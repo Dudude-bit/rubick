@@ -31,6 +31,36 @@ impl PathResolver {
         }
     }
 
+    /// The file names one command can be installed under, in the order a
+    /// shell would try them.
+    ///
+    /// On Unix a command is its own file name. On Windows it is the name plus
+    /// an extension from `PATHEXT`, and the ones that matter here are not
+    /// `.exe`: Azure's CLI ships `az.cmd` and Google's `gcloud.cmd`. Joining
+    /// the bare name found neither, so the Diagnostics pane reported tools
+    /// absent that the reader can run in their own terminal, and an AKS
+    /// context whose exec command is `az` could not be started at all.
+    #[must_use]
+    pub fn binary_file_names(binary_name: &str) -> Vec<String> {
+        #[cfg(not(windows))]
+        {
+            vec![binary_name.to_string()]
+        }
+        #[cfg(windows)]
+        {
+            // The name alone stays first: a file with no extension is what an
+            // scoop shim or a hand-placed binary can be.
+            let mut names = vec![binary_name.to_string()];
+            let pathext = std::env::var("PATHEXT")
+                .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+                .to_lowercase();
+            for ext in pathext.split(';').filter(|e| e.starts_with('.')) {
+                names.push(format!("{binary_name}{ext}"));
+            }
+            names
+        }
+    }
+
     /// Build common search paths for a binary.
     ///
     /// Returns a list of paths where the binary might be installed,
@@ -86,24 +116,27 @@ impl PathResolver {
 
         #[cfg(windows)]
         {
-            // Windows common paths
+            // Every extension `PATHEXT` names, not just `.exe`: `az` and
+            // `gcloud` ship as `.cmd`.
+            let mut dirs_to_try: Vec<PathBuf> = Vec::new();
             if let Some(home) = dirs::home_dir() {
-                paths.push(
-                    home.join(".cargo\\bin")
-                        .join(format!("{}.exe", binary_name)),
-                );
-                paths.push(
-                    home.join("scoop\\shims")
-                        .join(format!("{}.exe", binary_name)),
-                );
+                dirs_to_try.push(home.join(".cargo\\bin"));
+                dirs_to_try.push(home.join("scoop\\shims"));
             }
             if let Ok(program_files) = std::env::var("ProgramFiles") {
-                paths.push(PathBuf::from(program_files).join(format!("{}.exe", binary_name)));
+                dirs_to_try.push(PathBuf::from(program_files));
+            }
+            for dir in dirs_to_try {
+                for file in Self::binary_file_names(binary_name) {
+                    paths.push(dir.join(file));
+                }
             }
         }
 
-        // Just binary name for PATH lookup (last resort)
-        paths.push(PathBuf::from(binary_name));
+        // Bare names for PATH lookup (last resort)
+        for file in Self::binary_file_names(binary_name) {
+            paths.push(PathBuf::from(file));
+        }
 
         paths
     }
@@ -235,6 +268,26 @@ impl PathResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bare name leads, so a file installed without an extension still
+    /// wins over a `.cmd` shim beside it. Would break if the extensions were
+    /// put first.
+    #[test]
+    fn the_command_name_itself_is_tried_before_any_extension() {
+        let names = PathResolver::binary_file_names("az");
+
+        assert_eq!(names.first().map(String::as_str), Some("az"));
+        assert!(names.iter().all(|n| n.starts_with("az")));
+    }
+
+    /// A Unix command is its own file name; adding extensions there would
+    /// make every lookup miss on the first try. Would break if the Windows
+    /// branch leaked out of its `cfg`.
+    #[cfg(not(windows))]
+    #[test]
+    fn a_unix_command_has_exactly_one_file_name() {
+        assert_eq!(PathResolver::binary_file_names("gcloud"), vec!["gcloud"]);
+    }
 
     #[test]
     fn test_separator_is_os_specific() {

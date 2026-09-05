@@ -47,55 +47,51 @@ pub(super) struct ExecTerminalParams {
 }
 
 /// What a bearer token turned out to be once the console had finished
-/// drawing it.
-///
-/// Three states, because the alternative is one: `Unauthorized`. A token the
-/// console broke and a token the cluster refuses reach the reader as the same
-/// bare 401, and only one of them is theirs to fix.
+/// drawing it. Four states, because the alternative is one bare 401 for all
+/// of them, and only some are the reader's to fix.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum TokenShape {
-    /// Nothing to say: every byte is one a bearer token may carry.
     Intact,
-    /// The plugin's value carried whitespace, which a bearer token never
-    /// does. Removed — the count is what the report says.
-    Mended { removed: usize },
-    /// Something is in there that whitespace removal does not explain.
-    Unusable { first_bad: char },
+    /// Whitespace removed; the count is what the log reports.
+    Mended {
+        removed: usize,
+    },
+    /// Holds a byte an HTTP header cannot carry, so it can only be damage.
+    Unusable {
+        first_bad: char,
+    },
+    /// Whitespace was all there was.
+    Empty,
 }
 
 /// Repair what a console put inside a bearer token, and say what was found.
 ///
-/// A bearer token is `token68` (RFC 7235): letters, digits, and
-/// `-._~+/`, with `=` padding. **Whitespace is never part of one** — it
-/// cannot be, because the value travels in an HTTP header. So removing
-/// whitespace from a token cannot destroy a value that was ever valid; it can
-/// only rescue one a terminal wrapped or padded.
+/// `ConPTY` hands back the rendered screen rather than the bytes the child
+/// wrote; `unwrap_console_breaks` takes out the control bytes that stopped
+/// the JSON parsing, but not a space, because a space inside a JSON string is
+/// ordinary data. Inside an `id_token` it is not, and the cluster answers
+/// that with `Unauthorized`, naming nothing.
 ///
-/// This exists because `ConPTY` hands back the *rendered screen* rather than
-/// the bytes the child wrote (see `unwrap_console_breaks`). That pass removes
-/// the control bytes, which is what stopped the JSON parsing. What it cannot
-/// remove is a space, because a space inside a JSON string is ordinary data —
-/// and a space inside a `kubectl oidc-login` `id_token` is a credential the API
-/// server answers with `Unauthorized`, naming nothing.
+/// The line between damage and data is what the transport can carry, not what
+/// RFC 7235 permits a client to send. `kube` builds the header with
+/// `HeaderValue::try_from(format!("Bearer {token}"))` and `http` accepts every
+/// byte `0x20..=0x7E`, so a Rancher token's `:` travels today and must keep
+/// travelling. Only bytes no header can hold are called damage here.
 pub(super) fn mend_bearer_token(token: &mut String) -> TokenShape {
     let before = token.len();
     token.retain(|c| !c.is_whitespace());
     let removed = before - token.len();
 
-    if let Some(bad) = token.chars().find(|c| !is_token68(*c)) {
+    if let Some(bad) = token.chars().find(|c| !c.is_ascii_graphic()) {
         return TokenShape::Unusable { first_bad: bad };
+    }
+    if token.is_empty() {
+        return TokenShape::Empty;
     }
     if removed > 0 {
         return TokenShape::Mended { removed };
     }
     TokenShape::Intact
-}
-
-/// The characters RFC 7235 allows in a `token68`, which is what a bearer
-/// credential is. Deliberately not "any printable byte": the point is to
-/// separate a token a console mangled from one it did not.
-fn is_token68(c: char) -> bool {
-    c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '~' | '+' | '/' | '=')
 }
 
 /// Extract an `ExecCredential` JSON object from a (possibly noisy)
@@ -310,10 +306,60 @@ mod tests {
         assert_eq!(token, whole);
     }
 
-    /// Removing whitespace is safe because a bearer token never contains
-    /// any. That argument does not extend one character further, so anything
-    /// else stops here with the character named rather than reaching the
-    /// cluster. Would break if an unusable token were reported as mended.
+    /// The line is what a header can carry, not what RFC 7235 lets a client
+    /// send. Rancher's exec plugin emits `<id>:<secret>` and the colon is
+    /// structural; `http` accepts it and the cluster authenticates on it
+    /// today. An earlier version of this function tested `token68` and
+    /// refused every Rancher login on every platform. Would break if the
+    /// charset narrowed again.
+    #[test]
+    fn a_token_carrying_punctuation_a_header_accepts_is_left_alone() {
+        for whole in [
+            "kubeconfig-u-abcde1234:x9f7q2mnb4vzt8k6hjw3rslp5dgy0c", // Rancher
+            "sha256~aGVsbG8td29ybGQ",                                // OpenShift
+            "k8s-aws-v1.aHR0cHM6Ly9zdHM",                            // aws-iam-authenticator
+            "ya29.a0AfB_byC-9xK",                                    // gcloud
+        ] {
+            let mut token = whole.to_string();
+            assert_eq!(
+                mend_bearer_token(&mut token),
+                TokenShape::Intact,
+                "{whole} is a credential in the wild"
+            );
+            assert_eq!(token, whole);
+        }
+    }
+
+    /// Whitespace was all of it. Storing the empty string buys the same
+    /// anonymous 401 this function exists to prevent. Would break if an empty
+    /// token were reported mended and sent.
+    #[test]
+    fn a_token_that_was_only_whitespace_is_not_a_token() {
+        let mut token = " \r\n\t ".to_string();
+
+        assert_eq!(mend_bearer_token(&mut token), TokenShape::Empty);
+    }
+
+    /// A console leaves both at once: padding, and an escape whose tail
+    /// `unwrap_console_breaks` did not reach. Damage has to outrank repair,
+    /// or the token is reported mended and sent, and the silent 401 is back.
+    /// Would break if the whitespace check returned before the byte check.
+    #[test]
+    fn damage_outranks_repair_when_a_token_carries_both() {
+        let mut token = "head.pay load\u{1b}]0;t\u{7}.sig".to_string();
+
+        assert_eq!(
+            mend_bearer_token(&mut token),
+            TokenShape::Unusable {
+                first_bad: '\u{1b}'
+            }
+        );
+    }
+
+    /// Whitespace removal explains a console's padding and nothing further,
+    /// so a byte no header can hold stops here with the character named
+    /// rather than reaching the cluster. Would break if an unusable token
+    /// were reported as mended.
     #[test]
     fn a_token_holding_more_than_whitespace_is_reported_unusable() {
         let mut token = "abc.def\u{1b}[0m.ghi".to_string();
@@ -468,5 +514,49 @@ mod tests {
         let buf = br#"{"kind":"ExecCredential","status":{"token":"} fake }"}}"#;
         let cred = extract_exec_credential(buf).expect("must respect string literals");
         assert_eq!(cred.status.unwrap().token.as_deref(), Some("} fake }"));
+    }
+
+    // ---- TEMPORARY PROBES (to be reverted) ----
+    #[test]
+    fn probe_nbsp_count_is_bytes_not_characters() {
+        let mut t = " a\u{00a0}b\u{2003}c ".to_string();
+        let shape = mend_bearer_token(&mut t);
+        println!("PROBE nbsp: shape={shape:?} token={t:?} chars_removed=4");
+    }
+
+    #[test]
+    fn probe_rancher_style_token_with_colon() {
+        let mut t = "kubeconfig-u-abcde1234:x9f7q2mnb4vzt8k6hjw3rslp5dgy0c".to_string();
+        println!("PROBE rancher: {:?}", mend_bearer_token(&mut t));
+    }
+
+    #[test]
+    fn probe_openshift_and_aws_and_jwt() {
+        for s in [
+            "sha256~kV46hPnEJhb4H4N1cM3-abcDEF_123",
+            "k8s-aws-v1.aHR0cHM6Ly9zdHMuYW1hem9uYXdzLmNvbS8_QWN0aW9u",
+            "eyJhbGciOiJSUzI1NiIsImtpZCI6IngifQ.eyJzdWIiOiIxIn0.sig-_",
+            "ya29.a0AfB_byC-x_9dQ",
+        ] {
+            let mut t = s.to_string();
+            println!("PROBE ok-shapes {:?} -> {:?}", s, mend_bearer_token(&mut t));
+        }
+    }
+
+    #[test]
+    fn probe_all_whitespace_token_becomes_empty_but_reports_mended() {
+        let mut t = "   ".to_string();
+        let shape = mend_bearer_token(&mut t);
+        println!(
+            "PROBE whitespace-only: shape={shape:?} token={t:?} len={}",
+            t.len()
+        );
+    }
+
+    #[test]
+    fn probe_token_is_mutated_even_when_unusable() {
+        let mut t = "ab cd<ef".to_string();
+        let shape = mend_bearer_token(&mut t);
+        println!("PROBE unusable-mutation: shape={shape:?} token={t:?}");
     }
 }

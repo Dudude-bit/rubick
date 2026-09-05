@@ -136,11 +136,9 @@ fn resolve_exec_cluster(
 
 /// Applies what the plugin returned, and hands back the deadline it named.
 ///
-/// Refuses a token this cannot make into a credential rather than handing the
-/// server something it will answer with a bare `Unauthorized`. A 401 reads as
-/// "your login is wrong", and reaches the reader identically whether the
-/// cluster refused a good token or we sent a broken one — the two have
-/// nothing in common to do about them.
+/// The log line and the two refusals are what tell a bare `Unauthorized`
+/// apart: the cluster refusing a whole credential, and us sending a broken
+/// one, read identically and have nothing in common to do about them.
 fn apply_exec_credentials(
     auth_info: &mut AuthInfo,
     status: ExecCredentialStatus,
@@ -149,34 +147,30 @@ fn apply_exec_credentials(
 
     if let Some(mut token) = status.token {
         match cred::mend_bearer_token(&mut token) {
-            // Said out loud on purpose. When the cluster then answers
-            // `Unauthorized`, this line is what separates "we sent it
-            // something broken" from "the cluster refused a credential that
-            // left the plugin whole" — the two look identical from the
-            // outside and have nothing in common to do about them. The
-            // length only: a token is a credential and does not go in a log.
+            // The length only — a token is a credential and does not go in a log.
             cred::TokenShape::Intact => tracing::info!(
                 "Applied a {} character token from the credential plugin, intact.",
                 token.len()
             ),
-            cred::TokenShape::Mended { removed } => {
-                // Worth a line in the log: it says the credential arrived
-                // broken and was repaired, which is the difference between
-                // "the cluster refused you" and "your console wrapped a
-                // kilobyte of JWT at eighty columns".
-                tracing::warn!(
-                    "The credential plugin's token carried {removed} whitespace \
-                     characters a bearer token cannot have — the console that \
-                     drew it put them there. Removed."
-                );
-            }
+            cred::TokenShape::Mended { removed } => tracing::warn!(
+                "The credential plugin's token carried {removed} whitespace \
+                 characters the console that drew it put there. Removed."
+            ),
             cred::TokenShape::Unusable { first_bad } => {
                 return Err(Error::Auth(AuthError::Kubeconfig(format!(
-                    "The credential plugin's token contains {first_bad:?}, which a \
-                     bearer token cannot carry, so the cluster would refuse it \
-                     without saying why. This is the terminal the plugin ran \
-                     under corrupting its output, not a rejected login."
+                    "The credential plugin's token contains {first_bad:?}, which no \
+                     HTTP header can carry, so the cluster would refuse it without \
+                     saying why. The terminal the plugin ran under corrupted its \
+                     output; this is not a rejected login."
                 ))));
+            }
+            cred::TokenShape::Empty => {
+                return Err(Error::Auth(AuthError::Kubeconfig(
+                    "The credential plugin returned a token that is entirely \
+                     whitespace. Sending it would reach the cluster as no \
+                     credential at all."
+                        .to_string(),
+                )));
             }
         }
         auth_info.token = Some(SecretString::from(token));
@@ -255,11 +249,10 @@ mod tests {
         }
     }
 
-    /// A console that pads a wrapped row leaves spaces inside the `id_token`,
-    /// and a space is ordinary data inside a JSON string — so the credential
-    /// parses, the token is stored as drawn, and the API server answers
-    /// `Unauthorized` naming nothing (#106 on Windows). Would break if the
-    /// token reached `AuthInfo` with the console's spaces still in it.
+    /// A console pads a wrapped row, and a space is ordinary data inside a
+    /// JSON string — so the credential parses and the API server answers
+    /// `Unauthorized` naming nothing (#106). Would break if the token reached
+    /// `AuthInfo` with the console's spaces still in it.
     #[test]
     fn a_token_a_console_padded_is_stored_without_the_padding() {
         let mut auth_info = AuthInfo::default();
@@ -272,21 +265,34 @@ mod tests {
         );
     }
 
-    /// Whitespace is the one thing removal explains. Anything else in there
-    /// is damage this cannot undo, and sending it buys a 401 that reads as a
-    /// rejected login. Would break if an unrepairable token were stored and
-    /// left to the server to refuse.
+    /// Damage no header can carry stops before the request, with the byte
+    /// named. Would break if an unusable token were stored and left to the
+    /// server to refuse.
     #[test]
     fn a_token_carrying_what_no_console_explains_is_refused_here() {
         let mut auth_info = AuthInfo::default();
-        let err = apply_exec_credentials(&mut auth_info, token_status("header.pay<load>.sig"))
+        let err = apply_exec_credentials(&mut auth_info, token_status("header.pay\u{7f}load.sig"))
             .expect_err("a token that cannot be a bearer credential is not sent");
 
         assert!(auth_info.token.is_none(), "nothing half-applied");
-        let text = err.to_string();
         assert!(
-            text.contains('<'),
-            "the message names the character found: {text}"
+            err.to_string().contains("\\u{7f}"),
+            "the message names the character found: {err}"
+        );
+    }
+
+    /// `<` and `:` are bytes an HTTP header carries and real plugins emit —
+    /// Rancher's `<id>:<secret>` among them. Would break if the refusal
+    /// widened back to a charset narrower than the transport.
+    #[test]
+    fn a_token_with_punctuation_the_transport_accepts_is_applied() {
+        let mut auth_info = AuthInfo::default();
+        apply_exec_credentials(&mut auth_info, token_status("kubeconfig-u-abc:x9f7q2"))
+            .expect("a colon is not damage");
+
+        assert_eq!(
+            auth_info.token.as_ref().expect("the token").expose_secret(),
+            "kubeconfig-u-abc:x9f7q2"
         );
     }
 }
