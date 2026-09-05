@@ -193,7 +193,7 @@ function summarise(
  * live path computes — so a message repeated fifty times before the crash
  * collapses the same way it would have live.
  */
-function toStreamedLines(
+export function toStreamedLines(
   page: LogHistoryPage,
   nextId: { current: number }
 ): StreamedLogLine[] {
