@@ -60,9 +60,12 @@ fn locate(name: &str, search_dirs: &[std::path::PathBuf]) -> Option<String> {
     if literal.components().count() > 1 {
         return is_runnable(&literal).then(|| literal.to_string_lossy().into_owned());
     }
+    let file_names = PathResolver::binary_file_names(name);
     search_dirs.iter().find_map(|dir| {
-        let candidate = dir.join(name);
-        is_runnable(&candidate).then(|| candidate.to_string_lossy().into_owned())
+        file_names.iter().find_map(|file| {
+            let candidate = dir.join(file);
+            is_runnable(&candidate).then(|| candidate.to_string_lossy().into_owned())
+        })
     })
 }
 
