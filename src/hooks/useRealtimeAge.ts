@@ -181,8 +181,16 @@ export function useRealtimeCountdown(
   const remaining = getRemainingSeconds(targetDate);
   const remainingDays = remaining / 86400;
 
+  // Nothing to count down to is not a countdown that ran out. `targetDate` of
+  // `null` measures as zero seconds, and reading that as expired paints a
+  // deadline nobody set in the colour of one that has passed — the third state
+  // folded into the second, in a hook a caller reads for a verdict.
+  const targeted = targetDate !== null && targetDate !== undefined;
+
   let warningLevel: "none" | "warning" | "critical" = "none";
-  if (remaining <= 0) {
+  if (!targeted) {
+    warningLevel = "none";
+  } else if (remaining <= 0) {
     warningLevel = "critical";
   } else if (remainingDays <= criticalThresholdDays) {
     warningLevel = "critical";
@@ -192,7 +200,7 @@ export function useRealtimeCountdown(
 
   return {
     display: formatCountdown(remaining),
-    isExpired: remaining <= 0,
+    isExpired: targeted && remaining <= 0,
     remainingSeconds: remaining,
     warningLevel,
   };
