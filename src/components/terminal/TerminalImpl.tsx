@@ -10,52 +10,7 @@ import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
 import type { StatusRole } from "@/lib/status-role";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
-
-/** Used only if `--canvas` cannot be read; matches the dark canvas token. */
-const CANVAS_FALLBACK = "rgb(26, 28, 30)";
-
-/**
- * The canvas colour as a literal xterm can parse.
- *
- * xterm needs a colour string, not a class, so the terminal cannot inherit
- * `bg-canvas` and used to hardcode a bluish `#1a1a2e` that read as a panel
- * floating on the page. Reading the token keeps it exactly the page colour.
- * It is resolved through a probe element rather than passed as `hsl(...)`
- * because xterm parses `#rrggbb` and `rgb()` directly and hands anything else
- * to a canvas 2D context it may fail to acquire.
- */
-function readCanvasTheme(): {
-  background: string;
-  dark: boolean;
-  ansi: string[];
-} {
-  const root = document.documentElement;
-  const dark = root.classList.contains("dark");
-  const style = getComputedStyle(root);
-  const token = style.getPropertyValue("--canvas").trim();
-  const slots = Array.from({ length: 16 }, (_, i) =>
-    style.getPropertyValue(`--ansi-${i}`).trim()
-  );
-  if (!token) return { background: CANVAS_FALLBACK, dark, ansi: [] };
-
-  const probe = document.createElement("span");
-  probe.style.cssText = "position:absolute;visibility:hidden";
-  document.body.appendChild(probe);
-  const resolve = (hsl: string): string => {
-    if (!hsl) return "";
-    probe.style.color = `hsl(${hsl})`;
-    return getComputedStyle(probe).color;
-  };
-  const background = resolve(token);
-  const ansi = slots.map(resolve);
-  probe.remove();
-
-  return {
-    background: background || CANVAS_FALLBACK,
-    dark,
-    ansi: ansi.every(Boolean) ? ansi : [],
-  };
-}
+import { readCanvasTheme } from "./canvas-theme";
 
 function useCanvasTheme() {
   const [canvas, setCanvas] = useState(readCanvasTheme);
