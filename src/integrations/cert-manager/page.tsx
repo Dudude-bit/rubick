@@ -1,33 +1,26 @@
 /**
  * cert-manager's page: which certificates are in trouble, and why.
  *
- * ## Why a page at all
+ * Not the expiry date — `tls.crt` states that itself, this app reads it on a
+ * cluster with nothing installed, and the fact already lives on the Secret and
+ * on the Ingress that serves it. What has no home is the *walk*:
+ * `Certificate` → `CertificateRequest` → `Order` → `Challenge` is four
+ * unrelated custom resources, the sentence that says what failed is on the
+ * last of them, and no core object can host that shape. So the page is a list
+ * ordered by trouble with the walk under the row that has one, and nothing
+ * else.
  *
- * The expiry date is not the reason. `tls.crt` states that itself and this
- * app reads it on a cluster with nothing installed — that fact belongs on the
- * Secret and on the Ingress that serves it, and it already lives there.
+ * Ordered by trouble, never by name: one certificate that has not renewed for
+ * six days beside thirty that are fine, and the alphabet puts the answer
+ * wherever it happens to put it. A row that is anything other than healthy
+ * opens itself while there are few enough to read; past {@link AUTO_OPEN}
+ * nothing opens itself, because a screen where everything is expanded
+ * emphasises nothing.
  *
- * What has no home is the *walk*: `Certificate` → `CertificateRequest` →
- * `Order` → `Challenge` is four unrelated custom resources, the sentence that
- * says what failed is on the last of them, and no core object can host that
- * shape. So the page is a list ordered by trouble with the walk under the row
- * that has one, and nothing else.
- *
- * ## Ordered by trouble, never by name
- *
- * The reader has one certificate that has not renewed for six days and
- * thirty that are fine, and the alphabet puts the answer wherever the
- * alphabet happens to put it. A row that is anything other than healthy opens
- * itself while there are few enough of them to read; past {@link AUTO_OPEN}
- * nothing opens itself, because a screen where everything is expanded is a
- * screen where nothing is emphasised.
- *
- * ## Where a link goes
- *
- * To the object in this app, every time. Each step of the walk is a real
- * custom resource with a real page, and the whole point of reading this here
- * rather than in `kubectl describe` is that the next click is already in the
- * right place.
+ * Every link goes to the object in this app: each step of the walk is a real
+ * custom resource with a real page, and the point of reading this here rather
+ * than in `kubectl describe` is that the next click is already in the right
+ * place.
  */
 
 import { useMemo, useState } from "react";

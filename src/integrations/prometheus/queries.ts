@@ -1,29 +1,22 @@
 /**
- * The PromQL, and nothing else.
+ * The PromQL, and nothing else. Pure strings from pure inputs, so the part
+ * of this integration that is easiest to get quietly wrong is the part that
+ * can be asserted on without a server. Every query here was compared against
+ * `kubectl top` on a real cluster before it was believed.
  *
- * Pure strings from pure inputs, so the part of this integration that is
- * easiest to get quietly wrong is the part that can be asserted on without a
- * server. Every query here was compared against `kubectl top` on a real
- * cluster before it was believed; the two label rules below are the reason
- * the first attempt disagreed with it by exactly a factor of two.
+ * `container!=""` is load-bearing, not a tidy-up. cAdvisor emits three series
+ * for a one-container pod: the pod's own cgroup roll-up (no `container`
+ * label), the pause container that owns the network namespace (no `container`
+ * label either, on containerd), and the real container. Summing without the
+ * filter counts the workload twice — measured, not assumed: `busy-demo` reads
+ * 40m unfiltered and 20m filtered, and `kubectl top pod` says 20m.
+ * `container="POD"` is the older runtimes' spelling of the pause container
+ * and is excluded too, for the clusters that still emit it.
  *
- * ## `container!=""` is not a tidy-up
- *
- * cAdvisor emits three series for a one-container pod: the pod's own cgroup
- * roll-up (no `container` label), the pause container that owns the network
- * namespace (no `container` label either, on containerd), and the real
- * container. Summing without a filter counts the workload twice — measured,
- * not assumed: `busy-demo` reads 40m unfiltered and 20m filtered, and
- * `kubectl top pod` says 20m. `container="POD"` is the older runtimes'
- * spelling of the pause container and is excluded too, for the clusters that
- * still emit it.
- *
- * ## Network is the exception to that rule
- *
- * Every container in a pod shares one network namespace, so cAdvisor reports
- * traffic only on the sandbox — the very series `container!=""` throws away.
- * Traffic sums over interfaces instead, minus loopback, which is a pod
- * talking to itself.
+ * Network is the exception to that rule. Every container in a pod shares one
+ * network namespace, so cAdvisor reports traffic only on the sandbox — the
+ * very series `container!=""` throws away. Traffic sums over interfaces
+ * instead, minus loopback, which is a pod talking to itself.
  */
 
 import { escapeRegex, podPattern } from "../pod-names";

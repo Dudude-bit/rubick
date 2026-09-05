@@ -1,23 +1,19 @@
 //! Writing `config.toml` so that only its owner can read it.
 //!
-//! This file holds the bearer tokens for Prometheus and Loki and the registry
-//! password in plain text. Storing them there rather than in a second, better
-//! store is a deliberate choice — see [`crate::config::integrations`] for why
-//! — but it is not a licence to leave them where the rest of the machine can
-//! read them, and `std::fs::write` does exactly that: it creates with `0666`
-//! masked by the umask, which on a stock macOS or Linux account leaves `0644`.
+//! The file holds the Prometheus and Loki bearer tokens and the registry
+//! password in plain text — a deliberate choice, see
+//! [`crate::config::integrations`] — but `std::fs::write` would leave them
+//! where the rest of the machine can read them: it creates with `0666` masked
+//! by the umask, which on a stock macOS or Linux account leaves `0644`.
 //!
-//! Both things this module does come from the same trick — write a fresh
-//! neighbouring file and rename it over the target:
-//!
-//! * **Owner-only from the first byte.** Creating the file `0600` and then
-//!   filling it means the token is never briefly readable, which chmod-ing
-//!   after the write would not give.
-//! * **All of the new file or none of it.** A rename is atomic, so an
-//!   interrupted save can no longer leave half a config behind.
+//! So a save writes a fresh neighbouring file and renames it over the target,
+//! which buys two things. The scratch file is created `0600` and only then
+//! filled, so the token is never briefly readable — chmod-ing after the write
+//! would not give that. And a rename is atomic, so an interrupted save cannot
+//! leave half a config behind.
 //!
 //! Renaming also replaces the inode, so a config already sitting at `0644`
-//! from an older version heals the next time anything is saved. [`harden`]
+//! from an older version heals the next time anything is saved; [`harden`]
 //! covers the reader who never changes a setting again.
 //!
 //! On Windows there are no mode bits and this falls back to a plain replace:

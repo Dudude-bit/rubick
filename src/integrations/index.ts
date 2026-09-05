@@ -2,26 +2,19 @@
  * Everything the app knows about a specific vendor's product, and the only
  * door into it.
  *
- * A surface asks for a facet and gets an implementation or nothing. It never
- * learns which vendor answered, or whether one did. The tree spans all three
- * tiers; what decides that something lives here is not the tier but whether
- * it is knowledge about a specific vendor's product. See `registry.ts` for
- * the rest of the rule and what is deliberately outside it.
+ * A surface asks for a facet and gets an implementation or nothing; it never
+ * learns which vendor answered, or whether one did. What belongs here is
+ * knowledge about a specific vendor's product, whatever tier it sits in —
+ * `registry.ts` has the rest of the rule and what is deliberately outside it.
  *
- * ## Adding a vendor
- *
- * Two files, both in this tree, and nothing anywhere else:
- *
- * 1. `src/integrations/<id>/index.ts` — `defineVendor({ … })` with the facets
- *    it has, and anything bulky beside it in the same folder.
- * 2. `src/integrations/index.ts` — one import and one entry in
- *    {@link VENDORS}.
- *
- * That holds for a vendor bringing a whole screen: `page: { count, load }`
- * beside `extension` puts a row in the sidebar and serves
- * `/integrations/<id>` through the route `App.tsx` already has. No surface is
- * edited, no switch grows a case, nothing registers at startup, and no test
- * outside this tree changes.
+ * Adding a vendor is two files, both in this tree and nothing anywhere else:
+ * `src/integrations/<id>/index.ts` with `defineVendor({ … })` and anything
+ * bulky beside it in the same folder, and one import plus one entry in
+ * {@link VENDORS} here. A vendor bringing a whole screen adds
+ * `page: { count, load }` beside `extension`, which puts a row in the sidebar
+ * and serves `/integrations/<id>` through the route `App.tsx` already has —
+ * no surface edited, no switch grown a case, nothing registered at startup,
+ * no test outside this tree changed.
  *
  * Two exceptions, both inside the tree: a genuinely new *capability* adds a
  * key to `Capabilities` in `registry.ts` and needs a surface written to
@@ -414,16 +407,15 @@ function endpointOf(url: string): string {
  * Every installed vendor that supplies a capability, in registry order.
  *
  * {@link useCapability} answers with the first, which is right where the
- * question has one answer: one thing issues the certificate in a given Secret,
- * and asking a second vendor about it would be asking it to guess.
+ * question has one answer: one thing issues the certificate in a given
+ * Secret.
  *
- * Delivery is not that question. Argo CD and Flux are routinely installed side
- * by side — one team's namespace under each — and on such a cluster the *first*
- * provider is the wrong answer for half the objects and would silently return
- * `null` for them. Worse, an object both controllers really do apply is a fact
- * worth shouting, and a lookup that stopped at the first hit could never find
- * it. So the surfaces that need it ask everybody and reconcile the answers
- * themselves.
+ * Delivery is not that question. Argo CD and Flux are routinely installed
+ * side by side — one team's namespace under each — so the *first* provider is
+ * the wrong answer for half the objects and would silently return `null` for
+ * them, and an object both controllers really do apply is a fact worth
+ * shouting that a lookup stopping at the first hit could never find. The
+ * surfaces that need it ask everybody and reconcile the answers themselves.
  */
 export function useCapabilities<K extends CapabilityKey>(
   key: K
@@ -471,13 +463,10 @@ export interface IntegrationStatus {
   /** Narrowed off the vendor, because only vendors with one are listed. */
   extension: Extension;
   /**
-   * Present and usable. For a detected vendor that is "its CRDs are here";
-   * for a configured one it is "it has an address and the address answered",
-   * which is what keeps the row's promise honest — a row saying "detected"
-   * over a Prometheus that is refusing every query would be the silent
-   * fallback this whole seam exists to prevent.
+   * Present and usable: for a detected vendor "its CRDs are here", for a
+   * configured one "it has an address and the address answered". `null` where
+   * the cluster would not say — which is not "no".
    */
-  /** `null` where the cluster would not say — which is not "no". */
   installed: boolean | null;
   version: string | null;
   facts: FactsState;
@@ -519,19 +508,17 @@ export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
  * Every extension this cluster could have, whether it has it, and what the
  * ones it has are currently doing — for the one screen allowed to name them.
  *
- * Only vendors declaring {@link Extension} appear, which is what keeps the
- * cluster's own flavour out: GKE and k3s are vendors in this tree too, and
- * "Google Cloud · not installed" is nonsense — you cannot have a cluster
- * and not have the thing running it.
+ * Only vendors declaring {@link Extension} appear, which keeps the cluster's
+ * own flavour out: GKE and k3s are vendors in this tree too, and "Google
+ * Cloud · not installed" is nonsense.
  *
- * Facts are fetched for detected extensions only. An absent one is not
- * asked about, because the objects it would count cannot exist; and nothing
- * is fetched at all unless the reader is standing on the pane, so mounting
- * this to answer a search query costs no requests.
+ * Facts are fetched for detected extensions only — an absent one's objects
+ * cannot exist — and nothing is fetched at all unless the reader is standing
+ * on the pane, so mounting this to answer a search query costs no requests.
  *
- * A configured vendor never appears in the detection scan and must not: it
- * is present because somebody gave it an address, and its facts come from
- * the probe rather than from a query it would have to make twice.
+ * A configured vendor never appears in the detection scan and must not: it is
+ * present because somebody gave it an address, and its facts come from the
+ * probe rather than from a query it would have to make twice.
  */
 export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
@@ -695,15 +682,11 @@ export function useConnectionEditor(vendorId: string): {
     test: async (draft) =>
       vendor
         ? vendor.connect.probe(draft).then((result) => {
-            // The dialog held this answer in local state and the badge on
-            // the row behind it kept whatever the cached probe last said —
-            // so pressing Test and watching it succeed left "no answer" in
-            // red two centimetres away.
-            //
-            // Only when the tested draft *is* the saved connection: a test
-            // against an edited address is about a different address, and
-            // seeding the shared answer with it would be the same lie in
-            // the other direction.
+            // Seeds the shared probe answer, so pressing Test and watching
+            // it succeed does not leave the row behind the dialog showing
+            // "no answer" from the cached probe. Only when the tested draft
+            // *is* the saved connection: a test against an edited address is
+            // about a different address.
             if (
               saved &&
               saved.url === draft.url &&
@@ -811,17 +794,15 @@ export interface IntegrationPageEntry {
  * The Integrations category: one row per extension this cluster actually
  * has, or an empty list.
  *
- * **Every one of them, not only the ones with a screen.** The category used
- * to list vendors declaring a `page` and silently drop the rest, which meant
- * a cluster running cert-manager was told it had no integrations at all. An
- * extension that owns no screen is still installed, still doing something,
- * and still worth a row — it just goes to its Settings row, which is where
- * what it gives and what it is currently doing are already written.
+ * **Every one of them, not only the ones with a screen.** An extension that
+ * owns no screen is still installed, still doing something, and still worth a
+ * row — it goes to its Settings row, where what it gives and what it is
+ * currently doing are already written.
  *
  * Empty is still the answer for most clusters and the caller must draw
  * nothing at all for it — not an empty group, not a placeholder. Nothing is
- * hidden by that: with no extension installed there is no row to hide, and
- * Settings → Integrations names every extension the app knows either way.
+ * hidden by that: Settings → Integrations names every extension the app knows
+ * either way.
  */
 export function useIntegrationPages(): {
   pages: IntegrationPageEntry[];

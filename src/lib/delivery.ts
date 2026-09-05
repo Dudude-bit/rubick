@@ -2,8 +2,7 @@
  * What the app is allowed to say about an object's provenance, and when.
  *
  * On a cluster Argo or Flux runs, everything is managed — so a "managed"
- * badge would sit on ninety-five per cent of rows, spending the pixels the
- * app spends on `CrashLoopBackOff` to say nothing, while the interesting
+ * badge would sit on ninety-five per cent of rows while the interesting
  * object is the *un*managed one. It does not go on the kind glyph either:
  * that glyph is readable because it means one thing.
  *
@@ -13,8 +12,7 @@
  * - **Where it comes from** is quiet and always — {@link deliveryMarks}.
  * - **What it means for you right now** is loud and only when true —
  *   {@link deliveryLine}, which returns `null` for the ordinary managed,
- *   in-sync object and must, or every page of a GitOps cluster grows a banner
- *   and the trap is back one storey up.
+ *   in-sync object and must, or every page of a GitOps cluster grows a banner.
  * - **At the point of action** — {@link deliveryIntercept}. It tells rather
  *   than blocks: scaling a managed object by hand during an incident is
  *   legitimate, and the app's business is only that nobody does it believing
@@ -517,25 +515,16 @@ export function deliveryIntercept(
 /**
  * What to say at the moment somebody applies an edited manifest.
  *
- * The most powerful write in the app, and until now the only one that said
- * nothing — which, once every other control warns, reads as a claim that this
- * one is safe. It is {@link deliveryIntercept} with one case added, and the
- * added case is the reason it is a function of its own.
- *
- * ## Why a stale claim earns a sentence here and not on Scale
- *
- * A disowned label changes nothing about what *happens* — the edit stands
- * either way — so Scale and Delete rightly stay quiet about it. What it
- * changes is what the reader is looking at: the document open in front of
- * them carries a delivery label, and a label is the app's own evidence for
- * "the permanent change belongs in git". Here that evidence is in the buffer,
- * a line above the field being edited, and it is wrong. So the sentence is not
- * a warning about a revert that will not come — promising one would be a lie
- * the reader can check — it is a correction: this stands, and it is not in
- * that repository.
- *
- * Which is also why it confirms with a plain "Apply". "Apply anyway" is the
- * word for overriding a consequence, and there is no consequence to override.
+ * {@link deliveryIntercept} with one case added: a delivery label nothing
+ * honours. A disowned label changes nothing about what *happens* — the edit
+ * stands either way — so Scale and Delete rightly stay quiet about it. What
+ * it changes is what the reader is looking at: the document in front of them
+ * carries a delivery label, a line above the field being edited, and a label
+ * is the app's own evidence for "the permanent change belongs in git". So the
+ * sentence is a correction rather than a warning about a revert that will not
+ * come: this stands, and it is not in that repository. Which is also why it
+ * confirms with a plain "Apply" — "Apply anyway" is the word for overriding a
+ * consequence, and there is none to override.
  */
 export function deliveryApplyIntercept(
   deliveries: Delivery[],

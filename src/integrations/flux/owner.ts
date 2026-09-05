@@ -5,19 +5,17 @@
  * Flux labels everything it applies with the reconciler's name, and the label
  * is the claim, not the fact: a manifest committed with those labels already
  * on it, or a Kustomization deleted with `prune: false`, both leave an object
- * that says it is managed and is not. So the label finds the candidate and
- * the candidate's own `status.inventory` has to name the object back; where
- * it does not, the answer is {@link Delivery} `state: "claimed"`.
+ * that says it is managed and is not. So the label finds the candidate and the
+ * candidate's own `status.inventory` has to name the object back; where it
+ * does not, the answer is {@link Delivery} `state: "claimed"`.
  *
- * **Flux has no per-object drift.** Argo compares what it owns on a timer and
- * writes the verdict into `Application.status.resources`. A Kustomization
- * re-applies its own fields on its interval and the correction is silent —
- * nothing ever records that something had differed. So
- * {@link DeliverySource.sync} is `null` for every Flux-delivered object, and
- * that says nobody knows rather than a quiet tick. What Flux does publish is
- * whether the reconciler is running at all: a suspended Kustomization, or one
- * whose source stopped fetching, keeps `Ready=True` while applying nothing,
- * and that is {@link DeliverySource.warning}.
+ * **Flux has no per-object drift**, unlike Argo: a Kustomization re-applies
+ * its own fields on its interval and the correction is silent, so nothing
+ * records that anything had differed and {@link DeliverySource.sync} is `null`
+ * for every Flux-delivered object — nobody knows, not a quiet tick. What Flux
+ * does publish is whether the reconciler runs at all: a suspended
+ * Kustomization, or one whose source stopped fetching, keeps `Ready=True`
+ * while applying nothing, and that is {@link DeliverySource.warning}.
  *
  * Takes a list for the same reason Argo's does: one read of the reconcilers
  * answers a five-hundred-row page.
@@ -160,16 +158,16 @@ function ownerRef(
   };
 }
 
-/**
- * A reconciler that is not reconciling, in the two shapes Flux has for it.
- *
- * `Ready` is not the question. A suspended Kustomization and one whose source
- * stopped fetching both keep `Ready=True` from the last run that worked, which
- * is the state that looks perfect and is the reason this is read separately.
- */
 /** A translator for the branches that provably take no words. */
 const noWords: T = () => "";
 
+/**
+ * A reconciler that is not reconciling, in the two shapes Flux has for it.
+ *
+ * `Ready` is not the question: a suspended Kustomization and one whose source
+ * stopped fetching both keep `Ready=True` from the last run that worked, which
+ * is the state that looks perfect and is why this is read separately.
+ */
 function stalledReason(owner: CustomResourceInfo): Saying | null {
   if (getValueByPath(owner, "spec.suspend") === true)
     return { key: "fluxSuspendedWord" };

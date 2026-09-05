@@ -5,26 +5,22 @@
  * and *why is this URL not working*, so the unit here is a host and the
  * routes under it — whichever kind of object they came from.
  *
- * ## Two kinds of object, one routing table
- *
  * A page that read only the CRDs would be empty on a k3d cluster and wrong on
  * most real ones: k3d ships Traefik as *the* ingress controller, so plain
  * `Ingress` objects are the majority of what it serves. Which Ingresses are
  * Traefik's is not a guess either — an `IngressClass` carries the controller
  * that claims it, so an Ingress belongs here when it names a class whose
  * controller is Traefik's, or names none and this cluster's default class is
- * Traefik's. Every other Ingress in the cluster is somebody else's problem
- * and is not drawn.
+ * Traefik's. Every other Ingress in the cluster is not drawn.
  *
- * ## The findings are the reason the page exists
- *
- * None of them is visible anywhere in this app today: a Service with no
- * endpoints reads healthy on every list page, a host on a plain-HTTP entry
- * point looks like a normal route, and a certificate two objects away is
- * nobody's column. The vocabulary for the first is not reinvented here —
- * {@link ChainStop} is the same union the traffic chain already speaks, so
- * "no pod carries app=promo" reads identically whether it was reached from a
- * Deployment or from a hostname.
+ * The findings are the reason the page exists: none of them is visible
+ * anywhere else in this app. A Service with no endpoints reads healthy on
+ * every list page, a host on a plain-HTTP entry point looks like a normal
+ * route, and a certificate two objects away is nobody's column. The
+ * vocabulary for the first is not reinvented here — {@link ChainStop} is the
+ * same union the traffic chain already speaks, so "no pod carries app=promo"
+ * reads identically whether it was reached from a Deployment or from a
+ * hostname.
  */
 
 import { covers, type Expiry } from "@/lib/certificates";
@@ -464,12 +460,11 @@ function routesFromIngressRoute(object: CustomResourceInfo): TraefikRoute[] {
 }
 
 // --- entry points, read off the controller's own arguments --------------
+//
+// Static configuration: they exist only in the flags the proxy was started
+// with, which is why nothing in a cluster can answer "what does this listen
+// on" without reading the workload itself.
 
-/**
- * Traefik's entry points are static configuration: they exist only in the
- * flags the proxy was started with, which is why nothing in a cluster can
- * answer "what does this listen on" without reading the workload itself.
- */
 /**
  * The target of a redirection that names none.
  *
@@ -728,13 +723,10 @@ export function proxyServices(sources: TraefikSources): ServiceInfo[] {
 /**
  * What terminates TLS for this host *before* it reaches Traefik.
  *
- * The case this exists for is the ordinary one on a managed cluster and the
- * page used to call it a fault on every single row: a cloud load balancer
- * holds the certificate, and forwards plaintext to the proxy's `web` entry
- * point on purpose. Traefik is the second hop, the client-facing hop is
- * encrypted, and "served in the clear" was both wrong and — worse for a
- * warning about encryption — wrong on every host at once, which is how a
- * reader learns to stop reading it.
+ * The ordinary case on a managed cluster: a cloud load balancer holds the
+ * certificate and forwards plaintext to the proxy's `web` entry point on
+ * purpose. Traefik is the second hop, the client-facing hop is encrypted, and
+ * calling that "served in the clear" is wrong on every host at once.
  *
  * Evidence rather than inference: an Ingress in this cluster whose backend is
  * a Service that selects Traefik's own pods, and whose `spec.tls` covers this
@@ -743,8 +735,8 @@ export function proxyServices(sources: TraefikSources): ServiceInfo[] {
  *
  * TLS held in an *annotation* rather than in `spec.tls` — GKE's
  * `ManagedCertificate`, a pre-shared certificate — is not visible from here
- * and is not meant to be: that is the `service.routes` capability's job, and
- * the page asks it separately. This returns what the core objects state.
+ * and is not meant to be: that is the `service.routes` capability's job, asked
+ * separately. This returns what the core objects state.
  */
 export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
   const proxies = proxyServices(sources);

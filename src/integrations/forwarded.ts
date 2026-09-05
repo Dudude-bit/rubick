@@ -1,29 +1,21 @@
 /**
  * Reaching an in-cluster Prometheus or Loki without asking anybody to run
- * `kubectl port-forward` in another window.
- *
- * The observation this exists for is the reader's own: *we are typing an
- * address anyway.* A configured integration needs to know **which** server,
- * and a Service in this cluster names one exactly as well as a URL does —
- * better, because the app can already reach it. What it could not do was tell
- * the reader that the obvious address, the one its own placeholder suggested,
- * is resolvable only from inside the cluster.
- *
- * So the address can be produced rather than typed: pick the Service, the app
- * forwards a local port to it and the connection points at `localhost`.
- *
- * ## The thing that breaks the naive version
+ * `kubectl port-forward` in another window. A configured integration needs to
+ * know **which** server, and a Service in this cluster names one exactly as
+ * well as a URL does — better, because the app can already reach it, and
+ * because the obvious address the placeholder suggests is resolvable only
+ * from inside the cluster. So the address is produced rather than typed: pick
+ * the Service, the app forwards a local port to it and the connection points
+ * at `localhost`.
  *
  * `port_forward_pod` forwards to a **pod**, by name, and `autoReconnect`
- * retries *that pod* with a backoff — it does not go and find another one.
- * So the first rollout, node drain or OOM kill leaves the forward retrying a
+ * retries *that pod* with a backoff — it does not go and find another one. So
+ * the first rollout, node drain or OOM kill would leave the forward retrying a
  * pod that no longer exists, for ever, behind a `localhost` URL that used to
- * work. Every chart in the app would go quietly empty, which is the exact
- * failure this codebase keeps refusing to ship.
- *
- * The pod is therefore resolved from the Service **every time the forward is
- * established**, and re-resolved when the connection stops answering. The
- * durable thing is the Service; the pod is a detail that is looked up again.
+ * work, and every chart in the app would go quietly empty. The pod is
+ * therefore resolved from the Service **every time the forward is
+ * established**, and re-resolved when the connection stops answering: the
+ * durable thing is the Service, the pod is a detail that is looked up again.
  */
 
 import { SaidError, type Saying } from "@/i18n/say";
@@ -134,12 +126,9 @@ export async function podFor(service: ServiceInfo): Promise<string | null> {
   // forward onto it connects to nothing. Ready first, then merely up: a
   // rollout should move the forward onto the new pod rather than refusing
   // to make one.
-  // `pod.containers` holds the app containers and only those: init
-  // containers and native sidecars go to `initContainers`, stamped `Init`
-  // and `Sidecar` (src-tauri/src/resources/types/pod.rs). No phase test is
-  // needed — the clause that stood here could not fire, and the test that
-  // covered it had to put an init container in a list the backend never
-  // puts one in.
+  // No phase test is needed: `pod.containers` holds the app containers and
+  // only those — init containers and native sidecars go to `initContainers`,
+  // stamped `Init` and `Sidecar` (src-tauri/src/resources/types/pod.rs).
   const up = pods.filter((pod) =>
     pod.containers.some((container) => container.state.type === "running")
   );
@@ -147,13 +136,6 @@ export async function podFor(service: ServiceInfo): Promise<string | null> {
   return (ready ?? up[0])?.name ?? null;
 }
 
-/**
- * Point a local port at this Service, and say where.
- *
- * `autoReconnect` is on because it costs nothing and covers the blips; it is
- * explicitly *not* the answer to a pod that has gone for good, which is what
- * {@link reestablish} is for.
- */
 /**
  * The part of the address after the port, when the API does not sit at the root.
  *
@@ -169,6 +151,13 @@ export function normalisedSubpath(subpath: string | undefined): string {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
+/**
+ * Point a local port at this Service, and say where.
+ *
+ * `autoReconnect` is on because it costs nothing and covers the blips; it is
+ * explicitly *not* the answer to a pod that has gone for good, which is what
+ * {@link reestablish} is for.
+ */
 export async function forward(
   service: ServiceInfo,
   preferredPorts: number[],

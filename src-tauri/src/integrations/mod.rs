@@ -2,15 +2,13 @@
 //!
 //! **Detected.** Something whose whole state is objects on the same API
 //! server, so "is it there" has a yes or a no with no address to fill in and
-//! nothing guessed. Detection being a fact rather than a heuristic is the
-//! only reason it is allowed: `certificates.cert-manager.io` exists as a CRD
-//! or it does not; the app is not sniffing a port or matching a name.
-//!
-//! For most that fact is a marker CRD. ingress-nginx installs none, so the
-//! fact is a declared field instead — `IngressClass.spec.controller` is the
-//! implementation naming itself. The rule is not "a CRD", it is "the cluster
-//! says so in a field somebody had to write".
-//! [`detect_in_cluster_extensions`] answers for all of them.
+//! nothing guessed: `certificates.cert-manager.io` exists as a CRD or it does
+//! not; the app is not sniffing a port or matching a name. For most that fact
+//! is a marker CRD. ingress-nginx installs none, so the fact is a declared
+//! field instead — `IngressClass.spec.controller` is the implementation
+//! naming itself. The rule is not "a CRD", it is "the cluster says so in a
+//! field somebody had to write". [`detect_in_cluster_extensions`] answers for
+//! all of them.
 //!
 //! **Configured.** Anything needing its own URL, and usually a credential the
 //! kubeconfig does not carry, cannot be detected without guessing — and
@@ -55,11 +53,10 @@ pub struct DetectedExtension {
 
 /// The extensions whose whole Rust-side knowledge is a marker CRD.
 ///
-/// cert-manager has a folder because it has a command behind it. These
-/// three have nothing but the name of the object whose existence *is* the
-/// install, and three files holding one constant each would be ceremony
-/// standing in for structure. The first marker present wins, so a vendor
-/// that renamed its API group lists the current spelling first.
+/// cert-manager has a folder because it has a command behind it; these have
+/// nothing but the name of the object whose existence *is* the install. The
+/// first marker present wins, so a vendor that renamed its API group lists
+/// the current spelling first.
 const MARKERS: &[(&str, &[&str])] = &[
     (
         "traefik",

@@ -4,21 +4,18 @@
  *
  * `uri: {prefix: /api}` with a header or two is most of what anybody writes.
  * The rest — `queryParams`, `sourceLabels`, `withoutHeaders`, every regular
- * expression — is not paraphrased, because a wrong paraphrase of a routing
- * rule is worse than the raw block. A reader who sees the match as written
- * can check it; one told "serves /api" by a parser that quietly dropped
+ * expression — is not paraphrased: a reader shown the match as written can
+ * check it, one told "serves /api" by a parser that quietly dropped
  * `sourceLabels` cannot.
  *
  * The conditions inside one `match` entry are ANDed, so they only ever
- * narrow: if an entry requires `uri.prefix: /api` and also something this
- * parser cannot read, every request taking the route is still a request under
- * `/api`. Stating that term is a fact. The unread condition is kept verbatim
- * and the surface prints the whole entry beside it.
- *
- * Two things break that and are refused for the whole entry. A regular
- * expression, because there is no sentence about it shorter than the regex
- * itself. And `ignoreUriCase`, because it changes what every other URI term
- * in the entry means.
+ * narrow: an entry requiring `uri.prefix: /api` and also something this
+ * parser cannot read still takes only requests under `/api`, so stating that
+ * term is a fact. The unread condition is kept verbatim and the surface
+ * prints the whole entry beside it. Two things break that and are refused
+ * for the whole entry instead: a regular expression, because no sentence
+ * about it is shorter than the regex itself, and `ignoreUriCase`, because it
+ * changes what every other URI term in the entry means.
  *
  * A list of entries *is* read, because it needs no precedence: Istio takes a
  * request satisfying any one of them, so they are independent alternatives.

@@ -1,12 +1,10 @@
 /**
  * Whether the Prometheus somebody connected is watching *this* cluster.
  *
- * The question the whole page exists for, and one nothing else in the app can
- * ask. A connection is judged by a probe, and a probe only proves the address
- * answers PromQL — so pointing the app at the organisation's central
- * Prometheus, which scrapes four clusters and not this one, produces a
- * connection that reads as healthy and charts that are about somebody else's
- * pods. Every number is real. None of them is yours.
+ * A probe only proves the address answers PromQL, so pointing the app at the
+ * organisation's central Prometheus — which scrapes four clusters and not
+ * this one — produces a connection that reads as healthy and charts that are
+ * about somebody else's pods. Every number is real. None of them is yours.
  *
  * The check is a comparison rather than a judgement: the node names Prometheus
  * knows against the node names this cluster has. Nothing else identifies a
@@ -14,14 +12,11 @@
  * and a pod name is gone by tomorrow — while a node name is long, specific and
  * stable enough to be a fingerprint.
  *
- * ## And whether the metrics it needs are there
- *
- * A Prometheus that scrapes the right cluster but not its kubelets answers
- * every query with an empty series, and an empty series draws an empty chart
- * that looks exactly like a quiet pod. So the families the capabilities are
- * built on are checked by name, once, and a missing one is named — because
- * "install kube-state-metrics" and "your pod used no CPU" are the same
- * picture and very different repairs.
+ * The families the capabilities are built on are checked by name too, once,
+ * and a missing one is named: a Prometheus that scrapes the right cluster but
+ * not its kubelets answers every query with an empty series, and "install
+ * kube-state-metrics" and "your pod used no CPU" are the same empty chart
+ * with very different repairs.
  */
 
 import type { VendorVerdict } from "../kit";
@@ -43,17 +38,13 @@ import type { PromSeries } from "@/generated/types";
 const NODE_LABELS = ["node", "instance", "nodename"] as const;
 
 /**
- * The families each capability is built on, named so a gap can be attributed.
+ * The families each capability is built on, named so a gap can be attributed,
+ * with what each buys the reader and who scrapes it.
  *
  * Deliberately the metric *this app queries*, not a representative one: the
  * point is to answer "why is that chart empty", and only the exact name the
- * query uses can.
- */
-/**
- * What each metric family buys the reader, and who scrapes it.
- *
- * The metric names are Prometheus's own and never move; the two sentences
- * about each are catalogue keys.
+ * query uses can. The metric names are Prometheus's own and never move; the
+ * two sentences about each are catalogue keys.
  */
 export const FAMILIES: Array<{
   metric: string;
@@ -180,17 +171,11 @@ export async function coverage(): Promise<Coverage> {
       })
     );
 
-  // An empty answer is not evidence of a foreign cluster, and saying so was
-  // this panel's own worst finding: a VictoriaMetrics scraping cAdvisor and
-  // nothing else reported "not watching this cluster" while three of the four
-  // families held hundreds of series from that very cluster. Silence about
-  // node names means the question cannot be answered, not that the answer
-  // is no.
-  //
-  // kube-state-metrics is not everywhere; cAdvisor is, wherever this app has
-  // any history at all. Asked only when the first came back empty, so the
-  // ordinary cluster still costs one query, and grouped by both labels
-  // because which one carries the name is the scrape config's choice.
+  // An empty answer is not evidence of a foreign cluster, only that the
+  // question cannot be answered: kube-state-metrics is not everywhere,
+  // cAdvisor is. Asked only when the first came back empty, so the ordinary
+  // cluster still costs one query, and grouped by both labels because which
+  // one carries the name is the scrape config's choice.
   //
   // Read one way only, and that asymmetry is the point. `instance` is
   // routinely `10.0.0.4:10250`, which `shortName` reduces to "10" — a name no

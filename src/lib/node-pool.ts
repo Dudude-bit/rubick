@@ -2,11 +2,7 @@
  * What a managed cluster already says about its own nodes.
  *
  * On GKE, EKS or AKS every node is labelled with the pool it belongs to, the
- * machine it runs on, the zone it sits in and whether it is disposable. The
- * app has carried those labels across the wire since the beginning and read
- * none of them, so a forty-node cluster drew forty flat rows and the reader
- * could not see that they were three pools of different machines in different
- * places, half of them reclaimable at an hour's notice.
+ * machine it runs on, the zone it sits in and whether it is disposable.
  *
  * Three vendors spelling four facts differently is a table, not an
  * architecture — hence a handful of arrays and no provider interface. Those
@@ -17,11 +13,10 @@
  *
  * The hard rule is that **absence is not a claim**. No recognised label means
  * "not a managed cluster we recognise", which is not "not managed" and is
- * certainly not "not spot": a cluster may be OpenStack, Hetzner, bare metal or
- * something nobody here has heard of. So every field is nullable, `spot` is
- * only ever set by a label that says so, and the one fact that names a cloud
- * outright — `spec.providerID`'s scheme — is never substituted for by a pool
- * label that merely hints at one.
+ * certainly not "not spot": a cluster may be OpenStack, Hetzner or bare metal.
+ * So every field is nullable, `spot` is only ever set by a label that says so,
+ * and the one fact that names a cloud outright — `spec.providerID`'s scheme —
+ * is never substituted for by a pool label that merely hints at one.
  */
 
 import type { NodeInfo } from "@/generated/types";

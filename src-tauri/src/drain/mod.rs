@@ -6,16 +6,13 @@
 //! again, until it can leave. Anything that gives up on the first refusal is
 //! not draining a node, it is reporting on one.
 //!
-//! Two things this must never do, both of which it has done before:
+//! Two rules, both of which this has broken before:
 //!
-//! * **Delete a pod an eviction refused.** A `DELETE` is the one call that
-//!   does not consult the budget. The version this replaced fell back to it
-//!   on *any* eviction error, with the flag enabling that hard-wired on in
-//!   the node list — so a budget's refusal was answered by deleting the pod
-//!   it was protecting.
-//! * **Say it will wait and then not.** The dialog promised exactly this
-//!   waiting while the backend did the deleting above. Now the waiting is
-//!   here, so the sentence is true.
+//! * **Never delete a pod an eviction refused.** A `DELETE` is the one call
+//!   that does not consult the budget, so falling back to it answers a
+//!   budget's refusal by deleting the pod it was protecting.
+//! * **Never say it will wait and then not.** The drain dialog promises this
+//!   waiting, so the waiting lives here.
 //!
 //! Shaped after [`crate::search`], which had already solved the same
 //! problem: an operation too long for one command call, that has to report
@@ -63,8 +60,7 @@ const SUBSCRIBE_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// These decide membership, never the method: everything in the set leaves
 /// by eviction. That is the distinction `kubectl drain` draws with `--force`
-/// and `--delete-emptydir-data`, and the one an earlier `force` flag here
-/// collapsed into a licence to delete.
+/// and `--delete-emptydir-data`, and never a licence to delete.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DrainOptions {
@@ -156,11 +152,10 @@ impl RefusedPod {
 
 /// Where a drain stood at the last look.
 ///
-/// A report rather than a `Result`, because a drain that moved forty pods
-/// and is waiting on one is neither a success nor a failure, and the old
-/// signature had to pick. It picked failure and joined the refusals into a
-/// single error string — which put English somewhere the catalogue cannot
-/// reach, and left the dialog a blob to print instead of a list to walk.
+/// A report rather than a `Result`: a drain that moved forty pods and is
+/// waiting on one is neither a success nor a failure, and refusals joined
+/// into a single error string would put English where the catalogue cannot
+/// reach it, and leave the dialog a blob to print instead of a list to walk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DrainReport {
@@ -279,9 +274,8 @@ enum Evicted {
 
 /// Read one failed eviction.
 ///
-/// This is the half the security report was about. Every arm leaves the pod
-/// where it is; the version this replaced turned *any* of them into a direct
-/// `DELETE`, which is the one call that does not consult a
+/// Every arm leaves the pod where it is. Falling back to a direct `DELETE`
+/// would be reaching for the one call that does not consult a
 /// `PodDisruptionBudget`.
 fn outcome_of(err: kube::Error) -> Evicted {
     if let kube::Error::Api(response) = &err {
@@ -454,9 +448,8 @@ struct Survey {
     /// its controller create a new one, and on a node something tolerates the
     /// cordon on, that replacement lands right back here; a drain that
     /// re-listed for *work* each pass would chase its own replacements and
-    /// never finish. Watched it do exactly that against a live cluster — the
-    /// moved count climbing one per attempt — before this was a fixed set.
-    /// `kubectl drain` fixes its set for the same reason.
+    /// never finish — seen against a live cluster, the moved count climbing
+    /// one per attempt. `kubectl drain` fixes its set for the same reason.
     ///
     /// Later listings are for *departures* only, matched by uid, and can
     /// never add to this.
@@ -534,11 +527,10 @@ struct Progress {
     ///
     /// An eviction is a *graceful* delete: the API answers as soon as it is
     /// accepted and the pod stays put for its grace period — thirty seconds
-    /// by default, minutes with a `preStop` hook. Reporting a node drained at
-    /// acceptance told the operator it was safe to power off a node whose
-    /// pods were all still running. So the drain waits for these to go, which
-    /// is what `kubectl drain` does and what this app's own text already
-    /// claimed it did.
+    /// by default, minutes with a `preStop` hook. Reporting the node drained
+    /// at acceptance would tell the operator it is safe to power off a node
+    /// whose pods are all still running, so the drain waits for these to go,
+    /// as `kubectl drain` does.
     leaving: Vec<Target>,
     evicted: u32,
     already_gone: u32,
@@ -569,10 +561,9 @@ async fn run(
         }};
     }
 
-    // Cordoning belongs to the drain, not to whoever starts one. It used to
-    // sit in the Tauri command, and the first caller that was not that command
-    // — a test — got a drain that evicted pods onto a node still accepting
-    // them, forever. An operation that needs a step to make sense owns it.
+    // Cordoning belongs to the drain, not to whoever starts one: a caller
+    // that skipped it would leave the drain evicting pods onto a node still
+    // accepting them, forever.
     let cordoned = tokio::select! {
         result = cordon(client, node) => result,
         () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &empty, None),

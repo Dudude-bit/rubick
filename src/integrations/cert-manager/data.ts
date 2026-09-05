@@ -3,17 +3,13 @@
  *
  * Two queries. `Certificate` alone is what the sidebar count needs —
  * `certificateRows` puts down one row per certificate whatever the other
- * kinds say, so `.length` on the raw list is the row count. That split makes
- * the sidebar one cluster-wide list instead of six on every install where
- * nobody has this page open, and opening it costs nothing extra: it asks for
- * the key the row already primed.
+ * kinds say, so `.length` on the raw list is the row count. The sidebar
+ * therefore costs one cluster-wide list instead of six, and opening the page
+ * costs nothing extra: it asks for the key the row already primed.
  *
  * The other four go together, because a `Certificate` saying `Ready=False`
- * with the sentence explaining it on a `Challenge` three objects below is
- * what this page exists to show. Once the walk is needed at all, every kind
- * it can reach is needed.
- *
- * ## Absent, and unread
+ * has the sentence explaining it on a `Challenge` three objects below. Once
+ * the walk is needed at all, every kind it can reach is needed.
  *
  * A kind the API server does not serve reads as *none of those exist*: a
  * CA-only install has no `orders` or `challenges` CRD, and reporting "could
@@ -21,11 +17,10 @@
  * only failure allowed to become an empty list.
  *
  * A denial is not an absence. `issuers` and `clusterissuers` ship with every
- * install, so a kubeconfig without cluster-scoped `list clusterissuers` gets
- * nothing back about a cluster that may be signing everything it has — which
- * is how this page once told such a reader that no ClusterIssuer existed.
- * `Certificate` stays unwrapped altogether: its CRD is what detection is, so
- * failing to list it is the page's failure and it says so.
+ * install, so a kubeconfig without cluster-scoped `list clusterissuers` must
+ * not be told that no ClusterIssuer exists. `Certificate` stays unwrapped
+ * altogether: its CRD is what detection is, so failing to list it is the
+ * page's failure and it says so.
  */
 
 import { useMemo } from "react";

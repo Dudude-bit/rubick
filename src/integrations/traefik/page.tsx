@@ -2,23 +2,20 @@
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
  * It opens on Routes, like every vendor page in this tree, because "what is
- * broken" is what somebody who opened an integration page is asking, and that
- * answer belongs on screen rather than behind a click. Map is a real screen
- * and stays a click away.
+ * broken" is what somebody who opened an integration page is asking. Map is a
+ * real screen and stays a click away.
  *
- * A force-directed blob of every route is decoration. One request's journey
- * is not a general graph either — it is a chain in fixed order, entry point →
- * rule → middleware → service → pods — so it is drawn as one, left to right,
- * for the host the reader opened. What a chain cannot show is the shape
- * across hosts: which entry points carry which hostnames, and which land on
- * the same Service. Map answers that, layered and deterministic rather than
- * force-directed, so nothing rearranges when a pod restarts.
+ * One request's journey is a chain in fixed order — entry point → rule →
+ * middleware → service → pods — so it is drawn as one, left to right, for the
+ * host the reader opened. Map answers what a chain cannot: which entry points
+ * carry which hostnames, and which land on the same Service. Layered and
+ * deterministic rather than force-directed, so nothing rearranges when a pod
+ * restarts.
  *
  * Ordered by trouble, not by name: the reader has one URL that is not working
  * and seventy-nine that are. A host with a finding opens itself and every
- * other is one line, so eighty hosts is eighty lines with the three that
- * matter already open. Past {@link AUTO_OPEN} troubled hosts nothing opens
- * itself — a screen where everything is expanded emphasises nothing.
+ * other is one line; past {@link AUTO_OPEN} troubled hosts nothing opens
+ * itself, because a screen where everything is expanded emphasises nothing.
  *
  * Links go into this app for everything the cluster owns. Traefik's own
  * dashboard is deliberately not linked: it is bound to an entry point with no
@@ -975,12 +972,10 @@ function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
 
   if (group.findings.length === 0) return null;
 
-  // A closed row already carries its state in the word at its right end, and
-  // "served in the clear" under a row that says `served in the clear` is the
-  // same sentence twice and twice the height. Only a finding that says more
-  // than the status word does earns a line on a closed row — which on a
-  // cluster of eighty plain-HTTP hosts is the difference between eighty rows
-  // and a hundred and sixty.
+  // A closed row already carries its state in the word at its right end, so
+  // only a finding that says more than that word earns a line on it — which
+  // on a cluster of eighty plain-HTTP hosts is the difference between eighty
+  // rows and a hundred and sixty.
   const worthRepeating = group.findings.filter(
     (finding) => finding.kind !== "clear"
   );

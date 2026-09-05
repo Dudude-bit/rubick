@@ -1,30 +1,14 @@
 /**
  * Workload list page factory.
  *
- * Workload list pages (Deployment, StatefulSet, DaemonSet, Job, CronJob)
- * share an extra layer over `createResourceListPage`: each fetches its own
- * resource list AND `usePodsWithMetrics`, then aggregates pod-level CPU /
- * memory up to the workload row via a per-resource `matchPods` function.
+ * A workload list (Deployment, StatefulSet, DaemonSet, Job, CronJob) adds one
+ * layer over `createResourceListPage`: it fetches its own resource list AND
+ * `usePodsWithMetrics`, then aggregates pod-level CPU / memory up to the
+ * workload row via a per-resource `matchPods`. This collapses that
+ * boilerplate.
  *
- * `createWorkloadListPage` collapses that boilerplate. PodList is NOT
- * built on this — pods are themselves the metrics-bearing rows, so they
- * use `usePodsWithMetrics` directly without aggregation.
- *
- * Example:
- * ```tsx
- * export const DeploymentList = createWorkloadListPage<DeploymentInfo>({
- *   resourceType: ResourceType.Deployment,
- *   title: "Deployments",
- *   fetchList: ({ namespace }) =>
- *     commands.listDeployments({ namespace, ... }),
- *   matchPods: matchDeploymentPods,
- *   deleter: (item) => commands.deleteDeployment(item.name, item.namespace),
- *   columns: () => [...],
- *   extraActions: ({ navigate }) => [
- *     { icon: Scale, label: "Scale", onClick: ... },
- *   ],
- * });
- * ```
+ * PodList is NOT built on this — pods are themselves the metrics-bearing
+ * rows, so they use `usePodsWithMetrics` directly without aggregation.
  */
 
 import { useCallback, useMemo, useState } from "react";

@@ -20,8 +20,8 @@
  * without saying why. So neither ever holds a joined list: both hold
  * {@link wireNamespace}, and the selection rides in `ScopeTab.scope`, which
  * older builds ignore. Downgrading loses the extra namespaces and reopens on
- * "All namespaces" — a superset, labelled as one. {@link decodeScope} still
- * parses a joined list because early builds of this feature wrote one.
+ * "All namespaces" — a superset, labelled as one. {@link decodeScope} parses
+ * a joined list anyway, because early builds of this feature wrote one.
  */
 
 import type { T } from "@/i18n/useT";
@@ -34,24 +34,22 @@ import type { T } from "@/i18n/useT";
  * *full cluster* pod LIST, because the scheduler panel divides requests by
  * every node's allocatable and is cluster-wide whatever the scope. The window
  * asks for the cluster-wide overview however narrow the selection is (the
- * namespace picker exists to show the namespaces you are *not* on) and for
- * one more per namespace selected, every ten seconds. The bill therefore runs
- * about 90 requests a minute at "All namespaces", 186 at one namespace —
- * which is what this app has always cost — and about 480 at four, five of
- * them whole-cluster pod lists every poll.
+ * namespace picker exists to show the namespaces you are *not* on) and for one
+ * more per namespace selected, every ten seconds: about 90 requests a minute
+ * at "All namespaces", 186 at one namespace, about 480 at four — five of them
+ * whole-cluster pod lists every poll.
  *
  * Four is a judgement rather than a line something crosses at five: it holds
- * the window to about two and a half times what one namespace costs, well
- * short of the ~700 a minute this same query ran up before `lib/refresh.ts`
- * slowed it down, and it covers what people actually ask for — prod beside
- * staging, or an app's namespace beside the one its database lives in. An
- * unbounded selection has no such ceiling at all: a dozen namespaces is over
- * 1200 requests a minute, and nothing on screen would say so.
+ * the window to about two and a half times what one namespace costs, and
+ * covers what people actually ask for — prod beside staging, or an app's
+ * namespace beside the one its database lives in. An unbounded selection has
+ * no ceiling at all: a dozen namespaces is over 1200 requests a minute, and
+ * nothing on screen would say so.
  *
  * Enforced where a selection is *made* — `clusterStore.setNamespaceScope`, and
  * the picker that calls it — rather than where it is read. A bound applied at
  * the reading end would leave the window labelled with more namespaces than
- * its numbers cover, which is the one thing no surface here may do.
+ * its numbers cover.
  */
 export const SCOPE_LIMIT = 4;
 
@@ -122,10 +120,8 @@ export function scopeIn(scope: readonly string[], t: T): string {
  * `currentNamespace || null` to get a nullable out of it. A `== null` test
  * against the raw value compiles, is never true, and filters every row away:
  * the sidebar's Gateways and Routes rows read 0 above pages listing forty
- * (shipped in 4.7.3+, caught by review before release).
- *
- * Named here so the rule has one home and a test, rather than being three
- * inline ternaries in a component nothing exercises.
+ * (4.7.3+, caught by review before release). Named here so the rule has one
+ * home and a test.
  */
 export function inNamespace<T extends { namespace: string }>(
   items: T[],

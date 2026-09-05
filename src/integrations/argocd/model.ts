@@ -9,21 +9,19 @@
  * cannot tell them apart:
  *
  * - **Sync failing with auto-sync on.** A manifest the API server refuses,
- *   retried forever. Argo is trying and will never converge; the fix is a
- *   commit.
+ *   retried forever. Argo will never converge; the fix is a commit.
  * - **Out of sync with auto-sync off.** Nothing is trying. Somebody changed
  *   the cluster by hand, or changed git and nobody pressed sync. The fix is a
  *   decision, and until it is made the cluster and git disagree quietly.
  *
- * Both are red in every list Argo or this app has ever drawn, and one is a
- * machine failing while the other is a person forgetting. Naming which is
- * which is the whole reason to read Argo here.
+ * Both are red in every list; one is a machine failing and the other a person
+ * forgetting, and naming which is which is the whole reason to read Argo here.
  *
- * Everything comes from the CRD's own status: detected, no credential, tier
- * 2. The line-by-line diff lives only in Argo's API and needs a token, which
- * is tier 3. So the page says which resources differ and why in Argo's own
- * words — `status.operationState.syncResult` carries the API server's refusal
- * verbatim — and hands the diff itself to Argo.
+ * Everything comes from the CRD's own status: detected, no credential, tier 2.
+ * The line-by-line diff lives only in Argo's API and needs a token — tier 3 —
+ * so the page says which resources differ and why in Argo's own words
+ * (`status.operationState.syncResult` carries the API server's refusal
+ * verbatim) and hands the diff itself to Argo.
  */
 
 import type { VendorVerdict } from "../kit";
@@ -104,8 +102,7 @@ export interface ArgoApp {
  * They carry a type and a message and **no status** — the presence of the
  * entry is the assertion. Reading them through the shared `VendorCondition`
  * helper would quietly treat every one of them as `status: undefined`, so
- * they get their own shape. This is the first place the two vendors were
- * tempting to unify and should not be.
+ * they get their own shape rather than being unified with the other vendor's.
  */
 export interface ArgoCondition {
   type: string;
@@ -402,11 +399,9 @@ export interface ResourceKindGroup {
 /**
  * Everything an Application manages, grouped by kind.
  *
- * The page used to draw a count — "17 objects" — and then list only the ones
- * that differed. A healthy Application therefore said how many things it
- * owned and never which, which is the wrong half: *what is in this
- * Application* is the question somebody opens it with, and the objects are
- * already in `status.resources` with their own health beside them.
+ * The whole list rather than a count of it: *what is in this Application* is
+ * the question somebody opens it with, and the objects are already in
+ * `status.resources` with their own health beside them.
  *
  * Kinds are ordered by trouble and then alphabetically, and so are the
  * objects inside each one, because a hundred-object Helm release is the
@@ -446,11 +441,10 @@ export function resourceTone(resource: ArgoResource): "err" | "warn" | null {
 /**
  * The word at the right of a row.
  *
- * Deliberately close to Argo's own vocabulary, and deliberately not the thing
- * that distinguishes the two findings — because in Argo's vocabulary they are
- * the same word. The tone separates them at a glance and the finding says
- * which is which; a status column that claimed to tell them apart would be
- * inventing a word Argo does not have.
+ * Deliberately close to Argo's own vocabulary, and deliberately not what
+ * distinguishes the two findings — in Argo's vocabulary they are the same
+ * word, so a status column claiming to tell them apart would be inventing one
+ * Argo does not have. The tone separates them and the finding says which.
  */
 export function appState(app: ArgoApp, t: T): VendorVerdict {
   const words = [

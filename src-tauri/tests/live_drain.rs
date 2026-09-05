@@ -1,6 +1,5 @@
-//! Manual proof harness for draining a node against a real cluster.
-//! Ignored by default — it needs a kubeconfig and the specimens, so it is not
-//! part of the `--lib` gate.
+//! Manual proof harness for draining a node against a real cluster. Ignored
+//! by default — it needs a kubeconfig and the specimens.
 //!
 //! ```text
 //! K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain K8S_GUI_DRAIN_NODE=rubick-drain-worker \
@@ -10,28 +9,26 @@
 //! The specimens (`kind` cluster, two nodes, everything pinned to the worker):
 //!   * `held` — two replicas behind a `PodDisruptionBudget` with
 //!     `minAvailable: 2`, so the budget allows no disruption at all and the
-//!     eviction API answers 429 every single time. **This is the case the
-//!     security report was about**: the version this replaced answered that
-//!     429 with a direct `DELETE` and took the pods anyway.
+//!     eviction API answers 429 every single time. The security case: a 429
+//!     must not become a direct `DELETE`.
 //!   * `movable` — one replica, no budget. Must actually leave.
 //!   * `stubborn` — one replica that tolerates everything, so its replacement
-//!     lands back on the node even after the cordon. This is the specimen
-//!     that makes the fixed-target-set rule observable: a drain that re-listed
-//!     each pass would evict this one, then its replacement, then the next,
-//!     for as long as it ran.
+//!     lands back on the node even after the cordon. Makes the
+//!     fixed-target-set rule observable: a drain that re-listed each pass
+//!     would evict this one, then its replacement, then the next, for as long
+//!     as it ran.
 //!   * `scratchy` — one replica holding an `emptyDir`. Out of the set unless
 //!     asked for.
 //!   * `lonely` — a bare pod with no controller. Out of the set unless asked
 //!     for.
 //!   * kindnet / kube-proxy — DaemonSets, which stay and are not refusals.
-//!
 //!   * `slowpoke` — ignores SIGTERM, so the kubelet waits out its 25-second
 //!     grace period. What makes "accepted" and "gone" far enough apart to
 //!     measure.
 //!
-//! `a_spent_budget_keeps_its_pods` wants the budget in place.
-//! `drained_means_the_pods_are_gone` wants it gone — it drains the node
-//! completely, which `held-pdb` would forbid forever:
+//! `a_spent_budget_keeps_its_pods` wants the budget in place;
+//! `drained_means_the_pods_are_gone` drains the node completely, which
+//! `held-pdb` would forbid for ever:
 //!
 //! ```text
 //! kubectl delete pdb held-pdb -n draintest
@@ -43,7 +40,6 @@
 //! kind create cluster --config test-manifests/drain-kind.yaml
 //! kubectl apply -f test-manifests/drain-scene.yaml
 //! ```
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -102,11 +98,11 @@ async fn pods_on_node(client: &kube::Client, node: &str) -> Vec<String> {
 /// pods have actually gone.
 ///
 /// An eviction is a *graceful* delete: the API answers as soon as it accepts
-/// one, and the pod stays put for its grace period. This drain used to call
-/// that "drained" — telling the operator it was safe to power off a node
-/// whose pods were all still running, which is the exact accident a drain
-/// exists to prevent. `slowpoke` takes 20 seconds to stop, so a premature
-/// `Drained` is measurable rather than arguable.
+/// one, and the pod stays put for its grace period. Calling that "drained"
+/// tells the operator it is safe to power off a node whose pods are all still
+/// running, which is the exact accident a drain exists to prevent. `slowpoke`
+/// takes 20 seconds to stop, so a premature `Drained` is measurable rather
+/// than arguable.
 #[tokio::test]
 #[ignore = "needs a real cluster with the specimens; run explicitly with --ignored"]
 async fn drained_means_the_pods_are_gone() {
@@ -407,13 +403,11 @@ async fn a_spent_budget_keeps_its_pods() {
         report.evicted >= 1,
         "the pod with no budget has to have left"
     );
-    // The regression this test found, and the reason `stubborn` is in the
-    // scene. The drain used to re-list the node every pass and work on
-    // whatever it saw, so a replacement that tolerates the cordon got evicted
-    // too, and the next, for as long as it ran. The set is fixed at the first
-    // look, so once that look is done nothing new can enter it: with a budget
-    // that never releases — which is this scene — both numbers must be
-    // identical on every attempt after the first.
+    // The set is fixed at the first look, so nothing new can enter it: with a
+    // budget that never releases — which is this scene — both numbers must be
+    // identical on every attempt after the first. Without that the drain works
+    // on whatever it re-lists, and `stubborn`'s replacement gets evicted too,
+    // and the next, for as long as it runs.
     let (_, moved_first, held_first) = shape[0];
     for (attempt, moved, held) in &shape[1..] {
         assert_eq!(

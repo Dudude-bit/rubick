@@ -4,25 +4,24 @@
  *
  * ``Host(`shop.example.com`) && PathPrefix(`/api`)`` is most of what anybody
  * writes, and it is what lets the page be pivoted by host. The rest —
- * `Header`, `Query`, `ClientIP`, `Method`, `HostRegexp`, negation — is not
- * paraphrased, because a wrong paraphrase of a routing rule is worse than the
- * raw string.
+ * `Header`, `Query`, `ClientIP`, `Method`, `HostRegexp` — is not paraphrased,
+ * because a wrong paraphrase of a routing rule is worse than the raw string.
  *
  * Partial reading is honest because a conjunction only ever narrows: a rule
  * requiring ``Host(`a`)`` and something this parser cannot read still matches
  * only requests for host `a`, so filing it under `a` states a fact. The
  * unread term is kept in {@link RuleReading.unread} and printed beside it.
- *
  * Negation breaks that and is refused for the whole rule: `!Host(`a`)`
  * matches everything except `a`, so treating the term as a requirement
  * inverts it.
  *
- * `||`, `&&` and groups *are* read, because Traefik's precedence is fixed, so
- * a rule has exactly one reading: the expression is expanded into its
- * alternatives, ``Host(`a`) && (PathPrefix(`/x`) || PathPrefix(`/y`))``
- * becoming the two routes it is. Refusing groups was tried first and produced
- * its own confident wrongness — the host vanished from the page and its
- * placeholder collided with others as a phantom duplicate.
+ * `||`, `&&` and groups *are* read: Traefik's precedence is fixed, so a rule
+ * has exactly one reading, and the expression is expanded into its
+ * alternatives — ``Host(`a`) && (PathPrefix(`/x`) || PathPrefix(`/y`))``
+ * becoming the two routes it is. Refusing them instead, which is what the
+ * rule above would suggest, was tried and was its own confident wrongness:
+ * the host vanished from the page and its placeholder collided with the
+ * others as a phantom duplicate.
  */
 
 import type { Saying } from "@/i18n/say";

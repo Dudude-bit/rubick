@@ -7,20 +7,17 @@
  * assembled from three objects that reference each other *by string*: a
  * VirtualService names gateways by name, a destination by hostname, and a
  * subset by a label nothing validates. Every one of those references can
- * point at nothing, and every one of them is accepted by the API server
- * without complaint.
+ * point at nothing, and the API server accepts it without complaint.
  *
- * That is where the findings come from, and it is why they are worth a page:
- * a VirtualService naming a host no Gateway serves is correct YAML that
- * receives no traffic, and a route to a subset no DestinationRule defines is
- * a 503 that no object in the cluster reports.
+ * That is where the findings come from: a VirtualService naming a host no
+ * Gateway serves is correct YAML that receives no traffic, and a route to a
+ * subset no DestinationRule defines is a 503 that no object in the cluster
+ * reports.
  *
- * ## What is deliberately not here
- *
- * Anything that needs the mesh rather than its configuration. No Envoy
- * config dumps, no telemetry, no "is this route actually receiving
- * requests". Everything on this page is stated by the objects themselves,
- * which is what keeps it a tier-two page with nothing to configure.
+ * Nothing here needs the mesh rather than its configuration — no Envoy config
+ * dumps, no telemetry, no "is this route actually receiving requests".
+ * Everything on this page is stated by the objects themselves, which is what
+ * keeps it a tier-two page with nothing to configure.
  */
 
 import type { T } from "@/i18n/useT";

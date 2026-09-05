@@ -3,11 +3,10 @@
  *
  * Seven pages — Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob
  * and Pod — differ in which rows exist, not in the order of the questions a
- * reader asks, and each used to declare the same naive two-column grid. Four
- * blocks flowed into it in DOM order, so a component rendering two sections
- * put "who sets the replica count" top-right and "what a drain must respect"
- * bottom-left. Nobody chose that; auto-flow did. So the order lives here and
- * a page passes its content in.
+ * reader asks, so the order lives here and a page passes its content in. Left
+ * to a page-level two-column grid, blocks flow in DOM order: a component
+ * rendering two sections puts "who sets the replica count" top-right and "what
+ * a drain must respect" bottom-left.
  *
  * The questions, in order: *is it all right* (the header, above this), *how
  * many, who decides, what stops it* ({@link CountBlock}), *what does it use*
@@ -16,8 +15,7 @@
  *
  * - **Full width by default.** Nothing is squeezed into half a page by where
  *   it happened to fall.
- * - **Two columns only inside a block, declared by that block.** No
- *   page-level auto-flow is left to scatter anything.
+ * - **Two columns only inside a block, declared by that block.**
  * - **One label column.** Every key/value table is `KeyValueRow`, so the eye
  *   has one left edge.
  * - **A block states its subject once.** The header is exempt — it is
@@ -120,10 +118,9 @@ export interface CountBlockProps {
 /**
  * The number, who sets it, and what a drain must respect — one block.
  *
- * This replaced three: a bar, an "Autoscaling" section and a "Disruption
- * budget" section, which between them stated the replica count twice more
- * than the header already had. The bar owns the count and the autoscaler and
- * the budget are reduced to what they contribute to *this* number.
+ * The bar owns the count; the autoscaler and the budget are reduced to what
+ * they contribute to *this* number rather than restating it in sections of
+ * their own.
  *
  * Two columns, declared here: the bar wants a bar's width and not the page's,
  * and the rows read as a caption beside it. When nothing governs the workload
@@ -202,11 +199,9 @@ export interface FactBlockProps {
 /**
  * The flat facts, at the bottom, under a name that says what they are for.
  *
- * The name matters more than it looks. This block used to be titled with the
- * kind — `"StatefulSet"` — and the caption rule correctly drops a heading that
- * only repeats what the breadcrumb already said, so the block rendered
- * anonymous. Right rule, wrong outcome: "How it is declared" is what it is
- * for, and it is not suppressed because it is not a repetition.
+ * Titled "How it is declared" and not with the kind: the caption rule drops a
+ * heading that only repeats what the breadcrumb already said, so a block
+ * titled `"StatefulSet"` renders anonymous.
  */
 export function FactBlock({ title, count, items }: FactBlockProps) {
   const split = items.length >= SPLIT_AT ? Math.ceil(items.length / 2) : 0;

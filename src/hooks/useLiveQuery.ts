@@ -1,21 +1,19 @@
 /**
- * The only way anything in this app re-reads the cluster on a timer.
- *
- * `useQuery` plus the four conditions that decide whether the timer should run
- * at all — is the surface on screen, does the window have focus, has the
- * answer stopped changing, did the reader just touch something — and the one
- * output that keeps the screen honest about it.
+ * The only way anything in this app re-reads the cluster on a timer: `useQuery`
+ * plus the four conditions that decide whether the timer should run at all —
+ * is the surface on screen, does the window have focus, has the answer stopped
+ * changing, did the reader just touch something — and the one output that keeps
+ * the screen honest about it.
  *
  * A query asks for a *rate* (`refresh: "resourceList"`) rather than a number,
- * and `refetchInterval` is a lint error everywhere but this file, so the
- * number cannot be written by hand again — see the `no-restricted-syntax`
- * block in `eslint.config.js`.
+ * and `refetchInterval` is a lint error everywhere but this file, so the number
+ * cannot be written by hand — see the `no-restricted-syntax` block in
+ * `eslint.config.js`.
  *
- * Every way of arriving back at a query refetches it before the reader can
- * read it: switching to a detail tab, un-minimising, regaining focus. The
- * whole licence to stop polling rests on that, so it is not tunable — a
- * returning reader must never see a number that stopped being true while they
- * were gone.
+ * Every way of arriving back at a query refetches it before the reader can read
+ * it: switching to a detail tab, un-minimising, regaining focus. The whole
+ * licence to stop polling rests on that, so it is not tunable — a returning
+ * reader must never see a number that stopped being true while they were gone.
  *
  * A query re-reading more slowly than its rate reports `freshness.slowed`, and
  * `DataFreshness` draws "slowed" rather than "polling". A *watch* is not this:

@@ -5,54 +5,38 @@
  * rather than for the vendor by name. A lint rule keeps that honest: nothing
  * outside `src/integrations/` may import a vendor folder.
  *
- * ## Powers, and sometimes a page
- *
  * A vendor gets a {@link Vendor.page} when it owns objects and a topology no
- * core object can host — "what hosts does this cluster serve, and where does
- * each one go" is the routing layer's own shape. Prometheus gets none: every
- * fact it has belongs on the pod or node it is about. Most vendors are both.
- * cert-manager's expiry is a power, through {@link Capabilities}, and its
- * list of failing chains is a page. {@link Extension} is the third thing: is
- * it here, is it healthy, what does it give.
- *
- * ## The three tiers
+ * core object can host. Prometheus gets none: every fact it has belongs on the
+ * pod or node it is about. cert-manager has both — its expiry a power through
+ * {@link Capabilities}, its list of failing chains a page. {@link Extension}
+ * is the third thing: is it here, is it healthy, what does it give. It is a
+ * field rather than a capability key, because a capability lets a surface ask
+ * for a power without learning who answered and this pane's job is to name
+ * the vendor.
  *
  * The tier decides a facet's runtime obligations, not where its code lives.
  *
- * - **Tier 1 — free.** The cluster already says it. {@link Vendor.nodeLabels}
- *   and {@link Vendor.flavours} are read on every cluster, always.
+ * - **Tier 1 — free.** {@link Vendor.nodeLabels} and {@link Vendor.flavours}
+ *   are read on every cluster, always.
  * - **Tier 2 — detected.** Its state is CRDs on the same API server.
  *   {@link Vendor.crd} needs no detection call — a CRD group with no objects
  *   is never rendered — while {@link Vendor.provides} is gated on the
  *   backend's CRD scan.
- * - **Tier 3 — configured.** Needs its own address and usually a credential
- *   the kubeconfig does not carry, so presence is a probe, and the answer has
- *   three values. {@link Connect} is that shape.
+ * - **Tier 3 — configured** ({@link Connect}). Its own address and usually a
+ *   credential the kubeconfig does not carry, so presence is a probe with
+ *   three answers and the surface owes all three: configured and silent looks
+ *   exactly like never set up, and the reader blames the app rather than their
+ *   monitoring. {@link CapabilityState} carries the difference and the reason.
  *
- * **Configured is three states and the surface owes all three.** Configured
- * and not answering is the one that ruins a feature quietly: a broken
- * Prometheus that falls back silently looks exactly like one nobody set up,
- * and the reader concludes the app is broken rather than their monitoring.
- * {@link CapabilityState} carries the difference and the reason.
- *
- * {@link Extension.facts} is a field rather than a capability key because a
- * capability exists so a surface can ask for a power without learning who
- * answered, and the Integrations pane's whole job is to name the vendor.
- *
- * ## What decides that something lives here
- *
- * **Is this knowledge about a specific vendor's product?** GKE's node-pool
- * label spellings qualify even though reading node labels is tier 1. Generic
- * machinery that groups a table by any key does not.
- *
- * **A capability key is a contract, and the surface must have a real answer
- * for its absence.** `certificate.issuance` absent means the page shows the
- * expiry it read from `tls.crt` and says nothing about renewal. A capability
- * with no good answer when absent does not belong behind this seam — which
- * is why cloud *auth* is not in this tree: without it there is no kubeconfig.
- *
- * **A vendor may never take something away.** The core answer is drawn first
- * and stays drawn; the facet extends it.
+ * What lives here is knowledge about a specific vendor's product: GKE's
+ * node-pool label spellings qualify even though reading node labels is tier 1,
+ * generic machinery that groups a table by any key does not. **A capability
+ * key is a contract, and the surface must have a real answer for its absence**
+ * — `certificate.issuance` absent means the page shows the expiry it read from
+ * `tls.crt` and says nothing about renewal — which is why cloud *auth* is not
+ * in this tree: without it there is no kubeconfig. And **a vendor may never
+ * take something away**: the core answer is drawn first and stays drawn; the
+ * facet extends it.
  *
  * Deliberately absent, because a dozen static records are a list and not a
  * framework: registration order, priorities, lifecycle hooks, an event bus,
@@ -77,12 +61,10 @@ import type { InClusterHint } from "./forwarded";
  *
  * Owned here rather than by whichever vendor answers, because the picker is
  * drawn by the surface: a chart offering ranges only the current supplier
- * happens to implement would change shape when the supplier did.
- *
- * One vocabulary across every history capability, and that is worth stating:
- * the log viewer's range picker offers the same four words the usage chart
- * does, so "the last six hours" means one thing in this app rather than one
- * thing per pane.
+ * happens to implement would change shape when the supplier did. One
+ * vocabulary across every history capability — the log viewer's picker offers
+ * the same four words the usage chart does — so "the last six hours" means one
+ * thing in this app rather than one thing per pane.
  */
 export const USAGE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 
@@ -368,14 +350,6 @@ export interface ServiceRoute {
   to?: string;
 }
 
-/**
- * Every capability the app knows how to consume, and its contract.
- *
- * Plain async functions rather than components or hooks: the surface owns
- * how it fetches and how it draws, so the vendor cannot smuggle a layout
- * decision across the seam, and a surface can call one inside its own
- * `useQuery` without any rules-of-hooks trouble.
- */
 /** What stands behind a Service that is a proxy's own front door. */
 export interface ProxyBehind {
   /** The vendor's display name — "Traefik". */
@@ -386,6 +360,14 @@ export interface ProxyBehind {
   hosts: number;
 }
 
+/**
+ * Every capability the app knows how to consume, and its contract.
+ *
+ * Plain async functions rather than components or hooks: the surface owns how
+ * it fetches and how it draws, so the vendor cannot smuggle a layout decision
+ * across the seam, and a surface can call one inside its own `useQuery`
+ * without any rules-of-hooks trouble.
+ */
 export interface Capabilities {
   /**
    * How the certificate in a TLS Secret came to be, and what is stopping it
@@ -444,17 +426,15 @@ export interface Capabilities {
   /**
    * The lines a pod wrote before it stopped existing.
    *
-   * The biggest hole in this app's log viewer, and the one no amount of
-   * client-side buffering closes: `--previous` reaches one run back and only
-   * while the pod object is still there, so a crashed pod that its
-   * ReplicaSet has already replaced takes its log with it. A store that was
-   * shipped to has them.
+   * No amount of client-side buffering closes this: `--previous` reaches one
+   * run back and only while the pod object is still there, so a crashed pod
+   * its ReplicaSet has already replaced takes its log with it. A store that
+   * was shipped to has them.
    *
    * Absent means the viewer is exactly what it is today: the live stream, the
    * previous run where the kubelet still holds one, and a pod that is gone
-   * says so and stops. Nothing is removed, nothing is dimmed, and no pane
-   * that reads fine today starts nagging — the offer appears only where the
-   * reader has just been told there is nothing to read.
+   * says so and stops. The offer appears only where the reader has just been
+   * told there is nothing to read; nothing else is removed or dimmed.
    *
    * **Never live.** This answers a closed range and returns a page; it is not
    * a second subscription and must not be drawn as one. A pane holding
@@ -478,12 +458,11 @@ export interface Capabilities {
   /**
    * Bytes in and out of a workload's pods.
    *
-   * The one capability here whose absence has **no** core answer, and the
-   * consequence is spelled out rather than worked around: with no supplier
-   * the row is simply not drawn. It gets no placeholder and no invitation —
-   * a "connect a Prometheus" nag on every page would be an advert repeated
-   * once per surface, and the single quiet line under Usage already carries
-   * the offer for the whole app.
+   * The one capability here whose absence has **no** core answer: with no
+   * supplier the row is simply not drawn, with no placeholder and no
+   * invitation. The single quiet line under Usage already carries the offer
+   * for the whole app, so a "connect a Prometheus" nag on every page would be
+   * one advert per surface.
    */
   "network.traffic": (input: {
     scope: UsageScope;
@@ -512,17 +491,12 @@ export interface Capabilities {
    * thing that routes them is the vendor's own object rather than an Ingress.
    *
    * The app's connection graph is built in the backend from `Ingress` and
-   * nothing else, which is correct — a `Routes` edge out of a Traefik
-   * `IngressRoute` would be vendor knowledge in the core, and the core has
-   * no business knowing what an IngressRoute is. The consequence, though, was
-   * a cluster whose entire edge is CRDs being told *by the app* that nothing
-   * routes to anything: the Argo CD page said "no Ingress in this cluster
-   * serves argocd-server" over a cluster where `argocd.example.com` had been
-   * serving it through Traefik for months. Saying nothing would have been
-   * fine; that sentence was a claim, and it was false.
-   *
-   * So the vendor answers for its own objects, in the same shape a core
-   * Ingress would have given.
+   * nothing else, which is correct: a `Routes` edge out of a Traefik
+   * `IngressRoute` would be vendor knowledge in the core, and the core has no
+   * business knowing what an IngressRoute is. So the vendor answers for its
+   * own objects, in the same shape a core Ingress would have given —
+   * otherwise a cluster whose entire edge is CRDs is told *by the app* that
+   * nothing routes to anything, which is a false claim rather than silence.
    *
    * Absent means every surface draws what it drew before: the Ingresses the
    * core found, and a sentence about *those* rather than about the cluster.
@@ -537,11 +511,10 @@ export interface Capabilities {
    * Whether this Ingress is served over TLS, when the certificate is not in
    * `spec.tls`.
    *
-   * The single widest hole this seam has had, and it was not on a vendor page
-   * — it was on the core Ingress list, the core Ingress page, the peek, and
-   * the traffic chain of every workload behind one. All of them answer "is
-   * this served over TLS" by reading `spec.tls`, which is correct on a
-   * self-managed cluster and empty on all three managed clouds:
+   * The core Ingress list, the core Ingress page, the peek and the traffic
+   * chain of every workload behind one all answer "is this served over TLS"
+   * by reading `spec.tls`, which is correct on a self-managed cluster and
+   * empty on all three managed clouds:
    *
    * - AWS's controller does not read `spec.tls` **at all** — the certificate
    *   is `alb.ingress.kubernetes.io/certificate-arn`, or discovered from the
@@ -550,8 +523,8 @@ export interface Capabilities {
    *   Gateway and named in `appgw.ingress.kubernetes.io/appgw-ssl-certificate`
    * - GKE's is a `ManagedCertificate` or a pre-shared name, both annotations
    *
-   * So every managed cluster was told its HTTPS sites were plain HTTP, and
-   * handed `http://` links to open them with.
+   * Read `spec.tls` alone and every managed cluster is told its HTTPS sites
+   * are plain HTTP, and handed `http://` links to open them with.
    *
    * Answered per host and only for the hosts the vendor can speak for: a host
    * missing from the answer is not a denial, and the caller keeps whatever
@@ -559,10 +532,9 @@ export interface Capabilities {
    *
    * **Takes a list and answers positionally**, the same contract
    * {@link Capabilities."delivery.source"} has and for the same reason: the
-   * Ingress list is a table, and a capability asked once per row would have
-   * made the column impossible — which is where the wrong answer is most
-   * visible, because the list is what hands out the `http://` link somebody
-   * clicks.
+   * Ingress list is a table, and a capability asked once per row would make
+   * the column impossible — and the list is where a wrong answer shows most,
+   * because it is what hands out the `http://` link somebody clicks.
    */
   "ingress.tls": (
     ingresses: Array<{ namespace: string; name: string; hosts: string[] }>
@@ -570,13 +542,12 @@ export interface Capabilities {
   /**
    * What one custom resource is connected to, as its own controller states it.
    *
-   * The gap this closes is a whole surface rather than a field. Every core
-   * object in this app has a Connections tab; a custom resource had none and
-   * could not — `get_resource_connections` answers for nine kinds and refuses
-   * the rest, correctly, because the joins it computes do not exist for a kind
-   * it has never heard of. So the object with the most connections in a
-   * GitOps cluster, an Argo `Application` naming forty objects it manages, was
-   * the one object in the app that showed none.
+   * The gap this closes is a whole surface rather than a field.
+   * `get_resource_connections` answers for nine core kinds and refuses the
+   * rest, correctly, because the joins it computes do not exist for a kind it
+   * has never heard of. So the object with the most connections in a GitOps
+   * cluster — an Argo `Application` naming forty objects it manages — gets a
+   * Connections tab from here or from nowhere.
    *
    * Asked per object rather than for a list: a Connections tab is opened for
    * one object at a time, and there is no table of custom resources this would
@@ -810,40 +781,22 @@ export interface Extension {
 }
 
 /**
- * The screen a vendor owns, and its row in the sidebar.
- *
- * Declared here for the same reason {@link Extension} is: the shell needs a
- * route, a label, a glyph and a number, and it must get all four without
- * learning that Traefik exists. `App.tsx` serves one route for every vendor
- * page there will ever be, and the sidebar category is derived rather than
- * written — so a second vendor page costs one folder and one line in
- * {@link VENDORS}, and no file outside this tree changes.
- *
- * A page belongs to a vendor that also declares an {@link Extension}, and
- * that is not a formality: the row takes its name and its glyph from the
- * extension, and the category lists only *detected* extensions, so a vendor
- * with a page and no extension would have a screen nothing could reach.
- */
-/**
  * How a sidebar row gets its number: the page's *own* query, plus the
  * arithmetic that turns its answer into a count.
  *
- * A query rather than a function, and that is the whole point of the shape.
- * Every one of these counts used to be a `() => Promise<number>` that made
- * the same cluster reads the page makes, under a key of its own — so opening
- * the Traefik page listed every Ingress, every IngressRoute and every
- * Middleware twice, once for the screen and once for the number beside its
- * name. Declaring the query instead means the row and the page share one
- * cache entry: the row pays for the read, and opening the page costs nothing.
+ * A query rather than a `() => Promise<number>`, so the row and the page share
+ * one cache entry: the row pays for the read and opening the page costs
+ * nothing. A count fetching under a key of its own would list every Ingress,
+ * every IngressRoute and every Middleware twice, once for the screen and once
+ * for the number beside its name.
  *
  * `staleTime` is the vendor's, because a routing table and a delivery
  * pipeline do not go out of date at the same speed. Nothing here polls.
  *
- * The shell prefixes {@link queryKey} with the cluster context before it
- * runs the query — cluster B must never read cluster A's numbers, the same
- * rule the detection scan states. A page that wants to share the cache
- * entry (the whole point of declaring the query) prefixes its own reads
- * the same way: `[context, ...KEY]`.
+ * The shell prefixes {@link queryKey} with the cluster context before it runs
+ * the query — cluster B must never read cluster A's numbers, the same rule the
+ * detection scan states. A page that wants to share the cache entry prefixes
+ * its own reads the same way: `[context, ...KEY]`.
  */
 export interface PageCount {
   queryKey: readonly unknown[];
@@ -887,6 +840,21 @@ export function pageCount<T>(count: {
   return count as PageCount;
 }
 
+/**
+ * The screen a vendor owns, and its row in the sidebar.
+ *
+ * Declared here for the same reason {@link Extension} is: the shell needs a
+ * route, a label, a glyph and a number, and must get all four without learning
+ * that Traefik exists. `App.tsx` serves one route for every vendor page there
+ * will ever be, and the sidebar category is derived rather than written — so a
+ * second vendor page costs one folder and one line in {@link VENDORS}, and no
+ * file outside this tree changes.
+ *
+ * A page belongs to a vendor that also declares an {@link Extension}, and that
+ * is not a formality: the row takes its name and its glyph from the extension,
+ * and the category lists only *detected* extensions, so a vendor with a page
+ * and no extension would have a screen nothing could reach.
+ */
 export interface VendorPage {
   /**
    * The number at the end of the sidebar row. See {@link PageCount}.
