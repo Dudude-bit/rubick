@@ -18,8 +18,9 @@ export function ReproducePanel({ className = "" }: { className?: string }) {
         live in the objects, not in the traffic. You get a pod whose phase is
         Running while its only container crashes on every start, a Service whose
         three pods are Ready and which publishes no port next to a twin Service
-        on the same pods that publishes fine, and one host with three paths, one
-        of them pointing at a Service that does not exist.
+        on the same pods that publishes fine, and one host with four paths: one
+        healthy, one behind the crashlooping pod, one behind the mistyped port,
+        one pointing at a Service that does not exist.
       </p>
       <div className="mt-6 flex flex-col gap-3">
         <CommandLine command={`kubectl apply -f ${LINKS.lies}`} />

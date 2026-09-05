@@ -66,6 +66,25 @@ const LANES: Lane[] = [
     tone: "bad",
   },
   {
+    path: "/checkout",
+    stopAt: 5,
+    nodes: [
+      { label: "shop.example.test", tone: "neutral" },
+      { label: "/checkout → checkout", tone: "neutral" },
+      { label: "none", tone: "none" },
+      { label: "checkout :80", sub: "targetPort: 8080", tone: "neutral" },
+      {
+        label: "running, none ready",
+        sub: "a pod that is not Ready is never published",
+        tone: "stop",
+      },
+      { label: "checkout", sub: "CrashLoopBackOff, never Ready", tone: "stop" },
+    ],
+    verdict:
+      "The Service is wired up and green on every list page. The one pod behind it crashes on start and has never been Ready, so nothing is published, and anything that reaches this address gets a connection refused.",
+    tone: "bad",
+  },
+  {
     path: "/api",
     stopAt: 3,
     nodes: [
@@ -93,9 +112,11 @@ export function TrafficChain({ className = "" }: { className?: string }) {
   return (
     <div ref={ref} className={`chain ${className}`}>
       <p className="sr-only">
-        Three paths on one host. Slash reaches three ready pods through Service
+        Four paths on one host. Slash reaches three ready pods through Service
         api-ok. Slash legacy reaches Service api, whose target port name matches
-        no container, so its addresses are published with no port. Slash api
+        no container, so its addresses are published with no port. Slash
+        checkout reaches Service checkout, whose only pod crashes on start and
+        has never been Ready, so nothing is published behind it. Slash api
         points at Service api-v2, which does not exist in this namespace;
         nothing past it was looked at.
       </p>

@@ -94,10 +94,27 @@ spec:
       port: 80
       targetPort: http
 ---
-# Lie 3. One host, three paths. / reaches three ready pods through api-ok.
+# The crashlooping pod from lie 1, behind a Service. The selector matches,
+# the Service is green, and the pod has never been Ready, so nothing is
+# published behind it and every request gets a connection refused.
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: rubick-lies
+spec:
+  selector:
+    app: checkout
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+# Lie 3. One host, four paths. / reaches three ready pods through api-ok.
 # /legacy points at api, whose port name matches nothing, so it stops at
-# what is published. /api points at api-v2, a Service that was never
-# created; the API server accepts the rule and nothing marks it. No ingress
+# what is published. /checkout points at a Service whose only pod never
+# became Ready. /api points at api-v2, a Service that was never created;
+# the API server accepts the rule and nothing marks it. No ingress
 # controller is needed to see any of this: the gaps are in the objects.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -121,6 +138,13 @@ spec:
             backend:
               service:
                 name: api
+                port:
+                  number: 80
+          - path: /checkout
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout
                 port:
                   number: 80
           - path: /api
