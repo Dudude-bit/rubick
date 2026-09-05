@@ -3,32 +3,25 @@
  *
  * Seven pages — Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob
  * and Pod — differ in which rows exist, not in the order of the questions a
- * reader asks, and each of them used to declare its own layout. What they all
- * declared was the same naive two-column grid, so four blocks flowed into it
- * in DOM order and a component that rendered *two* sections put "who sets the
- * replica count" top-right and "what a drain must respect" bottom-left.
- * Nobody chose that; auto-flow did. Doing it per page is how it drifted the
- * first time, so the order lives here and a page passes its content in.
+ * reader asks, and each used to declare the same naive two-column grid. Four
+ * blocks flowed into it in DOM order, so a component rendering two sections
+ * put "who sets the replica count" top-right and "what a drain must respect"
+ * bottom-left. Nobody chose that; auto-flow did. So the order lives here and
+ * a page passes its content in.
  *
- * The questions, in the order they are asked:
+ * The questions, in order: *is it all right* (the header, above this), *how
+ * many, who decides, what stops it* ({@link CountBlock}), *what does it use*
+ * (Usage, which needs the width it used to get least of), *how is it reached
+ * and how is it declared*.
  *
- * 1. *Is it all right?* — the header answers, and the problem summary says why
- *    when it is not. Above this, and untouched by it.
- * 2. *How many, who decides, what stops it* — one block. See {@link CountBlock}.
- * 3. *What does it use* — Usage, which needs the width it used to get least of.
- * 4. *How is it reached, and how is it declared* — the traffic chain, then the
- *    flat facts nobody reads until they need one.
- *
- * ## The layout rules
- *
- * - **Full width by default.** A block spans the page; nothing is squeezed
- *   into half of it by where it happened to fall.
- * - **Two columns only inside a block, and declared by that block.** There is
- *   no page-level auto-flow left to scatter anything into.
- * - **One label column.** Every key/value table on the page is `KeyValueRow`,
- *   whose label track is fixed, so the eye has one left edge.
- * - **A block states its subject once.** If a number belongs to a block, no
- *   other block repeats it. The header is exempt — it is identity.
+ * - **Full width by default.** Nothing is squeezed into half a page by where
+ *   it happened to fall.
+ * - **Two columns only inside a block, declared by that block.** No
+ *   page-level auto-flow is left to scatter anything.
+ * - **One label column.** Every key/value table is `KeyValueRow`, so the eye
+ *   has one left edge.
+ * - **A block states its subject once.** The header is exempt — it is
+ *   identity.
  */
 
 import { useT, type T } from "@/i18n/useT";

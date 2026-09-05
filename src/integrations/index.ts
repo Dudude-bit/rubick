@@ -2,42 +2,31 @@
  * Everything the app knows about a specific vendor's product, and the only
  * door into it.
  *
- * Kubernetes core is what the kubeconfig already reaches and what every
- * cluster answers for. This tree is the rest: cert-manager, Traefik, Istio,
- * Flux, and the three clouds' spellings of the facts their nodes already
- * carry. A surface asks for a facet and gets an implementation or nothing.
- * It never learns which vendor answered, or whether one did.
- *
- * The name is `integrations/` and it spans all three tiers, including tier
- * one, which is neither detected nor configured. What decides that
- * something lives here is not the tier but one question: *is this knowledge
- * about a specific vendor's product?* See `registry.ts` for the rest of the
- * rule and for what is deliberately outside it.
+ * A surface asks for a facet and gets an implementation or nothing. It never
+ * learns which vendor answered, or whether one did. The tree spans all three
+ * tiers; what decides that something lives here is not the tier but whether
+ * it is knowledge about a specific vendor's product. See `registry.ts` for
+ * the rest of the rule and what is deliberately outside it.
  *
  * ## Adding a vendor
  *
  * Two files, both in this tree, and nothing anywhere else:
  *
- * 1. `src/integrations/<id>/index.ts` — `defineVendor({ … })` with the
- *    facets it has. Put anything bulky beside it in the same folder:
- *    `crd.ts` for a page of column definitions, a client, a config form.
+ * 1. `src/integrations/<id>/index.ts` — `defineVendor({ … })` with the facets
+ *    it has, and anything bulky beside it in the same folder.
  * 2. `src/integrations/index.ts` — one import and one entry in
  *    {@link VENDORS}.
  *
- * That is the whole procedure, and it holds for a vendor that brings a whole
- * screen: `page: { count, load }` beside `extension` puts a row in the
- * sidebar's Integrations category and serves the screen at
- * `/integrations/<id>`, through the one route `App.tsx` already has. No
- * surface is edited, no switch statement grows a case, nothing is registered
- * at startup, and no test outside this tree changes — every consumer reads
- * the facet through a derivation below, so a new vendor's labels, columns,
- * marks and pages appear wherever the existing ones already do.
+ * That holds for a vendor bringing a whole screen: `page: { count, load }`
+ * beside `extension` puts a row in the sidebar and serves
+ * `/integrations/<id>` through the route `App.tsx` already has. No surface is
+ * edited, no switch grows a case, nothing registers at startup, and no test
+ * outside this tree changes.
  *
- * Two exceptions, both of which stay inside the tree: a genuinely new
- * *capability* (as opposed to a new supplier of an existing one) adds a key
- * to `Capabilities` in `registry.ts` and needs a surface written to consume
- * it; and a new cluster *flavour* adds a member to `ClusterProvider` there
- * too, because that union is what keeps the mark table exhaustive.
+ * Two exceptions, both inside the tree: a genuinely new *capability* adds a
+ * key to `Capabilities` in `registry.ts` and needs a surface written to
+ * consume it, and a new cluster *flavour* adds a member to `ClusterProvider`
+ * there, because that union is what keeps the mark table exhaustive.
  */
 
 import { sayWords } from "@/i18n/say";

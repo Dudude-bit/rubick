@@ -1,14 +1,9 @@
 /**
  * What Argo CD says about itself, read from the `Application` CRD alone.
  *
- * ## One question, asked differently to Traefik's
- *
- * Traefik's page is pivoted by host because that is how routing is asked
- * about. Delivery is asked about differently — *is this in sync, and if not,
- * what differs and since when* — so this is a list of Applications ordered by
- * trouble, never by name.
- *
- * ## The two findings this page exists for
+ * Delivery is asked about as *is this in sync, and if not, what differs and
+ * since when*, so this is a list of Applications ordered by trouble, never by
+ * name.
  *
  * `OutOfSync` is one word for two opposite problems, and a status column
  * cannot tell them apart:
@@ -17,23 +12,18 @@
  *   retried forever. Argo is trying and will never converge; the fix is a
  *   commit.
  * - **Out of sync with auto-sync off.** Nothing is trying. Somebody changed
- *   the cluster by hand and meant to, or changed git and nobody pressed sync.
- *   The fix is a decision, and until somebody makes it the cluster and git
- *   disagree quietly.
+ *   the cluster by hand, or changed git and nobody pressed sync. The fix is a
+ *   decision, and until it is made the cluster and git disagree quietly.
  *
- * Both are `OutOfSync`, both are red in every list Argo or this app has ever
- * drawn, and one of them is a machine failing while the other is a person
- * forgetting. Naming which is which is the whole reason to read Argo here.
+ * Both are red in every list Argo or this app has ever drawn, and one is a
+ * machine failing while the other is a person forgetting. Naming which is
+ * which is the whole reason to read Argo here.
  *
- * ## The tier boundary, drawn openly
- *
- * Everything here comes from the `Application` CRD's own status: detected,
- * no credential, tier 2. The *line-by-line* difference between git and live
- * lives only in Argo's API and needs a token, which is tier 3 and is not
- * this. So the page says **which** resources differ and **why** in Argo's own
+ * Everything comes from the CRD's own status: detected, no credential, tier
+ * 2. The line-by-line diff lives only in Argo's API and needs a token, which
+ * is tier 3. So the page says which resources differ and why in Argo's own
  * words — `status.operationState.syncResult` carries the API server's refusal
- * verbatim — and hands the diff itself to Argo. If somebody later connects
- * the API, the diff arrives through the same seam without this file changing.
+ * verbatim — and hands the diff itself to Argo.
  */
 
 import type { VendorVerdict } from "../kit";

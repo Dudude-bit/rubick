@@ -3,34 +3,26 @@
  * decides *which host and which path* — nothing else.
  *
  * ``Host(`shop.example.com`) && PathPrefix(`/api`)`` is most of what anybody
- * writes, and it is what lets the page be pivoted by host at all. The rest of
- * the language — `Header`, `Query`, `ClientIP`, `Method`, `HostRegexp`,
- * negation, parenthesised groups — is not paraphrased, because **a wrong
- * paraphrase of a routing rule is worse than the raw string.** A reader who
- * sees the rule as written can check it; a reader told "serves /api" by a
- * parser that quietly dropped `&& Method(`POST`)` cannot.
+ * writes, and it is what lets the page be pivoted by host. The rest —
+ * `Header`, `Query`, `ClientIP`, `Method`, `HostRegexp`, negation — is not
+ * paraphrased, because a wrong paraphrase of a routing rule is worse than the
+ * raw string.
  *
- * ## What is a fact and what is a guess
+ * Partial reading is honest because a conjunction only ever narrows: a rule
+ * requiring ``Host(`a`)`` and something this parser cannot read still matches
+ * only requests for host `a`, so filing it under `a` states a fact. The
+ * unread term is kept in {@link RuleReading.unread} and printed beside it.
  *
- * The one thing that makes partial reading honest is that **a conjunction
- * only ever narrows**. If a rule requires ``Host(`a`)`` and also something
- * this parser does not understand, then every request it matches is still for
- * host `a` — so filing the route under `a` states a fact, not a guess. The
- * term it could not read is kept verbatim in {@link RuleReading.unread} and
- * the surface prints the whole rule beside it.
+ * Negation breaks that and is refused for the whole rule: `!Host(`a`)`
+ * matches everything except `a`, so treating the term as a requirement
+ * inverts it.
  *
- * One thing breaks that and is therefore refused outright, for the whole
- * rule: **negation**. `!Host(`a`)` matches everything *except* `a`, so
- * treating the `Host` term as a requirement inverts the meaning.
- *
- * `||`, `&&` and parenthesised groups *are* read, because Traefik's
- * precedence is fixed — `&&` binds tighter than `||`, parentheses group —
- * so a rule has exactly one reading and it is computed rather than guessed:
- * the expression is expanded into its alternatives, ``Host(`a`) &&
- * (PathPrefix(`/x`) || PathPrefix(`/y`))`` becoming the two routes it is.
- * Refusing groups was tried first and produced its own confident wrongness:
- * the refused rule's host vanished from the page and its placeholder row
- * collided with other placeholders as a phantom duplicate.
+ * `||`, `&&` and groups *are* read, because Traefik's precedence is fixed, so
+ * a rule has exactly one reading: the expression is expanded into its
+ * alternatives, ``Host(`a`) && (PathPrefix(`/x`) || PathPrefix(`/y`))``
+ * becoming the two routes it is. Refusing groups was tried first and produced
+ * its own confident wrongness — the host vanished from the page and its
+ * placeholder collided with others as a phantom duplicate.
  */
 
 import type { Saying } from "@/i18n/say";

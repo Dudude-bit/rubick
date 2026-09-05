@@ -2,32 +2,24 @@
  * What the Ingresses in front of this object say about themselves.
  *
  * The neighbourhood answer knows which Ingress routes to which Service, on
- * which host and path, and whether `spec.tls` covers that host — and it stops
- * there, because walking an Ingress's TLS block is done when the Ingress is
- * the subject. So a Deployment page could always say *which hostname* reached
- * it and never *what serves that hostname* or *what certificate it is served
- * under*, which is the half somebody is usually asking about when they open
- * a workload and want a URL.
+ * which host and path, and whether `spec.tls` covers that host. It stops
+ * there, so a Deployment page could say *which hostname* reached it and never
+ * *what certificate it is served under* — the half somebody is usually asking
+ * when they open a workload and want a URL.
  *
- * This closes it with the reads the Ingress page already makes, from the
- * other end: the Ingress objects themselves, the class each one asks for, the
- * certificates behind their Secrets, and — where anything in the cluster can
- * say — why those certificates look the way they do.
+ * This closes it from the other end, with the reads the Ingress page already
+ * makes: the Ingress objects, the class each asks for, the certificates
+ * behind their Secrets, and why those certificates look the way they do.
  *
- * Every one of the four is optional to the surface. The chain is whole
- * without any of them, and a page that has read none draws exactly what it
- * drew before this existed.
+ * All four are optional to the surface; a page that has read none draws what
+ * it drew before this existed. What is not optional is the difference between
+ * not having read something and having failed to — they draw the same
+ * nothing, so failures come back as their own list ({@link UnreadIngress}).
  *
- * What is *not* optional is the difference between not having read something
- * and having failed to: they draw the same nothing, so the failures come back
- * as their own list — see {@link UnreadIngress}.
- *
- * ## What it costs
- *
- * One `get_ingress` per Ingress that fronts this object, which is one or two
- * on any real workload, plus one class resolution per distinct class name.
- * Both are shared with the Ingress detail page through its own query keys, so
- * a reader who arrives from there pays for neither.
+ * Cost: one `get_ingress` per Ingress fronting this object, one or two on any
+ * real workload, plus one class resolution per distinct class name. Both are
+ * shared with the Ingress detail page's query keys, so a reader arriving from
+ * there pays for neither.
  */
 
 import { useQueries } from "@tanstack/react-query";
