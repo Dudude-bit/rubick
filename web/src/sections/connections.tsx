@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   LuBox,
+  LuCopy,
   LuDatabase,
   LuFileText,
   LuGlobe,
@@ -17,6 +18,7 @@ import { Section } from "../components/section";
 type Kind =
   | "Pod"
   | "Deployment"
+  | "ReplicaSet"
   | "ConfigMap"
   | "Secret"
   | "PersistentVolumeClaim"
@@ -31,6 +33,7 @@ type Kind =
 const KINDS: Record<Kind, { Icon: typeof LuBox; hue: number }> = {
   Pod: { Icon: LuBox, hue: 246 },
   Deployment: { Icon: LuLayers, hue: 252 },
+  ReplicaSet: { Icon: LuCopy, hue: 258 },
   ConfigMap: { Icon: LuFileText, hue: 18 },
   Secret: { Icon: LuKeyRound, hue: 54 },
   PersistentVolumeClaim: { Icon: LuHardDriveDownload, hue: 308 },
@@ -54,6 +57,7 @@ type Subject = {
   kind: Kind;
   name: string;
   facts: string;
+  missing?: true;
   status?: { label: string; tone: "bad" | "ok" };
   chain?: Ref[];
   groups: Group[];
@@ -296,6 +300,187 @@ const SUBJECTS: Subject[] = [
       },
     ],
   },
+  {
+    kind: "Deployment",
+    name: "api",
+    facts: "3/3 ready · RollingUpdate · nginx:1.27-alpine",
+    status: { label: "3 of 3 ready", tone: "ok" },
+    chain: [
+      { kind: "Ingress", name: "shop", note: "/" },
+      { kind: "Service", name: "api-ok", note: "3 ready", tone: "ok" },
+      { kind: "Deployment", name: "api", note: "3 pods", tone: "ok" },
+    ],
+    groups: [
+      {
+        title: "Made by, and makes",
+        rows: [
+          {
+            kind: "ReplicaSet",
+            name: "api-7bbffd88b6",
+            note: "the current revision, 3 pods",
+            tone: "ok",
+          },
+        ],
+      },
+      {
+        title: "Runs on",
+        rows: [
+          {
+            kind: "Node",
+            name: "k3d-k8s-gui-dev-server-0",
+            note: "all three pods",
+          },
+        ],
+      },
+      {
+        title: "Not looked at",
+        note: "named, so a group that is absent is never read as a group that is empty",
+        rows: [],
+        empty: {
+          label: "the kinds this page did not read",
+          note: "listed by name, with the reason, instead of left as a gap",
+        },
+      },
+    ],
+  },
+  {
+    kind: "ReplicaSet",
+    name: "api-7bbffd88b6",
+    facts: "desired 3 · ready 3 · the current revision of api",
+    status: { label: "3 of 3 ready", tone: "ok" },
+    groups: [
+      {
+        title: "Made by, and makes",
+        rows: [
+          { kind: "Deployment", name: "api", note: "made by" },
+          {
+            kind: "Pod",
+            name: "api-7bbffd88b6-5dndb",
+            note: "10.42.0.36 · ready",
+            tone: "ok",
+          },
+          {
+            kind: "Pod",
+            name: "api-7bbffd88b6-qnxdk",
+            note: "10.42.0.37 · ready",
+            tone: "ok",
+          },
+          {
+            kind: "Pod",
+            name: "api-7bbffd88b6-rmkkg",
+            note: "10.42.0.35 · ready",
+            tone: "ok",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    kind: "Pod",
+    name: "api-7bbffd88b6-5dndb",
+    facts: "nginx:1.27-alpine · 10.42.0.36 · port http 80",
+    status: { label: "Running, 1/1 ready", tone: "ok" },
+    groups: [
+      {
+        title: "Made by, and makes",
+        rows: [{ kind: "ReplicaSet", name: "api-7bbffd88b6", note: "made by" }],
+      },
+      {
+        title: "Runs on",
+        rows: [{ kind: "Node", name: "k3d-k8s-gui-dev-server-0", note: "" }],
+      },
+    ],
+  },
+  {
+    kind: "Pod",
+    name: "api-7bbffd88b6-qnxdk",
+    facts: "nginx:1.27-alpine · 10.42.0.37 · port http 80",
+    status: { label: "Running, 1/1 ready", tone: "ok" },
+    groups: [
+      {
+        title: "Made by, and makes",
+        rows: [{ kind: "ReplicaSet", name: "api-7bbffd88b6", note: "made by" }],
+      },
+      {
+        title: "Runs on",
+        rows: [{ kind: "Node", name: "k3d-k8s-gui-dev-server-0", note: "" }],
+      },
+    ],
+  },
+  {
+    kind: "Pod",
+    name: "api-7bbffd88b6-rmkkg",
+    facts: "nginx:1.27-alpine · 10.42.0.35 · port http 80",
+    status: { label: "Running, 1/1 ready", tone: "ok" },
+    groups: [
+      {
+        title: "Made by, and makes",
+        rows: [{ kind: "ReplicaSet", name: "api-7bbffd88b6", note: "made by" }],
+      },
+      {
+        title: "Runs on",
+        rows: [{ kind: "Node", name: "k3d-k8s-gui-dev-server-0", note: "" }],
+      },
+    ],
+  },
+  {
+    kind: "PersistentVolume",
+    name: "pvc-8d1e2f2f-8df4-47d1-94c2-50174980961d",
+    facts: "1Gi · ReadWriteOnce · Bound · reclaim Delete",
+    groups: [
+      {
+        title: "Bound to",
+        rows: [
+          {
+            kind: "PersistentVolumeClaim",
+            name: "checkout-data",
+            note: "the claim it was provisioned for",
+          },
+          { kind: "StorageClass", name: "local-path", note: "" },
+        ],
+      },
+    ],
+  },
+  {
+    kind: "StorageClass",
+    name: "local-path",
+    facts:
+      "rancher.io/local-path · WaitForFirstConsumer · reclaim Delete · the default class",
+    groups: [
+      {
+        title: "Used by",
+        note: "the claims that name this class",
+        rows: [
+          {
+            kind: "PersistentVolumeClaim",
+            name: "checkout-data",
+            note: "Bound, 1Gi",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    kind: "Service",
+    name: "api-v2",
+    facts:
+      "No Service named api-v2 in this namespace. There is nothing to open; the Ingress rule is the only object that mentions it.",
+    missing: true,
+    status: { label: "does not exist", tone: "bad" },
+    groups: [
+      {
+        title: "Used by",
+        rows: [
+          {
+            kind: "Ingress",
+            name: "shop",
+            note: "/api, pointing at nothing",
+            tone: "bad",
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 const BY_KEY = new Map(SUBJECTS.map((s) => [keyOf(s), s]));
@@ -396,7 +581,15 @@ export function Connections() {
             </button>
           ) : null}
           <KindMark kind={subject.kind} />
-          <span className="text-neutral-100">{subject.name}</span>
+          <span
+            className={
+              subject.missing
+                ? "rounded-md border border-dashed border-neutral-600 px-1.5 text-neutral-300"
+                : "text-neutral-100"
+            }
+          >
+            {subject.name}
+          </span>
           {subject.status ? (
             <span
               className={`ml-auto inline-flex items-center gap-2 rounded-md border px-2 py-0.5 text-[13px] ${subject.status.tone === "bad" ? "border-red-400/70 text-red-300" : "border-green-400/60 text-green-300"}`}
@@ -478,9 +671,9 @@ export function Connections() {
         </div>
       </Reveal>
       <p className="mt-6 max-w-2xl font-mono text-sm text-neutral-400">
-        Nine objects from the fixture, each drawn in the groups its own
-        Connections tab uses. What the tab does not show is not drawn here
-        either.
+        Every object the fixture creates, and the one it only mentions, each
+        drawn in the groups its own Connections tab uses. What the tab does not
+        show is not drawn here either.
       </p>
     </Section>
   );
