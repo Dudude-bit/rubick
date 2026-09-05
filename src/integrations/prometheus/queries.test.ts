@@ -31,12 +31,12 @@ const HOUR = RANGE_SPECS["1h"];
 
 describe("CPU", () => {
   /**
-   * **The measured bug this filter exists for.** cAdvisor emits three series
-   * for a one-container pod — the pod cgroup roll-up, the pause container and
-   * the real container — and only the last carries a `container` label on
-   * containerd. Summing without the filter reads `busy-demo` at 40m; with it,
-   * at 20m; `kubectl top pod` says 20m. Losing this filter doubles every
-   * number on every chart, plausibly, and nothing else would notice.
+   * cAdvisor emits three series for a one-container pod — the pod cgroup
+   * roll-up, the pause container and the real container — and only the last
+   * carries a `container` label on containerd. Summing without the filter
+   * reads `busy-demo` at 40m; with it, at 20m; `kubectl top pod` says 20m.
+   * Losing this filter doubles every number on every chart, plausibly, and
+   * nothing else would notice.
    */
   it("counts a container once, not once per cgroup cAdvisor happens to walk", () => {
     const query = cpuQuery(pod, HOUR);
@@ -169,11 +169,11 @@ describe("volume fullness", () => {
 
 describe("traffic", () => {
   /**
-   * **The exception that inverts the CPU rule, and the reason it is its own
-   * test.** Every container in a pod shares one network namespace, so
-   * cAdvisor reports traffic only on the sandbox — the very series
-   * `container!=""` throws away. Applying the CPU filter here returns nothing
-   * at all, and an empty chart reads as a silent pod.
+   * The exception that inverts the CPU rule above: every container in a pod
+   * shares one network namespace, so cAdvisor reports traffic only on the
+   * sandbox — the very series `container!=""` throws away. Applying the CPU
+   * filter here returns nothing at all, and an empty chart reads as a silent
+   * pod.
    */
   it("does not filter out the sandbox, which is where the counters live", () => {
     const query = trafficQuery(pod, HOUR, "receive");
@@ -194,13 +194,12 @@ describe("traffic", () => {
 
 describe("scope across a rollout", () => {
   /**
-   * **The rollout decision.** A Deployment's pods are
-   * `<name>-<replicaset hash>-<suffix>`, and the hash changes on every
-   * rollout — so a pattern built from the *current* ReplicaSet would draw a
-   * chart that goes blank at the last deploy, which is the exact moment the
-   * reader came to look at. Leaving both trailing segments open spans every
-   * generation the workload has had, and the rollout shows as a bump where
-   * both are briefly running rather than as a gap.
+   * A Deployment's pods are `<name>-<replicaset hash>-<suffix>` and the hash
+   * changes on every rollout, so a pattern built from the *current*
+   * ReplicaSet would draw a chart that goes blank at the last deploy — the
+   * exact moment the reader came to look at. Leaving both trailing segments
+   * open spans every generation the workload has had, and the rollout shows
+   * as a bump where both briefly run rather than as a gap.
    */
   it("spans the generations a Deployment has had, hash and all", () => {
     const pattern = new RegExp(podPattern("Deployment", "busy-demo"));

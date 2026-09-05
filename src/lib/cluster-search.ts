@@ -5,13 +5,12 @@
  * `arn:aws:eks:us-east-1:1234:cluster/prod` — and the part a reader types is
  * one word out of the middle. A plain edit distance is the wrong tool for
  * that shape: `prod` against that ARN is a distance of 35, which sorts the
- * obvious match below every seven-letter name that merely shares letters.
- *
- * So the order is a ladder of *kinds* of match — exact, prefix, substring,
+ * obvious match below every seven-letter name that merely shares letters. So
+ * the order is a ladder of *kinds* of match — exact, prefix, substring,
  * subsequence — and distance is only ever the tie-break inside one rung. A
- * name on no rung at all is not offered: a list of clusters the reader did
- * not mean, ordered by how nearly they were meant, is worse than a short
- * list, because picking the wrong cluster is the expensive mistake here.
+ * name on no rung at all is not offered: picking the wrong cluster is the
+ * expensive mistake here, so a short list beats a long one ordered by how
+ * nearly each was meant.
  *
  * @module lib/cluster-search
  */
@@ -59,8 +58,8 @@ export interface Bang {
  * `!needle rest`. Null when the text is not a bang at all.
  *
  * The bang only counts at the very start: `!` inside a resource name is a
- * character, not a scope, and a search box that changed meaning halfway
- * through a word would be unpredictable to type into.
+ * character, not a scope, and a box that changed meaning halfway through a
+ * word would be unpredictable to type into.
  */
 export function parseBang(text: string): Bang | null {
   if (!text.startsWith("!")) return null;
@@ -77,10 +76,9 @@ export function matchesAllClusters(needle: string): boolean {
 }
 
 /**
- * Levenshtein distance, two rows deep.
- *
- * Only ever compared between names already on the same rung, where it
- * reduces to "how much of this name is not what I typed".
+ * Levenshtein distance, two rows deep. Only ever compared between names
+ * already on the same rung, where it reduces to "how much of this name is not
+ * what I typed".
  */
 function distance(a: string, b: string): number {
   if (a === b) return 0;
@@ -161,11 +159,11 @@ function better(a: Rungs, b: Rungs): Rungs {
 /**
  * Which rung a cluster sits on for `needle`, or null for none of them.
  *
- * A cluster that has been renamed is climbed twice, and the better of the
- * two rungs wins. The alias exists precisely so nobody has to type the ARN
- * again; one that could not be searched for would leave the mouse as the
- * only way to reach the cluster it names. The name that matched is carried
- * back so the row can show which of the two the reader hit.
+ * A cluster that has been renamed is climbed twice and the better of the two
+ * rungs wins: an alias exists so nobody has to type the ARN again, and one
+ * that could not be searched for would leave the mouse as the only way to
+ * reach the cluster it names. The name that matched is carried back so the
+ * row can show which of the two the reader hit.
  *
  * An empty needle is not "no rung": it is the reader who has typed `!` and
  * nothing else, and every cluster is still a candidate.
@@ -203,11 +201,10 @@ export function matchContext(
 }
 
 /**
- * The clusters worth offering for `needle`, best first.
- *
- * An empty needle keeps the kubeconfig's own order: with nothing typed
- * there is nothing to rank by, and the order the file lists them in is the
- * one the reader has seen everywhere else in the app.
+ * The clusters worth offering for `needle`, best first. An empty needle keeps
+ * the kubeconfig's own order: with nothing typed there is nothing to rank by,
+ * and the order the file lists them in is the one the reader has seen
+ * everywhere else in the app.
  */
 export function rankContexts(
   needle: string,

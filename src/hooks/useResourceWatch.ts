@@ -38,46 +38,41 @@ interface UseResourceWatchOptions {
   /** TanStack Query cache key the watch should keep up to date. */
   queryKey: QueryKey;
   /**
-   * Called when the backend emits a `failed` event — typically RBAC
-   * `watch` denial or a persistent network problem. The cache is NOT
-   * mutated for failed events; the consumer decides what to do
-   * (show a toast, fall back to polling, etc.).
+   * Called on a backend `failed` event — typically RBAC `watch` denial or a
+   * persistent network problem. The cache is NOT mutated for those; the
+   * consumer decides what to do (toast, fall back to polling, …).
    */
   onError?: (error: string) => void;
   /**
-   * Called once when a non-failed event arrives after a failed one —
-   * the watcher recovered. Consumers use this to flip their
-   * watchFailed state back to false, which stops the polling
-   * fallback and reverts to pure-watch updates.
+   * Called once when a non-failed event arrives after a failed one: the
+   * watcher recovered. Consumers flip watchFailed back to false here, which
+   * stops the polling fallback and reverts to pure-watch updates.
    */
   onRecovered?: () => void;
 }
 
 export interface ResourceWatchState {
   /**
-   * A resync is in flight: the watcher is re-listing the collection and
-   * the rows in the cache are the last complete state, not the current
-   * one. Surfaces show what they have — or a skeleton where they have
-   * nothing — instead of an empty state that reads as "your cluster has
-   * none of these".
+   * A resync is in flight: the watcher is re-listing the collection, so the
+   * cached rows are the last complete state and not the current one. Surfaces
+   * show what they have — or a skeleton where they have nothing — not an
+   * empty state that reads as "your cluster has none of these".
    */
   resyncing: boolean;
 }
 
-/**
- * Subscribes to a backend resource watch, listens for
- * `resource-event` Tauri events, and updates the TanStack Query
- * cache directly. Replaces 2-second polling on the migrated list.
- *
- * Same deferred-start handshake as `useGenericTerminalSession` and
- * `useLogStream`: the hook calls `commands.resourceWatchSubscribed`
- * only after `listen()` has resolved, so the very first
- * `applied`/`restarted` events from the backend cannot land in the
- * void.
- */
 /** Matches `EVENT_BRIDGE_LAGGED` in `src-tauri/src/main.rs`. */
 const EVENT_BRIDGE_LAGGED = "event-bridge-lagged";
 
+/**
+ * Subscribes to a backend resource watch, listens for `resource-event` Tauri
+ * events and updates the TanStack Query cache directly.
+ *
+ * Same deferred-start handshake as `useGenericTerminalSession` and
+ * `useLogStream`: `commands.resourceWatchSubscribed` is called only after
+ * `listen()` has resolved, so the backend's first `applied`/`restarted`
+ * events cannot land in the void.
+ */
 export function useResourceWatch<
   T extends { name: string; namespace?: string | null },
 >({
@@ -107,10 +102,8 @@ export function useResourceWatch<
     let active = true;
     let streamId: string | null = null;
     let unlisten: (() => void) | null = null;
-    // Tracks whether the most recent stream state was a failure so a
-    // following non-failed event can fire `onRecovered` exactly once
-    // per failure→recovery transition (instead of on every successful
-    // event).
+    // Tracks whether the last stream state was a failure, so `onRecovered`
+    // fires once per failure→recovery transition and not on every event.
     let inFailedState = false;
     // The rows a resync has delivered so far, held here rather than in
     // the cache until the backend says the burst is complete.
@@ -209,11 +202,11 @@ export function useResourceWatch<
         );
 
         // The bridge dropping events is this watch failing, whatever the
-        // stream itself is doing. A resync replaces the cache from a burst,
-        // so events lost in that burst are rows that never arrive — the list
-        // is not stale, it is short, and nothing polls it back while it
-        // believes it is live. Same treatment as a failed stream: say so,
-        // drop the badge, start polling again.
+        // stream itself is doing: a resync replaces the cache from a burst,
+        // so events lost in it are rows that never arrive — the list is not
+        // stale, it is short, and nothing polls it back while it believes it
+        // is live. Same treatment as a failed stream: say so, drop the badge,
+        // start polling again.
         const offLagged = await listen<number>(EVENT_BRIDGE_LAGGED, (event) => {
           inFailedState = true;
           // A resync missing an unknown number of its own rows is not a
@@ -234,9 +227,8 @@ export function useResourceWatch<
           offLagged();
         };
 
-        // Listener installed — release the backend gate. Failure here
-        // means the session was already torn down (race with cleanup);
-        // surface to the console but don't crash.
+        // Listener installed — release the backend gate. A failure here means
+        // the session was already torn down (race with cleanup): log, no crash.
         try {
           await commands.resourceWatchSubscribed(id);
         } catch (err) {
@@ -254,11 +246,10 @@ export function useResourceWatch<
     return () => {
       void teardown();
     };
-    // queryKey is intentionally compared by reference here. Consumers
-    // pass a stable, memoised key (queryKeys.resources(...) called
-    // inside a useMemo) — when the underlying namespace/kind changes
-    // the key reference changes too, which is correct: the watch
-    // belongs to that key and must re-subscribe.
+    // queryKey is compared by reference on purpose. Consumers pass a stable,
+    // memoised key (`queryKeys.resources(...)` inside a useMemo); when the
+    // namespace or kind changes the reference changes too, and re-subscribing
+    // is correct — the watch belongs to that key.
   }, [enabled, subscribe, queryClient, queryKey]);
 
   return { resyncing };
@@ -284,10 +275,10 @@ function stage<T extends { name: string; namespace?: string | null }>(
 /**
  * The list with a batch of changes folded in.
  *
- * Keyed rather than scanned: `findIndex` per change is O(N) against a
- * list the same burst is growing, so an init burst of a thousand objects
- * cost half a million name comparisons and half a million copied array
- * slots to arrive at a list it could have built in one pass.
+ * Keyed rather than scanned: `findIndex` per change is O(N) against a list
+ * the same burst is growing, so an init burst of a thousand objects costs
+ * half a million name comparisons and as many copied array slots to build
+ * what one pass builds.
  *
  * A `Map` keeps insertion order and leaves a replaced row where it was,
  * so rows do not jump around under an update.

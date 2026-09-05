@@ -2,17 +2,16 @@
  * What a Kubernetes message says out loud, split into the parts that name
  * something and the prose around them.
  *
- * The whole design is one rule: **the kind must be stated by the controller,
- * never inferred from the token's shape.** A regex over prose invents links
- * that go nowhere, and a dead link is worse than plain text because it claims
- * the cluster has something it does not. So nothing here matches a name; it
- * matches a *sentence a controller writes*, and takes the name out of it.
+ * One rule: **the kind must be stated by the controller, never inferred from
+ * the token's shape.** A regex over prose invents links that go nowhere, and
+ * a dead link is worse than plain text because it claims the cluster has
+ * something it does not. Nothing here matches a name; it matches a *sentence
+ * a controller writes*, and takes the name out of it.
  *
  * Every anchor below carries the message it was written from, captured from a
- * real cluster (`kubectl get events -A`). None of them were invented — the
- * ones a controller writes differently than you would guess (`Created pod: x`
- * with a colon, `Created job x` without one, `in pod x_ns(uid)`) are exactly
- * why.
+ * real cluster (`kubectl get events -A`) — including the ones a controller
+ * writes differently than you would guess (`Created pod: x` with a colon,
+ * `Created job x` without one, `in pod x_ns(uid)`).
  */
 
 import {

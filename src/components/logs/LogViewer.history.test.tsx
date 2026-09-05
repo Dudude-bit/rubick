@@ -151,9 +151,9 @@ async function renderStranded() {
  * How many lines the pane is holding.
  *
  * The list is virtualised and renders nothing into a jsdom viewport with no
- * height, so the buffer meter is what these tests read — which is the right
- * thing to assert anyway: the question is whether the live lines are still
- * *held* beside the history, not which of them a scroll position reveals.
+ * height, so the buffer meter is what these tests read — and it is the right
+ * question anyway: whether the live lines are still *held* beside the history,
+ * not which of them a scroll position reveals.
  */
 function held(): number {
   return Number(
@@ -180,13 +180,10 @@ function connected() {
 
 /**
  * The three states a configured integration owes the surface it extends, on
- * the one surface where getting them wrong is worst.
- *
- * A chart that quietly went shorter is annoying. A log pane that quietly
+ * the one surface where getting them wrong is worst: a log pane that quietly
  * showed less log is a reader concluding their container printed nothing
- * before it died — and going to look somewhere else for a bug that is in
- * front of them. So each of the three is pinned, and every one of them
- * checks that **the live line is still on screen**: the core answer draws
+ * before it died. So each of the three is pinned, and every one of them
+ * checks that **the live line is still on screen** — the core answer draws
  * first and stays drawn, whatever the integration is doing.
  */
 // The detection scan is gated on a standing connection now — these tests
@@ -271,14 +268,11 @@ describe("a pod whose log the API server can no longer serve", () => {
   });
 
   /**
-   * The one this file exists for.
-   *
-   * A page that stopped at a limit and did not say so is the most damaging
-   * thing this integration can do: a log pane has no axis and no total, so
+   * The one this file exists for. A log pane has no axis and no total, so
    * "the newest thousand lines of six hours" and "everything this workload
-   * wrote in six hours" look identical on screen — and a reader who takes
-   * the first for the second concludes the gap they are looking for is not
-   * there.
+   * wrote in six hours" look identical on screen — and a reader who takes a
+   * page that stopped at a limit for the whole range concludes the gap they
+   * are looking for is not there.
    */
   it("says a page that filled the limit is only the newest of the range", async () => {
     connected();

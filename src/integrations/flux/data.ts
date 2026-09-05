@@ -1,18 +1,17 @@
 /**
  * What the Flux page reads, and what it costs.
  *
- * Six cluster-wide list calls, made in parallel and split into two queries:
- * the reconcilers and their sources are one picture and are useless apart —
- * a `Kustomization` reporting `Ready` while its `GitRepository` has not
- * fetched for a week is precisely the state this page exists to show, and it
- * cannot be drawn from either list alone. The controllers' own workloads are
- * a separate query, because only one tab needs them.
+ * Six cluster-wide list calls in parallel, split into two queries. The
+ * reconcilers and their sources are one picture and are useless apart — a
+ * `Kustomization` reporting `Ready` while its `GitRepository` has not fetched
+ * for a week is what this page exists to show, and neither list says it
+ * alone. The controllers' own workloads are a separate query because only one
+ * tab needs them.
  *
- * Every one of the source kinds is optional. A source-only Flux install has
- * no `helmreleases` CRD at all, and a page that reported "could not read
- * them" on a perfectly good install would be calling a supported
- * configuration broken — so a kind the API server does not serve reads as
- * *none of those exist*, which is what it means.
+ * Every source kind is optional: a source-only Flux install has no
+ * `helmreleases` CRD at all. So a kind the API server does not serve reads as
+ * *none of those exist* — reporting "could not read them" there would call a
+ * supported configuration broken.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -28,10 +27,9 @@ export const HELM_RELEASES_CRD = "helmreleases.helm.toolkit.fluxcd.io";
 /**
  * The source kinds a reconciler can name, and their CRDs.
  *
- * `HelmChart` is deliberately absent. Flux creates one *itself* for every
+ * `HelmChart` is deliberately absent: Flux creates one *itself* for every
  * HelmRelease, so listing them would put an object in Sources for every row in
- * Reconcilers that nobody wrote and nobody can fix — inventory that reads as
- * configuration.
+ * Reconcilers that nobody wrote and nobody can fix.
  */
 export const SOURCE_KINDS: ReadonlyArray<[kind: string, crd: string]> = [
   ["GitRepository", "gitrepositories.source.toolkit.fluxcd.io"],
@@ -71,15 +69,12 @@ export const PICTURE_KEY = ["flux", "picture"] as const;
  * How many things Flux is reconciling — the sidebar's number, read off the
  * same picture the page draws.
  *
- * Reconcilers rather than every Flux object: the page lists what is being
- * applied, and a cluster with one Kustomization and four sources is
- * reconciling one thing.
+ * Reconcilers rather than every Flux object: a cluster with one Kustomization
+ * and four sources is reconciling one thing.
  *
- * This used to be its own two list calls, which was cheaper in isolation and
- * more expensive in practice — the reader who opened the page paid for those
- * two lists twice. Sharing the page's query costs four extra lists a minute on
- * a cluster that has Flux and nobody looking at it, and nothing at all on one
- * where somebody is.
+ * Sharing the page's query rather than making its own two list calls costs
+ * four extra lists a minute where Flux is installed and nobody is looking, and
+ * nothing at all where somebody is.
  */
 export function countReconcilers(picture: FluxPicture): number {
   return picture.reconcilers.length;

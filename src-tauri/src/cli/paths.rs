@@ -8,8 +8,6 @@ pub struct PathResolver;
 impl PathResolver {
     /// Get OS-specific path separator.
     ///
-    /// Returns ';' on Windows, ':' on Unix-like systems.
-    ///
     /// # Examples
     ///
     /// ```
@@ -37,9 +35,9 @@ impl PathResolver {
     /// On Unix a command is its own file name. On Windows it is the name plus
     /// an extension from `PATHEXT`, and the ones that matter here are not
     /// `.exe`: Azure's CLI ships `az.cmd` and Google's `gcloud.cmd`. Joining
-    /// the bare name found neither, so the Diagnostics pane reported tools
+    /// the bare name finds neither — the Diagnostics pane then reports tools
     /// absent that the reader can run in their own terminal, and an AKS
-    /// context whose exec command is `az` could not be started at all.
+    /// context whose exec command is `az` cannot be started at all.
     #[must_use]
     pub fn binary_file_names(binary_name: &str) -> Vec<String> {
         #[cfg(not(windows))]
@@ -61,14 +59,7 @@ impl PathResolver {
         }
     }
 
-    /// Build common search paths for a binary.
-    ///
-    /// Returns a list of paths where the binary might be installed,
-    /// based on common conventions for each platform.
-    ///
-    /// # Arguments
-    ///
-    /// * `binary_name` - Name of the binary to search for (e.g., "kubectl", "helm")
+    /// Where a binary might be installed, by each platform's conventions.
     ///
     /// # Examples
     ///
@@ -101,13 +92,10 @@ impl PathResolver {
                 paths.push(home.join(".asdf/shims").join(binary_name));
                 paths.push(home.join(".cargo/bin").join(binary_name));
 
-                // Tool-specific paths. Through `krew_bin` like
-                // `fallback_directories` below: this used to hardcode
-                // `~/.krew/bin` and so did that one, which was at least
-                // consistent. Teaching only that one about `KREW_ROOT` left
-                // the two looking in different places on the machine that
-                // had moved it — the answer this app gives about where a
-                // plugin is has to be one answer.
+                // Through `krew_bin`, like `fallback_directories` below: both
+                // lists have to look in the same place, or the app gives two
+                // answers about where a plugin is on a machine that moved
+                // `KREW_ROOT`.
                 if binary_name == "kubectl" {
                     paths.push(Self::krew_bin().join(binary_name));
                 }
@@ -143,16 +131,8 @@ impl PathResolver {
 
     /// Merge shell PATH with fallback paths, removing duplicates.
     ///
-    /// Paths from `shell_path` take priority over `fallback_paths`.
-    ///
-    /// # Arguments
-    ///
-    /// * `shell_path` - Optional PATH string from shell (e.g., from `$PATH` env var)
-    /// * `fallback_paths` - Fallback paths to include if not in `shell_path`
-    ///
-    /// # Returns
-    ///
-    /// A PATH string with OS-appropriate separator, with duplicates removed.
+    /// Paths from `shell_path` take priority over `fallback_paths`; the result
+    /// uses the OS-appropriate separator.
     ///
     /// # Examples
     ///
@@ -242,10 +222,8 @@ impl PathResolver {
             }
             // krew, which is how kubectl credential plugins are installed and
             // therefore where a missing `kubectl-oidc_login` most often already
-            // is. Through `krew_bin` so `KREW_ROOT` counts: this list used to
-            // hardcode `~/.krew/bin` while the shell path builder honoured the
-            // variable, so the two disagreed about where to look on exactly the
-            // machine that had moved it.
+            // is. Through `krew_bin` so `KREW_ROOT` counts, and so this list
+            // and `search_paths` look in the same place.
             paths.push(Self::krew_bin());
         }
 

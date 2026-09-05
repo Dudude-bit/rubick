@@ -3,14 +3,12 @@
 //! Every configured vendor does the same four things: build a client that
 //! may have been told to accept a self-signed certificate, attach a bearer
 //! token the webview has never seen, ask for a path, and turn whatever went
-//! wrong into a sentence the Settings row can print. Written once per vendor
-//! those four would drift — and the one that drifts is the error phrasing,
-//! which is the only part the reader ever sees.
+//! wrong into a sentence the Settings row can print. Per-vendor copies drift
+//! at the error phrasing, which is the only part the reader ever sees.
 //!
-//! What is deliberately *not* here is any knowledge of what a response
-//! means. This module hands back a status and a body; Prometheus reads JSON
-//! out of it and Loki reads JSON and YAML, and neither of them is expressed
-//! in terms of the other.
+//! No knowledge of what a response *means* lives here: this module hands
+//! back a status and a body, and Prometheus reading JSON out of it is not
+//! expressed in terms of Loki reading JSON and YAML.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -62,12 +60,12 @@ pub fn why(error: &reqwest::Error) -> String {
 
 /// One GET, and the body as text.
 ///
-/// Text rather than parsed JSON because the two vendors behind this do not
-/// agree on a content type — Loki's `/config` is YAML — and because a
-/// refusal's body is frequently not JSON at all whatever the success case is.
+/// Text rather than parsed JSON: the two vendors behind this do not agree on
+/// a content type — Loki's `/config` is YAML — and a refusal's body is
+/// frequently not JSON at all whatever the success case is.
 ///
-/// The error string is the *server's own words* wherever it gave any:
-/// `refusal` pulls them out in whatever shape this vendor states them, and
+/// The error string is the *server's own words* wherever it gave any —
+/// `refusal` pulls them out in whatever shape this vendor states them — and
 /// only a body that says nothing falls back to the status code's name. "429
 /// too many outstanding requests" and "401 Unauthorized" send the reader to
 /// two different places; a bare "could not connect" sends them nowhere.

@@ -32,12 +32,8 @@ const EMPTY: ContextBinding = {
 };
 
 /**
- * Which profile one context uses.
- *
- * This was a tab listing every context twice — bound and unbound — beside
- * the profile editor, which is the wrong grouping: nobody reads bindings
- * as a set. They read one, on the row that has the problem. So the list is
- * gone and what is left is the edit itself, opened from that row.
+ * Which profile one context uses, edited from the row that has the problem
+ * rather than from a list of every binding.
  *
  * Clearing both selects removes the binding rather than storing an empty
  * one, so "no profile" has exactly one representation.

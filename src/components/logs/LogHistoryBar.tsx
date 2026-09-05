@@ -13,12 +13,11 @@ import { useT } from "@/i18n/useT";
  * The one row that says where a pane's oldest lines came from — and, on the
  * three occasions it cannot say that, what is missing instead.
  *
- * It draws only where the reader has just been told there is nothing to
- * read: a pod that is gone, a container that never started, or a workload
- * tab whose reader has asked for a range. Everywhere else it is absent, and
- * that is deliberate — a "connect a Loki" line under every healthy log pane
- * would be an advert repeated a hundred times a day, and the one place it
- * belongs is where the app has just failed to answer.
+ * It draws only where the reader has just been told there is nothing to read:
+ * a pod that is gone, a container that never started, or a workload tab whose
+ * reader has asked for a range. Everywhere else it is absent, because a
+ * "connect a Loki" line under every healthy log pane would be an advert
+ * repeated a hundred times a day.
  *
  * The three states are the whole contract:
  *
@@ -26,8 +25,8 @@ import { useT } from "@/i18n/useT";
  *   under the sentence explaining why there is nothing to read.
  * - **configured and not answering** — the loss is *stated*, with the
  *   supplier's own words for why, and the live pane is still untouched. A
- *   silent fallback here would be indistinguishable from never having
- *   configured one, and the reader would conclude the app lost their logs.
+ *   silent fallback would be indistinguishable from never having configured
+ *   one, and the reader would conclude the app lost their logs.
  * - **answering** — an offer, and once taken, an honest account of what came
  *   back: how many lines, over what window, whether the limit cut it off,
  *   and whether anything matched at all.
@@ -57,13 +56,11 @@ export function LogHistoryBar({
   stranded: string | null;
   ranged: boolean;
   /**
-   * How many of the lines that came back the pane is actually holding.
-   *
-   * Not the same number as what was fetched, and the difference is the point:
-   * history yields to the live stream when `Keep N` is full, so a reader who
-   * asks for six hours over a busy workload can be handed a thousand lines
-   * and hold none of them. A row that printed the fetched count there would
-   * be describing a pane that does not exist.
+   * How many of the lines that came back the pane is actually holding — not
+   * the same number as what was fetched, and the difference is the point:
+   * history yields to the live stream when `Keep N` is full, so six hours over
+   * a busy workload can be handed a thousand lines and hold none of them. A
+   * row printing the fetched count would describe a pane that does not exist.
    */
   held: number;
   /** The buffer's own cap, named in the sentence that says what did not fit. */
@@ -157,11 +154,11 @@ export function LogHistoryBar({
   const { loaded } = history;
   const dropped = loaded.count - held;
 
-  // Not one stream matched — which is a different fact from a quiet pod, and
-  // the only one of the two the reader can do anything about. The label
-  // names are the likely cause and are printed rather than described: an
-  // install that relabels `pod` to `pod_name` answers every query here with
-  // nothing, and an empty pane would read as "this pod never logged".
+  // Not one stream matched — a different fact from a quiet pod, and the only
+  // one of the two the reader can do anything about. The label names are the
+  // likely cause and are printed rather than described: an install that
+  // relabels `pod` to `pod_name` answers every query here with nothing, and an
+  // empty pane would read as "this pod never logged".
   if (loaded.unmatched) {
     return (
       <Bar tone="warn" testId="log-history-unmatched">

@@ -17,26 +17,25 @@ use secrecy::SecretString;
 
 use cred::ExecCredentialStatus;
 
-/// Prepare kubeconfig for a context, handling exec auth if needed.
-///
-/// # Errors
-///
-/// Returns an error if the context cannot be resolved, exec
-/// authentication fails, or kubeconfig processing fails.
 /// A prepared kubeconfig, and the one fact about it that expires.
 ///
-/// The credential plugin states when what it just handed over stops working,
-/// and this used to be read and thrown away on the next line. Nothing renews
-/// it — `apply_exec_credentials` strips the `exec` block that could — so that
-/// timestamp is the only thing in the process that knows the session has a
-/// deadline. It is carried out of here so a surface can say *when*, rather
-/// than only that something is wrong once every request has started failing.
+/// Nothing renews the credential — `apply_exec_credentials` strips the `exec`
+/// block that could — so the plugin's expiry timestamp is the only thing in
+/// the process that knows the session has a deadline. It is carried out so a
+/// surface can say *when*, rather than only that something is wrong once every
+/// request has started failing.
 pub struct PreparedContext {
     pub kubeconfig: Kubeconfig,
     /// `None` where the plugin named no deadline, which many do not.
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Prepare kubeconfig for a context, handling exec auth if needed.
+///
+/// # Errors
+///
+/// Returns an error if the context cannot be resolved, exec
+/// authentication fails, or kubeconfig processing fails.
 pub async fn prepare_kubeconfig_for_context(
     state: &AppState,
     mut kubeconfig: Kubeconfig,

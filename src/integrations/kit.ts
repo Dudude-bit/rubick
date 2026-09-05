@@ -1,11 +1,10 @@
 /**
  * The vocabulary a vendor folder is written in.
  *
- * Generic, and here rather than in `src/lib/` all the same: nothing outside
- * this tree uses any of it, and a helper whose only callers are vendor
- * folders is part of how a vendor is declared. The rule that keeps this
- * tree honest is about vendor *knowledge* having one home, not about the
- * tree being free of plain functions.
+ * Generic, and here rather than in `src/lib/` all the same: a helper whose
+ * only callers are vendor folders is part of how a vendor is declared. The
+ * rule this tree enforces is that vendor *knowledge* has one home, not that
+ * the tree is free of plain functions.
  */
 
 import type { en } from "@/i18n/catalogue";
@@ -23,9 +22,9 @@ const CRDS = toPlural(ResourceType.CustomResourceDefinition);
 /**
  * The route to the objects of one CRD, and to one of them.
  *
- * Built here rather than spelled out per vendor because it has already
- * drifted once: a literal `/crds/…` in a vendor folder named a segment no
- * route has, and the link went nowhere with nothing to say so.
+ * Built here rather than per vendor because it has already drifted once: a
+ * literal `/crds/…` in a vendor folder named a segment no route has, and the
+ * link went nowhere with nothing to say so.
  */
 export function crdObjectsPath(crdName: string): string {
   return `/${CRDS}/${encodeURIComponent(crdName)}?tab=instances`;
@@ -46,28 +45,26 @@ export function crdObjectPath(
 }
 
 /**
- * One entry of the `status.conditions` array every operator writes.
- *
- * The one shape a vendor's objects genuinely share with every other vendor's:
- * a type, a status, and — the part that is worth a page — the controller's
- * own sentence about why. That message is never paraphrased anywhere in this
- * tree; a rewritten error is a second guess at somebody else's failure.
- */
-/**
  * The one line a vendor row shows about itself, and how to colour it.
  *
- * Written out five times across four vendor folders before it had a name,
- * which mattered less for the repetition than for what the repetition hid:
- * there are three tones and four things to say, so every vendor that cannot
- * reach its own backend files "could not look" under `warn` — the same tone
- * as a real warning. Widening this to say so is one edit here instead of
- * five, and the places to change are now the ones that reference this name.
+ * Three tones for four things to say: a vendor that cannot reach its own
+ * backend files "could not look" under `warn`, the same tone as a real
+ * warning. Widening this to say so is one edit here, and the call sites to
+ * change are the ones that reference this name.
  */
 export interface VendorVerdict {
   text: string;
   tone: "ok" | "warn" | "err";
 }
 
+/**
+ * One entry of the `status.conditions` array every operator writes.
+ *
+ * The one shape a vendor's objects genuinely share with every other vendor's:
+ * a type, a status, and the controller's own sentence about why. That message
+ * is never paraphrased anywhere in this tree; a rewritten error is a second
+ * guess at somebody else's failure.
+ */
 export interface VendorCondition {
   type: string;
   status: string;
@@ -225,10 +222,9 @@ export function conditionStatus(conditionType: string = "Ready"): CrdStatus {
 }
 
 /**
- * For a vendor whose objects carry no status at all. Naming it is better
- * than four copies of the same two stub functions, and better than making
- * `status` optional: a vendor that has not decided is different from one
- * whose resources genuinely do not report health.
+ * For a vendor whose objects carry no status at all. Named rather than made
+ * optional: a vendor that has not decided is different from one whose
+ * resources genuinely do not report health.
  */
 export const NO_STATUS: CrdStatus = {
   getStatus: () => null,

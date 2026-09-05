@@ -5,7 +5,7 @@
  * A pod's status is written by the kubelet on its node. When that node stops
  * answering, nothing rewrites the pod: it keeps the last state it was in, and
  * every client — this one, `kubectl get pods`, a dashboard — faithfully shows
- * a pod that may already be gone. `Running` was true when it was written.
+ * a pod that may already be gone.
  *
  * The window is not small. The node controller waits out
  * `node-monitor-grace-period` before it moves `Ready` to `Unknown`, then taints
@@ -15,10 +15,9 @@
  * removed or someone force-deletes them, because the guarantee is that the
  * name exists once.
  *
- * `Ready=False` is deliberately NOT silence. A node that says it is not ready
- * is a node that is still talking, so its pods' statuses are current — the node
- * is unhealthy, the reading is not stale. Only `Unknown`, or a Ready condition
- * that is missing altogether, means nobody is answering for those pods.
+ * `Ready=False` is deliberately NOT silence: a node that says it is not ready
+ * is still talking, so its pods' statuses are current. Only `Unknown`, or a
+ * Ready condition missing altogether, means nobody is answering for those pods.
  */
 
 import type { T } from "@/i18n/useT";
@@ -135,10 +134,9 @@ function ago(iso: string, now: Date): string | null {
 /**
  * The word `kubectl get nodes` prints for a node's readiness.
  *
- * One place, because it was three and only one of them knew about cordons: a
- * cordoned node keeps `Ready: True`, so a reader judging by conditions alone
- * calls it healthy full stop while the overview says "Cordoned" about the
- * same object.
+ * One place, because a cordoned node keeps `Ready: True`: a reader judging by
+ * conditions alone calls it healthy full stop while the overview says
+ * "Cordoned" about the same object.
  *
  * The words are `kubectl`'s and stay untranslated — `statusRole` looks them
  * up to pick the colour, and the reader is comparing them against a terminal.

@@ -18,9 +18,9 @@ import { useT } from "@/i18n/useT";
 
 /**
  * The blocks a resource detail page repeats: an action in the header row, a
- * condition list, a headroom bar and an event feed. All flat, all built from
- * role tokens, all sharing the column rhythm the overview and the event
- * screen already use. Cross-references to other objects are `ResourceRef`.
+ * condition list, a headroom bar and an event feed. Flat, role tokens only,
+ * on the column rhythm the overview and the event screen already use.
+ * Cross-references to other objects are `ResourceRef`.
  */
 
 export interface DetailActionProps extends Omit<
@@ -93,11 +93,9 @@ export function DetailAction({
 }
 
 /**
- * 190px is `PodReadyToStartContainers` in the 12px mono face with a character
- * to spare. The column used to be 140px, which clipped that condition — the
- * longest one a pod has and the only one whose name is the whole sentence —
- * to `PodReadyToStartCont…`, i.e. to the two words it shares with nothing.
- * A CRD can still invent something longer, so the `title` stays.
+ * 190px is `PodReadyToStartContainers` — the longest condition name a pod has
+ * — in the 12px mono face with a character to spare. A CRD can still invent
+ * something longer, so the `title` stays.
  */
 const CONDITION_ROW =
   "grid items-baseline gap-2.5 px-1.5 py-[3px] text-xs grid-cols-[10px_minmax(0,190px)_58px_minmax(0,1fr)_46px]";
@@ -160,38 +158,30 @@ function ConditionRow({
   dated: boolean;
 }) {
   const role = conditionRole(condition);
-  // Colour is spent on anomalies only. A pod reports six conditions and five
-  // of them are satisfied on every healthy pod in the cluster; five green
-  // ticks per row is the wall of colour that makes the sixth invisible. The
-  // satisfied condition keeps its glyph — a tick still says "met" — and gives
-  // up its hue, exactly as the composition bar's healthy segment does.
-  //
-  // What it does not give up is a shape: three greys stand in for the hue, so
-  // the row still says which of its parts is the one being read. The type is
-  // the name the reader came for and sits at full strength; whatever the
-  // condition has to say sits a step under it; the status word and the time
-  // sit a step under that. On an anomaly the type and the status word take the
-  // role colour back, which is the whole of the difference between the row you
-  // are meant to land on and the four above it.
+  // Colour is spent on anomalies only: five of a pod's six conditions are
+  // satisfied on every healthy pod, and five green ticks per row is the wall
+  // of colour that makes the sixth invisible. A satisfied condition keeps its
+  // glyph and gives up its hue, as the composition bar's healthy segment
+  // does, but not its hierarchy — three greys stand in: the type at full
+  // strength, whatever it has to say a step under, the status word and the
+  // time under that. An anomaly takes the role colour back on the type and
+  // the status word.
   const satisfied = role === "ok";
   const tone = satisfied ? "text-fg-mut" : ROLE_TEXT[role];
   const Icon = ROLE_ICON[role];
   const age = useRealtimeAge(condition.lastTransitionTime ?? null);
   const stamp = formatDate(condition.lastTransitionTime) ?? undefined;
   const detail = condition.message || condition.reason;
-  // The one fact a satisfied condition has that its glyph has not already
-  // given: since when. It reads on from the status word — `Ready True for 3d`
-  // — which is why it goes where the sentence would, and why the row then has
-  // no second place to print it.
+  // The one fact a satisfied condition's glyph has not already given: since
+  // when. It reads on from the status word — `Ready True for 3d` — so it takes
+  // the sentence's place, and the row has no second place to print it.
   const held = !detail && condition.lastTransitionTime;
 
   return (
     <div className={dated ? CONDITION_ROW : CONDITION_ROW_UNDATED}>
-      {/* Every row carries a mark, and the five marks differ in outline as
-       *  well as hue: a condition list is the first thing read on a broken
-       *  node, and a list where the healthy half was a dot and the unhealthy
-       *  half a triangle told the reader nothing about which of the two
-       *  unhealthy kinds — unreadable or failed — each one was. */}
+      {/* The five marks differ in outline as well as hue, so a condition
+       *  list on a broken node still separates unreadable from failed for a
+       *  reader who cannot use the colour. */}
       <Icon
         className={cn("h-2.5 w-2.5 justify-self-center self-center", tone)}
         aria-hidden="true"
@@ -247,17 +237,12 @@ export interface ProblemSummaryProps {
 /**
  * Why this object is not doing its job, at the top of the page.
  *
- * A page whose object is broken used to open exactly like a page whose
- * object is fine: `bad-image-demo` led with `Labels 0 · No labels` while
- * the reason sat two tabs away under `Containers → State`. The reason was
- * in the object the whole time; nothing led with it. This does, above the
- * tab strip, so it is on every tab rather than on the one the reader
- * happens to guess.
+ * Above the tab strip, so the reason is on every tab rather than on the one
+ * the reader happens to guess.
  *
- * Deliberately not a banner: no fill, no border, no icon in a box. The
- * glyph and the colour are the same two channels the condition rows and
- * the event feed already use for "this one is bad", so a page in trouble
- * reads as the rest of the app reads, only louder.
+ * Deliberately not a banner: no fill, no border, no icon in a box. The glyph
+ * and the colour are the same two channels the condition rows and the event
+ * feed already use for "this one is bad".
  */
 export function ProblemSummary({
   headline,
@@ -279,9 +264,9 @@ export function ProblemSummary({
           <p className="mt-0.5 wrap-break-word text-xs text-fg-mut">{detail}</p>
         )}
         {/* Under its own sentence, not flushed to the far edge of a 1160px
-         *  row: "See containers" a thousand pixels from the reason it
-         *  belongs to reads as one of the page's actions rather than as the
-         *  way to the rest of this one. */}
+         *  row: a link that far from the reason it belongs to reads as one
+         *  of the page's actions rather than the way to the rest of this
+         *  one. */}
         {action && (
           <div className="-ml-1.5 mt-0.5 flex items-center">{action}</div>
         )}
@@ -318,11 +303,9 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   return (
     <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
       <span className="text-[11px] text-fg-mut">{label}</span>
-      {/* No track without a ratio to fill it with. An empty full-width
-       *  track is not "nothing measured" to anyone looking at it — it is a
-       *  bar at zero, and it was being drawn both for workloads that
-       *  declare no limit and for clusters with no metrics-server, neither
-       *  of which is a reading of 0%. */}
+      {/* No track without a ratio to fill it. An empty full-width track
+       *  reads as a bar at zero, and neither "declares no limit" nor "no
+       *  metrics-server" is a reading of 0%. */}
       {ratio === null ? (
         <span />
       ) : (
@@ -409,11 +392,10 @@ export interface CompositionProps {
 /**
  * One count, split into what it is made of.
  *
- * A rollout is a single fact — "6 wanted, 5 running, 1 still coming" — and
- * printing desired/current/ready/updated/available as five equal rows made
- * the reader do the subtraction. The bar does it: the segments partition the
- * total, so a gap is visible before any number is read. The overview's
- * per-kind census is the same shape and shares this component.
+ * The segments partition the total, so a gap in a rollout is visible before
+ * any number is read — desired/current/ready/updated/available as five equal
+ * rows left the subtraction to the reader. The overview's per-kind census is
+ * the same shape and shares this component.
  */
 export function Composition({
   total,
@@ -479,9 +461,8 @@ export interface HeadlineProps {
 /**
  * The fact a page exists to answer, at the size of a composition's number.
  *
- * A cron schedule buried as row nine of a twenty-row metadata block is the
- * thing the reader opened the page for. Three of these across the top say it
- * before anything else is read.
+ * Three of these across the top say what the reader opened the page for — a
+ * cron schedule, say — before the metadata block is reached.
  */
 export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
   return (
@@ -578,13 +559,11 @@ function EventRow({
     name: event.involvedObject.name,
     namespace: event.involvedObject.namespace ?? event.namespace,
   };
-  // Two independent channels, one per column: the mark on the left is
-  // severity and only severity, the mark on the reason is family and only
-  // family. Where they meet, severity takes the colour outright — a Warning
-  // is amber end to end or a reader cannot count the warnings in a feed —
-  // and the family keeps its shape, which is the whole point of the shapes
-  // differing. So a FailedMount is an amber platter and a FailedScheduling
-  // an amber pin: still one severity, still two families.
+  // Two independent channels, one per column: the left mark is severity, the
+  // mark on the reason is family. Where they meet severity takes the colour
+  // outright — a Warning is amber end to end or the warnings in a feed cannot
+  // be counted — and the family keeps only its shape, so a FailedMount is an
+  // amber platter and a FailedScheduling an amber pin.
   const familyStyle = isWarning || !color ? undefined : { color };
 
   return (

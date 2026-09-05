@@ -25,21 +25,17 @@ interface LogLegendProps {
 /**
  * The legend, which is also the filter.
  *
- * It replaces a dropdown that showed one container and hid the other
- * four — so the one question a multi-container pod raises, what the
- * sidecar was doing when the app failed, could not be asked. Every
- * container is named here with its rule colour and its line count, and
- * clicking one takes it out of the view without stopping its stream, so
- * the count keeps telling the truth while it is hidden.
+ * Every container is named with its rule colour and its line count — a
+ * multi-container pod can be asked what the sidecar was doing when the app
+ * failed. Clicking one takes it out of the view without stopping its
+ * stream, so the count keeps telling the truth while it is hidden.
  *
- * A container whose stream died says so here. Without that a dead
- * sidecar and a quiet one look identical: both stop at a number.
+ * A container whose stream died says so here. Without that a dead sidecar
+ * and a quiet one look identical: both stop at a number.
  *
- * Isolating one used to cost a click per container. Click still toggles;
- * double-click or alt-click solos, and the same gesture again brings the
- * rest back — the mute/solo pair from every audio tool, which nobody has
- * to be taught. `1`…`9` do it from the keyboard, by the positions this
- * row is drawn in.
+ * Click toggles; double-click or alt-click solos, and the same gesture
+ * again brings the rest back. `1`…`9` do it from the keyboard, by the
+ * positions this row is drawn in.
  */
 export function LogLegend({
   containers,

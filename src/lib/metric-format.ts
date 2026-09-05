@@ -3,9 +3,8 @@ import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 /**
  * Pure helpers behind the table's quantity cells.
  *
- * Kept out of the component file so they can be exercised directly — both
- * are easy to get subtly wrong, and both are read on every row of every
- * resource table.
+ * Kept out of the component file so they can be exercised directly: both are
+ * easy to get subtly wrong, and both are read on every row of every table.
  */
 
 /**

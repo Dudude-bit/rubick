@@ -1,19 +1,15 @@
 import * as React from "react";
 
 /**
- * Search over settings, filtering rows rather than sections.
+ * Search over settings, filtering rows rather than sections: sections that
+ * hold nothing are dimmed, and the one on screen says how many matched.
  *
- * A setting you were told about once is a name you half-remember, not a
- * category you can place. Dimming the sections that hold nothing and
- * counting what matched in the one you are looking at turns five scrolls
- * into one keystroke.
- *
- * Two consequences shape the whole mechanism:
+ * Two contracts hold it together:
  *
  * 1. A row that does not match is hidden, never unmounted. An unmounted
  *    row deregisters, the count it contributed disappears, and a query
- *    that would bring it back can no longer see it — the section it lives
- *    in would go quiet and stay quiet.
+ *    that would bring it back can no longer see it — its section would go
+ *    quiet and stay quiet.
  * 2. Rows index themselves from what they already render, so the index is
  *    the screen rather than a second list of labels that drifts from it.
  */
@@ -49,11 +45,9 @@ function toTerms(query: string): string[] {
 }
 
 /**
- * The words a reader would point at.
- *
- * A hint is often an element — a mono path, a coloured failure — and the
- * words inside it are the ones somebody actually remembers ("homebrew",
- * "$KUBECONFIG"). Walking the node reaches them. It stops at a component
+ * The words a reader would point at: a hint is often an element, and the
+ * words inside it ("homebrew", "$KUBECONFIG") are the ones somebody
+ * remembers. Walking the node reaches them; it stops at a component
  * boundary, which is what the `keywords` prop is for.
  */
 // eslint-disable-next-line react-refresh/only-export-components

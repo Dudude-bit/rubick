@@ -7,10 +7,7 @@ import { columns } from "./PodList";
  * Which pod columns sort, and by what.
  *
  * Requested in #107: "especially in Pods, because you often need to sort by
- * status or by restart count". The machinery was already there — the feature
- * set has `rowSortingFeature` and a sorted row model, and `DataTable` holds
- * the state — and not one column in the app declared an accessor to sort by,
- * so nothing was sortable and nothing said so.
+ * status or by restart count".
  *
  * A column sorts on the value its `accessorFn` returns, not on what the cell
  * draws, so the accessor is the thing worth pinning: it is invisible on
@@ -24,7 +21,7 @@ type Row = {
 
 // `ColumnDef` is a union — the accessor arm carries `accessorFn` and the
 // display arm does not — so reading it needs the narrowing the union exists
-// to force. This is the test's whole subject, so it does it once here.
+// to force, done once here.
 type WithAccessor = { accessorFn?: (row: Row, index: number) => unknown };
 
 const column = (id: string) => {

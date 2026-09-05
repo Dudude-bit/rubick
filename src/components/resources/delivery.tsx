@@ -2,14 +2,13 @@
  * The three places an object says where it came from, and one that says what
  * that means for you.
  *
- * The judgement about *when* each of these appears is in `@/lib/delivery` and
- * not here — this file draws whatever that decided, so the rule cannot drift
- * between the header, the Overview, the list and the dialogs. See that module
- * for why a "managed" badge on every row would have been worse than nothing.
- *
- * Nothing here names Argo CD or Flux. The vendor supplies its own name, its own
- * sentence and an opaque id that resolves to its glyph; a third delivery
- * controller would appear on all four surfaces without this file changing.
+ * *When* each of these appears is decided in `@/lib/delivery`, not here, so
+ * the rule cannot drift between the header, the Overview, the list and the
+ * dialogs — that module also has why a "managed" badge on every row would be
+ * worse than nothing. Nothing here names Argo CD or Flux: the vendor supplies
+ * its own name, its own sentence and an opaque id that resolves to its glyph,
+ * so a third delivery controller appears on all four surfaces without this
+ * file changing.
  */
 
 import { Link } from "react-router-dom";
@@ -29,12 +28,10 @@ import { useT } from "@/i18n/useT";
 
 /**
  * Where this comes from, beside the status: quiet, and always when there is
- * an answer.
- *
- * Plain small text in a role colour rather than a chip — the discipline the
- * spot mark and `cordoned` already follow — because a bordered badge here
- * would out-shout the health beside it, and provenance is never the more
- * urgent of the two.
+ * an answer. Plain small text in a role colour rather than a chip — the
+ * discipline the spot mark and `cordoned` already follow — because a bordered
+ * badge would out-shout the health beside it, and provenance is never the
+ * more urgent of the two.
  */
 export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
   const t = useT();
@@ -74,12 +71,10 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
 }
 
 /**
- * The earned line, above everything, or nothing at all.
- *
- * A managed object that is in sync and whose delivery will not fight you gets
- * **no line**. That is the whole discipline: on a cluster Argo runs, a line
- * that appeared for "this is managed" would be on every page in the app and
- * would be worth exactly as much as a badge on every row.
+ * The earned line, above everything, or nothing at all. A managed object that
+ * is in sync and whose delivery will not fight you gets **no line**: on a
+ * cluster Argo runs, a line for "this is managed" would be on every page in
+ * the app and worth exactly as much as a badge on every row.
  */
 export function DeliveryBanner({ deliveries }: { deliveries: Delivery[] }) {
   const t = useT();
@@ -113,12 +108,11 @@ function DeliveryLineBody({ line }: { line: DeliveryLine }) {
 }
 
 /**
- * Where the change would actually have to be made.
- *
- * The revision is a link only where the remote resolves to a real page —
- * `gitRepoLink` refuses ssh remotes, self-hosted hosts and anything carrying a
- * credential, and a link that landed on a login wall would make the reader
- * doubt the app rather than the link.
+ * Where the change would actually have to be made. The revision is a link
+ * only where the remote resolves to a real page — `gitRepoLink` refuses ssh
+ * remotes, self-hosted hosts and anything carrying a credential, and a link
+ * that landed on a login wall would make the reader doubt the app rather than
+ * the link.
  */
 function DeliveryWhere({
   where,
@@ -170,11 +164,10 @@ function DeliveryWhere({
 }
 
 /**
- * The `Delivery` column's cell.
- *
- * Empty for the ordinary delivered-and-fine row, which on a GitOps cluster is
- * most of them: a problem earns a mark and inventory does not. `not delivered`
- * is faint and not a warning — it is worth knowing and it is not a fault.
+ * The `Delivery` column's cell. Empty for the ordinary delivered-and-fine
+ * row, which on a GitOps cluster is most of them: a problem earns a mark and
+ * inventory does not. `not delivered` is faint and not a warning — it is
+ * worth knowing and it is not a fault.
  */
 export function DeliveryCell({ deliveries }: { deliveries: Delivery[] }) {
   const t = useT();

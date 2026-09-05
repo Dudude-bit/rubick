@@ -1,21 +1,18 @@
 /**
  * Several namespaces' overviews, added up into one.
  *
- * The backend answers this question for one scope at a time, so a window
- * looking at three namespaces asks three times and joins the answers here.
- * The join is not a general merge and must not become one: every field is
- * either *namespace-scoped* and summed, or *cluster-scoped* and taken once.
+ * The backend answers for one scope at a time, so a window looking at three
+ * namespaces asks three times and joins the answers here. The join is not a
+ * general merge and must not become one: every field is either
+ * *namespace-scoped* and summed, or *cluster-scoped* and taken once. `nodes`
+ * is the whole cluster's node list in every one of the three answers — summing
+ * it reports a three-node cluster as having nine — and `counts.namespaces` is
+ * how many namespaces exist, not how many are being looked at.
  *
- * Getting that wrong is not a cosmetic bug. `nodes` is the whole cluster's
- * node list in every one of the three answers — summing it would report a
- * three-node cluster as having nine — and `counts.namespaces` is how many
- * namespaces exist, not how many are being looked at.
- *
- * Two fields are neither summed nor taken once, because they are *lists the
- * backend had already ordered and cut*: joining them end to end keeps each
- * part's ordering and throws away the whole's. Both are rebuilt here by the
- * same rule `src-tauri/src/commands/overview.rs` uses, and that file is where
- * the rule is decided — this one follows it.
+ * Two fields are neither summed nor taken once, being *lists the backend had
+ * already ordered and cut*: joining them end to end keeps each part's ordering
+ * and throws away the whole's. Both are rebuilt here by the rule
+ * `src-tauri/src/commands/overview.rs` decides — this file follows it.
  */
 
 import type {
@@ -42,12 +39,12 @@ const SUMMED: ReadonlyArray<keyof ResourceCounts> = [
 
 /**
  * `MAX_PROBLEMS` in `src-tauri/src/commands/overview.rs`, mirrored —
- * `shared/overview-limits.json` is what holds the two equal, and a test
- * on each side is what notices when they stop being.
+ * `shared/overview-limits.json` holds the two equal, and a test on each side
+ * notices when they stop being.
  *
  * Every part arrives ranked and already cut to it, so the join has to be cut
- * to the same number: a panel that grew by fifty rows per namespace watched
- * would defeat the cap on exactly the cluster the cap was written for.
+ * to the same number: a panel growing by fifty rows per namespace watched
+ * would defeat the cap on exactly the cluster it was written for.
  */
 export const MAX_PROBLEMS = 50;
 
@@ -68,10 +65,9 @@ function addCounts(parts: ResourceCounts[], whole: ResourceCounts) {
 
 /**
  * Worst first, then oldest first — `rank_and_cap` in the backend.
- *
  * Concatenation leaves the rows in per-namespace order, so a panel captioned
- * "worst first" would list twenty mild problems from the first namespace
- * above a CrashLoopBackOff from the second.
+ * "worst first" would list twenty mild problems from the first namespace above
+ * a CrashLoopBackOff from the second.
  *
  * `since` is RFC3339 written by the same backend, so string order is time
  * order, and an undated problem sorts first exactly as it does there: an
@@ -92,16 +88,15 @@ function rank(problems: ClusterProblem[]): ClusterProblem[] {
  * One row per reason, however many namespaces reported it.
  *
  * `WarningsPanel` keys its rows by `reason`, so two namespaces both reporting
- * `FailedScheduling` rendered two rows under one React key — one of which the
- * reader never saw, showing one namespace's count where the total belonged.
+ * `FailedScheduling` render two rows under one React key — one of which the
+ * reader never sees, showing one namespace's count where the total belongs.
  *
  * `count` is the only field of a group that adds up. The rest describe a
- * single event: the newest occurrence of that reason, which is what they
- * already mean inside one namespace, where the count also spans objects the
- * sample says nothing about. They move as a set — a message from one
- * namespace under a timestamp from another would describe an event that never
- * happened — and dropping them instead would take away the one sentence that
- * says what went wrong to prevent a claim the row does not make.
+ * single event, the newest occurrence of that reason — which is already what
+ * they mean inside one namespace, where the count also spans objects the
+ * sample says nothing about. They move as a set: a message from one namespace
+ * under a timestamp from another would describe an event that never happened,
+ * and clearing them would take away the one sentence saying what went wrong.
  */
 function addWarnings(parts: ClusterOverview[]): WarningGroup[] {
   const byReason = new Map<string, WarningGroup>();
@@ -137,10 +132,10 @@ function addWarnings(parts: ClusterOverview[]): WarningGroup[] {
  * `problems` looks namespace-scoped and is not: the backend builds it as pod
  * problems plus deployment problems plus **node** problems, and the node half
  * comes off the cluster API whatever namespace was asked for
- * (`overview.rs:893-896`, `:936`). So every part in the fan-out carries the
- * same node rows, and concatenating them drew a single NotReady node four
- * times over a four-namespace scope — with four identical React keys, and a
- * headline that counted it four times.
+ * (`overview.rs:893-896`, `:936`). Every part in the fan-out therefore carries
+ * the same node rows, and concatenating them draws a single NotReady node four
+ * times over a four-namespace scope — four identical React keys, and a
+ * headline counting it four times.
  *
  * Keyed exactly as `ProblemsPanel` keys its rows, so two rows that collapse
  * here are two rows that would have collided there.
@@ -165,21 +160,18 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
     ...first,
     problems: problems.slice(0, MAX_PROBLEMS),
     // Every part cut its own lowest-ranked tail, so the rows it dropped rank
-    // below every row it kept and below this cut: what survives here is still
-    // the worst of the whole scope, and the two numbers still add up to
-    // everything the scope has wrong with it, which is what the headline
-    // above the panel counts.
+    // below every row it kept and below this cut: what survives is still the
+    // worst of the whole scope, and the two numbers still add up to everything
+    // wrong with it — which is what the headline above the panel counts.
     problemsTruncated:
       parts.reduce((sum, part) => sum + part.problemsTruncated, 0) +
       Math.max(0, problems.length - MAX_PROBLEMS),
     warnings: addWarnings(parts),
     // `namespaces` is not joined, and there is nothing to join: it is the
     // namespace picker's breakdown of the whole cluster, and `build_overview`
-    // returns an empty one for any scoped read (`overview.rs`) — one row
-    // restating the selection under a heading that counts the cluster's
-    // namespaces was worth less than the request. Every part of a fan-out is
-    // a scoped read, so the empty vec comes through with `first`, and the
-    // picker goes on reading the cluster-wide overview it always did.
+    // returns an empty one for any scoped read (`overview.rs`). Every part of
+    // a fan-out is a scoped read, so the empty vec comes through with `first`,
+    // and the picker goes on reading the cluster-wide overview.
     counts: addCounts(
       parts.map((part) => part.counts),
       first.counts

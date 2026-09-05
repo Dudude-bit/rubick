@@ -1,18 +1,16 @@
 /**
  * Traefik's answer to "which hostnames reach this Service".
  *
- * The whole file exists because the app's connection graph is built in the
- * backend out of `Ingress` objects and nothing else. That is the right call —
- * an edge out of an `IngressRoute` would put Traefik's object model in the
- * core — but it left every surface that asks "how is this reached" answering
- * from Ingresses alone and phrasing the answer as though it had asked the
- * cluster. On a cluster whose edge is entirely IngressRoutes, that is a page
- * telling the reader nothing routes to a Service they have been reaching by
- * name for months.
+ * The core connection graph is built in the backend out of `Ingress` objects
+ * and nothing else, deliberately — an edge out of an `IngressRoute` would put
+ * Traefik's object model in the core. On a cluster whose edge is entirely
+ * IngressRoutes that leaves every "how is this reached" surface saying nothing
+ * routes to a Service the reader has been reaching by name for months, so
+ * this file answers for them.
  *
- * Nothing here is new knowledge: `allRoutes` already reads both shapes for
- * the routing page, and both reads below share that page's query keys, so a
- * reader who has opened it pays for neither.
+ * `allRoutes` already reads both shapes for the routing page, and both reads
+ * below share that page's query keys, so a reader who has opened it pays for
+ * neither.
  */
 
 import { commands } from "@/lib/commands";

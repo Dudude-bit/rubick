@@ -9,13 +9,12 @@ import { useT } from "@/i18n/useT";
 /**
  * What a context row is allowed to claim, read from the file and from PATH.
  *
- * Nothing here touches a network. Every sentence below is a restatement of
- * bytes already on this machine, which is why "cannot connect" is a
- * statement about a missing binary and never about an API server.
+ * Nothing here touches a network: every sentence is a restatement of bytes
+ * already on this machine, which is why "cannot connect" is a statement about
+ * a missing binary and never about an API server.
  *
- * The rule the whole module exists for: when the user entry is a shape
- * with no name here, the row says so. A confident wrong sentence on a
- * debugging screen costs more than the form this replaced.
+ * The rule the module exists for: when the user entry is a shape with no name
+ * here, the row says so rather than guessing.
  */
 
 /** A cloud whose credentials this app can pin to a profile. */
@@ -70,7 +69,7 @@ const MONO = "font-mono text-fg-mid";
  * One catalogue sentence, cut where it is rendered rather than stored in
  * halves.
  *
- * `describeAuth` is a plain function and cannot call the hook — but what it
+ * `describeAuth` is a plain function and cannot call the hook, but what it
  * returns is rendered inside the row, and a component put there can. The
  * sentence stays one catalogue string with a placeholder, which is what lets a
  * translator move the monospace word wherever their word order wants it.

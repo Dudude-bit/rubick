@@ -5,20 +5,18 @@
  * not converging and eleven that are, and the alphabet puts the answer
  * wherever the alphabet happens to put it.
  *
- * ## Where each link goes, because that is the whole point
- *
- * A resource row goes to **that object's page in this app** — the reason to
- * read Argo here rather than in Argo is that this app knows what a
- * `Deployment` is and can show you its pods. The repository and the revision
- * go **out** to the git host, and only where the address falls out of the
- * remote mechanically; `gitRepoLink` owns that judgement and an `ssh://`
- * remote simply gets no link. "Open in Argo CD" goes out to Argo, because the
- * line-by-line diff is the one thing Argo does better than this app could
- * without a credential — and it only appears where the cluster says, in an
- * object, how Argo's UI is actually reached. An `Ingress` is read directly;
- * anything else routing `argocd-server` — a Traefik `IngressRoute`, and every
- * cluster whose edge is entirely CRDs — answers through the `service.routes`
- * capability rather than being invisible, which is what it used to be.
+ * Where each link goes is the whole point. A resource row goes to **that
+ * object's page in this app** — the reason to read Argo here rather than in
+ * Argo is that this app knows what a `Deployment` is and can show you its
+ * pods. The repository and the revision go **out** to the git host, and only
+ * where the address falls out of the remote mechanically; `gitRepoLink` owns
+ * that judgement and an `ssh://` remote simply gets no link. "Open in Argo
+ * CD" goes out to Argo, because the line-by-line diff is the one thing Argo
+ * does better than this app could without a credential — and it only appears
+ * where the cluster says, in an object, how Argo's UI is actually reached: an
+ * `Ingress` is read directly, and anything else routing `argocd-server` — a
+ * Traefik `IngressRoute`, and every cluster whose edge is entirely CRDs —
+ * answers through the `service.routes` capability.
  */
 
 import { useMemo, useState } from "react";
@@ -83,11 +81,10 @@ import { useT } from "@/i18n/useT";
 const AUTO_OPEN = 8;
 
 /**
- * One catalogue sentence drawn around a monospace word.
- *
- * The word is a Kubernetes or Argo identifier and stays as it is spelled;
- * only where it lands in the sentence changes with the language, which is why
- * the string stays whole in the catalogue and the cut happens here.
+ * One catalogue sentence drawn around a monospace word. The word is a
+ * Kubernetes or Argo identifier and stays as it is spelled; only where it
+ * lands in the sentence changes with the language, which is why the string
+ * stays whole in the catalogue and the cut happens here.
  */
 function Mono({
   text,
@@ -124,10 +121,9 @@ export default function ArgoCdPage() {
     [applications.data]
   );
 
-  // An Ingress is not the only thing that can put Argo's UI on a hostname,
-  // and reading only Ingresses is what had this page telling readers of a
-  // Traefik cluster that nothing served `argocd-server`. The core reading
-  // stays first and unchanged; this is asked when it found nothing.
+  // An Ingress is not the only thing that can put Argo's UI on a hostname —
+  // on a Traefik cluster nothing does. The core reading stays first; this is
+  // asked only when it found nothing.
   const routed = useServiceRoutes(
     controller.data
       ? { namespace: controller.data.namespace, name: SERVER_SERVICE }
@@ -540,14 +536,11 @@ function RevisionRef({ app, source }: { app: ArgoApp; source: ArgoSource }) {
 }
 
 /**
- * Everything the Application manages, grouped by kind.
- *
- * The row used to say "17 objects" and then list only the ones that differed,
- * so a healthy Application told the reader how many things it owned and never
- * which. That is the wrong half of the answer: *what is in this Application*
- * is the question somebody opens it with, the objects are already in
- * `status.resources`, and every one of them is a link into its own page in
- * this app — which is the whole reason to read Argo here rather than in Argo.
+ * Everything the Application manages, grouped by kind — the whole inventory,
+ * not only what differs. *What is in this Application* is the question
+ * somebody opens it with, the objects are already in `status.resources`, and
+ * every one of them is a link into its own page in this app, which is the
+ * whole reason to read Argo here rather than in Argo.
  *
  * Ordered by trouble inside each kind and across them, because a Helm release
  * of a hundred objects is the ordinary case and the two that are failing must
@@ -620,10 +613,10 @@ function Manages({ app }: { app: ArgoApp }) {
  * One managed object: where it is in this app, and what Argo says about it.
  *
  * Half of a real Application's inventory is other operators' objects — a
- * `Certificate`, an `IngressRoute`, a `ServiceMonitor` — and those were drawn
- * as plain text, because a reference can only be made from a CRD's name and
- * Argo reports a group and a kind. The cluster is asked which CRD that pair
- * belongs to; a kind it has no CRD for is a core kind and needs none.
+ * `Certificate`, an `IngressRoute`, a `ServiceMonitor` — and a reference can
+ * only be made from a CRD's name, while Argo reports a group and a kind. So
+ * the cluster is asked which CRD that pair belongs to; a kind it has no CRD
+ * for is a core kind and needs none.
  */
 function ResourceLine({
   resource,
@@ -676,11 +669,9 @@ function ResourceLine({
 }
 
 /**
- * An Application a generator made.
- *
- * Worth a line on the row rather than a footnote elsewhere: editing it is
- * pointless — the ApplicationSet rewrites it — and the reader about to do
- * that has no other way to find out.
+ * An Application a generator made. Worth a line on the row rather than a
+ * footnote elsewhere: editing it is pointless — the ApplicationSet rewrites
+ * it — and the reader about to do that has no other way to find out.
  */
 function GeneratedNote({ app }: { app: ArgoApp }) {
   const t = useT();
@@ -764,13 +755,12 @@ function FindingLine({
 }
 
 /**
- * The tier boundary, stated where the reader meets it.
- *
- * Which resources differ is here, from the CRD, free. Which *lines* differ is
- * in Argo's API behind a token, so it is handed to Argo — but only when the
- * cluster says where Argo answers. With no Ingress in front of `argocd-server`
- * there is no address to guess, and the sentence says that instead of offering
- * a link into a connection error.
+ * The tier boundary, stated where the reader meets it. Which resources differ
+ * is here, from the CRD, free; which *lines* differ is in Argo's API behind a
+ * token, so it is handed to Argo — but only when the cluster says where Argo
+ * answers. With nothing routing `argocd-server` there is no address to guess,
+ * and the sentence says that instead of offering a link into a connection
+ * error.
  */
 function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
   const t = useT();
@@ -1150,10 +1140,8 @@ function ControllerTab({
           </p>
         ) : (
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            {/* Says what was read, not what the cluster contains: this
-                sentence used to claim the whole cluster routed nothing to
-                argocd-server, from a reading of Ingresses alone, on clusters
-                whose entire edge is a routing CRD. */}
+            {/* Says what was read, not what the cluster contains: neither
+                the Ingresses nor the routing capability named a host. */}
             <Mono
               text={t("empty", "nothingRoutesServiceToHostname")}
               slot="{service}"

@@ -59,13 +59,13 @@ const portNumbers = (
  * The status a pasted Pod manifest carries, read the way kubectl reads it.
  *
  * A live pod arrives with kubectl's full derivation done in Rust; a pasted
- * `kubectl get pod -o yaml` has no Rust behind it, and its `.status.phase`
- * says Running for a pod whose only container has crashed six hundred
- * times. Only the first rule of that derivation is applied: the lowest
- * container that is waiting for a reason or has terminated names the pod.
- * Init containers, `deletionTimestamp`, a pod-level reason and a Completed
- * pod with a live sidecar are not read, so such a pod shows its phase
- * where kubectl would say Init:0/2, Terminating, Evicted or Running.
+ * `kubectl get pod -o yaml` has none, and its `.status.phase` says Running for
+ * a pod whose only container has crashed six hundred times. Only the first
+ * rule of that derivation is applied here: the lowest container waiting for a
+ * reason or terminated names the pod. Init containers, `deletionTimestamp`, a
+ * pod-level reason and a Completed pod with a live sidecar are not read, so
+ * such a pod shows its phase where kubectl would say Init:0/2, Terminating,
+ * Evicted or Running.
  */
 export const manifestPodStatus = (status: ManifestStatus | undefined) => {
   const label = containerVerdict(status) ?? status?.phase;
@@ -77,12 +77,12 @@ export const manifestPodStatus = (status: ManifestStatus | undefined) => {
 const containerVerdict = (status: ManifestStatus | undefined) => {
   for (const { state } of status?.containerStatuses ?? []) {
     const waiting = state?.waiting?.reason;
-    // `PodInitializing` is skipped, and Rust is not: kubectl filters it in
-    // the *init* container loop (pod_display.rs:138) and not in this one
+    // `PodInitializing` is skipped and Rust does not skip it: kubectl filters
+    // it in the *init* container loop (pod_display.rs:138), not in this one
     // (:155), so the two derivations differ here on purpose. This canvas
-    // cannot read init containers at all, and the phase is the nearest
-    // honest word where kubectl would print `Init:0/2`. The conformance
-    // corpus names this as an exclusion rather than pretending otherwise.
+    // cannot read init containers at all, and the phase is the nearest honest
+    // word where kubectl would print `Init:0/2`; the conformance corpus names
+    // this as an exclusion.
     if (waiting && waiting !== "PodInitializing") return waiting;
     const dead = state?.terminated;
     if (!dead) continue;
@@ -197,9 +197,8 @@ export interface ManifestParseResult {
  * Whether a document's container list is something other than a list.
  *
  * Checked once at the boundary rather than guarded at each of the four places
- * that read it: the reader who pasted the manifest wants to be told their YAML
- * is wrong, and every one of those places would otherwise have to invent its
- * own answer to a document that cannot be built.
+ * that read it, each of which would otherwise have to invent its own answer to
+ * a document that cannot be built.
  */
 const containerListProblem = (doc: Manifest): string | null => {
   const template = doc.spec?.template as Manifest | undefined;
@@ -239,11 +238,11 @@ export const parseManifestYaml = (text: string): ManifestParseResult => {
         return;
       }
 
-      // `Manifest` is an assertion over what `js-yaml` produced, not a
-      // proof. A container list written as a mapping — the commonest slip in
-      // a hand-written manifest — satisfies the type and then throws where
-      // the builder destructures it, one tab switch later, with a stack
-      // trace instead of the parse error this page already renders.
+      // `Manifest` is an assertion over what `js-yaml` produced, not a proof.
+      // A container list written as a mapping — the commonest slip in a
+      // hand-written manifest — satisfies the type and then throws where the
+      // builder destructures it, one tab switch later, with a stack trace
+      // instead of the parse error this page already renders.
       const badContainers = containerListProblem(doc);
       if (badContainers) {
         errors.push(badContainers);
@@ -507,24 +506,22 @@ export const buildManifestYaml = (
 };
 
 /**
- * A live pod as a canvas node.
- *
- * The status is the one `kubectl get pod` prints, not `.status.phase`: a pod
- * whose only container is crash-looping is in phase Running, and this canvas
- * used to say so.
- */
-/**
  * What a Deployment's replica counts add up to, for the canvas.
  *
  * The same `workloadStatus` every list and peek panel uses, rather than a
- * third copy of `available >= desired`. That copy called a Deployment scaled
- * to zero **Available** — `0 >= 0` — which is the exact answer
- * `workloadStatus` was written to stop giving, and the canvas was giving it in
- * two places at once: here and in the cluster-import hook.
+ * third copy of `available >= desired` — a copy that called a Deployment
+ * scaled to zero **Available** (`0 >= 0`), in two places at once: here and in
+ * the cluster-import hook.
  */
 export const deploymentStatus = (desired: number, available: number): string =>
   workloadStatus({ desired, ready: available, available });
 
+/**
+ * A live pod as a canvas node.
+ *
+ * The status is the one `kubectl get pod` prints, not `.status.phase`: a pod
+ * whose only container is crash-looping is in phase Running.
+ */
 export const podResource = (pod: PodInfo): PodResourceData => {
   const container = pod.containers?.[0];
   return {

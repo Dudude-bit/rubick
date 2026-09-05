@@ -31,14 +31,12 @@ pub async fn get_configmap(
 
 /// Get `ConfigMap` data.
 ///
-/// Through the same door as a Secret's values. A `ConfigMap` is not a Secret,
-/// but nothing stops someone pasting a private key into one — it happens —
-/// and this path used to hand back `data` verbatim while the Secret path and
-/// every YAML tab redacted the same bytes. A `ConfigMap` carries no `type`, so
-/// the PEM-label and key-name nets are the ones that catch it.
+/// Redacted through the same door as a Secret's values: nothing stops someone
+/// pasting a private key into a `ConfigMap` — it happens — and it carries no
+/// `type`, so the PEM-label and key-name nets are the ones that catch it.
 ///
-/// `binaryData` is read too. It was dropped entirely before, which made a
-/// `ConfigMap` holding only binary keys look empty.
+/// `binaryData` is read too, or a `ConfigMap` holding only binary keys looks
+/// empty.
 #[tauri::command]
 pub async fn get_configmap_data(
     name: String,
@@ -61,12 +59,11 @@ pub async fn get_configmap_data(
 
 /// Write one key of a `ConfigMap`, leaving the rest alone.
 ///
-/// A merge patch on that one field rather than a replace of the object.
-/// Editing the whole `ConfigMap` as YAML is already possible and is what a
-/// reader asked to stop doing (#107): a value that is itself JSON turns into
-/// an indentation puzzle, and one mis-typed space rewrites a key nobody
-/// touched. Patching the field they edited cannot do that, and it will not
-/// clobber a change somebody else made to a different key in the meantime.
+/// A merge patch on that one field rather than a replace of the object (#107).
+/// Editing the whole `ConfigMap` as YAML turns a value that is itself JSON
+/// into an indentation puzzle where one mis-typed space rewrites a key nobody
+/// touched; patching one field cannot do that, and it will not clobber a
+/// change somebody else made to a different key in the meantime.
 ///
 /// `binaryData` is deliberately out of scope. A key held there is bytes, and
 /// a text box is not the way to edit bytes — the YAML editor still is.

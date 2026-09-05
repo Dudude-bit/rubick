@@ -4,8 +4,7 @@
  * The backend answers with the Service's own EndpointSlices — the cluster's
  * bookkeeping rather than ours — and nothing here re-derives a fact from it.
  * `serving`, `terminating` and `hints.forZones` all arrive stated; this only
- * puts them into a sentence, and refuses to invent the ones that are not
- * there.
+ * puts them into a sentence, and refuses to invent the ones that are absent.
  */
 
 import type { T } from "@/i18n/useT";
@@ -124,8 +123,8 @@ export function sourceMark(published: ServicePublished, t: T): string | null {
 /**
  * What topology-aware routing does to this Service, where hints are on.
  *
- * Null on the overwhelming majority of Services, which is the point: hints
- * are off by default and a caption over a gap is worse than no caption.
+ * Null on the overwhelming majority of Services: hints are off by default,
+ * and a caption over a gap is worse than no caption.
  */
 export function topologyNote(published: ServicePublished, t: T): string | null {
   const hinted = published.endpoints.filter(
@@ -183,9 +182,9 @@ export function unpublishedNote(entry: UnpublishedPod, t: T): string {
 /**
  * What the legacy `Endpoints` object is, next to the slices.
  *
- * The control plane still writes it, so the page stays — but it stops being
- * the source of truth. It is truncated at 1000 addresses and annotated
- * `endpoints.kubernetes.io/over-capacity` past that, and it cannot express
+ * The control plane still writes it, so the page stays, but it is no longer
+ * the source of truth: it truncates at 1000 addresses (annotated
+ * `endpoints.kubernetes.io/over-capacity` past that) and cannot express
  * `serving` or `terminating` at all, so a draining address is simply absent
  * from it. A page silently showing 1000 of 1240, or 0 of 1, is not showing
  * the answer.

@@ -1,22 +1,16 @@
 /**
  * Who mounts a volume where, said once.
  *
- * A mount was printed once per container, so the two containers of a pod
- * mounting one volume at one path printed that path twice — and the path in
- * question is `/var/run/secrets/kubernetes.io/serviceaccount`, on every pod
- * in the cluster. The container name was the only thing that differed and it
- * sat in the middle of the repetition.
- *
  * Grouped by exactly what a line prints: the path, the subPath, whether it is
  * read-only, and whether it arrived through a projection. Anything the line
  * does not print — which `spec.volumes` entry a mount came through — cannot
  * make two lines look different, so it does not split them either.
  *
- * Shared rather than done in each renderer because the Volumes block and the
- * Connections tab were repeating the same mount for the same reason, and a
- * grouping rule that holds in one place and not the other is how the two
- * spellings drift apart. What each renderer keeps is its own wording: one
- * writes a sentence, the other fills a column.
+ * Shared rather than done in each renderer: the Volumes block and the
+ * Connections tab repeat the same mount for the same reason, and a grouping
+ * rule that holds in one place and not the other is how two spellings drift
+ * apart. What each renderer keeps is its own wording — one writes a sentence,
+ * the other fills a column.
  */
 
 import type { T } from "@/i18n/useT";
@@ -65,12 +59,11 @@ export function groupMounts<T extends MountLike>(mounts: T[]): MountGroup<T>[] {
  * that does not know the denominator passes nothing and gets the names, which
  * are true either way.
  *
- * Where the line falls: a one-container pod has nothing to tell apart, so the
- * name is a column of the same word and is left off entirely. Where every
- * container mounts it — the service-account volume, on every pod in the
- * cluster — that is the fact, and it is shorter and steadier than the roster:
- * the same words on every pod, which the eye learns to skip. Names are for
- * the case they actually answer, which is *some* of the containers.
+ * A one-container pod has nothing to tell apart, so the name is a column of
+ * the same word and is left off entirely. Where every container mounts it —
+ * the service-account volume, on every pod in the cluster — that fact is
+ * shorter and steadier than the roster. Names are for the case they actually
+ * answer, which is *some* of the containers.
  */
 export function mountedBy(containers: string[], t: T, total?: number): string {
   if (total !== undefined && containers.length === total) {

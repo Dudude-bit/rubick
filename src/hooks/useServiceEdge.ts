@@ -7,17 +7,17 @@ export interface ServiceEdges {
    * Whether anything in this cluster can answer the question at all.
    *
    * `false` is the state nearly every reader is in — it needs one of the
-   * managed clouds' controllers installed — and it is not an error. The
-   * chain draws the Service hop it has always drawn.
+   * managed clouds' controllers installed — and it is not an error: the chain
+   * draws the Service hop it always draws.
    */
   available: boolean;
   /** `namespace/name` to what configures the way in. Absent means "not read
    *  yet"; present and empty means "read, and nothing configures it". */
   configs: Map<string, EdgeConfig[]>;
   /**
-   * Set where a capability was there and did not answer. A hop that quietly
-   * dropped its note would tell the reader this Service has no cloud
-   * configuration, which is a different and possibly wrong sentence.
+   * Set where a capability was there and did not answer. Dropping the failure
+   * would tell the reader this Service has no cloud configuration, which is a
+   * different and possibly wrong sentence.
    */
   error: Error | null;
 }
@@ -28,16 +28,15 @@ export const edgeKey = (namespace: string, name: string) =>
 /**
  * What the cloud's own objects say about the way into these Services.
  *
- * Asks for a capability, not for GKE or for the AWS load balancer
- * controller: this hook does not know what answered and neither does the
- * chain it hands the answer to.
+ * Asks for a capability, not for GKE or for the AWS load balancer controller:
+ * this hook does not know what answered and neither does the chain it hands
+ * the answer to.
  *
- * Every installed supplier is asked rather than only the first, unlike
- * `certificate.issuance` where one thing issues a given Secret and a second
- * opinion would be a guess. Here the question has no single owner — the
- * objects come from different controllers that key off different things —
- * and a cluster that somehow ran two would have two real answers, not one
- * right one and one to discard.
+ * Every installed supplier is asked, not only the first — unlike
+ * `certificate.issuance`, where one thing issues a given Secret and a second
+ * opinion would be a guess. Here the objects come from different controllers
+ * keying off different things, so a cluster running two has two real answers,
+ * not one to discard.
  */
 export function useServiceEdge(
   services: Array<{ namespace: string; name: string }>

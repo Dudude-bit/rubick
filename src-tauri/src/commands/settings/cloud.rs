@@ -1,6 +1,5 @@
-//! Cloud auth profile commands — GCP profiles, Azure profiles,
-//! kubeconfig context bindings, and CLI tool paths. Grouped because
-//! they all manage the cloud-auth side of the kubeconfig story.
+//! Cloud auth profile commands — GCP profiles, Azure profiles, kubeconfig
+//! context bindings, CLI tool paths and the kubeconfig path override.
 
 use crate::auth::AuthProvider;
 use crate::config::{AppConfig, AzureProfile, CliPathsConfig, ContextBinding, GcpProfile};
@@ -9,9 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::helpers::{read_config, with_config};
 
-// ============================================================================
-// GCP Profiles
-// ============================================================================
+// --- GCP profiles -----------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,9 +82,7 @@ pub async fn test_gcp_profile(name: String) -> Result<String> {
     }
 }
 
-// ============================================================================
-// Azure Profiles
-// ============================================================================
+// --- Azure profiles ---------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -160,9 +155,7 @@ pub async fn test_azure_profile(name: String) -> Result<String> {
     }
 }
 
-// ============================================================================
-// Context Bindings
-// ============================================================================
+// --- Context bindings -------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -219,9 +212,7 @@ pub fn delete_context_binding(context: String) -> Result<()> {
     })
 }
 
-// ============================================================================
-// CLI Paths
-// ============================================================================
+// --- CLI paths --------------------------------------------------------------
 
 #[tauri::command]
 pub fn get_cli_paths() -> Result<CliPathsConfig> {
@@ -240,17 +231,14 @@ pub async fn save_cli_paths(cli_paths: CliPathsConfig) -> Result<()> {
         config.cli_paths = cleaned;
     })?;
 
-    // Reload CLI managers with new configuration
-    // This ensures the managers pick up the updated custom paths immediately
+    // So the managers pick up the new custom paths immediately.
     crate::commands::kubectl::reload_kubectl_manager().await;
     crate::commands::helm::reload_helm_manager().await;
 
     Ok(())
 }
 
-// ============================================================================
-// Kubeconfig path override
-// ============================================================================
+// --- Kubeconfig path override -----------------------------------------------
 
 /// Return the persisted kubeconfig override path. `None` means "use
 /// default lookup" (i.e. $KUBECONFIG or ~/.kube/config).
@@ -306,13 +294,11 @@ pub async fn set_kubeconfig_path(
 /// Pin these files, in this order, as the kubeconfig the app reads.
 ///
 /// The whole list at once rather than one add and one remove: the files
-/// merge, and merging depends on the order, so "the list is now this" is
-/// the only statement that says what the app will read. It also makes the
-/// check honest — the new list is loaded before anything is written, so a
-/// file that will not parse leaves the reader on the set they had rather
-/// than half-applying.
-///
-/// An empty list clears the pinning and goes back to the default lookup.
+/// merge, and merging depends on the order, so "the list is now this" is the
+/// only statement that says what the app will read. It also keeps the check
+/// honest — the new list is loaded before anything is written, so a file that
+/// will not parse leaves the reader on the set they had rather than
+/// half-applying. An empty list goes back to the default lookup.
 #[tauri::command]
 pub async fn set_kubeconfig_paths(
     paths: Vec<String>,

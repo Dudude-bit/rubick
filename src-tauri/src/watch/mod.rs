@@ -1,19 +1,16 @@
 //! Kubernetes resource watch subsystem.
 //!
-//! Replaces the old 2-second polling model with a `kube::runtime::watcher`
-//! per (cluster, kind, namespace) tuple. The watcher streams `applied`
-//! / `deleted` / `restarted` events; we collect them into ~50ms batches
-//! and forward those to the frontend over the same broadcast channel as
-//! the rest of the app's events. The frontend updates the `TanStack`
-//! Query cache directly via `setQueryData` — no refetch round-trip.
+//! One `kube::runtime::watcher` per (cluster, kind, namespace) tuple streams
+//! `applied` / `deleted` / `restarted` events; they are collected into ~50ms
+//! batches and forwarded to the frontend over the same broadcast channel as
+//! the rest of the app's events. The frontend updates the `TanStack` Query
+//! cache directly via `setQueryData` — no refetch round-trip.
 //!
-//! Same deferred-start handshake as terminal-auth and log-stream lives
-//! here too: the spawned watcher task blocks on a oneshot gate until
-//! the frontend has installed its `listen("resource-event")` callback,
-//! and only then does it call `kube::runtime::watcher` and start
-//! emitting events. Without the gate the initial `restarted` event
-//! (which the watcher always emits before its first applied burst)
-//! could land in the void.
+//! Deferred-start handshake, the same one terminal-auth and log-stream use:
+//! the spawned task blocks on a oneshot gate until the frontend has installed
+//! its `listen("resource-event")` callback, and only then starts the watcher.
+//! Without the gate the initial `restarted` event — which the watcher always
+//! emits before its first applied burst — could land in the void.
 //!
 //! - `session`: `WatchSession` bookkeeping + RAII cleanup guard
 //! - `event`:   kube watcher Events → batched `AppEvent::ResourceWatchEvent`
@@ -169,15 +166,15 @@ impl WatchManager {
         self.spawn_watcher(api, kind_label, None, transform)
     }
 
-    /// Shared spawn loop for both subscribe variants. Holds the
-    /// session-table insert, the deferred-start gate, the watcher
-    /// loop, and the RAII cleanup guard.
+    /// Shared spawn loop for both subscribe variants: the session-table
+    /// insert, the deferred-start gate, the watcher loop, and the RAII
+    /// cleanup guard.
     ///
-    /// Must be called from a Tokio context — it spawns. Every caller
-    /// is a `#[tauri::command] async fn` for that reason; making one
-    /// of them sync puts it on a reactor-less worker thread, where the
-    /// `tokio::spawn` below panics across the IPC FFI boundary and
-    /// aborts the process rather than returning an error.
+    /// Must be called from a Tokio context — it spawns. Every caller is a
+    /// `#[tauri::command] async fn` for that reason; making one of them sync
+    /// puts it on a reactor-less worker thread, where the `tokio::spawn` below
+    /// panics across the IPC FFI boundary and aborts the process rather than
+    /// returning an error.
     fn spawn_watcher<K, F, U>(
         &self,
         api: Api<K>,
@@ -246,11 +243,10 @@ impl WatchManager {
 
             let mut stream = watcher(api, WatcherConfig::default()).boxed();
 
-            // Surface watcher failures (RBAC denial, network hiccups)
-            // to the frontend as a `Failed` event after a streak of
-            // consecutive errors. `FailureLatch` owns the threshold
-            // and emit-once behaviour; see `watch/failure.rs` for the
-            // tested state machine.
+            // Surface watcher failures (RBAC denial, network hiccups) to the
+            // frontend as a `Failed` event after a streak of consecutive
+            // errors. `FailureLatch` owns the threshold and emit-once
+            // behaviour; see `watch/failure.rs`.
             let mut latch = FailureLatch::new();
 
             // Changes are collected and flushed on a timer instead of

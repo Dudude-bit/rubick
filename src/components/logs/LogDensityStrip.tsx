@@ -30,24 +30,19 @@ import { useT } from "@/i18n/useT";
 /**
  * The strip: the retained buffer as a map you can click.
  *
- * A log pane answers "watch it happen" by scrolling. It answers "what
- * broke" and "find the burst four minutes ago" only if there is something
- * on screen that shows the shape of the whole buffer at once, and that is
- * this. Height is volume, the worst level in a slice stacks on top in its
- * own colour, the slice the reader is looking at is marked, clicking a
- * slice scrolls there and dragging across bounds the query by time.
+ * Scrolling answers "watch it happen"; "what broke" and "find the burst four
+ * minutes ago" need the shape of the whole buffer on screen at once. Height
+ * is volume, the worst level in a slice stacks on top in its own colour, the
+ * slice the reader is looking at is marked, clicking a slice scrolls there
+ * and dragging across bounds the query by time. That two-way tie to the
+ * viewport is what makes it a map rather than a chart above a log.
  *
- * The two-way tie to the viewport is the part that makes it a map. A bar
- * chart above a log is decoration; a bar chart that says where you are
- * and takes you somewhere is navigation.
- *
- * Not everyone wants a chart over their log, so it collapses — but to a
- * band rather than to nothing, because what a reader gives up by hiding
- * this is the navigation, and the navigation survives at nine pixels. In
- * "band" the height stops meaning volume and starts meaning severity, and
- * every other tie holds: the slices are the same slices, the viewport rail
- * still tracks, a click still jumps, a drag still bounds the query, the
- * keys still work and the spoken summary is word for word the same one.
+ * Hiding the chart must not cost the navigation, so it collapses to a
+ * nine-pixel band rather than to nothing. In "band" height stops meaning
+ * volume and means severity, and every other tie holds: the same slices, the
+ * viewport rail still tracks, a click still jumps, a drag still bounds the
+ * query, the keys still work and the spoken summary is word for word the
+ * same one.
  */
 
 /** Bar area. Tall enough for a burst to read, short enough not to be a chart. */
@@ -183,14 +178,13 @@ export function LogDensityStrip({
     return Math.min(MAX_BUDGET, Math.max(MIN_BUDGET, wanted));
   }, [width]);
 
-  // The accumulator has to survive renders and be advanced during one,
-  // which is what the rule below is there to prevent. It is safe here for
-  // two specific reasons: `advanceDensity` is idempotent — running it
-  // twice on the same buffer finds its own tail and counts nothing — so
-  // a double render cannot double-count, and every input it reads is a
-  // dependency of this memo, so the render can never be stale. Moving it
-  // to an effect would cost a second render pass four times a second, on
-  // the one component that is redrawing anyway.
+  // The accumulator has to survive renders and be advanced during one, which
+  // is what the rule below prevents. Safe here for two reasons:
+  // `advanceDensity` is idempotent — run twice on the same buffer it finds
+  // its own tail and counts nothing, so a double render cannot double-count —
+  // and every input it reads is a dependency of this memo, so the render
+  // cannot be stale. An effect instead would cost a second render pass four
+  // times a second, on the one component that is redrawing anyway.
   const cursorRef = useRef<DensityCursor>({ ...INITIAL_CURSOR });
   const density = useMemo(
     // eslint-disable-next-line react-hooks/refs

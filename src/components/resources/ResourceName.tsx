@@ -13,10 +13,9 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
  * A resource's kind glyph and its tinted name, with nothing said about where
  * it leads.
  *
- * Split out of `ResourceRef` because the detail page's own `<h1>` is the one
- * place in the app that shows a resource name and must *not* be a link to
- * itself — and, rendering it by hand, was the one place the name was plain
- * text. A name that carries its hue in every list and loses it on its own
+ * Separate from `ResourceRef` so the detail page's own `<h1>` — the one place
+ * that shows a resource name and must *not* be a link to itself — still gets
+ * the hue. A name that carries its hue in every list and loses it on its own
  * page teaches the reader that the hue means "clickable" rather than "this
  * object", which is the opposite of what identity colouring is for.
  *
@@ -24,21 +23,16 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
  * command-palette row and a page title need different ones.
  */
 /**
- * How large a reference draws itself.
- *
- * A reference takes its size from nothing. It used to take it from whichever
- * ancestor happened to set one, and the same component came out at 16px in a
- * Connections row, 13px in a page title, 12px in a table cell, 11.5px on an
- * integration page and 10px under a route — five sizes for one thing, none of
- * them chosen. These two are chosen, and a caller names the one it wants.
+ * How large a reference draws itself. A reference inherits no size from
+ * whichever ancestor happens to set one; a caller names one of these two.
  */
 export type ResourceNameSize = "row" | "title";
 
 /**
  * `row` is the app's reading size for a line of content — what tables,
  * key/value values, event rows and child rows already set for themselves. The
- * 11px clauses that sit beside a name are qualifiers; the name is the subject
- * of the line, and one step above its qualifiers is all the hierarchy it needs.
+ * 11px clauses beside a name are qualifiers; the name is the subject of the
+ * line, and one step above its qualifiers is all the hierarchy it needs.
  *
  * `title` is a heading: a detail page's own `<h1>`, and the peek's header.
  *
@@ -46,13 +40,13 @@ export type ResourceNameSize = "row" | "title";
  * down against the sans either: measured in the app's own engine, JetBrains
  * Mono and Inter have an identical cap-height ratio (0.7344) and x-heights
  * within 2.9% (0.5625 vs 0.5469), so at these sizes they rasterise to the
- * same cap and x-height to the pixel. What makes a monospaced name look large
- * is its fixed advance — 22% more width for the same string — and shrinking
- * the type to buy that width back would drop the name below the baseline
- * rhythm it currently shares with the sans beside it.
+ * same cap and x-height to the pixel. Mono only looks large because of its
+ * fixed advance — 22% more width for the same string — and shrinking the type
+ * to buy that width back would drop the name below the baseline rhythm it
+ * shares with the sans beside it.
  */
-// Splitting the scale into its own module is how it and the component that
-// applies it drift apart — which is the failure being fixed here.
+// Kept beside the component that applies it: a scale in its own module drifts
+// from its only user.
 // eslint-disable-next-line react-refresh/only-export-components
 export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
   row: "text-xs",
@@ -103,12 +97,11 @@ export function ResourceName({
     colouring === "off"
       ? undefined
       : { color: `hsl(${kindHue(kind)} var(--kind-s) var(--kind-l))` };
-  // The tint marks whichever part of the name says *which* object this is.
-  // Usually that is the generated tail. But a node is `k3d-k8s-gui-dev-agent-0`
-  // — every sibling shares all of it but the last few characters, and the tail
-  // the splitter finds is the ordinal `-0`, two characters of colour on a
-  // thirty-character string. Where the tail is that thin, or absent, the name
-  // itself is the identity and the whole of it is tinted.
+  // The tint marks whichever part of the name says *which* object this is,
+  // usually the generated tail. But a node is `k3d-k8s-gui-dev-agent-0`, where
+  // the tail the splitter finds is the ordinal `-0` — two characters of colour
+  // on a thirty-character string. Where the tail is that thin, or absent, the
+  // name itself is the identity and the whole of it is tinted.
   const identityStyle =
     colouring === "full"
       ? { color: `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))` }
