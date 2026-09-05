@@ -8,6 +8,19 @@ import { NotFound } from "../components/not-found";
 import { JSON_LD, OG_IMAGE, SITE } from "../lib/site";
 import appCss from "../styles.css?url";
 
+/**
+ * Arm the scroll reveal, and disarm it if the bundle never turns up.
+ *
+ * `@media (scripting: enabled)` says JavaScript is allowed, not that it ran,
+ * so a bundle that 404s or is stripped by a proxy would leave every
+ * `[data-reveal]` at `opacity: 0` for good — the whole page below the hero.
+ * Arming here rather than at hydration is what keeps the reveal from
+ * flashing; `use-in-view` clears the timer as soon as it observes anything,
+ * so the timeout only ever fires on a page whose bundle did not arrive.
+ */
+const ARM_REVEAL = `document.documentElement.setAttribute('data-reveal-armed','');
+window.__disarmReveal=setTimeout(function(){document.documentElement.removeAttribute('data-reveal-armed')},5000)`;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -36,7 +49,10 @@ export const Route = createRootRoute({
       { rel: "icon", type: "image/svg+xml", href: "/logo.svg" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
     ],
-    scripts: [{ type: "application/ld+json", children: JSON_LD }],
+    scripts: [
+      { type: "application/ld+json", children: JSON_LD },
+      { children: ARM_REVEAL },
+    ],
   }),
   component: RootComponent,
   notFoundComponent: NotFound,

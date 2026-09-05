@@ -125,14 +125,19 @@ p {
     animation: rise 0.6s var(--ease-enter) var(--d, 0s) both;
   }
 
-  [data-reveal] {
+  /* Armed by the inline script in `__root.tsx`, and disarmed by it if the
+     bundle never turns up. `scripting: enabled` says JavaScript is allowed,
+     not that it ran: without this gate a bundle that 404s or is stripped by a
+     proxy leaves every one of these at `opacity: 0` for good, which is the
+     whole page below the hero. */
+  [data-reveal-armed] [data-reveal] {
     opacity: 0;
     transform: translateY(12px);
     transition:
       opacity 0.36s var(--ease-enter) var(--d, 0s),
       transform 0.36s var(--ease-enter) var(--d, 0s);
   }
-  [data-reveal="settle"] {
+  [data-reveal-armed] [data-reveal="settle"] {
     transform: translateY(12px) scale(0.985);
   }
   [data-reveal][data-in],
