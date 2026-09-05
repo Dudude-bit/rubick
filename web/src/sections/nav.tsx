@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 import { LINKS, SITE } from "../lib/site";
 import { ButtonLink } from "../components/button-link";
+import { LogoMark } from "../components/logo-mark";
 
 function useScrolled() {
   const [scrolled, setScrolled] = useState(false);
@@ -29,7 +30,7 @@ export function Nav() {
           href="/"
           className="flex items-center gap-2.5 font-display text-lg font-bold tracking-tight"
         >
-          <img src="/logo.svg" alt="" className="size-6 rounded-md" />
+          <LogoMark className="size-6" />
           {SITE.name}
         </a>
         <nav className="flex items-center gap-6">
