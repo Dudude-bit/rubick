@@ -6,7 +6,10 @@ export function Correction() {
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-mono text-sm text-neutral-400 marker:hidden hover:text-neutral-200">
         <span className="size-1.5 rounded-full bg-amber-400" />
         We got this one wrong too
-        <span className="ml-auto text-neutral-600 transition-transform duration-150 group-open:rotate-90">
+        <span
+          aria-hidden
+          className="ml-auto text-neutral-500 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none"
+        >
           ›
         </span>
       </summary>

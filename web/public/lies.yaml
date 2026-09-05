@@ -15,7 +15,7 @@ metadata:
   name: rubick-lies
 ---
 # What the checkout pod needs to run: a ConfigMap it reads, a Secret it
-# mounts, a volume it writes to. None of them is the reason it crashes,
+# mounts, a volume it claims. None of them is the reason it crashes,
 # and all of them show up on its page, which is the point.
 apiVersion: v1
 kind: ConfigMap
