@@ -30,13 +30,13 @@ export function DownloadButtons() {
   return (
     <div className="flex flex-wrap items-center gap-3">
       {first ? (
-        <ButtonLink href="#install">
+        <ButtonLink href="/#install">
           <first.Icon aria-hidden className="size-4" />
           {first.label}
         </ButtonLink>
       ) : null}
       {rest.map((d) => (
-        <ButtonLink key={d.os} href="#install" variant="ghost">
+        <ButtonLink key={d.os} href="/#install" variant="ghost">
           <d.Icon aria-hidden className="size-4" />
           {d.label.replace("Download for ", "")}
         </ButtonLink>

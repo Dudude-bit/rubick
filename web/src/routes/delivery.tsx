@@ -16,6 +16,11 @@ export const Route = createFileRoute("/delivery")({
       { property: "og:description", content: description },
       { property: "og:url", content: url },
       { property: "og:image", content: `${SITE.url}/og/delivery.png` },
+      {
+        property: "og:image:alt",
+        content:
+          "The Argo CD and Flux delivery card: what applied each object, and whether an edit made by hand survives",
+      },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
       { name: "twitter:image", content: `${SITE.url}/og/delivery.png` },

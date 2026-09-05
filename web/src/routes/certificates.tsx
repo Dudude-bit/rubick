@@ -16,6 +16,11 @@ export const Route = createFileRoute("/certificates")({
       { property: "og:description", content: description },
       { property: "og:url", content: url },
       { property: "og:image", content: `${SITE.url}/og/certificates.png` },
+      {
+        property: "og:image:alt",
+        content:
+          "The certificates card: what issued each certificate, when it expires, and what renews it",
+      },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
       { name: "twitter:image", content: `${SITE.url}/og/certificates.png` },

@@ -1,25 +1,14 @@
 import { useRef, useState } from "react";
-import corpus from "../../../shared/pod-status-conformance.json";
+import { QUIZ_CASES, type QuizContainer } from "./quiz-cases";
 import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 import { useHydrated } from "../lib/use-hydrated";
 
-type Container = {
-  ready?: boolean;
-  state: {
-    waiting?: { reason?: string };
-    terminated?: { reason?: string; exitCode?: number; signal?: number };
-    running?: object;
-  };
-};
-
-const VERDICTS = [
-  ...new Set([...corpus.cases.map((c) => c.expect), "Running"]),
-];
+const VERDICTS = [...new Set([...QUIZ_CASES.map((c) => c.expect), "Running"])];
 const FOCUS =
   "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent";
 
-function evidence(containers: Container[]) {
+function evidence(containers: QuizContainer[]) {
   for (const [index, container] of containers.entries()) {
     const { waiting, terminated } = container.state;
     if (waiting?.reason) {
@@ -54,12 +43,12 @@ export function Quiz() {
   const [index, setIndex] = useState(0);
   const [choice, setChoice] = useState<string | null>(null);
   const firstVerdict = useRef<HTMLButtonElement>(null);
-  const current = corpus.cases[index]!;
+  const current = QUIZ_CASES[index]!;
   const inspected = !interactive || choice !== null;
   const decisive = evidence(current.status.containerStatuses);
 
   function nextCase() {
-    setIndex((previous) => (previous + 1) % corpus.cases.length);
+    setIndex((previous) => (previous + 1) % QUIZ_CASES.length);
     setChoice(null);
     firstVerdict.current?.focus();
   }
@@ -85,7 +74,7 @@ export function Quiz() {
             aria-atomic="true"
             className="font-mono text-sm tabular-nums text-neutral-400"
           >
-            {index + 1} of {corpus.cases.length}
+            {index + 1} of {QUIZ_CASES.length}
           </p>
         </div>
         <div className="p-6">
@@ -104,7 +93,7 @@ export function Quiz() {
           </div>
           <div className="mt-6 space-y-4">
             {current.status.containerStatuses.map((raw, containerIndex) => {
-              const container: Container = raw;
+              const container: QuizContainer = raw;
               const state = container.state;
               const fields = [
                 [
