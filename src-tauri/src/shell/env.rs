@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use super::path::{build_fallback_path, merge_path, set_user_path};
+use super::path::{build_fallback_path, set_user_path};
 
 /// Long, on purpose: coming up without the environment is the bug, and a
 /// `.zshrc` that starts `nvm` takes seconds. A profile that hangs is what the
@@ -288,7 +288,8 @@ pub fn import_login_shell_env() -> &'static ShellEnvReport {
             .shell_path
             .as_ref()
             .map(|p| p.to_string_lossy().into_owned());
-        let path = merge_path(shell_path.as_deref(), &build_fallback_path());
+        let path =
+            crate::cli::PathResolver::merge_paths(shell_path.as_deref(), &build_fallback_path());
         std::env::set_var("PATH", &path);
         set_user_path(path);
         match asked {

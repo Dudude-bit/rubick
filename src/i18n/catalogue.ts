@@ -2570,8 +2570,6 @@ export const en = {
     shellEnvNotAsked:
       "Not asked on this platform: Windows hands an app the environment from the system settings. Anything set only in a PowerShell profile is not in it.",
     notThere: "not there",
-    toolsPathIsGuess:
-      "The login shell did not answer, so anything below reported as not installed may be on a directory your profile adds.",
     toolsBlock: "Tools · {found} of {total}",
     notInstalledInline: "not installed",
     answeredNothing: "found, but would not say its version",

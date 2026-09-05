@@ -46,9 +46,7 @@ export function asMarkdown(d: Diagnostics): string {
     // maintainer reading a pasted report cannot see the machine, and
     // "not installed" from a search path nobody filled in would send them
     // looking for a missing binary that is sitting on the reader's PATH.
-    ...(d.searchPathIsReal
-      ? []
-      : [english("settings", "toolsPathIsGuess"), ""]),
+    ...(d.searchPathIsReal ? [] : [shellEnvLine(d.shell), ""]),
     // The version too: half the reports that lead somewhere turn on which
     // kubectl answered, and "installed" alone has never settled that.
     ...d.tools.map((tool) =>

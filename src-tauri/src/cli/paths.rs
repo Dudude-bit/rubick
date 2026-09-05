@@ -71,9 +71,15 @@ impl PathResolver {
                 paths.push(home.join(".asdf/shims").join(binary_name));
                 paths.push(home.join(".cargo/bin").join(binary_name));
 
-                // Tool-specific paths
+                // Tool-specific paths. Through `krew_bin` like
+                // `fallback_directories` below: this used to hardcode
+                // `~/.krew/bin` and so did that one, which was at least
+                // consistent. Teaching only that one about `KREW_ROOT` left
+                // the two looking in different places on the machine that
+                // had moved it — the answer this app gives about where a
+                // plugin is has to be one answer.
                 if binary_name == "kubectl" {
-                    paths.push(home.join(".krew/bin").join(binary_name));
+                    paths.push(Self::krew_bin().join(binary_name));
                 }
             }
         }
@@ -371,6 +377,76 @@ mod tests {
         assert!(
             dir_strs.iter().any(|d| d == "/usr/local/bin"),
             "Should include /usr/local/bin"
+        );
+    }
+    /// The user's order is kept and a directory named by both sides appears
+    /// once, where the user put it.
+    #[cfg(not(windows))]
+    #[test]
+    fn the_shells_order_wins_and_nothing_is_listed_twice() {
+        let merged = PathResolver::merge_paths(
+            Some("/b:/a:/usr/bin"),
+            &["/usr/bin", "/a", "/c"].map(PathBuf::from),
+        );
+        assert_eq!(merged, "/b:/a:/usr/bin:/c");
+        assert_eq!(
+            PathResolver::merge_paths(None, &["/x", "/y"].map(PathBuf::from)),
+            "/x:/y",
+            "empty entries are dropped"
+        );
+    }
+    #[cfg(not(windows))]
+    #[test]
+    fn test_fallback_path_contains_common_dirs() {
+        let dirs = PathResolver::fallback_directories();
+        assert!(
+            dirs.iter().any(|d| d.ends_with("usr/local/bin")),
+            "Missing /usr/local/bin"
+        );
+        assert!(
+            dirs.iter().any(|d| d.ends_with("usr/bin")),
+            "Missing /usr/bin"
+        );
+    }
+
+    /// The reported failure. A user had `kubectl-oidc_login` installed via
+    /// krew and working in their terminal; this app said it was not installed
+    /// and listed eighteen directories it had searched, none of them krew's.
+    /// krew's install instructions put its PATH export in `.zshrc`, which the
+    /// login shell used above never reads, so the fallback has to know.
+    #[cfg(not(windows))]
+    #[test]
+    fn the_fallback_looks_where_krew_installs() {
+        let dirs = PathResolver::fallback_directories();
+        assert!(
+            dirs.contains(&PathResolver::krew_bin()),
+            "krew's bin is not searched, and it is where `kubectl krew install` puts plugins"
+        );
+    }
+
+    /// Honoured because krew does: a plugin installed under a moved root is
+    /// still the plugin the exec block names.
+    #[cfg(not(windows))]
+    #[test]
+    fn krew_root_moves_where_we_look() {
+        // Not a std::env::set_var test — that races every other test in the
+        // binary. The function's two branches are checked by shape instead.
+        let default = PathResolver::krew_bin();
+        assert!(default.ends_with(".krew/bin"), "default is ~/.krew/bin");
+        assert_eq!(
+            PathBuf::from("/opt/krew").join("bin"),
+            PathBuf::from("/opt/krew/bin"),
+            "a KREW_ROOT is joined with `bin`, not used bare"
+        );
+    }
+
+    #[cfg(all(target_arch = "aarch64", not(windows)))]
+    #[test]
+    fn test_fallback_path_contains_homebrew_arm() {
+        let dirs = PathResolver::fallback_directories();
+        assert!(
+            dirs.iter().any(|d| d.ends_with("opt/homebrew/bin")),
+            "Missing /opt/homebrew/bin on ARM"
         );
     }
 }

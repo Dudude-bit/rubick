@@ -74,15 +74,15 @@ export function EnvironmentBlocks({
           total: tools.length,
         })}
       >
-        {/* The same caveat the plugins carry, on the same grounds: every
-            "not installed" below rests on the search path above, and
-            without the shell's answer that path is the well-known
-            directories and nothing a profile adds. Stated here rather
-            than one block away, where a reader scanning tools will not
-            look. */}
+        {/* The same sentence the search-path block above puts over its own
+            list, for the same reason: every "not installed" below rests on
+            that path, and without the shell's answer it is the well-known
+            directories and nothing a profile adds. The same words, not a
+            second phrasing of them — a reader scanning tools will not scroll
+            up for it, and a wording fixed in one place has to be one place. */}
         {!searchPathIsReal && (
-          <p className="mb-2 text-xs text-warn">
-            {t("settings", "toolsPathIsGuess")}
+          <p className={`mb-2 text-xs ${shellEnvTone(shell)}`}>
+            {shellEnvSentence(shell, t)}
           </p>
         )}
         <ul className="space-y-1">
