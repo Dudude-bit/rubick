@@ -6,6 +6,7 @@ import {
   LuShieldCheck,
   LuWaypoints,
 } from "react-icons/lu";
+import { DetectionDiagram } from "../components/detection-diagram";
 import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 import { LINKS } from "../lib/site";
@@ -56,6 +57,7 @@ export function Integrations() {
           never goes looking for one.
         </p>
       </Reveal>
+      <DetectionDiagram />
       <dl className="mt-12 grid gap-x-12 gap-y-8 md:grid-cols-2">
         {INTEGRATIONS.map((x, i) => (
           <Reveal key={x.name} delay={i * 45} className="relative pl-5">

@@ -335,3 +335,125 @@ p {
     transition: none;
   }
 }
+
+/* feature icons: one semantic move each, final state without motion */
+.fi-logs-dup {
+  opacity: 0;
+}
+.fi-secret-val {
+  opacity: 0;
+}
+.fi-rev {
+  transform: translateX(12px);
+}
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  @keyframes blink-twice {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    25%,
+    75% {
+      opacity: 0;
+    }
+  }
+  @keyframes draw-path {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes scan {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(19px);
+      opacity: 0;
+    }
+  }
+  @keyframes settle-centre {
+    from {
+      transform: scale(0.8);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  .fi-logs-dup {
+    opacity: 1;
+  }
+  .fi-logs-count {
+    opacity: 0;
+  }
+  [data-in] .fi-logs-dup {
+    transition:
+      opacity 0.26s var(--ease-state) calc(var(--d, 0s) + 0.4s),
+      transform 0.26s var(--ease-state) calc(var(--d, 0s) + 0.4s);
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  [data-in] .fi-logs-count {
+    transition: opacity 0.2s var(--ease-enter) calc(var(--d, 0s) + 0.66s);
+    opacity: 1;
+  }
+
+  [data-in] .fi-caret {
+    animation: blink-twice 0.5s steps(1) calc(var(--d, 0s) + 0.4s) 1 both;
+  }
+
+  .fi-route-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  [data-in] .fi-route-path {
+    animation: draw-path 0.32s var(--ease-trace) calc(var(--d, 0s) + 0.4s) both;
+  }
+
+  .fi-secret-val {
+    opacity: 1;
+  }
+  .fi-secret-dots {
+    opacity: 0;
+  }
+  [data-in] .fi-secret-val {
+    transition: opacity 0.18s var(--ease-exit) calc(var(--d, 0s) + 0.45s);
+    opacity: 0;
+  }
+  [data-in] .fi-secret-dots {
+    transition: opacity 0.18s var(--ease-enter) calc(var(--d, 0s) + 0.6s);
+    opacity: 1;
+  }
+
+  .fi-brace-l {
+    transform: translateX(-2.5px);
+  }
+  .fi-brace-r {
+    transform: translateX(2.5px);
+  }
+  [data-in] .fi-brace-l,
+  [data-in] .fi-brace-r {
+    transition: transform 0.22s var(--ease-enter) calc(var(--d, 0s) + 0.4s);
+    transform: none;
+  }
+
+  .fi-rev {
+    transform: none;
+  }
+  [data-in] .fi-rev {
+    transition: transform 0.24s var(--ease-state) calc(var(--d, 0s) + 0.45s);
+    transform: translateX(12px);
+  }
+
+  .logo-scan {
+    animation: scan 0.6s var(--ease-trace) 0.3s both;
+  }
+  .logo-centre {
+    transform-origin: 12px 12px;
+    animation: settle-centre 0.18s var(--ease-enter) 0.58s both;
+  }
+}
+.logo-scan {
+  opacity: 0;
+}
