@@ -1,7 +1,38 @@
+import {
+  LuBox,
+  LuFileText,
+  LuHardDriveDownload,
+  LuKeyRound,
+  LuServer,
+} from "react-icons/lu";
 import { Reveal } from "../components/motion/reveal";
 import { Section } from "../components/section";
 
-type Row = { kind: string; name: string; note: string };
+type Kind = "Pod" | "ConfigMap" | "Secret" | "PersistentVolumeClaim" | "Node";
+
+type Row = { kind: Kind; name: string; note: string };
+
+// The app's kind glyphs and hues: a family per sidebar category, siblings
+// spread inside it, dark theme at 38% saturation and 70% lightness.
+const KINDS: Record<Kind, { Icon: typeof LuBox; hue: number }> = {
+  Pod: { Icon: LuBox, hue: 246 },
+  ConfigMap: { Icon: LuFileText, hue: 18 },
+  Secret: { Icon: LuKeyRound, hue: 54 },
+  PersistentVolumeClaim: { Icon: LuHardDriveDownload, hue: 308 },
+  Node: { Icon: LuServer, hue: 210 },
+};
+
+const tint = (kind: Kind) => ({ color: `hsl(${KINDS[kind].hue} 38% 70%)` });
+
+function KindMark({ kind }: { kind: Kind }) {
+  const { Icon } = KINDS[kind];
+  return (
+    <span className="inline-flex items-center gap-1.5" style={tint(kind)}>
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      {kind}
+    </span>
+  );
+}
 
 type Group = {
   title: string;
@@ -74,7 +105,7 @@ export function Connections() {
         className="mt-12 max-w-3xl overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900/60"
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-neutral-800 px-5 py-4 font-mono text-sm">
-          <span className="text-neutral-400">Pod</span>
+          <KindMark kind="Pod" />
           <span className="text-neutral-100">checkout</span>
           <span className="text-neutral-500">rubick-lies</span>
           <span className="ml-auto inline-flex items-center gap-2 rounded-md border border-red-400/70 px-2 py-0.5 text-[13px] text-red-300">
@@ -104,9 +135,9 @@ export function Connections() {
                   {g.rows.map((r) => (
                     <li
                       key={`${r.kind}/${r.name}`}
-                      className="flex flex-wrap items-baseline gap-x-2 font-mono text-[13px]"
+                      className="flex flex-wrap items-center gap-x-2 font-mono text-[13px]"
                     >
-                      <span className="text-neutral-400">{r.kind}</span>
+                      <KindMark kind={r.kind} />
                       <span className="text-neutral-200">{r.name}</span>
                       <span className="text-neutral-400">{r.note}</span>
                     </li>

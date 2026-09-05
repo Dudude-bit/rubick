@@ -38,7 +38,7 @@ const loaded = new Set();
 for (const page of pages) {
   const html = readFileSync(page, "utf8");
   for (const tag of html.matchAll(
-    /<(script|link|img|iframe|source)\b[^>]*>/g
+    /<(script|link|img|iframe|source)\b[^>]*>/gi
   )) {
     if (/rel=["'](?:canonical|alternate|me)["']/.test(tag[0])) continue;
     for (const m of tag[0].matchAll(/(?:src|href|srcset)=["']([^"']+)["']/g)) {
