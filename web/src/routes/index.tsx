@@ -10,10 +10,21 @@ import { Lies } from "../sections/lies";
 import { Nav } from "../sections/nav";
 import { OpenSource } from "../sections/open-source";
 import { Testimonials } from "../sections/testimonials";
+import { Unknown } from "../sections/unknown";
 import { Warns } from "../sections/warns";
 
 export const Route = createFileRoute("/")({
-  head: () => ({ links: [{ rel: "canonical", href: SITE.url }] }),
+  head: () => ({
+    links: [
+      { rel: "canonical", href: SITE.url },
+      {
+        rel: "preload",
+        as: "image",
+        href: "/images/hero-workload-detail.webp",
+        type: "image/webp",
+      },
+    ],
+  }),
   component: Landing,
 });
 
@@ -25,6 +36,7 @@ function Landing() {
         <Hero />
         <Lies />
         <Warns />
+        <Unknown />
         <Features />
         <Integrations />
         <Testimonials />
