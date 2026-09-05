@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.0] - 2026-09-05
+
+### Added — Settings opens over any screen instead of taking over the tab
+
+Settings was a page of whichever tab was open: it took you off the list you
+were reading, renamed the tab, and stood behind every gate in front of it — so
+an expired token hid the one screen that could fix it. It is now a layer over
+the window, opened from the rail, with `mod+,` or from the palette, and closed
+with Esc onto the page it covered. Esc with something typed in the settings
+search clears the filter first, and the filter no longer survives until the
+next visit.
+
+Integrations moved out of Settings to sit beside the cluster's own screens,
+where they were already addressed from.
+
+From [#108](https://github.com/Dudude-bit/rubick/pull/108).
+
+### Fixed — a crash-looping pod was still a Running pod to three screens
+
+The Pods list has read the status kubectl prints since 3.0.0. Three other
+readers still used `.status.phase`, which says `Running` for a pod whose
+container is restarting in a loop:
+
+- the port-forward picker offered it as a target. It now wants a pod with a
+  container of its own actually running — which also keeps a pod whose sidecar
+  is stuck pulling eligible while the container that serves is up;
+- the infrastructure canvas drew the phase, both for imported pods and for a
+  pasted manifest;
+- the peek panel's sentence explaining why an action is unavailable named the
+  phase rather than the status on the badge beside it.
+
+From [#110](https://github.com/Dudude-bit/rubick/pull/110).
+
+### Fixed — signing in with a certificate from a credential plugin
+
+A plugin that authenticates with a client certificate — `tsh kube credentials`
+among them — returns PEM, and the two kubeconfig fields it lands in are read
+through a base64 decode. The certificate never reached the cluster: the request
+went out anonymous and the server refused it, and the refusal named neither the
+certificate nor the decode. Teleport's is `[00] access denied`, which the app
+then read to you as a cluster that is switched off or behind a VPN.
+
+Plugins that return a token were never affected.
+
+From [#111](https://github.com/Dudude-bit/rubick/pull/111).
+
+### Fixed — a CronJob countdown that stopped counting
+
+The next run was worked out once and counted down from there, so it reached
+zero and stayed, and the page read «через expired» above a timestamp that had
+already passed. A suspended CronJob has no next run at all; it was drawn in the
+colour of a deadline that has gone by, and now says what it is waiting for
+instead.
+
+### Changed — Diagnostics reports the environment the app resolved, and how
+
+The Tools block told a binary that is absent apart from one that is present and
+will not answer — the difference between installing something and finding out
+that what you installed is broken.
+
+Search paths now say where the list came from: which shell was read, how it was
+started, how many variables it changed. When the shell timed out, would not
+start or answered nothing, the line says that instead — and it is repeated in
+amber over the Tools list, because every "not installed" there rests on a path
+nobody confirmed. The app's environment is not always your terminal's, and that
+difference is the whole reason a plugin can work in one and not the other.
+
+From [#109](https://github.com/Dudude-bit/rubick/pull/109).
+
 ## [4.8.0] - 2026-09-04
 
 ### Added — sort a list by the column you are reading it for
