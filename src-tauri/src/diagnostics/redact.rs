@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use super::Diagnostics;
+use crate::shell::ShellEnvReport;
 
 /// Replace every identifying string in the report.
 #[must_use]
@@ -37,6 +38,18 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         out
     };
 
+    // A shell under `~/.nix-profile` names the user as surely as a path does.
+    match &mut d.shell {
+        ShellEnvReport::Imported { shell, .. }
+        | ShellEnvReport::TimedOut { shell, .. }
+        | ShellEnvReport::NoAnswer { shell, .. } => *shell = scrub(shell),
+        ShellEnvReport::CouldNotStart { shell, error } => {
+            *shell = scrub(shell);
+            *error = scrub(error);
+        }
+        // Neither carries a name.
+        ShellEnvReport::NotAsked | ShellEnvReport::NotRecorded => {}
+    }
     for ctx in &mut d.contexts {
         ctx.context = scrub(&ctx.context);
         ctx.command_path = ctx.command_path.as_deref().map(&scrub);
@@ -51,6 +64,10 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
     for tool in &mut d.tools {
         tool.path = tool.path.as_deref().map(&scrub);
     }
+    // No loop over a shell report inside a finding: there is not one. A
+    // finding says it is *about* the shell; the report itself lives once, on
+    // `Diagnostics`, and is scrubbed above. A second copy on the wire was a
+    // second thing to remember to scrub, and it was not remembered.
     for finding in &mut d.findings {
         finding.title = scrub(&finding.title);
         finding.detail = scrub(&finding.detail);
@@ -73,6 +90,12 @@ mod tests {
 
     fn sample() -> Diagnostics {
         Diagnostics {
+            shell: ShellEnvReport::Imported {
+                shell: "/bin/zsh".into(),
+                adopted: 3,
+                removed: 0,
+            },
+            search_path_is_real: true,
             search_path: Vec::new(),
             tools: vec![ToolStatus {
                 name: "kubectl".into(),
@@ -106,6 +129,7 @@ mod tests {
                 title: "kubectl-oidc_login is not installed".into(),
                 detail: "The context orders-stage authenticates with kubectl oidc-login.".into(),
                 subject: Some("orders-stage".into()),
+                about_shell: false,
             }],
         }
     }
@@ -141,9 +165,13 @@ mod tests {
         let mut d = sample();
         d.app.config_path = Some(format!("{home}/Library/Application Support/k8s-gui"));
         d.contexts[0].command_path = Some(format!("{home}/bin/kubectl"));
-        // Both fields: a spawn that failed quotes the file it could not run,
-        // so the error carries the home directory in prose even when the path
-        // beside it has already been scrubbed.
+        d.shell = ShellEnvReport::CouldNotStart {
+            shell: format!("{home}/.nix-profile/bin/zsh"),
+            error: format!("{home}/.nix-profile/bin/zsh: No such file"),
+        };
+        // Both fields on the tool too: a spawn that failed quotes the file
+        // it could not run, so the error carries the home directory in prose
+        // even when the path beside it has already been scrubbed.
         d.tools[0].path = Some(format!("{home}/bin/kubectl"));
 
         let out = redacted(d);

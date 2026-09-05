@@ -1141,6 +1141,8 @@ export interface EventFilters {
 }
 
 export interface Diagnostics {
+  shell: ShellEnvReport;
+  searchPathIsReal: boolean;
   searchPath: SearchPathEntry[];
   tools: ToolStatus[];
   plugins: PluginStatus[];
@@ -1155,6 +1157,7 @@ export interface Finding {
   title: string;
   detail: string;
   subject: string | null;
+  aboutShell: boolean;
 }
 
 export interface InstallationInfo {
@@ -1850,7 +1853,15 @@ export type Usage =
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
 
-export type Severity = "blocking" | "misconfigured" | "optional";
+export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
+
+export type ShellEnvReport =
+  | { outcome: "imported"; shell: string; adopted: number; removed: number }
+  | { outcome: "timedOut"; shell: string; seconds: number }
+  | { outcome: "couldNotStart"; shell: string; error: string }
+  | { outcome: "noAnswer"; shell: string; exit: number | null }
+  | { outcome: "notAsked" }
+  | { outcome: "notRecorded" };
 
 export type CertificateProblem =
   | { says: "noSecret" }

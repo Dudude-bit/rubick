@@ -5,6 +5,8 @@ import type { Diagnostics } from "@/generated/types";
 import { EnvironmentBlocks } from "./EnvironmentBlocks";
 
 const sample: Diagnostics = {
+  shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
+  searchPathIsReal: true,
   searchPath: [
     { path: "/opt/homebrew/bin", exists: true },
     { path: "~/.krew/bin", exists: false },
@@ -46,6 +48,31 @@ const sample: Diagnostics = {
 };
 
 describe("EnvironmentBlocks", () => {
+  /**
+   * The search path is a guess whenever the shell did not answer, and the
+   * directories below it are then the wrong thing to check one by one. The
+   * sentence has to sit above them, and it has to change tone: a reader
+   * skimming for what is wrong reads colour before words.
+   */
+  it("says where the search path came from, and warns when it is a guess", () => {
+    const { rerender } = render(<EnvironmentBlocks diagnostics={sample} />);
+    const answered = screen.getByText(/\/bin\/zsh/);
+    expect(answered).toHaveTextContent("3 variables changed, 0 removed");
+    expect(answered).not.toHaveClass("text-warn");
+
+    rerender(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          shell: { outcome: "timedOut", shell: "/bin/zsh", seconds: 30 },
+        }}
+      />
+    );
+    expect(screen.getByText(/did not print its environment/)).toHaveClass(
+      "text-warn"
+    );
+  });
+
   it("marks a search path directory that is not there", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.getByText("~/.krew/bin").closest("li")).toHaveTextContent(
@@ -98,5 +125,36 @@ describe("EnvironmentBlocks", () => {
   it("counts the tools that resolved", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.getByText(/Tools · 2 of 3/)).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if the caveat stopped reaching the tools.
+   *
+   * Every "not installed" below rests on the search path above, and without
+   * the shell's answer that path is the well-known directories and nothing a
+   * profile adds. Stated over the tool list as well as over the search path,
+   * because a reader scanning tools does not scroll up for it — and stated in
+   * the same words, so a wording fix is one place.
+   */
+  it("says the search path was a guess over the tools, not only over the path", () => {
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          searchPathIsReal: false,
+          shell: { outcome: "timedOut", shell: "/bin/zsh", seconds: 30 },
+        }}
+      />
+    );
+
+    // Twice: once over the directories, once over the tools that were looked
+    // for in them.
+    expect(screen.getAllByText(/\/bin\/zsh/)).toHaveLength(2);
+  });
+
+  /** And not at all when the shell did answer. */
+  it("says nothing of the sort when the path is real", () => {
+    render(<EnvironmentBlocks diagnostics={sample} />);
+    expect(screen.queryAllByText(/did not|не ответила/i)).toHaveLength(0);
   });
 });

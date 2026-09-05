@@ -1,5 +1,6 @@
-import type { Finding, Severity } from "@/generated/types";
+import type { Finding, Severity, ShellEnvReport } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { shellEnvSentence } from "./shell-env";
 
 /**
  * How far down the page a finding belongs.
@@ -11,15 +12,31 @@ import { useT } from "@/i18n/useT";
 const RANK: Record<Severity, number> = {
   blocking: 0,
   misconfigured: 1,
-  optional: 2,
+  unverified: 2,
+  optional: 3,
 };
 
-/** Only the last rank is a shrug; the other two stop something working. */
-function toneFor(severity: Severity) {
-  return severity === "optional" ? "text-warn" : "text-err";
-}
+/**
+ * The first two stop something working; the last two do not, but one of
+ * them says the verdicts above may be wrong. Total, so a severity the
+ * backend learns to report has to be given a tone here.
+ */
+const TONE: Record<Severity, "text-err" | "text-warn"> = {
+  blocking: "text-err",
+  misconfigured: "text-err",
+  unverified: "text-warn",
+  optional: "text-warn",
+};
 
-export function FindingsList({ findings }: { findings: Finding[] }) {
+export function FindingsList({
+  findings,
+  shell,
+}: {
+  findings: Finding[];
+  /* The one report, the one the redactor walked. A finding says it is
+     about the shell; it does not carry its own copy. */
+  shell?: ShellEnvReport;
+}) {
   const t = useT();
   if (findings.length === 0) {
     return (
@@ -42,11 +59,22 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
     <ul className="space-y-3">
       {ordered.map((finding, i) => (
         <li key={`${finding.title}-${finding.subject ?? i}`}>
-          <h4 className={`text-xs font-medium ${toneFor(finding.severity)}`}>
-            {finding.title}
+          <h4 className={`text-xs font-medium ${TONE[finding.severity]}`}>
+            {finding.aboutShell
+              ? t("settings", "shellFindingTitle")
+              : finding.title}
           </h4>
           <p className="mt-1 max-w-[72ch] text-xs text-fg-mut">
-            {finding.detail}
+            {/* A finding that carries a shell outcome is worded here, from the
+                same catalogue entry the block below uses. It used to arrive as
+                English prose composed in Rust, four lines above the Russian
+                sentence saying the same thing. */}
+            {finding.aboutShell && shell
+              ? `${shellEnvSentence(shell, t)} ${t(
+                  "settings",
+                  "shellFindingConsequence"
+                )}`
+              : finding.detail}
           </p>
         </li>
       ))}

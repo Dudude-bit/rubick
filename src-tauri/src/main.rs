@@ -21,10 +21,29 @@ fn main() {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // First: it writes the environment, which nothing else may be reading
+    // yet, and tracing below reads `RUST_LOG` from what the profile set.
+    //
+    // On stderr rather than through tracing, because tracing is what this
+    // runs before. Sourcing a profile can block — a `kinit`, a `gcloud auth`
+    // refresh, `mise` fetching a toolchain — and the wait is up to the
+    // timeout with no window on screen. Without this line a hang produced no
+    // evidence at all, not even under `RUST_LOG=trace`, because the
+    // subscriber that would carry it does not exist yet.
+    // Unix only, because that is where the wait exists: on Windows a GUI
+    // app already has the user's environment and the import returns at once.
+    #[cfg(unix)]
+    eprintln!(
+        "rubick: asking the login shell for its environment (up to {}s)",
+        shell::SHELL_ENV_TIMEOUT.as_secs()
+    );
+    let shell_env = shell::import_login_shell_env();
+
     // Initialize tracing
     init_tracing();
 
     tracing::info!("Starting Rubick application");
+    tracing::info!(?shell_env, "login shell environment");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -33,12 +52,6 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // Initialize user PATH for shell commands
-            tauri::async_runtime::block_on(async {
-                shell::init_user_path().await;
-            });
-            tracing::info!("User PATH initialized");
-
             // Initialize application state
             let state = AppState::new()?;
 

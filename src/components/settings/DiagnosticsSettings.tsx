@@ -33,7 +33,7 @@ export function DiagnosticsSettings() {
 
   return (
     <div className="max-w-[76ch] py-2">
-      <FindingsList findings={data?.findings ?? []} />
+      <FindingsList findings={data?.findings ?? []} shell={data?.shell} />
 
       {data && <EnvironmentBlocks diagnostics={data} />}
 

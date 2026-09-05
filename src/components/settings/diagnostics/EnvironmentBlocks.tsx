@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { shellEnvSentence, shellEnvTone } from "./shell-env";
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -32,12 +33,27 @@ export function EnvironmentBlocks({
 }: {
   diagnostics: Diagnostics;
 }) {
-  const { searchPath, tools, plugins, contexts, kubeconfig, app } = diagnostics;
+  const {
+    shell,
+    searchPathIsReal,
+    searchPath,
+    tools,
+    plugins,
+    contexts,
+    kubeconfig,
+    app,
+  } = diagnostics;
   const t = useT();
 
   return (
     <div className="mt-6">
       <Block title={t("settings", "searchPathBlock", { n: searchPath.length })}>
+        {/* Where the list came from, before the list: a search path that
+            is a guess has to say so above the directories, or a reader
+            checking them one by one is checking the wrong thing. */}
+        <p className={`mb-2 text-xs ${shellEnvTone(shell)}`}>
+          {shellEnvSentence(shell, t)}
+        </p>
         <ul className="space-y-1">
           {searchPath.map((entry) => (
             <li key={entry.path} className="font-mono text-xs text-fg-mut">
@@ -58,6 +74,17 @@ export function EnvironmentBlocks({
           total: tools.length,
         })}
       >
+        {/* The same sentence the search-path block above puts over its own
+            list, for the same reason: every "not installed" below rests on
+            that path, and without the shell's answer it is the well-known
+            directories and nothing a profile adds. The same words, not a
+            second phrasing of them — a reader scanning tools will not scroll
+            up for it, and a wording fixed in one place has to be one place. */}
+        {!searchPathIsReal && (
+          <p className={`mb-2 text-xs ${shellEnvTone(shell)}`}>
+            {shellEnvSentence(shell, t)}
+          </p>
+        )}
         <ul className="space-y-1">
           {tools.map((tool) => (
             <li key={tool.name} className="text-xs text-fg-mut">

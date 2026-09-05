@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::commands::binaries::{kubectl_plugin_binary, locate_on_user_path, search_directories};
+use crate::shell::ShellEnvReport;
 
 /// One directory a spawned binary is looked for in.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +109,17 @@ impl InstallationInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostics {
+    /// Whether the login shell's environment was adopted at startup. When it
+    /// was not, the search path below is a guess, and this says so first.
+    pub shell: ShellEnvReport,
+    /// Whether the search path below was built from the shell's answer.
+    ///
+    /// The fact, not the rule. `ShellEnvReport::answered()` decides it, and it
+    /// decides it once: a second `outcome === "imported" || ...` on the
+    /// frontend is one rule with two implementations across the IPC boundary,
+    /// and the outcome added the same day had to be excluded from both by
+    /// hand. The next one would be excluded from one.
+    pub search_path_is_real: bool,
     pub search_path: Vec<SearchPathEntry>,
     pub tools: Vec<ToolStatus>,
     pub plugins: Vec<PluginStatus>,
@@ -290,11 +302,19 @@ async fn tools_status() -> Vec<ToolStatus> {
 }
 
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
+    // `None` before `main` has run the import — in a test binary, or in a
+    // build that stopped calling it. Its own state, not `NotAsked`: that one
+    // means Windows had nothing to ask and the path is right, which would
+    // suppress every caveat below on a machine where the path is a guess.
+    let shell = crate::shell::env_report()
+        .cloned()
+        .unwrap_or(ShellEnvReport::NotRecorded);
     let search_path = search_directories()
         .into_iter()
         .map(|path| SearchPathEntry::probe(&path))
         .collect();
     let app = InstallationInfo::collect();
+    let search_path_is_real = shell.answered();
     let tools = tools_status().await;
 
     // The parsed config the app is already living on, not a fresh read of
@@ -308,7 +328,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         // finding and never produced one, so the panel built for exactly
         // this moment answered "no kubeconfig loaded" to somebody looking
         // at a kubeconfig.
-        let (kubeconfig, findings) = match client.kubeconfig_error().await {
+        let (kubeconfig, mut findings) = match client.kubeconfig_error().await {
             Some(why) => {
                 let path = client.kubeconfig_path().await.map_or_else(
                     || "unknown".to_string(),
@@ -325,7 +345,10 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             }
             None => (None, Vec::new()),
         };
+        findings.extend(super::shell_env_finding(&shell));
         return Diagnostics {
+            shell,
+            search_path_is_real,
             search_path,
             tools,
             plugins: Vec::new(),
@@ -356,6 +379,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             )
         })
         .collect();
+    findings.extend(super::shell_env_finding(&shell));
     findings.sort_by(|a, b| {
         a.severity
             .cmp(&b.severity)
@@ -363,6 +387,8 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     });
 
     Diagnostics {
+        shell,
+        search_path_is_real,
         search_path,
         tools,
         plugins,
@@ -514,7 +540,30 @@ users:
             "nothing was loaded, so nothing is named"
         );
         assert!(!d.app.version.is_empty());
-        assert!(d.findings.is_empty());
+
+        // Exactly one finding, and it is the one that says nobody recorded
+        // whether the shell was asked — because in a test binary nobody did.
+        // This used to assert an empty list, which passed only because an
+        // un-run import was drawn as `NotAsked`: "Windows, nothing to ask",
+        // `answered()` true, every caveat below suppressed. So a `main()` that
+        // stopped calling the import would have kept this green while the
+        // panel told a Mac a story about PowerShell.
+        assert!(
+            matches!(d.shell, ShellEnvReport::NotRecorded),
+            "an import that never ran is its own state: {:?}",
+            d.shell
+        );
+        assert_eq!(d.findings.len(), 1, "{:?}", d.findings);
+        // And the fact the frontend reads follows the rule, rather than the
+        // frontend deciding it again: an import that never ran did not build
+        // the search path, so every absence below it is a guess.
+        assert!(!d.search_path_is_real);
+        assert_eq!(d.search_path_is_real, d.shell.answered());
+        assert!(
+            d.findings[0].about_shell,
+            "the finding is marked as being about the shell, and the report it
+             is about is the one on `Diagnostics`"
+        );
     }
 
     /// The case this panel was built for, and the one it used to be silent
