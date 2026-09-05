@@ -1,32 +1,26 @@
 /**
  * What the app is allowed to say about an object's provenance, and when.
  *
- * ## The trap this file exists to avoid
+ * On a cluster Argo or Flux runs, everything is managed — so a "managed"
+ * badge would sit on ninety-five per cent of rows, spending the pixels the
+ * app spends on `CrashLoopBackOff` to say nothing, while the interesting
+ * object is the *un*managed one. It does not go on the kind glyph either:
+ * that glyph is readable because it means one thing.
  *
- * On a cluster Argo or Flux runs, **everything is managed.** A "managed" badge
- * would therefore sit on ninety-five per cent of rows, spending the same pixels
- * the app spends on `CrashLoopBackOff` to say nothing — and the genuinely
- * interesting object on such a cluster is the *un*managed one, so the naive
- * mark lands on precisely the wrong rows. It does not go on the kind glyph
- * either: that glyph is readable because it means one thing, and provenance is
- * a second dimension.
+ * So the facts are split by loudness, and the split is decided here rather
+ * than in four components that could drift apart:
  *
- * So the facts are split by loudness, and this module is where the split is
- * decided rather than in four components that could drift apart:
- *
- * - **Where it comes from** is quiet and always — {@link deliveryMarks}, the
- *   glyph and name beside the status. "Where do I change this" is asked
- *   constantly and costs one small element.
+ * - **Where it comes from** is quiet and always — {@link deliveryMarks}.
  * - **What it means for you right now** is loud and only when true —
  *   {@link deliveryLine}, which returns `null` for the ordinary managed,
- *   in-sync, nothing-odd object and must, or the Overview grows a banner on
- *   every page of a GitOps cluster and the trap is back one storey up.
- * - **At the point of action** — {@link deliveryIntercept}. It does not block,
- *   it tells: scaling a managed object by hand is a legitimate thing to do in
- *   an incident and the app has no business refusing it. Its business is making
- *   sure nobody does it *believing it will stick*.
- * - **In a list** — {@link deliveryCell}, empty for the ordinary case, because
- *   a problem earns a mark and inventory does not.
+ *   in-sync object and must, or every page of a GitOps cluster grows a banner
+ *   and the trap is back one storey up.
+ * - **At the point of action** — {@link deliveryIntercept}. It tells rather
+ *   than blocks: scaling a managed object by hand during an incident is
+ *   legitimate, and the app's business is only that nobody does it believing
+ *   it will stick.
+ * - **In a list** — {@link deliveryCell}, empty for the ordinary case,
+ *   because a problem earns a mark and inventory does not.
  */
 
 import { sayWords } from "@/i18n/say";

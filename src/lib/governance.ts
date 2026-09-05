@@ -1,32 +1,23 @@
 /**
- * What acts on an object without the object having asked, and what that
- * means for the reader right now.
+ * What acts on an object without the object having asked, and what that means
+ * for the reader right now.
  *
- * Two kinds live here, and they are together because they are the same shape
- * of fact: a HorizontalPodAutoscaler and a PodDisruptionBudget are both
- * written by somebody else, about this workload, and neither of them leaves a
- * trace on the workload's own YAML. Nothing on a Deployment says "an HPA
- * overwrites `spec.replicas` fifteen seconds after you set it", and nothing on
- * it says "a node drain will block on this".
+ * An HPA and a PDB are the same shape of fact: written by somebody else,
+ * about this workload, leaving no trace on its YAML. Nothing on a Deployment
+ * says "an HPA overwrites `spec.replicas` fifteen seconds after you set it",
+ * and nothing says "a node drain will block on this".
  *
- * The whole module is pure: it reads the `governs` edges the connections call
- * already returned and turns them into sentences. Nothing here fetches, and
- * nothing here re-derives a number the cluster already published — an
- * autoscaler's own arithmetic is the one thing this must never repeat, because
- * the app's answer and the controller's would disagree the moment a scaling
- * policy is involved.
+ * Pure: it reads the `governs` edges the connections call already returned.
+ * Nothing here re-derives a number the cluster published — an autoscaler's
+ * own arithmetic is the one thing this must never repeat, because the two
+ * answers would disagree the moment a scaling policy is involved.
  *
- * ## Why the HPA's target is not one of the Usage rows
- *
- * The Usage rows on a workload draw live usage summed over every replica
- * against the *limits* summed over every replica. An HPA's target is a
+ * The HPA's target is not drawn on the Usage bar: those rows are live usage
+ * summed over replicas against summed *limits*, while an HPA target is a
  * per-pod mean against the *request*. Different denominator, different
- * aggregation, and — the part that decides it — a different kind of number:
- * a limit is a ceiling the kernel enforces, and crossing an HPA target does
- * not throttle anything, it adds a pod. Drawing the target as a mark on that
- * bar would put two incompatible fractions on one axis, wrong by whatever the
- * limit-to-request ratio happens to be. So the reading stays here, next to
- * the target it is actually compared against.
+ * aggregation, and a different kind of number — a limit is a ceiling the
+ * kernel enforces, while crossing a target adds a pod. One axis for both
+ * would be wrong by the limit-to-request ratio.
  */
 
 import type { T } from "@/i18n/useT";

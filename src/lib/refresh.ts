@@ -1,29 +1,24 @@
 /**
  * How often the app is allowed to ask the cluster the same question again.
  *
- * Every number here used to be two seconds, and every screen used it: 45 call
- * sites, 9 of which stopped for a watch and 2 of which cared whether anybody
- * was looking. An app parked on one Pod page cost the API server ~1000
- * requests a minute while its reader made coffee.
+ * Every number here used to be two seconds across 45 call sites, so an app
+ * parked on one Pod page cost the API server ~1000 requests a minute while
+ * its reader made coffee. The rates are still what a *moving* screen re-reads
+ * at; what was missing is the three conditions under which re-reading is
+ * pointless, decided here so no screen decides them for itself:
  *
- * The rates below are still the rates a *moving* screen re-reads at — that
- * part was never the problem. What was missing is the three conditions under
- * which re-reading is pointless, and this module is where all three are
- * decided so no screen decides them for itself:
+ * 1. **Nobody is looking.** An off-screen tab or hidden window switches the
+ *    interval off rather than lengthening it. Coming back refetches.
+ * 2. **Nothing is happening.** Identical answers are the cluster telling us
+ *    to stop asking; the interval doubles to a cap.
+ * 3. **The window is not the one being used.** Visible but unfocused is a
+ *    glance, not a reading, so it is held at the cap.
  *
- * 1. **Nobody is looking.** An off-screen detail tab, a hidden window: the
- *    interval is not lengthened, it is switched off. Coming back refetches.
- * 2. **Nothing is happening.** Identical answers, over and over, are the
- *    cluster telling us to stop asking. The interval doubles to a cap.
- * 3. **The window is not the one being used.** A visible but unfocused window
- *    is a glance, not a reading, so it is held at the cap.
- *
- * Backing off is a promise the UI has to keep: {@link effectiveInterval} is
- * also what tells `DataFreshness` to say "slowed" instead of "polling", so
- * nothing on screen is older than the badge above it implies. A *watch* is a
- * different thing entirely and is not touched here — a connected stream keeps
- * data live at any poll rate, and `refresh: false` is how a watched query says
- * so.
+ * Backing off is a promise the UI keeps: {@link effectiveInterval} is also
+ * what tells `DataFreshness` to say "slowed" instead of "polling", so nothing
+ * on screen is older than the badge above it implies. A watch is not touched
+ * here — a connected stream keeps data live at any poll rate, and
+ * `refresh: false` is how a watched query says so.
  *
  * @module lib/refresh
  */

@@ -1,31 +1,23 @@
 /**
  * How long a certificate has left, and whether that is news.
  *
- * The app's discipline is that a mark is earned. "Expires in 61 days" is
- * the state almost every certificate in every cluster is in almost all of
- * the time — colouring it teaches the reader to stop looking, and then the
- * one that says four days looks like all the others.
+ * A mark is earned. "Expires in 61 days" is the state almost every
+ * certificate is in almost all of the time; colouring it teaches the reader
+ * to stop looking, and then the one that says four days looks like the rest.
  *
- * So two thresholds, and both of them are about what the reader can still
- * do rather than about round numbers:
+ * Two thresholds, both about what the reader can still do rather than about
+ * round numbers. **14 days** is the last point a normal change fits — raise
+ * it, get the certificate, review, deploy, without anybody's evening. **3
+ * days** is past the next weekend: no process left, only an interrupt.
  *
- * - **14 days** is the last point a normal change fits: raise it, get the
- *   certificate, review it, deploy it, without anybody's evening. Inside
- *   that window the reader has to start, so it is worth a warn.
- * - **3 days** is past the next weekend. There is no process left at that
- *   point, only an interrupt, and that is a different colour.
+ * Both are caps, not the rule. A seven-day Let's Encrypt certificate is born
+ * inside the fourteen-day window, and a mark worn from birth is a mark nobody
+ * reads (#68) — so on a short certificate the thresholds shrink to a third
+ * and a tenth of its lifetime, which puts the warn exactly at cert-manager's
+ * default renewal point. A ninety-day certificate never notices.
  *
- * Both are *caps*, not the rule. A seven-day Let's Encrypt certificate is
- * born inside the fourteen-day window, and a mark it wears from birth is a
- * mark nobody reads (#68) — so on a short certificate the thresholds
- * shrink to a third and a tenth of its lifetime, which for the seven-day
- * case lands the warn exactly where cert-manager's default renewal point
- * is. A ninety-day certificate never notices the difference.
- *
- * Outside the thresholds there is no mark at all. The fact is still stated
- * where the certificate is the subject — a Secret page that would not say
- * when its certificate expires is absurd — but it is stated in the same
- * tone as everything else on the page.
+ * Outside the thresholds there is no mark. The fact is still stated where the
+ * certificate is the subject, in the same tone as everything else.
  */
 
 import { sayWords, spanWords, type Saying } from "@/i18n/say";
