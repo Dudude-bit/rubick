@@ -1,8 +1,9 @@
 // Renders the Open Graph cards into public/og.png and public/og/<lie>.png.
 // Needs a Chromium binary; run from web/: `node scripts/og.mjs`.
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const CHROMIUM = process.env.CHROMIUM ?? "/usr/bin/chromium";
 const ROOT = resolve(import.meta.dirname, "..");
@@ -110,8 +111,9 @@ await send("Emulation.setDeviceMetricsOverride", {
   mobile: false,
 });
 mkdirSync(`${ROOT}/public/og`, { recursive: true });
+const scratch = mkdtempSync(join(tmpdir(), "rubick-og-"));
 for (const c of CARDS) {
-  const tmp = `/tmp/rubick-og-${c.file.replace(/[/.]/g, "-")}.html`;
+  const tmp = join(scratch, `${c.file.replace(/[/.]/g, "-")}.html`);
   writeFileSync(tmp, html(c));
   await send("Page.navigate", { url: `file://${tmp}` });
   await new Promise((r) => setTimeout(r, 700));
@@ -125,3 +127,4 @@ for (const c of CARDS) {
 }
 ws.close();
 chrome.kill();
+rmSync(scratch, { recursive: true, force: true });
