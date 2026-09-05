@@ -71,9 +71,17 @@ function readable(rgb: Rgb, dark: boolean): string {
 }
 
 /**
- * A background with no foreground draws the text in the canvas colour:
- * every palette colour reads against the canvas, so the canvas reads
- * against every palette colour. Inverse swaps the two the same way.
+ * Text on a background draws in the canvas colour: every palette colour is
+ * tuned to read against the canvas, so the canvas reads against every
+ * palette colour. That invariant is the only one available here — a pair
+ * the program chose was tuned twice against the canvas and not once
+ * against each other, so `\e[37m\e[41m` (white on red, how chalk and most
+ * Java formatters write a banner) lands at 1.19:1 on the light theme, and
+ * 464 of the 480 named pairs fall under 3:1 on one canvas or the other.
+ *
+ * So a background wins the pair and the foreground the program asked for
+ * is dropped. It loses one of the two colours; keeping both loses the
+ * words. Inverse is the same rule after the swap.
  */
 export function styleToCss(style: TextStyle, dark: boolean): CSSProperties {
   const css: CSSProperties = {};
@@ -81,7 +89,8 @@ export function styleToCss(style: TextStyle, dark: boolean): CSSProperties {
   let bg = style.bg ? cssColor(style.bg, dark) : undefined;
   if (style.inverse) {
     [fg, bg] = [bg ?? "hsl(var(--canvas))", fg ?? "hsl(var(--fg))"];
-  } else if (bg && !fg) {
+  }
+  if (bg) {
     fg = "hsl(var(--canvas))";
   }
   if (fg) css.color = fg;

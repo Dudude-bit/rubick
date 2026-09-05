@@ -1131,7 +1131,7 @@ export const en = {
     viewTable: "Table",
     viewTableHint: "Level spelled out and the message wrapped in full",
     viewRaw: "Raw",
-    viewRawHint: "The bytes the container wrote",
+    viewRawHint: "The whole line, with the colour codes taken out",
     repeats: "Repeats",
     collapseRepeatsHint:
       "Collapse consecutive repeats into one row with a count and a time span",

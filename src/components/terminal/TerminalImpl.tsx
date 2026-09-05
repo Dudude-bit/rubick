@@ -10,34 +10,7 @@ import { useGenericTerminalSession } from "@/hooks/useGenericTerminalSession";
 import type { StatusRole } from "@/lib/status-role";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
-
-/** Used only if `--canvas` cannot be read; matches the dark canvas token. */
-const CANVAS_FALLBACK = "rgb(26, 28, 30)";
-
-/**
- * The canvas colour as a literal xterm can parse.
- *
- * xterm needs a colour string, not a class, so the terminal cannot inherit
- * `bg-canvas` and used to hardcode a bluish `#1a1a2e` that read as a panel
- * floating on the page. Reading the token keeps it exactly the page colour.
- * It is resolved through a probe element rather than passed as `hsl(...)`
- * because xterm parses `#rrggbb` and `rgb()` directly and hands anything else
- * to a canvas 2D context it may fail to acquire.
- */
-function readCanvasTheme(): { background: string; dark: boolean } {
-  const root = document.documentElement;
-  const dark = root.classList.contains("dark");
-  const token = getComputedStyle(root).getPropertyValue("--canvas").trim();
-  if (!token) return { background: CANVAS_FALLBACK, dark };
-
-  const probe = document.createElement("span");
-  probe.style.cssText = `position:absolute;visibility:hidden;color:hsl(${token})`;
-  document.body.appendChild(probe);
-  const background = getComputedStyle(probe).color;
-  probe.remove();
-
-  return { background: background || CANVAS_FALLBACK, dark };
-}
+import { readCanvasTheme } from "./canvas-theme";
 
 function useCanvasTheme() {
   const [canvas, setCanvas] = useState(readCanvasTheme);
@@ -83,7 +56,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initializedRef = useRef(false);
-  const { background, dark: isDark } = useCanvasTheme();
+  const { background, dark: isDark, ansi } = useCanvasTheme();
 
   const onOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);
@@ -110,57 +83,66 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     }
   );
 
-  // The sixteen ANSI slots stay literal: they are terminal semantics a program
-  // addresses by index, not app chrome.
-  const terminalTheme = useMemo(
-    () =>
-      isDark
-        ? {
-            background,
-            foreground: "#e4e4e7",
-            cursor: "#3b82f6",
-            selectionBackground: "#3b82f680",
-            black: "#09090b",
-            red: "#ef4444",
-            green: "#22c55e",
-            yellow: "#eab308",
-            blue: "#3b82f6",
-            magenta: "#a855f7",
-            cyan: "#06b6d4",
-            white: "#fafafa",
-            brightBlack: "#52525b",
-            brightRed: "#f87171",
-            brightGreen: "#4ade80",
-            brightYellow: "#facc15",
-            brightBlue: "#60a5fa",
-            brightMagenta: "#c084fc",
-            brightCyan: "#22d3ee",
-            brightWhite: "#ffffff",
-          }
-        : {
-            background,
-            foreground: "#18181b",
-            cursor: "#2563eb",
-            selectionBackground: "#3b82f640",
-            black: "#09090b",
-            red: "#dc2626",
-            green: "#16a34a",
-            yellow: "#ca8a04",
-            blue: "#2563eb",
-            magenta: "#9333ea",
-            cyan: "#0891b2",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#ef4444",
-            brightGreen: "#22c55e",
-            brightYellow: "#eab308",
-            brightBlue: "#3b82f6",
-            brightMagenta: "#a855f7",
-            brightCyan: "#06b6d4",
-            brightWhite: "#ffffff",
-          },
-    [isDark, background]
-  );
+  // The sixteen slots come from `--ansi-0..15` in `index.css`, the same
+  // table the log viewer paints a run with. They were sixteen hex literals
+  // here under a comment calling them terminal semantics — which left the
+  // same program's output one colour in Logs and another in Exec, and left
+  // this pane with the invisibility the palette exists to fix: black on the
+  // dark canvas, white on the light one. xterm wants a colour string, so
+  // they are resolved the way the background already is.
+  const terminalTheme = useMemo(() => {
+    const chrome = isDark
+      ? {
+          background,
+          foreground: "#e4e4e7",
+          cursor: "#3b82f6",
+          selectionBackground: "#3b82f680",
+        }
+      : {
+          background,
+          foreground: "#18181b",
+          cursor: "#2563eb",
+          selectionBackground: "#3b82f640",
+        };
+    if (ansi.length !== 16) return chrome;
+    const [
+      black,
+      red,
+      green,
+      yellow,
+      blue,
+      magenta,
+      cyan,
+      white,
+      brightBlack,
+      brightRed,
+      brightGreen,
+      brightYellow,
+      brightBlue,
+      brightMagenta,
+      brightCyan,
+      brightWhite,
+    ] = ansi;
+    return {
+      ...chrome,
+      black,
+      red,
+      green,
+      yellow,
+      blue,
+      magenta,
+      cyan,
+      white,
+      brightBlack,
+      brightRed,
+      brightGreen,
+      brightYellow,
+      brightBlue,
+      brightMagenta,
+      brightCyan,
+      brightWhite,
+    };
+  }, [isDark, background, ansi]);
 
   // Store callbacks in refs to avoid dependency issues
   const sendRef = useRef(send);

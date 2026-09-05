@@ -278,7 +278,11 @@ fn apply_sgr(mut style: TextStyle, params: &str) -> TextStyle {
             39 => style.fg = None,
             40..=47 | 100..=107 => style.bg = Some(palette(code - 10)),
             49 => style.bg = None,
-            38 | 48 => {
+            // 58 sets an underline colour, which nothing here draws — but it
+            // takes the same operands as 38 and 48, and leaving them behind
+            // is not "ignored": `58;2;0;0;0` reads its two zero channels as
+            // SGR 0 and wipes the whole style. Eaten and dropped.
+            38 | 48 | 58 => {
                 let (color, used) = if subs.len() > 1 {
                     (extended_color(&subs[1..], true), 0)
                 } else {
@@ -298,10 +302,11 @@ fn apply_sgr(mut style: TextStyle, params: &str) -> TextStyle {
                     (extended_color(&rest, false), used)
                 };
                 if let Some(color) = color {
-                    if code == 38 {
-                        style.fg = Some(color);
-                    } else {
-                        style.bg = Some(color);
+                    match code {
+                        38 => style.fg = Some(color),
+                        48 => style.bg = Some(color),
+                        // 58: consumed above, and there is nowhere to put it.
+                        _ => {}
                     }
                 }
                 i += used;
@@ -466,6 +471,145 @@ mod tests {
                 seg("plain red", Some(fg(1))),
             ])
         );
+    }
+
+    /// 58 names an underline colour this draws nothing for, and its
+    /// operands are still its own. Read as codes instead, the two zero
+    /// channels of `58;2;255;0;0` are two SGR 0 and the line loses every
+    /// style it had; `58;5;9` leaks a 9 and strikes the text through.
+    /// Would break if 58 fell through to the arm that ignores a code.
+    #[test]
+    fn an_underline_colour_takes_its_operands_with_it() {
+        let truecolor = split("\u{1b}[31;4;58;2;255;0;0mERROR\u{1b}[0m rest");
+        assert_eq!(
+            truecolor.segments,
+            Some(vec![
+                seg(
+                    "ERROR",
+                    Some(TextStyle {
+                        fg: Some(AnsiColor::Named { index: 1 }),
+                        underline: true,
+                        ..TextStyle::default()
+                    })
+                ),
+                seg(" rest", None),
+            ])
+        );
+
+        let indexed = split("\u{1b}[31;58;5;9mERROR");
+        assert_eq!(indexed.segments, Some(vec![seg("ERROR", Some(fg(1)))]));
+    }
+
+    /// The two codes that put a colour back to the terminal's own are not
+    /// the same as a reset: they leave every other attribute standing.
+    /// Would break if either arm were dropped as "same as 0" — which is
+    /// what chalk and Spring Boot close every colour with.
+    #[test]
+    fn a_default_colour_is_not_a_reset() {
+        let out = split("\u{1b}[1;31;44mloud\u{1b}[39;49m still bold");
+        assert_eq!(
+            out.segments,
+            Some(vec![
+                seg(
+                    "loud",
+                    Some(TextStyle {
+                        fg: Some(AnsiColor::Named { index: 1 }),
+                        bg: Some(AnsiColor::Named { index: 4 }),
+                        bold: true,
+                        ..TextStyle::default()
+                    })
+                ),
+                seg(
+                    " still bold",
+                    Some(TextStyle {
+                        bold: true,
+                        ..TextStyle::default()
+                    })
+                ),
+            ])
+        );
+    }
+
+    /// Every attribute that can be turned on has a code that turns it off,
+    /// and each one has to turn off only itself. Would break if any of the
+    /// off-arms were dropped: the suite passed with all of them gone.
+    #[test]
+    fn each_attribute_is_turned_off_on_its_own() {
+        let all = "\u{1b}[1;2;3;4;7;9m";
+        for (code, still) in [
+            (
+                22,
+                TextStyle {
+                    italic: true,
+                    underline: true,
+                    inverse: true,
+                    strike: true,
+                    ..TextStyle::default()
+                },
+            ),
+            (
+                23,
+                TextStyle {
+                    bold: true,
+                    dim: true,
+                    underline: true,
+                    inverse: true,
+                    strike: true,
+                    ..TextStyle::default()
+                },
+            ),
+            (
+                24,
+                TextStyle {
+                    bold: true,
+                    dim: true,
+                    italic: true,
+                    inverse: true,
+                    strike: true,
+                    ..TextStyle::default()
+                },
+            ),
+            (
+                27,
+                TextStyle {
+                    bold: true,
+                    dim: true,
+                    italic: true,
+                    underline: true,
+                    strike: true,
+                    ..TextStyle::default()
+                },
+            ),
+            (
+                29,
+                TextStyle {
+                    bold: true,
+                    dim: true,
+                    italic: true,
+                    underline: true,
+                    inverse: true,
+                    ..TextStyle::default()
+                },
+            ),
+        ] {
+            let esc = '\u{1b}';
+            let out = split(&format!("{all}{esc}[{code}mtext"));
+            assert_eq!(
+                out.segments,
+                Some(vec![seg("text", Some(still))]),
+                "SGR {code} turned off something else as well"
+            );
+        }
+    }
+
+    /// A CSI carrying an intermediate byte is not an SGR, whatever its
+    /// final byte says: `ESC[1 m` is a terminal command, not bold. Would
+    /// break if the intermediate scan or the gate that reads it were
+    /// dropped — the suite passed with either gone.
+    #[test]
+    fn an_intermediate_byte_stops_it_being_a_colour() {
+        assert_eq!(split("\u{1b}[1\u{20}mtext").segments, None);
+        assert_eq!(split("\u{1b}[1\u{20}mtext").text, "text");
     }
 
     /// `38;9` is a colour selector nobody defined, not a strike-through;
