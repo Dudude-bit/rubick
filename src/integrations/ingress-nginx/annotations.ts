@@ -1,32 +1,24 @@
 import type { T } from "@/i18n/useT";
 /**
  * ingress-nginx's behaviour is a program written in annotations, and this
- * reads the part of it that can be read exactly.
+ * reads the part of it that can be read exactly: an Ingress carrying twelve
+ * `nginx.ingress.kubernetes.io/*` keys is a routing configuration, and
+ * decoded it is five decisions in five sentences.
  *
- * A plain Ingress carrying twelve `nginx.ingress.kubernetes.io/*` keys is a
- * routing configuration, and every screen in this app today renders it as an
- * annotation blob you have to already know how to read. Decoded it is five
- * decisions in five sentences.
+ * The rule the whole file is built on: **anything the app cannot state
+ * confidently is shown raw and said to be raw**, and the raw key stays beside
+ * every decoded line either way. Three things follow, none negotiable:
  *
- * ## The rule the whole file is built on
- *
- * **Anything the app cannot state confidently is shown raw and said to be
- * raw**, and the raw key stays beside every decoded line whether or not it
- * was decoded. Three things follow from that and none of them is negotiable:
- *
- * - A key not in {@link TABLE} is printed as written. There are around
- *   ninety of these annotations and this table holds the ones worth a
- *   sentence; the rest are not guessed at, and the table growing is a normal
- *   thing that happens later.
- * - A key *in* the table whose value is not a shape it recognises is also
- *   printed as written. `proxy-body-size: enormous` is not 413 at some size
- *   this app invented, and an entry that returns `null` for a value it
- *   cannot parse is the mechanism for saying so.
+ * - A key not in {@link TABLE} is printed as written. There are around ninety
+ *   of these annotations and the table holds the ones worth a sentence; the
+ *   rest are not guessed at, and the table growing later is normal.
+ * - A key *in* the table whose value is not a shape it recognises is printed
+ *   as written too. `proxy-body-size: enormous` is not 413 at some size this
+ *   app invented; an entry returns `null` for a value it cannot parse.
  * - {@link isSnippet} keys are **never** paraphrased at any confidence.
- *   `configuration-snippet` is raw nginx configuration injected verbatim
- *   into the server block; it can rewrite, redirect, deny or proxy anywhere,
- *   and no summary of it is safe. It is shown as written and flagged as raw
- *   nginx config.
+ *   `configuration-snippet` is raw nginx configuration injected verbatim into
+ *   the server block — it can rewrite, redirect, deny or proxy anywhere — so
+ *   it is shown as written and flagged as raw nginx config.
  *
  * A wrong paraphrase of a routing rule is worse than the annotation nobody
  * read, because this time somebody believed it.
@@ -516,9 +508,7 @@ export function sayFor(suffix: string): Say | undefined {
   return BY_SUFFIX.get(suffix);
 }
 
-/**
- * Read one annotation, with the raw key kept whatever the answer is.
- */
+/** Read one annotation, with the raw key kept whatever the answer is. */
 export function readAnnotation(
   key: string,
   value: string,

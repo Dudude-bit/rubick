@@ -36,12 +36,12 @@ type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
 /**
  * Whether an error message says the request is worth making again.
  *
- * Matched on whole words, and `network` was the reason why: every Kubernetes
- * error about an object in `networking.k8s.io` — every Ingress, every
- * NetworkPolicy — contains the substring, so a flat `403 Forbidden` on an
- * Ingress classified as a retryable network blip and was retried until it
- * gave up. A verdict is not a blip: the API server has already decided, and
- * asking again spends requests to be told the same thing.
+ * Matched on whole words, and `network` is why: every Kubernetes error about
+ * an object in `networking.k8s.io` — every Ingress, every NetworkPolicy —
+ * contains the substring, so a flat `403 Forbidden` on an Ingress classifies
+ * as a retryable network blip. A verdict is not a blip: the API server has
+ * already decided, and asking again spends requests to be told the same
+ * thing.
  */
 function isRetryableError(message: string): boolean {
   const lower = message.toLowerCase();
@@ -60,12 +60,11 @@ function isRetryableError(message: string): boolean {
  * query client's entire retry policy.
  *
  * Without one, React Query's default applies to every query in the app: three
- * further requests and about seven seconds of skeleton before a `Forbidden`
- * the API server had already decided reaches the screen. On a token that
- * cannot see Secrets that is four requests per failing list, per poll, and the
- * reader waits the seven seconds to be told the same thing.
+ * further requests and about seven seconds of skeleton before an already
+ * decided `Forbidden` reaches the screen. On a token that cannot see Secrets
+ * that is four requests per failing list, per poll.
  *
- * It is also why a *number* of retries matters so little here: a polled query
+ * A *number* of retries matters little here either way: a polled query
  * re-asks on its own interval, so its retry is the next poll.
  */
 export function isWorthRetrying(error: unknown): boolean {
@@ -97,13 +96,12 @@ function extractErrorCode(error: unknown): ErrorCode {
 
   const lowerMessage = message.toLowerCase();
 
-  // A refusal is read first and on whole words, both for the same reason
-  // `isRetryableError` above learned it: the sentence names Kubernetes
-  // objects, and they carry these words inside them. `auth` used to be
-  // matched bare and tested first, so every refusal about Istio's
-  // `authorizationpolicies` — or any refusal at all in a namespace called
-  // `auth`, or for a `system:serviceaccount:auth:…` — was filed as an
-  // authentication problem and drawn as a fault the reader could retry.
+  // A refusal is read first and on whole words, for the reason
+  // `isRetryableError` above names: the sentence names Kubernetes objects,
+  // and they carry these words inside them. A bare `auth` tested first files
+  // every refusal about Istio's `authorizationpolicies` — or any refusal in a
+  // namespace called `auth`, or for a `system:serviceaccount:auth:…` — as an
+  // authentication problem, drawn as a fault the reader could retry.
   if (/\b(forbidden|permission denied)\b/.test(lowerMessage)) {
     return ERROR_CODES.PERMISSION;
   }
@@ -134,23 +132,22 @@ function extractErrorCode(error: unknown): ErrorCode {
 }
 
 /**
+ * Whether the cluster refused this, rather than failing at it.
+ *
+ * The difference is the whole message. "Could not read Pods" says something
+ * is broken and invites a retry; a refusal is neither.
+ */
+export function isRefusal(error: unknown): boolean {
+  return extractErrorCode(error) === ERROR_CODES.PERMISSION;
+}
+
+/**
  * Normalize any error into a consistent NormalizedError structure
  *
  * @param error - Error to normalize (can be any type)
  * @param context - Optional context string for where the error occurred
  * @returns Normalized error structure
  */
-/**
- * Whether the cluster refused this, rather than failing at it.
- *
- * The difference is the whole message. "Could not read Pods" tells somebody
- * that something is broken and invites them to retry; a refusal is neither,
- * and reads as a fault only because it was never told apart from one.
- */
-export function isRefusal(error: unknown): boolean {
-  return extractErrorCode(error) === ERROR_CODES.PERMISSION;
-}
-
 export function normalizeError(
   error: unknown,
   context?: string
@@ -200,32 +197,22 @@ export function reportError(error: unknown, context?: string): NormalizedError {
 /**
  * Normalize Tauri error to a readable string message
  *
- * Tauri errors can be:
- * - String
- * - Error object with message property
- * - Object with code/message/error_code properties (from our Error type or API)
- * - Plain object
- *
  * @param error - Error to normalize (can be any type)
  * @returns Normalized error message as string
  */
 export function normalizeTauriError(error: unknown): string {
-  // If it's already a string, return it
   if (typeof error === "string") {
     return error;
   }
 
-  // If it's an Error instance, return its message
   if (error instanceof Error) {
     return error.message;
   }
 
-  // If it's an object, try to extract message
   if (error && typeof error === "object") {
-    // Check for API error structure: { error, code, error_code }
     const err = error as Record<string, unknown>;
 
-    // Check for API error structure first
+    // The API error shape `{ error, code, error_code }` wins over `message`.
     if (typeof err.error === "string" && err.error) {
       const errorCode =
         err.error_code && typeof err.error_code === "string"
@@ -234,26 +221,22 @@ export function normalizeTauriError(error: unknown): string {
       return `${errorCode}${err.error}`;
     }
 
-    // Try message field (most common for Tauri errors)
     if (typeof err.message === "string" && err.message) {
       return err.message;
     }
 
-    // Try to stringify the whole object for debugging
+    // Anything else goes on screen as JSON rather than as `[object Object]`.
     try {
       const json = JSON.stringify(error);
-      // If it's a valid JSON object with structure, try to extract meaningful info
       if (err.code && typeof err.code === "string") {
         return `${err.code}: ${err.message || json}`;
       }
       return json;
     } catch {
-      // If stringification fails, return a generic message
       return "Unknown error occurred";
     }
   }
 
-  // Fallback
   return String(error);
 }
 
@@ -261,11 +244,10 @@ export function normalizeTauriError(error: unknown): string {
  * The failure as the server stated it, with our own framing taken off.
  *
  * `wrapCommand` prefixes every rejected invoke with the name of the Tauri
- * command it came from. That is a fact about our call stack, not about what
- * went wrong, and it is worth keeping on the thrown `Error` — it is what makes
- * a console trace legible. It is worth nothing to a reader looking at a toast
- * that should read "deployments.apps 'api' is forbidden", so it comes off at
- * the last moment, where the message is shown rather than where it is made.
+ * command it came from. That stays on the thrown `Error` — it is what makes a
+ * console trace legible — but it is worth nothing to a reader looking at a
+ * toast that should read "deployments.apps 'api' is forbidden". So it comes
+ * off where the message is shown, not where it is made.
  */
 export function verbatim(message: string): string {
   return message.replace(/^Tauri command '[^']*' failed: /, "");

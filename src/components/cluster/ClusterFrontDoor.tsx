@@ -11,17 +11,15 @@ import { useT } from "@/i18n/useT";
 /**
  * The first screen anyone sees.
  *
- * It used to greet the reader and send them to look for a control, which
- * is the one thing this screen cannot afford to do: the app has already
- * read the kubeconfig and knows exactly which clusters exist, so the
- * honest version of the screen is that list.
+ * The app has already read the kubeconfig and knows exactly which clusters
+ * exist, so the screen is that list rather than a greeting pointing at a
+ * control.
  *
  * Two people open it — someone who has never typed `kubectl`, and an SRE
  * who wants the path and the server's verbatim error. Splitting the
  * difference patronises one and fails the other, so every state here is
  * layered the way the pod pages already are: a plain sentence on top, the
- * machine's own words in mono underneath, both always present. The novice
- * stops after line two; the SRE reads line four first.
+ * machine's own words in mono underneath, both always present.
  *
  * Nothing below is written unless the backend actually said it. Where a
  * fact is not available the line is absent rather than plausible.
@@ -107,16 +105,12 @@ export function ClusterFrontDoor() {
 /**
  * The column this screen is, and where it sits.
  *
- * Centred across the window, because a screen whose only job is one short
- * list has nothing to justify pinning it to a corner of a 1600px canvas.
- *
- * Down the page it is not centred but offset from the top, and that is the
- * part worth arguing. This block grows: one context is four lines, fifteen
- * is a full page. Centring would slide the heading upward with every
- * cluster added, so the same screen would meet two people in two different
- * places. A fixed offset keeps "Connect a cluster" where it was last time,
- * and lets the list grow downward into the room below it — which is the
- * direction a list grows anyway.
+ * Centred across the window; down the page, offset from the top rather
+ * than centred. The block grows — one context is four lines, fifteen is a
+ * full page — and vertical centring would slide the heading upward with
+ * every cluster added, so the same screen would meet two people in two
+ * different places. A fixed offset keeps "Connect a cluster" where it was
+ * last time and lets the list grow downward.
  *
  * The offset is a fraction of the window rather than a constant so it stays
  * a proportion on a laptop and on a monitor, and it is clamped at both ends
@@ -232,15 +226,13 @@ function SourceLine({
 }
 
 /**
- * Three states, from the same facts: is a file there, and did it parse.
+ * Three states, from the same two facts: is a file there, and did it parse.
  *
- * It used to be two, split on the file existing. A kubeconfig that exists
- * and will not parse landed in the "it was read" branch, so the heading said
- * the file lists no context to connect with — directly above the parse error
- * it then printed, naming the line and column where reading stopped. The
- * reader is told the file is empty and shown proof that it is broken, and
- * those call for opposite next moves: one says point the app somewhere else,
- * the other says go fix line 6.
+ * Not two. A kubeconfig that exists and will not parse must not land in the
+ * "it was read" branch, whose heading says the file lists no context to
+ * connect with — printed directly above the parse error naming the line and
+ * column where reading stopped. The two call for opposite next moves: point
+ * the app somewhere else, or go fix line 6.
  */
 function NoClusters({
   kubeconfig,

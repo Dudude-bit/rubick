@@ -7,13 +7,11 @@ import { STALE_TIMES } from "@/lib/refresh";
 /**
  * What the node under an object says about itself.
  *
- * The join is here rather than on the wire on purpose. Carrying `spot` on
- * `PodInfo` would mean every pod list in the app fetching a node list to
- * build it, and the pod list is the hottest path there is — a namespace of
- * three hundred pods would pay for a fact wanted on one detail page. A node's
- * labels also change on a timescale of pool edits, not pod restarts, so
- * pinning them into a pod's payload would mostly be copying the same answer
- * three hundred times.
+ * The join is here rather than on the wire: carrying `spot` on `PodInfo`
+ * would make every pod list — the hottest path there is — fetch a node list
+ * for a fact wanted on one detail page, and in a namespace of three hundred
+ * pods mostly copy the same answer three hundred times, over labels that
+ * change with pool edits rather than pod restarts.
  *
  * The key is the one `useResourceDetail` builds for a cluster-scoped kind, so
  * this shares its cache with the Node page: opening five pods on one node is

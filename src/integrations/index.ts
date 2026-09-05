@@ -3,23 +3,20 @@
  * door into it.
  *
  * A surface asks for a facet and gets an implementation or nothing; it never
- * learns which vendor answered, or whether one did. What belongs here is
- * knowledge about a specific vendor's product, whatever tier it sits in —
- * `registry.ts` has the rest of the rule and what is deliberately outside it.
+ * learns which vendor answered, or whether one did. `registry.ts` has the
+ * rest of the rule and what is deliberately outside it.
  *
  * Adding a vendor is two files, both in this tree and nothing anywhere else:
- * `src/integrations/<id>/index.ts` with `defineVendor({ … })` and anything
+ * `src/integrations/<id>/index.ts` with `defineVendor({ … })` plus anything
  * bulky beside it in the same folder, and one import plus one entry in
  * {@link VENDORS} here. A vendor bringing a whole screen adds
  * `page: { count, load }` beside `extension`, which puts a row in the sidebar
- * and serves `/integrations/<id>` through the route `App.tsx` already has —
- * no surface edited, no switch grown a case, nothing registered at startup,
- * no test outside this tree changed.
+ * and serves `/integrations/<id>` through the route `App.tsx` already has.
  *
- * Two exceptions, both inside the tree: a genuinely new *capability* adds a
- * key to `Capabilities` in `registry.ts` and needs a surface written to
- * consume it, and a new cluster *flavour* adds a member to `ClusterProvider`
- * there, because that union is what keeps the mark table exhaustive.
+ * Two exceptions, both inside the tree: a new *capability* adds a key to
+ * `Capabilities` in `registry.ts` and needs a surface written to consume it;
+ * a new cluster *flavour* adds a member to `ClusterProvider` there, because
+ * that union is what keeps the mark table exhaustive.
  */
 
 import { sayWords } from "@/i18n/say";
@@ -195,8 +192,8 @@ function useDetected() {
   // before the client exists, and firing then buys four errored queries
   // and their retry backoff on every launch.
   const isConnected = useClusterStore((state) => state.isConnected);
-  // Keyed on the context, as "one CRD list per cluster" always claimed:
-  // cluster B must never read cluster A's scan, and a window with no
+  // Keyed on the context: cluster B must never read cluster A's scan,
+  // and a window with no
   // cluster — context null — reads nothing, so the rail forgets the old
   // cluster's vendors the moment the reader leaves it.
   const context = useClusterStore((state) => state.currentContext);
@@ -480,8 +477,7 @@ export interface IntegrationStatus {
  * The pane is glanced at, not watched, so nothing polls: opening it reads
  * the cluster, and opening it again within the minute does not. A number on
  * screen is therefore at most one pane-open old, which is why it is stated
- * without a timestamp and without a live mark — it never claims to be
- * either.
+ * without a timestamp and without a live mark.
  */
 const FACTS_STALE_TIME = 60_000;
 
@@ -540,8 +536,7 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
       installed: connection
         ? connection.state === "connected"
         : // A vendor the scan never mentioned is not installed. A vendor it
-          // mentioned without an answer is a different thing, and `?? false`
-          // used to flatten the two into the same claim.
+          // mentioned without an answer is a different thing.
           entry
           ? entry.installed
           : false,
@@ -986,8 +981,8 @@ export function useIntegrationPage(
 
 /**
  * The vendor view for a custom resource's API group, or `null` for the
- * thousands of CRDs nobody here has heard of — which get the CRD's own
- * printer columns, exactly as they did before this tree existed.
+ * thousands of CRDs nobody here has heard of, which get the CRD's own
+ * printer columns.
  *
  * No detection call: reaching a `cert-manager.io` list page requires the
  * group to exist, so the group is the detection.

@@ -37,11 +37,10 @@ pub struct PluginStatus {
 
 /// One tool the app spawns itself, and what it answered.
 ///
-/// Distinct from `PluginStatus` in the one way that matters: this list is
-/// fixed and compiled in, while that one is whatever the kubeconfig names.
-/// Only this one is ever executed — a settings pane that ran every `command`
-/// a context declared would be running arbitrary programs because somebody
-/// opened a tab.
+/// Distinct from `PluginStatus`: this list is fixed and compiled in, that one
+/// is whatever the kubeconfig names, and only this one is ever executed — a
+/// settings pane that ran every `command` a context declared would run
+/// arbitrary programs because somebody opened a tab.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolStatus {
@@ -114,11 +113,11 @@ pub struct Diagnostics {
     pub shell: ShellEnvReport,
     /// Whether the search path below was built from the shell's answer.
     ///
-    /// The fact, not the rule. `ShellEnvReport::answered()` decides it, and it
-    /// decides it once: a second `outcome === "imported" || ...` on the
-    /// frontend is one rule with two implementations across the IPC boundary,
-    /// and the outcome added the same day had to be excluded from both by
-    /// hand. The next one would be excluded from one.
+    /// The fact, not the rule. `ShellEnvReport::answered()` decides it once: a
+    /// second `outcome === "imported" || ...` on the frontend is one rule with
+    /// two implementations across the IPC boundary, and the outcome added the
+    /// same day had to be excluded from both by hand. The next one would be
+    /// excluded from one.
     pub search_path_is_real: bool,
     pub search_path: Vec<SearchPathEntry>,
     pub tools: Vec<ToolStatus>,
@@ -221,25 +220,17 @@ pub fn plugins_from(contexts: &[DiagnosticContext], raw: &Kubeconfig) -> Vec<Plu
         .collect()
 }
 
-/// Read the environment.
-///
-/// Best-effort per block: a kubeconfig that will not parse becomes a finding
-/// and leaves every other block answering. A page that empties itself because
-/// one file is malformed would hide the very facts somebody came for.
 /// What one tool's answer amounts to.
 ///
-/// Split out because the interesting part is a judgement, not the process
-/// launch: `check_availability` answers `available: false` for two different
-/// machines — one where the binary is absent, and one where it is right there
-/// and would not run (wrong architecture, no execute bit, a wrapper that exits
-/// non-zero). `try_path` returns `None` for both, and the message it builds,
-/// "not found in any search location", is untrue of the second.
-///
-/// That difference is most of why somebody opens this pane. One says install
-/// it; the other says the thing you already installed is broken, and
-/// reinstalling the same file will not fix it. So the caller looks for the
-/// file — which this module can do and that one does not — and this decides
-/// what the pair of answers means.
+/// `check_availability` answers `available: false` for two different
+/// machines — one where the binary is absent, one where it is right there and
+/// would not run (wrong architecture, no execute bit, a wrapper that exits
+/// non-zero). `try_path` returns `None` for both, so the two arrive here
+/// indistinguishable — and the message, "not found in any search location", is untrue
+/// of the second. That difference is most of why somebody opens this pane:
+/// one says install it, the other says reinstalling the same file will not
+/// fix it. So the caller locates the file, which this module can do and
+/// `check_availability` cannot, and this decides what the pair means.
 fn tool_status(
     name: &str,
     found: crate::cli::CliAvailability,
@@ -265,14 +256,12 @@ fn tool_status(
 
 /// What each known tool resolved to, asked concurrently.
 ///
-/// Fresh managers rather than the app's cached ones on purpose: those resolve
-/// once and hold it, which is right for a hot path and wrong for a panel whose
-/// whole job is to say what is true now. Somebody installing the plugin the
-/// findings named wants the next read to notice.
-///
-/// Concurrent because each answer costs a process launch with a five-second
-/// ceiling, and six of those in a row is a pane that takes half a minute to
-/// say everything is fine.
+/// Fresh managers rather than the app's cached ones: those resolve once and
+/// hold it, which is right for a hot path and wrong for a panel whose job is
+/// to say what is true now — somebody installing the plugin the findings
+/// named wants the next read to notice. Concurrent because each answer costs
+/// a process launch with a five-second ceiling, and six in a row is a pane
+/// that takes half a minute to say everything is fine.
 async fn tools_status() -> Vec<ToolStatus> {
     use crate::cli::cloud::{AzTool, GcloudTool, GkeAuthPluginTool, KubeloginTool};
     use crate::cli::helm::HelmTool;
@@ -301,6 +290,11 @@ async fn tools_status() -> Vec<ToolStatus> {
     vec![kubectl, helm, gcloud, gke, az, kubelogin]
 }
 
+/// Read the environment.
+///
+/// Best-effort per block: a kubeconfig that will not parse becomes a finding
+/// and leaves every other block answering. A page that empties itself because
+/// one file is malformed would hide the very facts somebody came for.
 pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     // `None` before `main` has run the import — in a test binary, or in a
     // build that stopped calling it. Its own state, not `NotAsked`: that one
@@ -324,10 +318,8 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         // Nothing parsed. Two different reasons land here and they must not
         // read the same: a file that would not parse is a problem with an
         // address and a fix, while no file at all is just an app nobody has
-        // pointed at a cluster yet. This block promised the first case a
-        // finding and never produced one, so the panel built for exactly
-        // this moment answered "no kubeconfig loaded" to somebody looking
-        // at a kubeconfig.
+        // pointed at a cluster yet. Collapsing them answers "no kubeconfig
+        // loaded" to somebody looking at a kubeconfig.
         let (kubeconfig, mut findings) = match client.kubeconfig_error().await {
             Some(why) => {
                 let path = client.kubeconfig_path().await.map_or_else(
@@ -435,10 +427,10 @@ mod tests {
 
     /// Would break if the two ways of being unavailable were merged again.
     ///
-    /// This one is the third state the panel exists for: the file is right
-    /// there and would not run. `check_availability` cannot see the
-    /// difference — it reports both as "not found in any search location" —
-    /// so a reader told that would go and install what they already have.
+    /// The third state the panel exists for: the file is right there and
+    /// would not run. `check_availability` reports that as "not found in any
+    /// search location", so a reader told it would go and install what they
+    /// already have.
     #[test]
     fn a_tool_that_is_present_and_would_not_run_says_where_it_is() {
         let out = tool_status(
@@ -543,11 +535,10 @@ users:
 
         // Exactly one finding, and it is the one that says nobody recorded
         // whether the shell was asked — because in a test binary nobody did.
-        // This used to assert an empty list, which passed only because an
-        // un-run import was drawn as `NotAsked`: "Windows, nothing to ask",
-        // `answered()` true, every caveat below suppressed. So a `main()` that
-        // stopped calling the import would have kept this green while the
-        // panel told a Mac a story about PowerShell.
+        // Asserting an empty list instead passes while an un-run import is
+        // drawn as `NotAsked` ("Windows, nothing to ask", `answered()` true,
+        // every caveat below suppressed), so a `main()` that stopped calling
+        // the import stays green while the panel tells a Mac about PowerShell.
         assert!(
             matches!(d.shell, ShellEnvReport::NotRecorded),
             "an import that never ran is its own state: {:?}",

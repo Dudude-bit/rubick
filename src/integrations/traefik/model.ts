@@ -1,26 +1,22 @@
 /**
- * What this cluster's Traefik serves, pivoted the way the question is asked.
+ * What this cluster's Traefik serves, pivoted the way the question is
+ * asked: the unit is a host and the routes under it, from whichever kind of
+ * object — nobody asks "list the IngressRoutes", they ask *what serves this
+ * hostname* and *why is this URL not working*.
  *
- * Nobody asks "list the IngressRoutes". They ask *what serves this hostname*
- * and *why is this URL not working*, so the unit here is a host and the
- * routes under it — whichever kind of object they came from.
+ * Plain `Ingress` objects count, not only the CRDs: k3d ships Traefik as
+ * *the* ingress controller, so they are the majority of what it serves.
+ * Which ones are Traefik's is read rather than guessed — an `IngressClass`
+ * carries the controller that claims it, so an Ingress belongs here when it
+ * names a class whose controller is Traefik's, or names none and this
+ * cluster's default class is Traefik's. Every other Ingress is not drawn.
  *
- * A page that read only the CRDs would be empty on a k3d cluster and wrong on
- * most real ones: k3d ships Traefik as *the* ingress controller, so plain
- * `Ingress` objects are the majority of what it serves. Which Ingresses are
- * Traefik's is not a guess either — an `IngressClass` carries the controller
- * that claims it, so an Ingress belongs here when it names a class whose
- * controller is Traefik's, or names none and this cluster's default class is
- * Traefik's. Every other Ingress in the cluster is not drawn.
- *
- * The findings are the reason the page exists: none of them is visible
- * anywhere else in this app. A Service with no endpoints reads healthy on
- * every list page, a host on a plain-HTTP entry point looks like a normal
- * route, and a certificate two objects away is nobody's column. The
- * vocabulary for the first is not reinvented here — {@link ChainStop} is the
- * same union the traffic chain already speaks, so "no pod carries app=promo"
- * reads identically whether it was reached from a Deployment or from a
- * hostname.
+ * The findings are why the page exists; none is visible anywhere else in
+ * this app. A Service with no endpoints reads healthy on every list page, a
+ * host on a plain-HTTP entry point looks like a normal route, a certificate
+ * two objects away is nobody's column. {@link ChainStop} is the same union
+ * the traffic chain already speaks, so "no pod carries app=promo" reads
+ * identically whether it was reached from a Deployment or from a hostname.
  */
 
 import { covers, type Expiry } from "@/lib/certificates";
@@ -731,12 +727,9 @@ export function proxyServices(sources: TraefikSources): ServiceInfo[] {
  * Evidence rather than inference: an Ingress in this cluster whose backend is
  * a Service that selects Traefik's own pods, and whose `spec.tls` covers this
  * host. Anything less specific would silence the finding on a cluster where
- * nothing terminates anything.
- *
- * TLS held in an *annotation* rather than in `spec.tls` — GKE's
+ * nothing terminates anything. TLS held in an *annotation* instead — GKE's
  * `ManagedCertificate`, a pre-shared certificate — is not visible from here
- * and is not meant to be: that is the `service.routes` capability's job, asked
- * separately. This returns what the core objects state.
+ * and is the `service.routes` capability's job, asked separately.
  */
 export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
   const proxies = proxyServices(sources);
@@ -781,17 +774,15 @@ export function terminatedUpstream(
 /**
  * A host served with no encryption at all.
  *
- * Narrower than "reachable over plain HTTP", deliberately. Traefik's Ingress
+ * Narrower than "reachable over plain HTTP", deliberately: Traefik's Ingress
  * provider binds a router with no declared entry point to *every* entry
- * point, so on a cluster whose `web` carries no redirection every host in it
- * is also reachable unencrypted — which is one fact about the proxy, not
- * eighty findings about eighty hosts. That one belongs on the Entry points
- * tab and is stated there once.
+ * point, so on a cluster whose `web` carries no redirection every host is
+ * also reachable unencrypted — one fact about the proxy, stated once on the
+ * Entry points tab, not eighty findings about eighty hosts.
  *
  * What is a finding about *this* host is that nothing serves it over TLS at
  * all: no route under it carries a certificate, **and nothing in front of the
- * proxy holds one either** — so there is no encrypted way to reach it even
- * for a client that asks for one.
+ * proxy holds one either** — no encrypted way in, even for a client asking.
  */
 function clearFinding(
   routes: TraefikRoute[],

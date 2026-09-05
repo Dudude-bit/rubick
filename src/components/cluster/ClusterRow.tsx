@@ -10,24 +10,20 @@ import { useClusterMark } from "@/stores/clusterIdentityStore";
 /**
  * One cluster, wherever a cluster is offered.
  *
- * The app has two places that put clusters in a list — the tab's cluster
- * segment and the front door — and they answer the same question, so they
- * are the same row: identity dot, provider mark, name with its provider
- * boilerplate dimmed, and one trailing fact. Only that trailing fact
- * differs (a provider label in the tab, how long ago it was used on the
- * front door), which is why it is a slot rather than a variant.
+ * Both places that list clusters — the tab's cluster segment and the front
+ * door — answer the same question, so they are one row. Only the trailing
+ * fact differs (a provider label in the tab, how long ago it was used on
+ * the front door), which is why that is a slot rather than a variant.
  *
- * The dot keeps the cluster's identity colour rather than becoming a
- * status light: this row's whole job is telling two similarly-named
- * clusters apart, and the colour is the thing that does it on every other
- * surface in the window. A cluster that just refused the connection is
- * the one exception, because a red dot is the fact worth reading first.
+ * The dot keeps the cluster's identity colour rather than becoming a status
+ * light: this row's job is telling two similarly-named clusters apart, and
+ * the colour is what does that on every other surface in the window. A
+ * cluster that just refused the connection is the one exception.
  *
- * A renamed cluster reads as two lines, not one: the name this person gave
- * it, and under it, dimmed, the context name itself. This is the list you
- * pick a cluster from, so it is the last place an alias is allowed to be
- * the only thing on offer — you have to know which context you are about to
- * connect to before you press Enter on it.
+ * A renamed cluster reads as two lines: the alias, and dimmed under it the
+ * context name itself. This is the list you pick a cluster from, so it is
+ * the last place an alias may be the only thing on offer — you have to know
+ * which context you are connecting to before you press Enter on it.
  */
 export function ClusterRow({
   context,

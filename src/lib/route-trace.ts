@@ -1,17 +1,17 @@
 /**
  * The route's diagnosis, in debug order — the page IS the trace.
  *
- * Eight links, rendered in the order a person who has done this before
- * checks them: class claimed, gateway programmed with an address, listener
- * accepts, namespace allowed, references resolve, backend exists, endpoints
- * ready, reachable from outside. The first broken link is the verdict;
- * everything after it is "not reached", not broken.
+ * Eight links, in the order a person who has done this before checks them:
+ * class claimed, gateway programmed with an address, listener accepts,
+ * namespace allowed, references resolve, backend exists, endpoints ready,
+ * reachable from outside. The first broken link is the verdict; everything
+ * after it is "not reached", not broken.
  *
  * Two sources of truth, never conflated: what the controllers wrote
  * (conditions, per parent) and what the cluster's objects say for
  * themselves (the gateway list, the Services, what they publish). Where a
- * source cannot be read the step goes dashed — "can't know from here" —
- * instead of guessing either way.
+ * source cannot be read the step goes `blind`, drawn dashed — "can't know
+ * from here" — instead of guessing either way.
  */
 
 import type {
@@ -243,17 +243,17 @@ const namesNoBackend = (route: RouteInfo): boolean =>
  * Every rule either redirects or hands off to an ExtensionRef filter, and
  * the route names no backend at all.
  *
- * **This is not a claim that the filter answers.** What a vendor filter does
- * is its vendor's business and this app does not read it: `KongPlugin` and
- * Traefik's `Middleware` are ExtensionRefs that decorate a request and still
- * need somewhere to send it, and even Envoy Gateway's own `HTTPRouteFilter`
- * has variants that do. All this says is that there is nothing here for the
- * backend steps to look at — which is why they go `blind` rather than `ok`,
- * and why the copy names the filter instead of vouching for it.
+ * **Not a claim that the filter answers.** What a vendor filter does is its
+ * vendor's business and this app does not read it: `KongPlugin` and
+ * Traefik's `Middleware` decorate a request and still need somewhere to
+ * send it, and even Envoy Gateway's own `HTTPRouteFilter` has variants that
+ * do. This says only that there is nothing here for the backend steps to
+ * look at — hence `blind` rather than `ok`, and copy that names the filter
+ * instead of vouching for it.
  *
  * `namesNoBackend`, not `namesNoService`: a route with a non-Service
- * backendRef does name somewhere to go, and saying "no backends" about it
- * would be false.
+ * backendRef does name somewhere to go, and "no backends" about it would
+ * be false.
  */
 export function selfAnswered(route: RouteInfo): boolean {
   return (
@@ -474,13 +474,11 @@ function gatewayStep(
     };
   }
   if (gateway.addresses.length === 0) {
-    // `status.addresses` is optional in the spec, and an implementation on a
-    // private or overlay network has nothing to publish there. So when the
-    // controller has already said Programmed, an empty list is this app
-    // failing to see where traffic arrives — not the traffic having nowhere
-    // to arrive. Blind rather than err, which is what keeps `servingKnown`
-    // honest instead of confidently wrong.
-    //
+    // `status.addresses` is optional in the spec, and an implementation on
+    // a private or overlay network has nothing to publish there. So once
+    // the controller has said Programmed, an empty list is this app failing
+    // to see where traffic arrives — not traffic having nowhere to arrive.
+    // Blind rather than err, which is what keeps `servingKnown` honest.
     // Reported against 4.6.0: a Netbird gateway, programmed and working,
     // with five routes under it all reading "traffic has nowhere to arrive".
     if (programmed?.status === "True") {
@@ -498,10 +496,10 @@ function gatewayStep(
       };
     }
     // A controller that has taken this and not decided has not failed to
-    // give it an address — it has not got there yet. Saying "traffic has
-    // nowhere to arrive" in red about a Gateway mid-provisioning is the same
-    // over-claim as calling it programmed, three branches down, and this
-    // branch runs first so it was the one the reader actually saw.
+    // give it an address — it has not got there yet, so a Gateway
+    // mid-provisioning must not read "traffic has nowhere to arrive". The
+    // same over-claim as calling it programmed, three branches down; this
+    // branch runs first, so it is the one the reader actually saw.
     if (programmed?.status === "Unknown") {
       return {
         id: "gateway",
@@ -535,11 +533,9 @@ function gatewayStep(
       subject,
     };
   }
-  // `Unknown` is the API's third answer and it was falling through to the
-  // green one below: a controller that has taken the Gateway and not decided
-  // yet (`Pending`) read as "is programmed". The Gateways list already got
-  // this right — its column says "unknown" — so one object wore a confident
-  // tick here and a grey word there.
+  // `Unknown` is the API's third answer: a controller that has taken the
+  // Gateway and not decided yet (`Pending`) is not "is programmed". The
+  // Gateways list says "unknown" in its column for the same state.
   if (programmed.status !== "True") {
     return {
       id: "gateway",
@@ -591,18 +587,13 @@ function acceptanceSteps(
   const label = listenerLabel(listeners, t);
 
   if (entries.length === 0) {
-    // No parent status written at all — and by the time this runs, that can
-    // only mean the controller stayed quiet about *this route*. The two cases
+    // No parent status written at all, which by the time this runs can only
+    // mean a controller that exists and stayed quiet about *this route* —
+    // as several implementations still do for the alpha kinds. The cases
     // where nobody is there to have written one are caught above: an
-    // unclaimed class stops at step 1, a missing or refused gateway at step 2,
-    // and both force everything below them off.
-    //
-    // So what is left is a controller that exists and did not write route
-    // status, which several implementations still do not for the alpha kinds.
-    // This used to say "the route is invisible to the data plane either way",
-    // which contradicted the two green steps directly above it and was wrong
-    // for a reader whose TCPRoutes were carrying traffic the whole time.
-    // Blind, and the steps below still get to run.
+    // unclaimed class stops at step 1, a missing or refused gateway at step
+    // 2, and both force everything below them off. So: blind, not err — the
+    // route may well be carrying traffic — and the steps below still run.
     return [
       {
         id: "listener",
@@ -705,10 +696,9 @@ function acceptanceSteps(
     ];
   }
 
-  // `Unknown` is the third answer, and it was falling through to the green
-  // one below: a controller that has taken this parent and not decided read
-  // as "the listener accepts". The peek and the routes list both keep it
-  // neutral — this reader was the one claiming a verdict nobody wrote.
+  // `Unknown` is the third answer: a controller that has taken this parent
+  // and not decided is not "the listener accepts". The peek and the routes
+  // list keep the same state neutral.
   if (accepted.status !== "True") {
     return [
       {
@@ -887,10 +877,8 @@ function backendSteps(
   }
   // A filter is named and nothing else is. Blind, not ok: the difference
   // between "we looked and it is fine" and "there is nothing here we can
-  // read". It is also what keeps `servingKnown` false, so a route nobody
-  // verified does not come back reading verified — which is what this
-  // branch did when it answered `ok`, and how a Kong plugin with a
-  // forgotten backendRef would have read as serving.
+  // read". It is also what keeps `servingKnown` false, so a Kong plugin
+  // with a forgotten backendRef does not come back reading as serving.
   if (serviceRefs.length === 0 && selfAnswered(route)) {
     const say = t("empty", "gwFilterNamed");
     return [
@@ -1219,18 +1207,18 @@ export type ProbeStep<T> =
  * The `reachable` step, told what the probe below it found.
  *
  * The step and the panel under it are two renderings of one fact, and the
- * step is the static one: it is composed from the trace's own data and says
- * "not checked yet" forever, including after a reader presses Probe and
- * watches the panel answer. Reported against 4.7.1.
+ * step is the static one — left alone it says "not checked yet" forever,
+ * including after a reader presses Probe and watches the panel answer
+ * (reported against 4.7.1).
  *
- * The trace's own data is deliberately not touched. A probe from this
- * machine is not what the cluster says — that is why the step is
- * `who: "machine"` and why `servingKnown` ignores it — so the verdict above
- * must not move when this does. Only the words and the mark do.
+ * The trace's own data is deliberately not touched: a probe from this
+ * machine is not what the cluster says, which is why the step is
+ * `who: "machine"` and why `servingKnown` ignores it. Only the words and
+ * the mark move.
  *
  * A failed probe is a `warn`, never an `err`: this laptop being unable to
  * reach the address says as much about this laptop, its VPN and its
- * firewall as it does about the gateway.
+ * firewall as about the gateway.
  */
 export function probedReachable(
   step: TraceStep,

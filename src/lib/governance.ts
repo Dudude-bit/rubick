@@ -1,23 +1,20 @@
 /**
- * What acts on an object without the object having asked, and what that means
- * for the reader right now.
+ * What acts on an object without the object having asked: an HPA and a PDB
+ * are written by somebody else, about this workload, and leave no trace on
+ * its YAML. Nothing on a Deployment says "an HPA overwrites `spec.replicas`
+ * fifteen seconds after you set it", or "a node drain will block on this".
  *
- * An HPA and a PDB are the same shape of fact: written by somebody else,
- * about this workload, leaving no trace on its YAML. Nothing on a Deployment
- * says "an HPA overwrites `spec.replicas` fifteen seconds after you set it",
- * and nothing says "a node drain will block on this".
- *
- * Pure: it reads the `governs` edges the connections call already returned.
- * Nothing here re-derives a number the cluster published — an autoscaler's
- * own arithmetic is the one thing this must never repeat, because the two
- * answers would disagree the moment a scaling policy is involved.
+ * Pure — it reads the `governs` edges the connections call already returned,
+ * and never re-derives a number the cluster published. Repeating an
+ * autoscaler's own arithmetic gives two answers that disagree the moment a
+ * scaling policy is involved.
  *
  * The HPA's target is not drawn on the Usage bar: those rows are live usage
  * summed over replicas against summed *limits*, while an HPA target is a
  * per-pod mean against the *request*. Different denominator, different
- * aggregation, and a different kind of number — a limit is a ceiling the
- * kernel enforces, while crossing a target adds a pod. One axis for both
- * would be wrong by the limit-to-request ratio.
+ * aggregation, and a limit is a ceiling the kernel enforces while crossing a
+ * target adds a pod — one axis for both would be wrong by the
+ * limit-to-request ratio.
  */
 
 import type { T } from "@/i18n/useT";
@@ -56,9 +53,8 @@ export interface Budget {
  *
  * `neutral` is not a lesser warning, it is a different claim: the fact is
  * true and worth reading and the cluster is not in trouble. Every
- * `DisruptionAllowed=False` on a healthy two-replica workload is one of
- * these, which is exactly the judgement `condition-health.ts` already makes
- * about the condition itself.
+ * `DisruptionAllowed=False` on a healthy two-replica workload is one, the
+ * same judgement `condition-health.ts` makes about the condition itself.
  */
 export interface Finding {
   tone: "err" | "warn" | "neutral";
@@ -113,10 +109,9 @@ const isFalse = (c: ConditionInfo | undefined) => c?.status === "False";
  * A controller's message, made into a sentence that another can follow.
  *
  * Kubernetes writes condition messages as lower-case clauses with no full
- * stop — "the desired replica count is more than the maximum replica count" —
- * which is fine alone and runs straight into the next sentence when anything
- * is appended to it. Quoting it verbatim is still the right call: the words
- * are the controller's and paraphrasing them loses the search term.
+ * stop, which runs straight into whatever is appended to them. Quoting
+ * verbatim is still right: the words are the controller's, and paraphrasing
+ * them loses the search term.
  */
 function sentence(text: string): string {
   const trimmed = text.trim();
@@ -252,9 +247,8 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
  *
  * An autoscaler that failed to compute leaves `status.desiredReplicas` at
  * zero — not because it wants zero replicas, but because it never got as far
- * as wanting anything. Printing "0 wanted" beside a running workload is the
- * worst number on the page: it reads as an autoscaler about to delete
- * everything, and it is the field being unset.
+ * as wanting anything. "0 wanted" beside a running workload reads as an
+ * autoscaler about to delete everything, and it is the field being unset.
  */
 export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
   const computed = !isFalse(condition(facts.conditions, "ScalingActive"));
@@ -274,9 +268,9 @@ export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
 /**
  * When the count last moved, or nothing where it never has.
  *
- * Split out of {@link autoscalerReplicas} because the replica numbers beside
- * it belong to the workload's own block now, and this clause does not: it is
- * the one thing the autoscaler knows that the count itself cannot say.
+ * Split from {@link autoscalerReplicas}: the replica numbers beside it belong
+ * to the workload's own block and this clause does not — it is the one thing
+ * the autoscaler knows that the count itself cannot say.
  */
 export function lastScaled(facts: AutoscalerFacts, t: T): string | null {
   return facts.lastScaleTime
@@ -314,23 +308,19 @@ export function budgetRoom(facts: BudgetFacts, t: T): string {
 }
 
 /**
- * What a budget is worth saying, and — mostly — how loudly it is not.
+ * What a budget is worth saying, and how loudly.
  *
- * `disruptionsAllowed == 0` is the fact a drain runs into, and it is also
- * the **normal** state of a one-replica workload with `minAvailable: 1`, or a
- * two-replica one with `minAvailable: 2`. Painting that red claims a fault
- * the cluster never reported, which is the same mistake
- * `condition-health.ts` made with `DisruptionAllowed=False` and fixed by
- * calling the condition advisory.
+ * `disruptionsAllowed == 0` is the fact a drain runs into, and it is also the
+ * **normal** state of a workload with as many replicas as `minAvailable`
+ * demands. Painting that red claims a fault the cluster never reported — the
+ * same call `condition-health.ts` makes about `DisruptionAllowed=False` by
+ * treating the condition as advisory.
  *
- * So the fact is always stated and the colour is earned by one thing: whether
- * the budget is *spent* or *broken*. A budget exactly met — as many healthy
- * pods as it demands — is spent, and one more ready replica frees it; that is
- * the budget doing its job and it gets no colour. A budget below its own
- * floor is broken: the drain blocks *and* the workload is already short, so
- * nothing is going to free it until the workload recovers. That earns a
- * warning, and it is a warning about the workload rather than about the
- * budget.
+ * So the fact is always stated and the colour is earned by whether the budget
+ * is *spent* or *broken*. Exactly met is spent, and one more ready replica
+ * frees it: no colour. Below its own floor is broken, because the drain
+ * blocks *and* nothing will free it until the workload recovers — a warning,
+ * and one about the workload rather than about the budget.
  */
 export function budgetFinding(budget: Budget, t: T): Finding | null {
   const facts = budget.facts;
@@ -370,14 +360,12 @@ export interface DrainBlocker {
 /**
  * The budgets on this node that will refuse the first eviction.
  *
- * A drain is where a PodDisruptionBudget stops being a number on a page and
- * becomes the thing that makes the command hang: `kubectl drain` does not
- * fail on a spent budget, it retries, and a reader who does not know which
- * budget is holding it has no way to tell a slow drain from a stuck one.
+ * `kubectl drain` does not fail on a spent budget, it retries, and a reader
+ * who does not know which budget is holding it has no way to tell a slow
+ * drain from a stuck one.
  *
- * Deduplicated by budget rather than listed per pod: one budget covering
- * four pods on this node is one reason, and four identical lines would be a
- * count dressed up as a list.
+ * Deduplicated by budget rather than listed per pod: one budget covering four
+ * pods on this node is one reason, not four identical lines.
  */
 export function drainBlockers(
   conns: ResourceConnections | undefined
@@ -401,9 +389,9 @@ export function drainBlockers(
  *
  * The same shape delivery's intercept produces, so the Scale dialog can hold
  * two of them without knowing which kind either one is. `subject` is the
- * three-word noun that heads a stacked line — with two warnings the dialog
- * needs to say *what* is doing it before it says what will happen, or the two
- * paragraphs read as one long complaint.
+ * three-word noun heading a stacked line: with two warnings the dialog has to
+ * say *what* is doing it before what will happen, or the two paragraphs read
+ * as one long complaint.
  */
 export interface ActionWarning {
   key: string;
@@ -422,13 +410,12 @@ export interface ActionWarning {
  *
  * - one autoscaler, working — the number goes back within about fifteen
  *   seconds, and the honest instruction is to change the bounds instead;
- * - one autoscaler that cannot currently act — the number *stands*, and
- *   saying "this will be undone" would be a lie the reader can check. It
- *   stands until the metrics come back, which is worth knowing precisely
- *   because nothing announces that moment;
- * - several autoscalers on one workload — a real state, and not one that may
- *   be drawn as a confident bound: each writes `spec.replicas` from its own
- *   reading and each undoes the other, so no range on the page is the range.
+ * - one autoscaler that cannot currently act — the number *stands* until the
+ *   metrics come back, and nothing announces that moment, so "this will be
+ *   undone" would be a lie the reader can check;
+ * - several autoscalers on one workload — each writes `spec.replicas` from
+ *   its own reading and each undoes the other, so no range on the page is
+ *   the range.
  */
 export function autoscalerScaleWarnings(
   conns: ResourceConnections | undefined,
@@ -497,12 +484,10 @@ export function autoscalerScaleWarnings(
  * Everything that will move a replica count back, soonest first.
  *
  * The order is the order the reader will feel them: an autoscaler re-reads in
- * about fifteen seconds, a delivery controller reconciles in minutes. A
- * workload that has both is a real and unremarkable arrangement — an HPA in
- * git, applied by Argo — and the two of them do genuinely different things:
- * the HPA replaces the number, the controller replaces the *object*, taking
- * the number with it. Neither sentence is a rewording of the other, which is
- * what stops the pair from reading as noise.
+ * about fifteen seconds, a delivery controller reconciles in minutes. Having
+ * both — an HPA in git, applied by Argo — is unremarkable, and the two do
+ * different things: the HPA replaces the number, the controller replaces the
+ * *object*, taking the number with it.
  */
 export function scaleWarnings(
   conns: ResourceConnections | undefined,
@@ -531,25 +516,19 @@ export function deliveryWarning(
 /**
  * Everything that will undo the manifest you are about to apply.
  *
- * ## Why the autoscaler is here only when the replica count moves
+ * A delivery controller re-applies the **whole object**, so every field is at
+ * risk and its warning is true whatever was edited. An HPA owns exactly one
+ * field — `spec.replicas` — and says nothing about an image tag, a resource
+ * limit or an env var: warning about it on every save would be wrong on
+ * almost every save, and a dialog that is usually wrong gets dismissed unread
+ * on the day it is right.
  *
- * The two causes are not the same size, and treating them as one would make
- * the dialog lie. A delivery controller re-applies the **whole object**, so
- * every field in the document is at risk and the warning is true whatever was
- * edited. An HPA owns exactly one field — `spec.replicas` — and says nothing
- * at all about an image tag, a resource limit or an env var. Warning about it
- * on every save would therefore be wrong on almost every save, and a dialog
- * that is wrong most of the time is a dialog people learn to dismiss without
- * reading; the next time it is right, it will be dismissed too.
- *
- * Never is the other wrong answer: a replica count typed into the YAML editor
- * is undone by the autoscaler exactly as fast as one typed into the Scale
- * dialog, and the app already warns there. The reader would learn that the
- * same edit is dangerous through one control and safe through another.
- *
- * So the rule is the diff: `changesReplicaCount` compares what the API server
- * had when the editor opened against what is about to be sent, and the
- * autoscaler is named when — and only when — that field is what moved.
+ * Never naming it is the other wrong answer, because a replica count typed
+ * into the YAML editor is undone exactly as fast as one typed into the Scale
+ * dialog, where the app already warns. So the rule is the diff:
+ * `changesReplicaCount` compares what the API server had when the editor
+ * opened against what is about to be sent, and the autoscaler is named when —
+ * and only when — that field is what moved.
  */
 export function applyWarnings(
   conns: ResourceConnections | undefined,
@@ -568,14 +547,13 @@ export function applyWarnings(
  * `original` carried.
  *
  * `original` is what the API server had when the editor opened, so this is
- * true both when the reader typed a new number and when the document they are
- * about to send is stale — an autoscaler that moved the count under them
- * leaves a buffer whose `spec.replicas` will scale the workload back on apply,
- * which is a surprise worth the same sentence.
+ * true both when the reader typed a new number and when the buffer is stale —
+ * an autoscaler moved the count under them, and applying scales the workload
+ * back.
  *
  * A document that will not parse is not a replica change: the apply is about
- * to fail on its own and the API server's message is a better one than
- * anything guessed from here.
+ * to fail on its own, and the API server's message beats anything guessed
+ * from here.
  */
 export function changesReplicaCount(original: string, edited: string): boolean {
   const before = replicaCountIn(original);

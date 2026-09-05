@@ -1,17 +1,17 @@
 //! What an object is connected to, and where a path into it stops.
 //!
 //! Every edge here is one Kubernetes states outright — an owner reference, a
-//! label selector that matches, a volume or env source in a pod spec, an
-//! Ingress backend naming a Service, `spec.nodeName`, a claim's volume and
-//! storage class. Nothing is inferred from a shared label, a similar name or
-//! a common Helm release: a guessed edge is a dead link that the reader
-//! cannot tell from a real one.
+//! matching label selector, a volume or env source in a pod spec, an Ingress
+//! backend naming a Service, `spec.nodeName`, a claim's volume and storage
+//! class. Nothing is inferred from a shared label, a similar name or a common
+//! Helm release: a guessed edge is a dead link the reader cannot tell from a
+//! real one.
 //!
 //! Field names inside the enum variants below carry explicit
-//! `#[serde(rename)]`. Serde's container-level `rename_all` does not reach
-//! the fields of a variant, and the TS generator honours nothing but an
-//! explicit rename there, so the wire format and the bindings only agree
-//! when it is spelled out.
+//! `#[serde(rename)]`: serde's container-level `rename_all` does not reach a
+//! variant's fields, and the TS generator honours nothing but an explicit
+//! rename there, so the wire format and the bindings agree only when it is
+//! spelled out.
 
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::PodSpec;
@@ -310,15 +310,14 @@ pub enum Relation {
     /// `scaleTargetRef` names it, a `PodDisruptionBudget` whose selector
     /// matches its pods.
     ///
-    /// A verb of its own rather than `Selects` or `Uses`, and the direction
-    /// of consent is why. Every other verb here is stated by the object that
-    /// wants something: a pod spec names the `ConfigMap` it needs, a claim
-    /// names its class. These two are stated *about* an object, by a third
-    /// one, and nothing on the governed side records that it happened — a
+    /// Its own verb rather than `Selects` or `Uses`, because the direction of
+    /// consent is reversed: every other verb here is stated by the object
+    /// that wants something, while these are stated *about* an object by a
+    /// third one, and nothing on the governed side records it — a
     /// Deployment's YAML says nothing about the HPA that overwrites its
-    /// `spec.replicas` fifteen seconds after you set it. Filing that under
-    /// `Selects` would put a `PodDisruptionBudget` in the same group as the
-    /// Service that routes traffic, which answers a different question.
+    /// `spec.replicas` fifteen seconds after you set it. Under `Selects` a
+    /// `PodDisruptionBudget` would land in the same group as the Service that
+    /// routes traffic, which answers a different question.
     Governs {
         /// The selector that matched, where the edge came from one. `None`
         /// where the governor names its target outright, as an HPA does.
@@ -504,10 +503,9 @@ impl UnexploredKind {
     /// What a workload's neighbourhood still cannot answer once the two
     /// governing kinds have been read, given the reason each read failed.
     ///
-    /// Empty for both `None`, and that is the point of the function: the app
-    /// reads both kinds now, and a row still saying "the app does not read
-    /// `HorizontalPodAutoscalers`" would be a worse lie than the gap it
-    /// replaced.
+    /// Empty for both `None`, which is the point of the function: naming a
+    /// kind the app does read as unread — "the app does not read
+    /// `HorizontalPodAutoscalers`" — is a worse lie than the gap it replaced.
     #[must_use]
     pub fn governance(autoscalers: Option<&str>, budgets: Option<&str>) -> Vec<Self> {
         [

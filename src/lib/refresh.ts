@@ -12,11 +12,11 @@
  * 3. **The window is not the one being used.** Visible but unfocused is a
  *    glance, not a reading, so it is held at the cap.
  *
- * Backing off is a promise the UI keeps: {@link effectiveInterval} is also
- * what tells `DataFreshness` to say "slowed" instead of "polling", so nothing
- * on screen is older than the badge above it implies. A watch is not touched
- * here — a connected stream keeps data live at any poll rate, and
- * `refresh: false` is how a watched query says so.
+ * {@link effectiveInterval} is also what tells `DataFreshness` to say
+ * "slowed" instead of "polling", so nothing on screen is older than the badge
+ * above it implies. A watch is not touched here — a connected stream keeps
+ * data live at any poll rate, and `refresh: false` is how a watched query
+ * says so.
  *
  * @module lib/refresh
  */
@@ -34,15 +34,13 @@ export const REFRESH_INTERVALS = {
    * The cluster-wide aggregate: the sidebar's row counts, the namespace
    * picker, the status bar, and the Overview page.
    *
-   * The priciest query in the app. One poll fans out to about a dozen
-   * cluster-wide LISTs, and the window asks for it in two scopes at once —
-   * the current namespace for the rail, the whole cluster for the status bar
-   * — so at a two-second rate it alone is ~700 requests a minute.
-   *
-   * It is also the one query that cannot back off on its own: the payload
-   * carries node CPU and memory usage, different on every single read, so a
-   * rule that waits for an identical answer waits forever. The rate is the
-   * only lever it has.
+   * The priciest query in the app — one poll fans out to about a dozen
+   * cluster-wide LISTs, in two scopes at once (the current namespace for the
+   * rail, the whole cluster for the status bar), so at a two-second rate it
+   * alone is ~700 requests a minute. It is also the one query that cannot
+   * back off on its own: the payload carries node CPU and memory usage,
+   * different on every single read, so a rule that waits for an identical
+   * answer waits forever. The rate is the only lever it has.
    *
    * Ten seconds, because nothing this reports turns over faster: a kubelet
    * takes ten seconds to report a status change at all, a CrashLoopBackOff
@@ -85,7 +83,7 @@ export const STALE_TIMES = {
 } as const;
 
 /**
- * The three numbers that decide how fast a still screen goes quiet.
+ * The numbers that decide how fast a still screen goes quiet.
  *
  * `steadyAfter: 3` — three identical answers before anything changes; six
  * seconds at the 2s base. Long enough that a Deployment mid-rollout (something
@@ -98,12 +96,12 @@ export const STALE_TIMES = {
  *
  * `cap: 30_000` — the same order as the intervals the cluster itself works on
  * (kubelet status updates and node leases are 10s), so half a minute cannot
- * hide a settled state change. It is also as long as a "slowed" label can
- * carry: past that the honest word would be "stale".
+ * hide a settled state change, and as long as a "slowed" label can carry:
+ * past that the honest word would be "stale".
  *
  * `unfocusedFloor: 30_000` — a window you can see but are not typing into is
  * being glanced at. It keeps updating, because it is on screen and must not
- * lie, but it goes straight to the cap instead of walking there.
+ * lie, but goes straight to the cap instead of walking there.
  */
 export const BACKOFF = {
   steadyAfter: 3,

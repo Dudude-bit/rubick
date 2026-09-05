@@ -4,19 +4,18 @@
  * can be asserted on without a server. Every query here was compared against
  * `kubectl top` on a real cluster before it was believed.
  *
- * `container!=""` is load-bearing, not a tidy-up. cAdvisor emits three series
- * for a one-container pod: the pod's own cgroup roll-up (no `container`
- * label), the pause container that owns the network namespace (no `container`
- * label either, on containerd), and the real container. Summing without the
- * filter counts the workload twice — measured, not assumed: `busy-demo` reads
- * 40m unfiltered and 20m filtered, and `kubectl top pod` says 20m.
- * `container="POD"` is the older runtimes' spelling of the pause container
- * and is excluded too, for the clusters that still emit it.
+ * `container!=""` is load-bearing. cAdvisor emits three series for a
+ * one-container pod: the pod's own cgroup roll-up, the pause container that
+ * owns the network namespace (neither carries a `container` label, on
+ * containerd), and the real container. Summing without the filter counts the
+ * workload twice — measured: `busy-demo` reads 40m unfiltered and 20m
+ * filtered, and `kubectl top pod` says 20m. `container="POD"` is the older
+ * runtimes' spelling of the pause container and is excluded too.
  *
- * Network is the exception to that rule. Every container in a pod shares one
- * network namespace, so cAdvisor reports traffic only on the sandbox — the
- * very series `container!=""` throws away. Traffic sums over interfaces
- * instead, minus loopback, which is a pod talking to itself.
+ * Network is the exception: every container in a pod shares one network
+ * namespace, so cAdvisor reports traffic only on the sandbox — the very
+ * series `container!=""` throws away. Traffic sums over interfaces instead,
+ * minus loopback, which is a pod talking to itself.
  */
 
 import { escapeRegex, podPattern } from "../pod-names";
@@ -28,17 +27,15 @@ export { escapeRegex, podPattern };
 /**
  * How a range is drawn, and what that costs in fidelity.
  *
- * **Max per bucket, never mean.** A bucket wide enough to hide a spike is a
- * bucket that will hide the thirty seconds that got a container OOM-killed,
- * which is the one reading anybody opens this chart for. So every bucket
- * asks Prometheus for the *largest* value at a finer resolution inside it,
- * through a subquery, rather than for whatever the series happened to read
- * at the bucket's own boundary.
+ * Max per bucket, never mean: a bucket wide enough to hide a spike hides the
+ * thirty seconds that got a container OOM-killed, which is the one reading
+ * anybody opens this chart for. So every bucket asks Prometheus, through a
+ * subquery, for the *largest* value at a finer resolution inside it rather
+ * than for whatever the series read at the bucket's own boundary.
  *
  * `inner` is `null` for the shortest range, where the bucket already is the
- * scrape resolution and there is nothing finer to take a maximum over.
- * Saying so is the point — the label under the picker names the resolution
- * for exactly this reason.
+ * scrape resolution and there is nothing finer to take a maximum over — the
+ * label under the picker names the resolution for exactly this reason.
  */
 export interface RangeSpec {
   id: UsageRange;
@@ -196,8 +193,7 @@ export function memoryQuery(scope: UsageScope, spec: RangeSpec): string {
  * `container_start_time_seconds` changing is a container that came back, and
  * cAdvisor reports it on every cluster — unlike
  * `kube_pod_container_status_restarts_total`, which needs kube-state-metrics
- * and would make the restart marker depend on a second install the reader
- * was never asked for.
+ * and would make the restart marker depend on a second install.
  *
  * The window is the bucket, so a restart is attributed to the bucket it
  * happened in rather than smeared across the rate window.
@@ -211,11 +207,10 @@ export function restartQuery(scope: UsageScope, spec: RangeSpec): string {
  * How full each of a namespace's volumes is.
  *
  * Two series rather than the ratio, because the row states used *and*
- * capacity — a bare percentage of an unnamed total is the kind of number
- * that gets misread as a share of the declared size, which it is not: the
- * kubelet reports the filesystem behind the volume, and for a provisioner
- * that does not enforce a quota (`local-path`, `hostPath`) that filesystem
- * is the node's. The row says what the kubelet said and names it as such.
+ * capacity: a bare percentage gets misread as a share of the declared size,
+ * which it is not. The kubelet reports the filesystem behind the volume, and
+ * for a provisioner that does not enforce a quota (`local-path`, `hostPath`)
+ * that filesystem is the node's.
  */
 export function volumeUsedQuery(namespace: string, claims: string[]): string {
   return `kubelet_volume_stats_used_bytes{${claimSelector(namespace, claims)}}`;

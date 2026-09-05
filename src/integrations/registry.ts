@@ -6,41 +6,39 @@
  * outside `src/integrations/` may import a vendor folder.
  *
  * A vendor gets a {@link Vendor.page} when it owns objects and a topology no
- * core object can host. Prometheus gets none: every fact it has belongs on the
- * pod or node it is about. cert-manager has both — its expiry a power through
- * {@link Capabilities}, its list of failing chains a page. {@link Extension}
- * is the third thing: is it here, is it healthy, what does it give. It is a
+ * core object can host. Prometheus gets none — every fact it has belongs on
+ * the pod or node it is about; cert-manager gets both, its expiry a power
+ * through {@link Capabilities} and its failing chains a page.
+ * {@link Extension} — is it here, is it healthy, what does it give — is a
  * field rather than a capability key, because a capability lets a surface ask
- * for a power without learning who answered and this pane's job is to name
- * the vendor.
+ * for a power without learning who answered and this pane names the vendor.
  *
  * The tier decides a facet's runtime obligations, not where its code lives.
  *
  * - **Tier 1 — free.** {@link Vendor.nodeLabels} and {@link Vendor.flavours}
  *   are read on every cluster, always.
- * - **Tier 2 — detected.** Its state is CRDs on the same API server.
+ * - **Tier 2 — detected**, its state being CRDs on the same API server.
  *   {@link Vendor.crd} needs no detection call — a CRD group with no objects
  *   is never rendered — while {@link Vendor.provides} is gated on the
  *   backend's CRD scan.
- * - **Tier 3 — configured** ({@link Connect}). Its own address and usually a
+ * - **Tier 3 — configured** ({@link Connect}): its own address and usually a
  *   credential the kubeconfig does not carry, so presence is a probe with
- *   three answers and the surface owes all three: configured and silent looks
- *   exactly like never set up, and the reader blames the app rather than their
+ *   three answers and the surface owes all three — configured and silent must
+ *   not read as never set up, or the reader blames the app rather than their
  *   monitoring. {@link CapabilityState} carries the difference and the reason.
  *
- * What lives here is knowledge about a specific vendor's product: GKE's
+ * What belongs here is knowledge about a specific vendor's product: GKE's
  * node-pool label spellings qualify even though reading node labels is tier 1,
  * generic machinery that groups a table by any key does not. **A capability
  * key is a contract, and the surface must have a real answer for its absence**
- * — `certificate.issuance` absent means the page shows the expiry it read from
+ * — no `certificate.issuance` means the page shows the expiry it read from
  * `tls.crt` and says nothing about renewal — which is why cloud *auth* is not
  * in this tree: without it there is no kubeconfig. And **a vendor may never
  * take something away**: the core answer is drawn first and stays drawn; the
  * facet extends it.
  *
- * Deliberately absent, because a dozen static records are a list and not a
- * framework: registration order, priorities, lifecycle hooks, an event bus,
- * third-party loading.
+ * No registration order, priorities, lifecycle hooks, event bus or
+ * third-party loading: a dozen static records are a list, not a framework.
  */
 
 import type { Saying } from "@/i18n/say";
@@ -63,8 +61,7 @@ import type { InClusterHint } from "./forwarded";
  * drawn by the surface: a chart offering ranges only the current supplier
  * happens to implement would change shape when the supplier did. One
  * vocabulary across every history capability — the log viewer's picker offers
- * the same four words the usage chart does — so "the last six hours" means one
- * thing in this app rather than one thing per pane.
+ * the same four words the usage chart does.
  */
 export const USAGE_RANGES = ["15m", "1h", "6h", "24h"] as const;
 

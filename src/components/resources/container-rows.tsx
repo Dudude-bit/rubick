@@ -41,22 +41,20 @@ import { useT } from "@/i18n/useT";
  * A pod's containers, and a deployment's container template, as metadata
  * blocks rather than cards.
  *
- * Runtime and spec containers carry different fields — only a running
- * container has a state and a restart count, only a template has declared
- * requests and limits — so the row list is built per container instead of
- * being forced into one shared table.
+ * Runtime and spec containers carry different fields — only a running one
+ * has a state and a restart count, only a template has declared requests
+ * and limits — so rows are built per container rather than forced into
+ * one shared table.
  *
- * Neither is a set. Init containers run in order and each waits on the
- * one before it, sidecars start during init and never finish, app
- * containers run together — so both views are grouped by phase and the
- * init group is drawn as a rail. One renderer for all three phases and
- * for both views: an init container and an app container differ by *when*
- * they run, not by what they are, and five detail pages sharing one
- * template type have to share the grouping too or they drift.
+ * Neither is a set: init containers run in order, each waiting on the one
+ * before it; sidecars start during init and never finish; app containers
+ * run together. Hence grouping by phase, the init group drawn as a rail,
+ * and one renderer for all three phases and both views — five detail
+ * pages sharing one template type must share the grouping or they drift.
  *
- * The two are given as whole lists rather than one array because handing
- * this component `deployment.containers` is exactly the bug it exists to
- * fix, and a prop that cannot be passed is a better guard than a comment.
+ * Whole lists rather than one array: handing this component
+ * `deployment.containers` is exactly the bug it exists to fix, and a prop
+ * that cannot be passed is a better guard than a comment.
  */
 
 function isRuntime(
@@ -272,14 +270,12 @@ function ContainerBlock({
       value: container.restartCount,
       tone: container.restartCount > 0 ? "warn" : undefined,
     });
-    // A container that restarts is a container that died, and the count
-    // alone never said of what. The heading carries the state word, so
-    // this row carries only what the word could not: the exit code and
-    // when it happened, whether the death is the state the container is
-    // in now or the one it is backing off from.
-    // Not on a step that ended cleanly: `Completed · exit 0` under a
-    // heading that already reads Completed, beside a note that already
-    // says when it finished, is the same fact three times.
+    // A container that restarts is one that died, and the count alone
+    // never said of what. The heading carries the state word, so this row
+    // carries only the exit code and when — whether that death is the
+    // state the container is in now or the one it is backing off from.
+    // Skipped on a step that ended cleanly: the heading and the note
+    // already say all of it.
     const death = step?.mark === "done" ? null : lastTermination(container);
     if (death) {
       const when = terminationWhen(death, t);
@@ -343,11 +339,10 @@ function ContainerBlock({
     <Section>
       <SectionHeader
         title={container.name}
-        // The container's state, where its readiness used to sit as a
-        // bare word. Readiness is folded into it: "Running" now means
-        // running *and* serving, and a container failing its readiness
-        // probe says "Not ready" rather than claiming Running in one
-        // place and denying it in another.
+        // The container's state, with readiness folded into it: "Running"
+        // means running *and* serving, and a container failing its
+        // readiness probe says "Not ready" rather than claiming Running
+        // in one place and denying it in another.
         count={
           status ? (
             <StatusBadge status={status.text} roleOverride={status.role} />

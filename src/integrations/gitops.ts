@@ -1,20 +1,18 @@
 /**
  * What Argo CD and Flux genuinely share, and deliberately nothing more.
  *
- * The temptation with two delivery vendors is a "GitOps" model both pages
- * are drawn from, and it is the wrong move: Argo puts source and destination
- * in **one** object, Flux **splits** them — a `GitRepository` fetches, a
- * `Kustomization` applies, and several appliers share one source. Flattening
- * that into Argo's shape would hide the most common Flux failure, which is a
- * source that stopped fetching while every applier below it keeps reporting
- * the last revision it managed to apply.
+ * Not one "GitOps" model both pages are drawn from: Argo puts source and
+ * destination in **one** object, Flux **splits** them — a `GitRepository`
+ * fetches, a `Kustomization` applies, and several appliers share one source.
+ * Flattening that into Argo's shape would hide the most common Flux failure,
+ * a source that stopped fetching while every applier below it keeps
+ * reporting the last revision it managed to apply.
  *
- * So the shape is not shared. What is shared is the handful of facts that are
- * literally the same fact: a git remote, a commit, and where on the web those
- * two resolve to. Both vendors also express health as `status.conditions` and
- * both state ages in ISO timestamps — the first is {@link conditionOf} in
- * `kit.ts` because every operator does it, and the second is `formatAge`,
- * which the whole app already has.
+ * So the shape is not shared. What is shared is the handful of facts that
+ * are literally the same fact: a git remote, a commit, and where on the web
+ * those two resolve to. Health is `status.conditions` for both, which is
+ * {@link conditionOf} in `kit.ts` because every operator does it, and ages
+ * are ISO timestamps for both, which is `formatAge`.
  */
 
 import type { Saying } from "@/i18n/say";
@@ -34,9 +32,9 @@ export interface DeliveryOwner {
  *
  * Labels and annotations and nothing else, because that is the whole cost
  * story: both vendors stamp their claim onto the object itself, so every list
- * this app already draws is holding the answer before anybody asks. A query
- * shape that needed a live read per object would make this a detail-page
- * feature and quietly kill the column.
+ * this app already draws is holding the answer before anybody asks. A shape
+ * that needed a live read per object would make this a detail-page feature
+ * and quietly kill the column.
  */
 export interface DeliveryQuery {
   /** The API group, or `""` for core — Flux spells its inventory ids with it. */
@@ -50,22 +48,20 @@ export interface DeliveryQuery {
 
 /**
  * Who applied an object, from which commit, and whether a hand edit here
- * survives.
+ * survives — *can I touch this, or will my change be undone*.
  *
- * The answer to the question that stops people mid-task — *can I touch this,
- * or will my change be undone* — and the one shape both vendors genuinely
- * produce, which is why it is here rather than twice in two folders. Argo
- * reaches it through an `Application`, Flux through a `Kustomization` or a
- * `HelmRelease`, and the reader asking does not care which.
+ * The one shape both vendors genuinely produce, which is why it is here
+ * rather than twice in two folders: Argo reaches it through an `Application`,
+ * Flux through a `Kustomization` or a `HelmRelease`, and the reader asking
+ * does not care which.
  */
 export interface DeliverySource {
   /** Named out loud, because the surface that uses this says it out loud. */
   vendor: string;
   /**
    * The registry id, so a surface can find the vendor's own glyph without
-   * naming the vendor. Argo's mark and Flux's are different shapes because
-   * they are different products, and handing a component across the seam
-   * instead would let a vendor decide how the mark is drawn.
+   * naming the vendor. Handing a component across the seam instead would let
+   * a vendor decide how its mark is drawn.
    */
   vendorId: string;
   owner: DeliveryOwner;
@@ -90,10 +86,9 @@ export interface DeliverySource {
    * `null` is not a quiet way of saying `synced`, and no surface may draw it
    * as one. Argo compares every object it owns and publishes the verdict in
    * `Application.status.resources`; **Flux publishes no per-object drift at
-   * all** — it re-applies its own fields on a timer and corrects silently, so
-   * there is no moment at which it records that something differed. `null` is
-   * "nobody here knows", and the honest thing to render for it is nothing,
-   * with the reason available rather than an implied tick.
+   * all** — it re-applies its own fields on a timer and corrects silently.
+   * `null` is "nobody here knows", and the honest thing to render is nothing
+   * with the reason available, never an implied tick.
    */
   sync: "synced" | "drifted" | null;
   /**
@@ -121,13 +116,12 @@ export interface DeliverySource {
  * The union exists because **the label is a claim and anybody can write one.**
  * A manifest committed with `argocd.argoproj.io/instance` already in it, a
  * copy-pasted YAML, an Application deleted while its objects were left behind,
- * a Kustomization pruned with `prune: false` — every one of those produces an
- * object that says it is delivered and is not. Collapsing that into `null`
- * would throw away a fact worth having (somebody meant this to be managed and
- * it is not), and collapsing it into {@link DeliverySource} would assert a
- * revision and a revert behaviour that nothing is actually enforcing.
- *
- * So there are three answers, and `null` — no claim at all — is the fourth.
+ * a Kustomization pruned with `prune: false` — each produces an object that
+ * says it is delivered and is not. Collapsing that into `null` throws away a
+ * fact worth having (somebody meant this to be managed and it is not);
+ * collapsing it into {@link DeliverySource} asserts a revision and a revert
+ * behaviour nothing is enforcing. So: three answers, with `null` — no claim
+ * at all — as the fourth.
  */
 export type Delivery =
   /** The owner names the object back in its own inventory. */
@@ -194,16 +188,15 @@ export function shortRevision(revision: string): string {
 
 /**
  * The web address of a git remote, and only where it falls out of the remote
- * mechanically.
+ * mechanically — the same judgement `registryLink` settled for image
+ * registries.
  *
- * The same judgement `registryLink` settled for image registries, applied to
- * the other kind of address this app holds. An `https://` GitHub or GitLab
- * remote resolves to a page with no guessing; an `ssh://` or `git@host:path`
- * remote names a protocol with no website behind it, a self-hosted Gitea or
- * Bitbucket has a URL shape this app would be inventing, and a remote
- * carrying credentials must never be handed to a browser at all. Those get
- * nothing, because a link that lands on a 404 or a login wall makes the
- * reader doubt the app rather than the link.
+ * An `https://` GitHub or GitLab remote resolves to a page with no guessing.
+ * An `ssh://` or `git@host:path` remote names a protocol with no website
+ * behind it, a self-hosted Gitea or Bitbucket has a URL shape this app would
+ * be inventing, and a remote carrying credentials must never be handed to a
+ * browser at all. Those get nothing: a link landing on a 404 or a login wall
+ * makes the reader doubt the app rather than the link.
  */
 export function gitRepoLink(repoUrl: string): GitLink | null {
   const parsed = readRemote(repoUrl);

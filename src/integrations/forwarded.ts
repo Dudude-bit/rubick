@@ -1,21 +1,20 @@
 /**
  * Reaching an in-cluster Prometheus or Loki without asking anybody to run
  * `kubectl port-forward` in another window. A configured integration needs to
- * know **which** server, and a Service in this cluster names one exactly as
- * well as a URL does — better, because the app can already reach it, and
- * because the obvious address the placeholder suggests is resolvable only
- * from inside the cluster. So the address is produced rather than typed: pick
- * the Service, the app forwards a local port to it and the connection points
- * at `localhost`.
+ * know **which** server, and a Service names one better than a URL does: the
+ * app can already reach it, while the address the placeholder suggests
+ * resolves only from inside the cluster. So the address is produced rather
+ * than typed — pick the Service, the app forwards a local port to it and the
+ * connection points at `localhost`.
  *
  * `port_forward_pod` forwards to a **pod**, by name, and `autoReconnect`
- * retries *that pod* with a backoff — it does not go and find another one. So
- * the first rollout, node drain or OOM kill would leave the forward retrying a
- * pod that no longer exists, for ever, behind a `localhost` URL that used to
- * work, and every chart in the app would go quietly empty. The pod is
- * therefore resolved from the Service **every time the forward is
- * established**, and re-resolved when the connection stops answering: the
- * durable thing is the Service, the pod is a detail that is looked up again.
+ * retries *that pod* with a backoff rather than finding another. Left alone,
+ * the first rollout, node drain or OOM kill would leave the forward retrying
+ * a pod that no longer exists, for ever, behind a `localhost` URL that used
+ * to work — and every chart in the app would go quietly empty. So the pod is
+ * resolved from the Service **every time the forward is established**, and
+ * re-resolved when the connection stops answering: the Service is the durable
+ * thing, the pod a detail looked up again.
  */
 
 import { SaidError, type Saying } from "@/i18n/say";

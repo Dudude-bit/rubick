@@ -88,11 +88,10 @@ function LogSkeleton() {
 /**
  * A stream that stopped on its own, said out loud.
  *
- * It sits above the output rather than replacing it: a pod deleted
- * after an hour of logs still has an hour of logs worth reading, and
- * swapping them for an error message would be its own kind of lie. The
- * two kinds read differently on purpose — a deleted pod is a fact and
- * gets no button, a broken connection is a maybe and gets Reconnect.
+ * Above the output rather than replacing it: a pod deleted after an hour
+ * of logs still has an hour of logs worth reading. The two kinds read
+ * differently on purpose — a deleted pod is a fact and gets no button, a
+ * broken connection is a maybe and gets Reconnect.
  */
 function StreamFailureNotice({
   failure,
@@ -212,14 +211,13 @@ function StreamFailureNotice({
 }
 
 /**
- * The head of the log is being thrown away, and it used to happen in
- * silence.
+ * The head of the log is being thrown away.
  *
- * A count in the corner that keeps rising reads as a tally of something
- * that happened once; the pane above it goes on looking like the whole
- * log. This says the loss in a sentence, and puts the way out next to it —
- * a download that reads from the API rather than from the buffer, so it is
- * not bounded by the number that just failed the reader.
+ * A rising count in the corner reads as a tally of something that happened
+ * once, while the pane above goes on looking like the whole log. This says
+ * the loss in a sentence and puts the way out next to it — a download that
+ * reads from the API rather than from the buffer, so it is not bounded by
+ * the number that just failed the reader.
  */
 function DroppedNotice({
   dropped,
@@ -267,11 +265,10 @@ const COLLAPSED_LINES = 50;
  * The grouping is doing all the work, said where the work is happening.
  *
  * A container that writes the same line a thousand times collapses to one
- * row, which is the right answer and looks exactly like a broken pane: a
+ * row — the right answer, and indistinguishable from a broken pane: a
  * single line over 700px of nothing, with `1 shown · 4 025 hidden by
  * filter and grouping` in 11px at the far corner. The count was never the
- * problem — its distance from the emptiness it explained was. This says
- * it at the top of the list, next to the way out.
+ * problem; its distance from the emptiness it explained was.
  */
 function GroupedNotice({
   rows,
@@ -320,12 +317,12 @@ const INTAKE_QUIET_MS = 12000;
  * Nothing has matched intake for a while — which looks exactly like a
  * stream that died.
  *
- * That is the one ambiguity intake introduces: a pane that has gone
- * still is either a narrow filter working or a connection that dropped,
- * and the reader cannot tell them apart by looking. This says which,
- * names the terms doing it, and keeps counting so the silence reads as
- * measured rather than as a freeze. Its own component because the clock
- * ticks every second and the list beside it holds thousands of rows.
+ * That is the one ambiguity intake introduces: a still pane is either a
+ * narrow filter working or a connection that dropped, and the reader
+ * cannot tell them apart by looking. This says which, names the terms
+ * doing it, and keeps counting so the silence reads as measured rather
+ * than as a freeze. Its own component because the clock ticks every
+ * second and the list beside it holds thousands of rows.
  */
 function IntakeQuietNotice({
   since,
@@ -366,10 +363,9 @@ function IntakeQuietNotice({
 /**
  * The pane opened somewhere the reader did not put it, said out loud.
  *
- * Two narrowings the viewer applies on its own — one container instead
- * of all of them, one run instead of the current one — and both of them
- * are lies unless they are stated where the reader is looking. A log
- * that silently shows history is the worst kind of log.
+ * Two narrowings the viewer applies on its own — one container instead of
+ * all of them, one run instead of the current one — and both are lies
+ * unless stated where the reader is looking.
  */
 function FocusNotice({
   reason,
@@ -468,10 +464,10 @@ function FinishedNotice({ container }: { container: ContainerInfo }) {
  * Every container in view answering "there is nothing earlier", in one
  * line instead of one banner each.
  *
- * A pod whose containers have never restarted has as many of these to
- * say as it has containers, and said separately they buried the log they
- * were describing. It is one fact about the pane: this run does not
- * exist, and the current one does.
+ * A pod whose containers have never restarted has as many of these to say
+ * as it has containers, and said separately they bury the log they are
+ * describing. It is one fact about the pane: this run does not exist, and
+ * the current one does.
  */
 function NoEarlierRunNotice({
   containers,
@@ -611,21 +607,15 @@ export function LogViewer({
   );
   const copyToClipboard = useCopyToClipboard();
   // Every container streams, always. Hiding one is a view filter and
-  // nothing more: stopping its stream would make its line count a lie
-  // the moment it came back, and a sidecar bug is invisible one
-  // container at a time.
-  //
-  // And nothing is hidden on open. The pane used to be handed the first
-  // container of the pod as a starting filter, which on a five-container
-  // workload meant it opened showing a fifth of the log with no statement
-  // anywhere near the reader that four fifths were being withheld. A
-  // filter the reader did not set is not a filter, it is a lie about how
-  // much log there is.
+  // nothing more: stopping its stream would make its line count a lie the
+  // moment it came back, and a sidecar bug is invisible one container at a
+  // time. Nothing is hidden on open either — a filter the reader did not
+  // set is a lie about how much log there is.
   //
   // Except when the pod is held in init. Then "show everything" shows
-  // nothing — the app container has never started — and the one log
-  // that answers the question is the failing init container's previous
-  // run. Decided once, on mount, and announced above the output.
+  // nothing — the app container has never started — and the one log that
+  // answers the question is the failing init container's previous run.
+  // Decided once, on mount, and announced above the output.
   const [focus] = useState(() => initialFocus(containerInfos, soloContainer));
   const [hidden, setHidden] = useState<ReadonlySet<string>>(focus.hidden);
   const [previousRun, setPreviousRun] = useState(focus.previous);
@@ -639,9 +629,9 @@ export function LogViewer({
    * Which terms are also kept at the source, by label.
    *
    * A mode per term rather than one intake control for the toolbar: the
-   * reader mixes them — `component=ingest` worth restarting the stream
-   * for, `level≥warn` worth flipping off a moment later without touching
-   * it — and a single toolbar-wide intake cannot express that.
+   * reader mixes them — `component=ingest` worth restarting the stream for,
+   * `level≥warn` worth flipping off a moment later — and a single
+   * toolbar-wide intake cannot express that.
    *
    * Kept beside the terms rather than inside them because `QueryTerm` is
    * generated from Rust and is the shape the backend is handed; the mode
@@ -1088,12 +1078,11 @@ export function LogViewer({
     return info;
   }, [containerInfos, shownContainers]);
 
-  // "There is no earlier run of this one" is a fact about a container,
-  // not about the pane, and the legend chip already carries it beside the
-  // name. It is only worth a banner when it is the whole answer — every
-  // container in view saying it, so the pane is empty because of it.
-  // Otherwise a three-container pod stacked three warnings over a log
-  // that was reading perfectly well.
+  // "There is no earlier run of this one" is a fact about a container, not
+  // about the pane, and the legend chip already carries it beside the name.
+  // It is only worth a banner when it is the whole answer — every container
+  // in view saying it, so the pane is empty because of it. Otherwise a
+  // three-container pod stacks three warnings over a log that reads fine.
   const absentInView = failures.filter(
     (failure) =>
       failure.kind === "no-previous-run" && !hidden.has(failure.container)
@@ -1124,11 +1113,11 @@ export function LogViewer({
   /**
    * What the API server has run out of answers for, named.
    *
-   * Exactly the two dead ends the pane already states in words above the
-   * output — a stream that ended because the container is gone, and a
-   * container that has never started — reused rather than re-derived, so the
-   * offer cannot appear beside a notice that is not there or go missing
-   * beside one that is. Everywhere else this is `null` and no offer is drawn.
+   * Exactly the two dead ends the pane already states above the output — a
+   * stream that ended because the container is gone, and a container that
+   * has never started — reused rather than re-derived, so the offer cannot
+   * appear beside a notice that is not there or go missing beside one that
+   * is. Everywhere else this is `null` and no offer is drawn.
    */
   const stranded = useMemo(() => {
     const gone = bannered
@@ -1353,10 +1342,7 @@ export function LogViewer({
   );
 }
 
-/**
- * Why there is nothing to read. Five different silences, and the old pane
- * had one sentence for all of them.
- */
+/** Why there is nothing to read: five different silences, said apart. */
 function EmptyState({
   failed,
   connecting,
@@ -1437,10 +1423,8 @@ function EmptyState({
     return (
       <Note>
         {t("empty", "noOutputYet")}
-        {/* Safe to claim the stream is attached now: a stream that dies
-            emits `stream-failed`, which replaces this with the notice
-            above. Before that event existed this branch also covered a
-            broken connection and could not say so. */}
+        {/* Safe to claim the stream is attached: a stream that dies emits
+            `stream-failed`, which replaces this with the notice above. */}
         <span className="text-fg-fnt">
           {" "}
           {t("empty", "streamAttachedNothingWritten")}

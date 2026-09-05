@@ -61,19 +61,17 @@ const SEGMENT =
 /**
  * The namespace in the trail, and the scope it stands for.
  *
- * `pods / k8s-gui-test / burst-demo` reads as a path, so the middle of it has
- * to behave like one. It means "that list, in this namespace": the tab is
- * narrowed to the namespace and the list opens under it. Narrowing is a side
- * effect past navigation — the scope pill in the tab strip changes with it —
- * so the segment says so instead of only naming itself, and says it only
- * while it is true.
+ * `pods / k8s-gui-test / burst-demo` reads as a path, so the middle of it
+ * behaves like one: it means "that list, in this namespace" — the tab is
+ * narrowed to the namespace and the list opens under it. The narrowing is a
+ * side effect past navigation, visible in the tab strip's scope pill, so the
+ * segment says so, and only while it is true.
  *
- * With no list to narrow the scope is all there is to offer, and the segment
- * hands it over without leaving the page: a detail page stays valid under its
- * own object's namespace, so nothing the reader is looking at goes away.
- * Once the tab already holds that scope there is nothing left to do at all,
- * and the segment is text rather than a control that answers a click with
- * nothing — which is the bug it exists to fix.
+ * With no list to narrow, the segment hands the scope over without leaving
+ * the page: a detail page stays valid under its own object's namespace, so
+ * nothing the reader is looking at goes away. Once the tab already holds that
+ * scope there is nothing left to do, and the segment is text rather than a
+ * control that answers a click with nothing.
  */
 function NamespaceSegment({
   namespace,
@@ -148,19 +146,12 @@ function NamespaceSegment({
 /**
  * The top of every detail page: one line, and only identity on it.
  *
- * The name used to be a 24px title with a 32px icon beside it, which made the
- * heaviest thing on the page the one fact the user just clicked to get here.
- * It then became two breadcrumb-scale rows — the trail on one, the name and
- * the page's actions on the other — above a page that already has a tab strip
- * of its own, so a detail page opened with two bands of chrome before the
- * first fact and a third one under them.
- *
- * The actions have moved to that strip, and once they are gone nothing is
- * left on the second row that will not fit on the first: the trail, the name,
- * its status, its qualifiers and its age are all breadcrumb-scale. One row
- * also means the header stops changing shape when the reader clicks Logs — it
- * used to collapse from two rows to one on a full-height tab, and a header
- * that restructures itself under the pointer reads as the page reloading.
+ * The page's actions live in the tab strip, and everything left — the trail,
+ * the name, its status, its qualifiers and its age — is breadcrumb-scale and
+ * fits on one row, above a page that already has a tab strip of its own. One
+ * row also means the header keeps its shape when the reader clicks Logs: a
+ * header that restructures itself under the pointer on a full-height tab
+ * reads as the page reloading.
  */
 export function ResourceDetailHeader({
   name,

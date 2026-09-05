@@ -4,28 +4,26 @@ import type { StreamedLogLine } from "./types";
 /**
  * The buffer's shape over time, sliced.
  *
- * Everything here is deliberately outside React: the strip recomputes
- * four times a second on a buffer of up to forty thousand lines, and the
- * only way that stays free is if a batch touches the slices it landed in
- * rather than all of them. See `advanceDensity`.
+ * Deliberately outside React: the strip recomputes four times a second on
+ * a buffer of up to forty thousand lines, and that only stays free
+ * because a batch touches the slices it landed in rather than all of
+ * them. See `advanceDensity`.
  */
 
 /**
  * Slice durations the strip is allowed to use, with what to call them.
  *
- * A ladder rather than a constant, because neither constant works. A
- * fixed slice count makes every slice a meaningless fraction — 1/84th of
- * eleven seconds is 131ms and 1/84th of four hours is 2m 51s, and the
- * axis under it can only be read by doing division. A fixed duration is
- * worse in the other direction: 1s slices are one bar under `flood-demo`
- * and four thousand bars on a pod that has been up since breakfast.
+ * A ladder rather than a constant, because neither constant works: a
+ * fixed slice count makes every slice a meaningless fraction (1/84th of
+ * four hours is 2m 51s, readable only by doing division), and a fixed
+ * duration is one bar under `flood-demo` and four thousand on a pod up
+ * since breakfast. So the slice is a duration a person already thinks
+ * in, and the strip picks the finest rung that still fits the span.
  *
- * So: the slice is a duration a person already thinks in, and the strip
- * picks the finest rung that still fits the span it has to cover. Every
- * rung is a whole number of the units it is named in, which is what lets
- * the slices be aligned to the clock instead of to the first line — a
- * 5-minute slice starts at :00 and :05, so the axis labels are times
- * that exist rather than "1m 43s after whatever we happened to keep".
+ * Every rung is a whole number of the units it is named in, which is what
+ * lets slices be aligned to the clock rather than to the first line — a
+ * 5-minute slice starts at :00 and :05, so the axis labels are times that
+ * exist.
  */
 const STEPS: ReadonlyArray<readonly [ms: number, label: string]> = [
   [100, "100 ms"],
@@ -53,9 +51,9 @@ const STEPS: ReadonlyArray<readonly [ms: number, label: string]> = [
 export const FINEST_STEP_MS = STEPS[0][0];
 
 /**
- * Fewer than this and it is not a map. One bar spanning the whole buffer
- * says nothing a line count does not already say, and two says nearly as
- * little; the strip refuses and prints the span instead.
+ * Fewer than this and it is not a map: one bar spanning the whole buffer
+ * says nothing a line count does not, and two say nearly as little. The
+ * strip refuses and prints the span instead.
  */
 export const MIN_USEFUL_SLICES = 3;
 
@@ -63,10 +61,10 @@ export const MIN_USEFUL_SLICES = 3;
  * The finest rung whose slices still fit in `maxSlices` bars.
  *
  * `maxSlices` comes from the measured width, so the same pod gives a
- * coarser strip in a 360px peek panel than in a full window — the rule
- * is "a bar is a few pixels wide", not "there are 84 bars". Because the
- * rungs are at most 3x apart, the slice count never falls below a third
- * of the budget, so the strip is never a handful of fat bars either.
+ * coarser strip in a 360px peek panel than in a full window — the rule is
+ * "a bar is a few pixels wide", not "there are 84 bars". Rungs are at most
+ * 3x apart, so the slice count never falls below a third of the budget and
+ * the strip is never a handful of fat bars either.
  */
 export function chooseStep(spanMs: number, maxSlices: number): number {
   for (const [step] of STEPS) {
@@ -93,9 +91,9 @@ export interface Density {
   /** Minutes-as-ms the slices were aligned against; see `alignTo`. */
   offset: number;
   /**
-   * Dense and gapless. A pod that said nothing for four minutes gets
-   * four minutes of empty slices, because the gap *is* the finding — a
-   * strip that packed the bars together would draw silence as activity.
+   * Dense and gapless. A pod that said nothing for four minutes gets four
+   * minutes of empty slices: packing the bars together would draw silence
+   * as activity.
    */
   buckets: DensityBucket[];
   /** Tallest slice; the height every bar is drawn against. */
@@ -133,11 +131,9 @@ export function severityOf(level: LogLevel | null): "err" | "warn" | null {
 /**
  * Slice boundaries on the wall clock rather than on the first line.
  *
- * Two reasons, and the second is the one that matters. A 1-minute slice
- * that starts at :00 can be labelled with a time that exists. And it does
- * not move when a line arrives or the head is dropped, which is the whole
- * reason the histogram can be updated instead of rebuilt: a slice's
- * identity is its start, not its index.
+ * A slice's identity is its start, not its index, so it does not move when
+ * a line arrives or the head is dropped — which is what lets the histogram
+ * be updated instead of rebuilt. It also gives labels that are real times.
  *
  * The offset is the local UTC offset, taken once so that every slice is
  * the same length even across a DST boundary. Without it an hour slice
@@ -192,8 +188,8 @@ function countInto(density: Density, line: StreamedLogLine): void {
  * Totals read back off the slices rather than carried along beside them.
  *
  * A hundred-odd slices is nothing to walk, and deriving means an
- * incremental update cannot drift from a rebuild — which it otherwise
- * would the first time the head was dropped and the totals were not told.
+ * incremental update cannot drift from a rebuild — which it would the
+ * first time the head was dropped and the totals were not told.
  */
 function summarise(
   density: Density,
@@ -239,12 +235,11 @@ export function buildDensity(
 /**
  * The head slice, recounted from the buffer.
  *
- * Dropping whole slices that fell off the front is easy — their lines are
- * gone and so are they. The slice straddling the new head is the hard
- * one: some of its lines were evicted and the evicted ones are no longer
- * anywhere to be subtracted, so the only honest thing is to count what is
- * left. Bounded by one slice's worth of lines, and only when the head has
- * actually moved.
+ * Whole slices that fell off the front are simply dropped. The slice
+ * straddling the new head cannot be: some of its lines were evicted and
+ * are no longer anywhere to be subtracted, so the only honest thing is to
+ * count what is left. Bounded by one slice's worth of lines, and only when
+ * the head has actually moved.
  */
 function retrimHead(density: Density, logs: readonly StreamedLogLine[]): void {
   const buckets = density.buckets;
@@ -276,12 +271,11 @@ function retrimHead(density: Density, logs: readonly StreamedLogLine[]): void {
 /**
  * Where the line we last counted sits now.
  *
- * The hint is right whenever nothing was dropped, which is most of the
- * time. When the cap did evict, the shift equals what was dropped, so
- * walking back from the tail finds it in batch-sized time rather than
- * buffer-sized time. Ids are unique but not monotonic in array order —
- * the reorder window sorts by timestamp — so this is a search for an id
- * and not a comparison against one.
+ * The hint is right whenever nothing was dropped. When the cap did evict,
+ * the shift equals what was dropped, so walking back from the tail finds
+ * it in batch-sized time rather than buffer-sized time. Ids are unique but
+ * not monotonic in array order — the reorder window sorts by timestamp —
+ * so this searches for an id rather than comparing against one.
  */
 function locate(
   logs: readonly StreamedLogLine[],
@@ -324,14 +318,13 @@ export const INITIAL_CURSOR: DensityCursor = {
  *
  * The usual batch appends a few hundred lines to the tail and evicts as
  * many from the head, so the work is those lines plus one slice — not the
- * forty thousand standing between them. A full rebuild happens only when
- * the query changed, when the span outgrew its rung (which can happen at
- * most once per rung, twenty times over the life of a stream), or when
- * the buffer was replaced outright.
+ * forty thousand between them. A full rebuild happens only when the query
+ * changed, when the span outgrew its rung (at most once per rung, twenty
+ * times over the life of a stream), or when the buffer was replaced.
  *
  * Mutates the cursor and returns a fresh snapshot: the slices are copied
- * out so that whatever renders them sees a new object every time, and can
- * never be memoized onto a bucket that was mutated underneath it.
+ * out so whatever renders them sees a new object every time and can never
+ * be memoized onto a bucket that was mutated underneath it.
  */
 export function advanceDensity(
   cursor: DensityCursor,
@@ -401,8 +394,8 @@ const pad = (value: number) => String(value).padStart(2, "0");
  * An axis label at the precision its slice deserves, and no more.
  *
  * A 5-minute slice labelled to the second claims a resolution the bar
- * under it does not have; a 250ms slice labelled to the minute gives
- * three identical labels. The day is only spelled out when the span could
+ * under it does not have; a 250ms slice labelled to the minute gives three
+ * identical labels. The day is spelled out only when the span could
  * otherwise wrap around the clock and read as an hour ago.
  */
 export function axisLabel(epoch: number, step: number, spanMs: number): string {

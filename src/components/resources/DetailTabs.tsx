@@ -1,14 +1,11 @@
 /**
- * The tab strip, and the panels under it.
+ * The tab strip, and the panels under it — the strip and nothing else, since
+ * the header, the breadcrumb and the actions belong to the page.
  *
- * Lifted out of `ResourceDetailLayout` when the first screen that is not a
- * resource detail page needed one. The two rules a tab is drawn by —
- * `detail-tab.ts`'s glyph and its earned mark — are worth exactly as much on
- * an integration's page as on a Deployment's, and a second strip drawn beside
- * this one would have drifted from it by the second vendor.
- *
- * Everything about the header, the breadcrumb and the actions stayed behind:
- * this is the strip and nothing else.
+ * Shared with screens that are not resource detail pages: the two rules a tab
+ * is drawn by — `detail-tab.ts`'s glyph and its earned mark — are worth
+ * exactly as much on an integration's page as on a Deployment's, and a second
+ * strip beside this one would drift from it by the second vendor.
  */
 
 import { useState } from "react";
@@ -58,19 +55,18 @@ function DetailTabTrigger({
  * Which tabs have been opened at least once.
  *
  * Radix unmounts the panel of every tab that is not the open one, which is
- * right for a stack of blocks and wrong for a surface: a surface is a place
- * with something live in it — an attached shell, a log stream, an editor's
- * undo history — and unmounting it is not hiding it, it is ending it. So a
- * surface panel stays mounted once it has been opened.
+ * right for a stack of blocks and wrong for a surface: a surface holds
+ * something live — an attached shell, a log stream, an editor's undo history
+ * — and unmounting it is not hiding it, it is ending it. So a surface panel
+ * stays mounted once it has been *opened*, and not before: force-mounting
+ * every surface on arrival would open an exec session into a pod nobody asked
+ * to shell into, and start a log stream for a reader who came for the
+ * Overview.
  *
- * Once it has been *opened*, and not before: force-mounting every surface on
- * arrival would open an exec session into a pod nobody asked to shell into,
- * and start a log stream for a reader who came for the Overview.
- *
- * The set is grown in render rather than in an effect: by the time this render
- * runs the tab is already the active one, and its panel has to be in this
- * pass's output. Adding a member nobody has read yet schedules nothing and is
- * idempotent, so a double render arrives at the same set.
+ * Grown in render rather than in an effect: by the time this render runs the
+ * tab is already the active one, and its panel has to be in this pass's
+ * output. Adding a member schedules nothing and is idempotent, so a double
+ * render arrives at the same set.
  */
 function useOpenedTabs(activeTab: string): ReadonlySet<string> {
   const [opened] = useState<Set<string>>(() => new Set());
@@ -104,13 +100,13 @@ export function DetailTabs({
       onValueChange={onTabChange}
       className={surface ? "flex min-h-0 flex-1 flex-col" : undefined}
     >
-      {/* One control row rather than two. The strip is an underline, not a
-          pill row: the window already has a pill tab strip for scopes, and
-          two of them on one screen read as the same control at two levels.
-          The page's actions share the row's hairline so it reads as one
-          band, and are held off by a pip — a control sitting flush against
-          a tab strip reads as another destination, and "Delete" is the one
-          word in the app that must never be mistaken for a place to go. */}
+      {/* One control row rather than two, an underline rather than a pill row:
+          the window already has a pill tab strip for scopes, and two of them
+          on one screen read as the same control at two levels. The page's
+          actions share the row's hairline so it reads as one band, held off
+          by a pip — a control flush against a tab strip reads as another
+          destination, and "Delete" must never be mistaken for a place to
+          go. */}
       <div className="flex flex-none items-stretch gap-3">
         <TabsList className="h-auto min-w-0 flex-1 justify-start gap-4 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
           {tabs.map((tab) => (

@@ -9,14 +9,13 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * failure over a resource that may well still be running, so the panel
  * that shows it owes the reader a way back.
  *
- * `noPreviousRun` is neither: the previous run that was asked for does
- * not exist because the container has never restarted. It is its own
- * kind because the apiserver phrases it as a 400 ending in "not found",
- * which would otherwise be read as the pod having been deleted — and
- * because "there is nothing to show" and "we could not show it" have to
- * look different on screen. A caller can tell in advance:
- * `container.lastTerminated` is set for exactly the containers that
- * have a previous run to read.
+ * `noPreviousRun` is neither: the run asked for does not exist because
+ * the container has never restarted. Its own kind because the apiserver
+ * phrases it as a 400 ending in "not found", which would otherwise read
+ * as the pod having been deleted, and because "there is nothing to show"
+ * and "we could not show it" have to look different on screen. A caller
+ * can tell in advance: `container.lastTerminated` is set for exactly the
+ * containers that have a previous run to read.
  */
 export type StreamFailureKind = "gone" | "broken" | "no-previous-run";
 
@@ -42,7 +41,7 @@ interface StreamFailedPayload {
  * `logStreamSubscribed` / `terminalSubscribed` — for the same reason
  * `log-batch` must: Tauri events have no replay, so a failure emitted
  * before this resolves is lost and the panel falls back to its empty
- * state, which is the exact lie this event exists to stop telling.
+ * state — the exact lie this event exists to stop telling.
  */
 export function listenForStreamFailure(
   matchId: () => string | null,
@@ -56,10 +55,10 @@ export function listenForStreamFailure(
 
 /**
  * The same subscription for a caller that owns several streams at once —
- * the log viewer runs one per container — and has to know which of them
- * died. One registration covers all of them, which keeps the gate simple:
- * the listener is installed once, before the first stream is released,
- * and every later `logStreamSubscribed` is therefore covered too.
+ * the log viewer runs one per container — and has to know which died. One
+ * registration covers all of them: the listener is installed once, before
+ * the first stream is released, so every later `logStreamSubscribed` is
+ * covered too.
  */
 export function listenForStreamFailures(
   onFailure: (streamId: string, failure: StreamFailure) => void

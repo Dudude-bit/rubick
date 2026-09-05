@@ -20,8 +20,8 @@
  * without saying why. So neither ever holds a joined list: both hold
  * {@link wireNamespace}, and the selection rides in `ScopeTab.scope`, which
  * older builds ignore. Downgrading loses the extra namespaces and reopens on
- * "All namespaces" — a superset, labelled as one. {@link decodeScope} parses
- * a joined list anyway, because early builds of this feature wrote one.
+ * "All namespaces" — a superset, labelled as one. {@link decodeScope} still
+ * parses a joined list, because early builds of this feature wrote one.
  */
 
 import type { T } from "@/i18n/useT";
@@ -37,14 +37,12 @@ import type { T } from "@/i18n/useT";
  * namespace picker exists to show the namespaces you are *not* on) and for one
  * more per namespace selected, every ten seconds: about 90 requests a minute
  * at "All namespaces", 186 at one namespace, about 480 at four — five of them
- * whole-cluster pod lists every poll.
+ * whole-cluster pod lists every poll. A dozen namespaces would be over 1200 a
+ * minute, and nothing on screen would say so.
  *
- * Four is a judgement rather than a line something crosses at five: it holds
- * the window to about two and a half times what one namespace costs, and
- * covers what people actually ask for — prod beside staging, or an app's
- * namespace beside the one its database lives in. An unbounded selection has
- * no ceiling at all: a dozen namespaces is over 1200 requests a minute, and
- * nothing on screen would say so.
+ * Four holds the window to about two and a half times what one namespace
+ * costs, and covers what people actually ask for — prod beside staging, or an
+ * app's namespace beside the one its database lives in.
  *
  * Enforced where a selection is *made* — `clusterStore.setNamespaceScope`, and
  * the picker that calls it — rather than where it is read. A bound applied at
@@ -89,10 +87,9 @@ export function inScope(
   // Nothing selected is the whole cluster, including the cluster-scoped
   // objects that have no namespace at all.
   if (scope.length === 0) return true;
-  // A cluster-scoped object is in every namespace scope and in none of them.
-  // In: a StorageClass does not stop existing because somebody narrowed the
-  // window to two namespaces, and a Nodes page that emptied itself would be
-  // the filter deciding a question it was never asked.
+  // A cluster-scoped object stays in: a StorageClass does not stop existing
+  // because somebody narrowed the window to two namespaces, and a Nodes page
+  // that emptied itself would be the filter answering a question nobody asked.
   if (!namespace) return true;
   return scope.includes(namespace);
 }
@@ -116,12 +113,11 @@ export function scopeIn(scope: readonly string[], t: T): string {
  * The items of the selected namespace, or all of them.
  *
  * `""` is this app's word for "the whole cluster" — the store types
- * `currentNamespace` as a `string` and every consumer writes
+ * `currentNamespace` as a `string`, so every consumer writes
  * `currentNamespace || null` to get a nullable out of it. A `== null` test
  * against the raw value compiles, is never true, and filters every row away:
- * the sidebar's Gateways and Routes rows read 0 above pages listing forty
- * (4.7.3+, caught by review before release). Named here so the rule has one
- * home and a test.
+ * that is the sidebar's Gateways and Routes rows reading 0 above pages
+ * listing forty. Named here so the rule has one home and a test.
  */
 export function inNamespace<T extends { namespace: string }>(
   items: T[],

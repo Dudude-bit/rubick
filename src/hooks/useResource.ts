@@ -1,10 +1,4 @@
-/**
- * Unified Resource Hooks
- *
- * Consolidates common patterns for resource data fetching, mutations, and deletions.
- * Replaces useResourceQuery, useResourceListQuery, useResourceMutation, useResourceListDelete
- * with a unified API.
- */
+/** Shared defaults for resource queries, mutations and their toasts. */
 
 import {
   useMutation,
@@ -19,9 +13,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
 
-// ============================================================================
-// Query Hooks
-// ============================================================================
+// --- query hooks --------------------------------------------------------
 
 export interface UseResourceOptions<
   TData = unknown,
@@ -80,9 +72,7 @@ export function useResourceList<TData = unknown, TError = Error>(
   });
 }
 
-// ============================================================================
-// Mutation Hooks
-// ============================================================================
+// --- mutation hooks -----------------------------------------------------
 
 export interface MutationToastConfig<TData, TVariables> {
   /** Success toast title */
@@ -136,14 +126,12 @@ export function useResourceMutation<
   return useMutation<TData, TError, TVariables>({
     mutationFn,
     onSuccess: (data, variables) => {
-      // Invalidate queries
       if (options.invalidateQueryKeys) {
         options.invalidateQueryKeys.forEach((key) => {
           queryClient.invalidateQueries({ queryKey: key });
         });
       }
 
-      // Show success toast
       const description =
         typeof options.toast.successDescription === "function"
           ? options.toast.successDescription(data, variables)
@@ -154,7 +142,6 @@ export function useResourceMutation<
         description,
       });
 
-      // Call additional callback
       options.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {

@@ -25,12 +25,10 @@ export function getResourceDetailUrl(
 ): string {
   const plural = toPlural(resourceKind as ResourceKind);
   // A cluster-scoped kind has no namespace to put in a path, whatever it was
-  // handed. `isRoutableKind` already refuses the mirror case — a namespaced
-  // kind with no namespace — for the reason it names: a half-built URL is a
-  // dead link the reader only discovers by clicking. This side went
-  // unchecked, so an owner reference that arrived carrying its child's
-  // namespace turned a PersistentVolume into `/persistentvolumes/default/pv`
-  // and no route matched.
+  // handed: an owner reference carrying its child's namespace would turn a
+  // PersistentVolume into `/persistentvolumes/default/pv`, which no route
+  // matches. `isRoutableKind` refuses the mirror case — a namespaced kind
+  // with no namespace — for the same reason.
   if (namespace && !isClusterScoped(resourceKind)) {
     return `/${plural}/${namespace}/${name}`;
   }
@@ -54,14 +52,11 @@ const CRD_INSTANCES = toPlural(ResourceType.CustomResourceDefinition);
  * addresses everything else: its kind is not in the registry, so there is no
  * plural to build a path out of, and the CRD's own name — `<plural>.<group>`
  * — is the only thing that identifies the API it comes from. Hence the extra
- * argument, and hence this being a second function rather than a branch.
+ * argument, and hence a second function rather than a branch.
  *
- * It lives beside its sibling rather than in `src/integrations/kit.ts`, where
- * it used to: the route is one this app serves for every CRD on any cluster,
- * so knowing it is not knowledge about a vendor. What made that placement
- * wrong in practice is that `ResourceRef` needs it — a core component cannot
- * reach into the integrations tree, and a reference to a custom resource is
- * not a vendor feature.
+ * It belongs here and not under `src/integrations/`: the route is one this
+ * app serves for every CRD on any cluster, and `ResourceRef` needs it — a
+ * core component cannot reach into the integrations tree.
  */
 export function getCustomResourceUrl(
   crdName: string,

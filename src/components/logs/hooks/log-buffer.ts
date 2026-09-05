@@ -4,22 +4,18 @@ import { HIDDEN_FIELD_KEYS, type StreamedLogLine } from "../types";
  * How long an arriving line is held back before it is committed.
  *
  * Streaming five containers means five independent HTTP bodies, five
- * kubelet read loops and five 50ms backend flush timers, so the lines
- * do not arrive in timestamp order and nothing downstream can fix that
- * after the fact — sorting the whole retained buffer on every batch is
- * an O(n log n) pass over 40 000 entries twenty times a second.
+ * kubelet read loops and five 50ms backend flush timers, so lines do not
+ * arrive in timestamp order and nothing downstream can fix that after the
+ * fact — sorting the whole retained buffer on every batch is an O(n log n)
+ * pass over 40 000 entries twenty times a second. So: hold, sort, commit.
+ * Everything arriving inside one window is emitted in timestamp order, and
+ * the committed buffer is append-only and never reordered afterwards.
  *
- * So: hold, sort, commit. Everything that arrives inside one window is
- * emitted in timestamp order; the committed buffer is append-only and
- * is never reordered afterwards.
- *
- * 250ms is chosen against the backend's own 50ms flush: it is five
- * flushes wide, so a container that is a flush or two behind still
- * lands in the same window as its peers, and it costs the live tail a
- * quarter-second of latency that a reader watching a log scroll cannot
- * perceive. It also cuts the re-render rate from ~20/s per stream to
- * 4/s total, which is why the flood is cheaper to watch than it was
- * with one stream.
+ * 250ms is five of the backend's own 50ms flushes wide, so a container a
+ * flush or two behind still lands in the same window as its peers. It
+ * costs the live tail a quarter-second a reader watching a log scroll
+ * cannot perceive, and cuts the re-render rate from ~20/s per stream to
+ * 4/s total.
  */
 export const REORDER_WINDOW_MS = 250;
 
@@ -35,21 +31,20 @@ export const MAX_PENDING_LINES = 5000;
  * Distinct values one key may carry before the index stops listing them.
  *
  * `request_id` has one value per line: recording them costs a map entry
- * per retained line and yields a list of ten thousand buttons nobody can
- * read. Past this point the index keeps only how many lines carry the
- * key, and the popover says so instead of pretending to offer a choice.
+ * per retained line and yields ten thousand buttons nobody can read. Past
+ * this point the index keeps only how many lines carry the key, and the
+ * popover says so instead of pretending to offer a choice.
  */
 export const MAX_TRACKED_VALUES = 50;
 
 /**
  * What the retained buffer can be filtered by, counted as it fills.
  *
- * It lives here rather than in a `useMemo` over `logs` because a recount
- * is a pass over up to 40 000 lines and the buffer changes four times a
- * second; the append already walks every arriving line and the eviction
- * already knows exactly which lines left, so both ends of the count are
- * free. The maps are mutated in place — see `appendCapped` for why that
- * is still safe for React.
+ * Not a `useMemo` over `logs`: a recount is a pass over up to 40 000 lines
+ * and the buffer changes four times a second, whereas the append already
+ * walks every arriving line and the eviction already knows exactly which
+ * lines left, so both ends of the count are free. The maps are mutated in
+ * place — see `appendCapped` for why that is still safe for React.
  */
 export interface FieldIndex {
   /** key -> lines carrying it. Includes `container` and `level`, always. */
@@ -86,10 +81,10 @@ export const emptyBuffer = (): LogBuffer => ({
 
 /**
  * Everything a line can be filtered by. `container` and `level` are not
- * parsed fields, but they are the two filters a reader reaches for first
- * and every line has them, so the index carries them beside the rest.
- * The keys the parser writes a message under are skipped: filtering on
- * `msg=` the whole message is not a question anyone asks.
+ * parsed fields, but every line has them and they are the two filters a
+ * reader reaches for first, so the index carries them beside the rest. The
+ * keys the parser writes a message under are skipped: filtering on `msg=`
+ * the whole message is not a question anyone asks.
  */
 function eachField(
   line: StreamedLogLine,
@@ -185,11 +180,11 @@ export function fieldSuggestions(index: FieldIndex): FieldSuggestion[] {
 /**
  * Order one reorder window by timestamp, arrival order breaking ties.
  *
- * `id` is assigned at receive time, so the tiebreak is a total order
- * and the result does not depend on the sort being stable. The
- * already-ordered check is not a micro-optimisation: with a single
- * container — still the common case — every window is already ordered
- * and the sort would be pure waste.
+ * `id` is assigned at receive time, so the tiebreak is a total order and
+ * the result does not depend on the sort being stable. The already-ordered
+ * check is not a micro-optimisation: with a single container — still the
+ * common case — every window is already ordered and the sort would be pure
+ * waste.
  */
 export function orderByTimestamp(
   pending: StreamedLogLine[]
@@ -205,18 +200,18 @@ export function orderByTimestamp(
 /**
  * Append a window to the retained buffer, honouring one cap.
  *
- * `[...prev, ...batch].slice(-limit)` built a full-length array only to
- * throw the head of it away — two allocations and two full copies per
- * batch. Trim once, then push in place. The result is still a new
- * array: React re-renders on identity, and a buffer mutated in place
- * would go unnoticed.
+ * Trim once, then push in place: `[...prev, ...batch].slice(-limit)` builds
+ * a full-length array only to throw the head of it away, two allocations
+ * and two full copies per batch. The result is still a new array, because
+ * React re-renders on identity and a buffer mutated in place would go
+ * unnoticed.
  *
- * The field index rides along: every line pushed is counted and every
- * line evicted is uncounted, so the counts describe exactly the lines
- * that are retained without anyone walking the buffer to find out. Its
- * maps are mutated in place — nothing outside holds them across a
- * render — and handed back inside a fresh wrapper, which is the identity
- * the suggestion list memoizes on.
+ * The field index rides along: every line pushed is counted and every line
+ * evicted uncounted, so the counts describe exactly the retained lines
+ * without anyone walking the buffer to find out. Its maps are mutated in
+ * place — nothing outside holds them across a render — and handed back
+ * inside a fresh wrapper, which is the identity the suggestion list
+ * memoizes on.
  */
 export function appendCapped(
   prev: LogBuffer,
@@ -259,11 +254,10 @@ export function appendCapped(
 /**
  * The number the backfill asks each container for.
  *
- * The cap counts lines in the viewer, not lines per container, so
- * asking every container for the whole cap would fetch N times what can
- * be kept and throw the difference away before the first frame — and
- * report a head already being dropped on a pane the reader has only
- * just opened.
+ * The cap counts lines in the viewer, not lines per container, so asking
+ * every container for the whole cap would fetch N times what can be kept,
+ * throw the difference away before the first frame, and report a head
+ * already being dropped on a pane the reader has only just opened.
  */
 export function backfillPerContainer(
   limit: number,

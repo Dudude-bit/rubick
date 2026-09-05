@@ -1,13 +1,11 @@
 /**
  * The window behind the usage chart.
  *
- * `metrics.k8s.io` stores nothing. It answers with the last ~30s of a
- * running kubelet and has no concept of a range query, so there is no
- * "yesterday" to ask for — the only history that can exist is the one this
- * app accumulates while a page is open. Everything here is that buffer and
- * the arithmetic that turns it into a series. The pixels are recharts'
- * business; what a bucket is worth, and where the top of the scale sits,
- * are decisions this app has to own.
+ * `metrics.k8s.io` stores nothing: it answers with the last ~30s of a running
+ * kubelet and has no concept of a range query, so the only history that can
+ * exist is the buffer this app fills while a page is open. Everything here is
+ * that buffer and the arithmetic that turns it into a series; the pixels are
+ * recharts' business.
  *
  * Two rules the rest of the app depends on:
  *

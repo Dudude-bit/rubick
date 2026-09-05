@@ -28,14 +28,13 @@ pub enum WatchOp {
     /// Resource was deleted.
     Deleted,
     /// A (re)sync started. What follows, up to the matching `synced`,
-    /// is the complete new state — but it is only complete once
-    /// `synced` arrives, so the frontend stages the burst instead of
-    /// clearing what it holds. Clearing here is what painted "no
-    /// resources in the current scope" over a healthy cluster for the
-    /// whole length of the burst: the list query is long since loaded,
-    /// so nothing renders a skeleton, and a resync is exactly when an
-    /// apiserver restart or a "too old resource version" makes a
-    /// reader look at their cluster.
+    /// is the complete new state — but only once `synced` arrives, so
+    /// the frontend stages the burst instead of clearing what it
+    /// holds. Clearing here paints "no resources in the current scope"
+    /// over a healthy cluster for the whole burst: the list query is
+    /// long since loaded, so nothing renders a skeleton, and a resync
+    /// is exactly when an apiserver restart or a "too old resource
+    /// version" makes a reader look at their cluster.
     Restarted,
     /// The resync is complete: what was staged since `restarted` is
     /// the whole collection and can be swapped in as one update.
@@ -201,13 +200,12 @@ pub enum AppEvent {
     },
     /// A batch of Kubernetes watch changes for one stream. Forwarded
     /// to the frontend so it can update the `TanStack` Query cache
-    /// directly, replacing the old 2s polling refresh model. Each
-    /// `resource` JSON is the typed resource serialized via the same
-    /// path the existing list/get commands use.
+    /// directly. Each `resource` JSON is the typed resource serialized
+    /// via the same path the list/get commands use.
     ///
     /// Batched for the same reason as `LogBatch`: one Tauri event per
     /// watch event is one JS task per watch event, which React cannot
-    /// batch across, so a thousand-object init burst cost a thousand
+    /// batch across, so a thousand-object init burst costs a thousand
     /// renders — each rebuilding the whole table — and a thousand
     /// slots in a broadcast channel that holds a thousand.
     ///
@@ -222,13 +220,12 @@ pub enum AppEvent {
     /// A log stream or terminal session stopped on its own — not
     /// because the frontend closed it.
     ///
-    /// Without this the failure only ever reached `tracing`, and the
-    /// panel that was waiting on the stream rendered its empty state:
-    /// "No output yet" for a stream that died on connect, a blank
-    /// terminal for an exec whose WebSocket upgrade was rejected after
-    /// `open_pod_shell` had already handed back a session id. An empty
-    /// state that means "it broke" sends the reader looking for the
-    /// problem in their cluster.
+    /// Without it the failure reaches only `tracing`, and the waiting
+    /// panel renders its empty state: "No output yet" for a stream
+    /// that died on connect, a blank terminal for an exec whose
+    /// WebSocket upgrade was rejected after `open_pod_shell` had
+    /// already handed back a session id. An empty state that means "it
+    /// broke" sends the reader hunting through their cluster.
     ///
     /// `stream_id` is the log stream id or the terminal session id —
     /// whichever the receiving panel is holding. `message` is written
@@ -366,18 +363,16 @@ impl AppEvent {
         }
     }
 
-    /// Frontend-facing payload. We DON'T `serde_json::to_value(self)`
-    /// because `AppEvent` is `#[serde(tag = "type", content = "data")]` —
-    /// that would wrap each payload in `{ "type": ..., "data": {...} }`
-    /// and force every frontend listener to dig through `event.payload.data.*`.
-    /// Each variant explicitly returns the flat object the frontend hooks
-    /// expect (`event.payload.session_id`, etc.).
+    /// Frontend-facing payload. Not `serde_json::to_value(self)`:
+    /// `AppEvent` is `#[serde(tag = "type", content = "data")]`, which
+    /// would wrap each payload in `{ "type": ..., "data": {...} }` and
+    /// force every listener to dig through `event.payload.data.*`. Each
+    /// arm returns the flat object the hooks expect
+    /// (`event.payload.session_id`, etc.).
     ///
-    /// **Adding a new variant?** You MUST extend this match — the
-    /// `#[deny(non_exhaustive_omitted_patterns)]` style enforced by the
-    /// exhaustive match below means a new variant fails to compile until
-    /// it has a payload, and the unit test below fails until the payload
-    /// is structurally flat (no `type` wrapper key).
+    /// A new variant must be added here: the exhaustive match refuses to
+    /// compile without it, and `payload_is_flat_object_for_every_variant`
+    /// below fails until the payload is flat (no `type` wrapper key).
     #[must_use]
     pub fn payload(&self) -> serde_json::Value {
         match self {
@@ -539,12 +534,10 @@ mod tests {
     /// Every `AppEvent` payload must be a flat object — no `type`
     /// wrapper key, no `data` nesting. The frontend hooks read fields
     /// like `event.payload.context` directly; the `#[serde(tag, content)]`
-    /// representation that `serde_json::to_value(self)` would produce
-    /// instead sits one level deeper and silently breaks every consumer.
-    /// The bug we hit in v2.1.0 was exactly this for
-    /// `AuthTerminalSessionCreated` — modal opened with empty
-    /// context/command and a `terminalSessionId: undefined` that
-    /// disconnected the inner terminal. This test pins the contract.
+    /// representation sits one level deeper and silently breaks every
+    /// consumer — an `AuthTerminalSessionCreated` nested that way opens
+    /// the modal with empty context/command and a `terminalSessionId:
+    /// undefined` that disconnects the inner terminal.
     #[test]
     fn payload_is_flat_object_for_every_variant() {
         let samples = [
@@ -618,9 +611,9 @@ mod tests {
         }
     }
 
-    /// Specific guard for the v2.1.0 bug: every field consumed by the
-    /// frontend's `<AuthTerminal>` modal must be present at the top
-    /// level of the payload.
+    /// Every field the frontend's `<AuthTerminal>` modal consumes must
+    /// be present at the top level of the payload; one missing opens
+    /// the modal blank.
     #[test]
     fn auth_terminal_session_created_payload_is_flat_with_modal_fields() {
         let event = AppEvent::AuthTerminalSessionCreated {

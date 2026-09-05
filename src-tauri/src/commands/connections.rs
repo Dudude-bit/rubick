@@ -4,11 +4,10 @@
 //! on every open is how a detail page becomes slow on a real cluster, so
 //! there is one command here and it answers everything at once.
 //!
-//! Both directions come out of the same work. "Which Services select this
+//! Both directions come out of the same work: "which Services select this
 //! pod" and "which pods does this Service select" are the same selector test
 //! read from opposite ends, and the namespace's Services are one list either
-//! way — not one request per neighbour. That is what keeps the cost flat:
-//! in a namespace with 200 Services this is still a single Services list and
+//! way. In a namespace with 200 Services that is a single Services list and
 //! 200 in-memory comparisons, not 200 requests.
 
 use std::collections::{BTreeMap, HashSet};
@@ -67,18 +66,14 @@ pub async fn get_resource_connections(
     Box::pin(connections_of(&ctx, &kind, &name, gateway.as_ref())).await
 }
 
-/// The kinds whose neighbourhood spans every namespace there is: the pods a
-/// Node carries, and the claim a `PersistentVolume` is bound to.
 /// The kinds that are not in a namespace.
 ///
 /// The authority is the frontend registry — `src/lib/resource-registry.ts`,
 /// where each kind carries its `scope` and every URL is built from it. This
 /// mirrors the five it marks `cluster`, and only those: an unknown kind, a
 /// custom resource above all, is treated as namespaced, which is what the
-/// overwhelming majority of them are.
-///
-/// It listed two until `owner_ref` began asking it about arbitrary owner
-/// kinds rather than the handful this file dispatches on.
+/// overwhelming majority of them are. `owner_ref` asks it about arbitrary
+/// owner kinds, not just the handful this file dispatches on.
 fn cluster_scoped(kind: &str) -> bool {
     matches!(
         kind,
@@ -469,16 +464,16 @@ fn routes_into(ns: &str, svc_ref: &ObjectRef, snapshot: &Snapshot, out: &mut Nei
 
 /// What this Service publishes, and where the path stops if it does.
 ///
-/// The last hop used to be one `Selects` edge per selected pod and a count of
-/// their `Ready` conditions — 300 pod refs on a 300-pod Service, and a
-/// deduction at the end of it. It is the Service's own slices now: three
-/// objects, the cluster's own answer, and the two disagree in exactly the
-/// cases nobody can see.
+/// The last hop is the Service's own slices, not one `Selects` edge per
+/// selected pod: three objects rather than 300 pod refs on a 300-pod Service,
+/// and the cluster's own answer rather than a deduction — the two disagree in
+/// exactly the cases nobody can see.
 ///
 /// A Service with no selector is not a stop: an `ExternalName` resolves
 /// elsewhere and a hand-managed one has endpoints this app never wrote — but
 /// what it publishes is still read and still drawn, because a slice is a
 /// slice however it got written.
+///
 /// `detail` is whether the reader is on this Service's own page, where the
 /// endpoint rows and the pods it does not publish are the point rather than a
 /// payload every other page would carry for nothing.

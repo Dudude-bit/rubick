@@ -6,8 +6,8 @@
  * object is the *un*managed one. It does not go on the kind glyph either:
  * that glyph is readable because it means one thing.
  *
- * So the facts are split by loudness, and the split is decided here rather
- * than in four components that could drift apart:
+ * So the facts are split by loudness, here rather than in four components
+ * that could drift apart:
  *
  * - **Where it comes from** is quiet and always — {@link deliveryMarks}.
  * - **What it means for you right now** is loud and only when true —
@@ -478,9 +478,9 @@ export interface DeliveryIntercept {
  * What to say at the moment somebody presses Scale, Restart, Edit or Delete.
  *
  * `null` where there is nothing to warn about, and that includes every object
- * on a cluster with no delivery controller — the control behaves exactly as it
- * did before this existed. It never disables anything: the failure this
- * prevents is not the edit, it is the belief that the edit is permanent.
+ * on a cluster with no delivery controller — the control is left untouched.
+ * It never disables anything: the failure this prevents is not the edit, it
+ * is the belief that the edit is permanent.
  */
 export function deliveryIntercept(
   deliveries: Delivery[],
@@ -516,14 +516,13 @@ export function deliveryIntercept(
  * What to say at the moment somebody applies an edited manifest.
  *
  * {@link deliveryIntercept} with one case added: a delivery label nothing
- * honours. A disowned label changes nothing about what *happens* — the edit
- * stands either way — so Scale and Delete rightly stay quiet about it. What
- * it changes is what the reader is looking at: the document in front of them
- * carries a delivery label, a line above the field being edited, and a label
- * is the app's own evidence for "the permanent change belongs in git". So the
- * sentence is a correction rather than a warning about a revert that will not
- * come: this stands, and it is not in that repository. Which is also why it
- * confirms with a plain "Apply" — "Apply anyway" is the word for overriding a
+ * honours. It changes nothing about what *happens* — the edit stands either
+ * way, which is why Scale and Delete stay quiet about it — but the document
+ * in front of the reader carries that label a line above the field being
+ * edited, and a label is the app's own evidence for "the permanent change
+ * belongs in git". So the sentence is a correction, not a warning about a
+ * revert that will not come: this stands, and it is not in that repository.
+ * Hence the plain "Apply" — "Apply anyway" is the word for overriding a
  * consequence, and there is none to override.
  */
 export function deliveryApplyIntercept(

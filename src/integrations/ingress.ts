@@ -1,20 +1,16 @@
 /**
  * What every routing page in this tree does the same way.
  *
- * Traefik, ingress-nginx and Istio answer three different questions and
- * three different object models, and underneath all of them sit the same
- * two facts: **an Ingress belongs to the controller whose class claims it**,
- * and **a route is only as healthy as what the Service behind it
- * publishes**. Those were written once for Traefik and are here because
- * there is now a second and a third caller — not because a shared layer was
- * anticipated. A third copy of "does this Service have any ready endpoints"
- * is how two pages start disagreeing about whether the same Service is
- * broken.
+ * Traefik, ingress-nginx and Istio answer three different questions with
+ * three different object models over the same two facts: **an Ingress belongs
+ * to the controller whose class claims it**, and **a route is only as healthy
+ * as what the Service behind it publishes**. A third copy of "does this
+ * Service have any ready endpoints" is how two pages start disagreeing about
+ * whether the same Service is broken.
  *
- * What is deliberately *not* here is anything that decides what a route
- * means. Traefik's entry points, nginx's annotations and Istio's subsets are
- * each vendor's own, and a helper that tried to hold all three would hold
- * none of them honestly.
+ * Deliberately *not* here: anything that decides what a route means.
+ * Traefik's entry points, nginx's annotations and Istio's subsets are each
+ * vendor's own, and a helper holding all three would hold none honestly.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -67,13 +63,12 @@ export function claimsIngress(
 /**
  * The Secret an Ingress serves that host under, where it names one.
  *
- * Matched with {@link covers} rather than by equality, because a wildcard in
- * `spec.tls[].hosts` is the ordinary way to write this: a pair of
- * `*.example.com` and `example.com` on one Secret is what somebody sets up so
- * they never have to think about it again. Compared literally, every
- * subdomain that pair exists to serve came back with no Secret — and the
- * surfaces above this then said the host was served in the clear, which is
- * the app claiming an outage and a security problem that are not there.
+ * Matched with {@link covers} rather than by equality: a wildcard in
+ * `spec.tls[].hosts` is the ordinary way to write this, a pair of
+ * `*.example.com` and `example.com` on one Secret. Compared literally, every
+ * subdomain that pair exists to serve came back with no Secret, and the
+ * surfaces above then said the host was served in the clear — an outage and a
+ * security problem that are not there.
  */
 export function tlsSecretFor(
   ingress: IngressInfo,
