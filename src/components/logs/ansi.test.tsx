@@ -1,19 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import type { LogLine, StyledSegment, TextStyle } from "@/generated/types";
+import { contrast, type Rgb } from "@/lib/color";
 import {
   cssColor,
-  luminance,
   messageSegments,
+  splitByQuery,
   styleToCss,
   tailSegments,
 } from "./ansi";
 import { AnsiText } from "./AnsiText";
-
-vi.mock("@/stores/themeStore", () => ({
-  useThemeStore: (select: (state: { theme: string }) => unknown) =>
-    select({ theme: "dark" }),
-}));
 
 const plain: TextStyle = {
   bold: false,
@@ -37,17 +33,11 @@ const line = (partial: Partial<LogLine>): LogLine => ({
   ...partial,
 });
 
-type Rgb = [number, number, number];
 /** The canvases as `src/index.css` paints them, for the contrast checks. */
 const DARK_CANVAS: Rgb = [31, 33, 36];
 const LIGHT_CANVAS: Rgb = [251, 250, 248];
 
 const channels = (css: string) => css.match(/\d+/g)!.map(Number) as Rgb;
-const contrast = (css: string, canvas: Rgb) => {
-  const a = luminance(channels(css));
-  const c = luminance(canvas);
-  return (Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05);
-};
 
 describe("cssColor", () => {
   /// A hard-coded red would be invisible on one of the two canvases;
@@ -81,10 +71,10 @@ describe("cssColor", () => {
     const navy = cssColor({ kind: "indexed", index: 17 }, true);
     const white = cssColor({ kind: "rgb", r: 255, g: 255, b: 255 }, false);
     const grey = cssColor({ kind: "indexed", index: 255 }, false);
-    expect(contrast(black, DARK_CANVAS)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(navy, DARK_CANVAS)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(white, LIGHT_CANVAS)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(grey, LIGHT_CANVAS)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(channels(black), DARK_CANVAS)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(channels(navy), DARK_CANVAS)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(channels(white), LIGHT_CANVAS)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(channels(grey), LIGHT_CANVAS)).toBeGreaterThanOrEqual(4.5);
     // Navy stays blue: the lift keeps the hue the program chose.
     const [r, , b] = channels(navy);
     expect(b).toBeGreaterThan(r);
@@ -104,6 +94,8 @@ describe("styleToCss", () => {
     });
   });
 
+  /// Inverse with nothing set is "swap the defaults": fg on canvas
+  /// becomes canvas on fg, or an inverse-video banner vanishes.
   it("inverse swaps the two, with the canvas and the foreground standing in for what is unset", () => {
     expect(
       styleToCss(
@@ -120,6 +112,7 @@ describe("styleToCss", () => {
     });
   });
 
+  /// Two `textDecoration` assignments would keep only the last one.
   it("underline and strike share one declaration", () => {
     expect(
       styleToCss({ ...plain, underline: true, strike: true }, true)
@@ -184,26 +177,50 @@ describe("messageSegments", () => {
   });
 });
 
+describe("splitByQuery", () => {
+  /// The odd parts are the matches, whatever their case; a query that is
+  /// regex syntax is text to find, not a pattern.
+  it("cuts at every match and treats the query as text", () => {
+    expect(splitByQuery("Disk full, disk full", "disk")).toEqual([
+      "",
+      "Disk",
+      " full, ",
+      "disk",
+      " full",
+    ]);
+    expect(splitByQuery("a.b", ".")).toEqual(["a", ".", "b"]);
+    expect(splitByQuery("text", "")).toEqual(["text"]);
+  });
+});
+
 describe("AnsiText", () => {
-  /// Unstyled text stays text, so it inherits the row's level tint; a
+  const segments: StyledSegment[] = [
+    {
+      text: "ERR",
+      style: { ...plain, bold: true, fg: { kind: "named", index: 1 } },
+    },
+    { text: " disk full" },
+  ];
+
+  /// Unstyled text stays unstyled, so it inherits the row's level tint; a
   /// styled run is a span carrying only what the program set.
   it("styles only the runs the program styled", () => {
-    const { container } = render(
-      <AnsiText
-        segments={[
-          {
-            text: "ERR",
-            style: { ...plain, bold: true, fg: { kind: "named", index: 1 } },
-          },
-          { text: " disk full" },
-        ]}
-      />
-    );
-    const spans = container.querySelectorAll("span");
-    expect(spans).toHaveLength(1);
-    expect(spans[0].textContent).toBe("ERR");
-    expect(spans[0].style.color).toBe("hsl(var(--ansi-1))");
-    expect(spans[0].style.fontWeight).toBe("600");
+    const { container } = render(<AnsiText segments={segments} />);
+    const styled = container.querySelectorAll("span[style]");
+    expect(styled).toHaveLength(1);
+    expect(styled[0].textContent).toBe("ERR");
+    expect((styled[0] as HTMLElement).style.color).toBe("hsl(var(--ansi-1))");
+    expect((styled[0] as HTMLElement).style.fontWeight).toBe("600");
+    expect(container.textContent).toBe("ERR disk full");
+  });
+
+  /// Typing a search must not turn a coloured line grey: the match is
+  /// marked inside the run, the run keeps its colour.
+  it("marks the search inside the runs and keeps their colours", () => {
+    const { container } = render(<AnsiText segments={segments} query="disk" />);
+    const mark = container.querySelector("mark");
+    expect(mark?.textContent).toBe("disk");
+    expect(container.querySelectorAll("span[style]")).toHaveLength(1);
     expect(container.textContent).toBe("ERR disk full");
   });
 });

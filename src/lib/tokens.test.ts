@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { CLUSTER_HUES } from "./cluster-identity";
+import { contrast as contrastOf, type Rgb } from "./color";
 
 const css = readFileSync("src/index.css", "utf8");
 const light = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
@@ -111,19 +112,8 @@ function rgb([h, s, l]: [number, number, number]): [number, number, number] {
   return [channel(0), channel(8), channel(4)];
 }
 
-function contrast(
-  a: [number, number, number],
-  b: [number, number, number]
-): number {
-  const luminance = (colour: [number, number, number]) => {
-    const [r, g, bl] = colour.map((v) =>
-      v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-    );
-    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-  };
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
+const contrast = (a: Rgb, b: Rgb) =>
+  contrastOf(a.map((v) => v * 255) as Rgb, b.map((v) => v * 255) as Rgb);
 
 describe("the hues a cluster can be painted", () => {
   // The whole reason a chosen colour is a hue and not a colour is that the

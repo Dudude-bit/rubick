@@ -5,7 +5,9 @@ import type {
   StyledSegment,
   TextStyle,
 } from "@/generated/types";
-import { useThemeStore } from "@/stores/themeStore";
+import { luminance, type Rgb } from "@/lib/color";
+
+const token = (index: number) => `hsl(var(--ansi-${index}))`;
 
 /**
  * The sixteen named colours are theme tokens, not the colours a terminal
@@ -13,12 +15,14 @@ import { useThemeStore } from "@/stores/themeStore";
  * invisible, and a program that picked "red" meant "red", not the hex
  * its author's terminal happened to render. The cube and truecolor keep
  * the colour the program chose, pulled toward the canvas's opposite
- * just far enough to read on it.
+ * just far enough to read on it. (The identity hues in `index.css` fix
+ * saturation and lightness instead, because a hashed hue carries no
+ * lightness worth keeping; a program's truecolor does.)
  */
 export function cssColor(color: AnsiColor, dark: boolean): string {
-  if (color.kind === "named") return `hsl(var(--ansi-${color.index & 15}))`;
+  if (color.kind === "named") return token(color.index & 15);
   if (color.kind === "rgb") return readable([color.r, color.g, color.b], dark);
-  if (color.index < 16) return `hsl(var(--ansi-${color.index}))`;
+  if (color.index < 16) return token(color.index);
   if (color.index >= 232) {
     const grey = 8 + (color.index - 232) * 10;
     return readable([grey, grey, grey], dark);
@@ -35,8 +39,6 @@ export function cssColor(color: AnsiColor, dark: boolean): string {
   );
 }
 
-type Rgb = [number, number, number];
-
 /**
  * 4.5:1 against the canvas, as WCAG counts it for 12px text. The dark
  * canvas has a relative luminance near 0.015 and the light one near
@@ -44,14 +46,6 @@ type Rgb = [number, number, number];
  */
 const MIN_LUMINANCE_ON_DARK = 0.25;
 const MAX_LUMINANCE_ON_LIGHT = 0.165;
-
-export function luminance([r, g, b]: Rgb): number {
-  const channel = (v: number) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
 
 /** The colour, mixed toward white or black until it reads on the canvas. */
 function readable(rgb: Rgb, dark: boolean): string {
@@ -142,11 +136,17 @@ export function messageSegments(log: LogLine): StyledSegment[] | null {
 }
 
 /**
- * Whether the canvas is the dark one, resolved the way `App` resolves
- * the class on the root: a `system` theme asks the OS.
+ * `text` cut at every case-insensitive occurrence of `query`; the odd
+ * indices are the matches. A query that is not a valid pattern after
+ * escaping is not a query: the whole text comes back as one piece.
  */
-export function useIsDark(): boolean {
-  const theme = useThemeStore((state) => state.theme);
-  if (theme !== "system") return theme === "dark";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+export function splitByQuery(text: string, query: string): string[] {
+  if (!query) return [text];
+  try {
+    return text.split(
+      new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi")
+    );
+  } catch {
+    return [text];
+  }
 }

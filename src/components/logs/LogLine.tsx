@@ -2,7 +2,7 @@ import { useT } from "@/i18n/useT";
 import { memo } from "react";
 import type { LogLevel, LogLine as LogLineType } from "@/generated/types";
 import { messageSegments } from "./ansi";
-import { AnsiText } from "./AnsiText";
+import { AnsiText, Marked } from "./AnsiText";
 import { runSpanMs, type LogRun } from "./grouping";
 import {
   ViewMode,
@@ -101,9 +101,13 @@ function Fields({
  * known. Unstyled text inherits the level tint from the row, so a line
  * that only coloured its level word is still tinted as a whole.
  */
-function Message({ log }: { log: LogLineType }) {
+function Message({ log, query = "" }: { log: LogLineType; query?: string }) {
   const segments = messageSegments(log);
-  return segments ? <AnsiText segments={segments} /> : <>{log.message}</>;
+  return segments ? (
+    <AnsiText segments={segments} query={query} />
+  ) : (
+    <Marked text={log.message} query={query} />
+  );
 }
 
 interface LogLineProps {
@@ -137,12 +141,10 @@ export const LogLineComponent = memo(function LogLineComponent({
     return (
       <div className="px-1.5 py-px hover:bg-hover">
         <span className="whitespace-pre-wrap break-all text-fg-mid">
-          {searchQuery ? (
-            <HighlightedText text={log.raw} query={searchQuery} />
-          ) : log.segments ? (
-            <AnsiText segments={log.segments} />
+          {log.segments ? (
+            <AnsiText segments={log.segments} query={searchQuery} />
           ) : (
-            log.raw
+            <Marked text={log.raw} query={searchQuery} />
           )}
         </span>
       </div>
@@ -150,11 +152,7 @@ export const LogLineComponent = memo(function LogLineComponent({
   }
 
   const fields = visibleFieldsOf(log);
-  const message = searchQuery ? (
-    <HighlightedText text={log.message} query={searchQuery} />
-  ) : (
-    <Message log={log} />
-  );
+  const message = <Message log={log} query={searchQuery} />;
 
   return (
     <div>
@@ -328,37 +326,3 @@ export const LogRunRow = memo(function LogRunRow({
     </button>
   );
 });
-
-function HighlightedText({ text, query }: { text: string; query: string }) {
-  if (!query) return <>{text}</>;
-
-  // Build the parts array OUTSIDE the JSX so the try/catch wraps the
-  // RegExp construction (the actual throwable) rather than the JSX
-  // tree. JSX in try/catch trips react-hooks/error-boundaries
-  // because rendering errors don't throw synchronously and the catch
-  // wouldn't see them anyway.
-  let parts: string[];
-  try {
-    parts = text.split(new RegExp(`(${escapeRegex(query)})`, "gi"));
-  } catch {
-    return <>{text}</>;
-  }
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === query.toLowerCase() ? (
-          <mark key={i} className="rounded bg-warn/24 px-0.5 text-fg">
-            {part}
-          </mark>
-        ) : (
-          part
-        )
-      )}
-    </>
-  );
-}
-
-function escapeRegex(string: string): string {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

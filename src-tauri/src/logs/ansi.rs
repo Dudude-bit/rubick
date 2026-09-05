@@ -88,7 +88,7 @@ fn is_introducer(c: char) -> bool {
 #[must_use]
 pub fn strip(input: &str) -> Cow<'_, str> {
     if input.contains(is_introducer) {
-        Cow::Owned(split(input).text)
+        Cow::Owned(split_escaped(input).text)
     } else {
         Cow::Borrowed(input)
     }
@@ -111,12 +111,14 @@ pub fn split(input: &str) -> Split {
             segments: None,
         };
     }
+    split_escaped(input)
+}
 
+fn split_escaped(input: &str) -> Split {
     let chars: Vec<char> = input.chars().collect();
     let mut text = String::with_capacity(input.len());
     let mut runs: Vec<(usize, TextStyle)> = vec![(0, TextStyle::default())];
     let mut style = TextStyle::default();
-    let mut saw_sgr = false;
     let mut i = 0;
 
     while i < chars.len() {
@@ -165,7 +167,6 @@ pub fn split(input: &str) -> Split {
                                 runs.push((text.len(), next));
                                 style = next;
                             }
-                            saw_sgr = true;
                         }
                     }
                     _ => {}
@@ -203,20 +204,25 @@ pub fn split(input: &str) -> Split {
         }
     }
 
-    let segments = saw_sgr.then(|| {
-        runs.push((text.len(), TextStyle::default()));
-        runs.windows(2)
-            .filter(|w| w[1].0 > w[0].0)
-            .map(|w| StyledSegment {
-                text: text[w[0].0..w[1].0].to_string(),
-                style: if w[0].1.is_plain() {
-                    None
-                } else {
-                    Some(w[0].1)
-                },
-            })
-            .collect()
-    });
+    runs.push((text.len(), TextStyle::default()));
+    let segments: Vec<StyledSegment> = runs
+        .windows(2)
+        .filter(|w| w[1].0 > w[0].0)
+        .map(|w| StyledSegment {
+            text: text[w[0].0..w[1].0].to_string(),
+            style: if w[0].1.is_plain() {
+                None
+            } else {
+                Some(w[0].1)
+            },
+        })
+        .collect();
+    // A line whose only SGR was a no-op (`ESC[0m` hygiene, an unknown
+    // code) reads like a plain one and pays like one.
+    let segments = segments
+        .iter()
+        .any(|s| s.style.is_some())
+        .then_some(segments);
 
     Split { text, segments }
 }
@@ -268,12 +274,10 @@ fn apply_sgr(mut style: TextStyle, params: &str) -> TextStyle {
             24 => style.underline = false,
             27 => style.inverse = false,
             29 => style.strike = false,
-            30..=37 => style.fg = Some(named(code - 30)),
+            30..=37 | 90..=97 => style.fg = Some(palette(code)),
             39 => style.fg = None,
-            40..=47 => style.bg = Some(named(code - 40)),
+            40..=47 | 100..=107 => style.bg = Some(palette(code - 10)),
             49 => style.bg = None,
-            90..=97 => style.fg = Some(named(code - 90 + 8)),
-            100..=107 => style.bg = Some(named(code - 100 + 8)),
             38 | 48 => {
                 let (color, used) = if subs.len() > 1 {
                     (extended_color(&subs[1..], true), 0)
@@ -282,10 +286,14 @@ fn apply_sgr(mut style: TextStyle, params: &str) -> TextStyle {
                         .iter()
                         .map(|p| if p.len() == 1 { p[0] } else { None })
                         .collect();
+                    // The selector after 38/48 belongs to it even when it
+                    // is not one this parser knows: read as its own code,
+                    // `38;9` would strike the text through.
                     let used = match rest.first() {
                         Some(Some(5)) => 2,
                         Some(Some(2)) => 4,
-                        _ => 0,
+                        Some(_) => 1,
+                        None => 0,
                     };
                     (extended_color(&rest, false), used)
                 };
@@ -305,7 +313,9 @@ fn apply_sgr(mut style: TextStyle, params: &str) -> TextStyle {
     style
 }
 
-fn named(index: u16) -> AnsiColor {
+/// 30..37 are the eight colours, 90..97 their bright half.
+fn palette(code: u16) -> AnsiColor {
+    let index = if code >= 90 { code - 90 + 8 } else { code - 30 };
     AnsiColor::Named { index: index as u8 }
 }
 
@@ -456,6 +466,25 @@ mod tests {
                 seg("plain red", Some(fg(1))),
             ])
         );
+    }
+
+    /// `38;9` is a colour selector nobody defined, not a strike-through;
+    /// the number after 38 belongs to the 38.
+    #[test]
+    fn an_unknown_extended_colour_selector_is_not_read_as_its_own_code() {
+        let out = split("\u{1b}[31m\u{1b}[38;9mtext\u{1b}[48;1mmore");
+        assert_eq!(out.segments, Some(vec![seg("textmore", Some(fg(1)))]));
+    }
+
+    /// A reset nobody needed, an unknown code, or a colour with no text
+    /// after it colours nothing; a line like that must not grow a payload
+    /// every plain line was spared.
+    #[test]
+    fn a_no_op_sgr_leaves_no_segments() {
+        assert_eq!(split("\u{1b}[0mplain").segments, None);
+        assert_eq!(split("\u{1b}[999mplain").segments, None);
+        assert_eq!(split("\u{1b}[31m").segments, None);
+        assert_eq!(split("\u{1b}[31m").text, "");
     }
 
     /// An empty parameter list is a reset, the way terminals read `ESC[m`.

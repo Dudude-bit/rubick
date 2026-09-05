@@ -153,29 +153,17 @@ fn parse_json_message(message: &str) -> Option<ParsedMessage> {
     for (key, value) in object {
         let entry = match value {
             Value::String(inner) => ansi::strip(inner).into_owned(),
-            _ => value.to_string(),
+            _ => ansi::strip(&value.to_string()).into_owned(),
         };
         fields.insert(key.clone(), entry);
     }
 
-    let level_value = extract_json_value(object, &["level", "lvl", "severity", "log.level"]);
-    let message_value = extract_json_value(object, &["msg", "message", "log", "event", "error"]);
+    let level_value = extract_field(&fields, &["level", "lvl", "severity", "log.level"]);
+    let message_value = extract_field(&fields, &["msg", "message", "log", "event", "error"]);
 
     let level = level_value.as_deref().and_then(LogLevel::parse_value);
 
     Some((fields, level, message_value))
-}
-
-fn extract_json_value(object: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
-    for key in keys {
-        if let Some(value) = object.get(*key) {
-            return Some(match value {
-                Value::String(inner) => ansi::strip(inner).into_owned(),
-                _ => value.to_string(),
-            });
-        }
-    }
-    None
 }
 
 fn parse_logfmt_message(message: &str) -> Option<ParsedMessage> {
@@ -194,8 +182,8 @@ fn parse_logfmt_message(message: &str) -> Option<ParsedMessage> {
         return None;
     }
 
-    let level_value = extract_logfmt_value(&fields, &["level", "lvl", "severity"]);
-    let message_value = extract_logfmt_value(&fields, &["msg", "message", "log", "event", "error"]);
+    let level_value = extract_field(&fields, &["level", "lvl", "severity"]);
+    let message_value = extract_field(&fields, &["msg", "message", "log", "event", "error"]);
     let level = level_value.as_deref().and_then(LogLevel::parse_value);
     Some((fields, level, message_value))
 }
@@ -274,7 +262,7 @@ fn is_time_token(token: &str) -> bool {
         && bytes[6..8].iter().all(u8::is_ascii_digit)
 }
 
-fn extract_logfmt_value(fields: &BTreeMap<String, String>, keys: &[&str]) -> Option<String> {
+fn extract_field(fields: &BTreeMap<String, String>, keys: &[&str]) -> Option<String> {
     for key in keys {
         if let Some(value) = fields.get(*key) {
             return Some(value.clone());
