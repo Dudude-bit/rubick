@@ -14,17 +14,7 @@ import { Unknown } from "../sections/unknown";
 import { Warns } from "../sections/warns";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    links: [
-      { rel: "canonical", href: SITE.url },
-      {
-        rel: "preload",
-        as: "image",
-        href: "/images/hero-workload-detail.webp",
-        type: "image/webp",
-      },
-    ],
-  }),
+  head: () => ({ links: [{ rel: "canonical", href: SITE.url }] }),
   component: Landing,
 });
 
