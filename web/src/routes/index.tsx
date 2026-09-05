@@ -2,9 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { SITE } from "../lib/site";
 import { AntiFeatures } from "../sections/anti-features";
 import { Anywhere } from "../sections/anywhere";
+import { Certificate } from "../sections/certificate";
 import { Connections } from "../sections/connections";
 import { Features } from "../sections/features";
 import { Footer } from "../sections/footer";
+import { GitOps } from "../sections/gitops";
 import { Hero } from "../sections/hero";
 import { Install } from "../sections/install";
 import { Integrations } from "../sections/integrations";
@@ -34,6 +36,8 @@ function Landing() {
         <Quiz />
         <Features />
         <Integrations />
+        <GitOps />
+        <Certificate />
         <Anywhere />
         <Testimonials />
         <AntiFeatures />
