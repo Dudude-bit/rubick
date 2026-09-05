@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { CommandLine } from "../components/command-line";
 import { Reveal } from "../components/motion/reveal";
 import { Trace } from "../components/motion/trace";
 import { TruthSwap } from "../components/motion/truth-swap";
 import { Section } from "../components/section";
 import { WindowFrame } from "../components/window-frame";
-import { IMG } from "../lib/site";
+import { IMG, LINKS } from "../lib/site";
 
 const LIES: {
   lie: string;
@@ -19,7 +20,7 @@ const LIES: {
     evidence: (
       <TruthSwap
         reported="Running"
-        observed="Init:CrashLoopBackOff · 14 restarts · previous run opened"
+        observed="CrashLoopBackOff · log opened on the run that failed"
       />
     ),
     img: IMG.logs,
@@ -36,7 +37,7 @@ const LIES: {
         </p>
         <TruthSwap
           reported="3 endpoints"
-          observed='0 endpoints · port "htp" matches nothing'
+          observed='published with no port · "htp" matches no container'
         />
       </div>
     ),
@@ -74,7 +75,8 @@ export function Lies() {
         {LIES.map((l, i) => (
           <div
             key={l.lie}
-            className="items-center gap-12 md:grid md:grid-cols-2"
+            id={`lie-${i + 1}`}
+            className="scroll-mt-24 items-center gap-12 md:grid md:grid-cols-2"
           >
             <Reveal className={i % 2 === 1 ? "md:order-last" : undefined}>
               <p className="text-accent font-mono text-sm">LIE #{i + 1}</p>
@@ -92,6 +94,31 @@ export function Lies() {
           </div>
         ))}
       </div>
+      <Reveal className="mt-24 rounded-xl border border-neutral-800 bg-neutral-900/60 p-6 md:mt-32 md:p-8">
+        <p className="text-accent font-mono text-sm tracking-widest uppercase">
+          Reproduce them
+        </p>
+        <h3 className="mt-3 font-display text-2xl font-bold tracking-tight md:text-3xl">
+          Three objects, one throwaway cluster.
+        </h3>
+        <p className="mt-4 max-w-2xl text-neutral-400">
+          kind or k3d is enough, and no ingress controller is needed: the lies
+          live in the objects, not in the traffic. You get a pod whose phase is
+          Running while its only container crashes on every start, a Service
+          whose three pods are Ready and which publishes no port, and an Ingress
+          rule pointing at a Service that does not exist.
+        </p>
+        <div className="mt-6 flex flex-col gap-3">
+          <CommandLine command={`kubectl apply -f ${LINKS.lies}`} />
+          <CommandLine command="kubectl -n rubick-lies get pod,svc,endpointslice,ingress" />
+          <CommandLine command={`kubectl delete -f ${LINKS.lies}`} />
+        </div>
+        <p className="mt-6 font-mono text-sm text-neutral-500">
+          # kubectl reads the same objects Rubick does, so it is not fooled
+          either. The dashboards that are fooled read .status.phase, or the
+          selector, or the rule, and stop there.
+        </p>
+      </Reveal>
     </Section>
   );
 }

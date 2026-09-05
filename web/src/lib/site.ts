@@ -17,6 +17,24 @@ export const LINKS = {
   license: `${GH}/blob/main/LICENSE`,
   aur: "https://aur.archlinux.org/packages/rubick-kubernetes-bin",
   brew: "brew install --cask Dudude-bit/tap/rubick",
+  lies: "https://rubick.tech/lies.yaml",
+  reportLie: `${GH}/issues/new?${new URLSearchParams({
+    title: "A status Rubick got wrong: ",
+    body: [
+      "**What the cluster reported**",
+      "",
+      "**What Rubick showed**",
+      "",
+      "**What was actually true**",
+      "",
+      "**Rubick version, Kubernetes version**",
+      "",
+      "**Smallest manifest that reproduces it** (no kubeconfigs, no secrets)",
+      "",
+      "```yaml",
+      "```",
+    ].join("\n"),
+  })}`,
 };
 
 export const OG_IMAGE = {
