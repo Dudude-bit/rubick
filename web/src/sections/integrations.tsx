@@ -15,31 +15,37 @@ const INTEGRATIONS = [
   {
     name: "Traefik / ingress-nginx / Istio",
     Icon: LuWaypoints,
+    color: "#24a1c1",
     body: "hosts, rules and middleware read as routing, annotations turned into sentences with the raw key beside each",
   },
   {
     name: "cert-manager",
     Icon: LuShieldCheck,
+    color: "#4f8ef7",
     body: "expiry wherever TLS is named, and the issuance chain when renewal fails",
   },
   {
     name: "Argo CD / Flux",
     Icon: LuGitBranch,
+    color: "#ef7b4d",
     body: "every object says whether it is delivered, from which revision, and whether your edit will survive",
   },
   {
     name: "Prometheus",
     Icon: LuActivity,
+    color: "#e6522c",
     body: "real history, disk fullness, network traffic",
   },
   {
     name: "Loki",
     Icon: LuArchive,
+    color: "#f5bc1c",
     body: "logs that outlive the pod that wrote them",
   },
   {
     name: "GKE / EKS / AKS",
     Icon: LuCloud,
+    color: "#7dd3fc",
     body: "node pools, machine types, spot status, read from labels with no cloud account",
   },
 ];
@@ -63,12 +69,14 @@ export function Integrations() {
           <Reveal key={x.name} delay={i * 45} className="relative pl-5">
             <span
               aria-hidden
-              className="rule-y absolute inset-y-0 left-0 w-px bg-neutral-700"
+              className="rule-y absolute inset-y-0 left-0 w-px opacity-80"
+              style={{ background: x.color }}
             />
             <dt className="flex items-center gap-2.5 font-mono text-sm font-medium text-neutral-100">
               <x.Icon
                 aria-hidden
-                className="size-4 shrink-0 text-neutral-400"
+                className="size-4 shrink-0"
+                style={{ color: x.color }}
               />
               {x.name}
             </dt>
