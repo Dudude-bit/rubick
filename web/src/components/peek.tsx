@@ -126,7 +126,7 @@ function RefRow({
     <button
       type="button"
       onClick={() => onOpen(key)}
-      className="group -mx-2 flex min-h-9 flex-wrap items-center gap-x-2 rounded-md px-2 text-left font-mono text-[13px] transition-colors hover:bg-neutral-800/70 focus-visible:bg-neutral-800/70 focus-visible:outline-none"
+      className="group -mx-2 flex min-h-9 flex-wrap items-center gap-x-2 rounded-md px-2 text-left font-mono text-[13px] transition-colors hover:bg-neutral-800/70 focus-visible:bg-neutral-800/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       {body}
       <span

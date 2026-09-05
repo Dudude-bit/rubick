@@ -41,7 +41,7 @@ export function Nav() {
             <FaGithub aria-hidden className="size-4" />
             GitHub
           </a>
-          <ButtonLink href="#install">Download</ButtonLink>
+          <ButtonLink href="/#install">Download</ButtonLink>
         </nav>
       </div>
     </header>
