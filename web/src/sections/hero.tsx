@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { DownloadButtons } from "../components/download-buttons";
 import { Claims } from "../components/motion/claims";
+import { TruthSwap } from "../components/motion/truth-swap";
 import { WindowFrame } from "../components/window-frame";
 import { IMG } from "../lib/site";
 import { usePointerParallax } from "../lib/use-pointer-parallax";
@@ -35,6 +36,9 @@ export function Hero() {
             draws green and publishes nothing. Rubick reads what the cluster
             actually does, and tells you that instead.
           </p>
+          <div data-rise style={rise(105)} className="mt-6 lg:hidden">
+            <TruthSwap reported="Running" observed="CrashLoopBackOff" />
+          </div>
           <div data-rise style={rise(140)} className="mt-10">
             <DownloadButtons />
           </div>
