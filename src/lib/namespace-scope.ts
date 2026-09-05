@@ -2,58 +2,26 @@
  * Which namespaces the window is looking at, and the one string the backend
  * is told about.
  *
- * ## Two values, and why there have to be two
+ * A list command takes one `Option<String>`, because a `LIST` is scoped to
+ * one namespace or to none. The selection can be several, so it and the wire
+ * value are different things: none selected asks for the cluster, one asks
+ * for that one, several has no wire value at all.
  *
- * Every list command in this app takes one `Option<String>` namespace, and
- * that is the right shape for the API server: a `LIST` is scoped to one
- * namespace or to none. So the *selection* — which can be several — and the
- * *wire value* are different things:
+ * Lists are read once cluster-wide and narrowed here — a request and a watch
+ * per namespace per screen would multiply every page by the size of the
+ * selection. Aggregates cannot be narrowed after the fact, so the overview
+ * and the events feed's limit are asked per namespace and joined; those two
+ * are what {@link SCOPE_LIMIT} bounds, and the overview is the priciest query
+ * in the app (`lib/refresh.ts`).
  *
- * - **none selected** is the whole cluster, and asks for the whole cluster.
- * - **one selected** asks for that one, exactly as it always did. Nothing in
- *   the app changes shape for the case almost everybody is in.
- * - **several selected** has no wire value at all, so what it asks for
- *   depends on what is being asked — see below.
- *
- * ## What several namespaces actually costs
- *
- * Two kinds of answer, and only one of them is free:
- *
- * - A **list** is read once, cluster-wide, and narrowed here. Not because
- *   filtering in the browser is nice, but because the alternative — one
- *   request and one watch stream per namespace, per list, per page —
- *   multiplies the cost of every screen by the size of the selection. One
- *   read is never more than "All namespaces" already costs, which is a bill
- *   this app has always been willing to pay.
- * - An **aggregate** arrives already reduced and cannot be taken apart again:
- *   a cluster-wide `47 pods` under a two-namespace label states a number
- *   nobody measured. The overview and the events feed's limit are therefore
- *   asked once per namespace and joined here, and those two cost the size of
- *   the selection.
- *
- * The overview is the most expensive query in the app by a wide margin (see
- * `lib/refresh.ts`), so the second bullet is what {@link SCOPE_LIMIT} exists
- * to bound. The first is why the limit can be as generous as it is: nothing
- * else in the app gets dearer as the selection grows.
- *
- * ## What is stored, and what an older build reads back
- *
- * The selection is persisted in two places, and both of them are fields that
- * predate it: `ClusterPreferences.namespaces` holds one opaque string per
- * context, and a scope tab holds one more. A build without this feature reads
- * either straight into `currentNamespace` — handed `"prod,staging"` it would
- * ask the API server for a namespace that does not exist and show empty lists
- * on every screen without ever saying why.
- *
- * So neither field ever holds a joined list. Both hold {@link wireNamespace}:
- * `""` or one namespace, which every build back to the first one understands.
- * The selection itself rides beside them in `ScopeTab.scope`, which older
- * builds do not read. Downgrading therefore loses the extra namespaces and
- * says so — the window reopens on "All namespaces", a superset of what was
- * selected and labelled as exactly that — instead of on an empty screen.
- *
- * {@link decodeScope} still parses a joined list, because builds of this
- * feature before that was settled wrote one.
+ * Both places the selection persists are fields that predate it, and an older
+ * build reads either straight into `currentNamespace` — `"prod,staging"`
+ * would ask for a namespace that does not exist and empty every screen
+ * without saying why. So neither ever holds a joined list: both hold
+ * {@link wireNamespace}, and the selection rides in `ScopeTab.scope`, which
+ * older builds ignore. Downgrading loses the extra namespaces and reopens on
+ * "All namespaces" — a superset, labelled as one. {@link decodeScope} still
+ * parses a joined list, because early builds of this feature wrote one.
  */
 
 import type { T } from "@/i18n/useT";
@@ -66,24 +34,20 @@ import type { T } from "@/i18n/useT";
  * *full cluster* pod LIST, because the scheduler panel divides requests by
  * every node's allocatable and is cluster-wide whatever the scope. The window
  * asks for the cluster-wide overview however narrow the selection is (the
- * namespace picker exists to show the namespaces you are *not* on) and for
- * one more per namespace selected, every ten seconds. The bill therefore runs
- * about 90 requests a minute at "All namespaces", 186 at one namespace —
- * which is what this app has always cost — and about 480 at four, five of
- * them whole-cluster pod lists every poll.
+ * namespace picker exists to show the namespaces you are *not* on) and for one
+ * more per namespace selected, every ten seconds: about 90 requests a minute
+ * at "All namespaces", 186 at one namespace, about 480 at four — five of them
+ * whole-cluster pod lists every poll. A dozen namespaces would be over 1200 a
+ * minute, and nothing on screen would say so.
  *
- * Four is a judgement rather than a line something crosses at five: it holds
- * the window to about two and a half times what one namespace costs, well
- * short of the ~700 a minute this same query ran up before `lib/refresh.ts`
- * slowed it down, and it covers what people actually ask for — prod beside
- * staging, or an app's namespace beside the one its database lives in. An
- * unbounded selection has no such ceiling at all: a dozen namespaces is over
- * 1200 requests a minute, and nothing on screen would say so.
+ * Four holds the window to about two and a half times what one namespace
+ * costs, and covers what people actually ask for — prod beside staging, or an
+ * app's namespace beside the one its database lives in.
  *
  * Enforced where a selection is *made* — `clusterStore.setNamespaceScope`, and
  * the picker that calls it — rather than where it is read. A bound applied at
  * the reading end would leave the window labelled with more namespaces than
- * its numbers cover, which is the one thing no surface here may do.
+ * its numbers cover.
  */
 export const SCOPE_LIMIT = 4;
 
@@ -123,10 +87,9 @@ export function inScope(
   // Nothing selected is the whole cluster, including the cluster-scoped
   // objects that have no namespace at all.
   if (scope.length === 0) return true;
-  // A cluster-scoped object is in every namespace scope and in none of them.
-  // In: a StorageClass does not stop existing because somebody narrowed the
-  // window to two namespaces, and a Nodes page that emptied itself would be
-  // the filter deciding a question it was never asked.
+  // A cluster-scoped object stays in: a StorageClass does not stop existing
+  // because somebody narrowed the window to two namespaces, and a Nodes page
+  // that emptied itself would be the filter answering a question nobody asked.
   if (!namespace) return true;
   return scope.includes(namespace);
 }
@@ -150,14 +113,11 @@ export function scopeIn(scope: readonly string[], t: T): string {
  * The items of the selected namespace, or all of them.
  *
  * `""` is this app's word for "the whole cluster" — the store types
- * `currentNamespace` as a `string` and every consumer writes
+ * `currentNamespace` as a `string`, so every consumer writes
  * `currentNamespace || null` to get a nullable out of it. A `== null` test
  * against the raw value compiles, is never true, and filters every row away:
- * the sidebar's Gateways and Routes rows read 0 above pages listing forty
- * (shipped in 4.7.3+, caught by review before release).
- *
- * Named here so the rule has one home and a test, rather than being three
- * inline ternaries in a component nothing exercises.
+ * that is the sidebar's Gateways and Routes rows reading 0 above pages
+ * listing forty. Named here so the rule has one home and a test.
  */
 export function inNamespace<T extends { namespace: string }>(
   items: T[],

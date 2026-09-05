@@ -41,20 +41,17 @@ pub struct DeploymentInfo {
 
 /// One container as a workload's pod template declares it.
 ///
-/// Deliberately not `ContainerInfo`, and the two are not merged. A
-/// `ContainerInfo` is a spec entry *joined to* the kubelet's status row
-/// for it: `ready`, `started`, `state`, `last_terminated` and
-/// `restart_count` are all facts about a run, and its ports carry the
-/// name and protocol a port-forward needs. This is the declaration on its
-/// own, and it carries the two things only a declaration has — the
-/// requests and limits every replica will be admitted against. Merging
-/// them would ship five empty status fields on every template row and an
-/// empty `resources` on every pod row, and leave a reader of the type
-/// unable to tell which half of it is meaningful.
+/// Deliberately not `ContainerInfo`, which is a spec entry *joined to* the
+/// kubelet's status row for it: `ready`, `started`, `state`,
+/// `last_terminated`, `restart_count`, and ports carrying the name and
+/// protocol a port-forward needs. This is the declaration on its own, and it
+/// carries what only a declaration has — the requests and limits every
+/// replica will be admitted against. Merging the two would ship five empty
+/// status fields on every template row and an empty `resources` on every pod
+/// row.
 ///
-/// What the two genuinely share is *when the container runs*, which is
-/// why `phase` is the same enum and not a second one: a template's init
-/// containers and its sidecars group on screen exactly as a pod's do.
+/// `phase` is the same enum in both because a template's init containers and
+/// its sidecars group on screen exactly as a pod's do.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentContainerInfo {
@@ -70,17 +67,15 @@ pub struct DeploymentContainerInfo {
 /// A pod template's containers, split the way `PodInfo` splits a pod's.
 ///
 /// Five kinds — Deployment, `StatefulSet`, `DaemonSet`, Job, `CronJob` — reach
-/// their template through a different path and then want the identical
-/// thing from it. Doing it once is also what stops the next kind being
-/// added with `.containers` alone, which is how all five came to hide
-/// their init containers in the first place.
+/// their template through a different path and then want the identical thing
+/// from it. Doing it once is what stops the next kind being added with
+/// `.containers` alone, which hides that kind's init containers.
 pub struct TemplateContainers {
     pub containers: Vec<DeploymentContainerInfo>,
     pub init_containers: Vec<DeploymentContainerInfo>,
-    /// The identity every replica will hold. It rides here rather than being
-    /// read again per kind for the reason the container lists do: five kinds
-    /// reach the same `PodSpec` by five different paths, and the one that
-    /// forgets is the one that silently shows nothing.
+    /// The identity every replica will hold. Carried here rather than read
+    /// again per kind for the reason the container lists are: the kind that
+    /// reads the `PodSpec` itself is the one that forgets, and shows nothing.
     pub service_account_name: Option<String>,
 }
 

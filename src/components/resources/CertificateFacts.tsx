@@ -2,11 +2,11 @@
  * What a TLS Secret's certificate says, wherever TLS is named.
  *
  * Core, and drawn before anything an extension has to say: a certificate
- * carries its own validity, so the reader gets the expiry on a cluster with
- * nothing installed on it. cert-manager explains *why* a certificate looks
- * the way it does; it is not what makes the date knowable.
+ * carries its own validity, so the expiry shows on a cluster with nothing
+ * installed. cert-manager explains *why* a certificate looks the way it
+ * does; it is not what makes the date knowable.
  *
- * The private key is not part of any of this. It never leaves the backend.
+ * The private key never leaves the backend.
  */
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -32,9 +32,9 @@ function toneClass(tone: "warn" | "err" | null): string {
  * The one line a certificate is worth beside a name.
  *
  * `hosts` are the names the surface expects it to serve — an Ingress's, on
- * the Ingress page. A certificate that is perfectly valid for the wrong
- * name is the failure that reads as working on every other screen, so the
- * mismatch outranks the expiry when both are true.
+ * the Ingress page. A certificate valid for the wrong name reads as working
+ * on every other screen, so the mismatch outranks the expiry when both are
+ * true.
  */
 export function CertificateLine({
   read,

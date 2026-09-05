@@ -90,10 +90,8 @@ fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> 
 
     let namespace = metadata.get("namespace").and_then(|v| v.as_str());
 
-    // Parse group and version from apiVersion
     let (group, version) = parse_api_version(api_version);
 
-    // Create ApiResource
     let api_resource = ApiResource {
         group,
         version,
@@ -102,11 +100,9 @@ fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> 
         plural: pluralize(kind),
     };
 
-    // Parse as DynamicObject
     let mut object: DynamicObject =
         serde_yaml::from_value(value.clone()).map_err(|e| Error::Serialization(e.to_string()))?;
 
-    // Ensure metadata is set
     if object.metadata.name.is_none() {
         object.metadata.name = Some(name.to_string());
     }

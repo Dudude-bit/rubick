@@ -1,15 +1,12 @@
 /**
  * The one place that says which table features this app uses.
  *
- * TanStack Table v9 stopped shipping every feature to every table and made the
- * set part of the type: `ColumnDef` now reads `<TFeatures, TData, TValue>`, and
- * a table only has the options, state and row APIs its features contribute.
- * That is a good trade — the bundle carries what is asked for — but it means
- * the feature set appears in the type of every column in the app.
- *
- * So it is named once, here. Lists import `ColumnDef` from this module and go
- * on writing `ColumnDef<Pod>`; nothing outside repeats the vendor's generic,
- * and turning a feature on later is one edit rather than thirty.
+ * In TanStack Table v9 the feature set is part of the type — `ColumnDef` reads
+ * `<TFeatures, TData, TValue>`, and a table only has the options, state and row
+ * APIs its features contribute — so it would otherwise appear in the type of
+ * every column in the app. Named once here, lists import `ColumnDef` from this
+ * module and go on writing `ColumnDef<Pod>`, and turning a feature on later is
+ * one edit rather than thirty.
  */
 
 import {
@@ -36,8 +33,8 @@ import {
  *
  * Grouping is absent for a different reason. The lists *do* group — the
  * namespace captions on a Pods list — but by `RowGrouping`, which draws caption
- * rows between the table's own rows and hides the column it took over. That is
- * a rendering concern, not a row model, so TanStack's grouping never applied.
+ * rows between the table's own rows and hides the column it took over: a
+ * rendering concern, not a row model.
  *
  * No `sortFns`/`filterFns` registries: those name the *extra* functions a
  * column may ask for by string, and no column here asks for one. Every column

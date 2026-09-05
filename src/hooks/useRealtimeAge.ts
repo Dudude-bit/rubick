@@ -1,8 +1,8 @@
 /**
- * Real-Time Age Hook
+ * Auto-updating age and countdown displays.
  *
- * Provides auto-updating age display with adaptive refresh intervals.
- * Uses the global tick store for efficient batched updates.
+ * The refresh rate follows the value: the shared tick store batches every
+ * subscriber on one channel into a single timer.
  *
  * @module hooks/useRealtimeAge
  */
@@ -12,18 +12,12 @@ import { tickStore, type TickChannel } from "@/stores/tickStore";
 import { formatAge } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
-/**
- * Determine which tick channel to use based on age in seconds
- */
 function getChannelForAge(ageSeconds: number): TickChannel {
   if (ageSeconds < 60) return "fast"; // < 1 minute: update every 1s
   if (ageSeconds < 3600) return "medium"; // < 1 hour: update every 10s
   return "slow"; // >= 1 hour: update every 60s
 }
 
-/**
- * Calculate age in seconds from a timestamp
- */
 function getAgeSeconds(timestamp: string | null): number {
   if (!timestamp) return 0;
   const created = new Date(timestamp);
@@ -32,12 +26,7 @@ function getAgeSeconds(timestamp: string | null): number {
 }
 
 /**
- * Hook for real-time age updates with adaptive intervals
- *
- * Automatically determines the appropriate update frequency based on age:
- * - Seconds (< 60s): updates every 1s
- * - Minutes (< 1h): updates every 10s
- * - Hours/Days: updates every 60s
+ * Real-time age, refreshed at a rate that follows the age itself.
  *
  * @param timestamp - ISO timestamp string or null
  * @returns Current formatted age string (e.g., "5m", "2h", "3d")
@@ -50,11 +39,9 @@ function getAgeSeconds(timestamp: string | null): number {
  */
 export function useRealtimeAge(timestamp: string | null): string {
   const t = useT();
-  // Calculate initial age and channel
   const ageSeconds = getAgeSeconds(timestamp);
   const channel = getChannelForAge(ageSeconds);
 
-  // Subscribe to the appropriate tick channel
   const subscribe = useCallback(
     (callback: () => void) => tickStore.subscribe(channel, callback),
     [channel]
@@ -70,21 +57,18 @@ export function useRealtimeAge(timestamp: string | null): string {
     [channel]
   );
 
-  // This will trigger re-render on each tick
+  // Result unused: subscribing re-renders on each tick, and that render is
+  // what recomputes the age.
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Recalculate age on each render (triggered by tick)
   return formatAge(timestamp, t);
 }
 
-/**
- * Format a countdown duration
- */
 function formatCountdown(seconds: number): string {
-  // Empty, not a word. This formats a duration, and "expired" is not one —
-  // it went straight into `t("action", "inTime", {time})` and reached a
-  // Russian reader as «через expired». What to say when the moment has
-  // passed is the caller's sentence to write; `isExpired` is what it reads.
+  // Empty, not a word: this formats a duration, and "expired" is not one — it
+  // went into `t("action", "inTime", {time})` and reached a Russian reader as
+  // «через expired». The sentence for a passed moment is the caller's, off
+  // `isExpired`.
   if (seconds <= 0) return "";
 
   const days = Math.floor(seconds / 86400);
@@ -101,9 +85,6 @@ function formatCountdown(seconds: number): string {
   return parts.join(" ") || "0s";
 }
 
-/**
- * Calculate remaining seconds until a target date
- */
 function getRemainingSeconds(targetDate: string | Date | null): number {
   if (!targetDate) return 0;
   const target =
@@ -112,9 +93,6 @@ function getRemainingSeconds(targetDate: string | Date | null): number {
   return Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000));
 }
 
-/**
- * Determine tick channel for countdown based on remaining time
- */
 function getChannelForCountdown(remainingSeconds: number): TickChannel {
   if (remainingSeconds <= 60) return "fast"; // Last minute: every 1s
   if (remainingSeconds <= 3600) return "medium"; // Last hour: every 10s
@@ -133,7 +111,7 @@ export interface CountdownResult {
 }
 
 /**
- * Hook for real-time countdown to a target date
+ * Real-time countdown to a target date.
  *
  * @param targetDate - ISO timestamp string or Date object for target
  * @param options - Configuration options
@@ -174,17 +152,16 @@ export function useRealtimeCountdown(
     [channel]
   );
 
-  // This will trigger re-render on each tick
+  // Result unused: subscribing re-renders on each tick, and that render is
+  // what recomputes the remainder.
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Recalculate on each render (triggered by tick)
   const remaining = getRemainingSeconds(targetDate);
   const remainingDays = remaining / 86400;
 
-  // Nothing to count down to is not a countdown that ran out. `targetDate` of
-  // `null` measures as zero seconds, and reading that as expired paints a
-  // deadline nobody set in the colour of one that has passed — the third state
-  // folded into the second, in a hook a caller reads for a verdict.
+  // Nothing to count down to is not a countdown that ran out. A `targetDate`
+  // of `null` measures as zero seconds, and reading that as expired paints a
+  // deadline nobody set in the colour of one that has passed.
   const targeted = targetDate !== null && targetDate !== undefined;
 
   let warningLevel: "none" | "warning" | "critical" = "none";

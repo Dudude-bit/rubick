@@ -21,33 +21,28 @@ use super::cred::{
     ExecTerminalParams,
 };
 
-/// Timeout we inject into kubelogin-family exec plugins via
+/// Timeout injected into kubelogin-family exec plugins via
 /// `--authentication-timeout-sec` when the user hasn't set their own.
 ///
-/// We pair this with [`AUTH_FLOW_TIMEOUT_SECS`] outer cap, but
-/// injecting an explicit value lets the plugin print its own clean
-/// "context deadline exceeded" error on a predictable schedule (3 min)
-/// rather than hanging until our 30-min cap eventually kills it.
-///
-/// 180 s matches kubelogin's own historical default — long enough for
-/// a real browser-auth flow (SSO, MFA), short enough to surface a
-/// stuck attempt while the user is still looking at the screen.
+/// Paired with the [`AUTH_FLOW_TIMEOUT_SECS`] outer cap: an explicit value
+/// lets the plugin print its own clean "context deadline exceeded" on a
+/// predictable schedule (3 min) instead of hanging until the 30-min cap
+/// kills it. 180 s matches kubelogin's own historical default — long
+/// enough for a real browser-auth flow (SSO, MFA), short enough to surface
+/// a stuck attempt while the user is still looking at the screen.
 const KUBELOGIN_INJECTED_AUTH_TIMEOUT_SECS: u64 = 180;
 
-/// Decide whether to add `--authentication-timeout-sec=<N>` to the
-/// args we hand to the exec plugin.
-///
-/// True only when both:
+/// Whether to add `--authentication-timeout-sec=<N>` to the args handed to
+/// the exec plugin. True only when both:
 ///   * the command (by basename) is kubelogin or kubectl-oidc_login —
-///     including `kubectl oidc-login …` where kubectl invokes the
-///     plugin as a subcommand
+///     including `kubectl oidc-login …`, where kubectl invokes the plugin
+///     as a subcommand
 ///   * the user hasn't already set `--authentication-timeout-sec`
 ///     themselves (either form: `--flag=N` or `--flag N`)
 ///
-/// For any other plugin (gke-gcloud-auth-plugin, aws-iam-authenticator,
-/// corporate exec plugins, …) we leave args alone — the flag would be
-/// rejected as unknown. Those plugins fall back to the 30-min outer
-/// cap, which is the right behaviour for a generic case.
+/// Any other plugin (gke-gcloud-auth-plugin, aws-iam-authenticator,
+/// corporate exec plugins, …) would reject the flag as unknown, so its args
+/// are left alone and it falls back to the 30-min outer cap.
 fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
     let basename = std::path::Path::new(command)
         .file_name()
@@ -71,26 +66,22 @@ fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
 /// Hard cap on how long the auth flow waits for the spawned exec
 /// plugin before giving up and killing the terminal session.
 ///
-/// **Sized to outlast any reasonable plugin's own timeout**, not to
-/// race it. The previous design (210 s) tried to stay 30 s ahead of
-/// kubelogin / kubectl-oidc_login's then-current default of
-/// `--authentication-timeout-sec=180` — but pinning the relationship
-/// to a number that lives in someone else's source tree was fragile:
-/// the moment kubelogin (or whatever exec plugin a user has) bumps
-/// its default, we silently start killing it first again, swallowing
-/// its real error and leaving the user with the same useless "no
-/// JSON" toast that 210 s was meant to fix.
+/// **Sized to outlast any reasonable plugin's own timeout**, not to race
+/// it. Never pin this against a plugin's current default: that number
+/// lives in someone else's source tree, and the moment they bump it we
+/// silently start killing the plugin first, swallowing its real error and
+/// leaving the user a useless "no JSON" toast.
 ///
 /// 30 minutes covers:
-///   * kubelogin 180 s default and any future bump (3-5x headroom)
+///   * kubelogin's 180 s default and any future bump (3-5x headroom)
 ///   * cloud-CLI plugins (gke-gcloud-auth-plugin / aws-iam-authenticator)
 ///     that occasionally take minutes on first-time MFA prompts
 ///   * a real human walking away to fetch a `YubiKey`
 ///
 /// The user is never trapped: the auth modal has a Cancel button
 /// (`cancel_auth_session` Tauri command → `cancel_rx` branch of the
-/// select! below), so the only thing this timeout protects against
-/// is a genuinely hung plugin holding system resources forever.
+/// select! below), so this only protects against a genuinely hung plugin
+/// holding system resources forever.
 const AUTH_FLOW_TIMEOUT_SECS: u64 = 30 * 60;
 
 pub(super) async fn run_exec_auth(
@@ -102,14 +93,11 @@ pub(super) async fn run_exec_auth(
     // Create the auth session BEFORE attempting native auth so a
     // concurrent `disconnect_cluster` (or any caller of
     // `cancel_auth_sessions_for_context`) can interrupt this attempt.
-    //
-    // Without this, native GCP/Azure auth's ADC retries
-    // (5+ seconds for `gcp_auth::ConfigDefaultCredentials` looking for
-    // application default credentials, then `MetadataServiceAccount`)
-    // ran past the user switching contexts. The `AuthTerminalSessionCreated`
-    // event emitted at the end fired after the user already had a new
-    // context active → orphan modal stuck on whatever cluster they
-    // landed on.
+    // Native GCP/Azure auth's ADC retries take 5+ seconds
+    // (`gcp_auth::ConfigDefaultCredentials` looking for application default
+    // credentials, then `MetadataServiceAccount`) — long enough for the
+    // user to switch contexts first, and `AuthTerminalSessionCreated` then
+    // lands as an orphan modal over whatever cluster they landed on.
     let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec");
 
     // Race native cloud auth against the cancel signal. Dropping the
@@ -195,7 +183,6 @@ pub(super) async fn run_exec_auth(
             )))
         })?;
 
-    // Emit AuthTerminalSessionCreated event
     state.emit(AppEvent::AuthTerminalSessionCreated {
         auth_session_id: session_id.clone(),
         terminal_session_id: terminal_session_id.clone(),
@@ -291,18 +278,15 @@ pub(super) async fn run_exec_auth(
         return Err(Error::Auth(AuthError::Kubeconfig(msg)));
     }
 
-    // Real-world PTY output mixes prompts, blank lines, and
-    // occasional ANSI control sequences with the final JSON
-    // ExecCredential. `serde_json::from_slice` on the raw buffer
-    // fails with "expected value at line 2 column 1" because the
-    // bytes don't start at the `{`. `extract_exec_credential`
-    // locates the actual JSON object inside the buffer.
-    // On failure we tack on the child's exit code and the first
-    // few bytes of stdout escaped. Without this enrichment the user
-    // sees only "no JSON object found in N bytes" and has no way to
-    // tell apart "plugin exited 0 with whitespace", "plugin exited 1
-    // with an error string", or "plugin printed something
-    // machine-parseable that our extractor happens to choke on."
+    // Real-world PTY output mixes prompts, blank lines and occasional ANSI
+    // control sequences with the final JSON ExecCredential, so
+    // `serde_json::from_slice` on the raw buffer fails with "expected value
+    // at line 2 column 1" — the bytes don't start at the `{`.
+    // `extract_exec_credential` locates the JSON object inside the buffer.
+    // On failure the child's exit code and an escaped stdout preview are
+    // tacked on: without them "no JSON object found in N bytes" cannot be
+    // told apart from "exited 0 with whitespace", "exited 1 with an error
+    // string", or "printed something the extractor chokes on".
     let creds: ExecCredential =
         crate::auth::interactive::cred::extract_exec_credential(&stdout_data).map_err(|msg| {
             let exit_str = match *last_exit_status.lock() {
@@ -466,11 +450,10 @@ async fn read_auth_url(path: &PathBuf) -> Result<String> {
 /// common ones — newline, return, tab — using their conventional `\n`
 /// `\r` `\t` forms). Truncates with a "+N more" tail.
 ///
-/// Used to enrich `Invalid exec credentials` error messages with the
-/// actual bytes the auth plugin printed. Without this, "no JSON object
-/// found in 6 bytes" is indistinguishable from any of: PTY init noise,
-/// a one-line plugin error, a truncated JSON header, or an empty
-/// terminal response.
+/// Enriches `Invalid exec credentials` messages with the actual bytes the
+/// plugin printed: without them "no JSON object found in 6 bytes" is
+/// indistinguishable from PTY init noise, a one-line plugin error, a
+/// truncated JSON header or an empty terminal response.
 fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
     let truncated = data.len() > max_bytes;
     let slice = &data[..data.len().min(max_bytes)];
@@ -720,21 +703,16 @@ mod preview_tests {
     // the timeout, and the message needs both values in it.
     #[allow(clippy::assertions_on_constants)]
     fn auth_flow_timeout_is_large_enough_to_outlast_any_reasonable_plugin() {
-        // We deliberately do NOT pin our timeout against a specific
-        // plugin's current default — that's how we got into trouble
-        // the first time (210 s vs kubelogin's 180 s would silently
-        // break the moment kubelogin bumped). Instead this asserts
-        // the invariant we actually care about: the timeout is large
-        // enough that a plugin with a *reasonable* internal timeout
-        // (kubelogin's 180 s, AWS IAM's ~10 min, anything in that
-        // ballpark) will always get to print its own diagnostic and
-        // exit before our killer fires.
+        // Deliberately NOT pinned against a specific plugin's current
+        // default. The invariant asserted instead: the timeout is large
+        // enough that a plugin with a *reasonable* internal one
+        // (kubelogin's 180 s, AWS IAM's ~10 min) always gets to print its
+        // own diagnostic and exit before our killer fires.
         //
-        // 15 minutes is the conservative lower bound — any plugin
-        // with a default longer than that is doing something exotic,
-        // and a user who hits this in practice should bump the
-        // constant intentionally rather than hide the regression
-        // behind a passing test.
+        // 15 minutes is the conservative lower bound. A plugin with a
+        // longer default is doing something exotic, and whoever hits that
+        // should bump the constant intentionally rather than hide the
+        // regression behind a passing test.
         const MIN_REASONABLE_TIMEOUT_SECS: u64 = 15 * 60;
         assert!(
             AUTH_FLOW_TIMEOUT_SECS >= MIN_REASONABLE_TIMEOUT_SECS,
@@ -784,10 +762,11 @@ mod preview_tests {
 
     #[test]
     fn reproduces_a_realistic_6_byte_pty_payload() {
-        // The actual production failure: 6 bytes of stdout, no JSON.
-        // If those 6 bytes are "\\x1b[0m\\n" (ANSI reset + newline =
-        // 5 bytes) the preview should let a human see it at a glance.
-        // Adjust if the bug is different — at least we'll know.
+        // The actual production failure: 6 bytes of stdout, no JSON. This
+        // payload is a guess at them — "\\x1b[0m\\n" (ANSI reset + newline)
+        // is 5 — and the preview has to let a human see it at a glance.
+        // Adjust it if the real bytes turn out different; at least we
+        // will know.
         let bytes = b"\x1b[0m\n";
         let preview = preview_bytes(bytes, 200);
         assert_eq!(preview, "\"\\x1b[0m\\n\"");

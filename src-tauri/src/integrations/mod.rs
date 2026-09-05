@@ -1,35 +1,25 @@
 //! Extensions, in two kinds that must not be confused for each other.
 //!
-//! **Detected.** Core is what the API server answers for on any cluster. An
-//! in-cluster extension is something whose whole state is objects on that
-//! same API server — so "is it there" has a yes or a no, with no address to
-//! fill in, no credential to hold and nothing guessed. Detection being a
-//! **fact rather than a heuristic** is the only reason it is allowed at all:
-//! `certificates.cert-manager.io` exists as a CRD or it does not; the app is
-//! not sniffing a port or matching a name.
+//! **Detected.** Something whose whole state is objects on the same API
+//! server, so "is it there" has a yes or a no with no address to fill in and
+//! nothing guessed: `certificates.cert-manager.io` exists as a CRD or it does
+//! not; the app is not sniffing a port or matching a name. For most that fact
+//! is a marker CRD. ingress-nginx installs none, so the fact is a declared
+//! field instead — `IngressClass.spec.controller` is the implementation
+//! naming itself. The rule is not "a CRD", it is "the cluster says so in a
+//! field somebody had to write". [`detect_in_cluster_extensions`] answers for
+//! all of them.
 //!
-//! For most of them that fact is a marker CRD. For ingress-nginx there is no
-//! CRD to be marked by — it installs none — and the fact is a *declared
-//! field* instead: `IngressClass.spec.controller` is the implementation
-//! naming itself, which is the same kind of statement and is read the same
-//! way. The rule is not "a CRD"; it is "the cluster says so in a field
-//! somebody had to write". [`detect_in_cluster_extensions`] answers for all
-//! of them.
-//!
-//! **Configured.** Anything that needs its own URL, and usually a credential
-//! the kubeconfig does not carry, cannot be detected without guessing — and
+//! **Configured.** Anything needing its own URL, and usually a credential the
+//! kubeconfig does not carry, cannot be detected without guessing — and
 //! guessing at `monitoring`, at a Service named `prometheus`, at a port is
-//! wrong often enough to be worse than asking. So it is an address the
-//! reader gives us, per cluster, and its "is it there" is a probe rather
-//! than a CRD lookup. [`prometheus`] is the first and [`loki`] the second,
-//! and they hold the network half of themselves here because a bearer token
-//! has no business in the webview and CORS has no business in this. What
-//! they share of that half is in [`wire`].
+//! wrong often enough to be worse than asking. So it is an address the reader
+//! gives us, per cluster, probed rather than looked up. [`prometheus`] and
+//! [`loki`] hold the network half of themselves here, because a bearer token
+//! has no business in the webview; what they share of it is in [`wire`].
 //!
-//! One folder per extension. Nothing outside this module imports one by
-//! name — the frontend asks for a capability and gets an implementation or
-//! nothing, and a lint rule keeps that true.
-
+//! One folder per extension. Nothing outside this module imports one by name
+//! — the frontend asks for a capability and a lint rule keeps that true.
 pub mod cert_manager;
 pub mod ingress_nginx;
 pub mod loki;
@@ -63,11 +53,10 @@ pub struct DetectedExtension {
 
 /// The extensions whose whole Rust-side knowledge is a marker CRD.
 ///
-/// cert-manager has a folder because it has a command behind it. These
-/// three have nothing but the name of the object whose existence *is* the
-/// install, and three files holding one constant each would be ceremony
-/// standing in for structure. The first marker present wins, so a vendor
-/// that renamed its API group lists the current spelling first.
+/// cert-manager has a folder because it has a command behind it; these have
+/// nothing but the name of the object whose existence *is* the install. The
+/// first marker present wins, so a vendor that renamed its API group lists
+/// the current spelling first.
 const MARKERS: &[(&str, &[&str])] = &[
     (
         "traefik",

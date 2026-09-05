@@ -257,12 +257,10 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn test_is_executable_on_windows() {
-        // Test with .exe extension
         assert!(is_executable(Path::new("test.exe")));
         assert!(is_executable(Path::new("test.bat")));
         assert!(is_executable(Path::new("test.cmd")));
 
-        // Test without executable extension
         assert!(!is_executable(Path::new("test.txt")));
         assert!(!is_executable(Path::new("test")));
     }

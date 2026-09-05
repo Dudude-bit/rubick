@@ -106,11 +106,11 @@ const ROW =
 /**
  * A 60x14 trend line for one problem row.
  *
- * There is no history behind this. The backend returns a snapshot, so the
- * only shape that can be justified from the data is "a pod that has already
- * restarted is still climbing"; everything else draws flat. It is derived
- * from the row next to it, not measured telemetry — do not read it as a
- * series, and do not add shapes that no field in `ClusterProblem` supports.
+ * There is no history behind this: the backend returns a snapshot, so the
+ * only shape the data justifies is "a pod that has already restarted is still
+ * climbing", and everything else draws flat. Derived from the row beside it,
+ * not telemetry — do not read it as a series, and do not add shapes no field
+ * in `ClusterProblem` supports.
  */
 function Sparkline({
   rising,
@@ -164,9 +164,8 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
         )}
       >
         {/* The same family mark the event feed gives this reason. Severity
-         *  keeps the colour — the ranking on this screen is by severity and
-         *  nothing may compete with it — so the family contributes only its
-         *  shape, exactly as it does on a Warning in the feed. */}
+         *  keeps the colour — nothing may compete with the ranking on this
+         *  screen — so the family contributes only its shape. */}
         <ProblemIcon
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
@@ -322,11 +321,11 @@ type Segment = CompositionSegment;
 /**
  * Pods by phase.
  *
- * Phase is what separates a replica that is serving from a Job pod that ran
- * and finished — lumping both into one "Healthy" bar told anyone with a
- * nightly CronJob that they had more running workload than they do.
- * Crash-loopers are carved back out of Running: the phase says Running while
- * the container is in a back-off loop serving nothing.
+ * Phase separates a replica that is serving from a Job pod that ran and
+ * finished; one "Healthy" bar over both overstates the running workload of
+ * anyone with a nightly CronJob. Crash-loopers are carved back out of
+ * Running: the phase says Running while the container is in a back-off loop
+ * serving nothing.
  */
 function podSegments(pods: PodComposition): Segment[] {
   return [
@@ -592,8 +591,8 @@ export function NodesPanel({
   version?: string;
 }) {
   // Rendered in full, unlike the problems list: node counts are bounded in
-  // practice, and hiding one behind a "+N more" would hide the node someone
-  // opened this panel to find.
+  // practice, and a "+N more" would hide the node someone opened this panel
+  // to find.
   return (
     <Section>
       <SectionHeader
@@ -633,12 +632,9 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
 function WarningRow({ warning }: { warning: WarningGroup }) {
   const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
-  // family mark contributes only shape — the feed's rule, applied to the one
-  // event surface that was still rendering a reason as a bare word.
+  // family mark contributes only shape.
   const { Icon } = eventReasonMark(warning.reason);
-  // The same `Kind/name` this row always printed, now under the mark and hue
-  // every other naming of the same object carries. `showKind` stays on for
-  // exactly that reason: nothing beside it says the kind.
+  // `showKind` stays on: nothing beside this name says the kind.
   const subject =
     warning.objectKind && warning.objectName
       ? {
@@ -671,10 +667,9 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         {subject && warning.sample && " "}
         {warning.sample && (
           <span className="text-fg-fnt">
-            {/* The panel above this one has linkified the same sentence since
-             *  the segmenter shipped. It could not here because the group
-             *  carried a `"Kind/name"` string and no namespace, so every name
-             *  in the message had nothing to be resolved against. */}
+            {/* Names in the message are resolved against `subject`; a group
+             *  carrying only a `"Kind/name"` string and no namespace leaves
+             *  them nothing to resolve against. */}
             <ResourceMessage
               message={warning.sample}
               subject={subject ?? undefined}

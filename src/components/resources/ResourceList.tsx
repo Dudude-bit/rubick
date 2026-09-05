@@ -251,7 +251,6 @@ export function ResourceList<
       )
     : resources;
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (item: Row) => {
       if (deleteConfig) {

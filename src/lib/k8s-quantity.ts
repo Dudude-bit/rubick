@@ -28,7 +28,6 @@ export const DECIMAL_UNITS: Record<string, number> = {
   E: 1e18,
 };
 
-// CPU-specific units
 export const CPU_UNITS: Record<string, number> = {
   n: 1e-9, // nanocores
   u: 1e-6, // microcores

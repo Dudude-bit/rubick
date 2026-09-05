@@ -41,7 +41,6 @@ impl From<&Service> for ServiceInfo {
         let spec = service.spec.as_ref();
         let status = service.status.as_ref();
 
-        // Get LoadBalancer IPs from status.loadBalancer.ingress
         let load_balancer_ips = status
             .and_then(|s| s.load_balancer.as_ref())
             .and_then(|lb| lb.ingress.as_ref())

@@ -2,42 +2,21 @@
  * Everything the app knows about a specific vendor's product, and the only
  * door into it.
  *
- * Kubernetes core is what the kubeconfig already reaches and what every
- * cluster answers for. This tree is the rest: cert-manager, Traefik, Istio,
- * Flux, and the three clouds' spellings of the facts their nodes already
- * carry. A surface asks for a facet and gets an implementation or nothing.
- * It never learns which vendor answered, or whether one did.
+ * A surface asks for a facet and gets an implementation or nothing; it never
+ * learns which vendor answered, or whether one did. `registry.ts` has the
+ * rest of the rule and what is deliberately outside it.
  *
- * The name is `integrations/` and it spans all three tiers, including tier
- * one, which is neither detected nor configured. What decides that
- * something lives here is not the tier but one question: *is this knowledge
- * about a specific vendor's product?* See `registry.ts` for the rest of the
- * rule and for what is deliberately outside it.
+ * Adding a vendor is two files, both in this tree and nothing anywhere else:
+ * `src/integrations/<id>/index.ts` with `defineVendor({ … })` plus anything
+ * bulky beside it in the same folder, and one import plus one entry in
+ * {@link VENDORS} here. A vendor bringing a whole screen adds
+ * `page: { count, load }` beside `extension`, which puts a row in the sidebar
+ * and serves `/integrations/<id>` through the route `App.tsx` already has.
  *
- * ## Adding a vendor
- *
- * Two files, both in this tree, and nothing anywhere else:
- *
- * 1. `src/integrations/<id>/index.ts` — `defineVendor({ … })` with the
- *    facets it has. Put anything bulky beside it in the same folder:
- *    `crd.ts` for a page of column definitions, a client, a config form.
- * 2. `src/integrations/index.ts` — one import and one entry in
- *    {@link VENDORS}.
- *
- * That is the whole procedure, and it holds for a vendor that brings a whole
- * screen: `page: { count, load }` beside `extension` puts a row in the
- * sidebar's Integrations category and serves the screen at
- * `/integrations/<id>`, through the one route `App.tsx` already has. No
- * surface is edited, no switch statement grows a case, nothing is registered
- * at startup, and no test outside this tree changes — every consumer reads
- * the facet through a derivation below, so a new vendor's labels, columns,
- * marks and pages appear wherever the existing ones already do.
- *
- * Two exceptions, both of which stay inside the tree: a genuinely new
- * *capability* (as opposed to a new supplier of an existing one) adds a key
- * to `Capabilities` in `registry.ts` and needs a surface written to consume
- * it; and a new cluster *flavour* adds a member to `ClusterProvider` there
- * too, because that union is what keeps the mark table exhaustive.
+ * Two exceptions, both inside the tree: a new *capability* adds a key to
+ * `Capabilities` in `registry.ts` and needs a surface written to consume it;
+ * a new cluster *flavour* adds a member to `ClusterProvider` there, because
+ * that union is what keeps the mark table exhaustive.
  */
 
 import { sayWords } from "@/i18n/say";
@@ -213,8 +192,8 @@ function useDetected() {
   // before the client exists, and firing then buys four errored queries
   // and their retry backoff on every launch.
   const isConnected = useClusterStore((state) => state.isConnected);
-  // Keyed on the context, as "one CRD list per cluster" always claimed:
-  // cluster B must never read cluster A's scan, and a window with no
+  // Keyed on the context: cluster B must never read cluster A's scan,
+  // and a window with no
   // cluster — context null — reads nothing, so the rail forgets the old
   // cluster's vendors the moment the reader leaves it.
   const context = useClusterStore((state) => state.currentContext);
@@ -425,16 +404,15 @@ function endpointOf(url: string): string {
  * Every installed vendor that supplies a capability, in registry order.
  *
  * {@link useCapability} answers with the first, which is right where the
- * question has one answer: one thing issues the certificate in a given Secret,
- * and asking a second vendor about it would be asking it to guess.
+ * question has one answer: one thing issues the certificate in a given
+ * Secret.
  *
- * Delivery is not that question. Argo CD and Flux are routinely installed side
- * by side — one team's namespace under each — and on such a cluster the *first*
- * provider is the wrong answer for half the objects and would silently return
- * `null` for them. Worse, an object both controllers really do apply is a fact
- * worth shouting, and a lookup that stopped at the first hit could never find
- * it. So the surfaces that need it ask everybody and reconcile the answers
- * themselves.
+ * Delivery is not that question. Argo CD and Flux are routinely installed
+ * side by side — one team's namespace under each — so the *first* provider is
+ * the wrong answer for half the objects and would silently return `null` for
+ * them, and an object both controllers really do apply is a fact worth
+ * shouting that a lookup stopping at the first hit could never find. The
+ * surfaces that need it ask everybody and reconcile the answers themselves.
  */
 export function useCapabilities<K extends CapabilityKey>(
   key: K
@@ -482,13 +460,10 @@ export interface IntegrationStatus {
   /** Narrowed off the vendor, because only vendors with one are listed. */
   extension: Extension;
   /**
-   * Present and usable. For a detected vendor that is "its CRDs are here";
-   * for a configured one it is "it has an address and the address answered",
-   * which is what keeps the row's promise honest — a row saying "detected"
-   * over a Prometheus that is refusing every query would be the silent
-   * fallback this whole seam exists to prevent.
+   * Present and usable: for a detected vendor "its CRDs are here", for a
+   * configured one "it has an address and the address answered". `null` where
+   * the cluster would not say — which is not "no".
    */
-  /** `null` where the cluster would not say — which is not "no". */
   installed: boolean | null;
   version: string | null;
   facts: FactsState;
@@ -502,8 +477,7 @@ export interface IntegrationStatus {
  * The pane is glanced at, not watched, so nothing polls: opening it reads
  * the cluster, and opening it again within the minute does not. A number on
  * screen is therefore at most one pane-open old, which is why it is stated
- * without a timestamp and without a live mark — it never claims to be
- * either.
+ * without a timestamp and without a live mark.
  */
 const FACTS_STALE_TIME = 60_000;
 
@@ -530,19 +504,17 @@ export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
  * Every extension this cluster could have, whether it has it, and what the
  * ones it has are currently doing — for the one screen allowed to name them.
  *
- * Only vendors declaring {@link Extension} appear, which is what keeps the
- * cluster's own flavour out: GKE and k3s are vendors in this tree too, and
- * "Google Cloud · not installed" is nonsense — you cannot have a cluster
- * and not have the thing running it.
+ * Only vendors declaring {@link Extension} appear, which keeps the cluster's
+ * own flavour out: GKE and k3s are vendors in this tree too, and "Google
+ * Cloud · not installed" is nonsense.
  *
- * Facts are fetched for detected extensions only. An absent one is not
- * asked about, because the objects it would count cannot exist; and nothing
- * is fetched at all unless the reader is standing on the pane, so mounting
- * this to answer a search query costs no requests.
+ * Facts are fetched for detected extensions only — an absent one's objects
+ * cannot exist — and nothing is fetched at all unless the reader is standing
+ * on the pane, so mounting this to answer a search query costs no requests.
  *
- * A configured vendor never appears in the detection scan and must not: it
- * is present because somebody gave it an address, and its facts come from
- * the probe rather than from a query it would have to make twice.
+ * A configured vendor never appears in the detection scan and must not: it is
+ * present because somebody gave it an address, and its facts come from the
+ * probe rather than from a query it would have to make twice.
  */
 export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
@@ -564,8 +536,7 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
       installed: connection
         ? connection.state === "connected"
         : // A vendor the scan never mentioned is not installed. A vendor it
-          // mentioned without an answer is a different thing, and `?? false`
-          // used to flatten the two into the same claim.
+          // mentioned without an answer is a different thing.
           entry
           ? entry.installed
           : false,
@@ -706,15 +677,11 @@ export function useConnectionEditor(vendorId: string): {
     test: async (draft) =>
       vendor
         ? vendor.connect.probe(draft).then((result) => {
-            // The dialog held this answer in local state and the badge on
-            // the row behind it kept whatever the cached probe last said —
-            // so pressing Test and watching it succeed left "no answer" in
-            // red two centimetres away.
-            //
-            // Only when the tested draft *is* the saved connection: a test
-            // against an edited address is about a different address, and
-            // seeding the shared answer with it would be the same lie in
-            // the other direction.
+            // Seeds the shared probe answer, so pressing Test and watching
+            // it succeed does not leave the row behind the dialog showing
+            // "no answer" from the cached probe. Only when the tested draft
+            // *is* the saved connection: a test against an edited address is
+            // about a different address.
             if (
               saved &&
               saved.url === draft.url &&
@@ -822,17 +789,15 @@ export interface IntegrationPageEntry {
  * The Integrations category: one row per extension this cluster actually
  * has, or an empty list.
  *
- * **Every one of them, not only the ones with a screen.** The category used
- * to list vendors declaring a `page` and silently drop the rest, which meant
- * a cluster running cert-manager was told it had no integrations at all. An
- * extension that owns no screen is still installed, still doing something,
- * and still worth a row — it just goes to its Settings row, which is where
- * what it gives and what it is currently doing are already written.
+ * **Every one of them, not only the ones with a screen.** An extension that
+ * owns no screen is still installed, still doing something, and still worth a
+ * row — it goes to its Settings row, where what it gives and what it is
+ * currently doing are already written.
  *
  * Empty is still the answer for most clusters and the caller must draw
  * nothing at all for it — not an empty group, not a placeholder. Nothing is
- * hidden by that: with no extension installed there is no row to hide, and
- * Settings → Integrations names every extension the app knows either way.
+ * hidden by that: Settings → Integrations names every extension the app knows
+ * either way.
  */
 export function useIntegrationPages(): {
   pages: IntegrationPageEntry[];
@@ -1016,8 +981,8 @@ export function useIntegrationPage(
 
 /**
  * The vendor view for a custom resource's API group, or `null` for the
- * thousands of CRDs nobody here has heard of — which get the CRD's own
- * printer columns, exactly as they did before this tree existed.
+ * thousands of CRDs nobody here has heard of, which get the CRD's own
+ * printer columns.
  *
  * No detection call: reaching a `cert-manager.io` list page requires the
  * group to exist, so the group is the detection.

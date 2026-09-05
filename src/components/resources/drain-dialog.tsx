@@ -2,24 +2,19 @@
  * The drain, from the click to the last pod, in one dialog.
  *
  * A drain is where a PodDisruptionBudget stops being a number on a workload
- * page and becomes the reason a command sits there. So this says which
- * budget before the click, and then stays open and says what is happening —
- * because the interesting part of a drain is the waiting, and a spinner
+ * page and becomes the reason a command sits there, so this names the budget
+ * before the click and then stays open and says what is happening — a spinner
  * cannot tell "still going" from "stuck".
  *
  * **It does not block, it tells.** Draining into a spent budget is a
  * legitimate thing to do; the eviction is refused for now and asked again,
- * and a tool that refuses to let you try gets worked around.
+ * and a tool that refuses to let you try gets worked around. What it must
+ * never do is promise the waiting and then answer a refused eviction with a
+ * direct `DELETE` — the one call that consults no budget at all.
  *
- * What it must never do is promise one thing and do another. An earlier
- * version said here that the drain would wait, while the backend answered
- * every refused eviction with a direct `DELETE` — the one call that does not
- * consult a budget at all. The words were the honest half and the code was
- * not. Now the waiting is real, so the sentence is true.
- *
- * The two opt-ins are the other half of the same honesty. They decide which
- * pods are in the set, never how they leave it, and both start off, because
- * each one ends something the cluster will not bring back.
+ * The two opt-ins decide which pods are in the set, never how they leave it,
+ * and both start off, because each one ends something the cluster will not
+ * bring back.
  */
 
 import { useState } from "react";
@@ -63,14 +58,12 @@ const REFUSAL_LABEL: Record<DrainRefusal, keyof typeof en.cluster> = {
  * Total over the four outcomes, with no fallback on purpose.
  *
  * `drained` normally never reaches this view — the list closes the dialog and
- * says so in a toast, because an emptied node has nothing left to read. It is
- * still named here: a partial map needs a default, and a default is how a new
- * outcome ends up silently wearing an old one's label.
+ * says so in a toast. It is still named here: a partial map needs a default,
+ * and a default is how a new outcome silently wears an old one's label.
  *
- * `failed` here is not the same as the `failed` phase. That one is the
- * command being refused before any drain existed; this one is a drain that
- * was running and broke — so it arrives with a report of what it had already
- * moved, and the phase does not.
+ * `failed` here is not the `failed` phase. That one is the command being
+ * refused before any drain existed; this one is a drain that was running and
+ * broke, so it arrives with a report of what it had already moved.
  */
 const OUTCOME_LABEL: Record<DrainOutcome, keyof typeof en.action> = {
   drained: "nodeIsDrained",
@@ -101,10 +94,9 @@ export function DrainDialog({
 }) {
   const t = useT();
 
-  // Closable at every moment, including mid-drain. The panel says leaving the
-  // window does not stop the drain, and for a while it also refused to let
-  // you leave — the same shape of lie this whole change exists to remove. The
-  // node's row reopens this, running drain and all.
+  // Closable at every moment, including mid-drain: the panel says leaving the
+  // window does not stop the drain, and the node's row reopens this, running
+  // drain and all.
   return (
     <Dialog open={!!node} onOpenChange={onOpenChange}>
       <DialogContent>

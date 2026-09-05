@@ -149,7 +149,6 @@ export const useInfrastructureBuilderStore = create<InfrastructureBuilderState>(
 
       set({ context, loading: true });
 
-      // Load state from backend
       loadState(context).then((stored) => {
         set({
           selectedNodeId: null,

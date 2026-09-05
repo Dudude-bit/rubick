@@ -14,12 +14,10 @@ import {
 /**
  * A pod's containers as the sequence they actually are.
  *
- * `phase` alone is not the story. An init container that is waiting has
- * not failed and is not starting — it has not been given a turn, and the
- * only thing that says so is its *position*: the one before it in the
- * list has not finished. A flat list of three containers with three
- * states cannot express that, which is why this exists between the data
- * and the rows rather than inside them.
+ * `phase` alone cannot say that a waiting init container has neither
+ * failed nor started — it has not been given a turn, and the only thing
+ * that says so is its *position*: the one before it has not finished.
+ * Hence a layer between the data and the rows rather than inside them.
  */
 
 /** The silhouette a step gets on the rail. */
@@ -66,11 +64,10 @@ interface Phased {
 /**
  * The two lists a pod object and a workload template both carry.
  *
- * Generic because the split is the same fact in both: `initContainers` is
- * a separate field in the API object, and everything already reading
- * `containers` means app containers by it. Taking *this* rather than an
- * array is what makes `podReadiness(pod.containers)` — and every other
- * form of the bug — a type error instead of a convention.
+ * `initContainers` is a separate field in the API object, and everything
+ * already reading `containers` means app containers by it. Taking this
+ * pair rather than an array is what makes `podReadiness(pod.containers)`
+ * — and every other form of the bug — a type error, not a convention.
  */
 export interface ContainerLists<T extends Phased> {
   initContainers?: T[];
@@ -84,11 +81,8 @@ export type TemplateContainerLists = ContainerLists<DeploymentContainerInfo>;
 /**
  * Both lists, in the order the kubelet runs them.
  *
- * The two are separate on the wire because they are separate in the API
- * object, and every consumer that wants "the containers of this thing"
- * wants them concatenated in this order — a caller handed only
- * `.containers` is the bug this whole piece exists to fix, on a pod and
- * on the five kinds that share one template type alike.
+ * A caller handed only `.containers` is the bug this piece exists to fix
+ * — on a pod and on the five kinds sharing one template type alike.
  */
 export function declaredContainers<T extends Phased>(
   lists: ContainerLists<T>
@@ -139,11 +133,9 @@ export function podContainers(pod: PodContainerLists): ContainerInfo[] {
 /**
  * App containers first, then sidecars, then the rest.
  *
- * Run order is right when the question is "what happened" — it is what
- * explains a container that never got a turn. It is wrong when the
- * question is "which one do you mean", because the answer a reader wants
- * offered first is their own container, not the mesh proxy that was
- * injected into their pod without them asking.
+ * Run order answers "what happened"; this order answers "which one do you
+ * mean", where the container a reader wants offered first is their own,
+ * not the mesh proxy injected into their pod without them asking.
  */
 const PHASE_ORDER: Record<ContainerPhase, number> = {
   app: 0,
@@ -156,17 +148,15 @@ function byPhase(a: ContainerInfo, b: ContainerInfo): number {
 }
 
 /**
- * The containers that are meant to be up for as long as the pod is.
+ * The containers meant to be up for as long as the pod is — the set
+ * kubectl means by `READY`, and the spine of every helper under it.
  *
- * App containers and sidecars, and nothing else: a sidecar is an init
- * container with `restartPolicy: Always`, which means it starts during
- * init and then keeps running beside the app. An ordinary init container
- * has exited by the time anyone is looking, so counting it as part of the
- * pod, forwarding to a port it declared, or offering it as a debug target
- * all describe a process that is not there.
- *
- * This is the set kubectl means by a pod's containers in `READY`, and the
- * spine of every helper under it.
+ * App containers and sidecars, nothing else: a sidecar is an init
+ * container with `restartPolicy: Always`, so it starts during init and
+ * keeps running beside the app. An ordinary init container has exited by
+ * the time anyone is looking, so counting it as part of the pod,
+ * forwarding to a port it declared, or offering it as a debug target all
+ * describe a process that is not there.
  */
 export function lifetimeContainers(pod: PodContainerLists): ContainerInfo[] {
   return [
@@ -183,27 +173,25 @@ export interface PodReadiness {
 }
 
 /**
- * `2/2` — the number in kubectl's READY column, derived the way kubectl
- * derives it.
+ * `2/2` — kubectl's READY column, derived the way kubectl derives it.
  *
  * Ported from `printPod` in `pkg/printers/internalversion/printers.go`,
  * which is also where `pod_display.rs` gets the status beside it. Two
- * rules that a naive tally gets backwards, and both bite on every pod in
- * a service mesh:
+ * rules a naive tally gets backwards, both biting on every meshed pod:
  *
  * - A restartable init container — a sidecar — counts in *both* halves.
  *   `sidecar-demo` is one app container plus one sidecar and kubectl
  *   reports it `2/2`, not `1/1` and not `2/3`.
- * - An ordinary init container counts in neither, and this is the trap:
- *   the kubelet leaves `ready: true` on an init container that exited 0,
- *   so `[...init, ...app].filter(c => c.ready)` reads `3/3` on a pod
+ * - An ordinary init container counts in neither: the kubelet leaves
+ *   `ready: true` on one that exited 0, so
+ *   `[...init, ...app].filter(c => c.ready)` reads `3/3` on a pod
  *   kubectl calls `2/2`.
  *
- * The two halves are counted by different predicates because kubectl
- * counts them by different predicates: an app container is `Ready &&
- * State.Running`, a sidecar is `Started && Ready`. `started` is the
- * kubelet's startup-probe verdict and is its own field, which is why the
- * walk below reads it rather than standing a running state in for it.
+ * The halves use different predicates because kubectl uses different
+ * predicates: an app container is `Ready && State.Running`, a sidecar is
+ * `Started && Ready`. `started` is the kubelet's startup-probe verdict
+ * and its own field, which is why the walk below reads it rather than
+ * standing a running state in for it.
  */
 export function podReadiness(pod: PodContainerLists): PodReadiness {
   const total = lifetimeContainers(pod).length;
@@ -241,11 +229,10 @@ export interface PodPort {
 /**
  * Every port something in this pod could actually be listening on.
  *
- * A sidecar's port is not a footnote — on a meshed pod it is the proxy
- * port, which is the one a forward is usually aimed at. It sits beside
- * the app's rather than in a section of its own; what it does not do is
- * come first, because the default a dialog fills in should be the port
- * the reader's own container declared.
+ * A sidecar's port is the proxy port on a meshed pod, which is the one a
+ * forward is usually aimed at — so it sits beside the app's rather than
+ * in a section of its own, but not first: the port a dialog fills in by
+ * default should be the one the reader's own container declared.
  */
 export function podPorts(pod: PodContainerLists): PodPort[] {
   return lifetimeContainers(pod)
@@ -263,19 +250,18 @@ const NOT_STARTED = new Set([
 ]);
 
 /**
- * Why a shell cannot attach to this container, or nothing if it can.
+ * Why a shell cannot attach to this container, or nothing if it can — the
+ * one judgement about attachability in the app.
  *
- * The one judgement about attachability in the app. A shell needs a live
- * process on the other end, which is a fact about the container's state
- * and not about which list it arrived in: a running sidecar takes a shell
- * exactly like an app container does, and a finished init container takes
+ * Decided by state, not by which list the container arrived in: a shell
+ * needs a live process on the other end, so a running sidecar takes one
+ * exactly as an app container does and a finished init container takes
  * one from nobody.
  *
- * It returns a reason rather than a boolean because the Shell chooser
- * keeps unattachable containers on the list, struck out and carrying it —
- * a container that silently is not on the list makes the reader wonder
- * whether they misremembered its name, and the answer to "why can I not
- * shell into `prepare`" is a fact about `prepare`, not an absence.
+ * A reason rather than a boolean, because the Shell chooser keeps
+ * unattachable containers on the list, struck out and carrying it: the
+ * answer to "why can I not shell into `prepare`" is a fact about
+ * `prepare`, not an absence the reader has to interpret.
  */
 export function whyNoShell(container: ContainerInfo, t: T): string | null {
   const { state } = container;
@@ -458,19 +444,16 @@ export interface TemplateGroup {
 }
 
 /**
- * The same three groups for a template, said in the tense a template
- * deserves.
+ * The same three groups for a template, in a template's tense.
  *
  * A declaration has no run to report, so there is no `ContainerStep`
- * here: no mark, no state badge, no "finished 3s ago". Position still
- * means something — the kubelet runs init containers in the order they
- * are written — and that is the one live-looking thing kept, because it
- * is a fact about the spec rather than about any pod made from it.
- *
- * The captions carry the whole difference between the two views. "started
- * during init and still running" is a claim about a process; the template
- * can only say what will happen when a pod is made, and saying more would
- * be the same class of lie as calling a queued container "never started".
+ * here: no mark, no state badge, no "finished 3s ago". Position is the
+ * one live-looking thing kept — the kubelet runs init containers in the
+ * order they are written, which is a fact about the spec rather than
+ * about any pod made from it. The captions carry the rest of the
+ * difference: "started during init and still running" is a claim about a
+ * process, and the template can only say what will happen when a pod is
+ * made.
  */
 export function templateSequence(
   template: TemplateContainerLists,

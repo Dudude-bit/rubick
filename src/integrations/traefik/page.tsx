@@ -1,57 +1,26 @@
 /**
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
- * ## It opens on Routes, like every page in this tree
+ * It opens on Routes, like every vendor page in this tree, because "what is
+ * broken" is what somebody who opened an integration page is asking. Map is a
+ * real screen and stays a click away.
  *
- * cert-manager opens on Certificates, Flux on Reconcilers, Argo on
- * Applications, ingress-nginx on its own Routes — every vendor page in this
- * app lands the reader on the list ordered by trouble, because "what is
- * broken" is the question somebody who opened an integration page is almost
- * always asking, and that answer has to be on screen before a click, not
- * behind one. Traefik is not a case for a different rule: Routes carries the
- * same trouble-first ordering, the same auto-opened rows, the same one-line
- * summary at the top. Map is a real screen and stays a click away — it earns
- * that click by answering a different question than triage does — but it is
- * never where the page opens.
+ * One request's journey is a chain in fixed order — entry point → rule →
+ * middleware → service → pods — so it is drawn as one, left to right, for the
+ * host the reader opened. Map answers what a chain cannot: which entry points
+ * carry which hostnames, and which land on the same Service. Layered and
+ * deterministic rather than force-directed, so nothing rearranges when a pod
+ * restarts.
  *
- * ## A map and a chain, and they answer different questions
+ * Ordered by trouble, not by name: the reader has one URL that is not working
+ * and seventy-nine that are. A host with a finding opens itself and every
+ * other is one line; past {@link AUTO_OPEN} troubled hosts nothing opens
+ * itself, because a screen where everything is expanded emphasises nothing.
  *
- * A force-directed blob of every route in the cluster is decoration — it
- * looks like insight and answers nothing. One request's journey is not a
- * general graph either; it is a **chain in fixed order**: entry point → rule
- * → middleware → service → pods. So that is drawn as a chain, left to right,
- * with the columns labelled, and only for the host the reader opened.
- *
- * What the chain cannot show is the **shape across hosts** — which entry
- * points carry which hostnames, and which of them land on the same Service —
- * and that is a real question on any cluster with more than one host, which
- * is nearly all of them. It used to have no answer here at all: every host
- * was one collapsed line and the reader had to open them one at a time and
- * hold the picture in their head. Map is that answer, and it is deliberately
- * layered and deterministic rather than force-directed: fixed columns,
- * trouble-first order, no rearranging when a pod restarts. That it exists at
- * all is the whole of its claim on the reader's attention — it does not also
- * need to be the first thing they see.
- *
- * ## Good with one host and with eighty
- *
- * Ordered by trouble, not by name: the reader has one URL that is not
- * working and seventy-nine that are, and the alphabet puts the answer
- * wherever the alphabet happens to put it. A host with a finding opens
- * itself; every other host is one line until it is asked for, so eighty
- * hosts is eighty lines with the three that matter already open. Past
- * {@link AUTO_OPEN} troubled hosts nothing opens itself at all — a screen
- * where everything is expanded is a screen where nothing is emphasised — and
- * the filter above narrows by hostname, service or object name.
- *
- * ## Where a link goes
- *
- * Into this app for everything the cluster owns: the Service, the Ingress,
- * the IngressRoute, the controller's own Deployment and its logs. Traefik's
- * dashboard is good and is deliberately *not* linked to, because this app
- * cannot construct an address for it that works — it is bound to an entry
- * point with no route to it from outside the cluster, and a button that
- * leads to a connection error is worse than no button.
+ * Links go into this app for everything the cluster owns. Traefik's own
+ * dashboard is deliberately not linked: it is bound to an entry point with no
+ * route to it from outside, and a button that leads to a connection error is
+ * worse than no button.
  */
 
 import { sayWords } from "@/i18n/say";
@@ -1003,12 +972,10 @@ function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
 
   if (group.findings.length === 0) return null;
 
-  // A closed row already carries its state in the word at its right end, and
-  // "served in the clear" under a row that says `served in the clear` is the
-  // same sentence twice and twice the height. Only a finding that says more
-  // than the status word does earns a line on a closed row — which on a
-  // cluster of eighty plain-HTTP hosts is the difference between eighty rows
-  // and a hundred and sixty.
+  // A closed row already carries its state in the word at its right end, so
+  // only a finding that says more than that word earns a line on it — which
+  // on a cluster of eighty plain-HTTP hosts is the difference between eighty
+  // rows and a hundred and sixty.
   const worthRepeating = group.findings.filter(
     (finding) => finding.kind !== "clear"
   );

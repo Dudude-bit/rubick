@@ -2,21 +2,18 @@
  * What GKE's three Ingress objects say, read once for every surface that
  * asks.
  *
- * The split worth stating up front, because everything else here follows
- * from it: **`BackendConfig` and `FrontendConfig` have no status at all.**
- * Not an empty one that a controller has not filled in yet — the types are
- * declared `+genclient:noStatus` upstream and their CRDs carry a `status`
- * object with no properties in it. So nothing drawn from them may ever read
- * as a verdict. They state what the Google load balancer *will be told*: a
- * health check to run, a timeout to enforce, CDN to turn on. Whether that
- * health check passes is a question for the cloud's API and is not in this
- * cluster.
+ * **`BackendConfig` and `FrontendConfig` have no status at all.** Not an
+ * empty one a controller has not filled in yet — the types are declared
+ * `+genclient:noStatus` upstream and their CRDs carry a `status` object with
+ * no properties in it. So nothing drawn from them may ever read as a verdict.
+ * They state what the Google load balancer *will be told*: a health check to
+ * run, a timeout to enforce, CDN to turn on. Whether that health check passes
+ * is a question for the cloud's API and is not in this cluster.
  *
- * `ManagedCertificate` is the opposite and is the reason this tier is worth
- * anything: its controller writes a real status, per domain, and
- * `FailedNotVisible` on one domain of four is the single most common way a
- * GKE Ingress serves a certificate nobody can use. The vocabulary below is
- * the controller's own, not a guess at it.
+ * `ManagedCertificate` is the opposite: its controller writes a real status,
+ * per domain, and `FailedNotVisible` on one domain of four is the single most
+ * common way a GKE Ingress serves a certificate nobody can use. The
+ * vocabulary below is the controller's own, not a guess at it.
  */
 
 import type { Saying } from "@/i18n/say";
@@ -220,7 +217,7 @@ export function healthCheckOf(config: CustomResourceInfo): Saying | null {
  * How fast a failing backend is taken out, and how fast it comes back.
  *
  * The four numbers people actually open a `BackendConfig` for, and the
- * summary line has never carried them: an interval of 5s with an unhealthy
+ * summary line does not carry them: an interval of 5s with an unhealthy
  * threshold of 2 takes a backend out in ten seconds, and 60s with a
  * threshold of 10 takes ten minutes. Both read as "health check HTTP /" in
  * one line.

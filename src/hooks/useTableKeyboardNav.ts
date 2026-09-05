@@ -76,7 +76,6 @@ export function useTableKeyboardNav({
     (e: React.KeyboardEvent, currentIndex: number) => {
       if (!enabled) return;
 
-      // Check custom keyboard actions first
       const customAction = keyboardActions.find(
         (action) => action.key.toLowerCase() === e.key.toLowerCase()
       );

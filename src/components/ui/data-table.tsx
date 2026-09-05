@@ -60,26 +60,22 @@ interface DataTableProps<TData extends RowData> {
    * The table may use the whole height of the pane it is in: rows scroll
    * inside it while the search row and the count stay put.
    *
-   * A ceiling rather than a target — the table takes what it needs and no
-   * more, so a twelve-row list still ends where its rows end instead of
-   * pushing its count line to the bottom of the window. Only a list too long
-   * to fit reaches the ceiling, and that is the one that used to be cut to
-   * 600px with the rest of the pane blank beneath it.
+   * A ceiling rather than a target — a twelve-row list still ends where its
+   * rows end instead of pushing its count line to the bottom of the window,
+   * and only a list too long to fit reaches the ceiling.
    *
    * For a table that *is* the page: the parent has to be a flex column with a
    * height of its own — `h-full min-h-0` the whole way up to the scroll pane —
-   * or there is no ceiling to find and the table grows the page scroll as
-   * before. Off for a table embedded in a flow, where that is the right
-   * answer anyway.
+   * or there is no ceiling to find and the table grows the page scroll
+   * instead. Off for a table embedded in a flow.
    */
   fill?: boolean;
   /**
    * How tall the windowed scroll port is when there is no height to fill.
    *
-   * Only reached by an unfilled table, and only once it is long enough to
-   * window: the virtualiser measures its scroll element, and an element with
-   * no bound measures as tall as its own content — which draws every row and
-   * is the one thing windowing exists to avoid.
+   * The virtualiser measures its scroll element, and an element with no bound
+   * measures as tall as its own content — which draws every row, the one thing
+   * windowing exists to avoid.
    */
   virtualScrollHeight?: number;
   /** Generate navigation URL for row click */
@@ -105,12 +101,11 @@ interface DataTableProps<TData extends RowData> {
  * Where the table stops mounting every row and draws a window instead — and
  * where it goes back.
  *
- * Two marks rather than one, because a single one is a number that moves under
- * the reader: a namespace sitting at a hundred pods crosses it on a watch tick
- * and crosses back on the next. Crossing swaps every row's measured height for
- * an estimate and back, and on an unfilled table it swaps the whole list for a
- * fixed box with its own scrollbar — scroll position lost both ways. The gap is
- * wide enough that only a list genuinely changing size moves anything.
+ * Two marks rather than one: a single one is a number that moves under the
+ * reader, with a namespace sitting at a hundred pods crossing it on one watch
+ * tick and back on the next. Crossing swaps every row's measured height for an
+ * estimate and back, and on an unfilled table it swaps the whole list for a
+ * fixed box with its own scrollbar — scroll position lost both ways.
  */
 const VIRTUALISE_ABOVE_ROWS = 100;
 const STAY_FLAT_BELOW_ROWS = 75;
@@ -121,9 +116,9 @@ const VIRTUAL_SCROLL_DEFAULT_HEIGHT = 600;
  *
  * The scroll and the mount take a frame or two; a row that has not arrived by
  * now is not coming. Without a deadline the pending index outlives the key
- * press for the life of the table — a watch tick that drops the list shorter
- * than the index strands it there, and the moment the list grows back the
- * table pulls the focus off whatever the reader had moved to since.
+ * press for the life of the table: a watch tick that drops the list shorter
+ * than the index strands it there, and when the list grows back the table
+ * pulls focus off whatever the reader had moved to since.
  */
 const PENDING_FOCUS_MS = 1000;
 
@@ -131,11 +126,10 @@ const PENDING_FOCUS_MS = 1000;
 const ACTIONS_COLUMN_ID = "_actions";
 
 /**
- * A row's height before it has been measured, per density.
- *
- * Compact is the 23px pitch the cell padding is built around; comfortable is
- * the same line box with `py-2` around it. Only a first guess — every drawn
- * row is measured, because a comfortable row whose labels wrap is taller.
+ * A row's height before it has been measured, per density. Compact is the 23px
+ * pitch the cell padding is built around; comfortable is the same line box with
+ * `py-2` around it. Only a first guess — every drawn row is measured, because a
+ * comfortable row whose labels wrap is taller.
  */
 const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 
@@ -145,7 +139,6 @@ const OVERSCAN = 12;
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon
  * and a 2px gap each, inside the cell's own 10px padding on both sides.
- *
  * TanStack's default is 150 — a name column's worth of the table reserved for
  * two buttons, on every list in the app.
  */
@@ -161,10 +154,9 @@ const actionsColumnSize = (count: number) => 20 + count * 22;
  * every two seconds that replaced the button under the pointer between
  * `mousedown` and `mouseup` — no `click` was ever raised, the buttons appeared
  * dead, and the row's own handler (bound to a `tr` that does survive) opened
- * the object instead.
- *
- * A caller cannot get this wrong by passing a fresh array, which is what every
- * caller does: the renderer below is defined once and reads the array here.
+ * the object instead. The renderer below is defined once and reads the array
+ * here, so a caller passing a fresh array — which every caller does — cannot
+ * get it wrong.
  */
 const RowActions = React.createContext<QuickAction<never>[]>([]);
 
@@ -275,24 +267,19 @@ export function DataTable<TData extends RowData>({
   const [searchValue, setSearchValue] = React.useState("");
   const deferredSearch = React.useDeferredValue(searchValue);
 
-  // Density styling. Compact rows stay strictly single-line — a pod name
-  // like `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the
-  // row grows to triple height, which defeats the point of compact.
-  //
-  // 3px against a 16px line box and a 1px rule is a 23px pitch: nothing in
-  // a cell may be taller than that line box or it, not the padding, becomes
-  // the row height.
+  // Compact rows stay strictly single-line — a pod name like
+  // `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the row
+  // grows to triple height. 3px against a 16px line box and a 1px rule is a
+  // 23px pitch: nothing in a cell may be taller than that line box or it, not
+  // the padding, becomes the row height.
   const isCompact = tableDensity === "compact";
   const cellPadding = isCompact ? "py-[3px] px-2.5" : "py-2 px-2.5";
 
-  // Clipped, because the table is fixed-layout: a name longer than its
-  // column has nowhere to go and would otherwise paint straight over the
-  // namespace beside it.
-  //
-  // Text cells only. The actions cell holds 20px buttons whose pointer target
-  // is pushed back out to 24px by a pseudo-element, and hangs over the cell's
-  // padding by design; clipping that cell clips the hit area back to 20px in
-  // the density most of the app is looking at.
+  // Clipped, because the table is fixed-layout: a name longer than its column
+  // has nowhere to go and would otherwise paint over the namespace beside it.
+  // Text cells only — the actions cell holds 20px buttons whose pointer target
+  // is pushed back out to 24px by a pseudo-element hanging over the cell's
+  // padding, and clipping that cell clips the hit area back to 20px.
   const clipText =
     isCompact && "overflow-hidden text-ellipsis whitespace-nowrap";
 
@@ -333,13 +320,12 @@ export function DataTable<TData extends RowData>({
 
   const shouldVirtualScroll = enableVirtualScroll ?? isLong;
 
-  // Add actions column if quickActions provided
-  // Keyed on the count, not the array: the cell renderer no longer reads the
-  // array at all, and the column has nothing else to learn from it.
+  // Keyed on the count, not the array: the cell renderer reads the array from
+  // the context, and the column has nothing else to learn from it.
   const actionCount = quickActions?.length ?? 0;
   const columnsWithActions = React.useMemo(() => {
     if (actionCount === 0) return columns;
-    // Filter out any existing "_actions" or "actions" columns to avoid duplicates
+    // Drop any column already claiming the id, so it cannot appear twice.
     const filteredColumns = columns.filter(
       (col) => col.id !== ACTIONS_COLUMN_ID && col.id !== "actions"
     );
@@ -347,10 +333,9 @@ export function DataTable<TData extends RowData>({
   }, [columns, actionCount]);
 
   const table = useTable({
-    // Which features exist is now part of the table's type, and the app names
-    // them in one place rather than at every list. Row models come with them:
-    // in v9 the sorted and filtered ones are slots on the feature set, not
-    // functions handed in here.
+    // Which features exist is part of the table's type, named in one place.
+    // Row models come with them: in v9 the sorted and filtered ones are slots
+    // on the feature set, not functions handed in here.
     features: tableStack,
     data,
     columns: columnsWithActions,
@@ -445,18 +430,13 @@ export function DataTable<TData extends RowData>({
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  // Above the threshold every row used to mount, and a list that re-reads
-  // itself every two seconds then re-rendered all of them on every tick.
-  //
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
   // column grid, and every cell would have to carry its own width again.
   //
   // TanStack Virtual returns functions React Compiler cannot safely memoize,
-  // so it declines to compile this component. That used to be true of the
-  // table hook as well, and the disable sat there; v9's `useTable` is
-  // compatible, which is what let this one surface. The runtime cost is the
-  // same either way — the table re-renders cheaply — and it goes away when
+  // so it declines to compile this component. The runtime cost is the same
+  // either way — the table re-renders cheaply — and the disable goes away when
   // the fix lands upstream.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -475,11 +455,10 @@ export function DataTable<TData extends RowData>({
   });
 
   // Density changes the row height, and nothing in virtual-core notices:
-  // measured heights are cached per item and `estimateSize` is not part of
-  // what invalidates that cache. Without this, toggling density on a list
-  // whose rows have all been measured leaves the total height stale by the
-  // difference — a scrollbar that lies, and rows that jump as each one
-  // re-measures on its way back into the window.
+  // measured heights are cached per item and `estimateSize` does not
+  // invalidate that cache. Without this, toggling density on a list whose rows
+  // have all been measured leaves the total height stale by the difference —
+  // a scrollbar that lies, and rows that jump as each one re-measures.
   React.useEffect(() => {
     virtualizer.measure();
   }, [isCompact, virtualizer]);
@@ -583,14 +562,13 @@ export function DataTable<TData extends RowData>({
         key={row.id}
         data-index={line}
         ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
-        // No `data-state="selected"`: nothing in this app ever selects a row
-        // — no checkbox column, no selection state, no handler — so the answer
-        // was always "no". `TableRow` keeps the style for whoever wires
-        // selection up later.
+        // No `data-state="selected"`: nothing in this app selects a row —
+        // no checkbox column, no selection state, no handler. `TableRow`
+        // keeps the style for whoever wires it up later.
         // `rowProps` carries `data-focused`, which is what reveals the row's
-        // actions — read by CSS rather than by React, because hovering a row
-        // used to set state, and that rebuilt every column definition and
-        // re-rendered every cell in the table under the pointer.
+        // actions — read by CSS rather than by React, because hover state
+        // rebuilt every column definition and re-rendered every cell in the
+        // table under the pointer.
         {...rowProps}
         // After the spread on purpose: the hook's tab stop follows the focused
         // row, and the one that ships has to follow a drawn one.
@@ -712,10 +690,10 @@ export function DataTable<TData extends RowData>({
             />
           </div>
           <div className="flex items-center gap-2">
-            {/* Not a warning any more, a fact: the list is whole and only a
-              screenful of it is drawn. It stays because "why is this list
-              slow" and "why is my pod not here" have the same answer often
-              enough — narrow the scope or the search. */}
+            {/* The list is whole and only a screenful of it is drawn. It
+              stays because "why is this list slow" and "why is my pod not
+              here" have the same answer often enough — narrow the scope or
+              the search. */}
             {isLong && (
               <div className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -797,15 +775,16 @@ export function DataTable<TData extends RowData>({
                       return (
                         <TableHead
                           key={header.id}
-                          // A share of the table, not a pixel count. Fixed layout
-                          // reads its widths from the first row and resolves
-                          // `width: 100%` as `max(100%, Σ widths)` — so declared
-                          // pixels never shrink, and the ten columns a Pods list
-                          // wants added up to 378px more than the default window
-                          // has: a permanent horizontal scrollbar with the row's
+                          // A share of the table, not a pixel count. Fixed
+                          // layout reads its widths from the first row
+                          // and resolves `width: 100%` as
+                          // `max(100%, Σ widths)`, so declared pixels never
+                          // shrink: the ten columns a Pods list wants add up to
+                          // 378px more than the default window has — a
+                          // permanent horizontal scrollbar with the row's
                           // actions off the right edge. As percentages the same
-                          // numbers keep their proportions and always sum to the
-                          // table, at any width.
+                          // numbers keep their proportions and sum to the table
+                          // at any width.
                           style={{
                             width: `${(header.getSize() / totalSize) * 100}%`,
                           }}
@@ -876,11 +855,10 @@ export function DataTable<TData extends RowData>({
             </TableBody>
           </Table>
         </div>
-        {/* What the table holds, and nothing about pages. A live list has no
+        {/* What the table holds, and nothing about pages: a live list has no
           stable page 2 — objects appear and vanish under the reader, so a row
-          they saw a moment ago moves to another page they have to go and find
-          — and Ctrl-F only ever searched the twenty-five rows on screen. The
-          list is whole, the search narrows it, and long ones scroll. */}
+          moves to another page they have to go and find — and Ctrl-F would
+          only search the rows on screen. */}
         <div className="flex flex-none items-center justify-between text-[11px] text-fg-fnt">
           <div>
             {/* The noun is the kind's own plural and stays as the cluster

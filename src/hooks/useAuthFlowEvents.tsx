@@ -117,9 +117,7 @@ export function useAuthFlowEvents() {
     };
 
     const closeWindow = async (sessionId: string) => {
-      // Remove from active sessions
       activeSessionsRef.current.delete(sessionId);
-      // Dismiss auth toast
       dismissToast(sessionId);
 
       try {
@@ -301,7 +299,6 @@ export function useAuthFlowEvents() {
       );
       unlistenFns.push(unlistenRequested);
 
-      // Listener for auth flow completed
       const unlistenCompleted = await listen<AuthFlowCompletedPayload>(
         "auth-flow-completed",
         async (event) => {
@@ -335,7 +332,6 @@ export function useAuthFlowEvents() {
       );
       unlistenFns.push(unlistenCompleted);
 
-      // Listener for auth flow cancelled
       const unlistenCancelled = await listen<AuthFlowCancelledPayload>(
         "auth-flow-cancelled",
         async (event) => {

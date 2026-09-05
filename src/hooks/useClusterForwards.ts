@@ -2,14 +2,11 @@
  * Bringing a saved port-forward up: on its own when the reader asked for
  * that, and otherwise when they press the row.
  *
- * The two halves of one decision. A forward is a listening socket on this
- * machine and a connection into the cluster, so it is not started because
- * somebody once pressed a button — but a configured integration whose tunnel
- * is down should not vanish from the sidebar either, because vanishing is
- * indistinguishable from never having been set up.
- *
- * So a saved forward always draws its row. `autoStart` decides only whether
- * the reader has to press it.
+ * A forward is a listening socket on this machine and a connection into the
+ * cluster, so it is not started just because somebody once pressed a button.
+ * But a saved forward always draws its row, tunnel up or down: a row that
+ * vanishes is indistinguishable from an integration never set up. `autoStart`
+ * decides only whether the reader has to press it.
  */
 
 import { SaidError } from "@/i18n/say";
@@ -59,10 +56,9 @@ async function serviceOf(
 /**
  * Sessions this app has open onto the same Service, whatever port they are on.
  *
- * Reconnecting an integration picks a fresh local port, and the tunnel the
- * previous address was made of stays up behind it — a socket nobody is
- * listening to and a connection into the cluster nobody is using, both alive
- * until the app is restarted. They are stopped rather than left.
+ * Reconnecting an integration picks a fresh local port and leaves the previous
+ * tunnel up behind it: a socket nobody listens to and a cluster connection
+ * nobody uses, both alive until the app restarts. They are stopped, not left.
  */
 async function orphansOf(
   preference: ForwardPreference,
@@ -86,9 +82,8 @@ async function orphansOf(
  * is `http://localhost:<port>` and an address that moves under a connection
  * is worse than a slow one. Where the machine has taken it since — another
  * app, another cluster's tunnel — a free one is chosen and **the connection's
- * address is rewritten to match**, which is the half that makes moving safe:
- * the token and the TLS setting are untouched, since saving without a token
- * keeps the stored one.
+ * address is rewritten to match**. The token and the TLS setting are
+ * untouched, since saving without a token keeps the stored one.
  */
 export async function wake(
   vendorId: string,
@@ -172,11 +167,10 @@ async function moveAddress(
  * Wake a vendor's saved forward because the reader opened its page.
  *
  * Tunnels die with the app, so after a relaunch the page behind one opens
- * onto "could not ask it anything" — a dead end whose repair is one press
- * away in the sidebar. Navigating here *is* that press: the reader has
- * named the vendor as plainly as the row would have. One attempt per
- * mount, nothing when the tunnel is already up, and the row stays the
- * retry for an attempt that failed.
+ * onto "could not ask it anything". Navigating here names the vendor as
+ * plainly as pressing its sidebar row would: one attempt per mount, nothing
+ * when the tunnel is already up, and the row stays the retry for an attempt
+ * that failed.
  */
 export function useWakeOnVisit(vendorId: string): void {
   const context = useClusterStore((state) => state.currentContext);
@@ -211,8 +205,8 @@ export function useClusterForwards(): void {
   const forwards = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
   // One attempt per cluster per session. A forward that could not come up is
-  // not retried in a loop behind the reader's back — the row is there and
-  // pressing it tries again, which is a person deciding rather than a timer.
+  // not retried in a loop behind the reader's back; pressing the row is the
+  // retry.
   const tried = useRef(new Set<string>());
 
   useEffect(() => {

@@ -2,29 +2,23 @@
  * Whether the cluster still accepts the credentials this session was built
  * with — and the one place that decides it.
  *
- * ## Why this is not derived from a query
- *
  * A `401` is not an answer about the request that got it. Every request the
  * window makes afterwards gets the same one, because the token the client was
  * built with is simply not accepted any more: `prepare_kubeconfig_for_context`
  * runs the credential plugin once at connect and then strips the `exec` block
  * that could renew it, so a GKE session stops working about an hour in and
- * never recovers on its own.
+ * never recovers on its own. Nothing else notices — `isConnected` is set once
+ * at connect, a count the cluster refused draws as nothing, and a list that
+ * failed renders its *empty* state — so an expired token tells the reader, on
+ * every screen at once, that their cluster has no pods in it. The failure this
+ * module exists to end is the confident wrong answer, not a missing error
+ * screen.
  *
- * Nothing noticed. `isConnected` is set once at connect, so the rail kept its
- * green dot; a count the cluster refused draws as nothing, which is right
- * everywhere else and hid this; and a list that failed rendered its *empty*
- * state — so an expired token told the reader, on every screen at once, that
- * their cluster had no pods in it. That is the failure this module exists to
- * end: not a missing error screen, a confident wrong answer.
- *
- * ## Why a module and not a store
- *
- * It is set from `lib/commands.ts`, which every Tauri call in the app already
- * passes through — one choke point, no per-surface wiring, nothing to forget
- * on the next command added. `clusterStore` imports `commands`, so `commands`
- * cannot import `clusterStore`; this imports nothing and both sides may have
- * it.
+ * A module and not a store because it is set from `lib/commands.ts`, the one
+ * choke point every Tauri call already passes through: no per-surface wiring,
+ * nothing to forget on the next command added. `clusterStore` imports
+ * `commands`, so `commands` cannot import `clusterStore`; this imports nothing
+ * and both sides may have it.
  */
 
 /**

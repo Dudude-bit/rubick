@@ -12,15 +12,15 @@ import { useT } from "@/i18n/useT";
 
 /**
  * A container image reference, split the way a resource name is: the part a
- * reader recognises at full strength, its context quieter.
+ * reader recognises at full strength, its context quieter. The repository
+ * identifies the image — `busybox`, `project/sub/app`; the registry hosting it
+ * and the tag versioning it are context and drop a step.
  *
- * The repository is what identifies the image — `busybox`, `project/sub/app`.
- * The registry that hosts it and the tag that versions it are context, so they
- * drop a step. What an image affords is being copied — the same gesture an IP
- * already has, since the pods table carries no image column and "find pods
- * using this" would filter to nothing — and, where the registry has a page for
- * it, being read there. Which registries those are is `registryLink`'s
- * judgement; the ones it declines get no mark at all.
+ * An image affords being copied — the same gesture an IP has, since the pods
+ * table carries no image column and "find pods using this" would filter to
+ * nothing — and, where the registry has a page for it, being read there. Which
+ * registries those are is `registryLink`'s judgement; the ones it declines get
+ * no mark at all.
  */
 
 /** Enough digest to tell two builds apart; the rest is in the copy. */
@@ -101,15 +101,13 @@ export function ImageRef({ image, inline, className }: ImageRefProps) {
  * menu can copy it, a screen reader announces a link, and the address is the
  * one the reader would have got anyway. Every gesture on it is intercepted all
  * the same — the webview has no second window to hand a page to, so letting one
- * through would navigate the app away from itself — and each of them means the
- * one thing this control does: give the URL to the system browser.
+ * through would navigate the app away from itself — and each means the one
+ * thing this control does: give the URL to the system browser.
  *
- * It follows the copy mark's rule rather than inventing one. In a row it
- * reserves its width and fades in with the copy mark on hover; inside a
+ * It follows the copy mark's rule rather than inventing one: in a row it
+ * reserves its width and fades in with the copy mark on hover, and inside a
  * sentence it takes no width at rest, because `quietMark`'s promise is that
- * nothing sits in the prose until the reader asks. The copy mark can wait for
- * its confirmation to appear; an action has no confirmation, so hovering the
- * reference is the moment it has.
+ * nothing sits in the prose until the reader asks.
  */
 function RegistryLinkMark({
   link,

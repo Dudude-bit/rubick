@@ -14,7 +14,6 @@ impl From<&CustomResourceDefinition> for CrdInfo {
         let spec = &crd.spec;
         let names = &spec.names;
 
-        // Find storage version
         let storage_version = spec.versions.iter().find(|v| v.storage).map_or_else(
             || {
                 spec.versions

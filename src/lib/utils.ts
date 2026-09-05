@@ -15,10 +15,9 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * How long ago, in the compact notation the cluster's own tooling uses.
  *
- * The units stay `d`/`h`/`m`/`s` in every language on purpose — that is
- * `kubectl`'s notation and the reader matches it against a terminal. The one
- * word here is the absence, and a word has to be said in the reader's
- * language, so the translator comes in as an argument: this is called from
+ * The units stay `d`/`h`/`m`/`s` in every language: that is `kubectl`'s
+ * notation and the reader matches it against a terminal. Only the absence is
+ * a word, so the translator comes in as an argument — this is called from
  * modules where a hook is not legal.
  *
  * @param createdAt - ISO timestamp string or null
@@ -76,12 +75,11 @@ export function daysUntil(dateValue: unknown): number | null {
 
     const now = new Date();
     const diffMs = date.getTime() - now.getTime();
-    // Rounded down, like `expiryOf` in `lib/certificates.ts` — which is the
-    // rule every other certificate surface in the app already follows.
-    // Rounding up here meant the cert-manager column said "4 days" about a
-    // certificate the Ingress and Secret screens called "expires in 3 days",
-    // at the same instant, about the same object. Down is also the honest
-    // reading: 3.2 days left is three whole days.
+    // Rounded down, like `expiryOf` in `lib/certificates.ts` — the rule every
+    // other certificate surface follows. Rounding up here made the
+    // cert-manager column say "4 days" about the certificate the Ingress and
+    // Secret screens called "3 days", at the same instant. Down is also the
+    // honest reading: 3.2 days left is three whole days.
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   } catch {
     return null;

@@ -1,40 +1,24 @@
 /**
  * Which pods can become which Azure identity — read the way AKS does it now.
  *
- * The rest of this vendor is built on aad-pod-identity's three CRDs, and that
- * product is gone: the open-source project was deprecated in October 2022 and
- * archived in September 2023, and the managed AKS add-on was supported only
+ * The rest of this vendor reads aad-pod-identity's three CRDs, and that
+ * product is gone — archived September 2023, the AKS add-on supported only
  * through September 2025. On a cluster built since, all three kinds are
- * absent — so the app looked at a modern AKS cluster, found nothing, and
- * correctly reported nothing, while the identities were right there.
+ * absent, so the app reported nothing while the identities were right there.
  *
- * Its replacement has **no CRDs at all**, which is why nothing here reads
- * one. Microsoft Entra Workload ID is two pieces of ordinary metadata:
+ * Its replacement has **no CRDs at all**. Microsoft Entra Workload ID is two
+ * pieces of ordinary metadata: a `ServiceAccount` annotated
+ * `azure.workload.identity/client-id`, and a pod labelled
+ * `azure.workload.identity/use: "true"` that makes the webhook project a
+ * token for it. Both are required and each is silent without the other — a
+ * labelled pod on an unannotated ServiceAccount gets a token for no identity,
+ * and every Azure call fails with a 401 that has no Kubernetes symptom.
  *
- * - a `ServiceAccount` annotated `azure.workload.identity/client-id` with the
- *   client id of a user-assigned managed identity
- * - a pod (usually via its workload's template) labelled
- *   `azure.workload.identity/use: "true"`, which is what makes the webhook
- *   project a token for it
- *
- * Both halves are required and each is silent without the other, which is the
- * whole reason this is worth drawing. A labelled pod on a ServiceAccount with
- * no annotation gets a projected token for no identity, and every call it
- * makes to Azure fails with a 401 that has no Kubernetes symptom at all —
- * exactly the silence the aad-pod-identity dangling-binding check existed to
- * break.
- *
- * ## Read from the pods, and what that costs
- *
- * There is no `list_service_accounts` command and no `ServiceAccountInfo`
- * type, so the walk starts at the labelled pods and reads the manifest of
- * each distinct ServiceAccount they name — a bounded handful of `get`s rather
- * than a cluster-wide list.
- *
- * The consequence is stated rather than hidden: **a ServiceAccount carrying
- * the annotation with no labelled pod is not found this way.** That is the
- * harmless half of the pair — an identity nobody uses grants nothing to
- * nobody — and the dangerous half, a pod that will get 401s, is exactly what
+ * There is no `list_service_accounts` command, so the walk starts at the
+ * labelled pods and `get`s each distinct ServiceAccount they name. The
+ * consequence is stated rather than hidden: **an annotated ServiceAccount
+ * with no labelled pod is not found this way.** That is the harmless half —
+ * an identity nobody uses grants nothing — and the dangerous half is what
  * starting from the pods finds first.
  */
 

@@ -23,14 +23,13 @@ import { useT } from "@/i18n/useT";
 /**
  * The editor for a saved port-forward.
  *
- * `PortForwardDialog` starts a forward against a pod you are already
- * looking at, so its target is fixed and its verb is "start". This one
- * edits the stored thing itself — including which pod it points at — and
- * is the only surface that can rename or delete one.
+ * `PortForwardDialog` starts a forward against the pod you are already
+ * looking at, so its target is fixed. This one edits the stored config
+ * itself, including which pod it points at, and is the only surface that can
+ * rename or delete one.
  *
- * It is mounted per invocation rather than kept around with an `open`
- * flag, so the form is seeded from props and never has to be washed out
- * by an effect on close.
+ * Mounted per invocation rather than kept behind an `open` flag, so the form
+ * is seeded from props and never has to be washed out by an effect.
  */
 export function PortForwardConfigDialog({
   context,

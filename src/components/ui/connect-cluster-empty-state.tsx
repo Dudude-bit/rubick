@@ -7,11 +7,9 @@ import { useT } from "@/i18n/useT";
 /**
  * What a page shows when the window is not on a cluster.
  *
- * It used to be one grey sentence — `Connect to a cluster to view Pods` —
- * which named the state and then stopped, leaving the reader to go and
- * find a control the app could simply have offered. The clusters are
- * already known here, so this is the same list the front door is, and
- * connecting is one click from wherever the reader happened to be.
+ * The clusters are already known here, so this is the same list the front
+ * door shows, and connecting is one click from wherever the reader was
+ * rather than a sentence naming a control they have to go and find.
  *
  * Focus is deliberately not taken: this is a pane inside a page, not the
  * screen, and a list that grabs the caret would fight the tab strip.

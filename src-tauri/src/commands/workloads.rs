@@ -137,20 +137,16 @@ pub async fn get_cronjob(
 
 /// Run a `CronJob` now, the way `kubectl create job --from` does.
 ///
-/// A `CronJob` has no "run" verb: the controller creates Jobs on a schedule
-/// and nothing asks it to create one early. What `kubectl create job --from`
-/// actually does is copy the `CronJob`'s `jobTemplate` into a new `Job` and let
-/// the normal controller take it from there — so that is what this does.
+/// A `CronJob` has no "run" verb — nothing asks the controller to create a
+/// `Job` early — so this copies the `jobTemplate` into a new `Job` and lets
+/// the normal controller take it from there.
 ///
-/// The name is the reader's, not generated. `kubectl` appends a timestamp
-/// when you omit one, and a name a person chose is one they can find again
-/// in a list of forty; the dialog offers the timestamped name as the default
-/// and lets them change it.
-///
-/// The `ownerReference` is deliberate. Without it the `Job` outlives its
-/// `CronJob` and survives `successfulJobsHistoryLimit`, so a cluster where somebody
-/// pressed this weekly accumulates `Job`s nothing will ever collect —
-/// `kubectl` sets it for the same reason.
+/// The name is the caller's, not generated: a name a person chose is one they
+/// can find again in a list of forty, and the dialog offers `kubectl`'s
+/// timestamped default. The `ownerReference` is deliberate; without it the
+/// `Job` outlives its `CronJob` and never counts against
+/// `successfulJobsHistoryLimit`, so pressing this weekly accumulates `Job`s
+/// nothing will collect.
 #[tauri::command]
 pub async fn trigger_cronjob(
     name: String,
@@ -196,8 +192,8 @@ fn job_from_cronjob(cronjob: &CronJob, job_name: &str) -> Result<Job> {
         crate::error::Error::InvalidInput(format!("CronJob {name}'s jobTemplate has no spec"))
     })?;
 
-    // The template's own labels and annotations come along — a Job created by
-    // hand that a team's selectors cannot see is a `Job` nobody will find.
+    // The template's own labels and annotations come along: a `Job` a team's
+    // selectors cannot see is one nobody will find.
     let mut meta = template.metadata.unwrap_or_default();
     meta.name = Some(job_name.to_string());
     meta.namespace = cronjob.namespace();

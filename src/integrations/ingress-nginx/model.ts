@@ -1,29 +1,20 @@
 /**
  * What this cluster's ingress-nginx serves, pivoted the way the question is
- * asked.
+ * asked — *what serves this hostname*, *why is this URL not working*. The same
+ * pivot Traefik's page uses, and the shared half lives in `../ingress`.
  *
- * The same pivot Traefik's page uses, because it is the same question —
- * *what serves this hostname* and *why is this URL not working* — and the
- * shared half of it lives in `../ingress`. What is nginx's own is the two
- * things that make it a different page:
+ * nginx is Ingress-only: no CRDs, so no second object model, no rule language
+ * to refuse to paraphrase, and no entry points — it listens on 80 and 443 and
+ * that is not configuration this app has to go and read. The whole routing
+ * table is the Ingresses whose class this controller claims.
  *
- * ## An Ingress-only controller is the simpler case
- *
- * There are no CRDs. Every route nginx serves is a plain `Ingress`, so there
- * is no second object model, no rule language to refuse to paraphrase, and
- * no entry points — nginx listens on 80 and 443 and that is not
- * configuration this app has to go and read. The whole routing table is the
- * Ingresses whose class this controller claims.
- *
- * ## And the behaviour is somewhere no list page looks
- *
- * All of it is in annotations, which is why {@link ./annotations} exists and
- * why it refuses more than it decodes. A canary is the case where that
+ * Its behaviour is all in annotations, which is why {@link ./annotations}
+ * exists and why it refuses more than it decodes. A canary is where that
  * refusal is not enough on its own: `canary: "true"` does not mean "a route"
  * but **"a second route for a host another Ingress already serves"**, and a
  * page that listed it as its own host would draw two hosts where the cluster
- * has one, each looking like it takes all the traffic. So a canary is
- * grouped under the host it shadows and read as a share of it.
+ * has one, each looking like it takes all the traffic. So a canary is grouped
+ * under the host it shadows and read as a share of it.
  */
 
 import type { T } from "@/i18n/useT";

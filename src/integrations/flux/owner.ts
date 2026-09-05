@@ -2,32 +2,24 @@
  * Which Kustomization or HelmRelease delivers an object, resolved rather than
  * trusted.
  *
- * Flux labels everything it applies with the reconciler's name and namespace,
- * and the label is the *claim*, not the fact: a manifest committed with those
- * labels already on it, or a Kustomization that was deleted with `prune: false`
- * and left its objects behind, both produce an object that says it is managed
- * and is not. So the label finds the candidate and the candidate's own
- * `status.inventory` has to name the object back; where it does not, the answer
- * is {@link Delivery} `state: "claimed"` rather than silence.
+ * Flux labels everything it applies with the reconciler's name, and the label
+ * is the claim, not the fact: a manifest committed with those labels already
+ * on it, or a Kustomization deleted with `prune: false`, both leave an object
+ * that says it is managed and is not. So the label finds the candidate and the
+ * candidate's own `status.inventory` has to name the object back; where it
+ * does not, the answer is {@link Delivery} `state: "claimed"`.
  *
- * ## The one thing Flux does not have
- *
- * **Per-object drift.** Argo compares every object it owns on a timer and
- * writes the verdict into `Application.status.resources`, so "this Deployment
- * differs from git" is a lookup. Flux has no equivalent and never will in this
- * shape: a Kustomization re-applies its own fields on its interval and the
- * correction is silent — there is no moment at which anything records that
- * something had differed. So {@link DeliverySource.sync} is `null` for every
- * Flux-delivered object, and that is a statement that nobody knows, not a
- * quiet tick. What Flux *does* publish, and Argo words differently, is whether
- * the reconciler is still running at all — a suspended Kustomization or one
- * whose source stopped fetching keeps `Ready=True` while applying nothing, and
- * that is what {@link DeliverySource.warning} carries here.
+ * **Flux has no per-object drift**, unlike Argo: a Kustomization re-applies
+ * its own fields on its interval and the correction is silent, so nothing
+ * records that anything had differed and {@link DeliverySource.sync} is `null`
+ * for every Flux-delivered object — nobody knows, not a quiet tick. What Flux
+ * does publish is whether the reconciler runs at all: a suspended
+ * Kustomization, or one whose source stopped fetching, keeps `Ready=True`
+ * while applying nothing, and that is {@link DeliverySource.warning}.
  *
  * Takes a list for the same reason Argo's does: one read of the reconcilers
  * answers a five-hundred-row page.
  */
-
 import { commands } from "@/lib/commands";
 import { crdObjectPath, conditionOf, getValueByPath } from "../kit";
 import type { T } from "@/i18n/useT";
@@ -166,16 +158,16 @@ function ownerRef(
   };
 }
 
-/**
- * A reconciler that is not reconciling, in the two shapes Flux has for it.
- *
- * `Ready` is not the question. A suspended Kustomization and one whose source
- * stopped fetching both keep `Ready=True` from the last run that worked, which
- * is the state that looks perfect and is the reason this is read separately.
- */
 /** A translator for the branches that provably take no words. */
 const noWords: T = () => "";
 
+/**
+ * A reconciler that is not reconciling, in the two shapes Flux has for it.
+ *
+ * `Ready` is not the question: a suspended Kustomization and one whose source
+ * stopped fetching both keep `Ready=True` from the last run that worked, which
+ * is the state that looks perfect and is why this is read separately.
+ */
 function stalledReason(owner: CustomResourceInfo): Saying | null {
   if (getValueByPath(owner, "spec.suspend") === true)
     return { key: "fluxSuspendedWord" };

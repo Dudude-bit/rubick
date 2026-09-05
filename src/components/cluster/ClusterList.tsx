@@ -17,14 +17,11 @@ import { useT } from "@/i18n/useT";
  * The clusters in the kubeconfig, as the thing you act on rather than a
  * thing you are told about.
  *
- * Recent first: on a laptop with fifteen contexts the two you work in are
- * the answer nine times out of ten, and everything under "All contexts"
- * is a reference list. A cluster that has never been connected to has no
- * recency to sort by, so it keeps the kubeconfig's own order — the only
- * order its author chose.
+ * Recent first; everything under "All contexts" is a reference list. A
+ * cluster that has never been connected to has no recency to sort by, so
+ * it keeps the kubeconfig's own order — the only order its author chose.
  *
- * Nobody who reaches for this screen wants the mouse: focus lands on the
- * first row, arrows walk the list, Enter connects.
+ * Focus lands on the first row, arrows walk the list, Enter connects.
  */
 export function ClusterList({
   onSelect,

@@ -1,14 +1,12 @@
 /**
  * The `Delivery` column, and the filter that is the real reason it exists.
  *
- * There is deliberately **no "managed" mark**. On a cluster Argo or Flux runs,
- * every row would carry one; the column earns its width by being empty for the
- * ordinary row and saying something only where there is something to say.
- *
- * The filter is where "being delivered" pays off even when it is not worth
- * marking: *show me what Argo does not own* is how you find the thing somebody
- * applied by hand at three in the morning and never wrote down, and it costs
- * nothing on screen until it is used.
+ * There is deliberately **no "managed" mark**: on a cluster Argo or Flux runs
+ * every row would carry one, and the column earns its width by being empty
+ * for the ordinary row. The filter is where being delivered pays off instead
+ * — *show me what Argo does not own* is how you find the thing somebody
+ * applied by hand and never wrote down, and it costs nothing on screen until
+ * it is used.
  */
 
 import { createContext, useContext, type ReactNode } from "react";
@@ -34,7 +32,6 @@ export function DeliveryRowsProvider({
 
 /**
  * The cell, which reads the page's one answer rather than asking for its own.
- *
  * The whole page's objects are resolved in a single read and handed to every
  * cell through a context; a cell that asked on its own behalf would turn one
  * call into five hundred.
@@ -52,14 +49,12 @@ const OPTIONS: Array<{ id: DeliveryFilter; label: keyof typeof en.action }> = [
 
 /**
  * Three answers, and one caveat stated where it would otherwise look like a
- * bug.
- *
- * A controller that publishes no per-object comparison can never put a row
- * behind "Needs attention" for drift, however far its objects have wandered —
- * so on a cluster it runs, that filter looks broken rather than empty. It is
- * named from the data rather than from a list of vendors: any delivery
- * controller that reports `sync: null` says so here, including one written
- * after this file.
+ * bug: a controller that publishes no per-object comparison can never put a
+ * row behind "Needs attention" for drift, however far its objects have
+ * wandered, so on a cluster it runs that filter looks broken rather than
+ * empty. The caveat is named from the data rather than from a list of
+ * vendors — any delivery controller reporting `sync: null` says so here,
+ * including one written after this file.
  */
 export function DeliveryFilterControl({
   value,

@@ -4,25 +4,23 @@
 //! an environment no shell profile has touched: none of the `PATH` additions,
 //! no `AWS_PROFILE`, no `KUBECONFIG`, nothing that `.zshrc` or `.bashrc`
 //! export. A credential plugin that works in the terminal then fails here,
-//! and the failure looks like a missing binary or the wrong account. Lens
-//! answers this by asking the login shell for its environment once at
-//! startup and adopting it wholesale; this does the same.
+//! and the failure looks like a missing binary or the wrong account. So, as
+//! Lens does, the login shell is asked for its environment once at startup and
+//! it is adopted wholesale.
 //!
 //! The shell is started as an *interactive* login shell, `-i -l`, not a login
-//! shell alone. zsh reads `.zshrc` only when interactive, and the `.profile`
-//! that Debian and macOS ship sources `.bashrc` only when interactive. Those
-//! are the files where `pyenv`, `mise`, `nvm`, krew and most hand-written
-//! `export` lines live; the probe this replaced used `-l -c` and missed every
-//! one of them. What `-i` cannot give is a terminal: stdin is `/dev/null`, so
+//! shell alone: zsh reads `.zshrc` only when interactive, and the `.profile`
+//! that Debian and macOS ship sources `.bashrc` only when interactive — the
+//! files where `pyenv`, `mise`, `nvm`, krew and most hand-written `export`
+//! lines live. What `-i` cannot give is a terminal: stdin is `/dev/null`, so
 //! a profile that gates its setup on `[ -t 0 ]` still skips it.
 //!
 //! The probe shell starts from this process's own environment, so whatever
-//! differs afterwards is what the profile did on purpose: a variable it set
-//! is set here, a variable it unset is unset here. Four groups are left as
-//! the desktop started them, because the profile's version of those is at
-//! best the same and at worst stale: the probe shell's own bookkeeping, the
-//! desktop session's and its toolkits' variables, the locale, and the
-//! dynamic loader's.
+//! differs afterwards is what the profile did on purpose: a variable it set is
+//! set here, a variable it unset is unset here. Four groups are left as the
+//! desktop started them, the profile's version of those being at best the same
+//! and at worst stale: the probe shell's own bookkeeping, the desktop
+//! session's and its toolkits' variables, the locale, and the loader's.
 //!
 //! Values never leave the process. Diagnostics reports how many variables
 //! changed and the shell that was asked, nothing else.
@@ -36,13 +34,12 @@ use serde::{Deserialize, Serialize};
 
 use super::path::{build_fallback_path, set_user_path};
 
-/// Long, on purpose: coming up without the environment is the bug, and a
-/// `.zshrc` that starts `nvm` takes seconds. A profile that hangs is what the
-/// cap is for.
+/// How long the login shell gets to answer. Long on purpose: coming up without
+/// the environment is the bug, and a `.zshrc` that starts `nvm` takes seconds;
+/// the cap is for a profile that hangs. Public so `main` can name it in the
+/// line it prints before the wait — a number in a message and a number in the
+/// code that disagree is worse than no message.
 #[cfg(unix)]
-/// How long the login shell gets to answer. Public so `main` can name it in
-/// the line it prints before the wait — a number in a message and a number
-/// in the code that disagree is worse than no message.
 pub const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// More than any environment can be. Hard: an answer that crosses it in its
@@ -160,11 +157,11 @@ pub enum ShellEnvReport {
     /// Nobody asked, and nobody decided not to: `import_login_shell_env`
     /// has not run in this process.
     ///
-    /// Distinct from `NotAsked` on purpose. Both used to be `NotAsked`, so a
-    /// build that stopped calling the import at startup would have reported
-    /// a Windows story on a Mac, `answered()` would have said yes, and the
-    /// caveat on every "not installed" verdict would have been suppressed —
-    /// the third state folded into a confident second one.
+    /// Distinct from `NotAsked` on purpose: folded into it, a build that
+    /// stopped calling the import at startup would report a Windows story on
+    /// a Mac, `answered()` would say yes, and the caveat on every "not
+    /// installed" verdict would be suppressed — the third state made a
+    /// confident second.
     NotRecorded,
 }
 

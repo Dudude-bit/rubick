@@ -1,17 +1,16 @@
 /**
  * The chrome three vendor pages draw the same way, and only that.
  *
- * Traefik, Argo CD and Flux answer three unrelated questions, and they all
- * answer them in the same three shapes: a row that is one line until it is
- * asked to open, a finding under it in the controller's own words, and a
- * fixed-order chain drawn left to right with the columns labelled. Those are
- * the app's vocabulary for "ordered by trouble", not any one vendor's, and a
- * third copy of the chevron-and-severity-border markup is how the three pages
- * start disagreeing about what red means.
+ * Traefik, Argo CD and Flux answer three unrelated questions in the same
+ * three shapes: a row that is one line until it is asked to open, a finding
+ * under it in the controller's own words, and a fixed-order chain drawn left
+ * to right with the columns labelled. Those are the app's vocabulary for
+ * "ordered by trouble", not any one vendor's, and a third copy of the
+ * chevron-and-severity-border markup is how the three pages start disagreeing
+ * about what red means.
  *
- * What is deliberately *not* here is anything that decides what a row says.
- * The status word, the findings, the ordering and every sentence in them are
- * each vendor's own, because that is the whole of what the page is for.
+ * Nothing here decides what a row says: the status word, the findings, the
+ * ordering and every sentence in them are each vendor's own.
  */
 
 import {
@@ -89,23 +88,22 @@ export function TroubleRow({
 }: {
   title: ReactNode;
   /**
-   * The title as a string, when it is something worth putting on the
-   * clipboard — a hostname, on every page whose rows are hosts.
+   * The title as a string, when it is worth putting on the clipboard — a
+   * hostname, on every page whose rows are hosts.
    *
    * It changes the row's shape rather than decorating it, and has to: the
    * title normally sits *inside* the disclosure button, and a button nested
-   * in a button is neither valid nor operable. Given this, the title moves
-   * out and becomes its own control, the rest of the row goes on toggling,
-   * and a screen reader hears the two as the two things they are.
+   * in a button is neither valid nor operable. So the title moves out and
+   * becomes its own control, the rest of the row goes on toggling, and a
+   * screen reader hears the two as the two things they are.
    */
   copy?: string;
   /**
    * The object the title names, where the row is *about* one — an Argo
    * Application, a Flux Kustomization, a cert-manager Certificate.
    *
-   * The other half of the same problem `copy` solves, and the reason the
-   * shape is worth having twice: on those pages the row's subject is an
-   * object with a page and a peek of its own, and it was the one thing on the
+   * The other half of the problem `copy` solves: on those pages the row's
+   * subject has a page and a peek of its own, and it was the one thing on the
    * screen a reader could not open, because it was drawn inside the
    * disclosure button. `crd` is what makes a custom resource addressable at
    * all — see `ResourceRef`.
@@ -277,9 +275,9 @@ export function Finding({
  * it and a screen reader announces a link — and every gesture intercepted,
  * because following it would navigate the app away from itself.
  *
- * Callers hand it a URL that is already known to be mechanical. Nothing here
- * decides whether a link should exist; `gitRepoLink` and its neighbours do
- * that, and a destination they declined never reaches this component.
+ * Nothing here decides whether a link should exist; `gitRepoLink` and its
+ * neighbours do that, and a destination they declined never reaches this
+ * component.
  */
 export function OutLink({
   href,
@@ -338,8 +336,7 @@ export function Cell({
    * `BackendConfig` summarised as "health check HTTP :8080/healthz · 60s
    * timeout · CDN CACHE_ALL_STATIC · Cloud Armor edge-armor" is four times
    * that. Truncating it is right; truncating it with no way to read the rest
-   * is the reader having to go and open the object to see what they were
-   * being shown.
+   * makes the reader open the object to see what they were being shown.
    */
   title?: string;
 }) {
@@ -366,11 +363,9 @@ export function Cell({
 /**
  * A chain: labelled columns in the order a request crosses them.
  *
- * The columns used to be a bare `grid grid-cols-5` at each call site and the
- * boxes sat in five unconnected stacks — a table of cells that the reader had
- * to be told was a sequence. The join is what makes it read as one path, and
- * it is drawn here so all five chains in the app agree about it rather than
- * each page inventing its own.
+ * The join between the columns is what makes the boxes read as one path
+ * rather than five unconnected stacks, and it is drawn here so all five
+ * chains in the app agree about it rather than each page inventing its own.
  */
 export function Chain({ children }: { children: ReactNode }) {
   const columns = Children.toArray(children);

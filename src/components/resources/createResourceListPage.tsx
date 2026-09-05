@@ -4,26 +4,8 @@
  * Most resource list pages share the same structure: pull `currentNamespace`
  * from the cluster store, define columns + quick actions, wire up
  * `<ResourceList>` with the right `queryKey`, fetcher, and delete config.
- *
- * `createResourceListPage` collapses that boilerplate into a single config
- * object. A typical list page goes from ~80 LOC to ~15 LOC.
- *
- * Example:
- * ```tsx
- * export const ConfigMapList = createResourceListPage<ConfigMapInfo>({
- *   resourceType: ResourceType.ConfigMap,
- *   title: "ConfigMaps",
- *   fetcher: ({ namespace }) =>
- *     commands.listConfigmaps({
- *       namespace,
- *       labelSelector: null,
- *       fieldSelector: null,
- *       limit: null,
- *     }),
- *   deleter: (item) => commands.deleteConfigmap(item.name, item.namespace),
- *   columns: () => [...],
- * });
- * ```
+ * This collapses that into one config object — ~80 LOC to ~15 LOC per page.
+ * `ConfigMapList.tsx` is a typical use.
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -76,27 +58,23 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   emptyStateLabel?: string;
   /**
    * Optional description rendered under the title. The function form gets the
-   * namespace selection — which is a set, not a name: "in prod, staging" and
-   * "in 4 namespaces" are both scopes a reader can be in, and a line built
-   * from one namespace calls all of them "all namespaces".
-   *
-   * The translator comes with it: this config is a module-level table, so a
-   * hook cannot be called where the line is written. Taking `t` as a
-   * parameter is how every other such table says something in the reader's
-   * language.
+   * namespace selection — a set, not a name: "in prod, staging" and "in 4
+   * namespaces" are both scopes a reader can be in, and a line built from one
+   * namespace calls all of them "all namespaces". The translator comes with
+   * it because this config is a module-level table, where no hook can be
+   * called.
    */
   description?:
     string | ((deps: { scope: NamespaceScope; t: Translator }) => string);
   /** Search key (column accessor) for the in-page search box. */
   searchKey?: string;
   /**
-   * Optional watch subscription factory. When supplied, the page
-   * subscribes to backend `resource-event` updates and the polling
-   * `refresh` rate is switched off — the cache is kept fresh by
-   * incremental setQueryData updates instead. Receives the resolved
-   * namespace (`null` for cluster-scoped pages or "all namespaces")
-   * and returns a stream id from the matching `subscribe_*_watch`
-   * Tauri command.
+   * Optional watch subscription factory. When supplied, the page subscribes to
+   * backend `resource-event` updates and the polling `refresh` rate is
+   * switched off — the cache is kept fresh by incremental setQueryData updates
+   * instead. Receives the resolved namespace (`null` for cluster-scoped pages
+   * or "all namespaces") and returns a stream id from the matching
+   * `subscribe_*_watch` Tauri command.
    */
   watch?: (params: { namespace: string | null }) => Promise<string>;
 }
@@ -156,12 +134,10 @@ export function createResourceListPage<T extends ListableResource>(
       [namespace]
     );
 
-    // When the backend's watcher fails N times in a row (typical
-    // cause: kubeconfig user lacks the `watch` verb on this kind),
-    // fall back to periodic refresh so the list doesn't appear
-    // frozen. The toast warns the user once; the watcher keeps
-    // retrying in the background and a recovered stream resets the
-    // failed flag.
+    // When the backend's watcher fails N times in a row (typical cause: the
+    // kubeconfig user lacks the `watch` verb on this kind), fall back to
+    // periodic refresh so the list doesn't appear frozen. The toast warns
+    // once; the watcher keeps retrying and a recovered stream resets the flag.
     const { toast } = useToast();
     const [watchFailed, setWatchFailed] = useState(false);
     const handleWatchError = useCallback(

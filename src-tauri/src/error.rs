@@ -1,8 +1,5 @@
 //! Error handling for Rubick application
 //!
-//! This module provides a comprehensive error type that covers all possible
-//! error scenarios in the application, with proper conversion from library errors.
-//!
 //! An `Error` reaches the frontend as its `Display` string and nothing else —
 //! see the custom `Serialize` impl below, and the wire-format note in
 //! `src/lib/credentials.ts`.
@@ -34,15 +31,14 @@ pub enum Error {
     /// The cluster no longer accepts the credentials this session holds.
     ///
     /// Its own variant rather than a `KubeApi` string, and deliberately not
-    /// `PermissionDenied`: a 403 is an answer about *one* request and the rest
-    /// of the session still works, while a 401 means the token the client was
-    /// built with is not accepted for anything. That is not a rare state — a
-    /// GKE token lasts about an hour, `prepare_kubeconfig_for_context` strips
-    /// the `exec` block that could renew it, and nothing renews it afterwards.
+    /// `PermissionDenied`: a 403 answers *one* request and the rest of the
+    /// session still works, while a 401 means the token the client was built
+    /// with is accepted for nothing. Not a rare state — a GKE token lasts
+    /// about an hour, `prepare_kubeconfig_for_context` strips the `exec` block
+    /// that could renew it, and nothing renews it afterwards.
     ///
-    /// Errors cross to the frontend as their `Display` string and nothing
-    /// else, so this sentence *is* the wire format: `CREDENTIALS_EXPIRED` is
-    /// matched on there. Changing the prefix changes an API.
+    /// This sentence *is* the wire format: the frontend matches on the
+    /// `CREDENTIALS_EXPIRED` prefix, so changing it changes an API.
     #[error("CREDENTIALS_EXPIRED: the cluster rejected this session's credentials — {0}")]
     CredentialsExpired(String),
 
@@ -96,11 +92,11 @@ pub enum Error {
 
     /// A previous run was asked for and there is not one.
     ///
-    /// Its own variant rather than a `LogStream` string because the
-    /// caller has to act on it differently: the container has never
-    /// restarted, so there is no earlier log and nothing to retry. The
-    /// apiserver phrases it as a 400 ending in "not found", which every
-    /// generic rule in this codebase reads as "the pod is gone".
+    /// Its own variant rather than a `LogStream` string because the caller
+    /// acts on it differently: the container has never restarted, so there is
+    /// no earlier log and nothing to retry. The apiserver phrases it as a 400
+    /// ending in "not found", which every generic rule here reads as "the pod
+    /// is gone".
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
@@ -151,24 +147,14 @@ impl Serialize for Error {
     where
         S: serde::Serializer,
     {
-        // Serialize as a string, not an object, so Tauri can properly convert it
-        // This ensures errors are displayed correctly in the frontend
+        // A string, not an object, so Tauri converts it and the frontend
+        // displays it.
         serializer.serialize_str(&self.to_string())
     }
 }
 
 impl Error {
     /// Create a not found error
-    ///
-    /// # Arguments
-    ///
-    /// * `kind` - Kubernetes resource kind
-    /// * `name` - Resource name
-    /// * `namespace` - Resource namespace
-    ///
-    /// # Returns
-    ///
-    /// A new `Error::NotFound` variant.
     pub fn not_found(
         kind: impl Into<String>,
         name: impl Into<String>,
@@ -263,11 +249,11 @@ impl From<Error> for String {
 impl Error {
     /// Whether the cluster refused this request, rather than failing at it.
     ///
-    /// A 403 arrives as `KubeApi` and stays there on purpose — folding it into
-    /// its own variant would say the session is over when only one request was
-    /// answered. So the question has to be asked of the response code, and a
-    /// caller that matched `PermissionDenied` instead would match nothing at
-    /// all: that variant exists for refusals the app itself raises.
+    /// A 403 arrives as `KubeApi` and stays there on purpose — its own variant
+    /// would say the session is over when only one request was answered. So
+    /// the question is asked of the response code: a caller matching
+    /// `PermissionDenied` would match nothing a cluster sends, since that
+    /// variant is for refusals the app itself raises.
     #[must_use]
     pub fn is_refusal(&self) -> bool {
         match self {
@@ -323,9 +309,8 @@ mod tests {
         ));
     }
 
-    /// The other half of the rule above. A 403 stays a `KubeApi`, so anything
-    /// that wants to know "was this refused" has to ask the code — matching
-    /// `PermissionDenied` would match nothing a cluster ever sends, which is
+    /// A 403 stays a `KubeApi`, so "was this refused" has to ask the code —
+    /// matching `PermissionDenied` matches nothing a cluster sends, which is
     /// how a screen came to report a refusal as a hard failure.
     #[test]
     fn a_403_is_a_refusal_however_it_is_filed() {

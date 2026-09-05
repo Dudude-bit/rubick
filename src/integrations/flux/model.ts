@@ -1,45 +1,28 @@
 /**
  * What Flux is doing, in the shape Flux actually has.
  *
- * ## Why this is not Argo's page with different words
+ * Flux splits source from applier — a `GitRepository` fetches, a
+ * `Kustomization` applies, several appliers share one source — so they are
+ * separate tabs with the link drawn rather than collapsed. Flattening hides
+ * the most common Flux failure: a source that stopped fetching while every
+ * applier below it keeps reporting the last revision it applied. Only the
+ * source says "failed", every Kustomization reads `Ready`, and the cluster
+ * quietly runs week-old manifests.
  *
- * Argo puts source and destination in **one** object. Flux **splits** them: a
- * `GitRepository` fetches, a `Kustomization` applies, and several appliers can
- * share one source. Flattening that into Argo's shape would hide the most
- * common Flux failure there is — *a source that stopped fetching while every
- * applier below it keeps reporting the last revision it managed to apply*. In
- * that state nothing says "failed" except the source, every Kustomization
- * under it reports `Ready`, and the cluster is quietly running week-old
- * manifests. So sources and reconcilers are separate tabs, because they are
- * separate objects, and the link between them is drawn rather than collapsed.
+ * `dependsOn` is a real ordering, and Flux writes `dependency
+ * 'flux-system/platform' is not ready` on everything held up — true and
+ * useless alone, so the reconciler that is actually broken is named with what
+ * it says. Suspension is first class: a suspended `Kustomization` keeps its
+ * last successful `Ready`, so it reads healthy in every list while
+ * reconciling nothing.
  *
- * ## Two things Flux has that Argo does not
+ * A `HelmRelease` is a reconciler, not a third thing — same interval,
+ * suspension, `dependsOn`, failures — so it is a row beside the
+ * Kustomizations, with a `HelmRepository` or `OCIRepository` for a source and
+ * a chart at a version rather than a path at a commit for a unit.
  *
- * **`dependsOn` is a real ordering.** A stuck reconciler holds up everything
- * declaring it, and Flux writes `dependency 'flux-system/platform' is not
- * ready` on each of them — true, and useless on its own, because the reader
- * then has to find `platform` and work out what is wrong with *it*. Saying
- * which reconciler is actually broken, and what it says, turns one red row
- * into an explained outage.
- *
- * **Suspension is first class.** A suspended `Kustomization` keeps its last
- * successful `Ready` condition, so it reads as perfectly healthy in every list
- * — including Flux's own — while reconciling nothing. It is the one state that
- * looks right and does nothing, and it must never be drawn as healthy here.
- *
- * ## HelmRelease is a reconciler, not a third thing
- *
- * A `HelmRelease` takes a source and applies a unit on an interval, suspends
- * the same way, declares `dependsOn` the same way, and fails the same way — so
- * it is a row in Reconcilers beside the Kustomizations, which is also what the
- * reader wants: "what is Flux applying here" has one answer, not two lists.
- * What differs is genuinely small and is drawn rather than flattened: its
- * source is a `HelmRepository` or an `OCIRepository` rather than a git remote,
- * and its unit is a chart at a version rather than a path at a commit.
- *
- * Every fact here is in the CRDs' own `status.conditions`. There is no
- * credential and — unlike Argo — no vendor UI to hand the rest to, which is
- * what makes this page the only place the whole picture exists.
+ * Everything comes from the CRDs' own `status.conditions`: no credential and,
+ * unlike Argo, no vendor UI to hand the rest to.
  */
 
 import type { VendorVerdict } from "../kit";
@@ -51,10 +34,9 @@ import { shortRevision } from "../gitops";
 /**
  * A Flux revision: `master@sha1:eec06d1…`, and the older `master/eec06d1`.
  *
- * Split rather than printed whole because the two halves answer different
- * questions — the ref is what the object asked for and the commit is what it
- * got — and because a 60-character string in a table column is a string
- * nobody reads.
+ * Split rather than printed whole: the two halves answer different questions
+ * — the ref is what the object asked for, the commit is what it got — and the
+ * whole 60-character string in a table column is one nobody reads.
  */
 export interface FluxRevision {
   raw: string;

@@ -2,21 +2,18 @@
  * cert-manager's objects, read as one answer per certificate.
  *
  * `Certificate` → `CertificateRequest` → `Order` → `Challenge` is four
- * unrelated custom resources on four list pages, and the reader walks them by
- * hand every time a renewal stops. This walks them once, in the browser, off
- * the four cluster-wide lists the page already has — the same lists the
- * sidebar count is read from, so the walk costs nothing extra.
+ * unrelated custom resources on four list pages; this walks them in the
+ * browser off the four cluster-wide lists the page already has — the same
+ * lists the sidebar count is read from, so the walk costs nothing extra.
  *
  * The backend's `certificate.issuance` capability answers the same question
- * from the other end: it starts at a Secret an Ingress named and is what the
- * Ingress and Secret pages ask. It is deliberately not reused here — it lists
- * every Certificate in a namespace per call, and a page with forty rows would
- * make forty of those calls to draw one screen.
+ * from the other end (start at a Secret an Ingress named) and is what the
+ * Ingress and Secret pages ask. Not reused here: it lists every Certificate
+ * in a namespace per call, so forty rows would cost forty calls.
  *
- * Nothing on the walk is paraphrased. `state` is the word the object uses for
- * itself and `note` is the controller's own sentence, because a rewritten
- * error is a second guess at somebody else's failure and the string is what
- * the reader will paste into a search.
+ * Nothing is paraphrased: `state` is the word the object uses for itself,
+ * `note` the controller's own sentence — that string is what the reader
+ * pastes into a search.
  */
 
 import { expiryText, managedExpiryOf, type Expiry } from "@/lib/certificates";
@@ -74,11 +71,9 @@ export interface CertRow {
   state: { text: string; tone: Tone };
   /**
    * The hostnames this certificate is actually serving, through whatever
-   * mounts its Secret — see `./serves`.
-   *
-   * The half a `Certificate` never states about itself, and the half
-   * somebody is asking about: "thirty days left" is not actionable until you
-   * know which address stops working.
+   * mounts its Secret — see `./serves`. A `Certificate` never states this
+   * about itself, and "thirty days left" is not actionable until you know
+   * which address stops working.
    */
   use: CertificateUse;
   /** Sort rank: lower is more urgent. */
@@ -106,12 +101,11 @@ export interface IssuerRow {
  * A kind this page needed and did not get.
  *
  * "The API server does not serve this kind" and "this read failed" are
- * different facts and only one of them is an absence: a CA-only install has
- * no `Order` CRD and genuinely has no orders, while a kubeconfig without
- * cluster-scoped `list clusterissuers` has read nothing about a cluster that
- * may be signing everything it has. Both used to arrive here as an empty
- * list, which is how a page came to tell a reader their working ClusterIssuer
- * did not exist.
+ * different facts and only one is an absence: a CA-only install genuinely has
+ * no `Order` CRD, while a kubeconfig without cluster-scoped
+ * `list clusterissuers` has read nothing about a cluster that may be signing
+ * everything it has. Collapsing the two into an empty list is what tells a
+ * reader their working ClusterIssuer does not exist.
  */
 export interface UnreadKind {
   /** The kind as cert-manager names it: `ClusterIssuer`, `Order`. */

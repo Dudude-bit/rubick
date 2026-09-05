@@ -41,7 +41,6 @@ pub async fn debug_pod_ephemeral(
 
     let container_name = generate_debugger_name();
 
-    // Build ephemeral container spec
     let mut ephemeral_container = serde_json::json!({
         "name": container_name,
         "image": config.image,
@@ -137,13 +136,11 @@ pub async fn debug_pod_copy(
     let api: Api<Pod> = ctx.namespaced_api();
     let ns = require_namespace(ctx.namespace.clone(), "default".to_string())?;
 
-    // Get the original pod
     let original_pod = api.get(&pod_name).await?;
 
     let debug_pod_name = generate_debug_pod_name(&pod_name);
     let container_name = generate_debugger_name();
 
-    // Build the debug container
     let debug_container = Container {
         name: container_name.clone(),
         image: Some(config.image.clone()),
@@ -175,7 +172,6 @@ pub async fn debug_pod_copy(
         new_spec.share_process_namespace = Some(true);
     }
 
-    // Add the debug container
     new_spec.containers.push(debug_container);
 
     // Set restart policy to Never for debug pods
@@ -196,7 +192,6 @@ pub async fn debug_pod_copy(
     labels.insert("k8s-gui/debug-source".to_string(), pod_name.clone());
     labels.insert("k8s-gui/created-at".to_string(), created_at.to_string());
 
-    // Create the debug pod
     let debug_pod = Pod {
         metadata: ObjectMeta {
             name: Some(debug_pod_name.clone()),
@@ -209,7 +204,6 @@ pub async fn debug_pod_copy(
         ..Default::default()
     };
 
-    // Create the pod
     api.create(&PostParams::default(), &debug_pod).await?;
 
     // Create and store the debug operation
@@ -319,7 +313,6 @@ pub async fn debug_node(
         ..Default::default()
     };
 
-    // Create the pod
     api.create(&PostParams::default(), &debug_pod).await?;
 
     // Create and store the debug operation

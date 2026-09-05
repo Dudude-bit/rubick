@@ -2,12 +2,11 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * A region on the flat canvas. The replacement for `Card`.
+ * A region on the flat canvas — the replacement for `Card`.
  *
  * Deliberately brings no background, border or shadow: the window is one
- * surface, and stacking tinted boxes on it is what made every screen read
- * as a grid of containers. Grouping is carried by the heading above the
- * content and by the space around it.
+ * surface, and stacking tinted boxes on it reads as a grid of containers.
+ * Grouping is carried by the heading above and the space around it.
  */
 export function Section({
   className,
@@ -21,12 +20,11 @@ export function Section({
 /**
  * What the frame around a section has already told the reader.
  *
- * A tab strip is a heading. Clicking "Conditions" is being told what the
- * pane below holds, so a block captioned "Conditions" under it says the
- * word twice; the breadcrumb and the page title say the kind the same
- * way. The rule that falls out is one sentence — *a caption names what
- * the frame has not already named* — and it was being broken on thirty-odd
- * tabs because every page had to remember it on its own.
+ * A tab strip is a heading: clicking "Conditions" is being told what the pane
+ * below holds, so a block captioned "Conditions" under it says the word
+ * twice, and the breadcrumb and page title say the kind the same way. The
+ * rule — *a caption names what the frame has not already named* — is enforced
+ * here rather than remembered by thirty-odd tabs one at a time.
  *
  * So the frame states what it says, and `SectionHeader` drops a title that
  * only repeats it. What the frame does not carry — a count, a description,
@@ -148,7 +146,7 @@ export function SectionHeader({
 }
 
 /** Wrapper for a list or table body: one hairline separates it from the
- *  heading, replacing what used to be the card's top border. */
+ *  heading, in place of the card's top border. */
 export function SectionBody({
   className,
   ...props

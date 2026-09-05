@@ -1,32 +1,24 @@
 /**
  * What the app is allowed to say about an object's provenance, and when.
  *
- * ## The trap this file exists to avoid
+ * On a cluster Argo or Flux runs, everything is managed — so a "managed"
+ * badge would sit on ninety-five per cent of rows while the interesting
+ * object is the *un*managed one. It does not go on the kind glyph either:
+ * that glyph is readable because it means one thing.
  *
- * On a cluster Argo or Flux runs, **everything is managed.** A "managed" badge
- * would therefore sit on ninety-five per cent of rows, spending the same pixels
- * the app spends on `CrashLoopBackOff` to say nothing — and the genuinely
- * interesting object on such a cluster is the *un*managed one, so the naive
- * mark lands on precisely the wrong rows. It does not go on the kind glyph
- * either: that glyph is readable because it means one thing, and provenance is
- * a second dimension.
+ * So the facts are split by loudness, here rather than in four components
+ * that could drift apart:
  *
- * So the facts are split by loudness, and this module is where the split is
- * decided rather than in four components that could drift apart:
- *
- * - **Where it comes from** is quiet and always — {@link deliveryMarks}, the
- *   glyph and name beside the status. "Where do I change this" is asked
- *   constantly and costs one small element.
+ * - **Where it comes from** is quiet and always — {@link deliveryMarks}.
  * - **What it means for you right now** is loud and only when true —
  *   {@link deliveryLine}, which returns `null` for the ordinary managed,
- *   in-sync, nothing-odd object and must, or the Overview grows a banner on
- *   every page of a GitOps cluster and the trap is back one storey up.
- * - **At the point of action** — {@link deliveryIntercept}. It does not block,
- *   it tells: scaling a managed object by hand is a legitimate thing to do in
- *   an incident and the app has no business refusing it. Its business is making
- *   sure nobody does it *believing it will stick*.
- * - **In a list** — {@link deliveryCell}, empty for the ordinary case, because
- *   a problem earns a mark and inventory does not.
+ *   in-sync object and must, or every page of a GitOps cluster grows a banner.
+ * - **At the point of action** — {@link deliveryIntercept}. It tells rather
+ *   than blocks: scaling a managed object by hand during an incident is
+ *   legitimate, and the app's business is only that nobody does it believing
+ *   it will stick.
+ * - **In a list** — {@link deliveryCell}, empty for the ordinary case,
+ *   because a problem earns a mark and inventory does not.
  */
 
 import { sayWords } from "@/i18n/say";
@@ -486,9 +478,9 @@ export interface DeliveryIntercept {
  * What to say at the moment somebody presses Scale, Restart, Edit or Delete.
  *
  * `null` where there is nothing to warn about, and that includes every object
- * on a cluster with no delivery controller — the control behaves exactly as it
- * did before this existed. It never disables anything: the failure this
- * prevents is not the edit, it is the belief that the edit is permanent.
+ * on a cluster with no delivery controller — the control is left untouched.
+ * It never disables anything: the failure this prevents is not the edit, it
+ * is the belief that the edit is permanent.
  */
 export function deliveryIntercept(
   deliveries: Delivery[],
@@ -523,25 +515,15 @@ export function deliveryIntercept(
 /**
  * What to say at the moment somebody applies an edited manifest.
  *
- * The most powerful write in the app, and until now the only one that said
- * nothing — which, once every other control warns, reads as a claim that this
- * one is safe. It is {@link deliveryIntercept} with one case added, and the
- * added case is the reason it is a function of its own.
- *
- * ## Why a stale claim earns a sentence here and not on Scale
- *
- * A disowned label changes nothing about what *happens* — the edit stands
- * either way — so Scale and Delete rightly stay quiet about it. What it
- * changes is what the reader is looking at: the document open in front of
- * them carries a delivery label, and a label is the app's own evidence for
- * "the permanent change belongs in git". Here that evidence is in the buffer,
- * a line above the field being edited, and it is wrong. So the sentence is not
- * a warning about a revert that will not come — promising one would be a lie
- * the reader can check — it is a correction: this stands, and it is not in
- * that repository.
- *
- * Which is also why it confirms with a plain "Apply". "Apply anyway" is the
- * word for overriding a consequence, and there is no consequence to override.
+ * {@link deliveryIntercept} with one case added: a delivery label nothing
+ * honours. It changes nothing about what *happens* — the edit stands either
+ * way, which is why Scale and Delete stay quiet about it — but the document
+ * in front of the reader carries that label a line above the field being
+ * edited, and a label is the app's own evidence for "the permanent change
+ * belongs in git". So the sentence is a correction, not a warning about a
+ * revert that will not come: this stands, and it is not in that repository.
+ * Hence the plain "Apply" — "Apply anyway" is the word for overriding a
+ * consequence, and there is none to override.
  */
 export function deliveryApplyIntercept(
   deliveries: Delivery[],

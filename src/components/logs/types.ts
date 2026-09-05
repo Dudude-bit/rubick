@@ -14,15 +14,14 @@ export type ViewMode = "compact" | "table" | "raw";
  * `id` because `LogLine` has no identity — two events can carry
  * identical timestamp and message bytes, and React needs a stable key
  * so a filter shrinking the visible array does not remount unrelated
- * rows. It is assigned at receive time and is therefore also the
- * arrival order, which is what breaks ties when several containers
- * report the same instant.
+ * rows. Assigned at receive time, so it is also the arrival order that
+ * breaks ties when several containers report the same instant.
  *
- * `epoch` and `groupKey` are precomputed for cost, not for taste: the
- * merge sorts on the first and the collapse compares the second, both
- * over the whole retained buffer several times a second. Parsing a
- * timestamp or running six regexes inside those loops is the difference
- * between a viewer and a stall.
+ * `epoch` and `groupKey` are precomputed for cost: the merge sorts on
+ * the first and the collapse compares the second, both over the whole
+ * retained buffer several times a second, and parsing a timestamp or
+ * running six regexes inside those loops is the difference between a
+ * viewer and a stall.
  */
 
 import type { T } from "@/i18n/useT";
@@ -37,17 +36,16 @@ export type StreamedLogLine = LogLine & {
 /**
  * One clause of the query, and the whole of what a chip stands for.
  *
- * A structured term rather than a substring because the reader has to be
- * able to see what they asked for and take it back: `level≥warn` is a
- * thing you can read off the toolbar and remove, where `warn` typed into
- * a search box is indistinguishable from a line that happens to contain
- * the word.
+ * Structured rather than a substring, so the reader can see what they
+ * asked for and take it back: `level≥warn` reads off the toolbar and
+ * removes, where `warn` typed into a search box is indistinguishable
+ * from a line that happens to contain the word.
  *
- * It is declared in Rust (`src-tauri/src/logs/filter.rs`) and generated
- * here, because the same term is evaluated in two places: over this
- * buffer when it is a query, and before the line is ever kept when it is
- * intake. One shape, and `shared/log-query-conformance.json` to keep the
- * two evaluators saying the same thing about it.
+ * Declared in Rust (`src-tauri/src/logs/filter.rs`) and generated here,
+ * because the same term is evaluated twice: over this buffer as a query,
+ * and before a line is ever kept as intake. One shape, and
+ * `shared/log-query-conformance.json` keeps the two evaluators saying
+ * the same thing about it.
  */
 export type { QueryTerm };
 
@@ -93,8 +91,8 @@ export const LEVEL_RANK: Record<LogLevel, number> = {
 /**
  * Log levels collapse onto the same roles the rest of the app uses, so a
  * warning in a log stream is the same yellow as a warning in a table.
- * `debug` no longer spends a hue on "less important than normal", and
- * `fatal` no longer needs a darker red than `error` to say the same thing.
+ * `debug` spends no hue on "less important than normal", and `fatal`
+ * shares `error`'s red rather than a darker one saying the same thing.
  */
 type LevelRole = "err" | "warn" | "info" | "mut";
 
@@ -114,11 +112,10 @@ const byRole = (classes: Record<LevelRole, string>): Record<LogLevel, string> =>
 
 /**
  * The level colours the message itself rather than spending a column on a
- * three-letter word. `info` is deliberately the plain foreground: a stream
- * where every second line is INF gains nothing from tinting the majority,
- * and leaving it neutral is what makes the two lines that are not stand out.
- * The word is never lost — it is one click away in the row's detail, and it
- * is what `level≥warn` filters on.
+ * three-letter word. `info` is deliberately the plain foreground: tinting
+ * the majority of a stream gains nothing, and leaving it neutral is what
+ * makes the two lines that are not `info` stand out. The word is never lost
+ * — it is one click away in the row's detail, and `level≥warn` filters on it.
  */
 export const LEVEL_MESSAGE_COLORS = byRole({
   err: "text-err",
@@ -233,12 +230,11 @@ export function parseQueryTerm(input: string): QueryTerm | null {
  *
  * A row's field key, the container in a row's detail, the level in the
  * Table view and the suggestion popover all come through here, so the
- * chip is the same object whichever produced it — which is also what
- * makes them deduplicate, since `termLabel` is the identity.
+ * chip is the same object whichever produced it — which is what makes
+ * them deduplicate, since `termLabel` is the identity.
  *
  * `level` is not a field test: no line carries a `level` key (the parser
- * lifts it out), and only a level term can be widened to `level≥warn`
- * afterwards.
+ * lifts it out), and only a level term can be widened to `level≥warn`.
  */
 export function fieldTerm(key: string, value: string): QueryTerm {
   if (key.toLowerCase() === "level" && isLevel(value)) {
@@ -259,15 +255,14 @@ export function formatTimeRange(from: number, to: number): string {
 }
 
 /**
- * Which terms may be promoted to intake.
+ * Which terms may be promoted to intake: every kind but `time`.
  *
- * Every kind but `time`. A time range is bounded in the past, so as
- * intake it would reject every line the container writes from now on and
- * the stream would go permanently silent — a toggle whose only effect is
- * to stop the log. The cluster-side narrowing a range does deserve
+ * A time range is bounded in the past, so as intake it would reject every
+ * line the container writes from now on and the stream would go
+ * permanently silent. The cluster-side narrowing a range does deserve
  * (`sinceTime`, pushed down by `LogConfig::to_log_params`) is a refetch
- * of that window, not a filter on a following stream, and that is a
- * different action from this toggle.
+ * of that window, not a filter on a following stream — a different action
+ * from this toggle.
  */
 export function canBeIntake(term: QueryTerm): boolean {
   return term.kind !== "time";

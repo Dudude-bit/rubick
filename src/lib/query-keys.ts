@@ -1,7 +1,5 @@
 /**
- * Centralized query key factory for React Query
- *
- * Ensures consistent query keys across the application.
+ * Query keys for React Query, in one place so they cannot drift.
  * Namespace-less keys carry {@link EVERY_NAMESPACE} rather than null.
  */
 
@@ -10,27 +8,24 @@ import { ResourceKind, toPlural } from "./resource-registry";
 /**
  * "Every namespace", written so that no namespace can be mistaken for it.
  *
- * It used to be the word `all`, which is a name a namespace can actually
- * have — the API server takes `kubectl create namespace all` without
- * complaint. So a cluster with one made the Pods page key its rows under
- * `["pods", "all"]` whether the reader had asked for that namespace or for
- * the whole cluster, and whichever question was asked first answered the
- * other. `*` is not a name it can have: names are RFC-1123 labels, so the
- * server rejects it outright, which is exactly what a sentinel needs to be.
+ * `all` is a name a namespace can actually have — the API server takes
+ * `kubectl create namespace all` without complaint — so keying rows under it
+ * made "that namespace" and "the whole cluster" one question, and whichever
+ * was asked first answered the other. `*` is not a name it can have: names
+ * are RFC-1123 labels, so the server rejects it outright, which is exactly
+ * what a sentinel needs to be.
  */
 export const EVERY_NAMESPACE = "*";
 
 /**
  * The one spelling of "every namespace" a key is allowed to carry.
  *
- * The app says it two ways. `clusterStore.currentNamespace` is `""` when
+ * The app says it two ways: `clusterStore.currentNamespace` is `""` when
  * nothing is selected, and callers that pass it to a Tauri command turn it
  * into `null` first, because the backend wants an absent namespace rather
- * than a blank one. Five callers passed the store's `""` straight into a key
- * and eighteen passed the converted `null` — and `?? "all"` caught only the
- * second, so the same list lived under `["pods", ""]` and `["pods", "all"]`
- * at once. The connect-time prefetch warmed one and every reader read the
- * other: the work was done, paid for, and never looked at.
+ * than a blank one. Both have to land here — miss one and the same list lives
+ * under two keys at once, with the connect-time prefetch warming the one no
+ * reader reads.
  *
  * `||` rather than `??` because empty is not a namespace either. A name is
  * one to sixty-three characters, so `""` can only have meant "all", and a
@@ -48,7 +43,6 @@ export const queryKeys = {
     scope(namespace),
   ],
 
-  // Resource detail
   resourceDetail: (
     type: ResourceKind,
     namespace: string,
@@ -107,10 +101,6 @@ export const queryKeys = {
    * reader picked and what the watch subscribes to — group, version and
    * plural are all derivable from it and only make a longer key that says
    * the same thing.
-   *
-   * This replaced a five-segment `customResources(group, version, plural,
-   * namespace)` that no caller had ever used: the list built its key inline
-   * instead, so the builder sat here being wrong in private.
    */
   customResourceList: (
     crdName: string,

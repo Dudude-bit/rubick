@@ -29,12 +29,9 @@ export interface ResourceRefProps {
    *
    * Without it a custom resource is drawn as plain text, because that is all
    * this component can honestly do: the registry has no plural for the kind,
-   * so there is no address to link to and nothing to peek at. Vendor pages
-   * knew the CRD all along and worked around the gap by writing their own
-   * `<Link>` — which is why an Argo Application navigated away from the page
-   * while the Service beside it opened a peek, and why the *managed* objects
-   * in Argo's own list, which are handed to this component without one, were
-   * dead text.
+   * so there is no address to link to and nothing to peek at. Pass it
+   * wherever the call site knows it rather than writing a `<Link>` of your
+   * own — that navigates away from the page instead of opening a peek.
    */
   crd?: string;
   /** Off where the surrounding column already says the kind. */
@@ -56,16 +53,15 @@ export interface ResourceRefProps {
 }
 
 /**
- * Kinds `App.tsx` serves a detail route for. The registry is deliberately not
- * the authority: it also lists Event, which has a list route and no detail
- * route, and a CustomResourceDefinition *instance* lives under
- * `/customresourcedefinitions/:crdName/instances/...`, which cannot be built
- * from kind and name alone. Everything else here maps to `/<plural>/...`,
- * which is exactly what `getResourceDetailUrl` produces.
+ * Kinds `App.tsx` serves a detail route for; every one of them maps to
+ * `/<plural>/...`, which is what `getResourceDetailUrl` produces.
  *
- * ReplicaSet is the mirror of Namespace and Event: a detail route and no
- * list page, because nobody browses revisions — you arrive at one from the
- * event that scaled it, a pod's owner chain or a Deployment's rollout.
+ * The registry is deliberately not the authority: it also lists Event, which
+ * has a list route and no detail route, and a CustomResourceDefinition
+ * *instance* lives under `/customresourcedefinitions/:crdName/instances/...`,
+ * which cannot be built from kind and name alone. ReplicaSet is the mirror —
+ * a detail route and no list page, reached from the event that scaled it, a
+ * pod's owner chain or a Deployment's rollout.
  */
 const ROUTABLE = new Set<ResourceKind>([
   "Pod",
@@ -100,10 +96,9 @@ const ROUTABLE = new Set<ResourceKind>([
  *
  * The single statement of the rule, so a caller deciding *whether* to draw a
  * reference and the component that draws one cannot disagree. A surface that
- * wraps a reference in its own layout — a row whose title is an object, say —
- * has to know the answer before it builds anything, because an element is
- * truthy however it renders and a link that returns nothing would silently
- * delete the title it was given.
+ * wraps a reference in its own layout has to ask here before it builds
+ * anything: an element is truthy however it renders, so a link that returned
+ * nothing would silently delete the title it was given.
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function objectUrl(
@@ -118,8 +113,8 @@ export function objectUrl(
 }
 
 // Callers that decide whether to offer a reference at all need this rule
-// without rendering one, and it is only correct next to the component that
-// enforces it — splitting it out is how the two drift apart.
+// without rendering one; it lives beside the component that enforces it so
+// the two cannot drift.
 // eslint-disable-next-line react-refresh/only-export-components
 export function isRoutableKind(kind: string, namespace?: string | null) {
   const resolved = isResourceType(kind) ? toKind(kind) : null;
@@ -137,13 +132,11 @@ export function isRoutableKind(kind: string, namespace?: string | null) {
  * reading" rule: the real destination on the anchor so middle-click and the
  * context menu behave, and a plain left click intercepted into a peek.
  *
- * Split out of {@link ResourceRef} because a reference is not always a name.
+ * Separate from {@link ResourceRef} because a reference is not always a name.
  * A vendor page draws `health check HTTP :8080/healthz · CDN` as the label of
  * a `BackendConfig` — that sentence *is* the useful thing about the object,
- * and rendering the object's name instead to make it clickable would be
- * trading the reader's information for the reader's ability to click. Those
- * call sites wrote their own `<Link>` and so navigated away from the page,
- * which is exactly the inconsistency this is here to end.
+ * and rendering the object's name instead to make it clickable would trade
+ * the reader's information for the reader's ability to click.
  *
  * `null` where the object cannot be addressed — the caller draws its own text
  * rather than an anchor to nowhere.
@@ -170,9 +163,8 @@ export function ObjectLink({
   const to = objectUrl(kind, name, namespace, crd);
   if (to === null) return null;
 
-  // This component wrote the gesture rules and then kept its own copy of
-  // them; `useLinkGesture` is where they live for every other surface, so
-  // ctrl-click can only mean one thing once they are read from one place.
+  // The gesture rules live in `useLinkGesture` for every surface; a local
+  // copy is how ctrl-click comes to mean two different things.
   const handle = (event: MouseEvent<HTMLAnchorElement>) => {
     // `onClick` is documented to run before the peek or before a tab. A
     // right-click opens a context menu and alt-click belongs to the
@@ -228,9 +220,8 @@ export function ResourceRef({
   // name in the command palette. `min-w-0` is what lets a real bound shrink it.
   const shell = RESOURCE_NAME_SHELL;
 
-  // Asked here rather than left to `ObjectLink` returning null: an element is
-  // truthy whatever it renders, so the fallback has to be chosen before one
-  // is built.
+  // Asked before anything is built: an element is truthy whatever it renders,
+  // so `ObjectLink` returning null cannot choose the fallback.
   if (objectUrl(kind, name, namespace, crd) === null) {
     return <span className={cn(shell, className)}>{body}</span>;
   }

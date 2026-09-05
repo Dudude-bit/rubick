@@ -1,33 +1,24 @@
 /**
  * What a GKE Ingress actually serves, pivoted by host.
  *
- * This file is the answer to a claim the vendor record used to make — that
- * GKE's objects are "properties of a Service or an Ingress that already has
- * a page" and so own no topology. They are not. Every one of them is joined
- * to the routing table by an *annotation*, and until now the app read
- * exactly one of the four edges:
+ * GKE joins its objects to the routing table by *annotation*, one edge each:
  *
- * | edge | annotation | before |
- * |---|---|---|
- * | Service → BackendConfig | `cloud.google.com/backend-config` | read |
- * | Ingress → FrontendConfig | `networking.gke.io/v1beta1.FrontendConfig` | — |
- * | Ingress → ManagedCertificate | `networking.gke.io/managed-certificates` | — |
- * | Service → NEG | `cloud.google.com/neg` | — |
+ * | edge | annotation |
+ * |---|---|
+ * | Service → BackendConfig | `cloud.google.com/backend-config` |
+ * | Ingress → FrontendConfig | `networking.gke.io/v1beta1.FrontendConfig` |
+ * | Ingress → ManagedCertificate | `networking.gke.io/managed-certificates` |
+ * | Service → NEG | `cloud.google.com/neg` |
  *
- * So a `ManagedCertificate` sitting on `FailedNotVisible` was on its own list
- * page with no way of knowing which hostname it was supposed to serve, and
- * the reader matched domains to Ingress rules by eye. That join is the whole
- * topology: **host → what terminates it → what answers it**, which is the
- * same shape Traefik's and nginx's pages have and is not a property of any
- * one object.
+ * Those four edges are the topology — **host → what terminates it → what
+ * answers it** — and no single object carries it: a `ManagedCertificate` on
+ * its own cannot say which hostname it was supposed to serve.
  *
- * ## Which Ingresses are GKE's
- *
- * The annotation, and only the annotation. GKE is explicit that it reads
- * `kubernetes.io/ingress.class` and **ignores `spec.ingressClassName`**, so
- * the `IngressClass`-and-controller reasoning every other routing page uses
- * is wrong here — an Ingress with `ingressClassName: gce` and no annotation
- * is served by nothing at all, which is a finding rather than a row.
+ * Which Ingresses are GKE's: the annotation, and only the annotation. GKE
+ * reads `kubernetes.io/ingress.class` and **ignores `spec.ingressClassName`**,
+ * so the `IngressClass`-and-controller reasoning every other routing page uses
+ * is wrong here — an Ingress with `ingressClassName: gce` and no annotation is
+ * served by nothing at all, which is a finding rather than a row.
  */
 
 import type {

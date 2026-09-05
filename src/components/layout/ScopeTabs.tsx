@@ -50,27 +50,25 @@ import {
 /**
  * The window's tab strip. A tab is a route plus the scope it is read under,
  * and the cluster and the namespace are separate click targets: namespaces
- * change dozens of times an hour and clusters a few times a day, so a
- * single merged list would bury the frequent job under the rare one.
+ * change dozens of times an hour and clusters a few times a day, so one
+ * merged list would bury the frequent job under the rare one.
  *
- * What a tab says, in the order it gives things up:
+ * What a tab protects as it narrows, most protected first:
  *
- * 1. The cluster's colour dot and provider mark are never dropped and never
- *    shrink — acting on the wrong cluster is the expensive mistake here.
- * 2. The route is the tab's name and the only part of it that is written
- *    nowhere else on screen, so it shrinks last and has a floor of its own.
- * 3. The namespace gives way first, because the active tab's namespace is
- *    also the one the page itself is filtered by.
- * 4. The cluster's *name* is spent only where it discriminates: a strip
- *    holding one cluster drops it on every tab, because the sidebar has
- *    just said it and the dot still guards the mistake. The moment a second
- *    cluster is open, every tab names itself.
+ * 1. Never the cluster's colour dot or provider mark — acting on the wrong
+ *    cluster is the expensive mistake here.
+ * 2. The route is the tab's name and the only part written nowhere else on
+ *    screen, so it shrinks last and has a floor of its own.
+ * 3. The namespace goes first: the active tab's namespace is also the one
+ *    the page itself is filtered by.
+ * 4. The cluster's *name* is spent only where it discriminates — dropped on
+ *    every tab while the strip holds one cluster, since the sidebar has just
+ *    said it and the dot still guards the mistake.
  *
- * Width is shrink-to-a-floor-then-scroll, the Firefox rule rather than the
- * Chrome one: tabs take their natural width, shrink together as the strip
- * fills, and stop at a floor wide enough to still read a route. Past that
- * the strip scrolls instead of grinding every tab into an unreadable
- * sliver. Nothing stretches, so one tab is one tab's worth of chrome.
+ * Width is the Firefox rule, not the Chrome one: natural width, shrinking
+ * together as the strip fills, stopping at a floor wide enough to still read
+ * a route, and past that the strip scrolls rather than grinding tabs into
+ * slivers. Nothing stretches, so one tab is one tab's worth of chrome.
  */
 export function ScopeTabs() {
   const t = useT();
@@ -642,41 +640,29 @@ interface NamespaceOption {
 /**
  * One namespace, or several.
  *
- * A plain click *replaces* the selection and shuts the list, because that is
- * what this control has always done and what it is used for dozens of times
- * an hour. Holding the platform's multi-select key toggles instead and leaves
- * the list open, which is the same gesture a file manager and every list in
- * this app's tables already use — so the frequent job costs exactly what it
- * used to and the new one costs a modifier.
+ * A plain click *replaces* the selection and shuts the list — the frequent
+ * job, done dozens of times an hour. Holding the platform's multi-select key
+ * toggles instead and leaves the list open, the same gesture a file manager
+ * and every list in this app's tables already use, so the new job costs a
+ * modifier and the old one costs what it always did.
  *
- * ## Why the rows are options with nothing inside them
+ * Nothing inside a row may be a control: `option` carries *children
+ * presentational* in ARIA 1.2, so assistive tech flattens whatever it holds
+ * and folds every label inside into one accessible name. Hence a filtered
+ * listbox driven from the filter box — the shape `LogQuery` already uses. The
+ * caret never leaves the input, the rows are named by `aria-activedescendant`,
+ * and the whole popover is one tab stop. `Enter` replaces the selection and
+ * `mod+Enter` toggles: the keyboard spelling of the two gestures the mouse
+ * has, rather than a third vocabulary. The checkbox is a hit target for the
+ * mouse and only for the mouse — a modifier is not an affordance, and somebody
+ * who has never held one still has to be able to build a selection by
+ * clicking.
  *
- * A row used to be a `role="option"` holding two buttons, a checkbox and a
- * label. `option` carries *children presentational* in ARIA 1.2: assistive
- * tech is specified to flatten whatever is inside it, so neither button was
- * reachable through it and both their labels folded into one accessible name
- * — including the explanation of why the checkbox had gone quiet at the
- * ceiling, which was also `disabled` and therefore out of the tab order
- * entirely. It cost two tab stops per row as well, which on a sixty-namespace
- * cluster is a hundred and twenty presses to cross the list.
- *
- * So the list is a filtered listbox driven from the filter box — the shape
- * `LogQuery` already uses. The caret never leaves the input, the rows are
- * named by `aria-activedescendant`, and the whole popover is one tab stop.
- * `Enter` replaces the selection and `mod+Enter` toggles: the keyboard
- * spelling of the two gestures the mouse has, rather than a third vocabulary.
- *
- * The checkbox stays a hit target for the mouse, and only for the mouse: a
- * modifier is not an affordance, and somebody who has never held one still
- * has to be able to build a selection by clicking. It is not a control of its
- * own — it cannot be, inside an option — and everything it does the keyboard
- * does with the modifier.
- *
- * Only *adding* stops at `SCOPE_LIMIT`. Replacing the selection with one
+ * Only *adding* stops at `SCOPE_LIMIT`; replacing the selection with one
  * namespace is always allowed, so the ceiling never gets between a reader and
  * the namespace they are trying to open. The footer is both the filter box's
  * description and a live region, so the ceiling is spoken before it bites and
- * the refusal is spoken when it does.
+ * the refusal when it does.
  */
 function NamespacePopover({
   children,

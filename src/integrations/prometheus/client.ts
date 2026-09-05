@@ -4,10 +4,9 @@
  * The HTTP is the backend's — this file sends PromQL and reads numbers, and
  * never sees the credential. What it owns is the alignment: three separate
  * range queries come back as three series over the same timestamps, and the
- * chart wants one array of samples. Doing that here rather than in the
- * component keeps `usage-chart` unable to tell where its samples came from,
- * which is the property that makes the fallback and the Prometheus answer
- * literally the same picture.
+ * chart wants one array of samples. Doing that here keeps `usage-chart`
+ * unable to tell where its samples came from, which is what makes the
+ * fallback and the Prometheus answer literally the same picture.
  */
 
 import { commands } from "@/lib/commands";

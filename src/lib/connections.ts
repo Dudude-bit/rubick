@@ -1,16 +1,14 @@
 /**
  * The reader's questions, built from the cluster's verbs.
  *
- * `get_resource_connections` returns typed edges — six verbs and nothing
- * inferred — deliberately, so the backend never has to guess how a page wants
- * to read them. That leaves the grouping here, in one place: "Related
- * resources: ConfigMap, Secret, PVC, Node" is a pile, and *what does this need
- * to run* is a question. Ten pages asking the same question want one answer,
- * not ten spellings of it.
+ * `get_resource_connections` returns typed edges — six verbs, nothing
+ * inferred — so the backend never has to guess how a page reads them. The
+ * grouping lives here instead, in one place, so ten pages asking "what does
+ * this need to run" get one answer rather than ten spellings of it.
  *
- * Nothing here re-derives a fact. `Usage` already carries how a volume is
- * mounted and which key an environment variable reads; this only puts those
- * into a sentence.
+ * Nothing here re-derives a fact: `Usage` already carries how a volume is
+ * mounted and which key an environment variable reads, and this only puts
+ * that into a sentence.
  */
 
 import type { T } from "@/i18n/useT";
@@ -143,15 +141,11 @@ function describeUsage(
  * printed twice. Two mounts that genuinely differ — the same path, one of
  * them read-only — stay two lines, because the difference is the finding.
  *
- * Two ways read as a sentence — "mounted at /etc/app, and APP_MESSAGE reads
- * app.conf" — and the row stays one line. Past that a sentence stops being
- * one: a ConfigMap that a pod mounts twice, reads a key from and imports
- * wholesale is five clauses nobody finishes, so each way becomes its own
- * line. Containers are named where they tell two lines apart, and nowhere
- * else: one line covering three containers is not ambiguous, and the roster
- * on it would be read on every pod page in the app for no answer.
+ * Two ways read as one sentence and the row stays one line; past that each
+ * way becomes its own line. Containers are named only where they tell two
+ * lines apart.
  *
- * No "all containers" here, unlike the pod's Volumes block. That summary is
+ * No "all containers" here, unlike the pod's Volumes block: that summary is
  * a claim about a denominator — the pod's whole container list — which the
  * edge does not carry, and which a ConfigMap page listing four pods that use
  * it could not know for any of them.
@@ -295,9 +289,9 @@ export function describeExistence(
  *
  * `publishesNothing` is the sharpest: a healthy selector, healthy pods, a
  * green everything and no traffic at all, because the Service asks for a port
- * name no container declares. It is invisible to every deduction — including
- * the one this chain used to make — since the pods really are Ready and it is
- * the endpoint controller that skipped them.
+ * name no container declares. No deduction from pod readiness can see it —
+ * the pods really are Ready, and it is the endpoint controller that skipped
+ * them.
  */
 export function describeStop(
   stop: ChainStop,
@@ -417,10 +411,10 @@ export interface ChainHopObject {
 /**
  * The last hop, and it is the cluster's own answer rather than ours.
  *
- * It used to be a list of the pods the selector matched with their `Ready`
- * conditions counted — a deduction, one edge per pod, and wrong in both the
- * directions that matter: a draining pod reads as dead while it is still
- * taking traffic, and a Service that publishes nothing at all reads as green.
+ * Counting `Ready` conditions over the pods a selector matches is a deduction
+ * wrong in both the directions that matter: a draining pod reads as dead
+ * while it is still taking traffic, and a Service that publishes nothing at
+ * all reads as green.
  */
 export interface ChainHopPublished {
   at: "published";
@@ -498,10 +492,10 @@ export interface RoutedIngress {
    * Where the controller published it: `status.loadBalancer.ingress`, as an
    * address or a hostname.
    *
-   * Empty is a finding rather than a blank. Until something assigns an
-   * address nothing reaches the Ingress at all, and it is the single most
-   * common reason a perfectly correct one "does not work" — so the chain says
-   * so instead of printing a URL that resolves to nothing.
+   * Empty is a finding rather than a blank: until something assigns an
+   * address nothing reaches the Ingress at all — the most common reason a
+   * perfectly correct one "does not work" — so the chain says so instead of
+   * printing a URL that resolves to nothing.
    */
   addresses: string[];
 }
@@ -594,10 +588,9 @@ function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
 /**
  * What the Service hands to kube-proxy, counted.
  *
- * A draining address is counted as taking traffic, and that is the fix rather
- * than a nicety: kube-proxy falls back to the terminating endpoints when no
- * ready one is left, so a Service down to one draining pod is a restart in
- * progress and the app used to call it an outage.
+ * A draining address counts as taking traffic: kube-proxy falls back to the
+ * terminating endpoints when no ready one is left, so a Service down to one
+ * draining pod is a restart in progress rather than an outage.
  */
 function publishedHop(published: ServicePublished, t: T): ChainHopPublished {
   const first = published.endpoints[0];
@@ -652,9 +645,8 @@ export function tlsSecrets(
  * covers every host the Ingress routes — which is why an empty list is a
  * match rather than a miss. Where hosts are named, matching them is
  * {@link covers}'s job rather than string equality: a Secret named for
- * `*.example.com` is exactly the common case, and exact matching drew no
- * certificate hop for it at all — silently, on the setup most clusters
- * actually use.
+ * `*.example.com` is the common case, and exact matching silently draws no
+ * certificate hop for it at all.
  */
 function servesAny(tlsHosts: string[], pathHosts: string[]): boolean {
   if (tlsHosts.length === 0) return true;
@@ -688,9 +680,7 @@ export function trafficChains(
      * The neighbourhood answer carries the routing edges and the Ingress's
      * class, and stops there — an Ingress's `spec.tls` is only walked when
      * the Ingress is the subject. Without this a Deployment could say which
-     * hostname reaches it and never whether that hostname is served over TLS,
-     * which is the half somebody is usually asking about. Absent, the chain
-     * draws exactly what it drew before.
+     * hostname reaches it and never whether that hostname is served over TLS.
      */
     routing?: Map<string, RoutedIngress>;
   } = {}
@@ -905,12 +895,11 @@ export function chainSilence(conns: ResourceConnections, t: T): string | null {
 /**
  * A far end that is not in the cluster at all.
  *
- * The one edge in this model whose other side is a commit. Every other verb
- * joins two objects an API server can be asked about; `delivers` joins an
- * object to the repository that made it, and the reason it belongs in the
- * same list rather than in a box of its own is that it answers the same
- * question the ownership walk answers — *what made this* — and gives a truer
- * answer than the ReplicaSet does.
+ * The one edge whose other side is a commit: every other verb joins two
+ * objects an API server can be asked about, while `delivers` joins an object
+ * to the repository that made it. It belongs in the same list rather than a
+ * box of its own because it answers the question the ownership walk answers —
+ * *what made this* — and answers it more truly than the ReplicaSet does.
  */
 export interface OutsideEnd {
   /** The controller's object, and where it is in this app. */
@@ -938,11 +927,11 @@ export interface ConnRow {
    * Whether this row is worth saying t("nav", "notChecked") on.
    *
    * Only where existence bears on the claim the group makes. "If one of these
-   * is missing the pod does not start" is exactly such a claim, so a name the
-   * app read off a pod spec and never looked up has to say so there. A Node
-   * the pod is demonstrably running on does not: repeating it on every row
-   * turns an admission into wallpaper, and then nobody reads the one that
-   * matters. A `missing` object always says so, in every group.
+   * is missing the pod does not start" is such a claim, so a name the app
+   * read off a pod spec and never looked up has to say so there; a Node the
+   * pod is demonstrably running on does not, because an admission repeated on
+   * every row is one nobody reads. A `missing` object always says so, in
+   * every group.
    */
   verifiable?: boolean;
   /** Set where the row is the app admitting it did not look. */
@@ -956,14 +945,12 @@ export interface ConnGroup {
   rows: ConnRow[];
 }
 
-/** Which question a thing a pod spec names is an answer to. */
 /**
- * What a needed object is called, as a catalogue key rather than the words.
+ * Which question a thing a pod spec names is an answer to — a catalogue key
+ * rather than the words.
  *
- * The words used to be the key: this table held "Configuration" and the sort
- * below looked that same string up in an order list. Translating the label
- * would have left every row ranked last, in whatever order the API happened
- * to return them — a label doing double duty as a sort key breaks the moment
+ * The key must not be the label: the sort below looks it up in an order list,
+ * and a label doing double duty as a sort key ranks every row last the moment
  * the label stops being English.
  */
 const NEED_LABEL: Record<string, NeedKey> = {
@@ -1019,10 +1006,10 @@ function needLabel(
 }
 
 /**
- * What the top of an ownership chain is worth opening for. Shared with the
- * overview's own chain so the two never say it differently.
+ * What the top of an ownership chain is worth opening for, as a catalogue
+ * key: shared with the overview's own chain so the two callers cannot word it
+ * differently.
  */
-/** The catalogue key for it, so the two callers cannot word it differently. */
 export const REPLICAS_SET_HERE = "replicaCountSetHere" as const;
 
 const OWNABLE = new Set([
@@ -1152,16 +1139,14 @@ function answersHere(conns: ResourceConnections, t: T): ConnRow[] {
  * the object somebody actually deploys is one further up. The backend already
  * sent every hop of the chain, so this costs a loop rather than a request.
  *
- * ## Why the top of the chain says where the replica count is set
- *
- * A pod is not scalable and must not pretend to be — a Scale control here
- * would write a number to an object that has no such field. But a reader
- * standing on a crash-looping pod asking where to set the count is two hops
- * from the answer, and nothing on the row says which of the two names is the
- * one to open: `crash-demo-c688f57cf` is a revision that will be replaced,
- * `crash-demo` is where the number lives. The name is already a link; the
- * clause is what makes it worth following, and it is only ever put on a kind
- * this app can actually scale, so it never points somewhere with no control.
+ * The top of the chain carries the clause saying where the replica count is
+ * set. A pod is not scalable and must not pretend to be — a Scale control
+ * there would write a number to an object with no such field — but a reader
+ * on a crash-looping pod is two hops from the answer and nothing else says
+ * which name to open: `crash-demo-c688f57cf` is a revision that will be
+ * replaced, `crash-demo` is where the number lives. It is only ever put on a
+ * kind this app can actually scale, so it never points somewhere with no
+ * control.
  */
 function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   const owns = verb(conns.edges, "owns");
@@ -1236,10 +1221,9 @@ function revisionOf(object: ObjectRef): number {
  * Where the scheduler put it — the same edge, read from whichever end the
  * page is standing on.
  *
- * The mirror used to be withheld. `get_resource_connections` resolved a
- * missing namespace to `default`, so a Node came back with whatever happened
- * to live there and would have drawn that as the whole answer; the subject's
- * own scope decides now, and a Node's pods are read across every namespace.
+ * The subject's own scope decides which namespaces are read: a Node's pods
+ * across all of them, never resolved to `default`, which would draw whatever
+ * happened to live there as the whole answer.
  */
 function placement(conns: ResourceConnections, t: T): ConnGroup | null {
   const edges = verb(conns.edges, "runsOn");
@@ -1263,8 +1247,7 @@ function placement(conns: ResourceConnections, t: T): ConnGroup | null {
  * The namespace is the label rather than a suffix on the name because it is
  * the thing that repeats: a node in a real cluster carries kube-system's
  * pods, an ingress controller's and the reader's own, and the grouping is
- * what turns a flat list of forty names into three answers. It is also the
- * fact the old, namespace-scoped answer could not have stated at all.
+ * what turns a flat list of forty names into three answers.
  *
  * The count reads against what the scheduler will allow, because a list of
  * pods with no denominator does not answer "is this node full".
@@ -1303,17 +1286,14 @@ function runsHere(
 /**
  * What acts on this object without it having asked, and without it knowing.
  *
- * Its own group rather than a couple of rows in "Made by, and makes", and the
- * difference is the tense: that group answers *what made this*, which is a
- * fact about the past and is settled. These two are about what is going to
- * happen next — a replica count that moves back in fifteen seconds, an
- * eviction that gets refused — and the reader looking for either is not
- * looking at provenance.
+ * Its own group rather than rows in "Made by, and makes", and the difference
+ * is the tense: that group answers *what made this*, a settled fact about the
+ * past, while these two are about what happens next — a replica count that
+ * moves back in fifteen seconds, an eviction that gets refused.
  *
- * Nor does it merge with "Needs to run": that group's claim is "if one of
- * these is missing the pod does not start", and an autoscaler is the exact
- * opposite kind of thing. The workload runs perfectly well without it, and
- * has no say in it either way.
+ * Nor does it merge with "Needs to run", whose claim is "if one of these is
+ * missing the pod does not start": the workload runs perfectly well without
+ * an autoscaler, and has no say in it either way.
  */
 function governedBy(conns: ResourceConnections, t: T): ConnRow[] {
   const rows = verb(conns.edges, "governs").map((edge) => ({
@@ -1423,13 +1403,10 @@ export function connectionGroups(
       caption: t("nav", "governedByNote"),
       rows: governedBy(conns, t),
     },
-    // Only for the kinds that take part in ownership at all. "Controlled by:
-    // nothing" is a real answer on a Deployment and a non-sequitur on a
-    // ConfigMap, which no controller was ever going to have made.
-    // Drawn for a delivered object whatever its kind: a ConfigMap has no
-    // controller and "Controlled by: nothing" would be a non-sequitur, but a
-    // ConfigMap applied from a repository was still *made* by something, and
-    // that is exactly what this group is called.
+    // The kinds that take part in ownership, plus any delivered object
+    // whatever its kind: "Controlled by: nothing" is a real answer on a
+    // Deployment and a non-sequitur on a ConfigMap, but a ConfigMap applied
+    // from a repository was still *made* by something.
     OWNABLE.has(conns.subject.kind) || deliveredBy.length > 0
       ? {
           key: "owners",
@@ -1502,11 +1479,11 @@ function deliveredRows(delivery: Delivery[], t: T): ConnRow[] {
 }
 
 /**
- * How many pods a node is carrying.
+ * How many pods a node is carrying: the `runsOn` edges, counted.
  *
- * The `runsOn` edges, counted. The node page used to ask for the same list a
- * second time to fill the Pods row of its Headroom block; both reads are
- * `spec.nodeName=<node>` across every namespace, and one of them is enough.
+ * The node page fills the Pods row of its Headroom block from here rather
+ * than asking again — both reads are `spec.nodeName=<node>` across every
+ * namespace, and one of them is enough.
  */
 export function podsOnNode(
   conns: ResourceConnections | undefined
@@ -1515,17 +1492,17 @@ export function podsOnNode(
   return unique(verb(conns.edges, "runsOn").map((edge) => edge.from)).length;
 }
 
-/** How many distinct objects the tab draws — what its count mark stands for. */
 /**
  * A translator for the one caller that provably throws every word away.
  *
  * {@link connectionCount} reads `row.object` and nothing else, so the number
- * cannot depend on the language — and threading a translator through the ten
- * pages that ask for the count, so that a count could ignore it, would be a
- * parameter that exists to be discarded.
+ * cannot depend on the language, and threading a translator through the ten
+ * pages that ask for the count would be a parameter that exists to be
+ * discarded.
  */
 const NO_WORDS: T = () => "";
 
+/** How many distinct objects the tab draws — what its count mark stands for. */
 export function connectionCount(conns: ResourceConnections): number {
   return unique(
     connectionGroups(conns, NO_WORDS)

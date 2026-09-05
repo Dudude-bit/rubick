@@ -1,34 +1,22 @@
 /**
  * The routing layer drawn as what it is: a fan-out, left to right.
  *
- * ## Why this is a graph and the chain is not
- *
- * A single request's journey is a **chain** — entry point, rule, middleware,
+ * A single request's journey is a chain — entry point, rule, middleware,
  * service, pods, in that order and never any other — and `page-kit`'s
- * `Column`/`Cell` draw exactly that. This answers a different question. "How
- * is the routing built" is about the *shape across hosts*: which entry points
- * carry which hostnames, which hostnames land on the same Service, and where
- * one broken backend is quietly serving four of them. That shape is invisible
- * in a list of eighty rows no matter how the rows are ordered, and it is the
- * question a page whose whole reason is "this cluster's routing" owes an
- * answer to.
+ * `Column`/`Cell` draw that. This answers a different question: the shape
+ * across hosts. Which entry points carry which hostnames, which land on the
+ * same Service, and where one broken backend is quietly serving four of them.
+ * That is invisible in eighty rows however they are ordered.
  *
- * ## Not a force-directed blob
+ * Layered and deterministic rather than force-directed: fixed labelled
+ * columns, the middle one keeping the trouble-first order it was handed, the
+ * outer ones placed at the average height of what they connect to and pushed
+ * apart. Two readers see the same picture, and it does not rearrange when a
+ * pod restarts.
  *
- * Layered and deterministic: the columns are fixed and labelled, the middle
- * column keeps the order it was handed — which is trouble-first, the same as
- * every list in this app — and the outer columns are placed at the average
- * height of what they connect to and then pushed apart. Two readers looking
- * at the same cluster see the same picture, and it does not rearrange itself
- * when a pod restarts.
- *
- * ## What it never does
- *
- * Invent an edge. Every line here is one object naming another — an entry
- * point a router is bound to, a backend a rule names — and a host whose
- * backing has not been read yet draws a neutral line rather than a green one.
- * Colour is earned the same way it is everywhere else: red is a path that
- * stops, amber is worth a look, and everything healthy is left alone.
+ * It never invents an edge. Every line is one object naming another, and a
+ * host whose backing has not been read draws a neutral line rather than a
+ * green one.
  */
 
 import { useMemo, useState, type ReactNode } from "react";

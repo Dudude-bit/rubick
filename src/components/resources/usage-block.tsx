@@ -1,9 +1,8 @@
 /**
  * The Usage block, on every page that has one.
  *
- * Everything a detail page needs to say about resource consumption lives
- * here so the answer cannot drift between kinds — a chart on the Pod page
- * and a bar on the Deployment page would be worse than bars on both.
+ * Everything a detail page says about resource consumption lives here, so
+ * the answer cannot drift between kinds.
  */
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -59,33 +58,28 @@ export interface UsageBlockProps {
   /**
    * What a history supplier would be asked about.
    *
-   * Optional, and its absence is not a degraded state: a caller that has not
-   * said what it is looking at cannot be answered for, so the ranges stay
-   * dimmed exactly as they were before any of this existed. The block never
-   * guesses a scope from `kind` and `uid` — a wrong scope draws a confident
-   * chart of somebody else's workload.
+   * Optional, and its absence is not a degraded state: with no scope the
+   * ranges simply stay dimmed. Never guessed from `kind` and `uid` — a wrong
+   * scope draws a confident chart of somebody else's workload.
    */
   history?: UsageScope;
   /**
    * Whether anything is running behind this block.
    *
    * False on a finished Job, a suspended CronJob or a Deployment scaled to
-   * zero, and only ever set where a supplier can answer for the past —
-   * without one there is nothing to draw and the caller says so in words
-   * instead. What it turns off is every claim about *now*: no sample is
-   * recorded into the watched buffer, the caption drops the live-window
-   * label rather than counting up a window nobody is watching, and the
-   * bands report their peak instead of a last reading the reader would take
-   * for a current one.
+   * zero, and only ever set where a supplier can answer for the past. It
+   * turns off every claim about *now*: no sample is recorded into the watched
+   * buffer, the caption drops the live-window label rather than counting up a
+   * window nobody is watching, and the bands report their peak instead of a
+   * last reading the reader would take for a current one.
    */
   live?: boolean;
   /**
    * Why there is nothing running, in the caller's own words.
    *
-   * Only read when {@link live} is false, and finished here rather than by
-   * the caller because only this block knows whether the supplier came back
-   * with anything: "this is what Prometheus kept" under two empty rows is the
-   * page promising a past that was never recorded.
+   * Only read when {@link live} is false, and finished here because only this
+   * block knows whether the supplier came back with anything: "this is what
+   * Prometheus kept" under two empty rows promises a past nothing recorded.
    */
   idleNote?: string;
 }
@@ -139,10 +133,10 @@ export function UsageBlock({
   const watched = samples.length > 0 ? watchedFor(samples) : null;
 
   // Both bands read the same buffer, so "watching from now" and "no limit
-  // set" are facts about the workload rather than about CPU and then again
-  // about memory. Said once, under the pair.
-  // Null until the supplier has answered; false when it answered with an
-  // empty window, which is a different sentence from "not yet".
+  // set" are facts about the workload, not about CPU and then again about
+  // memory. Said once, under the pair. Null until the supplier has answered;
+  // false when it answered with an empty window, which is a different
+  // sentence from "not yet".
   const kept = past.window === null ? null : past.window.samples.length > 0;
 
   const shared = !live
@@ -179,11 +173,9 @@ export function UsageBlock({
           .join(" · ")
       : [
           scope,
-          // Nothing is running, so there is no window being watched and no
-          // honest way to say how long it has been watched for. The range
-          // picker beside it is the whole offer, and the caption is just the
-          // scope — "watched since you opened this page · 0s" would be the
-          // block counting up a thing it is not doing.
+          // Nothing is running, so no window is being watched and there is
+          // no honest span to print: the caption is just the scope, and the
+          // range picker beside it is the whole offer.
           !live
             ? null
             : watched === null
@@ -282,10 +274,9 @@ export function UsageBlock({
  * The offer, the loss, or nothing — the three states a configured
  * integration owes the surface it upgrades.
  *
- * The middle one is the trap the whole seam exists to close. An integration
- * that silently falls back looks identical to one that was never configured,
- * and the reader concludes the feature is broken rather than that their
- * Prometheus is. Saying which one it is costs a line.
+ * The middle one is the trap: an integration that silently falls back looks
+ * identical to one that was never configured, and the reader concludes the
+ * feature is broken rather than their Prometheus.
  */
 function HistoryNote({ state }: { state: RangedHistory }) {
   const t = useT();
@@ -316,10 +307,9 @@ function HistoryNote({ state }: { state: RangedHistory }) {
 /**
  * Live where a supplier is answering, dimmed and inert where none is.
  *
- * `disabled` rather than a styled span, so assistive tech is told the same
- * thing the dimming says — and the title names what is missing, because a
- * control that is off for a reason the reader cannot discover is worse than
- * no control.
+ * `disabled` rather than a styled span, so assistive tech is told what the
+ * dimming says; the title names what is missing, because a control that is
+ * off for an undiscoverable reason is worse than no control.
  */
 function RangePicker({
   enabled,
@@ -392,11 +382,9 @@ type TrafficLike = NonNullable<
 /**
  * The past, where something can answer for it.
  *
- * Nothing here blocks the live chart. The block renders its watched window
- * on the first frame and this fills in beside it — a page that waited on
- * somebody else's Prometheus before drawing the numbers it already had would
- * be worse with the integration than without one, which is the single thing
- * the seam exists to prevent.
+ * Nothing here blocks the live chart: the block renders its watched window on
+ * the first frame and this fills in beside it, so the page is never slower
+ * with the integration than without one.
  */
 function useRangedHistory(
   scope: UsageScope | undefined,
@@ -405,12 +393,10 @@ function useRangedHistory(
 ): RangedHistory {
   const power = useCapabilityState("usage.history");
   const trafficPower = useCapabilityState("network.traffic");
-  // A block with nothing running opens on a range instead of on nothing.
-  // There is no live window for it to fall back to, so an unselected picker
-  // would draw an empty plot over a supplier that has the answer — and the
-  // reader would have to guess that the fix is a button they were given no
-  // reason to press. 6h rather than 15m because the workloads this happens
-  // to are the ones that stopped, often hours ago.
+  // A block with nothing running opens on a range instead of on nothing:
+  // there is no live window to fall back to, so an unselected picker would
+  // draw an empty plot over a supplier that has the answer. 6h rather than
+  // 15m because the workloads this happens to stopped hours ago.
   const [range, setRange] = React.useState<UsageRange | null>(
     live ? null : "6h"
   );
@@ -576,10 +562,9 @@ function StorageRow({
         ))}
       </ul>
       {/* The half of the disk question this app cannot answer on its own,
-       *  said once rather than implied by an empty bar nobody can fill —
-       *  and still said for the volumes nothing measured, because "no
-       *  kubelet scraping" and "an unprovisioned volume" look identical
-       *  from here and an empty bar would read as 0% for both. */}
+       *  said in words rather than implied by an empty bar — and still said
+       *  for the volumes nothing measured, because "no kubelet scraping"
+       *  and "an unprovisioned volume" look identical from here. */}
       {measured < claims.length && (
         <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
           {measured === 0
@@ -598,9 +583,8 @@ function StorageRow({
  *
  * Never a bare percentage: the capacity a kubelet reports is the filesystem
  * behind the volume, and for a provisioner that enforces no quota — a
- * `local-path` or a `hostPath` — that filesystem is the node's disk rather
- * than the claim's declared size. Printing both makes the difference from
- * the declared size beside it visible instead of confusing.
+ * `local-path` or a `hostPath` — that is the node's disk, not the claim's
+ * declared size. Printing both makes the gap visible instead of confusing.
  */
 function Fullness({ measured }: { measured?: VolumeFullness }) {
   const t = useT();

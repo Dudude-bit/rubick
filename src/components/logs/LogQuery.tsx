@@ -70,17 +70,16 @@ interface LogQueryProps {
  * The query, made of parts you can see and take back.
  *
  * A substring box cannot say what it is doing: `warn` in it means both
- * "lines at warn" and "lines containing the word", and there is nothing on
- * screen afterwards that says which. Each clause here is a chip with its
- * own ×, and the ones that come from clicking a field key in a row are the
- * same objects as the ones you type — `fieldTerm` builds all of them.
+ * "lines at warn" and "lines containing the word", with nothing on screen
+ * afterwards to say which. Each clause here is a chip with its own ×, and
+ * the ones that come from clicking a field key in a row are the same
+ * objects as the ones you type — `fieldTerm` builds all of them.
  *
- * Focusing it opens what the buffer can actually be filtered by. Parsing
- * fields is only worth its cost if the keys can be found, and until now
- * the only way to find one was to spot it in a row and click it: a query
- * language whose vocabulary is discovered by luck. Two steps, key then
- * value, because `component=ingest` is the useful filter and
- * `component exists` almost never is.
+ * Focusing it opens what the buffer can actually be filtered by: parsing
+ * fields is only worth its cost if the keys can be found, rather than
+ * spotted in a row by luck. Two steps, key then value, because
+ * `component=ingest` is the useful filter and `component exists` almost
+ * never is.
  */
 export function LogQuery({
   terms,
@@ -477,13 +476,12 @@ function Hint({
  * reversible, costing nothing. The second button promotes that one term
  * to intake, where it is evaluated in Rust before the line is kept — the
  * only way to survive a pod that writes faster than the buffer can hold.
- * Both modes filter what is on screen, and by the same evaluator on both
- * sides (see `shared/log-query-conformance.json`), so the toggle changes
- * what is *kept* and never what is *shown*.
+ * Both modes filter by the same evaluator on both sides (see
+ * `shared/log-query-conformance.json`), so the toggle changes what is
+ * *kept* and never what is *shown*.
  *
- * Intake takes the informational hue and an inset edge, as in the mock.
  * Colour cannot be the only difference between a chip that throws data
- * away and one that does not, so it also carries the ⇣ mark the strip
+ * away and one that does not, so intake also carries the ⇣ mark the strip
  * and the status bar use for the same thing, and its toggle is a real
  * pressed state with a name that says which direction it goes.
  */

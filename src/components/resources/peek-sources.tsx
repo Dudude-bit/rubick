@@ -286,12 +286,12 @@ function controlledBy(
  * Every image the thing runs, in run order, each row saying which kind of
  * container it belongs to.
  *
- * Given the lists rather than an array, because `images(x.containers, t)` is
- * precisely how this group came to leave out a mesh proxy on all five
- * workload kinds. There is no room for the sequence UI in a peek row, so
- * the phase arrives as the word beside the name that the pod's Containers
- * tab prints for the same reason: without it, a reader counting three
- * images cannot tell which one their pod is actually serving from.
+ * Given the lists rather than an array: `images(x.containers, t)` is precisely
+ * how this group came to leave out a mesh proxy on all five workload kinds.
+ * There is no room for the sequence UI in a peek row, so the phase arrives as
+ * the word beside the name that the pod's Containers tab prints, without which
+ * a reader counting three images cannot tell which one their pod is serving
+ * from.
  */
 function images(
   lists: ContainerLists<{ name: string; image: string; phase: ContainerPhase }>,
@@ -1301,13 +1301,12 @@ export function resolveSource(target: PeekTarget): PeekSource {
 /**
  * A custom resource, read through the CRD that defines it.
  *
- * The reason this is not {@link manifestSource} with a different argument:
- * `getManifest` is given an `apiVersion`, and the only one available for a
- * kind outside the registry is `getApiVersion`'s fallback of `v1`. That asks
- * the core API for an Argo Application and gets a 404 — the peek would have
- * been an error panel for every custom resource in the cluster. The backend
- * already resolves a CRD's real group and version from its name, which is
- * what the detail page has always used.
+ * Not {@link manifestSource} with a different argument: `getManifest` is given
+ * an `apiVersion`, and the only one available for a kind outside the registry
+ * is `getApiVersion`'s fallback of `v1` — which asks the core API for an Argo
+ * Application and gets a 404, an error panel for every custom resource in the
+ * cluster. The backend already resolves a CRD's real group and version from
+ * its name, which is what the detail page uses.
  *
  * `spec` and `status` are drawn the same way an unrecognised manifest's are:
  * scalars, dotted, capped. Nothing here reads a field by name, because the

@@ -32,14 +32,13 @@ import type { T } from "@/i18n/useT";
  * React. It answers here, in one place, testable without a DOM — the panel
  * only has to render the answer and own the dialogs.
  *
- * Nothing here pre-flights access, and that is still true now that the nav
- * does. A `SelfSubjectAccessReview` decides how a nav row is *drawn* — the
- * reader has not committed to anything yet, and a wrong mark costs them a
- * mark the real call then corrects. A button is the commitment: greying it
- * out on a guess shuts somebody out of an action they could have taken, and
- * a review that disagrees with the call does so in exactly the cases that
- * matter. So an RBAC refusal surfaces here the way it does on every detail
- * page: the call is made, it fails, and the error says so.
+ * Nothing here pre-flights access, even though the nav does. A
+ * `SelfSubjectAccessReview` decides how a nav row is *drawn*, and a wrong
+ * mark costs a mark the real call then corrects. A button is a commitment:
+ * greying it out on a guess shuts somebody out of an action they could have
+ * taken, in exactly the cases where the review and the call disagree. So an
+ * RBAC refusal surfaces here the way it does on every detail page — the call
+ * is made, it fails, and the error says so.
  */
 
 export type PeekActionId =
@@ -145,14 +144,13 @@ type ScaleCommand = (
  * Both surfaces read it — the peek's action row and its dialog — so a kind
  * cannot end up with a button on one and nothing on the other.
  *
- * **ReplicaSet is deliberately absent.** It is scalable through the API, and
- * setting the count on one under a Deployment is undone by the Deployment
- * controller on the same watch event, not in fifteen seconds — there is no
- * honest version of the dialog's "this lasts until the next pass" for a number
- * that never lands at all. An orphaned ReplicaSet would keep the count, but
- * offering the control only for the rare unowned one would mean a Scale that
- * appears and disappears between two revisions of the same Deployment. The
- * page instead links the Deployment that owns it, which is where the count is
+ * ReplicaSet is deliberately absent. It is scalable through the API, but a
+ * count set on one under a Deployment is undone by the Deployment controller
+ * on the same watch event — the dialog's "this lasts until the next pass" has
+ * no honest form for a number that never lands. An orphaned ReplicaSet would
+ * keep it, but offering the control only for the rare unowned one means a
+ * Scale that appears and disappears between two revisions of one Deployment.
+ * The page links the owning Deployment instead, which is where the count is
  * really set.
  */
 const SCALE_COMMANDS: Record<ScalableKind, ScaleCommand> = {
@@ -180,8 +178,7 @@ const FINISHED_PHASES = new Set(["succeeded", "completed"]);
  *
  * `shellTargets` decides both what counts and what comes first — app
  * container, then sidecar, then a running init container. On a meshed pod
- * whose app container has not come up, the sidecar is a real shell and
- * this used to report there was none.
+ * whose app container has not come up, the sidecar is a real shell.
  */
 export function reachableContainer(pod: PodInfo | undefined) {
   if (!pod) return undefined;
@@ -441,9 +438,9 @@ export function describeBareRestart(
  * What a mutation from the panel has to make stale.
  *
  * The panel is not modal: the list it was opened from is still on screen
- * behind it, so a row that keeps its old state after a delete is the first
- * thing anyone notices. Both key shapes in the app are covered — the lists
- * and `queryKeys.resourceDetail` are plural-first, the detail pages'
+ * behind it, so a row keeping its old state after a delete is the first thing
+ * anyone notices. Both key shapes are covered — the lists and
+ * `queryKeys.resourceDetail` are plural-first, the detail pages'
  * `useResourceDetail` is singular-first — plus the panel's own queries.
  */
 export function peekMutationKeys(kind: string): string[][] {

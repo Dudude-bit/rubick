@@ -1,32 +1,22 @@
 /**
- * The only way anything in this app re-reads the cluster on a timer.
+ * The only way anything here re-reads the cluster on a timer: `useQuery` plus
+ * the four conditions that decide whether the timer runs at all — surface on
+ * screen, window focused, answer still changing, reader recently active — and
+ * the one output that keeps the screen honest about it.
  *
- * `useQuery` plus the four conditions that decide whether the timer should run
- * at all — is the surface on screen, does the window have focus, has the
- * answer stopped changing, did the reader just touch something — and the one
- * output that keeps the screen honest about it.
- *
- * Two things make this a mechanism rather than a helper. A query written
- * tomorrow inherits all of it by asking for a *rate* (`refresh: "resourceList"`)
- * instead of a number, and `refetchInterval` is a lint error everywhere except
- * this file, so the number cannot be written by hand again. See the
+ * A query asks for a *rate* (`refresh: "resourceList"`), never a number:
+ * `refetchInterval` is a lint error everywhere but this file — see the
  * `no-restricted-syntax` block in `eslint.config.js`.
  *
- * ## Coming back
- *
- * Every way of arriving back at a query refetches it before the reader can
- * read it: a detail tab being switched to, the window being un-minimised, the
- * window regaining focus. This is not an optimisation to be tuned away — the
- * whole licence to stop polling rests on it. A returning reader must never see
- * a number that stopped being true while they were gone.
- *
- * ## What it says about itself
+ * Every way of arriving back at a query refetches it first — switching to a
+ * detail tab, un-minimising, regaining focus. The licence to stop polling
+ * rests on that promise, so it is not tunable: a returning reader must never
+ * see a number that stopped being true while they were gone.
  *
  * A query re-reading more slowly than its rate reports `freshness.slowed`, and
- * `DataFreshness` draws "slowed" rather than "polling" for it. A *watch* is not
- * this: a stream that is still connected keeps its data live at any poll rate,
- * says so with `refresh: false`, and this hook never claims "live" on its own
- * behalf — that word belongs to the surface that owns the stream.
+ * `DataFreshness` draws "slowed" rather than "polling". A *watch* is not this:
+ * a connected stream stays live at any poll rate, says so with
+ * `refresh: false`, and this hook never claims "live" on its own behalf.
  *
  * @module hooks/useLiveQuery
  */
@@ -148,34 +138,29 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
  * The same discipline for a question that is several requests at once.
  *
  * A window scoped to three namespaces asks the overview three times, and
- * `useQueries` has no room for the per-query state {@link useLiveQuery}
- * keeps. It is here rather than at the call site because the interval is what
- * this module exists to own — and a fan-out is where it matters most: this is
- * the one shape in the app whose cost is multiplied by something the reader
- * chose.
+ * `useQueries` has no room for the per-query state {@link useLiveQuery} keeps.
+ * It lives here rather than at the call site because the interval is what this
+ * module owns, and a fan-out is the one shape in the app whose cost is
+ * multiplied by something the reader chose.
  *
- * All four conditions apply, to the group rather than to a query, and two of
- * them had to be redefined.
+ * All four conditions apply to the group rather than to a query, and two of
+ * them mean something different for it.
  *
- * **Steadiness is a property of a round** — one answer from every part — and
- * not of an arrival. The parts answer in separate tasks, so counting arrivals
- * let three quiet namespaces reach `BACKOFF.steadyAfter` in the gap between
- * two answers from a fourth that was changing every poll: the interval
- * flipped between its rate and twice its rate once a second, and the badge
- * over data that was moving the whole time flipped with it. A round is steady
- * only when *all* of it comes back identical, so one part still moving keeps
- * the whole group at full rate. The overview never goes steady as its payload
- * stands — node CPU differs on every read — but the events feed does, and an
- * idle events page fanned out across four namespaces at one second is exactly
- * the bill `lib/refresh.ts` exists to stop.
+ * **Steadiness is a property of a round** — one answer from every part — not
+ * of an arrival. The parts answer in separate tasks, so counting arrivals lets
+ * quiet ones reach `BACKOFF.steadyAfter` in the gap between two answers from a
+ * part that is changing every poll, and the interval — with the badge over
+ * data that never stopped moving — flips once a second. One part still moving
+ * keeps the whole group at full rate. The overview never goes steady as its
+ * payload stands (node CPU differs on every read); the events feed does, and
+ * an idle events page fanned out across four namespaces at one second is
+ * exactly the bill `lib/refresh.ts` exists to stop.
  *
  * **Coming back re-reads the parts from here** rather than leaving each of
- * them to it. A fan-out is the one shape with a reason to switch React
- * Query's own focus refetch off — four namespaces re-read on every alt-tab is
- * four times the cost of the thing being avoided — and the events feed does
- * exactly that. The promise at the top of this module is the group's all the
- * same: a returning reader never reads a number that stopped being true while
- * they were away.
+ * them to it: a fan-out is the one shape with a reason to switch React Query's
+ * own focus refetch off — four namespaces re-read on every alt-tab is four
+ * times the cost of the thing being avoided — and the events feed does exactly
+ * that. The promise at the top of this module is the group's all the same.
  */
 export function useLiveQueries<T>(options: {
   queries: Array<

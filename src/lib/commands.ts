@@ -48,8 +48,8 @@ function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
       // Every call in the app comes through here, which is the whole reason
       // the check is here: a 401 is not about the request that got it — the
       // session is over and every other request is failing too. Noticing it
-      // once, centrally, is what stops each surface having to recognise it
-      // and stops the next command added from forgetting to.
+      // once, centrally, is what stops the next command added from
+      // forgetting to.
       if (isCredentialsExpired(message)) {
         credentialsExpired(expiryReason(message));
       }
@@ -61,14 +61,12 @@ function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
 }
 
 /**
- * Eagerly wraps all command functions with error normalization.
- *
- * Note: We use eager wrapping instead of a Proxy because in production builds,
- * module namespace objects have non-configurable, non-writable properties.
- * A Proxy's 'get' handler that returns a different value (wrapped function)
- * violates the Proxy invariant and throws:
- * "Proxy handler's 'get' result of a non-configurable and non-writable
- * property should be the same value as the target's property"
+ * Eagerly wraps every command, rather than proxying them: in production
+ * builds a module namespace object's properties are non-configurable and
+ * non-writable, so a Proxy 'get' handler returning the wrapped function
+ * violates the invariant and throws "Proxy handler's 'get' result of a
+ * non-configurable and non-writable property should be the same value as the
+ * target's property".
  */
 function wrapAllCommands<T extends Record<string, unknown>>(
   commands: T

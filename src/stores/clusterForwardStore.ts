@@ -1,24 +1,21 @@
 /**
  * Which in-cluster server this person pointed an integration at, per cluster.
  *
- * The sibling of `clusterIdentityStore`, and here for the same reasons. A
+ * The sibling of `clusterIdentityStore`, and here for the same reasons: a
  * forward is a choice about *this laptop* — which local port is free on it,
  * whether this person wants a tunnel opened the moment they switch to this
  * cluster — so it belongs beside the alias and the colour rather than in the
  * kubeconfig or in the app's shared config file. Another machine connecting
  * to the same cluster has its own answer.
  *
- * ## What is stored, and what deliberately is not
+ * The **Service** is saved, not the pod: `port_forward_pod` targets a pod by
+ * name and `autoReconnect` retries that same pod, so a saved pod name is a
+ * fact with a shelf life of one rollout. The pod is looked up again every
+ * time the forward comes up — see `integrations/forwarded.ts`.
  *
- * The **Service**, not the pod. `port_forward_pod` targets a pod by name and
- * `autoReconnect` retries that same pod, so a saved pod name is a fact with a
- * shelf life of one rollout. The Service is the durable thing and the pod is
- * looked up again every time the forward comes up — see
- * `integrations/forwarded.ts`.
- *
- * The **local port**, because the saved connection's URL is made of it. Move
- * the port and the address the integration was configured with stops being
- * true; the port is re-checked for a collision when the forward is brought
+ * The **local port** is saved because the connection's URL is made of it:
+ * move the port and the address the integration was configured with stops
+ * being true. It is re-checked for a collision when the forward is brought
  * up, and only then moved.
  *
  * @module stores/clusterForwardStore
@@ -44,9 +41,9 @@ export interface ForwardPreference {
    *
    * Off by default and asked for explicitly, because a forward is a listening
    * socket on this machine and an outbound connection into the cluster —
-   * neither is something to start on somebody's behalf because they once
-   * pressed a button. Off, the integration's row is still drawn and pressing
-   * it is what wakes it.
+   * neither is started on somebody's behalf because they once pressed a
+   * button. Off, the integration's row is still drawn and pressing it is what
+   * wakes it.
    */
   autoStart: boolean;
 }

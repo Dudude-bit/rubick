@@ -1,43 +1,26 @@
 /**
  * What the cert-manager page reads, and what it costs.
  *
- * Two queries, not the one this used to be. `Certificate` is the whole of
- * what a sidebar count needs — `certificateRows` puts down exactly one row
- * per certificate whatever the other three kinds say, so `.length` on the
- * raw list is always the row count, and the walk that explains *why* one is
- * stuck is not part of that arithmetic. Splitting the read the way Traefik's
- * page does turns the sidebar's number into one cluster-wide list instead of
- * six, on every cluster with cert-manager installed and nobody looking at
- * this page. Opening the page does not pay for the split: it asks for the
- * same key the row already primed, so that list is never read twice.
+ * Two queries. `Certificate` alone is what the sidebar count needs —
+ * `certificateRows` puts down one row per certificate whatever the other
+ * kinds say, so `.length` on the raw list is the row count. The sidebar
+ * therefore costs one cluster-wide list instead of six, and opening the page
+ * costs nothing extra: it asks for the key the row already primed.
  *
- * The other four are one query together, because they answer to a different
- * rule than the count does. A `Certificate` saying `Ready=False` with the
- * sentence that explains it sitting on a `Challenge` three objects below is
- * exactly the state this page exists to show, and it cannot be drawn from
- * the certificates alone — so once the page needs the walk at all, it needs
- * every kind the walk can reach, still fetched together.
+ * The other four go together, because a `Certificate` saying `Ready=False`
+ * has the sentence explaining it on a `Challenge` three objects below. Once
+ * the walk is needed at all, every kind it can reach is needed.
  *
- * ## Absent, and unread
+ * A kind the API server does not serve reads as *none of those exist*: a
+ * CA-only install has no `orders` or `challenges` CRD, and reporting "could
+ * not read them" would call a supported configuration broken. That is the
+ * only failure allowed to become an empty list.
  *
- * A kind the API server does not serve reads as *none of those exist*, which
- * is what it means: a cert-manager install with no ACME issuer has no
- * `orders` or `challenges` CRD at all, and a page reporting "could not read
- * them" on a perfectly good CA-only install would be calling a supported
- * configuration broken.
- *
- * That is the only failure allowed to become an empty list. A denial and a
- * broken connection are *not* absences, and the four kinds are not equally
- * optional: `issuers` and `clusterissuers` ship with every install, so a
- * kubeconfig without cluster-scoped `list clusterissuers` gets nothing back
- * about a cluster that may be signing everything it has — and swallowing that
- * is how this page came to tell such a reader, in as many words, that no
- * ClusterIssuer existed. So the three are told apart here and the page says
- * which it is looking at.
- *
- * `Certificate` itself stays unwrapped altogether: its CRD is what detection
- * is, so any failure to list it is the page's failure and it says so instead
- * of drawing an empty list.
+ * A denial is not an absence. `issuers` and `clusterissuers` ship with every
+ * install, so a kubeconfig without cluster-scoped `list clusterissuers` must
+ * not be told that no ClusterIssuer exists. `Certificate` stays unwrapped
+ * altogether: its CRD is what detection is, so failing to list it is the
+ * page's failure and it says so.
  */
 
 import { useMemo } from "react";

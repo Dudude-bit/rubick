@@ -15,9 +15,8 @@ export interface InstalledObject {
  * the release itself states. A document without both is skipped — a stray
  * `---` or a template that rendered to nothing is not an object.
  *
- * This is not linkifying YAML. The Manifest tab stays the text surface it is;
- * this parses the same string into the objects it declares, which is a
- * different question with a different answer.
+ * Not linkified YAML: the Manifest tab stays the text surface it is, and this
+ * parses the same string into the objects it declares.
  */
 export function installedObjects(
   manifest: string,

@@ -6,8 +6,7 @@ import type { StreamedLogLine } from "./types";
  * A run holds a range into the source array rather than a copy of the
  * lines: a buffer of 40 000 lines that repeats nothing would otherwise
  * allocate 40 000 single-element arrays every time a batch lands. The
- * head line is carried because every renderer needs it and indexing for
- * it is noise.
+ * head line is carried because every renderer needs it.
  */
 export interface LogRun {
   /** The head line's id — unique, monotonic, and stable as a React key. */
@@ -23,10 +22,9 @@ export interface LogRun {
 /**
  * Collapse consecutive repeats into runs.
  *
- * Consecutive is the whole contract: a run is a claim that the program
- * said one thing N times in a row, and reordering the buffer to gather
- * distant repeats would turn a count into a statistic and lose the
- * ordering that made the log worth reading. Container and level are
+ * Consecutive is the whole contract: a run claims the program said one
+ * thing N times in a row, and gathering distant repeats would turn a
+ * count into a statistic and lose the ordering. Container and level are
  * folded into `groupKey`, so a run can never straddle either.
  *
  * With `collapse` false every line gets its own run, so callers have

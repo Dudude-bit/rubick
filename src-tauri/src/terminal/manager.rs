@@ -238,7 +238,6 @@ impl TerminalManager {
                         }
                     }
                     () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
-                        // Read output
                         match adapter.read_output().await {
                             Ok(Some(data)) => {
                                 let data_str = String::from_utf8_lossy(&data).to_string();
@@ -275,7 +274,6 @@ impl TerminalManager {
             let _ = adapter.close().await;
             *session_state.write().await = TerminalState::Disconnected;
 
-            // Remove session from map
             sessions.remove(&session_id_clone);
 
             let _ = event_tx.send(AppEvent::TerminalClosed {

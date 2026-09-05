@@ -17,14 +17,13 @@ import type { ConditionInfo, PodInfo } from "@/generated/types";
  * Rule one: a tab names a thing, or it names a view.
  *
  * `kind` is Containers, Pods, Instances, Events — a tab that opens onto
- * objects of a kind the app already draws elsewhere. It takes that kind's
- * glyph and that kind's hue, active or not: clicking `Pods` on a Deployment
- * and meeting the same cube that was clicked in the sidebar is the whole
- * point of having hues.
+ * objects of a kind the app already draws elsewhere, so it takes that kind's
+ * glyph and hue, active or not: clicking `Pods` on a Deployment must meet the
+ * same cube that was clicked in the sidebar.
  *
  * `view` is Overview, Logs, Conditions, YAML, Template — a way of looking at
- * *this* object. It takes a functional glyph and no hue at all, because it is
- * a verb rather than a thing, and a hue would claim it is a resource.
+ * *this* object. Functional glyph, no hue: it is a verb rather than a thing,
+ * and a hue would claim it is a resource.
  */
 export type DetailTabGlyph =
   { names: "kind"; kind: string } | { names: "view"; icon: LucideIcon };
@@ -33,9 +32,9 @@ export type DetailTabGlyph =
  * Rule two: a tab earns a mark only when the mark changes which tab is
  * clicked. Three cases, and the union is what stops there being a fourth.
  *
- * One at a time, deliberately. A pod whose containers are counted *and*
- * failing shows the failure: `3` beside a red dot is two answers to a
- * question that has one, and the count is the one nobody came for.
+ * One at a time, deliberately: a pod whose containers are counted *and*
+ * failing shows the failure, because `3` beside a red dot is two answers to
+ * a question that has one, and the count is the one nobody came for.
  */
 export type DetailTabMark =
   /** The tab is a collection, and its size decides whether it is worth opening. */
@@ -53,20 +52,18 @@ export interface DetailTab {
   glyph: DetailTabGlyph;
   mark?: DetailTabMark | null;
   /**
-   * What the tab is made of, which is what decides the space above it and
-   * who owns the page's height.
+   * What the tab is made of, which decides the space above it and who owns
+   * the page's height.
    *
-   * "sections" is the page rhythm: a stack of blocks with 22px of canvas
-   * between them and 18px under the tab strip, in a page that flows and
-   * scrolls. "surface" is one full-height pane that brings its own chrome —
-   * a log viewer, an editor, a terminal. Two things follow from that. The
-   * rhythm is wrong for it: the first row of such a pane is a toolbar, and
-   * canvas above a toolbar reads as a hole rather than as breathing room.
-   * And the height is its: a pane with its own scrollbar inside a page with
-   * another one is two scrollbars over the same content, and the reader has
-   * to scroll the outer one to see the foot of the inner. A surface tab
-   * pins the page to the window and takes every pixel the chrome above it
-   * does not.
+   * "sections" is the page rhythm: blocks with 22px of canvas between them
+   * and 18px under the tab strip, in a page that flows and scrolls.
+   * "surface" is one full-height pane bringing its own chrome — a log
+   * viewer, an editor, a terminal — and it gets neither. The rhythm is
+   * wrong because the first row of such a pane is a toolbar and canvas
+   * above a toolbar reads as a hole; the height is the pane's because two
+   * scrollbars over the same content make the reader scroll the outer one
+   * to see the foot of the inner. A surface tab pins the page to the window
+   * and takes every pixel the chrome above it does not.
    */
   kind?: "sections" | "surface";
 }
@@ -108,9 +105,7 @@ export const liveMark = (says: string): DetailTabMark => ({
  * What a Conditions tab is worth marking with, on any of the six pages that
  * has one.
  *
- * A condition that is off is the object naming the trouble in its own words,
- * and until now that only reached a reader who thought to click through. It
- * is `warn` rather than `err` even for `Ready=False`, because the container
+ * `warn` rather than `err` even for `Ready=False`, because the container
  * state or the phase is always the louder and more specific answer — this is
  * a signpost to the rest of the story, not the story.
  */
@@ -142,18 +137,13 @@ export function podsMark(pods: readonly PodInfo[]): DetailTabMark {
 }
 
 /**
- * Whether the open tab is a surface, which is what decides who owns the page's
+ * Whether the open tab is a surface, which decides who owns the page's
  * height: the flow, or the pane.
  *
- * It used to ask a second question — whether *any* other tab was a stack of
- * blocks — because a surface also hid the blocks the page drew above the tab
- * strip, and a page whose every tab was a surface hid them for good. That is
- * how PersistentVolume once lost its capacity, binding and reclaim policy
- * entirely. A page has nothing above the strip to hide any more: its blocks
- * are a tab of their own, and a tab is never the thing that gets hidden. So
- * the case the guard existed for cannot recur — a page with only surface tabs
- * has no blocks to lose — and keeping it would only deny such a page the
- * window height its one kind of tab is built to fill.
+ * Only that. A page has nothing above the tab strip that a surface could
+ * hide — its blocks are a tab of their own, and a tab is never hidden — so
+ * a page whose every tab is a surface loses nothing by being pinned to the
+ * window height.
  */
 export function surfaceIsOpen(tabs: DetailTab[], activeTab: string): boolean {
   return tabs.find((tab) => tab.id === activeTab)?.kind === "surface";

@@ -67,7 +67,6 @@ pub(super) fn check_ephemeral_container_status(pod: &Pod, container_name: &str) 
 
 /// Check regular container status
 pub(super) fn check_container_status(pod: &Pod, container_name: &str) -> DebugStatus {
-    // First check pod phase
     let phase = pod
         .status
         .as_ref()

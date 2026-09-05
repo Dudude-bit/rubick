@@ -2,32 +2,22 @@
  * What the Ingresses in front of this object say about themselves.
  *
  * The neighbourhood answer knows which Ingress routes to which Service, on
- * which host and path, and whether `spec.tls` covers that host — and it stops
- * there, because walking an Ingress's TLS block is done when the Ingress is
- * the subject. So a Deployment page could always say *which hostname* reached
- * it and never *what serves that hostname* or *what certificate it is served
- * under*, which is the half somebody is usually asking about when they open
- * a workload and want a URL.
+ * which host and path, and whether `spec.tls` covers that host — so a
+ * Deployment page could name *which hostname* reached it and never *what
+ * certificate it is served under*. This adds the other half, from the reads
+ * the Ingress page already makes: the Ingress objects, the class each asks
+ * for, the certificates behind their Secrets, and why those certificates
+ * look the way they do.
  *
- * This closes it with the reads the Ingress page already makes, from the
- * other end: the Ingress objects themselves, the class each one asks for, the
- * certificates behind their Secrets, and — where anything in the cluster can
- * say — why those certificates look the way they do.
+ * All four are optional to the surface. What is not optional is the
+ * difference between not having read something and having failed to — they
+ * draw the same nothing, so failures come back as their own list
+ * ({@link UnreadIngress}).
  *
- * Every one of the four is optional to the surface. The chain is whole
- * without any of them, and a page that has read none draws exactly what it
- * drew before this existed.
- *
- * What is *not* optional is the difference between not having read something
- * and having failed to: they draw the same nothing, so the failures come back
- * as their own list — see {@link UnreadIngress}.
- *
- * ## What it costs
- *
- * One `get_ingress` per Ingress that fronts this object, which is one or two
- * on any real workload, plus one class resolution per distinct class name.
- * Both are shared with the Ingress detail page through its own query keys, so
- * a reader who arrives from there pays for neither.
+ * Cost: one `get_ingress` per Ingress fronting this object, one or two on
+ * any real workload, plus one class resolution per distinct class name.
+ * Both share the Ingress detail page's query keys, so a reader arriving
+ * from there pays for neither.
  */
 
 import { useQueries } from "@tanstack/react-query";
@@ -58,17 +48,16 @@ const refKey = (ref: {
  * A read that came back a failure, which is a third thing from a read that
  * has not come back and from one that came back empty.
  *
- * The chain draws the same nothing for the first two — no address under the
- * Ingress hop, no certificate hop, no controller hop — and that is honest
- * while a read is in flight, because {@link RoutedIngress} is simply not
- * there yet. For a failed read it is honest and permanent: `retry` is
- * deliberate about what it will ask twice, so a refused read stays refused
- * for as long as the page is open and nothing on it would ever say why.
+ * The chain draws the same nothing for a pending read and a failed one — no
+ * address under the Ingress hop, no certificate hop, no controller hop.
+ * That is honest while a read is in flight, because {@link RoutedIngress}
+ * is simply not there yet; for a failed read it is honest and permanent,
+ * because `retryTransient` will not ask a verdict twice, so a refused read
+ * stays refused for as long as the page is open.
  *
  * So the failure comes out beside the answers rather than being folded into
- * them. A surface may draw it or not — the chain is whole without it, the
- * same as every other field here — but nothing may state the *absence* of an
- * address, a certificate or a controller on the strength of one.
+ * them. A surface may draw it or not, but nothing may state the *absence*
+ * of an address, a certificate or a controller on the strength of one.
  */
 export interface UnreadIngress {
   /** The Ingress the read was about. */
@@ -101,10 +90,10 @@ const VERDICT = /(forbidden|unauthorized|not ?found)/i;
  * Ask again only where asking again can change the answer.
  *
  * A verdict is the same the second time, one wasted request per Ingress on
- * the page. A failure to reach one at all is not, and these two reads are the
+ * the page. A failure to reach one at all is not, and these reads are the
  * difference between a workload page that names the certificate it is served
- * under and one that quietly says nothing about it until somebody reopens it
- * — so a blip is worth exactly one more ask.
+ * under and one that says nothing about it until somebody reopens the page —
+ * so a blip is worth exactly one more ask.
  */
 const retryTransient = (attempts: number, error: Error): boolean =>
   attempts < 1 && !VERDICT.test(error.message);
@@ -134,11 +123,11 @@ export function useIngressRouting(
   const read = useQueries({
     queries: ingresses.map((ingress) => ({
       // The Ingress detail page's own key, so the two share one cache entry
-      // and arriving from there costs nothing. It is `useResourceDetail`'s
-      // shape — singular, lowercased — and deliberately not
+      // and arriving from there costs nothing. `useResourceDetail`'s shape —
+      // singular, lowercased — and deliberately not
       // `queryKeys.resourceDetail`, which is plural-first and belongs to the
-      // lists. `peek-actions.ts` documents the same split; using the wrong
-      // one here looked like sharing and quietly fetched the Ingress twice.
+      // lists (`peek-actions.ts` documents the same split): the wrong one
+      // here looks like sharing and quietly fetches the Ingress twice.
       queryKey: [
         ResourceType.Ingress.toLowerCase(),
         ingress.namespace ?? "",
@@ -156,10 +145,9 @@ export function useIngressRouting(
   //
   // Built only from reads that have come back. `null` is itself a real class
   // name here — "this Ingress names none" — so a pending `getIngress` must
-  // contribute nothing rather than stand in for it: doing so would fire
+  // contribute nothing: standing in for it would fire
   // `resolve_ingress_class(null)` and hand back the cluster's default
-  // controller before this app has any idea what the Ingress actually asked
-  // for.
+  // controller before this app knows what the Ingress asked for.
   const classNames = [
     ...new Set(
       read.flatMap((result) => (result.data ? [result.data.className] : []))
@@ -177,14 +165,13 @@ export function useIngressRouting(
 
   /**
    * The class resolution for one Ingress, or nothing where there is not one
-   * yet — never asked about, or asked and still in flight, or asked and
-   * failed, which the caller tells apart by the result's own `error`.
+   * yet — never asked about, still in flight, or failed, which the caller
+   * tells apart by the result's own `error`.
    *
    * A real answer is never folded into that: an Ingress that genuinely names
    * no class gets back the `IngressClassBinding` the cluster gave it,
-   * `requested: null` and all, and `viaDefault` says whether the default
-   * controller actually picked it up. That is a fact worth drawing, not
-   * silence.
+   * `requested: null` and all, with `viaDefault` saying whether the default
+   * controller picked it up.
    */
   const classResult = (className: string | null) => {
     const index = classNames.indexOf(className);

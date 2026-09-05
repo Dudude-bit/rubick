@@ -2,15 +2,13 @@
 //!
 //! The answer comes from `SelfSubjectAccessReview` — the cluster's own
 //! authorizer, not a reading of RBAC objects the app would have to interpret
-//! for itself. That distinction is what makes asking worth doing: a guess
-//! could disagree with the call it is guessing about, and this cannot.
+//! for itself, so it cannot disagree with the call it is describing.
 //!
-//! It still is not the authority. The list call is, and it stays that way:
-//! nothing here blocks a click, and a row the review calls refused is marked
-//! rather than disabled. A review that is wrong — an authorizer that admits
-//! more than RBAC says, a webhook that admits less — costs a mark that the
-//! real call then corrects, instead of locking somebody out of a screen they
-//! could have used.
+//! It still is not the authority. The list call is: nothing here blocks a
+//! click, and a row the review calls refused is marked rather than disabled.
+//! A review that is wrong — an authorizer that admits more than RBAC says, a
+//! webhook that admits less — costs a mark the real call then corrects,
+//! instead of locking somebody out of a screen they could have used.
 
 use futures::future::join_all;
 use k8s_openapi::api::authorization::v1::{

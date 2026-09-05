@@ -19,7 +19,6 @@ const fluxStatusConfig: CrdStatus = {
 
     if (!Array.isArray(conditions)) return null;
 
-    // Check for Ready condition
     const readyCondition = conditions.find((c) => c.type === "Ready");
     if (readyCondition) {
       if (readyCondition.status === "True") return "Ready";
@@ -27,7 +26,6 @@ const fluxStatusConfig: CrdStatus = {
       return "NotReady";
     }
 
-    // Check for Stalled condition
     const stalledCondition = conditions.find((c) => c.type === "Stalled");
     if (stalledCondition?.status === "True") return "Stalled";
 

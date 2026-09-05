@@ -185,7 +185,6 @@ export default function App() {
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
   usePortForwardAutoStart();
-  // Initialize auto-updater
   useAutoUpdater();
 
   // Mounted here rather than in a component that can remount: every query in

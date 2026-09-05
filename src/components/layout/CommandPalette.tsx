@@ -110,11 +110,10 @@ const quickActions: Array<{
 ];
 
 /**
- * The Activity panel's three tabs, by the names a reader searches for.
+ * The Activity panel's tabs, by the names a reader searches for.
  *
- * "Port forwards" is here because someone with one running could not find it:
- * the panel is a sheet behind a status-bar line, and the palette — the app's
- * own answer to not finding something — did not know it existed.
+ * The panel is a sheet behind a status-bar line, so a reader with a port
+ * forward running has no other way to reach it.
  */
 const PANELS: Array<{
   tab: ActivityTab;
@@ -128,19 +127,17 @@ const PANELS: Array<{
 /**
  * Rows one cluster may spend while others are still answering.
  *
- * A fan-out is only honest if the reader can see who has answered, and one
- * cluster with twenty hits pushes every other cluster's line below the
- * fold — including the one that failed and the one still connecting. The
- * rest of that cluster's hits are one keystroke away on its own row.
+ * Twenty hits from one cluster would push every other cluster's line below
+ * the fold, including the failed one and the one still connecting. The rest
+ * of that cluster's hits are one keystroke away on its own row.
  */
 const ROWS_PER_CLUSTER = 5;
 
 /**
  * The name the ladder landed on, with the part the reader typed marked.
  *
- * The unmatched text is dimmed only when there is something to dim it
- * against: with nothing typed yet every name is equally a candidate, and
- * greying the whole list says the opposite.
+ * Unmatched text is dimmed only when there is something to dim it against:
+ * with nothing typed yet every name is equally a candidate.
  */
 function highlight(match: ContextMatch): ReactNode {
   return splitMarks(match.matched, match.marks).map((part, index) =>
@@ -159,9 +156,9 @@ function highlight(match: ContextMatch): ReactNode {
 /**
  * Which clusters the query runs against.
  *
- * `current` is the default and is today's behaviour: every keystroke would
- * otherwise wake every connection in the kubeconfig. The other two are
- * reached by typing `!`, and both are visible afterwards as a chip.
+ * `current` is the default: every keystroke would otherwise wake every
+ * connection in the kubeconfig. The other two are reached by typing `!`, and
+ * both are visible afterwards as a chip.
  */
 type Scope =
   { kind: "current" } | { kind: "all" } | { kind: "context"; context: string };
@@ -170,11 +167,11 @@ type Scope =
  * The clusters the reader has explicitly agreed to open a connection to,
  * and the request that carries that agreement.
  *
- * `connect` is one flag for the whole fan-out, so the only way to wake
- * exactly the cluster that was asked for is to leave the other cold ones
- * out of the request — which is why the rows for those are kept here and
- * rendered from the snapshot. Without it a single Enter on one cluster
- * would run the credential plugin of every cluster in the kubeconfig.
+ * `connect` is one flag for the whole fan-out, so waking exactly the cluster
+ * that was asked for means leaving the other cold ones out of the request —
+ * their rows are kept here and rendered from the snapshot instead. Otherwise
+ * one Enter would run the credential plugin of every cluster in the
+ * kubeconfig.
  */
 interface Wake {
   /** Contexts the request asks about, connecting where it must. */
@@ -211,12 +208,7 @@ type Entry =
   | { id: string; kind: "hit"; hit: SearchHit; path: string | null }
   | { id: string; kind: "more"; context: string; rest: number }
   | { id: string; kind: "link"; path: string; label: string; icon: IconType }
-  /**
-   * A row that does something instead of going somewhere. Added because the
-   * Activity panel — port forwards and terminals — was a sheet
-   * behind a status-bar line and therefore invisible to the one mechanism this
-   * app offers for "I cannot find it".
-   */
+  /** A row that does something instead of going somewhere. See `PANELS`. */
   | {
       id: string;
       kind: "panel";
@@ -341,9 +333,8 @@ export function CommandPalette() {
     const grouped = new Map<string, Map<string, SearchHit>>();
     // The unscoped search asks the cluster for one namespace or for all of
     // them, so a window narrowed to several has to keep what it wants here —
-    // the same rule the lists follow, and for the same reason.
-    // A search that has deliberately left this cluster's scope keeps every
-    // hit: another cluster's namespaces are not this one's.
+    // the same rule the lists follow. A scoped search keeps every hit:
+    // another cluster's namespaces are not this one's.
     for (const hit of scoped ? hits : namespaceScope.narrow(hits)) {
       const key = `${hit.kind}/${hit.namespace ?? ""}/${hit.name}`;
       const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
@@ -563,10 +554,8 @@ export function CommandPalette() {
         // The search can list kinds the router serves no detail page for, and
         // `getResourceDetailUrl` builds a URL for any of them: an unrouted
         // path inside the layout route matches no branch and blanks the shell.
-        // A Namespace has a page now, but here it still offers the stronger
-        // action: it is the scope a window is read under, and pointing the
-        // window at it is why anybody types one into a palette. Anything
-        // else with no detail route is not offered at all.
+        // A Namespace has a page, but here it offers the stronger action —
+        // the scope the window is read under. Nothing else unrouted is offered.
         const routable = isRoutableKind(hit.kind, hit.namespace);
         if (!routable && !isNamespaceHit(hit)) continue;
         out.push({
@@ -590,8 +579,7 @@ export function CommandPalette() {
     }
 
     // Rows, not hits: a cluster whose every match was a kind with nowhere to
-    // go has shown the reader nothing, and an empty list with no line under
-    // it is the same silence the counts exist to break.
+    // go has shown the reader nothing.
     if (!out.some((entry) => entry.kind === "hit")) {
       // "No results" while a cluster is still working is a lie, and so is
       // "no results" for a cluster nobody has connected to. The count is
@@ -702,16 +690,11 @@ export function CommandPalette() {
 
   const activate = useCallback(
     (entry: Entry, newTab: boolean) => {
-      // Once, here, rather than at each arm that takes the reader somewhere.
-      // Settings is an opaque layer over the whole window and this listener
-      // is on `window`, which a Radix modal does not stop — so anything that
-      // moves the reader has to stand it aside first. Written per-arm, it was
-      // written on the two that open *background* tabs, where the reader does
-      // not move, and missed the `hit` arm that switches them to a foreground
-      // tab in another cluster. Which is the palette's main path.
-      //
-      // Not for `settings`: that arm opens the layer, and closing it first
-      // would be a state churn for nothing.
+      // Once here rather than in each arm that moves the reader: Settings is
+      // an opaque layer over the window, and this listener is on `window`,
+      // which a Radix modal does not stop. Anything that moves the reader has
+      // to stand it aside first — including the `hit` arm that switches to a
+      // foreground tab in another cluster. Not for `settings`, which opens it.
       if (entry.kind !== "settings") {
         useSettingsStore.getState().closeSettings();
       }
@@ -1047,11 +1030,9 @@ function FootKey({
 }
 
 /**
- * The resolved bang.
- *
- * The same object the log query's terms are, down to the hue and the inset
- * edge, so a reader who learned one already knows this one: visible,
- * removable, and it survives while the rest of the query is retyped.
+ * The resolved bang: the same object the log query's terms are, down to the
+ * hue and the inset edge — visible, removable, and surviving while the rest
+ * of the query is retyped.
  */
 function ScopeChip({
   label,
@@ -1265,11 +1246,10 @@ function EntryRow({
 /**
  * One cluster's own line: which cluster, and what it has said so far.
  *
- * Four different truths share this row and none of them may pretend to be
- * another. Still connecting is not "no results"; failed says why and
- * offers to be asked again; and a cluster nobody has connected to is not
- * woken silently, because its credential plugin can prompt — so searching
- * it is a keystroke the reader presses on purpose.
+ * Four truths share this row and none may pretend to be another. Still
+ * connecting is not "no results"; failed says why and offers to be asked
+ * again; a cluster nobody has connected to is not woken silently, because
+ * its credential plugin can prompt.
  */
 function ClusterGroup({
   domId,

@@ -1,39 +1,31 @@
 /**
  * How often the app is allowed to ask the cluster the same question again.
  *
- * Every number here used to be two seconds, and every screen used it: 45 call
- * sites, 9 of which stopped for a watch and 2 of which cared whether anybody
- * was looking. An app parked on one Pod page cost the API server ~1000
- * requests a minute while its reader made coffee.
+ * The rates are what a *moving* screen re-reads at. The three conditions
+ * under which re-reading is pointless are decided here, so no screen decides
+ * them for itself:
  *
- * The rates below are still the rates a *moving* screen re-reads at — that
- * part was never the problem. What was missing is the three conditions under
- * which re-reading is pointless, and this module is where all three are
- * decided so no screen decides them for itself:
+ * 1. **Nobody is looking.** An off-screen tab or hidden window switches the
+ *    interval off rather than lengthening it. Coming back refetches.
+ * 2. **Nothing is happening.** Identical answers are the cluster telling us
+ *    to stop asking; the interval doubles to a cap.
+ * 3. **The window is not the one being used.** Visible but unfocused is a
+ *    glance, not a reading, so it is held at the cap.
  *
- * 1. **Nobody is looking.** An off-screen detail tab, a hidden window: the
- *    interval is not lengthened, it is switched off. Coming back refetches.
- * 2. **Nothing is happening.** Identical answers, over and over, are the
- *    cluster telling us to stop asking. The interval doubles to a cap.
- * 3. **The window is not the one being used.** A visible but unfocused window
- *    is a glance, not a reading, so it is held at the cap.
- *
- * Backing off is a promise the UI has to keep: {@link effectiveInterval} is
- * also what tells `DataFreshness` to say "slowed" instead of "polling", so
- * nothing on screen is older than the badge above it implies. A *watch* is a
- * different thing entirely and is not touched here — a connected stream keeps
- * data live at any poll rate, and `refresh: false` is how a watched query says
- * so.
+ * {@link effectiveInterval} is also what tells `DataFreshness` to say
+ * "slowed" instead of "polling", so nothing on screen is older than the badge
+ * above it implies. A watch is not touched here — a connected stream keeps
+ * data live at any poll rate, and `refresh: false` is how a watched query
+ * says so.
  *
  * @module lib/refresh
  */
 
 /**
- * The rate a screen re-reads at while it is being watched *and* still moving.
- *
- * Unchanged from when every one of them was chosen: this is what "as it
- * happens" costs on a screen that has no watch behind it. The saving comes
- * from {@link effectiveInterval}, not from making a moving screen sluggish.
+ * The rate a screen re-reads at while it is being watched *and* still moving:
+ * what "as it happens" costs on a screen that has no watch behind it. The
+ * saving comes from {@link effectiveInterval}, not from making a moving
+ * screen sluggish.
  */
 export const REFRESH_INTERVALS = {
   resourceList: 2000,
@@ -42,24 +34,17 @@ export const REFRESH_INTERVALS = {
    * The cluster-wide aggregate: the sidebar's row counts, the namespace
    * picker, the status bar, and the Overview page.
    *
-   * The one rate that was measured rather than reasoned about, and the one
-   * that had to move. Counted against the API server on an idle Pod page,
-   * this single query was most of what the app cost: one poll fans out to
-   * about a dozen cluster-wide LISTs, and the window asks for it in two
-   * scopes at once — the current namespace for the rail, the whole cluster
-   * for the status bar. At two seconds that is ~700 requests a minute for
-   * numbers nobody is waiting on.
+   * The priciest query in the app — one poll fans out to about a dozen
+   * cluster-wide LISTs, in two scopes at once (the current namespace for the
+   * rail, the whole cluster for the status bar), so at a two-second rate it
+   * alone is ~700 requests a minute. It is also the one query that cannot
+   * back off on its own: the payload carries node CPU and memory usage,
+   * different on every single read, so a rule that waits for an identical
+   * answer waits forever. The rate is the only lever it has.
    *
-   * It is also the one query that cannot back off on its own: the payload
-   * carries node CPU and memory usage, which is different on every single
-   * read, so a rule that waits for an identical answer waits forever. The
-   * rate is the only lever it has.
-   *
-   * Ten seconds, because nothing this reports turns over faster. A kubelet
-   * takes ten seconds to report a status change at all; a CrashLoopBackOff
-   * lasts minutes; a namespace's pod count is chrome, glanced at rather than
-   * watched. Two seconds was never buying information here, only the
-   * appearance of it.
+   * Ten seconds, because nothing this reports turns over faster: a kubelet
+   * takes ten seconds to report a status change at all, a CrashLoopBackOff
+   * lasts minutes, and a namespace's pod count is chrome.
    */
   overview: 10_000,
   metrics: 2000,
@@ -82,10 +67,9 @@ export type RefreshRate = keyof typeof REFRESH_INTERVALS;
  *
  * The usage chart draws what it polled: `bucketize` puts a gap where no sample
  * landed, deliberately, because a gap is not a zero. Slowing that query down
- * does not make a reading older, it makes the recording worse — a line with
- * holes in it, for data that had not changed anyway. So a recorder keeps its
- * cadence for as long as somebody is watching it, and stops dead when they are
- * not, which is the one saving that costs the chart nothing.
+ * does not make a reading older, it makes the recording worse. So a recorder
+ * keeps its cadence while somebody is watching it and stops dead when they are
+ * not — the one saving that costs the chart nothing.
  */
 export const RECORDED: ReadonlySet<RefreshRate> = new Set(["metrics"]);
 
@@ -99,28 +83,25 @@ export const STALE_TIMES = {
 } as const;
 
 /**
- * The three numbers that decide how fast a still screen goes quiet.
+ * The numbers that decide how fast a still screen goes quiet.
  *
- * `steadyAfter: 3` — three identical answers in a row before anything changes.
- * At the 2s base that is six seconds of a screen not moving, which is long
- * enough that a Deployment mid-rollout (something different every poll) never
- * backs off at all, and short enough that an idle page stops costing almost
- * immediately.
+ * `steadyAfter: 3` — three identical answers before anything changes; six
+ * seconds at the 2s base. Long enough that a Deployment mid-rollout (something
+ * different every poll) never backs off at all, short enough that an idle page
+ * stops costing almost immediately.
  *
- * `factor: 2` — doubling reaches the cap in four more reads. From arrival, a
- * still page runs at 2s for the first ~6s, then 4s, 8s, 16s, and is at the cap
- * ~34 seconds in. The half-minute in which a reader is actually deciding
- * something is served at full rate; what follows is wallpaper.
+ * `factor: 2` — doubling reaches the cap in four more reads: 2s for the first
+ * ~6s, then 4s, 8s, 16s, at the cap ~34 seconds in. The half-minute in which a
+ * reader is actually deciding something is served at full rate.
  *
  * `cap: 30_000` — the same order as the intervals the cluster itself works on
  * (kubelet status updates and node leases are 10s), so half a minute cannot
- * hide a state change that has been settled for long. It is also about as long
- * as a "slowed" label can carry: past that the honest word would be "stale",
- * and a screen that needs that word should not be on screen.
+ * hide a settled state change, and as long as a "slowed" label can carry:
+ * past that the honest word would be "stale".
  *
  * `unfocusedFloor: 30_000` — a window you can see but are not typing into is
  * being glanced at. It keeps updating, because it is on screen and must not
- * lie, but it goes straight to the cap instead of walking there.
+ * lie, but goes straight to the cap instead of walking there.
  */
 export const BACKOFF = {
   steadyAfter: 3,

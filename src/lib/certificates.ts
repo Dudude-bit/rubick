@@ -1,31 +1,21 @@
 /**
  * How long a certificate has left, and whether that is news.
  *
- * The app's discipline is that a mark is earned. "Expires in 61 days" is
- * the state almost every certificate in every cluster is in almost all of
- * the time — colouring it teaches the reader to stop looking, and then the
- * one that says four days looks like all the others.
+ * A mark is earned. "Expires in 61 days" is the state almost every
+ * certificate is in almost all of the time; colouring it teaches the reader
+ * to stop looking, and then the one that says four days looks like the rest.
+ * Outside the thresholds there is no mark — the fact is still stated where
+ * the certificate is the subject, in the same tone as everything else.
  *
- * So two thresholds, and both of them are about what the reader can still
- * do rather than about round numbers:
+ * Two thresholds, both about what the reader can still do rather than about
+ * round numbers: **14 days** is the last point a normal change fits, **3
+ * days** is past the next weekend and leaves only an interrupt.
  *
- * - **14 days** is the last point a normal change fits: raise it, get the
- *   certificate, review it, deploy it, without anybody's evening. Inside
- *   that window the reader has to start, so it is worth a warn.
- * - **3 days** is past the next weekend. There is no process left at that
- *   point, only an interrupt, and that is a different colour.
- *
- * Both are *caps*, not the rule. A seven-day Let's Encrypt certificate is
- * born inside the fourteen-day window, and a mark it wears from birth is a
- * mark nobody reads (#68) — so on a short certificate the thresholds
- * shrink to a third and a tenth of its lifetime, which for the seven-day
- * case lands the warn exactly where cert-manager's default renewal point
- * is. A ninety-day certificate never notices the difference.
- *
- * Outside the thresholds there is no mark at all. The fact is still stated
- * where the certificate is the subject — a Secret page that would not say
- * when its certificate expires is absurd — but it is stated in the same
- * tone as everything else on the page.
+ * Both are caps, not the rule. A seven-day Let's Encrypt certificate is born
+ * inside the fourteen-day window and a mark worn from birth is one nobody
+ * reads (#68), so on a short certificate the thresholds shrink to a third and
+ * a tenth of its lifetime — putting the warn exactly at cert-manager's
+ * default renewal point. A ninety-day certificate never notices.
  */
 
 import { sayWords, spanWords, type Saying } from "@/i18n/say";
@@ -61,10 +51,10 @@ export interface Expiry {
    * Milliseconds until `notAfter`, negative once it has passed — the same
    * quantity {@link days} rounds off.
    *
-   * Ranking by whole days used to decide the order of everything expiring
-   * inside one day by name, which is the hour the order matters most. `0`
-   * where there is no readable date, so an unreadable one keeps the place
-   * `days: 0` gave it rather than silently moving.
+   * Rank by this, not by {@link days}: whole days order everything expiring
+   * inside one day by name, in the hour the order matters most. `0` where
+   * there is no readable date, so an unreadable one keeps the place `days: 0`
+   * gave it rather than silently moving.
    */
   left: number;
   expired: boolean;
@@ -75,11 +65,10 @@ export interface Expiry {
 /**
  * A span in the largest unit that still gives it a number.
  *
- * Every step down exists because the one above it rounds to zero, and "0
- * days" — or "0 hours" in the last hour of a certificate's life — reads as
- * a rendering bug at exactly the moment the reader most needs a number.
- * The floor is a minute: below that the number stops being useful before
- * it stops being true.
+ * Each step down exists because the one above rounds to zero, and "0 days"
+ * reads as a rendering bug at the moment the reader most needs a number. The
+ * floor is a minute: below that the number stops being useful before it stops
+ * being true.
  */
 export function expiryText(expiry: Expiry, t: T): string {
   return sayWords(expiry.text, t);
@@ -89,10 +78,10 @@ export function expiryText(expiry: Expiry, t: T): string {
  * The one sentence a certificate's validity is worth.
  *
  * `notBefore` is checked as well as `notAfter`: a certificate issued with a
- * clock skew, or restored from a backup of a future cluster, is refused by
- * browsers exactly as an expired one is, and it is the failure nobody
- * thinks to look for. It also supplies the lifetime the thresholds scale
- * by; without a readable one the absolute caps are the only honest rule.
+ * clock skew is refused by browsers exactly as an expired one is, and it is
+ * the failure nobody thinks to look for. It also supplies the lifetime the
+ * thresholds scale by; without a readable one the absolute caps are the only
+ * honest rule.
  */
 export function expiryOf(
   facts: Pick<CertificateFacts, "notAfter" | "notBefore">,

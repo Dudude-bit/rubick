@@ -1,28 +1,26 @@
 /**
  * What AKS's two add-ons' objects say.
  *
- * **aad-pod-identity.** Three kinds that only mean anything together, and
- * that is exactly why they read so badly as three separate lists.
- * `AzureIdentity` is a managed identity in Azure written down;
- * `AzureIdentityBinding` says which pods may become it, by label selector;
- * `AzureAssignedIdentity` is what the controller creates when a pod actually
- * matched. The reader's question is one sentence — *this identity binds those
- * pods* — and it currently costs three list pages and a squint.
+ * **aad-pod-identity.** Three kinds that only mean anything together, which is
+ * why they read so badly as three separate lists: `AzureIdentity` is a managed
+ * identity in Azure written down, `AzureIdentityBinding` says which pods may
+ * become it by label selector, and `AzureAssignedIdentity` is what the
+ * controller creates when a pod actually matched. One sentence — *this
+ * identity binds those pods* — otherwise costs three list pages.
  *
  * The one thing worth colouring is a binding whose `spec.azureIdentity` names
  * an `AzureIdentity` that does not exist. Nothing validates that string: the
  * binding is accepted, no pod ever gets the identity, and every call from
- * those pods fails with a 403 that has no Kubernetes-side symptom at all.
- * That is a missing *object*, checked by looking for it — not an inference
- * from a missing status, which these objects would not support: their status
- * is `availableReplicas` and nothing else.
+ * those pods fails with a 403 that has no Kubernetes-side symptom at all. That
+ * is a missing *object*, checked by looking for it — not an inference from a
+ * missing status, which these objects would not support: their status is
+ * `availableReplicas` and nothing else.
  *
- * **AGIC.** `AzureIngressProhibitedTarget` is the opposite kind of object —
- * pure spec, no status, and it does not configure anything so much as fence
- * something off. It says "do not touch this hostname or these paths on the
- * Application Gateway", which is how AGIC is run beside a gateway that
- * something else also configures. A reader who cannot see these has no way
- * to explain why an Ingress they wrote is being ignored.
+ * **AGIC.** `AzureIngressProhibitedTarget` is pure spec, no status; it fences
+ * something off rather than configuring it — "do not touch this hostname or
+ * these paths on the Application Gateway" — which is how AGIC is run beside a
+ * gateway something else also configures. A reader who cannot see these has no
+ * way to explain why an Ingress they wrote is being ignored.
  */
 
 import type { T } from "@/i18n/useT";

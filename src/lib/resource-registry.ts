@@ -52,12 +52,10 @@ export const RESOURCE_REGISTRY = [
     kind: "ReplicaSet",
     plural: "replicasets",
     displayPlural: "ReplicaSets",
-    // Not `Copy`, which is the DaemonSet's "one per node": the grouped boxes
-    // are the Pod's own cube repeated, which is what a ReplicaSet is.
-    //
-    // The plural here is never a nav row — nothing lists ReplicaSets. It is
-    // read by `getResourceDetailUrl` and by the peek's URL, both of which
-    // need the path segment `App.tsx` serves the detail route on.
+    // Not `Copy`, the DaemonSet's "one per node": grouped boxes are the
+    // Pod's own cube repeated. The plural is never a nav row — nothing lists
+    // ReplicaSets — but `getResourceDetailUrl` and the peek's URL read it for
+    // the path segment `App.tsx` serves the detail route on.
     icon: Boxes,
     apiVersion: "apps/v1",
     scope: "namespaced",
@@ -76,9 +74,9 @@ export const RESOURCE_REGISTRY = [
     kind: "DaemonSet",
     plural: "daemonsets",
     displayPlural: "DaemonSets",
-    // Not Server, which belongs to Nodes: a DaemonSet and a Node drawn with
-    // the same mark sit six rows apart in the sidebar and stop being two
-    // things. The offset-frames glyph reads as "one copy per node".
+    // Not Server, which belongs to Nodes: two kinds six sidebar rows apart
+    // drawn with one mark stop being two things. Offset frames read as "one
+    // copy per node".
     icon: Copy,
     apiVersion: "apps/v1",
     scope: "namespaced",
@@ -205,8 +203,8 @@ export const RESOURCE_REGISTRY = [
     kind: "PersistentVolumeClaim",
     plural: "persistentvolumeclaims",
     displayPlural: "PVCs",
-    // A claim draws from a volume, so it is the drive with the arrow — the
-    // two sat adjacent under Storage sharing one mark.
+    // A claim draws from a volume: the drive with the arrow, so it does not
+    // share a mark with the PersistentVolume next to it under Storage.
     icon: HardDriveDownload,
     apiVersion: "v1",
     scope: "namespaced",
@@ -234,8 +232,8 @@ export const RESOURCE_REGISTRY = [
     kind: "Endpoints",
     plural: "endpoints",
     displayPlural: "Endpoints",
-    // Not Service's mark, which it shared until both were in the nav at
-    // once: two rows drawn with one glyph stop being two things.
+    // Not Service's mark: two nav rows drawn with one glyph stop being two
+    // things.
     icon: Waypoints,
     apiVersion: "v1",
     scope: "namespaced",
@@ -269,12 +267,11 @@ export const RESOURCE_REGISTRY = [
     category: null,
   },
   {
-    // Registered for the glyph and for nothing else. Neither of the two
-    // governing kinds gets a nav row or a page: an autoscaler is a property
-    // of the thing it scales and a budget a property of the pods it
-    // protects, so both are read where that thing is. What they do need is a
-    // mark, because they appear by name in Connections and on the workload,
-    // and `CircleDashed` is the app saying "I do not know this kind".
+    // Registered for the glyph and nothing else. Neither governing kind gets
+    // a nav row or a page — an autoscaler is a property of what it scales, a
+    // budget of the pods it protects, so both are read there. Both still
+    // appear by name in Connections and on the workload, where an unregistered
+    // kind draws as `CircleDashed`, the app's "I do not know this kind".
     kind: "HorizontalPodAutoscaler",
     plural: "horizontalpodautoscalers",
     displayPlural: "HorizontalPodAutoscalers",
@@ -320,10 +317,9 @@ const RESOURCE_BY_PLURAL = new Map<string, ResourceDefinition>(
 /**
  * The question that asks whether somebody may list this kind.
  *
- * Built here because this table already holds every part of it — the plural
- * the API server matches, the group in front of it, and whether the kind
- * lives in a namespace at all. A second copy anywhere else would be free to
- * disagree with the URLs built from these same three fields.
+ * Built here because this table holds every part of it — the plural the API
+ * server matches, the group, and whether the kind is namespaced. A second
+ * copy would be free to disagree with the URLs built from those same fields.
  */
 export function listQueryFor(resourceKind: ResourceKind): {
   group: string;
@@ -351,8 +347,8 @@ export function toPlural(resourceKind: ResourceKind): string {
  * One of whatever the plural names, spelled the way the cluster spells it.
  *
  * Read out of the registry rather than made by trimming a letter: the API's
- * plurals are not all `noun + "s"`, and `"ingresses".replace(/s$/, "")` —
- * which is what a group caption used to print — says "1 ingresse".
+ * plurals are not all `noun + "s"`, and `"ingresses".replace(/s$/, "")` says
+ * "1 ingresse".
  */
 export function toSingularNoun(plural: string): string {
   const lower = plural.toLowerCase();
@@ -370,10 +366,10 @@ export function toKind(resourceType: string): ResourceKind | null {
 /**
  * The kinds whose replica count a reader can set by hand, everywhere.
  *
- * One list, because the trap is a control that exists on the detail page and
- * not in the peek, or a chain that points at an owner with no way to change
- * the number when you get there. The Scale command table is keyed by this
- * type, so adding a kind here does not compile until its command exists.
+ * One list, because the trap is a control on the detail page and not in the
+ * peek, or a chain pointing at an owner with no way to change the number
+ * there. The Scale command table is keyed by this type, so adding a kind does
+ * not compile until its command exists.
  *
  * DaemonSet is absent because it has no replica count — one pod per matching
  * node is the whole model. ReplicaSet is absent on purpose: see the note on
@@ -401,10 +397,9 @@ export function isResourceType(value: string): value is ResourceKind {
  * The registry entry for a kind, by either spelling.
  *
  * Plurals resolve too, because `isResourceType` accepts them and narrows to
- * `ResourceKind` — so the type system endorses handing one straight to this
- * function, and it used to answer `undefined` while its signature promised a
- * definition. The next caller to write the obvious `isResourceType(k) &&
- * getResourceDefinition(k).scope` read a property of nothing.
+ * `ResourceKind`: the type system endorses `isResourceType(k) &&
+ * getResourceDefinition(k).scope`, so a plural must not answer `undefined`
+ * here against a signature that promises a definition.
  */
 export function getResourceDefinition(kind: ResourceKind): ResourceDefinition {
   return (RESOURCE_BY_KIND.get(kind) ??

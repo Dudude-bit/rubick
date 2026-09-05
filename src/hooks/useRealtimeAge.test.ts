@@ -6,11 +6,10 @@ import { useRealtimeCountdown } from "./useRealtimeAge";
 /**
  * What a countdown says when there is no time left.
  *
- * It used to answer the string `"expired"`, which the CronJob page dropped
- * into `t("action", "inTime", {time})` — so a Russian reader was told the next
- * run was «через expired». The word was written in a formatter that takes a
- * number of seconds and knows nothing about a reader, which is exactly where a
- * word cannot be chosen; `isExpired` is what a caller reads to write its own
+ * The formatter takes a number of seconds and knows nothing about a reader,
+ * so it offers no word of its own: `"expired"` reached the CronJob page's
+ * `t("action", "inTime", {time})` and told a Russian reader the next run was
+ * «через expired». `isExpired` is what a caller reads to write its own
  * sentence.
  */
 afterEach(() => {
@@ -43,11 +42,10 @@ describe("what a countdown says when the moment has passed", () => {
   /**
    * Nothing to count down to is not the same as a countdown that ran out.
    *
-   * A `null` target measures as zero seconds, so both used to answer
+   * A `null` target measures as zero seconds, so both can answer
    * `isExpired: true` and `warningLevel: "critical"` — a deadline nobody set,
    * painted in the colour of one that has passed. The empty `display` cannot
-   * tell them apart, which is what the earlier version of this test asserted
-   * and why it did not notice.
+   * tell them apart, so asserting on it alone notices nothing.
    */
   it("does not call a missing target expired", () => {
     const missing = renderHook(() => useRealtimeCountdown(null));

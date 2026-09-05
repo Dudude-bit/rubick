@@ -3,22 +3,20 @@
  *
  * A tab is a browser tab: a route — pathname *and* query string, so an open
  * peek comes back with it — plus the scope that route is read under, one
- * cluster and one namespace. Switching tabs therefore takes the reader
- * somewhere instead of re-filtering the screen they were already on.
+ * cluster and one namespace.
  *
- * The backend holds a single live connection, so only the active tab is
- * live. The others are parked records, not mounted React trees: there is
- * one router outlet and it belongs to the active tab, which is what keeps
- * a parked tab from holding watches or queries.
+ * The backend holds a single live connection, so only the active tab is live.
+ * The others are parked records, not mounted React trees: there is one router
+ * outlet and it belongs to the active tab, which is what keeps a parked tab
+ * from holding watches or queries.
  *
- * The active tab owns neither its scope nor its route — both mirror the
- * thing that actually holds them, `clusterStore` and the router. Storing a
- * second copy would give two sources of truth that drift the moment
- * anything else (the command palette, a restored preference, any `<Link>`)
- * moves the app. `recordHref` is the router's only writer, and
- * `pendingHref` is the one direction that runs the other way: an
- * activation asks for a route and the router bridge in `useScopeTabs`
- * delivers it.
+ * The active tab owns neither its scope nor its route — both mirror the thing
+ * that actually holds them, `clusterStore` and the router. A second copy would
+ * be a second source of truth, drifting the moment anything else (the command
+ * palette, a restored preference, any `<Link>`) moves the app. `recordHref` is
+ * the router's only writer; `pendingHref` is the one direction that runs the
+ * other way: an activation asks for a route and the router bridge in
+ * `useScopeTabs` delivers it.
  *
  * @module stores/scopeTabStore
  */

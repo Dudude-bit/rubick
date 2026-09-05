@@ -1,16 +1,13 @@
 /**
  * The form behind Connect and Edit.
  *
- * Generic on purpose: it is driven entirely by what the vendor declared, and
- * it names no vendor. The reader sees "Prometheus" because the pane passed
- * the row's own name down as a string — the same rule the whole seam runs
- * on, where naming a vendor in copy was never the problem and naming one in
- * an `import` is.
+ * Driven entirely by what the vendor declared, and it names no vendor: the
+ * reader sees "Prometheus" because the pane passed the row's own name down as
+ * a string.
  *
- * The token field is write-only and says so. It cannot be pre-filled because
- * the credential never crosses out of the backend, and pretending otherwise
- * with a row of dots the reader could not read back would be a control that
- * lies about what it holds.
+ * The token field is write-only and says so. It cannot be pre-filled — the
+ * credential never crosses out of the backend — and a row of dots standing in
+ * for it would be a control that lies about what it holds.
  */
 import * as React from "react";
 
@@ -445,11 +442,10 @@ export function InCluster({
  * Prometheus label, listens on 8428 and answers the same queries (#71).
  *
  * So: any Service in the cluster, any of its ports, and the subpath the API
- * sits under. Namespace, Service and port are chosen from what the cluster
- * actually has rather than typed, because three of the four fields are facts
- * this app already holds and a typo in them is a connection that fails with
- * nothing to point at. Only the subpath is typed, because only the subpath is
- * something the cluster cannot tell us.
+ * sits under. Namespace, Service and port are picked from what the cluster
+ * actually has rather than typed — a typo in a fact the app already holds is
+ * a connection that fails with nothing to point at. Only the subpath is
+ * typed, because only the subpath is something the cluster cannot tell us.
  */
 function ByHand({
   hint,

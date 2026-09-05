@@ -1,30 +1,22 @@
 //! ingress-nginx, detected without a single CRD.
 //!
-//! Every other extension in this module is found by asking whether one
-//! object exists: `certificates.cert-manager.io` is in the API server or it
-//! is not. ingress-nginx installs **no `CustomResourceDefinition` at all** —
-//! its whole configuration lives in core `Ingress` objects and in
-//! annotations on them — so there is no marker CRD to look for, and the
-//! marker table cannot hold it.
+//! It installs **no `CustomResourceDefinition` at all** — its whole
+//! configuration lives in core `Ingress` objects and in annotations on them —
+//! so the marker table every other extension here is found through cannot
+//! hold it.
 //!
-//! What it does have is a fact of exactly the same kind. An `IngressClass`
+//! What it does have is a declared field of the same kind: an `IngressClass`
 //! carries `spec.controller`, and that string is the implementation naming
-//! *itself*: ingress-nginx writes `k8s.io/ingress-nginx` into it, and no
-//! other controller may claim that name without answering for it. That is
-//! not sniffing a port and not matching a workload's name — it is the same
-//! declared field the app already reads to decide which Ingresses Traefik
-//! serves.
-//!
-//! ## The second fact, and why it is second
+//! *itself* — ingress-nginx writes `k8s.io/ingress-nginx` into it. The same
+//! field the app already reads to decide which Ingresses Traefik serves.
 //!
 //! A controller started with `--watch-ingress-without-class` and no class of
-//! its own is a real, if unusual, install, and the class check would call it
-//! absent. So where no class claims the controller, the controller's own
-//! workload is looked for by the label its every chart and static manifest
-//! writes. That is weaker evidence than a `spec.controller` string — a label
-//! is something anybody may apply — and it is therefore only ever a
-//! fallback, never the thing that is asked first. It costs a second request
-//! only on clusters where the first answer was no.
+//! its own is a real, if unusual, install that the class check would call
+//! absent. So where no class claims the controller, its workload is looked
+//! for by the label every chart and static manifest writes. A label is
+//! something anybody may apply, so it is weaker evidence and only ever the
+//! fallback; it costs a second request only on clusters where the first
+//! answer was no.
 
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::networking::v1::IngressClass;
@@ -40,9 +32,9 @@ pub const ID: &str = "ingress-nginx";
 /// The string ingress-nginx writes into `IngressClass.spec.controller`.
 ///
 /// The same constant the frontend uses to decide which Ingresses belong on
-/// its page, spelled here because detection and the page must agree: a
-/// vendor row saying "detected" over a page with nothing on it would be the
-/// two halves disagreeing about the same cluster.
+/// its page, spelled here because detection and the page must agree: a vendor
+/// row saying "detected" over a page with nothing on it is the two halves
+/// disagreeing about the same cluster.
 pub const CONTROLLER: &str = "k8s.io/ingress-nginx";
 
 /// What the project's own manifests and charts label the controller with.

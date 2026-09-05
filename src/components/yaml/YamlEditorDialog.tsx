@@ -52,7 +52,6 @@ import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
 import { useT } from "@/i18n/useT";
 
-// Action Props
 interface YamlEditorActionProps {
   title: string;
   resourceKey: ResourceKey;

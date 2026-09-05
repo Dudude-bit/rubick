@@ -2,15 +2,15 @@
  * Per-cluster identity: which flavour of Kubernetes a context talks to,
  * and which colour stands for it across the window.
  *
- * Acting on the wrong cluster is the expensive mistake this tool can
- * cause, so the colour is repeated in three always-visible places (the
- * window edge strip, the tab dot and the provider mark). It has to be
- * decided before anyone configures anything, which is why both the
- * provider and the colour are derived from the context name alone.
+ * Acting on the wrong cluster is the expensive mistake this tool can cause,
+ * so the colour is repeated in three always-visible places (the window edge
+ * strip, the tab dot and the provider mark), and both the provider and the
+ * colour are derived from the context name alone — they have to be decided
+ * before anyone has configured anything.
  *
  * The colours are the app's and are here. Which context names belong to
- * which vendor, and what each vendor's mark looks like, are not: they are
- * knowledge about a specific product and live in `src/integrations/`.
+ * which vendor, and what each vendor's mark looks like, live in
+ * `src/integrations/`.
  */
 
 import {
@@ -24,10 +24,9 @@ export type { ClusterProvider };
 /**
  * Detect the provider from the context name.
  *
- * Which names belong to which vendor is that vendor's knowledge and lives
- * with the rest of it; the order they are tested in is registry order, most
- * specific vendor first. `generic` is not a vendor and is what is left when
- * none of them claims the name.
+ * Names are tested in registry order, most specific vendor first; which
+ * names belong to which vendor is that vendor's knowledge. `generic` is not
+ * a vendor — it is what is left when none of them claims the name.
  */
 export function detectProvider(context: string): ClusterProvider {
   return flavourOfContext(context)?.id ?? "generic";
@@ -43,12 +42,11 @@ export function providerLabel(provider: ClusterProvider): string {
  * part that actually names the cluster.
  *
  * `arn:aws:eks:us-east-1:1234:cluster/prod` and
- * `gke_acme-prod_europe-west1_main` are, to a reader scanning a list,
- * fifty characters of account number followed by the one word they are
- * looking for. Neither half can be dropped — the account and the project
- * are what tell two `prod`s apart — so the prefix is kept and dimmed.
- *
- * The full name is never rewritten: `prefix + label` is the input.
+ * `gke_acme-prod_europe-west1_main` are fifty characters of account number
+ * followed by the one word a reader scanning a list wants. Neither half can
+ * be dropped — the account and the project are what tell two `prod`s apart —
+ * so the prefix is kept and dimmed. The full name is never rewritten:
+ * `prefix + label` is the input.
  */
 export function clusterNameParts(context: string): {
   prefix: string;
@@ -82,16 +80,15 @@ export const DANGER_CLUSTER_COLOR = "hsl(var(--err))";
  * The hues a cluster's colour can be *set* to by hand.
  *
  * The same ring `identHue` draws from, thinned to the rungs that survive
- * being 6px wide on opposite ends of a tab strip. Five, not more: the
- * ring's two greens are a near-miss on each other at that size — checked on
- * screen, not on paper — and the rung past pink is the magenta that sits
- * next to `--err`, which is what production wears. A swatch nobody can tell
- * from the danger colour is worse than one fewer swatch.
+ * being 6px wide on opposite ends of a tab strip. Five, not more: the ring's
+ * two greens are a near-miss on each other at that size, and the rung past
+ * pink is the magenta that sits next to `--err`, which is what production
+ * wears.
  *
- * Only the hue is chosen here. Saturation and lightness stay in
- * `--ident-s` / `--ident-l`, which are per-theme and already calibrated for
- * text, so a hue picked on the dark canvas cannot vanish on the near-white
- * one. `tokens.test.ts` holds both themes to that.
+ * Only the hue is chosen here. Saturation and lightness stay in `--ident-s` /
+ * `--ident-l`, which are per-theme and already calibrated for text, so a hue
+ * picked on the dark canvas cannot vanish on the near-white one.
+ * `tokens.test.ts` holds both themes to that.
  */
 export const CLUSTER_HUES = [132, 184, 224, 274, 318] as const;
 
@@ -103,18 +100,16 @@ export function clusterHueColor(hue: number): string {
 /**
  * Colour for a context, as a CSS colour usable in `--cluster`.
  *
- * Anything that looks like production gets the danger colour without
- * being configured — the protection has to work on first launch, before
- * anyone has assigned anything. Everything else gets a colour derived
- * from the name, so it is stable across restarts and across machines.
+ * Anything that looks like production gets the danger colour without being
+ * configured — the protection has to work on first launch. Everything else
+ * gets a colour derived from the name, so it is stable across restarts and
+ * across machines.
  *
- * A hue chosen by hand beats both, because the derivation cannot read: it
- * paints `product-catalog-dev` in the danger colour and two unrelated
- * clusters the same blue, and the only reader who can tell those apart is
- * the one sitting in front of it. Nothing is lost by letting them —
- * `isProductionContext` is a separate question and is not moved by a
- * swatch, and no warm hue is on offer, so a chosen colour can never
- * impersonate `--err`.
+ * A hue chosen by hand beats both: the derivation cannot read, so it paints
+ * `product-catalog-dev` in the danger colour and two unrelated clusters the
+ * same blue. Letting a reader override costs nothing — `isProductionContext`
+ * is a separate question and is not moved by a swatch, and no warm hue is on
+ * offer, so a chosen colour can never impersonate `--err`.
  */
 export function clusterColor(
   context: string | null | undefined,

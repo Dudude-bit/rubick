@@ -1,31 +1,26 @@
 /**
  * The screen for a session the cluster has stopped accepting.
  *
- * ## Why it takes the whole page
+ * It replaces the whole page because the whole page is wrong. A `401` is not
+ * about the request that got it: the token this window was built with is
+ * refused for everything, so every list, every count and every chart behind
+ * this is empty or stale — and a failed list renders its *empty* state, which
+ * tells the reader on every screen at once that their cluster has no pods in
+ * it. A banner over a page of zeroes leaves the zeroes on screen.
  *
- * Because the whole page is wrong. A `401` is not about the request that got
- * it: the token this window was built with is refused for everything, so every
- * list, every count and every chart behind this is either empty or stale. The
- * app used to draw them anyway — a failed list rendered its *empty* state, so
- * an expired GKE token told the reader on every screen at once that their
- * cluster had no pods in it. Replacing the page is the only honest option; a
- * banner over a page of zeroes leaves the zeroes on screen.
+ * Not `ClusterFrontDoor`: that is for a window with no cluster and answers
+ * with the list to pick from. This reader has a cluster, knows which one, and
+ * needs to be let back in — so the screen names the cluster, says what expired
+ * and when, gives the API server's own sentence for anyone who has to paste it
+ * somewhere, and offers one button.
  *
- * ## Why it is not the front door
- *
- * `ClusterFrontDoor` is for a window with no cluster, and its answer is the
- * list of clusters to pick from. This reader has a cluster, knows which one,
- * and needs exactly one thing: to be let back in. So the screen names the
- * cluster, says what expired and when, gives the API server's own sentence for
- * anyone who has to paste it somewhere, and offers one button.
- *
- * Sign in again re-runs `connect`, which is what runs the credential plugin —
- * `prepare_kubeconfig_for_context` is only ever reached from there. On a
- * context whose plugin can refresh without a human that returns silently in a
- * second; on one that needs `gcloud auth login` it opens the same interactive
- * flow the first connect uses. The button therefore promises no more than
- * "try the thing that worked the first time", which is all it can honestly do
- * while nothing renews credentials on its own.
+ * Sign in again re-runs `connect`, the only path that reaches
+ * `prepare_kubeconfig_for_context` and therefore the only one that runs the
+ * credential plugin: a plugin that can refresh without a human returns
+ * silently in a second, one that needs `gcloud auth login` opens the same
+ * interactive flow the first connect uses. The button promises no more than
+ * "try the thing that worked the first time", which is all it can do while
+ * nothing renews credentials on its own.
  */
 
 import { useState } from "react";

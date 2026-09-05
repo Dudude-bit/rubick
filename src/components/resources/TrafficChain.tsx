@@ -1,18 +1,15 @@
 /**
  * How traffic gets here — and where it stops.
  *
- * On the Overview rather than behind a tab, because it is the first question
- * anybody asks about a running workload and the answer used to cost three
- * list pages and a squint at label selectors.
+ * On the Overview rather than behind a tab: it is the first question anybody
+ * asks about a running workload, and the answer otherwise costs three list
+ * pages and a squint at label selectors.
  *
- * The broken chain is the point. A view that only draws healthy topology is a
- * diagram; a view that says *where the path stops* is a tool. So a stop is a
- * hop of its own with a sentence a person can act on, and `noneReady` — pods
- * running, none of them ready — gets the loudest one, because it is the case
- * every list page in this app draws as healthy.
- *
- * Where there is nothing to draw the whole thing collapses to one line. A
- * Deployment with no Service in front of it must not cost a diagram to say so.
+ * A stop is a hop of its own carrying a sentence a person can act on, and
+ * `noneReady` — pods running, none of them ready — gets the loudest one,
+ * because that is the case every list page in this app draws as healthy.
+ * Where there is nothing to draw at all the whole thing collapses to one
+ * line: a Deployment with no Service in front of it must not cost a diagram.
  */
 
 import { joinSayings, sayWords } from "@/i18n/say";
@@ -52,8 +49,8 @@ import { useT } from "@/i18n/useT";
 
 /**
  * A name at a hop. A missing object keeps its glyph and its hue and loses
- * only the link: the reader still has to recognise the name that is at
- * fault, and a link to a page that 404s is a second dead end.
+ * only the link: the reader still has to recognise the name at fault, and a
+ * link to a page that 404s is a second dead end.
  */
 function HopName({ object }: { object: ObjectRef }) {
   if (object.existence === "missing") {
@@ -191,14 +188,14 @@ function Controller({ binding }: { binding: IngressClassBinding }) {
 /**
  * What a cloud's own object configures about the way into this Service.
  *
- * Under the Service hop and never instead of it, the same order the renewal
- * note follows: the Service's own ports and selector are drawn first and stay
- * drawn, and this is a line added below them or nothing at all.
+ * Under the Service hop and never instead of it, like the renewal note: the
+ * Service's own ports and selector stay drawn above, and this is a line below
+ * them or nothing at all.
  *
  * The summary is stated as configuration, because that is what these objects
- * are. "health check HTTP :8080/healthz" is the probe the cloud will run —
- * not a claim that it passes, which no object in this cluster knows. Only
- * `problem` is allowed a colour, and only a supplier that read a real status
+ * are: "health check HTTP :8080/healthz" is the probe the cloud will run, not
+ * a claim that it passes, which no object in this cluster knows. Only
+ * `problem` may carry a colour, and only a supplier that read a real status
  * or a real missing object may set it.
  */
 function EdgeNote({
@@ -393,11 +390,9 @@ function Hop({
               )}
             </span>
             {hop.via && <p className="text-[11px] text-fg-fnt">{hop.via}</p>}
-            {/* The address, on the clipboard. Everything above this hop is
-                what the reader can read; this is the one line they can act
-                on, and reconstructing it by hand from a host, a path and a
-                guess at the scheme is exactly the errand this view exists to
-                save. */}
+            {/* The address, on the clipboard: reconstructing it by hand from
+                a host, a path and a guess at the scheme is the errand this
+                view exists to save. */}
             {hop.urls.length > 0 && (
               <p className="mt-0.5 text-[11px]">
                 <CopyableAddresses
@@ -564,11 +559,10 @@ export function TrafficChain({
             : undefined
         }
       />
-      {/* A read that failed is not a chain that is still loading, and until
-          this was drawn the two looked identical: no certificate hop, no
-          controller hop, no address — forever, with nothing saying why. The
-          hops below are still whatever could be read; this says what could
-          not, so the gaps in them are not mistaken for answers. */}
+      {/* A read that failed looks exactly like a chain still loading — no
+          certificate hop, no controller hop, no address — unless something
+          says so. The hops below are whatever could be read; this is what
+          could not, so their gaps are not mistaken for answers. */}
       {routed.unread.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {routed.unread.map((unread) => (

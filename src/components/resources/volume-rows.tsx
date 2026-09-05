@@ -6,12 +6,8 @@ import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 
 /**
- * What a pod mounts, and what each mount is made of.
- *
- * A pod names every ConfigMap, Secret and claim it depends on in
- * `.spec.volumes`, and none of it reached a screen: the only way to find out
- * which ConfigMap `cfg` was, or which claim the data directory came from, was
- * to open the YAML tab and read the spec by hand.
+ * What a pod mounts, and what each mount is made of — every ConfigMap, Secret
+ * and claim the pod names in `.spec.volumes`.
  *
  * Three columns, because a volume answers three questions and they are
  * different questions: what the pod calls it, what it actually is, and who
@@ -92,17 +88,14 @@ export function VolumeRows({
  *
  * `ingest, web · /etc/app from app.conf, read-only`. Three kinds of thing in
  * three tones: who mounts it, the literal path in mono, and the qualifiers in
- * neither the path's typeface nor its weight. That last part is the point of
- * the rewrite — `ro` sat inside the run of path text and read as part of it,
- * and a subPath joined to the path with a slash was indistinguishable from a
- * longer path, which is not what it is: it is a path inside the volume.
- * `read-only` is the word the Connections tab already uses for the same flag.
+ * neither the path's typeface nor its weight — a subPath is a path *inside*
+ * the volume, not a continuation of the path, and `read-only` is the word the
+ * Connections tab already uses for the same flag.
  *
- * Container identity colour (`--ctr-*`) is deliberately not used. It means
- * something in the log gutter because a legend there says which container is
- * which; in a three-column table with no legend it would be a second tinted
- * channel competing with the reference links the middle column carries and
- * with `--warn` on the row below.
+ * Container identity colour (`--ctr-*`) is deliberately not used: it means
+ * something in the log gutter, where a legend says which container is which,
+ * and here it would be a second tinted channel competing with the reference
+ * links the middle column carries and with `--warn` on the row below.
  */
 function Mounts({
   volume,

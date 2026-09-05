@@ -10,16 +10,7 @@ use crate::error::Result;
 use crate::resources::PodInfo;
 use crate::state::AppState;
 
-/// List pods with optional filters
-///
-/// Supports filtering by:
-/// - namespace: Kubernetes namespace
-/// - `label_selector`: Label selector string (e.g., "app=nginx,env=prod")
-/// - selector: Label selector as key-value map (alternative to `label_selector`)
-/// - `field_selector`: Field selector string
-/// - `node_name`: Filter pods running on a specific node
-/// - `status_filter`: Filter by pod phase (Running, Pending, Failed, etc.)
-/// - limit: Maximum number of pods to return
+/// List pods, narrowed by the terms `PodFilters` names.
 #[tauri::command]
 pub async fn list_pods(
     filters: Option<PodFilters>,
@@ -29,7 +20,6 @@ pub async fn list_pods(
     let ctx = ResourceContext::for_list(&state, filters.base.namespace.clone())?;
     let api: kube::Api<Pod> = ctx.namespaced_or_cluster_api();
 
-    // Build list params with combined selectors
     let mut lp = ListParams::default();
     if let Some(label_sel) = filters.build_label_selector() {
         lp = lp.labels(&label_sel);
@@ -105,7 +95,6 @@ pub async fn restart_pod(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    // Restarting a standalone pod just deletes it
-    // For pods managed by controllers, the controller will recreate it
+    // A standalone pod is simply gone; only a controller-managed one returns.
     delete_pod(name, namespace, Some(false), state).await
 }
