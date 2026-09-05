@@ -1,17 +1,15 @@
 /**
  * What the Flux page reads, and what it costs.
  *
- * Six cluster-wide list calls in parallel, split into two queries. The
- * reconcilers and their sources are one picture and are useless apart — a
- * `Kustomization` reporting `Ready` while its `GitRepository` has not fetched
- * for a week is what this page exists to show, and neither list says it
- * alone. The controllers' own workloads are a separate query because only one
- * tab needs them.
+ * Six cluster-wide list calls in parallel, in two queries. Reconcilers and
+ * their sources share one: a `Kustomization` reporting `Ready` while its
+ * `GitRepository` has not fetched for a week is what this page exists to
+ * show, and neither list says it alone. The controllers' own workloads are a
+ * separate query because only one tab needs them.
  *
- * Every source kind is optional: a source-only Flux install has no
- * `helmreleases` CRD at all. So a kind the API server does not serve reads as
- * *none of those exist* — reporting "could not read them" there would call a
- * supported configuration broken.
+ * Every source kind is optional — a source-only Flux install has no
+ * `helmreleases` CRD at all — so a kind the API server does not serve reads
+ * as none of that kind, not as a failed read.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -67,14 +65,12 @@ export const PICTURE_KEY = ["flux", "picture"] as const;
 
 /**
  * How many things Flux is reconciling — the sidebar's number, read off the
- * same picture the page draws.
+ * same picture the page draws. Reconcilers rather than every Flux object: a
+ * cluster with one Kustomization and four sources is reconciling one thing.
  *
- * Reconcilers rather than every Flux object: a cluster with one Kustomization
- * and four sources is reconciling one thing.
- *
- * Sharing the page's query rather than making its own two list calls costs
- * four extra lists a minute where Flux is installed and nobody is looking, and
- * nothing at all where somebody is.
+ * Sharing the page's query rather than listing on its own costs four extra
+ * lists a minute where Flux is installed and nobody is looking at the page,
+ * and nothing at all where somebody is — the page reads the same key.
  */
 export function countReconcilers(picture: FluxPicture): number {
   return picture.reconcilers.length;

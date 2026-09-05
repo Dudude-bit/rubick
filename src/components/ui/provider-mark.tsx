@@ -2,14 +2,11 @@ import { flavourOf, type ClusterProvider } from "@/integrations";
 import { cn } from "@/lib/utils";
 
 /**
- * A mark per Kubernetes flavour, one simplified geometric shape so it stays
- * legible at 13px next to the context name. It answers "which kind of cluster
- * am I talking to"; the colour beside it answers "which one".
- *
- * The shapes are each vendor's own and live with the rest of what the app
- * knows about them. The heptagon is Kubernetes' own, so it is what a cluster
- * wears when no vendor claims its name — and what k3d and k3s wear too, having
- * no mark of their own worth drawing this small.
+ * A mark per Kubernetes flavour: one simplified shape, legible at 13px beside
+ * the context name. It says which kind of cluster this is; the colour beside it
+ * says which one. Vendor shapes live with that vendor's integration; the
+ * heptagon is Kubernetes' own and stands in when no vendor claims the name —
+ * k3d and k3s included, having no mark worth drawing this small.
  */
 const HEPTAGON = (
   <>

@@ -57,18 +57,18 @@ export function useRealtimeAge(timestamp: string | null): string {
     [channel]
   );
 
-  // The result is unused: subscribing is what re-renders on each tick, and
-  // the age is recomputed by that render.
+  // Result unused: subscribing re-renders on each tick, and that render is
+  // what recomputes the age.
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   return formatAge(timestamp, t);
 }
 
 function formatCountdown(seconds: number): string {
-  // Empty, not a word. This formats a duration, and "expired" is not one — it
-  // went straight into `t("action", "inTime", {time})` and reached a Russian
-  // reader as «через expired». What to say once the moment has passed is the
-  // caller's sentence to write; `isExpired` is what it reads.
+  // Empty, not a word: this formats a duration, and "expired" is not one — it
+  // went into `t("action", "inTime", {time})` and reached a Russian reader as
+  // «через expired». The sentence for a passed moment is the caller's, off
+  // `isExpired`.
   if (seconds <= 0) return "";
 
   const days = Math.floor(seconds / 86400);
@@ -152,8 +152,8 @@ export function useRealtimeCountdown(
     [channel]
   );
 
-  // The result is unused: subscribing is what re-renders on each tick, and the
-  // remainder is recomputed by that render.
+  // Result unused: subscribing re-renders on each tick, and that render is
+  // what recomputes the remainder.
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const remaining = getRemainingSeconds(targetDate);

@@ -112,9 +112,8 @@ const quickActions: Array<{
 /**
  * The Activity panel's tabs, by the names a reader searches for.
  *
- * The panel is a sheet behind a status-bar line, so someone with a port
- * forward running could not find it — and the palette, the app's own answer
- * to not finding something, did not know it existed.
+ * The panel is a sheet behind a status-bar line, so a reader with a port
+ * forward running has no other way to reach it.
  */
 const PANELS: Array<{
   tab: ActivityTab;
@@ -128,8 +127,8 @@ const PANELS: Array<{
 /**
  * Rows one cluster may spend while others are still answering.
  *
- * One cluster with twenty hits pushes every other cluster's line below the
- * fold — including the one that failed and the one still connecting. The rest
+ * Twenty hits from one cluster would push every other cluster's line below
+ * the fold, including the failed one and the one still connecting. The rest
  * of that cluster's hits are one keystroke away on its own row.
  */
 const ROWS_PER_CLUSTER = 5;
@@ -138,8 +137,7 @@ const ROWS_PER_CLUSTER = 5;
  * The name the ladder landed on, with the part the reader typed marked.
  *
  * Unmatched text is dimmed only when there is something to dim it against:
- * with nothing typed yet every name is equally a candidate, and greying the
- * whole list says the opposite.
+ * with nothing typed yet every name is equally a candidate.
  */
 function highlight(match: ContextMatch): ReactNode {
   return splitMarks(match.matched, match.marks).map((part, index) =>
@@ -169,11 +167,11 @@ type Scope =
  * The clusters the reader has explicitly agreed to open a connection to,
  * and the request that carries that agreement.
  *
- * `connect` is one flag for the whole fan-out, so the only way to wake exactly
- * the cluster that was asked for is to leave the other cold ones out of the
- * request — hence their rows are kept here and rendered from the snapshot.
- * Otherwise a single Enter on one cluster would run the credential plugin of
- * every cluster in the kubeconfig.
+ * `connect` is one flag for the whole fan-out, so waking exactly the cluster
+ * that was asked for means leaving the other cold ones out of the request —
+ * their rows are kept here and rendered from the snapshot instead. Otherwise
+ * one Enter would run the credential plugin of every cluster in the
+ * kubeconfig.
  */
 interface Wake {
   /** Contexts the request asks about, connecting where it must. */
@@ -692,12 +690,11 @@ export function CommandPalette() {
 
   const activate = useCallback(
     (entry: Entry, newTab: boolean) => {
-      // Once, here, rather than at each arm that takes the reader somewhere:
-      // Settings is an opaque layer over the whole window and this listener is
-      // on `window`, which a Radix modal does not stop, so anything that moves
-      // the reader has to stand it aside first — including the `hit` arm that
-      // switches to a foreground tab in another cluster, the palette's main
-      // path. Not for `settings`, which opens the layer.
+      // Once here rather than in each arm that moves the reader: Settings is
+      // an opaque layer over the window, and this listener is on `window`,
+      // which a Radix modal does not stop. Anything that moves the reader has
+      // to stand it aside first — including the `hit` arm that switches to a
+      // foreground tab in another cluster. Not for `settings`, which opens it.
       if (entry.kind !== "settings") {
         useSettingsStore.getState().closeSettings();
       }
@@ -1033,11 +1030,9 @@ function FootKey({
 }
 
 /**
- * The resolved bang.
- *
- * The same object the log query's terms are, down to the hue and the inset
- * edge: visible, removable, and it survives while the rest of the query is
- * retyped.
+ * The resolved bang: the same object the log query's terms are, down to the
+ * hue and the inset edge — visible, removable, and surviving while the rest
+ * of the query is retyped.
  */
 function ScopeChip({
   label,
@@ -1253,9 +1248,8 @@ function EntryRow({
  *
  * Four truths share this row and none may pretend to be another. Still
  * connecting is not "no results"; failed says why and offers to be asked
- * again; a cluster nobody has connected to is not woken silently, because its
- * credential plugin can prompt — searching it is a keystroke the reader
- * presses on purpose.
+ * again; a cluster nobody has connected to is not woken silently, because
+ * its credential plugin can prompt.
  */
 function ClusterGroup({
   domId,
