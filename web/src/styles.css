@@ -38,10 +38,22 @@ p {
   text-wrap: pretty;
 }
 
+.quiz-field[data-decisive] {
+  border-color: var(--color-amber-400);
+  background-color: color-mix(in srgb, var(--color-amber-400) 10%, transparent);
+}
+
 /* Everything below is progressive enhancement: the prerendered page is complete
    and still without JavaScript or under reduced motion. Only inside this media
    block do elements start hidden and move into place. */
 @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .quiz-field[data-decisive] {
+    animation: lock-in 0.16s var(--ease-enter) both;
+  }
+  .quiz-answer {
+    animation: rise 0.22s var(--ease-enter) both;
+  }
+
   html {
     --motion: 1;
   }
