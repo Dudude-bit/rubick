@@ -20,9 +20,13 @@ export function Testimonials() {
           them. It felt off-brand for a product whose entire personality is not
           lying to you.
         </p>
+        <p className="mx-auto mt-4 max-w-md text-neutral-400">
+          The first thing this box will ever show is a report of a status we got
+          wrong, and what we did about it.
+        </p>
         <div className="mt-8 flex justify-center">
-          <ButtonLink href={LINKS.issues} variant="ghost">
-            Be the first
+          <ButtonLink href={LINKS.reportLie} variant="ghost">
+            Show us a status we got wrong
           </ButtonLink>
         </div>
       </Reveal>
