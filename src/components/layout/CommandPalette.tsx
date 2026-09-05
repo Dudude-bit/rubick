@@ -663,11 +663,6 @@ export function CommandPalette() {
           })
           .catch(() => {});
       }
-      // Settings is an opaque layer over the whole window: navigating under
-      // it moves the router and shows the reader nothing. The palette's own
-      // listener is on `window`, which a Radix modal does not stop, so the
-      // layer stands aside instead of being stepped over.
-      useSettingsStore.getState().closeSettings();
       close();
       requestAnimationFrame(() => navigate(path));
     },
@@ -707,6 +702,19 @@ export function CommandPalette() {
 
   const activate = useCallback(
     (entry: Entry, newTab: boolean) => {
+      // Once, here, rather than at each arm that takes the reader somewhere.
+      // Settings is an opaque layer over the whole window and this listener
+      // is on `window`, which a Radix modal does not stop — so anything that
+      // moves the reader has to stand it aside first. Written per-arm, it was
+      // written on the two that open *background* tabs, where the reader does
+      // not move, and missed the `hit` arm that switches them to a foreground
+      // tab in another cluster. Which is the palette's main path.
+      //
+      // Not for `settings`: that arm opens the layer, and closing it first
+      // would be a state churn for nothing.
+      if (entry.kind !== "settings") {
+        useSettingsStore.getState().closeSettings();
+      }
       switch (entry.kind) {
         case "all-clusters":
           pickScope({ kind: "all" });
@@ -763,7 +771,6 @@ export function CommandPalette() {
         }
         case "recent":
           if (newTab) {
-            useSettingsStore.getState().closeSettings();
             openTab({ href: entry.path, background: true });
             close();
             return;
@@ -776,7 +783,6 @@ export function CommandPalette() {
           return;
         case "link":
           if (newTab) {
-            useSettingsStore.getState().closeSettings();
             openTab({ href: entry.path, background: true });
             close();
             return;
@@ -786,7 +792,6 @@ export function CommandPalette() {
         case "panel":
           // Nothing to open in a tab: it is a panel over the current page,
           // not a page of its own.
-          useSettingsStore.getState().closeSettings();
           openActivityOn(entry.tab);
           close();
           return;
