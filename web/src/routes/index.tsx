@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SITE } from "../lib/site";
 import { AntiFeatures } from "../sections/anti-features";
+import { Connections } from "../sections/connections";
 import { Features } from "../sections/features";
 import { Footer } from "../sections/footer";
 import { Hero } from "../sections/hero";
@@ -25,6 +26,7 @@ function Landing() {
       <main>
         <Hero />
         <Lies />
+        <Connections />
         <Warns />
         <Unknown />
         <Features />

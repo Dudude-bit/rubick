@@ -1,4 +1,5 @@
 import { ButtonLink } from "./button-link";
+import { Correction } from "./correction";
 import { Reveal } from "./motion/reveal";
 import { ReproducePanel } from "./reproduce";
 import { TrafficChain } from "./traffic-chain";
@@ -26,6 +27,11 @@ export function LiePage({ lie }: { lie: Lie }) {
             <div className="mt-8 max-w-2xl rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
               {lie.evidence}
             </div>
+            {lie.correction ? (
+              <div className="max-w-2xl">
+                <Correction />
+              </div>
+            ) : null}
           </Reveal>
           {lie.visual === "chain" ? (
             <Reveal className="mt-10 rounded-xl border border-neutral-800 bg-neutral-900/60 p-5 md:p-7">

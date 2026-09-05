@@ -13,6 +13,7 @@ export type Lie = {
   observed: string;
   evidence: ReactNode;
   visual?: "chain";
+  correction?: true;
   img: (typeof IMG)[keyof typeof IMG];
   alt: string;
 };
@@ -33,6 +34,7 @@ export const LIES: Lie[] = [
         observed="CrashLoopBackOff · log opened on the run that failed"
       />
     ),
+    correction: true,
     img: IMG.logs,
     alt: "Logs opened on the failing init container's previous run",
   },
