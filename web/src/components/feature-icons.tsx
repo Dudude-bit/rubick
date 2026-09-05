@@ -8,9 +8,11 @@ const common = {
   "aria-hidden": true,
 } as const;
 
-function Logs({ className }: { className?: string }) {
+type IconProps = { className?: string; style?: React.CSSProperties };
+
+function Logs({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <path d="M3 4h14M3 8h9" />
       <path className="fi-logs-dup" d="M3 12h9M3 16h9" />
       <text
@@ -28,18 +30,18 @@ function Logs({ className }: { className?: string }) {
   );
 }
 
-function Shell({ className }: { className?: string }) {
+function Shell({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <path d="M4 6l4 4-4 4" />
       <path className="fi-caret" d="M10 14h5" strokeWidth={2} />
     </svg>
   );
 }
 
-function Route({ className }: { className?: string }) {
+function Route({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <circle cx="4" cy="14" r="1.75" />
       <circle cx="16" cy="6" r="1.75" />
       <path
@@ -51,9 +53,9 @@ function Route({ className }: { className?: string }) {
   );
 }
 
-function Secret({ className }: { className?: string }) {
+function Secret({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <rect x="2.5" y="6" width="15" height="8" rx="2" />
       <path className="fi-secret-val" d="M6 10h8" />
       <g className="fi-secret-dots" fill="currentColor" stroke="none">
@@ -65,9 +67,9 @@ function Secret({ className }: { className?: string }) {
   );
 }
 
-function Crd({ className }: { className?: string }) {
+function Crd({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <rect x="7" y="7" width="6" height="6" rx="1" />
       <path
         className="fi-brace-l"
@@ -81,9 +83,9 @@ function Crd({ className }: { className?: string }) {
   );
 }
 
-function Helm({ className }: { className?: string }) {
+function Helm({ className, style }: IconProps) {
   return (
-    <svg {...common} className={`fi ${className ?? ""}`}>
+    <svg {...common} className={`fi ${className ?? ""}`} style={style}>
       <path d="M3 10h14" />
       <circle cx="4" cy="10" r="1.5" />
       <circle cx="10" cy="10" r="1.5" />
