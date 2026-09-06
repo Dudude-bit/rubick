@@ -63,3 +63,33 @@ jobs:
 
       - name: Frontend lint
         run: bun run lint
+
+  windows-console:
+    name: Windows console
+    runs-on: windows-2025
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Setup Tauri build environment
+        uses: ./.github/actions/setup-tauri
+        with:
+          target: x86_64-pc-windows-msvc
+          install_tauri_cli: 'false'
+
+      - name: Build frontend
+        # `tauri::generate_context!()` reads ../dist while the crate compiles.
+        run: bun run build
+
+      - name: Console tests
+        # Filtered, not the whole suite: the rest of the Rust tests spawn
+        # `/bin/sh` and have never run on Windows. These are the ones whose
+        # subject *is* the platform — ConPTY hands back a rendered screen
+        # rather than the child's bytes, and no other runner can tell us what
+        # that does to a credential.
+        run: cargo test --workspace drawn_on_it -- --nocapture

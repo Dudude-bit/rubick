@@ -675,4 +675,93 @@ mod tests {
             TokenReading::Jwt { expires_at: None }
         );
     }
+
+    /// A token long enough to fill the console it is drawn on, run through
+    /// the real terminal the auth flow uses.
+    ///
+    /// This is the reported failure reproduced rather than reasoned about.
+    /// `ConPTY` is a screen buffer: an `id_token` of a few kilobytes does not
+    /// fit an 80x24 console, so the child's bytes reach us only after being
+    /// wrapped, scrolled and repainted. Whatever that does to the token, it
+    /// leaves it ASCII-graphic and whitespace-free — which is why every check
+    /// before this one passed and the cluster answered `Unauthorized` with
+    /// nothing to say about why.
+    ///
+    /// `type`/`cat` is the child on purpose: no shell quoting, and the bytes
+    /// on the way in are exactly the bytes in the file.
+    #[tokio::test]
+    async fn a_token_longer_than_the_console_survives_being_drawn_on_it() {
+        use crate::terminal::{AuthExecAdapter, TerminalAdapter};
+        use std::collections::HashMap;
+        use std::time::Duration;
+
+        // 3893 characters, the length from the report, and non-periodic so a
+        // run repeated by a repaint cannot pass for the original.
+        let token: String = {
+            const ALPHABET: &[u8] =
+                b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+            let mut seed: u64 = 0x5eed_1234_9876_abcd;
+            (0..3893)
+                .map(|_| {
+                    seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                    ALPHABET[(seed >> 33) as usize % ALPHABET.len()] as char
+                })
+                .collect()
+        };
+        let payload = format!(
+            r#"{{"kind":"ExecCredential","apiVersion":"client.authentication.k8s.io/v1beta1","status":{{"token":"{token}"}}}}"#
+        );
+
+        let path = std::env::temp_dir().join(format!("rubick-cred-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, payload.as_bytes()).expect("the test writes its own input");
+        let shown = path.to_string_lossy().to_string();
+
+        let (command, args) = if cfg!(windows) {
+            (
+                "cmd.exe".to_string(),
+                vec!["/C".into(), "type".into(), shown],
+            )
+        } else {
+            ("/bin/cat".to_string(), vec![shown])
+        };
+        let mut adapter = AuthExecAdapter::new(command, args, HashMap::new());
+        let collected = adapter.collected_stdout();
+
+        adapter.connect().await.expect("the child has to start");
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let mut idle = 0;
+        while tokio::time::Instant::now() < deadline {
+            match adapter.read_output().await {
+                Ok(Some(_)) => idle = 0,
+                Ok(None) => {
+                    idle += 1;
+                    if idle > 10 && !adapter.is_running() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+                Err(_) => break,
+            }
+        }
+        adapter.close().await.expect("close");
+        let _ = std::fs::remove_file(&path);
+
+        let buffer = collected.lock().clone();
+        let credential = extract_exec_credential(&buffer).unwrap_or_else(|why| {
+            panic!("no credential in {} bytes of console: {why}", buffer.len())
+        });
+        let mut got = credential
+            .status
+            .and_then(|status| status.token)
+            .expect("the payload names a token");
+        let shape = mend_bearer_token(&mut got);
+
+        assert_eq!(
+            got,
+            token,
+            "the console changed the token: {} characters came back where {} went in, shape {shape:?}",
+            got.len(),
+            token.len()
+        );
+    }
 }
