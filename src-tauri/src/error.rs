@@ -104,10 +104,6 @@ pub enum Error {
     #[error("Operation timed out: {0}")]
     Timeout(String),
 
-    /// WebSocket errors
-    #[error("WebSocket error: {0}")]
-    WebSocket(String),
-
     /// Internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -221,12 +217,6 @@ impl From<reqwest::Error> for Error {
     }
 }
 
-impl From<tokio_tungstenite::tungstenite::Error> for Error {
-    fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
-        Error::WebSocket(err.to_string())
-    }
-}
-
 impl From<url::ParseError> for Error {
     fn from(err: url::ParseError) -> Self {
         Error::InvalidInput(format!("Invalid URL: {err}"))
@@ -251,14 +241,19 @@ impl Error {
     ///
     /// A 403 arrives as `KubeApi` and stays there on purpose — its own variant
     /// would say the session is over when only one request was answered. So
-    /// the question is asked of the response code: a caller matching
-    /// `PermissionDenied` would match nothing a cluster sends, since that
-    /// variant is for refusals the app itself raises.
+    /// the question is asked of the response, and of `reason` as well as
+    /// `code` for the same reason the 401 path above does: some distributions
+    /// send `Forbidden` with the code unset, and code alone would then read a
+    /// refusal as a hard failure. A caller matching `PermissionDenied` would
+    /// match nothing a cluster sends — that variant is for refusals the app
+    /// itself raises.
     #[must_use]
     pub fn is_refusal(&self) -> bool {
         match self {
             Error::PermissionDenied(_) => true,
-            Error::KubeApi(kube::Error::Api(response)) => response.code == 403,
+            Error::KubeApi(kube::Error::Api(response)) => {
+                response.code == 403 || response.reason == "Forbidden"
+            }
             _ => false,
         }
     }
@@ -319,6 +314,15 @@ mod tests {
         assert!(!Error::from(api_error(401, "Unauthorized")).is_refusal());
         assert!(!Error::from(api_error(500, "InternalError")).is_refusal());
         assert!(!Error::Config("nothing to do with rights".into()).is_refusal());
+    }
+
+    /// The same trap the 401 path was already guarded against: a distribution
+    /// that sends `Forbidden` with the code unset. Asking `code` alone reads
+    /// that refusal as a hard failure and throws the reader out over a screen
+    /// their token merely cannot see.
+    #[test]
+    fn a_forbidden_with_no_code_is_still_a_refusal() {
+        assert!(Error::from(api_error(0, "Forbidden")).is_refusal());
     }
 
     #[test]
