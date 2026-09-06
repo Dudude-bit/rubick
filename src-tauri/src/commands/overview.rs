@@ -317,6 +317,18 @@ fn pod_requests(pod: &Pod) -> (f64, u64) {
     let Some(spec) = pod.spec.as_ref() else {
         return (0.0, 0);
     };
+    // KEP-2837: a pod-level request, where set, is what the scheduler reserves
+    // for the pod, in place of the container sum and per resource. The pod
+    // detail page applies the same rule (`PodInfo`'s aggregation) — one fact,
+    // both readers.
+    let pod_level = spec.resources.as_ref().and_then(|r| r.requests.as_ref());
+    let pod_cpu = pod_level
+        .and_then(|m| m.get("cpu"))
+        .map(|q| parse_cpu(&q.0));
+    let pod_memory = pod_level
+        .and_then(|m| m.get("memory"))
+        .map(|q| parse_memory(&q.0));
+
     let mut cpu = 0.0;
     let mut memory = 0u64;
     // Init containers run to completion before the app containers start, so
@@ -338,7 +350,7 @@ fn pod_requests(pod: &Pod) -> (f64, u64) {
             memory += parse_memory(&q.0);
         }
     }
-    (cpu, memory)
+    (pod_cpu.unwrap_or(cpu), pod_memory.unwrap_or(memory))
 }
 
 fn node_is_ready(node: &Node) -> bool {
@@ -1421,6 +1433,29 @@ mod tests {
         let accounting = account_by_node(&pods);
         assert_eq!(accounting.pods.get("n1"), Some(&1));
         assert_eq!(accounting.requests.get("n1").map(|r| r.0), Some(250.0));
+    }
+
+    /// KEP-2837: a pod-level request is what the scheduler reserves, so the
+    /// accounting uses it in place of the container sum, per resource. A pod
+    /// asking for 2 CPU at the pod level over a 500m container reserves 2, not
+    /// 2.5 and not 0.5. The pod detail page aggregates the same way — one fact,
+    /// both readers.
+    #[test]
+    fn a_pod_level_request_replaces_the_container_sum() {
+        let mut pod = scheduled_pod("p", "app", "n1", "500m", "256Mi");
+        pod.spec.as_mut().unwrap().resources = Some(ResourceRequirements {
+            requests: Some(quantities(&[("cpu", "2"), ("memory", "1Gi")])),
+            ..Default::default()
+        });
+        let (cpu, memory) = pod_requests(&pod);
+        assert_eq!(cpu, parse_cpu("2"), "pod-level CPU stands in for the sum");
+        assert_eq!(memory, parse_memory("1Gi"), "pod-level memory too");
+
+        // No pod-level request: the container sum still stands.
+        assert_eq!(
+            pod_requests(&scheduled_pod("q", "app", "n1", "500m", "256Mi")).0,
+            parse_cpu("500m")
+        );
     }
 
     #[test]

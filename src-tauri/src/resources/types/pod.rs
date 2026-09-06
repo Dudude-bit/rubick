@@ -263,26 +263,47 @@ impl From<&Pod> for PodInfo {
                     }
                 }
 
-                let cpu_requests = if total_cpu_requests_millicores > 0.0 {
+                let mut cpu_requests = if total_cpu_requests_millicores > 0.0 {
                     Some(format_cpu(total_cpu_requests_millicores))
                 } else {
                     None
                 };
-                let cpu_limits = if total_cpu_limits_millicores > 0.0 {
+                let mut cpu_limits = if total_cpu_limits_millicores > 0.0 {
                     Some(format_cpu(total_cpu_limits_millicores))
                 } else {
                     None
                 };
-                let memory_requests = if total_memory_requests_bytes > 0 {
+                let mut memory_requests = if total_memory_requests_bytes > 0 {
                     Some(format!("{total_memory_requests_bytes}"))
                 } else {
                     None
                 };
-                let memory_limits = if total_memory_limits_bytes > 0 {
+                let mut memory_limits = if total_memory_limits_bytes > 0 {
                     Some(format!("{total_memory_limits_bytes}"))
                 } else {
                     None
                 };
+
+                // KEP-2837: a pod-level request or limit, where set, is the
+                // pod's own — the scheduler reserves it in place of the
+                // container sum, per resource, so the display follows. Parsed
+                // through the same formatters, so a pod-level `1`/`1Gi` reads
+                // exactly as a summed one. `overview::pod_requests` does the
+                // same for the cluster totals — both readers of one fact.
+                if let Some(pod_level) = &s.resources {
+                    if let Some(cpu) = pod_level.requests.as_ref().and_then(|m| m.get("cpu")) {
+                        cpu_requests = Some(format_cpu(parse_cpu(&cpu.0)));
+                    }
+                    if let Some(mem) = pod_level.requests.as_ref().and_then(|m| m.get("memory")) {
+                        memory_requests = Some(format!("{}", parse_memory(&mem.0)));
+                    }
+                    if let Some(cpu) = pod_level.limits.as_ref().and_then(|m| m.get("cpu")) {
+                        cpu_limits = Some(format_cpu(parse_cpu(&cpu.0)));
+                    }
+                    if let Some(mem) = pod_level.limits.as_ref().and_then(|m| m.get("memory")) {
+                        memory_limits = Some(format!("{}", parse_memory(&mem.0)));
+                    }
+                }
 
                 (cpu_requests, cpu_limits, memory_requests, memory_limits)
             });
@@ -768,6 +789,62 @@ mod tests {
             Some("app-sa"),
             "the identity a pod holds against the API server was in the spec \
              all along and reached no screen"
+        );
+    }
+
+    /// KEP-2837: a pod-level request or limit, where set, is what the
+    /// scheduler reserves for the pod — in place of the container sum, per
+    /// resource. A pod asking for 2 CPU at the pod level, over a 500m
+    /// container, reports 2. `overview::pod_requests` accounts the same way;
+    /// both read one fact.
+    #[test]
+    fn pod_level_resources_stand_in_for_the_container_sum() {
+        use k8s_openapi::api::core::v1::ResourceRequirements;
+        use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+
+        let quantity = |value: &str| Quantity(value.to_string());
+        let pod = Pod {
+            spec: Some(PodSpec {
+                containers: vec![Container {
+                    name: "app".to_string(),
+                    resources: Some(ResourceRequirements {
+                        requests: Some([("cpu".to_string(), quantity("500m"))].into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+                resources: Some(ResourceRequirements {
+                    requests: Some(
+                        [
+                            ("cpu".to_string(), quantity("2")),
+                            ("memory".to_string(), quantity("1Gi")),
+                        ]
+                        .into(),
+                    ),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let info = PodInfo::from(&pod);
+        assert_eq!(
+            info.cpu_requests,
+            Some(format_cpu(parse_cpu("2"))),
+            "pod-level CPU stands in for the container's 500m"
+        );
+        assert_eq!(
+            info.memory_requests,
+            Some(format!("{}", parse_memory("1Gi")))
+        );
+
+        // Drop the pod-level block and the container's own request returns.
+        let mut plain = pod.clone();
+        plain.spec.as_mut().unwrap().resources = None;
+        assert_eq!(
+            PodInfo::from(&plain).cpu_requests,
+            Some(format_cpu(parse_cpu("500m")))
         );
     }
 }
