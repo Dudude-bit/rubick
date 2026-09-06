@@ -78,8 +78,11 @@ pub async fn prepare_kubeconfig_for_context(
         if provider.name == "oidc" {
             let oidc_result =
                 oidc::run_oidc_auth(state, context_name, &user_name, &provider).await?;
-            auth_info.token = Some(SecretString::from(oidc_result.token));
-            auth_info.auth_provider = None;
+            let expires_at = apply_oidc_result(auth_info, oidc_result)?;
+            return Ok(PreparedContext {
+                kubeconfig,
+                expires_at,
+            });
         }
     }
 
@@ -133,47 +136,105 @@ fn resolve_exec_cluster(
     Ok(Some(exec_cluster))
 }
 
-/// Applies what the plugin returned, and hands back the deadline it named.
+/// Apply what the kubeconfig's own `oidc` provider produced.
 ///
-/// The log line and the two refusals are what tell a bare `Unauthorized`
-/// apart: the cluster refusing a whole credential, and us sending a broken
-/// one, read identically and have nothing in common to do about them.
+/// Its own function so the wiring is testable: the branch used to assign
+/// `auth_info.token` itself, which meant a token a console had damaged was
+/// refused on the exec path and sent on this one, and the deadline the
+/// provider had just handed over was dropped on the floor.
+fn apply_oidc_result(
+    auth_info: &mut AuthInfo,
+    result: crate::auth::AuthResult,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    let named = result.expires_at;
+    // What the provider said, and failing that what the token itself says.
+    let carried = apply_bearer_token(auth_info, result.token, "oidc auth provider")?;
+    auth_info.auth_provider = None;
+    Ok(named.or(carried))
+}
+
+/// Put a bearer token on the auth info, having read what a console left in it.
+///
+/// The one place a credential becomes the one the client will send. Both ways
+/// in come through here — a plugin's `ExecCredential` and the kubeconfig's own
+/// `oidc` provider — because a token validated on one path and taken on trust
+/// on the other is the same bug wearing two hats, and the cluster answers
+/// both with the same bare `Unauthorized`.
+///
+/// Hands back the deadline the token carries, where it carries one.
+fn apply_bearer_token(
+    auth_info: &mut AuthInfo,
+    mut token: String,
+    source: &str,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    match cred::mend_bearer_token(&mut token) {
+        // The length only — a token is a credential and does not go in a log.
+        cred::TokenShape::Intact => tracing::info!(
+            "Applied a {} character token from the {source}, intact.",
+            token.len()
+        ),
+        cred::TokenShape::Mended { removed } => tracing::warn!(
+            "The {source}'s token carried {removed} whitespace characters the \
+             console that drew it put there. Removed."
+        ),
+        cred::TokenShape::Unusable { first_bad } => {
+            return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                "The {source}'s token contains {first_bad:?}, which no HTTP header \
+                 can carry, so the cluster would refuse it without saying why. The \
+                 terminal it ran under corrupted its output; this is not a rejected \
+                 login."
+            ))));
+        }
+        cred::TokenShape::Empty => {
+            return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                "The {source} returned a token that is entirely whitespace. Sending \
+                 it would reach the cluster as no credential at all."
+            ))));
+        }
+    }
+
+    // Whitespace is only the damage that stops the JSON parsing. A console
+    // wraps a line it cannot fit and hands back what it drew, so a token can
+    // come back longer than it went out and still be whitespace-free and
+    // ASCII-graphic. Read as a JWT, it says so.
+    let deadline = match cred::read_jwt(&token) {
+        cred::TokenReading::Damaged { why } => {
+            return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                "The {source} returned a token that begins as a JWT and then {why}. \
+                 The terminal it ran under damaged its output; the cluster would \
+                 refuse this without saying why, and this is not a rejected login."
+            ))));
+        }
+        cred::TokenReading::Jwt {
+            expires_at: Some(at),
+        } if at <= chrono::Utc::now() => {
+            return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                "The {source} returned a token that expired at {at}. The cluster \
+                 would refuse it as an unauthenticated request."
+            ))));
+        }
+        cred::TokenReading::Jwt { expires_at } => expires_at,
+        cred::TokenReading::Opaque => None,
+    };
+
+    auth_info.token = Some(SecretString::from(token));
+    Ok(deadline)
+}
+
+/// Applies what the plugin returned, and hands back the deadline it named.
 fn apply_exec_credentials(
     auth_info: &mut AuthInfo,
     status: ExecCredentialStatus,
 ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
     use base64::Engine;
 
-    if let Some(mut token) = status.token {
-        match cred::mend_bearer_token(&mut token) {
-            // The length only — a token is a credential and does not go in a log.
-            cred::TokenShape::Intact => tracing::info!(
-                "Applied a {} character token from the credential plugin, intact.",
-                token.len()
-            ),
-            cred::TokenShape::Mended { removed } => tracing::warn!(
-                "The credential plugin's token carried {removed} whitespace \
-                 characters the console that drew it put there. Removed."
-            ),
-            cred::TokenShape::Unusable { first_bad } => {
-                return Err(Error::Auth(AuthError::Kubeconfig(format!(
-                    "The credential plugin's token contains {first_bad:?}, which no \
-                     HTTP header can carry, so the cluster would refuse it without \
-                     saying why. The terminal the plugin ran under corrupted its \
-                     output; this is not a rejected login."
-                ))));
-            }
-            cred::TokenShape::Empty => {
-                return Err(Error::Auth(AuthError::Kubeconfig(
-                    "The credential plugin returned a token that is entirely \
-                     whitespace. Sending it would reach the cluster as no \
-                     credential at all."
-                        .to_string(),
-                )));
-            }
-        }
-        auth_info.token = Some(SecretString::from(token));
-    }
+    // A plugin that names no deadline may still be carrying one inside the
+    // token. Reading it there is the difference between the app knowing when
+    // the session ends and guessing that it does not.
+    let jwt_deadline = match status.token {
+        Some(token) => apply_bearer_token(auth_info, token, "credential plugin")?,
+        None => None,
+    };
     // A plugin hands back PEM, but the fields it lands in are kubeconfig
     // fields, and kube reads those through a base64 decode. Storing the PEM
     // as-is leaves the decode to fail, and the failure is swallowed — the
@@ -194,7 +255,8 @@ fn apply_exec_credentials(
     Ok(status
         .expiration_timestamp
         .and_then(|stamp| chrono::DateTime::parse_from_rfc3339(&stamp).ok())
-        .map(|stamp| stamp.with_timezone(&chrono::Utc)))
+        .map(|stamp| stamp.with_timezone(&chrono::Utc))
+        .or(jwt_deadline))
 }
 
 #[cfg(test)]
@@ -237,6 +299,73 @@ mod tests {
         assert_eq!(decoded(cert), CERT.as_bytes());
         let key = auth_info.client_key_data.as_ref().expect("the key");
         assert_eq!(decoded(key.expose_secret()), KEY.as_bytes());
+    }
+
+    fn live_jwt() -> String {
+        let exp = (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp();
+        let b64 = |raw: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+        format!(
+            "{}.{}.{}",
+            b64(br#"{"alg":"RS256","typ":"JWT"}"#),
+            b64(format!(r#"{{"sub":"a@b.c","exp":{exp}}}"#).as_bytes()),
+            b64(&[7u8; 256])
+        )
+    }
+
+    /// Both ways a credential reaches the client go through one door. The
+    /// kubeconfig's own `oidc` provider used to assign `auth_info.token`
+    /// itself, so a token a console had damaged was refused on the exec path
+    /// and sent on this one — the same credential judged two ways. Would
+    /// break if either caller stopped going through `apply_bearer_token`.
+    #[test]
+    fn the_oidc_provider_and_a_plugin_are_held_to_the_same_reading() {
+        // A console that drew the token twice: three segments still, the
+        // header still a header, and a payload that no longer decodes.
+        let whole = live_jwt();
+        let mut parts = whole.split('.');
+        let (header, payload, signature) = (
+            parts.next().expect("header"),
+            parts.next().expect("payload"),
+            parts.next().expect("signature"),
+        );
+        let damaged = format!("{header}.{payload}{}.{signature}", &payload[..24]);
+
+        let mut from_plugin = AuthInfo::default();
+        let plugin = apply_exec_credentials(&mut from_plugin, token_status(&damaged))
+            .expect_err("a plugin's damaged token is refused");
+
+        let mut from_provider = AuthInfo::default();
+        let provider = apply_oidc_result(
+            &mut from_provider,
+            crate::auth::AuthResult {
+                token: damaged,
+                expires_at: None,
+                refresh_token: None,
+                token_type: "Bearer".to_string(),
+            },
+        )
+        .expect_err("and so is the provider's");
+
+        assert!(from_plugin.token.is_none() && from_provider.token.is_none());
+        assert!(
+            plugin.to_string().contains("begins as a JWT")
+                && provider.to_string().contains("begins as a JWT"),
+            "both name the same damage: {plugin} / {provider}"
+        );
+    }
+
+    /// A token that says when it stops working hands that back, whichever
+    /// door it came through. Before this, an OIDC user's session had no
+    /// deadline at all and the app could only find out by failing.
+    #[test]
+    fn a_token_that_names_its_own_expiry_carries_the_deadline_out() {
+        let mut auth_info = AuthInfo::default();
+        let deadline = apply_bearer_token(&mut auth_info, live_jwt(), "oidc auth provider")
+            .expect("a live token is applied");
+
+        let left =
+            (deadline.expect("the deadline the token names") - chrono::Utc::now()).num_seconds();
+        assert!((3500..=3600).contains(&left), "{left}s left");
     }
 
     fn token_status(token: &str) -> ExecCredentialStatus {

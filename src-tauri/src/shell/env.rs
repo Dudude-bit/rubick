@@ -28,6 +28,9 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::sync::OnceLock;
+// Only the login-shell timeout is measured in time, and that is a Unix
+// notion — Windows hands an app its environment from the system settings.
+#[cfg(unix)]
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -603,6 +606,11 @@ mod tests {
     /// and `kubectl-oidc_login` were on their PATH. Drop `-i` and every
     /// plugin installed by a profile line goes missing again, with every
     /// other test still green.
+    // Windows has no login shell and no `LOGIN_SHELL_FLAGS` to read, so this
+    // test names a constant that is not compiled there. Its neighbours carry
+    // the same gate; this one was missed, and nothing said so because the
+    // Rust tests have never been built for Windows.
+    #[cfg(unix)]
     #[test]
     fn the_shell_is_started_interactively_as_well_as_as_a_login_shell() {
         assert!(
