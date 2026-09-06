@@ -742,26 +742,9 @@ mod tests {
             .resize(cols, 24)
             .await
             .expect("the console takes the width it is given");
-        // Draining stops on the exit status and then keeps reading: the
-        // child is gone long before the reader thread has handed over what
-        // the console still had, and stopping at `is_running` loses it.
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let mut after_exit = 0;
-        while tokio::time::Instant::now() < deadline {
-            match adapter.read_output().await {
-                Ok(Some(_)) => after_exit = 0,
-                Ok(None) => {
-                    if exited.lock().is_some() {
-                        after_exit += 1;
-                        if after_exit > 50 {
-                            break;
-                        }
-                    }
-                    tokio::time::sleep(Duration::from_millis(20)).await;
-                }
-                Err(_) => break,
-            }
-        }
+        // The same drain the adapter's own tests use: stopping at
+        // `is_running` loses what the console still had to hand over.
+        adapter.drain_to_exit(Duration::from_secs(30)).await;
         adapter.close().await.expect("close");
         let _ = std::fs::remove_file(&path);
 

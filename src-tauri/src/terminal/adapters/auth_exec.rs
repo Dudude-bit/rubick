@@ -286,38 +286,51 @@ impl TerminalAdapter for AuthExecAdapter {
     }
 }
 
+/// Reading a whole session out of the console, for tests on both sides of
+/// the auth flow.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    /// Drain `read_output` into a single buffer until either the
-    /// process stops emitting for several ticks (and is no longer
-    /// running), or `total_timeout` elapses. Used to assert what the
-    /// terminal would see across the full lifetime of a short command.
-    async fn drain(adapter: &mut AuthExecAdapter, total_timeout: Duration) -> Vec<u8> {
+impl AuthExecAdapter {
+    /// Read until the child has exited *and* has stopped handing anything
+    /// over.
+    ///
+    /// Stopping at `is_running()` is what this used to do, and on Windows it
+    /// loses the payload: the child is gone long before the reader thread has
+    /// handed over what the console still had, so a credential printed at the
+    /// last moment never arrives. The exit status is the signal; the reads
+    /// after it are what collect the rest.
+    pub(crate) async fn drain_to_exit(&mut self, total_timeout: std::time::Duration) -> Vec<u8> {
+        let exited = self.last_exit_status();
         let mut out = Vec::new();
         let deadline = tokio::time::Instant::now() + total_timeout;
-        let mut idle_ticks = 0;
+        let mut after_exit = 0;
         while tokio::time::Instant::now() < deadline {
-            match adapter.read_output().await {
+            match self.read_output().await {
                 Ok(Some(chunk)) => {
                     out.extend_from_slice(&chunk);
-                    idle_ticks = 0;
+                    after_exit = 0;
                 }
                 Ok(None) => {
-                    idle_ticks += 1;
-                    if idle_ticks > 10 && !adapter.is_running() {
-                        break;
+                    if exited.lock().is_some() {
+                        after_exit += 1;
+                        if after_exit > 50 {
+                            break;
+                        }
                     }
-                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 }
                 Err(_) => break,
             }
         }
         out
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[cfg(unix)]
     #[tokio::test]
     async fn read_output_returns_stdout_to_terminal() {
         // Many OIDC drivers (kubelogin --grant-type=authcode-keyboard,
@@ -331,7 +344,7 @@ mod tests {
         );
 
         adapter.connect().await.expect("spawn");
-        let drained = drain(&mut adapter, Duration::from_secs(2)).await;
+        let drained = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let text = String::from_utf8_lossy(&drained);
@@ -341,6 +354,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn read_output_still_returns_stderr() {
         let mut adapter = AuthExecAdapter::new(
@@ -350,7 +364,7 @@ mod tests {
         );
 
         adapter.connect().await.expect("spawn");
-        let drained = drain(&mut adapter, Duration::from_secs(2)).await;
+        let drained = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let text = String::from_utf8_lossy(&drained);
@@ -360,6 +374,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[cfg(unix)]
     #[tokio::test]
     async fn child_runs_under_a_real_tty() {
@@ -376,7 +391,7 @@ mod tests {
         );
 
         adapter.connect().await.expect("spawn");
-        let drained = drain(&mut adapter, Duration::from_secs(2)).await;
+        let drained = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let text = String::from_utf8_lossy(&drained);
@@ -390,6 +405,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[cfg(unix)]
     #[tokio::test]
     async fn child_inherits_parent_process_env() {
@@ -423,7 +439,7 @@ mod tests {
         );
 
         adapter.connect().await.expect("spawn");
-        let drained = drain(&mut adapter, Duration::from_secs(2)).await;
+        let drained = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let text = String::from_utf8_lossy(&drained);
@@ -434,6 +450,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[cfg(unix)]
     #[tokio::test]
     async fn explicit_env_overrides_inherited_env() {
@@ -461,7 +478,7 @@ mod tests {
         );
 
         adapter.connect().await.expect("spawn");
-        let drained = drain(&mut adapter, Duration::from_secs(2)).await;
+        let drained = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let text = String::from_utf8_lossy(&drained);
@@ -471,6 +488,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[cfg(unix)]
     #[tokio::test]
     async fn last_exit_status_captures_zero_for_clean_exit() {
@@ -488,7 +506,7 @@ mod tests {
         let status_handle = adapter.last_exit_status();
 
         adapter.connect().await.expect("spawn");
-        let _ = drain(&mut adapter, Duration::from_secs(2)).await;
+        let _ = adapter.drain_to_exit(Duration::from_secs(2)).await;
         // Give the wait thread a tick to record the exit before close.
         tokio::time::sleep(Duration::from_millis(100)).await;
         adapter.close().await.expect("close");
@@ -501,6 +519,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[cfg(unix)]
     #[tokio::test]
     async fn last_exit_status_captures_nonzero_exit_code() {
@@ -515,7 +534,7 @@ mod tests {
         let status_handle = adapter.last_exit_status();
 
         adapter.connect().await.expect("spawn");
-        let _ = drain(&mut adapter, Duration::from_secs(2)).await;
+        let _ = adapter.drain_to_exit(Duration::from_secs(2)).await;
         tokio::time::sleep(Duration::from_millis(100)).await;
         adapter.close().await.expect("close");
 
@@ -527,6 +546,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn collected_stdout_still_captures_json_payload() {
         // The auth flow downstream parses JSON ExecCredential from
@@ -539,7 +559,7 @@ mod tests {
         let collected_handle = adapter.collected_stdout();
 
         adapter.connect().await.expect("spawn");
-        let _ = drain(&mut adapter, Duration::from_secs(2)).await;
+        let _ = adapter.drain_to_exit(Duration::from_secs(2)).await;
         adapter.close().await.expect("close");
 
         let collected = collected_handle.lock();
