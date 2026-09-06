@@ -42,7 +42,7 @@ pub struct PortForwardConfig {
 pub struct RegistriesConfig {
     /// Registry configurations (key = registry ID)
     #[serde(default)]
-    pub registries: std::collections::HashMap<String, RegistryConfigEntry>,
+    pub registries: std::collections::BTreeMap<String, RegistryConfigEntry>,
 }
 
 /// Stored registry configuration (unified: connection settings + credentials)

@@ -311,6 +311,13 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     let search_path_is_real = shell.answered();
     let tools = tools_status().await;
 
+    // A config the app could not read is the same silent failure this panel
+    // exists for: startup moved it aside and carried on, and this is the one
+    // place the reader is told their settings did not load.
+    let recovery_finding = crate::config::recovery_report().map(|recovery| {
+        super::settings_recovered_finding(&recovery.path, &recovery.backup, &recovery.why)
+    });
+
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
     // this panel exists because two answers about one machine is the bug.
@@ -338,6 +345,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             None => (None, Vec::new()),
         };
         findings.extend(super::shell_env_finding(&shell));
+        findings.extend(recovery_finding);
         return Diagnostics {
             shell,
             search_path_is_real,
@@ -372,6 +380,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         })
         .collect();
     findings.extend(super::shell_env_finding(&shell));
+    findings.extend(recovery_finding);
     findings.sort_by(|a, b| {
         a.severity
             .cmp(&b.severity)
