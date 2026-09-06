@@ -153,15 +153,9 @@ fn apply_oidc_result(
     Ok(named.or(carried))
 }
 
-/// Put a bearer token on the auth info, having read what a console left in it.
-///
-/// The one place a credential becomes the one the client will send. Both ways
-/// in come through here — a plugin's `ExecCredential` and the kubeconfig's own
-/// `oidc` provider — because a token validated on one path and taken on trust
-/// on the other is the same bug wearing two hats, and the cluster answers
-/// both with the same bare `Unauthorized`.
-///
-/// Hands back the deadline the token carries, where it carries one.
+/// The one place a credential becomes the one the client will send — both the
+/// exec plugin and the kubeconfig's `oidc` provider, or one is validated and
+/// the other taken on trust. Hands back the deadline the token carries.
 fn apply_bearer_token(
     auth_info: &mut AuthInfo,
     mut token: String,

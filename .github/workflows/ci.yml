@@ -26,6 +26,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # The Comment budget step diffs against the merge-base, which a
+          # shallow clone does not contain — `origin/main...HEAD` then exits
+          # 128 and the script that reads it crashes. Full history is what
+          # lets the three-dot diff find where this branch left main.
+          fetch-depth: 0
 
       - name: Setup Tauri build environment
         uses: ./.github/actions/setup-tauri
@@ -63,6 +69,22 @@ jobs:
 
       - name: Frontend lint
         run: bun run lint
+
+      - name: Comment budget
+        # Only on a pull request, and only over what the patch adds: nothing
+        # already in the tree is judged. A doc comment on a test is exempt —
+        # CLAUDE.md requires one. Label a PR `comments` to skip it, which is
+        # for the rare change that is only about comments.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'comments')
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          python3 scripts/comment-budget.py "origin/${{ github.base_ref }}" HEAD
+
+      - name: Frontend formatting
+        # Prettier ran in the pre-commit hook and in no CI job at all, so a
+        # commit made with --no-verify put unformatted code on a green main.
+        # Same glob as the hook in lefthook.yml, or the two would disagree.
+        run: bunx prettier --check "src/**/*.{ts,tsx,css,json,md}"
 
   windows-console:
     name: Windows console

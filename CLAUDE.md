@@ -279,3 +279,11 @@ the owner — and publish it by hand.
 ## Commits
 
 Short messages, minimal comments, no `Co-Authored-By` trailers.
+
+`scripts/comment-budget.py` enforces the second one on pull requests: no more
+than 20% of the lines a patch **adds** may be comment. It measures the diff
+only, so nothing already here is judged, and a doc comment sitting on a test
+is exempt because this file requires one. For scale, the ANSI log work came
+to 6% and the landing page to 0%; a patch over the line is explaining itself
+rather than the thing a reader could not have worked out. Label a PR
+`comments` to skip the check, which is for a change that is only about them.

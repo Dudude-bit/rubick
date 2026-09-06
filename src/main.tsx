@@ -76,6 +76,13 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: STALE_TIMES.slow,
+      // Every queryFn here is a Tauri call the Rust side answers, so the
+      // webview's idea of being offline says nothing about whether the
+      // cluster can be reached — kind on loopback, a port-forward, a VPN on
+      // another interface. Left at the default, one `offline` event pauses
+      // every query, and a paused query is `isLoading: false` with no data,
+      // which every list draws as "this cluster has none of these".
+      networkMode: "always",
       // Focus and visibility are `useLiveQuery`'s to decide — it refetches on
       // both, and for a group of queries at once. React Query's own listener
       // would fire underneath that.
@@ -86,6 +93,9 @@ const queryClient = new QueryClient({
       retry: (failureCount, error) =>
         failureCount < 2 && isWorthRetrying(error),
     },
+    // A mutation shares the default, so a drain or a delete would sit paused
+    // with nothing said either.
+    mutations: { networkMode: "always" },
   },
 });
 

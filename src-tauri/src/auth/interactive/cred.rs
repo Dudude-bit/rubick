@@ -66,17 +66,12 @@ pub(super) enum TokenShape {
 
 /// Repair what a console put inside a bearer token, and say what was found.
 ///
-/// `ConPTY` hands back the rendered screen rather than the bytes the child
-/// wrote; `unwrap_console_breaks` takes out the control bytes that stopped
-/// the JSON parsing, but not a space, because a space inside a JSON string is
-/// ordinary data. Inside an `id_token` it is not, and the cluster answers
-/// that with `Unauthorized`, naming nothing.
-///
-/// The line between damage and data is what the transport can carry, not what
-/// RFC 7235 permits a client to send. `kube` builds the header with
-/// `HeaderValue::try_from(format!("Bearer {token}"))` and `http` accepts every
-/// byte `0x20..=0x7E`, so a Rancher token's `:` travels today and must keep
-/// travelling. Only bytes no header can hold are called damage here.
+/// `unwrap_console_breaks` takes out the control bytes, but not a space —
+/// ordinary data inside a JSON string, damage inside an `id_token`, which the
+/// cluster answers with a bare `Unauthorized`. The line between damage and
+/// data is what the transport can carry: `http` accepts every byte
+/// `0x20..=0x7E`, so a Rancher token's `:` travels and must keep travelling.
+/// Only bytes no header can hold are called damage here.
 pub(super) fn mend_bearer_token(token: &mut String) -> TokenShape {
     let before = token.len();
     token.retain(|c| !c.is_whitespace());
@@ -121,17 +116,10 @@ fn decode_segment(segment: &str) -> Option<Vec<u8>> {
 
 /// Read a bearer token as a JWT, where it is one.
 ///
-/// The header is what decides: a JWT's first segment is base64url of an
-/// object naming `alg`. Once that has been seen, a payload that will not
-/// decode is damage rather than a token this cannot understand — which is
-/// the distinction the caller needs, because one is worth refusing before
-/// the request and the other is not.
-///
-/// The console is the reason this exists. `ConPTY` hands back a rendered
-/// screen: a repaint can put a run of the token on the buffer twice, and the
-/// duplicate is as ASCII-graphic and as whitespace-free as the real thing, so
-/// [`mend_bearer_token`] finds nothing to mend and the cluster refuses a
-/// credential nobody can see anything wrong with.
+/// The header decides: once a `alg` object has been seen, a payload that will
+/// not decode is damage rather than a token this cannot judge. A console that
+/// drew the token twice leaves exactly that, and it is as whitespace-free as
+/// the real thing, so [`mend_bearer_token`] finds nothing to mend.
 pub(super) fn read_jwt(token: &str) -> TokenReading {
     let mut parts = token.split('.');
     let (Some(header), Some(payload), Some(_signature), None) =
@@ -171,24 +159,13 @@ pub(super) fn read_jwt(token: &str) -> TokenReading {
 /// Extract an `ExecCredential` JSON object from a (possibly noisy)
 /// stdout buffer.
 ///
-/// Why this is needed: `AuthExecAdapter` runs the auth child under a
-/// real PTY (so tools that gate on `isatty(stdin)` print their
-/// prompts). All PTY stdout — prompts, status lines, occasional ANSI
-/// control sequences, then the final `ExecCredential` JSON — is
-/// tee'd into a single `Vec<u8>`. Calling `serde_json::from_slice`
-/// on the raw buffer fails with `expected value at line N column 1`
-/// because the bytes don't start with `{`.
-///
-/// Approach: kubectl exec-credential plugins emit the JSON
-/// `ExecCredential` as their last structured output. Scan the buffer
-/// for every byte position where a `{` begins, then for each
-/// candidate (newest first) try to consume a single balanced JSON
-/// object starting there and parse it as `ExecCredential`. The first
-/// one that parses *and* has a recognisable `kind`/`status` wins.
-///
-/// Returns the parse error from the earliest-attempted candidate when
-/// nothing parses, so error messages stay close to what
-/// `from_slice(&buffer)` used to say in the clean-input case.
+/// The child runs under a real PTY, so prompts, status lines and ANSI
+/// sequences are tee'd into the buffer ahead of the final JSON, and a raw
+/// `from_slice` fails because the bytes do not start with `{`. So scan every
+/// `{`, and newest-first (the `ExecCredential` is the last structured output)
+/// consume one balanced object there — the first that parses *and* has a
+/// `kind`/`status` wins. On total failure, return the earliest candidate's
+/// error, to stay close to what `from_slice(&buffer)` said on clean input.
 pub(super) fn extract_exec_credential(buffer: &[u8]) -> Result<ExecCredential, String> {
     let starts: Vec<usize> = buffer
         .iter()
@@ -240,20 +217,12 @@ pub(super) fn extract_exec_credential(buffer: &[u8]) -> Result<ExecCredential, S
 
 /// Drop what a console put inside a JSON string, and nothing else.
 ///
-/// A pty on Unix hands back the bytes the child wrote. `ConPTY` does not: it
-/// is a screen buffer, so a read gives back the *rendered* screen — hard
-/// line breaks at the console width included. Our auth pty is 80 columns
-/// wide and an `id_token` runs to a kilobyte or two, so the break lands inside
-/// the quoted JWT, and a raw newline inside a JSON string is not JSON.
-///
-/// The rule is exact rather than heuristic: a control byte inside a JSON
-/// string literal is *never* valid JSON, so removing one cannot change the
-/// meaning of any document that was valid to begin with. It can only rescue
-/// one that a console broke. Outside a string, whitespace is legal and is
-/// left exactly as it was.
-///
-/// ANSI escape sequences are dropped on the same grounds — `ESC [ ... m`
-/// inside a string is a terminal's colour, not the plugin's data.
+/// `ConPTY` hands back the rendered screen, so a hard line break at the
+/// 80-column width lands inside the quoted `id_token`, and a raw control byte
+/// inside a JSON string is not JSON. Removing one is exact, not heuristic: it
+/// is never valid there, so it cannot change a document that already parsed —
+/// only rescue one a console broke. ANSI `ESC [ ... m` goes for the same
+/// reason. Whitespace outside a string is legal and is left as it was.
 fn unwrap_console_breaks(slice: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(slice.len());
     let mut in_string = false;

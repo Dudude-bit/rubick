@@ -16,20 +16,15 @@ use tokio::net::TcpListener;
 use tokio::time::Duration;
 use url::Url;
 
-/// Buffer size for OIDC callback reading
 const OIDC_CALLBACK_BUFFER_SIZE: usize = 4096;
 
 /// The loopback ports an OIDC client is likely to have been registered with.
 ///
-/// A redirect URI has to be registered with the provider before it will
-/// redirect to it, so a port picked at random can never be right: Dex answers
-/// `Bad Request — Unregistered redirect_uri ("http://127.0.0.1:58884/callback")`
-/// and the browser shows that instead of signing anybody in (#67).
-///
-/// These two are `kubectl oidc-login`'s own defaults — `--listen-address`
-/// defaults to `127.0.0.1:8000,127.0.0.1:18000` — which is what the provider
-/// was configured for by whoever followed its instructions, and this app is
-/// reading their kubeconfig.
+/// A redirect URI must be registered before the provider will redirect to it,
+/// so a random port can never be right — Dex answers `Unregistered
+/// redirect_uri` and the browser shows that instead of a login (#67). These
+/// two are `kubectl oidc-login`'s `--listen-address` defaults, which is what
+/// whoever set the provider up configured, and whose kubeconfig this reads.
 const REDIRECT_PORTS: [u16; 2] = [8000, 18000];
 
 /// A listener on a port the provider is likely to accept a redirect to.
@@ -199,16 +194,12 @@ pub(super) async fn run_oidc_auth(
     let redirect_port = listener.local_addr()?.port();
     // `http://localhost:<port>`, exactly — host and path included.
     //
-    // A provider compares redirect URIs by string (RFC 6749 §3.1.2.3), so
-    // matching the port is not enough: `http://127.0.0.1:8000/callback` is a
-    // different string from what was registered. What was registered is what
-    // `kubectl oidc-login` sends, and asking it directly answers
-    // `redirect_uri=http://localhost:8000` — host `localhost`, no path. Dex is
-    // lenient about both for a public client; Keycloak, Okta and Entra are not.
-    //
-    // The listener stays on 127.0.0.1 — also what kubelogin does — and the
-    // callback parser reads the query off whatever path arrives, so serving at
-    // the root costs nothing here.
+    // A provider matches redirect URIs by string (RFC 6749 §3.1.2.3), so the
+    // port alone is not enough: `kubectl oidc-login` sends
+    // `redirect_uri=http://localhost:8000` — host `localhost`, no path — and
+    // Keycloak, Okta and Entra reject anything else (Dex is lenient). The
+    // listener stays on 127.0.0.1, as kubelogin's does, and the parser reads
+    // the query off whatever path arrives.
     let redirect_uri = redirect_uri_for(redirect_port);
 
     let auth_url = auth.generate_auth_url(&redirect_uri).await?;

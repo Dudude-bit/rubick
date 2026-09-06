@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 pub struct YamlEditorConfig {
     /// History entries by resource key (kind:namespace:name)
     #[serde(default)]
-    pub history: std::collections::HashMap<String, Vec<YamlHistoryEntry>>,
+    pub history: std::collections::BTreeMap<String, Vec<YamlHistoryEntry>>,
 }
 
 /// YAML history entry
@@ -39,7 +39,7 @@ pub struct YamlHistoryEntry {
 pub struct InfrastructureBuilderConfig {
     /// State per context
     #[serde(default)]
-    pub contexts: std::collections::HashMap<String, InfrastructureBuilderState>,
+    pub contexts: std::collections::BTreeMap<String, InfrastructureBuilderState>,
 }
 
 /// Infrastructure builder state for a context

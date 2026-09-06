@@ -46,6 +46,10 @@ pub struct WatchManager {
     sessions: Arc<DashMap<String, WatchSession>>,
 }
 
+/// What the API server is asked to hold a watch open for, in seconds. Just
+/// under the five minutes kube used to enforce from the client side.
+const WATCH_TIMEOUT_SECS: u32 = 290;
+
 impl WatchManager {
     #[must_use]
     pub fn new(event_tx: broadcast::Sender<AppEvent>) -> Self {
@@ -241,7 +245,12 @@ impl WatchManager {
                 }
             }
 
-            let mut stream = watcher(api, WatcherConfig::default()).boxed();
+            // The API server closes the watch at this limit and the watcher
+            // re-lists, which is what recycles one that has gone quiet. Until
+            // `read_timeout` was removed from the client, kube's own 295-second
+            // socket timer did this by accident; now it is asked for.
+            let mut stream =
+                watcher(api, WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS)).boxed();
 
             // Surface watcher failures (RBAC denial, network hiccups) to the
             // frontend as a `Failed` event after a streak of consecutive

@@ -70,6 +70,28 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
     }
 }
 
+/// The finding for a `config.toml` that would not parse and was moved aside.
+///
+/// Misconfigured, not blocking: the cluster still connects, but the reader's
+/// saved settings — theme, cluster bindings, port-forwards — did not load,
+/// and the file that held them is now a backup they can recover by hand. The
+/// app used to answer this by never opening a window, since the parse ran in
+/// `setup` before one existed.
+#[must_use]
+pub fn settings_recovered_finding(path: &str, backup: &str, why: &str) -> Finding {
+    Finding {
+        severity: Severity::Misconfigured,
+        title: "Settings could not be read".to_string(),
+        detail: format!(
+            "{why}. The app started on default settings and kept your previous \
+             file at {backup}, so nothing was lost — open it to recover a value \
+             by hand. Saving any setting writes a fresh {path}."
+        ),
+        subject: Some(path.to_string()),
+        about_shell: false,
+    }
+}
+
 /// The finding for a login shell that did not answer at startup.
 ///
 /// `None` when it answered, or was never needed. Without an answer the
@@ -189,6 +211,35 @@ mod tests {
             finding.detail
         );
         assert_eq!(finding.subject.as_deref(), Some("orders-stage"));
+    }
+
+    /// A config the app could not read, once moved aside: the reader is told
+    /// where their settings went and how to get them back, and it stops short
+    /// of Blocking because the cluster still connects. The old answer was no
+    /// window and no word.
+    #[test]
+    fn a_recovered_config_names_its_backup_and_stops_short_of_blocking() {
+        let finding = settings_recovered_finding(
+            "/home/k/.config/k8s-gui/config.toml",
+            "/home/k/.config/k8s-gui/config.toml.corrupt.171",
+            "Failed to parse config: expected `=`",
+        );
+        assert_eq!(finding.severity, Severity::Misconfigured);
+        assert!(
+            finding.detail.contains("config.toml.corrupt.171"),
+            "detail should say where the old file was kept, got: {}",
+            finding.detail
+        );
+        assert!(
+            finding.detail.contains("expected `=`"),
+            "detail should carry the parse error, got: {}",
+            finding.detail
+        );
+        assert_eq!(
+            finding.subject.as_deref(),
+            Some("/home/k/.config/k8s-gui/config.toml")
+        );
+        assert!(!finding.about_shell);
     }
 
     #[test]
