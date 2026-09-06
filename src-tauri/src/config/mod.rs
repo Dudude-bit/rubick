@@ -151,11 +151,20 @@ impl AppConfig {
             Err(why) => match Self::config_path() {
                 Ok(path) if path.exists() => {
                     let (config, recovery) = Self::move_aside(&path, why.to_string());
-                    tracing::error!(
-                        "config.toml did not parse ({}); started on defaults, kept it at {}",
-                        recovery.why,
-                        recovery.backup
-                    );
+                    if let Some(backup) = &recovery.backup {
+                        tracing::error!(
+                            "config.toml did not parse ({}); started on defaults, kept it at {}",
+                            recovery.why,
+                            backup
+                        );
+                    } else {
+                        tracing::error!(
+                            "config.toml did not parse ({}) and could not be moved aside; \
+                             started on defaults, {} is still there",
+                            recovery.why,
+                            recovery.path
+                        );
+                    }
                     let _ = RECOVERY.set(recovery);
                     config
                 }
@@ -168,16 +177,17 @@ impl AppConfig {
     ///
     /// Takes the path so a test can drive it without the real config
     /// directory. The backup name is timestamped so a second corruption never
-    /// overwrites the first; a rename that fails still starts the app.
+    /// overwrites the first. A rename that fails still starts the app, but
+    /// `backup` is then `None` — the broken file is still where it was, which
+    /// the finding must say rather than claim a move that did not happen.
     fn move_aside(path: &Path, why: String) -> (Self, ConfigRecovery) {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
         let backup_path = path.with_extension(format!("toml.corrupt.{stamp}"));
-        let backup = match std::fs::rename(path, &backup_path) {
-            Ok(()) => backup_path.to_string_lossy().into_owned(),
-            Err(_) => path.to_string_lossy().into_owned(),
-        };
+        let backup = std::fs::rename(path, &backup_path)
+            .ok()
+            .map(|()| backup_path.to_string_lossy().into_owned());
         (
             Self::default(),
             ConfigRecovery {
@@ -194,8 +204,9 @@ impl AppConfig {
 pub struct ConfigRecovery {
     /// Where the broken file was.
     pub path: String,
-    /// Where it is now, kept so the reader can recover settings by hand.
-    pub backup: String,
+    /// Where it is now, kept so the reader can recover settings by hand — or
+    /// `None` when it could not be moved and is still at `path`.
+    pub backup: Option<String>,
     /// Why it would not parse — the words `toml` gave.
     pub why: String,
 }
@@ -297,14 +308,17 @@ mod tests {
         // The broken file is gone from its place...
         assert!(!path.exists(), "the broken file should have moved");
         // ...and its bytes are preserved under a backup that names the trouble.
-        assert_ne!(recovery.backup, recovery.path, "a rename should have run");
-        assert!(recovery.backup.contains("corrupt"), "{}", recovery.backup);
+        let backup = recovery
+            .backup
+            .expect("a rename should have produced a backup");
+        assert_ne!(backup, recovery.path, "a rename should have run");
+        assert!(backup.contains("corrupt"), "{backup}");
         assert_eq!(
-            std::fs::read_to_string(&recovery.backup).unwrap(),
+            std::fs::read_to_string(&backup).unwrap(),
             "this = is = broken = toml"
         );
 
-        std::fs::remove_file(&recovery.backup).ok();
+        std::fs::remove_file(&backup).ok();
     }
 
     /// Every config file written before those three sections were removed
