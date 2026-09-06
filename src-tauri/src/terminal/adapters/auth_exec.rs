@@ -18,9 +18,21 @@ use tokio::task;
 /// The terminal stream itself is bounded by xterm scrollback, not this cap.
 const MAX_STDOUT_SIZE: usize = 1024 * 1024;
 
-/// PTY default size at spawn. The frontend sends a real resize as soon
-/// as xterm measures itself, so this is just a sane initial value.
-const INITIAL_COLS: u16 = 80;
+/// The console a credential is drawn on, kept wider than any credential.
+///
+/// `ConPTY` is a screen buffer, not a pipe: a line longer than the console is
+/// wrapped, and what comes back out has been through that wrapping. Measured
+/// on Windows, a 3893-character token down an 80-column console comes back
+/// 3919 characters long — still ASCII-graphic, still whitespace-free, and no
+/// longer the token the plugin wrote, so every check passes and the cluster
+/// answers `Unauthorized` with nothing to say about why. Down a console it
+/// never wraps in, the same token comes back whole. Both are tested in
+/// `auth::interactive::cred`.
+///
+/// The width is not the reader's to choose, which is why `resize` floors it:
+/// xterm measures the pane and asks for its own width long before the plugin
+/// has printed anything.
+const CREDENTIAL_COLS: u16 = 8192;
 const INITIAL_ROWS: u16 = 24;
 
 /// Adapter for interactive auth-exec processes.
@@ -99,7 +111,7 @@ impl TerminalAdapter for AuthExecAdapter {
         let pair = pty_system
             .openpty(PtySize {
                 rows: INITIAL_ROWS,
-                cols: INITIAL_COLS,
+                cols: CREDENTIAL_COLS,
                 pixel_width: 0,
                 pixel_height: 0,
             })
@@ -231,6 +243,9 @@ impl TerminalAdapter for AuthExecAdapter {
             Some(m) => m.clone(),
             None => return Ok(()),
         };
+        // The pane's width would wrap the credential; see `CREDENTIAL_COLS`.
+        // Rows follow the reader, columns do not.
+        let cols = cols.max(CREDENTIAL_COLS);
 
         task::spawn_blocking(move || {
             let m = master.lock();
