@@ -33,6 +33,7 @@ pub struct DeploymentInfo {
     pub init_containers: Vec<DeploymentContainerInfo>,
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
+    pub pod_resources: DeploymentContainerResources,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -78,6 +79,12 @@ pub struct TemplateContainers {
     /// again per kind for the reason the container lists are: the kind that
     /// reads the `PodSpec` itself is the one that forgets, and shows nothing.
     pub service_account_name: Option<String>,
+    /// Pod-level requests/limits the template declares (KEP-2837), carried
+    /// like `service_account_name` because it is a property of the `PodSpec`,
+    /// not of any container. Where set, it is the replica's own ceiling in
+    /// place of the container sum — the Usage block applies it exactly as
+    /// `PodInfo` does, so a controller and its pods do not disagree.
+    pub pod_resources: DeploymentContainerResources,
 }
 
 impl TemplateContainers {
@@ -87,6 +94,7 @@ impl TemplateContainers {
         let init = spec
             .and_then(|s| s.init_containers.as_deref())
             .unwrap_or_default();
+        let pod_level = spec.and_then(|s| s.resources.as_ref());
 
         Self {
             containers: app
@@ -98,6 +106,10 @@ impl TemplateContainers {
                 .map(|c| DeploymentContainerInfo::declared(c, init_phase(c)))
                 .collect(),
             service_account_name: spec.and_then(|s| s.service_account_name.clone()),
+            pod_resources: DeploymentContainerResources {
+                requests: map_quantities(pod_level.and_then(|r| r.requests.as_ref())),
+                limits: map_quantities(pod_level.and_then(|r| r.limits.as_ref())),
+            },
         }
     }
 }
@@ -170,6 +182,7 @@ impl From<&Deployment> for DeploymentInfo {
             containers: template.containers,
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
+            pod_resources: template.pod_resources,
             labels: deployment.labels().clone(),
             annotations: deployment.annotations().clone(),
             created_at: deployment.creation_timestamp().map(|t| t.moment()),
@@ -246,6 +259,32 @@ mod tests {
             containers: vec![container("app", None)],
             ..Default::default()
         }
+    }
+
+    /// KEP-2837: pod-level resources on the template are the replica's own —
+    /// carried here next to the service account, not folded into a container,
+    /// so the workload's Usage ceiling can match its pods' instead of saying
+    /// "no limits" over pods that each show one.
+    #[test]
+    fn a_templates_pod_level_resources_are_carried() {
+        use k8s_openapi::api::core::v1::ResourceRequirements;
+        let spec = PodSpec {
+            containers: vec![container("app", None)],
+            resources: Some(ResourceRequirements {
+                limits: Some([("cpu".to_string(), Quantity("2".to_string()))].into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let template = TemplateContainers::of(Some(&spec));
+        assert_eq!(
+            template.pod_resources.limits.get("cpu").map(String::as_str),
+            Some("2"),
+            "the pod-level limit must reach the workload info"
+        );
+        // The app container declared none of its own — the ceiling is the
+        // pod-level block's, not a container sum.
+        assert!(template.containers[0].resources.limits.is_empty());
     }
 
     /// Reading `.containers` alone answered "which containers does this

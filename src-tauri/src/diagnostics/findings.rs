@@ -78,15 +78,24 @@ pub fn unreadable_kubeconfig_finding(path: &str, why: &str) -> Finding {
 /// app used to answer this by never opening a window, since the parse ran in
 /// `setup` before one existed.
 #[must_use]
-pub fn settings_recovered_finding(path: &str, backup: &str, why: &str) -> Finding {
-    Finding {
-        severity: Severity::Misconfigured,
-        title: "Settings could not be read".to_string(),
-        detail: format!(
+pub fn settings_recovered_finding(path: &str, backup: Option<&str>, why: &str) -> Finding {
+    let detail = match backup {
+        Some(backup) => format!(
             "{why}. The app started on default settings and kept your previous \
              file at {backup}, so nothing was lost — open it to recover a value \
              by hand. Saving any setting writes a fresh {path}."
         ),
+        // The rename failed too — do not promise a backup that is not there.
+        None => format!(
+            "{why}. The app started on default settings but could not move the \
+             unreadable file aside, so {path} is still there — saving a setting \
+             will fail until you fix or remove it by hand."
+        ),
+    };
+    Finding {
+        severity: Severity::Misconfigured,
+        title: "Settings could not be read".to_string(),
+        detail,
         subject: Some(path.to_string()),
         about_shell: false,
     }
@@ -221,7 +230,7 @@ mod tests {
     fn a_recovered_config_names_its_backup_and_stops_short_of_blocking() {
         let finding = settings_recovered_finding(
             "/home/k/.config/k8s-gui/config.toml",
-            "/home/k/.config/k8s-gui/config.toml.corrupt.171",
+            Some("/home/k/.config/k8s-gui/config.toml.corrupt.171"),
             "Failed to parse config: expected `=`",
         );
         assert_eq!(finding.severity, Severity::Misconfigured);
@@ -240,6 +249,28 @@ mod tests {
             Some("/home/k/.config/k8s-gui/config.toml")
         );
         assert!(!finding.about_shell);
+    }
+
+    /// The other outcome, which the finding used to lie about: the file could
+    /// not be moved either, so it is still where it was. Promising "kept at X,
+    /// nothing lost" then was the third state collapsing into the second.
+    #[test]
+    fn a_config_that_could_not_be_moved_aside_says_it_is_still_there() {
+        let finding = settings_recovered_finding(
+            "/home/k/.config/k8s-gui/config.toml",
+            None,
+            "Failed to parse config: expected `=`",
+        );
+        assert!(
+            finding.detail.contains("still there"),
+            "detail must say the unreadable file was not moved, got: {}",
+            finding.detail
+        );
+        assert!(
+            !finding.detail.contains("nothing was lost"),
+            "detail must not claim a backup that was not made, got: {}",
+            finding.detail
+        );
     }
 
     #[test]

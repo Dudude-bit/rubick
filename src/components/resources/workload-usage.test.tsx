@@ -15,6 +15,8 @@ import { commands } from "@/lib/commands";
 import { useCapabilityState } from "@/integrations";
 import { useUsageHistoryStore } from "@/stores/usageHistoryStore";
 import { WorkloadUsage } from "./workload-usage";
+import { templateCeiling } from "./workload-ceiling";
+import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import type { DeploymentContainerInfo, PodInfo } from "@/generated/types";
 
 function pod(name: string, phase: string): PodInfo {
@@ -267,5 +269,48 @@ describe("WorkloadUsage with a pod running", () => {
     await waitFor(() => expect(dom.querySelector("svg")).not.toBeNull());
     expect(screen.getByText(/summed over 1 pod/i)).toBeInTheDocument();
     expect(screen.queryByText(/scaled to zero/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("templateCeiling with pod-level resources (KEP-2837)", () => {
+  const withLimits = container; // cpu 100m, memory 64Mi at the container level
+  const bare: DeploymentContainerInfo = {
+    ...container,
+    resources: { requests: {}, limits: {} },
+  };
+
+  it("prefers a pod-level limit over the container sum, per resource", () => {
+    expect(
+      templateCeiling({
+        containers: [withLimits],
+        initContainers: [],
+        podResources: { requests: {}, limits: { cpu: "2", memory: "1Gi" } },
+      })
+    ).toEqual({ cpu: parseCPU("2"), memory: parseMemory("1Gi") });
+  });
+
+  it("falls back to the container sum where the pod level sets nothing", () => {
+    expect(
+      templateCeiling({ containers: [withLimits], initContainers: [] })
+    ).toEqual({ cpu: parseCPU("100m"), memory: parseMemory("64Mi") });
+  });
+
+  it("still finds a ceiling from the pod level when no container declares one", () => {
+    expect(
+      templateCeiling({
+        containers: [bare],
+        initContainers: [],
+        podResources: { requests: {}, limits: { cpu: "2", memory: "1Gi" } },
+      })
+    ).toEqual({ cpu: parseCPU("2"), memory: parseMemory("1Gi") });
+  });
+
+  it("is null where neither the container nor the pod level declares a limit", () => {
+    expect(templateCeiling({ containers: [bare], initContainers: [] })).toEqual(
+      {
+        cpu: null,
+        memory: null,
+      }
+    );
   });
 });

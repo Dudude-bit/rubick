@@ -315,7 +315,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     // exists for: startup moved it aside and carried on, and this is the one
     // place the reader is told their settings did not load.
     let recovery_finding = crate::config::recovery_report().map(|recovery| {
-        super::settings_recovered_finding(&recovery.path, &recovery.backup, &recovery.why)
+        super::settings_recovered_finding(&recovery.path, recovery.backup.as_deref(), &recovery.why)
     });
 
     // The parsed config the app is already living on, not a fresh read of
