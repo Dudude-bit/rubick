@@ -1,5 +1,6 @@
 //! Service-specific types: `ServiceInfo`, `ServicePortInfo`.
 
+use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Service;
 use kube::ResourceExt;
@@ -97,7 +98,7 @@ impl From<&Service> for ServiceInfo {
             selector: spec.and_then(|s| s.selector.clone()).unwrap_or_default(),
             labels: service.labels().clone(),
             annotations: service.annotations().clone(),
-            created_at: service.creation_timestamp().map(|t| t.0),
+            created_at: service.creation_timestamp().map(|t| t.moment()),
         }
     }
 }

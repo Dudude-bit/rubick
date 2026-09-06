@@ -11,6 +11,7 @@ use crate::utils::{format_cpu, parse_cpu, parse_memory};
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{display_status, restarts};
+use crate::utils::Moment;
 
 /// Simplified pod information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -298,7 +299,7 @@ impl From<&Pod> for PodInfo {
             init_containers,
             labels: pod.labels().clone(),
             annotations: pod.annotations().clone(),
-            created_at: pod.creation_timestamp().map(|t| t.0),
+            created_at: pod.creation_timestamp().map(|t| t.moment()),
             restart_count,
             last_restart_at,
             cpu_requests,
@@ -402,7 +403,7 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 0,
                 reason: Some("Completed".to_string()),
-                finished_at: Some(Time(at)),
+                finished_at: Some(Time(crate::utils::moment::as_cluster_time(at))),
                 ..Default::default()
             }),
             ..Default::default()
@@ -428,7 +429,7 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 1,
                 reason: Some("Error".to_string()),
-                finished_at: Some(Time(failed_at)),
+                finished_at: Some(Time(crate::utils::moment::as_cluster_time(failed_at))),
                 ..Default::default()
             }),
             ..Default::default()

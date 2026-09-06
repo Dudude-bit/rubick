@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
+use crate::utils::Moment;
 
 /// What a Deployment stamps on every `ReplicaSet` it creates, and on itself
 /// for the one it is currently on. Comparing the two is the whole of
@@ -109,7 +110,7 @@ impl From<&ReplicaSetCondition> for ConditionInfo {
             status: cond.status.clone(),
             reason: cond.reason.clone(),
             message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
     }

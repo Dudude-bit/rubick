@@ -4,6 +4,8 @@ use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomRe
 use kube::api::DynamicObject;
 use kube::ResourceExt;
 
+use crate::utils::Moment;
+
 use super::types::{
     CrdAcceptedNames, CrdCondition, CrdDetailInfo, CrdInfo, CrdVersionInfo,
     CustomResourceDetailInfo, CustomResourceInfo, OwnerReferenceInfo, PrinterColumn,
@@ -33,7 +35,7 @@ impl From<&CustomResourceDefinition> for CrdInfo {
             version: storage_version,
             short_names: names.short_names.clone().unwrap_or_default(),
             categories: names.categories.clone().unwrap_or_default(),
-            created_at: crd.creation_timestamp().map(|t| t.0),
+            created_at: crd.creation_timestamp().map(|t| t.moment()),
         }
     }
 }
@@ -92,7 +94,7 @@ impl From<&CustomResourceDefinition> for CrdDetailInfo {
                         status: c.status.clone(),
                         reason: c.reason.clone(),
                         message: c.message.clone(),
-                        last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        last_transition_time: c.last_transition_time.as_ref().map(Moment::moment),
                     })
                     .collect()
             })
@@ -135,7 +137,7 @@ impl From<&CustomResourceDefinition> for CrdDetailInfo {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
             conditions,
-            created_at: crd.creation_timestamp().map(|t| t.0),
+            created_at: crd.creation_timestamp().map(|t| t.moment()),
             accepted_names: accepted,
         }
     }
@@ -203,7 +205,7 @@ fn extract_common_fields(obj: &DynamicObject) -> CommonResourceFields {
             .filter(|(k, _)| !k.starts_with("kubectl.kubernetes.io"))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect(),
-        created_at: obj.creation_timestamp().map(|t| t.0),
+        created_at: obj.creation_timestamp().map(|t| t.moment()),
         owner_references,
     }
 }

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::resources::serialization::OwnerReference;
 
 use super::pod_display::is_sidecar;
+use crate::utils::Moment;
 
 /// Extract owner references from Kubernetes metadata
 #[must_use]
@@ -198,7 +199,7 @@ impl From<&PodCondition> for ConditionInfo {
             status: cond.status.clone(),
             reason: cond.reason.clone(),
             message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
     }
@@ -211,7 +212,7 @@ impl From<&NodeCondition> for ConditionInfo {
             status: cond.status.clone(),
             reason: cond.reason.clone(),
             message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
     }
@@ -392,8 +393,8 @@ impl From<&ContainerStateTerminated> for TerminationInfo {
             signal: terminated.signal.filter(|s| *s != 0),
             reason: terminated.reason.clone(),
             message: terminated.message.clone(),
-            started_at: terminated.started_at.as_ref().map(|t| t.0),
-            finished_at: terminated.finished_at.as_ref().map(|t| t.0),
+            started_at: terminated.started_at.as_ref().map(Moment::moment),
+            finished_at: terminated.finished_at.as_ref().map(Moment::moment),
         }
     }
 }

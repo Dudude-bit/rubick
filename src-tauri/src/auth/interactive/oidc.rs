@@ -417,6 +417,7 @@ mod tests {
                 ("id-token".to_string(), token.clone()),
                 ("refresh-token".to_string(), "refresh".to_string()),
             ]),
+            other: std::collections::BTreeMap::default(),
         };
         let state = AppState::new().expect("state");
         let result = run_oidc_auth(&state, "ctx", "alice", &provider)

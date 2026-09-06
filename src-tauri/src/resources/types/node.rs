@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use super::common::ConditionInfo;
+use crate::utils::Moment;
 
 /// Node information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,7 +181,7 @@ impl From<&Node> for NodeInfo {
             capacity,
             allocatable,
             provider_id: spec.and_then(|s| s.provider_id.clone()),
-            created_at: node.creation_timestamp().map(|t| t.0),
+            created_at: node.creation_timestamp().map(|t| t.moment()),
         }
     }
 }

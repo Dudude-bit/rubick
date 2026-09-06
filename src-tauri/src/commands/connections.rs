@@ -37,6 +37,7 @@ use crate::resources::{
     ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
+use crate::utils::Moment;
 
 /// The whole neighbourhood of one object.
 ///
@@ -836,13 +837,15 @@ fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
                         status: c.status.clone(),
                         reason: c.reason.clone(),
                         message: c.message.clone(),
-                        last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        last_transition_time: c.last_transition_time.as_ref().map(Moment::moment),
                         observed_generation: None,
                     })
                     .collect()
             })
             .unwrap_or_default(),
-        last_scale_time: status.and_then(|s| s.last_scale_time.as_ref()).map(|t| t.0),
+        last_scale_time: status
+            .and_then(|s| s.last_scale_time.as_ref())
+            .map(Moment::moment),
     })
 }
 
@@ -989,7 +992,7 @@ fn budget_ref(pdb: &PodDisruptionBudget, ns: &str) -> ObjectRef {
                         status: c.status.clone(),
                         reason: Some(c.reason.clone()).filter(|r| !r.is_empty()),
                         message: Some(c.message.clone()).filter(|m| !m.is_empty()),
-                        last_transition_time: Some(c.last_transition_time.0),
+                        last_transition_time: Some(c.last_transition_time.moment()),
                         observed_generation: None,
                     })
                     .collect()

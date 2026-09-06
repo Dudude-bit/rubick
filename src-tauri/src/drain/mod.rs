@@ -96,9 +96,9 @@ pub enum DrainRefusal {
     ///
     /// Deliberately not called "budget". Kubernetes answers 429 both for a
     /// spent `PodDisruptionBudget` and for its own request throttling, and
-    /// `kube::core::ErrorResponse` in 0.97 is flattened to
-    /// status/message/reason/code — it carries neither `details.causes`,
-    /// which is where `DisruptionBudget` would be named, nor `Retry-After`.
+    /// `kube::core::Status` gained a `details` field in kube 4, but the API
+    /// server leaves it empty for a 429: there is no `causes` entry naming
+    /// `DisruptionBudget`, and no `Retry-After` either.
     /// Which of the two this is cannot be known from here, so it is not
     /// claimed. The drain dialog reads the budgets from the cluster itself
     /// and names them from that instead.
@@ -860,12 +860,14 @@ mod tests {
     }
 
     fn api_error(code: u16) -> kube::Error {
-        kube::Error::Api(kube::error::ErrorResponse {
-            status: "Failure".into(),
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
             message: format!("the server responded with {code}"),
             reason: "Whatever".into(),
             code,
-        })
+            metadata: None,
+            details: None,
+        }))
     }
 
     /// Points nowhere on purpose. Enough to exercise the bookkeeping —
@@ -1003,7 +1005,7 @@ mod tests {
     }
 
     /// Deliberately not named after the budget. Kubernetes answers 429 for
-    /// throttling too, and nothing in `ErrorResponse` tells the two apart.
+    /// throttling too, and nothing in `Status` tells the two apart.
     #[test]
     fn the_refusal_does_not_claim_to_know_which_429_it_was() {
         let Evicted::No(refusal, message) = outcome_of(api_error(429)) else {

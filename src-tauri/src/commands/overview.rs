@@ -16,6 +16,7 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
+use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -397,7 +398,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         .metadata
         .creation_timestamp
         .as_ref()
-        .map(|t| t.0.to_rfc3339());
+        .map(|t| t.moment().to_rfc3339());
     let status = pod.status.as_ref()?;
     let phase = status.phase.as_deref().unwrap_or("");
 
@@ -450,7 +451,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         let pending_since = scheduled
             .and_then(|c| c.last_transition_time.as_ref())
             .or(pod.metadata.creation_timestamp.as_ref())
-            .map(|t| t.0);
+            .map(Moment::moment);
         // Undated pods fall through and get reported: an unknown age is not
         // evidence that the pod is young.
         if pending_since.is_some_and(|t| now - t < chrono::Duration::seconds(PENDING_GRACE_SECONDS))
@@ -535,7 +536,7 @@ fn deployment_problems(deployments: &[Deployment]) -> Vec<ClusterProblem> {
                 since: condition
                     .as_ref()
                     .and_then(|c| c.last_transition_time.as_ref())
-                    .map(|t| t.0.to_rfc3339()),
+                    .map(|t| t.moment().to_rfc3339()),
                 restarts: None,
             })
         })
@@ -565,7 +566,7 @@ fn node_problems(nodes: &[Node]) -> Vec<ClusterProblem> {
                     since: condition
                         .as_ref()
                         .and_then(|c| c.last_transition_time.as_ref())
-                        .map(|t| t.0.to_rfc3339()),
+                        .map(|t| t.moment().to_rfc3339()),
                     restarts: None,
                 });
             }
@@ -603,8 +604,8 @@ fn recent_warnings(events: &[Event]) -> Vec<WarningGroup> {
         let last = event
             .last_timestamp
             .as_ref()
-            .map(|t| t.0)
-            .or_else(|| event.event_time.as_ref().map(|t| t.0));
+            .map(Moment::moment)
+            .or_else(|| event.event_time.as_ref().map(Moment::moment));
         if last.is_some_and(|t| t < cutoff) {
             continue;
         }
@@ -1153,7 +1154,9 @@ mod tests {
     use kube::core::ObjectMeta;
 
     fn at(now: DateTime<Utc>, seconds_ago: i64) -> Time {
-        Time(now - chrono::Duration::seconds(seconds_ago))
+        Time(crate::utils::moment::as_cluster_time(
+            now - chrono::Duration::seconds(seconds_ago),
+        ))
     }
 
     fn pod(name: &str, status: PodStatus) -> Pod {

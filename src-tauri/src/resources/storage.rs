@@ -252,11 +252,11 @@ mod tests {
     #[test]
     fn a_stamped_volume_sends_the_stamp_itself() {
         let mut pv = PersistentVolume::default();
-        pv.metadata.creation_timestamp = Some(Time(
+        pv.metadata.creation_timestamp = Some(Time(crate::utils::moment::as_cluster_time(
             chrono::DateTime::parse_from_rfc3339("2026-01-15T10:30:00Z")
                 .unwrap()
                 .with_timezone(&chrono::Utc),
-        ));
+        )));
 
         let sent = PersistentVolumeInfo::from(&pv).created_at.unwrap();
         assert!(sent.starts_with("2026-01-15T10:30:00"), "{sent}");

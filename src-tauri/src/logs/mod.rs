@@ -170,7 +170,9 @@ mod tests {
 
         let params = config.to_log_params();
         assert_eq!(
-            params.since_time.map(|t| t.timestamp_millis()),
+            params
+                .since_time
+                .map(k8s_openapi::jiff::Timestamp::as_millisecond),
             Some(1_700_000_000_000)
         );
         // The API takes one of the two and kube resolves the tie the

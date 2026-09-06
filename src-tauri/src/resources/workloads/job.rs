@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
+use crate::utils::Moment;
 
 /// Basic Job info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,7 +151,7 @@ impl From<&JobCondition> for ConditionInfo {
             status: cond.status.clone(),
             reason: cond.reason.clone(),
             message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
     }
