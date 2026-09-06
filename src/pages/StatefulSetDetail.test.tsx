@@ -42,6 +42,7 @@ function buildSet(
     containers: [],
     initContainers: [],
     serviceAccountName: null,
+    podResources: { requests: {}, limits: {} },
     labels: {},
     annotations: {},
     conditions: [],

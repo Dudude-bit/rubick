@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
+use crate::resources::{
+    ConditionInfo, DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt,
+    TemplateContainers,
+};
 use crate::utils::Moment;
 
 /// Basic `DaemonSet` info for list views
@@ -58,6 +61,7 @@ pub struct DaemonSetDetailInfo {
     pub init_containers: Vec<DeploymentContainerInfo>,
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
+    pub pod_resources: DeploymentContainerResources,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     /// `spec.selector` in the API's own text form — `app=demo`, and
@@ -101,6 +105,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             containers: template.containers,
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
+            pod_resources: template.pod_resources,
             labels: ds.labels().clone(),
             annotations: ds.annotations().clone(),
             selector,

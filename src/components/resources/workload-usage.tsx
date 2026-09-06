@@ -18,44 +18,14 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageBlock } from "@/components/resources/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
-import {
-  declaredContainers,
-  type ContainerLists,
-} from "@/lib/container-sequence";
-import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import type { UsageScope } from "@/integrations";
 import { useT } from "@/i18n/useT";
-import type {
-  DeploymentContainerInfo,
-  PodInfo,
-  ResourceConnections,
-} from "@/generated/types";
-
-/**
- * What a template says one replica may take, or null where it says nothing.
- *
- * Sidecars count, ordinary init containers do not: a native sidecar runs for
- * the life of the pod, so the scheduler adds its request to the app
- * containers' and the ceiling a chart draws has to match. An ordinary init
- * container has exited before any of this is measured.
- */
-function templateCeiling(
-  template: ContainerLists<DeploymentContainerInfo> | null | undefined
-): { cpu: number | null; memory: number | null } {
-  if (!template) return { cpu: null, memory: null };
-
-  let cpu = 0;
-  let memory = 0;
-  for (const container of declaredContainers(template)) {
-    if (container.phase === "init") continue;
-    const limits = container.resources?.limits;
-    if (limits?.cpu) cpu += parseCPU(limits.cpu);
-    if (limits?.memory) memory += parseMemory(limits.memory);
-  }
-
-  return { cpu: cpu > 0 ? cpu : null, memory: memory > 0 ? memory : null };
-}
+import type { PodInfo, ResourceConnections } from "@/generated/types";
+import {
+  templateCeiling,
+  type WorkloadTemplate,
+} from "@/components/resources/workload-ceiling";
 
 /**
  * A pod that has terminated is not using anything, and metrics-server has
@@ -82,7 +52,7 @@ export interface WorkloadUsageProps {
   name?: string | null;
   namespace: string | null | undefined;
   /** The pod template, which is where a controller's limits are declared. */
-  template: ContainerLists<DeploymentContainerInfo> | null | undefined;
+  template: WorkloadTemplate | null | undefined;
   /** Every pod the page found, exited ones included. */
   pods: readonly PodInfo[];
   /**

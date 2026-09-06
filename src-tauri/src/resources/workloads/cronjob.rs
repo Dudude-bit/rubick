@@ -9,7 +9,9 @@ use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
-use crate::resources::{DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
+use crate::resources::{
+    DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt, TemplateContainers,
+};
 
 /// Basic `CronJob` info for list views
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +71,7 @@ pub struct CronJobDetailInfo {
     pub init_containers: Vec<DeploymentContainerInfo>,
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
+    pub pod_resources: DeploymentContainerResources,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub owner_references: Vec<OwnerReference>,
@@ -108,6 +111,7 @@ impl From<&CronJob> for CronJobDetailInfo {
             containers: template.containers,
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
+            pod_resources: template.pod_resources,
             labels: cj.labels().clone(),
             annotations: cj.annotations().clone(),
             owner_references: extract_owner_references(cj.metadata.owner_references.as_ref()),
