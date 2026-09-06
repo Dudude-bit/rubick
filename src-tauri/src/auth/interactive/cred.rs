@@ -729,6 +729,14 @@ mod tests {
         let exited = adapter.last_exit_status();
 
         adapter.connect().await.expect("the child has to start");
+        // `ConPTY` opens by asking the terminal where the cursor is (`ESC[6n`)
+        // and does not get on with the child until something answers. In the
+        // app xterm answers; here nothing would, and the plugin would sit
+        // there printing nothing until the flow timed out.
+        adapter
+            .write_input(b"\x1b[1;1R")
+            .await
+            .expect("the console asked where the cursor is");
         // Draining stops on the exit status and then keeps reading: the
         // child is gone long before the reader thread has handed over what
         // the console still had, and stopping at `is_running` loses it.
