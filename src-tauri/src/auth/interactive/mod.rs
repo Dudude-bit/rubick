@@ -144,6 +144,11 @@ fn apply_exec_credentials(
 ) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
     use base64::Engine;
 
+    // A plugin that names no deadline may still be carrying one inside the
+    // token. Reading it there is the difference between the app knowing when
+    // the session ends and guessing that it does not.
+    let mut jwt_deadline = None;
+
     if let Some(mut token) = status.token {
         match cred::mend_bearer_token(&mut token) {
             // The length only — a token is a credential and does not go in a log.
@@ -172,6 +177,31 @@ fn apply_exec_credentials(
                 )));
             }
         }
+        // Whitespace is not the only thing a console can leave in a token,
+        // only the one that stops the JSON parsing. A JWT says whether what
+        // came back is still the token the plugin wrote.
+        match cred::read_jwt(&token) {
+            cred::TokenReading::Damaged { why } => {
+                return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                    "The credential plugin returned a token that begins as a JWT and \
+                     then {why}. The terminal the plugin ran under damaged its output; \
+                     the cluster would refuse this without saying why, and this is not \
+                     a rejected login."
+                ))));
+            }
+            cred::TokenReading::Jwt {
+                expires_at: Some(at),
+            } if at <= chrono::Utc::now() => {
+                return Err(Error::Auth(AuthError::Kubeconfig(format!(
+                    "The credential plugin returned a token that expired at {at}. \
+                     The cluster would refuse it as an unauthenticated request."
+                ))));
+            }
+            cred::TokenReading::Jwt { expires_at } => {
+                jwt_deadline = expires_at;
+            }
+            cred::TokenReading::Opaque => {}
+        }
         auth_info.token = Some(SecretString::from(token));
     }
     // A plugin hands back PEM, but the fields it lands in are kubeconfig
@@ -194,7 +224,8 @@ fn apply_exec_credentials(
     Ok(status
         .expiration_timestamp
         .and_then(|stamp| chrono::DateTime::parse_from_rfc3339(&stamp).ok())
-        .map(|stamp| stamp.with_timezone(&chrono::Utc)))
+        .map(|stamp| stamp.with_timezone(&chrono::Utc))
+        .or(jwt_deadline))
 }
 
 #[cfg(test)]

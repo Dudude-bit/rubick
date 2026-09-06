@@ -94,6 +94,80 @@ pub(super) fn mend_bearer_token(token: &mut String) -> TokenShape {
     TokenShape::Intact
 }
 
+/// What a token that claims to be a JWT turned out to say.
+///
+/// The three states exist because they are three different things to do, and
+/// the cluster answers all of them with the same bare `Unauthorized`.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum TokenReading {
+    /// Not a JWT. Rancher issues `<id>:<secret>`, and a bare opaque string is
+    /// a credential too — nothing here is entitled to judge either.
+    Opaque,
+    /// A JWT that reads, and the deadline it names where it names one.
+    Jwt {
+        expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    },
+    /// A JWT header, and then a payload that is not one. A token cannot be
+    /// half a JWT: whatever produced this damaged it in transit.
+    Damaged { why: String },
+}
+
+fn decode_segment(segment: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(segment)
+        .ok()
+}
+
+/// Read a bearer token as a JWT, where it is one.
+///
+/// The header is what decides: a JWT's first segment is base64url of an
+/// object naming `alg`. Once that has been seen, a payload that will not
+/// decode is damage rather than a token this cannot understand — which is
+/// the distinction the caller needs, because one is worth refusing before
+/// the request and the other is not.
+///
+/// The console is the reason this exists. `ConPTY` hands back a rendered
+/// screen: a repaint can put a run of the token on the buffer twice, and the
+/// duplicate is as ASCII-graphic and as whitespace-free as the real thing, so
+/// [`mend_bearer_token`] finds nothing to mend and the cluster refuses a
+/// credential nobody can see anything wrong with.
+pub(super) fn read_jwt(token: &str) -> TokenReading {
+    let mut parts = token.split('.');
+    let (Some(header), Some(payload), Some(_signature), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return TokenReading::Opaque;
+    };
+
+    let Some(header_json) = decode_segment(header)
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+    else {
+        return TokenReading::Opaque;
+    };
+    if header_json.get("alg").is_none() {
+        return TokenReading::Opaque;
+    }
+
+    let Some(bytes) = decode_segment(payload) else {
+        return TokenReading::Damaged {
+            why: "its payload is not the base64url a JWT carries".to_string(),
+        };
+    };
+    let Ok(claims) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return TokenReading::Damaged {
+            why: "its payload decodes to something that is not the JSON of a claim set".to_string(),
+        };
+    };
+
+    TokenReading::Jwt {
+        expires_at: claims
+            .get("exp")
+            .and_then(serde_json::Value::as_i64)
+            .and_then(|secs| chrono::DateTime::from_timestamp(secs, 0)),
+    }
+}
+
 /// Extract an `ExecCredential` JSON object from a (possibly noisy)
 /// stdout buffer.
 ///
@@ -516,47 +590,89 @@ mod tests {
         assert_eq!(cred.status.unwrap().token.as_deref(), Some("} fake }"));
     }
 
-    // ---- TEMPORARY PROBES (to be reverted) ----
-    #[test]
-    fn probe_nbsp_count_is_bytes_not_characters() {
-        let mut t = " a\u{00a0}b\u{2003}c ".to_string();
-        let shape = mend_bearer_token(&mut t);
-        println!("PROBE nbsp: shape={shape:?} token={t:?} chars_removed=4");
+    fn jwt(payload: &str) -> String {
+        use base64::Engine;
+        let b64 = |raw: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+        format!(
+            "{}.{}.{}",
+            b64(br#"{"alg":"RS256","typ":"JWT"}"#),
+            b64(payload.as_bytes()),
+            b64(&[7u8; 256])
+        )
     }
 
+    /// A token that is not a JWT is still a credential — Rancher issues
+    /// `<id>:<secret>` and plenty of clusters take an opaque string. Would
+    /// break if the reading refused everything it could not decode.
     #[test]
-    fn probe_rancher_style_token_with_colon() {
-        let mut t = "kubeconfig-u-abcde1234:x9f7q2mnb4vzt8k6hjw3rslp5dgy0c".to_string();
-        println!("PROBE rancher: {:?}", mend_bearer_token(&mut t));
+    fn a_token_that_is_not_a_jwt_is_not_judged() {
+        assert_eq!(read_jwt("kubeconfig-u-abc123:xyz789"), TokenReading::Opaque);
+        assert_eq!(read_jwt("plain-opaque-token"), TokenReading::Opaque);
+        // Three dotted segments, but the first is not a JWT header.
+        assert_eq!(read_jwt("one.two.three"), TokenReading::Opaque);
     }
 
+    /// `ConPTY` hands back a rendered screen, and a repaint can put a run of
+    /// the token on it twice. The duplicate is as ASCII-graphic and as
+    /// whitespace-free as the rest, so `mend_bearer_token` finds nothing —
+    /// and the cluster answers the broken credential with a bare 401 that
+    /// reads exactly like a rejected login. Would break if a JWT whose
+    /// payload no longer decodes were sent anyway.
     #[test]
-    fn probe_openshift_and_aws_and_jwt() {
-        for s in [
-            "sha256~kV46hPnEJhb4H4N1cM3-abcDEF_123",
-            "k8s-aws-v1.aHR0cHM6Ly9zdHMuYW1hem9uYXdzLmNvbS8_QWN0aW9u",
-            "eyJhbGciOiJSUzI1NiIsImtpZCI6IngifQ.eyJzdWIiOiIxIn0.sig-_",
-            "ya29.a0AfB_byC-x_9dQ",
-        ] {
-            let mut t = s.to_string();
-            println!("PROBE ok-shapes {:?} -> {:?}", s, mend_bearer_token(&mut t));
-        }
-    }
-
-    #[test]
-    fn probe_all_whitespace_token_becomes_empty_but_reports_mended() {
-        let mut t = "   ".to_string();
-        let shape = mend_bearer_token(&mut t);
-        println!(
-            "PROBE whitespace-only: shape={shape:?} token={t:?} len={}",
-            t.len()
+    fn a_payload_a_console_doubled_is_damage_and_not_a_login_the_cluster_refused() {
+        let good = jwt(r#"{"sub":"kirill","exp":33229977600}"#);
+        let mut parts = good.split('.');
+        let (header, payload, signature) = (
+            parts.next().unwrap(),
+            parts.next().unwrap(),
+            parts.next().unwrap(),
         );
+        // The screen showed the middle of the payload a second time.
+        let doubled = format!("{header}.{payload}{}.{signature}", &payload[..40]);
+
+        let mut token = doubled.clone();
+        assert_eq!(mend_bearer_token(&mut token), TokenShape::Intact);
+        assert!(matches!(read_jwt(&doubled), TokenReading::Damaged { .. }));
     }
 
+    /// The other half of the damage: a payload that still decodes, into
+    /// something that is not a claim set. A console that overwrote a run of
+    /// base64 with a run of its own leaves exactly this. Would break if only
+    /// the base64 step were checked.
     #[test]
-    fn probe_token_is_mutated_even_when_unusable() {
-        let mut t = "ab cd<ef".to_string();
-        let shape = mend_bearer_token(&mut t);
-        println!("PROBE unusable-mutation: shape={shape:?} token={t:?}");
+    fn a_payload_that_decodes_to_something_other_than_claims_is_damage() {
+        use base64::Engine;
+        let b64 = |raw: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+        let token = format!(
+            "{}.{}.{}",
+            b64(br#"{"alg":"RS256","typ":"JWT"}"#),
+            b64(b"Logging in ... done"),
+            b64(&[7u8; 256])
+        );
+
+        assert!(matches!(read_jwt(&token), TokenReading::Damaged { .. }));
+    }
+
+    /// The deadline a plugin does not name is often written inside the token
+    /// it returns. Reading it there is what lets a surface say when the
+    /// session ends instead of assuming it never does.
+    #[test]
+    fn an_undamaged_jwt_hands_back_the_deadline_it_carries() {
+        let reading = read_jwt(&jwt(r#"{"sub":"kirill","exp":33229977600}"#));
+
+        let TokenReading::Jwt { expires_at } = reading else {
+            panic!("a JWT this test built itself has to read as one");
+        };
+        assert_eq!(expires_at.map(|at| at.timestamp()), Some(33_229_977_600));
+    }
+
+    /// A JWT with no `exp` is a JWT with no stated deadline, which is a
+    /// different thing from one that has expired.
+    #[test]
+    fn a_jwt_naming_no_expiry_names_no_deadline() {
+        assert_eq!(
+            read_jwt(&jwt(r#"{"sub":"kirill"}"#)),
+            TokenReading::Jwt { expires_at: None }
+        );
     }
 }
