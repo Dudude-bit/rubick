@@ -726,17 +726,23 @@ mod tests {
         };
         let mut adapter = AuthExecAdapter::new(command, args, HashMap::new());
         let collected = adapter.collected_stdout();
+        let exited = adapter.last_exit_status();
 
         adapter.connect().await.expect("the child has to start");
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
-        let mut idle = 0;
+        // Draining stops on the exit status and then keeps reading: the
+        // child is gone long before the reader thread has handed over what
+        // the console still had, and stopping at `is_running` loses it.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        let mut after_exit = 0;
         while tokio::time::Instant::now() < deadline {
             match adapter.read_output().await {
-                Ok(Some(_)) => idle = 0,
+                Ok(Some(_)) => after_exit = 0,
                 Ok(None) => {
-                    idle += 1;
-                    if idle > 10 && !adapter.is_running() {
-                        break;
+                    if exited.lock().is_some() {
+                        after_exit += 1;
+                        if after_exit > 50 {
+                            break;
+                        }
                     }
                     tokio::time::sleep(Duration::from_millis(20)).await;
                 }
@@ -747,6 +753,13 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let buffer = collected.lock().clone();
+        let seen = String::from_utf8_lossy(&buffer);
+        println!(
+            "console handed back {} bytes, exit {:?}: {}",
+            buffer.len(),
+            exited.lock(),
+            seen.chars().take(600).collect::<String>().escape_debug()
+        );
         let credential = extract_exec_credential(&buffer).unwrap_or_else(|why| {
             panic!("no credential in {} bytes of console: {why}", buffer.len())
         });
