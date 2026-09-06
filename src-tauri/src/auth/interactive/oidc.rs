@@ -46,13 +46,17 @@ const TOKEN_SKEW_SECS: i64 = 60;
 ///
 /// The signature is the API server's business. All this decides is whether a
 /// token is worth sending, so anything unreadable simply reads as spent.
+/// When the token says it stops working, or `None` for one that is not a JWT
+/// or does not say.
+///
+/// Reads through `cred::read_jwt` rather than decoding again: a token damaged
+/// by the console it was drawn on must not look merely undated here while the
+/// exec path refuses it, or the same token is judged two ways.
 fn expiry_of(token: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-    let payload = token.split('.').nth(1)?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(payload)
-        .ok()?;
-    let claims: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    chrono::DateTime::from_timestamp(claims.get("exp")?.as_i64()?, 0)
+    match super::cred::read_jwt(token) {
+        super::cred::TokenReading::Jwt { expires_at } => expires_at,
+        super::cred::TokenReading::Opaque | super::cred::TokenReading::Damaged { .. } => None,
+    }
 }
 
 fn still_usable(token: &str) -> bool {
@@ -364,11 +368,20 @@ mod tests {
 
     /// A JWT shaped the way a provider issues one, expiring `secs` from now.
     /// Only the payload matters here — nothing verifies the other two parts.
+    /// A token shaped like the ones a provider actually issues: three
+    /// base64url segments, the first of them the JWT header naming `alg`.
+    /// The header is what `cred::read_jwt` decides on, so a fixture that
+    /// only spells the word would be judged not-a-JWT and would stop
+    /// exercising the path it was written for.
     fn token_expiring_in(secs: i64) -> String {
         let exp = (chrono::Utc::now() + chrono::Duration::seconds(secs)).timestamp();
-        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(format!(r#"{{"sub":"a@b.c","exp":{exp}}}"#));
-        format!("header.{payload}.signature")
+        let b64 = |raw: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw);
+        format!(
+            "{}.{}.{}",
+            b64(br#"{"alg":"RS256","typ":"JWT"}"#),
+            b64(format!(r#"{{"sub":"a@b.c","exp":{exp}}}"#).as_bytes()),
+            b64(&[7u8; 256])
+        )
     }
 
     #[test]
