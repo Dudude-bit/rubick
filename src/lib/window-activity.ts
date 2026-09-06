@@ -1,17 +1,12 @@
 /**
  * Whether the OS window is on screen, whether it has focus, and when the
- * reader last touched it.
+ * reader last touched it — three window-level facts the app polls against,
+ * held in one place because they belong to the window, not any screen in it.
  *
- * Three facts the whole app polls against, held in one place because they are
- * properties of the window and not of any screen inside it. `useLiveQuery`
- * reads them; nothing else needs to.
- *
- * Both a DOM source and a Tauri source feed each fact, which is deliberate
- * rather than belt-and-braces. `document.visibilityState` is the only thing
- * that knows the webview has been occluded or the window minimised; Tauri's
- * `tauri://focus` / `tauri://blur` are the only things that reliably know the
- * *window* lost focus on Linux, where a webview can keep DOM focus after the
- * window manager has moved on. Whichever fires, the answer is the same.
+ * A DOM and a Tauri source feed each fact on purpose: only
+ * `document.visibilityState` knows the webview was occluded or minimised, and
+ * only `tauri://focus`/`blur` reliably knows the *window* lost focus on Linux,
+ * where a webview keeps DOM focus after the window manager moves on.
  *
  * @module lib/window-activity
  */

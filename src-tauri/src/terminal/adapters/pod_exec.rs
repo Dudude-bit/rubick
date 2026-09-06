@@ -171,13 +171,10 @@ impl TerminalAdapter for PodExecAdapter {
 
     /// Tell the far end how wide the pane is.
     ///
-    /// This used to throw the numbers away, under a comment saying kube could
-    /// not do it. kube has carried the resize channel since 0.77 and sent it
-    /// correctly since 0.89; the note outlived the limitation. Everything
-    /// above this — xterm's measurement, `terminal_resize`, the manager —
-    /// was already wired, so a shell ran at the API server's default geometry
-    /// for its whole life and anything drawing a full screen, `top` and
-    /// `vim` among them, was drawn to the wrong width.
+    /// This threw the numbers away under a note saying kube could not do it;
+    /// kube has sent resizes correctly since 0.89, and everything above here
+    /// was already wired. A shell ran at the server's default geometry for
+    /// its whole life.
     async fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
         use futures::SinkExt as _;
 

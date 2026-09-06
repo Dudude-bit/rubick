@@ -18,20 +18,10 @@ use tokio::task;
 /// The terminal stream itself is bounded by xterm scrollback, not this cap.
 const MAX_STDOUT_SIZE: usize = 1024 * 1024;
 
-/// The console a credential is drawn on, kept wider than any credential.
-///
-/// `ConPTY` is a screen buffer, not a pipe: a line longer than the console is
-/// wrapped, and what comes back out has been through that wrapping. Measured
-/// on Windows, a 3893-character token down an 80-column console comes back
-/// 3919 characters long — still ASCII-graphic, still whitespace-free, and no
-/// longer the token the plugin wrote, so every check passes and the cluster
-/// answers `Unauthorized` with nothing to say about why. Down a console it
-/// never wraps in, the same token comes back whole. Both are tested in
-/// `auth::interactive::cred`.
-///
-/// The width is not the reader's to choose, which is why `resize` floors it:
-/// xterm measures the pane and asks for its own width long before the plugin
-/// has printed anything.
+/// Wider than any credential, because `ConPTY` wraps at the console width and
+/// hands back what it drew: a 3893-character token came back 3919 characters
+/// long. `resize` floors it — the pane would otherwise ask for its own width
+/// before the plugin has printed. Tested in `auth::interactive::cred`.
 const CREDENTIAL_COLS: u16 = 8192;
 const INITIAL_ROWS: u16 = 24;
 
@@ -409,19 +399,12 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn child_inherits_parent_process_env() {
-        // `portable_pty::CommandBuilder::new` ships an *empty*
-        // environment by default. Without inheriting the parent
-        // process env, kubectl exec-credential plugins (oidc-login,
-        // kubelogin, etc.) lose HOME/USER/XDG_CACHE_HOME and bail
-        // out before printing their `ExecCredential` JSON — the
-        // user sees "expected value at line 2 column 1" from
-        // serde_json because the buffer is empty or contains an
-        // error message instead of JSON.
-        //
-        // This test pins inheritance by setting a recognisable
-        // marker on the test process env and asserting the child
-        // can see it. If a future refactor accidentally clears env
-        // again, the assertion catches it.
+        // `portable_pty::CommandBuilder::new` ships an *empty* environment,
+        // so without inheriting the parent's, exec-credential plugins lose
+        // HOME/USER/XDG_CACHE_HOME and bail before printing their JSON — the
+        // user sees serde_json's "expected value at line 2 column 1". A marker
+        // on the test process env, asserted visible in the child, catches a
+        // refactor that clears env again.
         let marker_value = format!("auth-exec-env-marker-{}", std::process::id());
         // SAFETY: tests run single-threaded enough for this; the
         // marker is unique per test process.

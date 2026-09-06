@@ -77,13 +77,13 @@ def main():
     counted = commented = 0
 
     for path, lines in files.items():
-        is_test_file = ".test." in path
         for length, after in runs(lines):
             # The line the run sits on decides whether it is a test's doc
             # comment — the run itself looks the same either way.
             subject = lines[after] if after < len(lines) else ""
-            exempt = is_test_file and TEST_SUBJECT.match(subject)
-            if exempt:
+            # Rust keeps its tests in the file they cover, so the line the run
+            # sits on has to decide this, not the file's name.
+            if TEST_SUBJECT.match(subject):
                 continue
             commented += length
         counted += sum(1 for line in lines if line.strip())
