@@ -1154,9 +1154,10 @@ mod tests {
     use kube::core::ObjectMeta;
 
     fn at(now: DateTime<Utc>, seconds_ago: i64) -> Time {
-        Time(crate::utils::moment::as_cluster_time(
-            now - chrono::Duration::seconds(seconds_ago),
-        ))
+        Time(
+            crate::utils::moment::as_cluster_time(now - chrono::Duration::seconds(seconds_ago))
+                .expect("an instant this test wrote itself"),
+        )
     }
 
     fn pod(name: &str, status: PodStatus) -> Pod {

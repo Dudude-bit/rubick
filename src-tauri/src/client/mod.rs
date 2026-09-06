@@ -65,6 +65,20 @@ pub struct K8sClientManager {
     credential_deadlines: DashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
+/// The retry policy this app is willing to have applied under it.
+///
+/// kube 4 turns client-level retries on by default: fifteen attempts, backing
+/// off to a thousand seconds, on 429, 503 and 504. Evicting a pod answers 429
+/// when a `PodDisruptionBudget` will not allow it — and `drain` is built on
+/// receiving that answer itself, so it can name the budget holding the node
+/// and wait in a `select!` the reader can cancel. Left on, an eviction would
+/// sit inside kube for a quarter of an hour, deaf to that cancel and
+/// invisible to the progress the dialog is drawing.
+fn without_client_retries(mut config: Config) -> Config {
+    config.default_retry = false;
+    config
+}
+
 impl K8sClientManager {
     /// Create a new client manager
     #[must_use]
@@ -357,6 +371,7 @@ impl K8sClientManager {
 
         let config = Config::from_custom_kubeconfig(kubeconfig, &options)
             .await
+            .map(without_client_retries)
             .map_err(|e| {
                 Error::Config(format!(
                     "Failed to create config for context {context}: {e}"
@@ -386,6 +401,7 @@ impl K8sClientManager {
 
         Config::from_custom_kubeconfig(kubeconfig.clone(), &options)
             .await
+            .map(without_client_retries)
             .map_err(|e| {
                 Error::Config(format!(
                     "Failed to create config for context {context}: {e}"

@@ -193,6 +193,7 @@ mod tests {
     /// this and asserts against `at`.
     fn stamp(rfc3339: &str) -> k8s_openapi::jiff::Timestamp {
         crate::utils::moment::as_cluster_time(at(rfc3339))
+            .expect("an instant this test wrote itself")
     }
 
     /// An event written through `events.k8s.io` carries its time in

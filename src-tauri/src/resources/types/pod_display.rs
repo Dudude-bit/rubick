@@ -411,8 +411,10 @@ mod tests {
     #[test]
     fn a_deleted_pod_reads_terminating() {
         let mut p = pod("Running");
-        p.metadata.deletion_timestamp =
-            Some(Time(crate::utils::moment::as_cluster_time(Utc::now())));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().container_statuses = Some(vec![status("app", running(), true)]);
         assert_eq!(display_status(&p), "Terminating");
     }
@@ -420,8 +422,10 @@ mod tests {
     #[test]
     fn a_deleted_pod_on_a_lost_node_reads_unknown() {
         let mut p = pod("Running");
-        p.metadata.deletion_timestamp =
-            Some(Time(crate::utils::moment::as_cluster_time(Utc::now())));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().reason = Some(NODE_UNREACHABLE.to_string());
         assert_eq!(display_status(&p), "Unknown");
     }
@@ -429,8 +433,10 @@ mod tests {
     #[test]
     fn a_finished_pod_keeps_its_completion_through_deletion() {
         let mut p = pod("Succeeded");
-        p.metadata.deletion_timestamp =
-            Some(Time(crate::utils::moment::as_cluster_time(Utc::now())));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().container_statuses =
             Some(vec![status("app", terminated(0, Some("Completed")), false)]);
         assert_eq!(display_status(&p), "Completed");
@@ -495,7 +501,10 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 1,
                 reason: Some("Error".to_string()),
-                finished_at: Some(Time(crate::utils::moment::as_cluster_time(when))),
+                finished_at: Some(Time(
+                    crate::utils::moment::as_cluster_time(when)
+                        .expect("an instant this test wrote itself"),
+                )),
                 ..Default::default()
             }),
             ..Default::default()

@@ -26,8 +26,18 @@ pub trait Moment {
 }
 
 fn crossing(stamp: k8s_openapi::jiff::Timestamp) -> DateTime<Utc> {
-    DateTime::from_timestamp(stamp.as_second(), stamp.subsec_nanosecond().unsigned_abs())
-        .unwrap_or_else(|| DateTime::from_timestamp_nanos(stamp.as_nanosecond() as i64))
+    // `jiff` puts the sign on both halves — `-0.5s` is second 0, nanosecond
+    // -500_000_000 — while `chrono` wants a fraction to add to the second.
+    // Handed the fraction unsigned, an instant before the epoch moves forward
+    // by twice it.
+    let (mut second, mut nanosecond) = (stamp.as_second(), stamp.subsec_nanosecond());
+    if nanosecond < 0 {
+        second -= 1;
+        nanosecond += 1_000_000_000;
+    }
+    // Cannot fail: `jiff` spans years -9999..=9999 and `chrono` refuses only
+    // beyond ±262143, so every instant a cluster can express fits.
+    DateTime::from_timestamp(second, nanosecond.unsigned_abs()).unwrap_or_default()
 }
 
 impl Moment for Time {
@@ -52,13 +62,14 @@ impl Moment for MicroTime {
 /// and it moved to `jiff` with everything else. Here rather than at the call
 /// site for the same reason the crossing above is: two conversions written
 /// separately are two chances to disagree about what the instant was.
+///
+/// `None` for an instant `jiff` cannot hold. The caller must not substitute
+/// one of its own: the only reader is `LogParams::since_time`, and a stand-in
+/// epoch there asks the cluster for every line it has ever kept.
 #[must_use]
-pub fn as_cluster_time(at: DateTime<Utc>) -> k8s_openapi::jiff::Timestamp {
-    k8s_openapi::jiff::Timestamp::new(
-        at.timestamp(),
-        i32::try_from(at.timestamp_subsec_nanos()).unwrap_or(0),
-    )
-    .unwrap_or(k8s_openapi::jiff::Timestamp::UNIX_EPOCH)
+pub fn as_cluster_time(at: DateTime<Utc>) -> Option<k8s_openapi::jiff::Timestamp> {
+    let nanosecond = i32::try_from(at.timestamp_subsec_nanos()).ok()?;
+    k8s_openapi::jiff::Timestamp::new(at.timestamp(), nanosecond).ok()
 }
 
 #[cfg(test)]
@@ -92,13 +103,16 @@ mod tests {
 
     /// A cluster whose clock predates 1970 is not a cluster anyone has, but
     /// the sign handling is the kind of thing that is wrong in one direction
-    /// and never noticed. Would break if the nanoseconds were taken as an
-    /// absolute value on their own.
+    /// and never noticed. `jiff` carries the sign on the fraction as well as
+    /// the seconds — `-0.5s` is second `0`, nanosecond `-500_000_000` — while
+    /// `chrono` wants a fraction added to the second. Taking the absolute
+    /// value of the fraction moves the instant forward by twice it. Would
+    /// break with the whole second the earlier version of this test used,
+    /// which has no fraction to get the sign wrong.
     #[test]
     fn an_instant_before_the_epoch_is_not_read_forwards() {
-        let before = at("1969-12-31T23:59:59Z").moment();
+        let before = at("1969-12-31T23:59:59.5Z").moment();
 
-        assert!(before.timestamp() < 0, "got {before}");
-        assert_eq!(before.to_rfc3339(), "1969-12-31T23:59:59+00:00");
+        assert_eq!(before.to_rfc3339(), "1969-12-31T23:59:59.500+00:00");
     }
 }

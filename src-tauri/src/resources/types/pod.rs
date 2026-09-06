@@ -403,7 +403,10 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 0,
                 reason: Some("Completed".to_string()),
-                finished_at: Some(Time(crate::utils::moment::as_cluster_time(at))),
+                finished_at: Some(Time(
+                    crate::utils::moment::as_cluster_time(at)
+                        .expect("an instant this test wrote itself"),
+                )),
                 ..Default::default()
             }),
             ..Default::default()
@@ -429,7 +432,10 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 1,
                 reason: Some("Error".to_string()),
-                finished_at: Some(Time(crate::utils::moment::as_cluster_time(failed_at))),
+                finished_at: Some(Time(
+                    crate::utils::moment::as_cluster_time(failed_at)
+                        .expect("an instant this test wrote itself"),
+                )),
                 ..Default::default()
             }),
             ..Default::default()
