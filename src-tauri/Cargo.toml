@@ -51,9 +51,6 @@ serde_yaml = "0.9"
 # HTTP client
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 
-# WebSocket for exec
-tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
-
 # Security
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2.2"

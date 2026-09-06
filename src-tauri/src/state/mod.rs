@@ -88,7 +88,9 @@ pub struct AppState {
 impl AppState {
     /// Create a new application state
     pub fn new() -> Result<Self> {
-        let config = AppConfig::load()?;
+        // Never `?` on config here: a broken file must not fail `setup` and
+        // leave Tauri with no window. `load_or_recover` moves it aside instead.
+        let config = AppConfig::load_or_recover();
         let (event_tx, _) = broadcast::channel(1000);
 
         let client_manager = Arc::new(K8sClientManager::new());

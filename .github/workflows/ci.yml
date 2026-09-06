@@ -26,6 +26,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # The Comment budget step diffs against the merge-base, which a
+          # shallow clone does not contain — `origin/main...HEAD` then exits
+          # 128 and the script that reads it crashes. Full history is what
+          # lets the three-dot diff find where this branch left main.
+          fetch-depth: 0
 
       - name: Setup Tauri build environment
         uses: ./.github/actions/setup-tauri
@@ -71,7 +77,7 @@ jobs:
         # for the rare change that is only about comments.
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'comments')
         run: |
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git fetch --no-tags origin "${{ github.base_ref }}"
           python3 scripts/comment-budget.py "origin/${{ github.base_ref }}" HEAD
 
       - name: Frontend formatting

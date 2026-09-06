@@ -34,12 +34,20 @@ TEST_SUBJECT = re.compile(
 
 def added_lines(base, head):
     """Every added line of the diff, grouped by the file it lands in."""
-    diff = subprocess.run(
+    result = subprocess.run(
         ["git", "diff", "--unified=0", f"{base}...{head}", "--", "*.rs", "*.ts", "*.tsx"],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
+    )
+    if result.returncode != 0:
+        # `base...head` diffs from the merge-base, which a shallow clone does
+        # not contain. Say so plainly instead of crashing with a traceback —
+        # the fix is a full-history checkout, not a change here.
+        sys.exit(
+            f"comment-budget: could not diff {base}...{head} "
+            f"(is the checkout shallow? git said: {result.stderr.strip()})"
+        )
+    diff = result.stdout
 
     files, path = {}, None
     for line in diff.split("\n"):

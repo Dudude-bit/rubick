@@ -24,7 +24,8 @@ pub mod private_file;
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 pub use app::{default_true, KubernetesConfig, ThemeConfig};
 pub use cloud::{AzureProfile, CliPathsConfig, CloudConfig, ContextBinding, GcpProfile};
@@ -134,6 +135,77 @@ impl AppConfig {
 
         Ok(config_dir.join("k8s-gui").join("config.toml"))
     }
+
+    /// Load for startup, where a broken file must not stop the window.
+    ///
+    /// [`load`](Self::load) stays strict, because a save path must refuse to
+    /// write over a file it could not read. This one always returns a config:
+    /// a `config.toml` that will not parse is renamed aside (preserved, and
+    /// out of the way of later reads and writes) and defaults take its place,
+    /// with the incident left in [`recovery_report`] for Diagnostics. A parse
+    /// error here used to fail `setup`, which Tauri answers with no window.
+    #[must_use]
+    pub fn load_or_recover() -> Self {
+        match Self::load() {
+            Ok(config) => config,
+            Err(why) => match Self::config_path() {
+                Ok(path) if path.exists() => {
+                    let (config, recovery) = Self::move_aside(&path, why.to_string());
+                    tracing::error!(
+                        "config.toml did not parse ({}); started on defaults, kept it at {}",
+                        recovery.why,
+                        recovery.backup
+                    );
+                    let _ = RECOVERY.set(recovery);
+                    config
+                }
+                _ => Self::default(),
+            },
+        }
+    }
+
+    /// Rename an unreadable config aside and describe what happened.
+    ///
+    /// Takes the path so a test can drive it without the real config
+    /// directory. The backup name is timestamped so a second corruption never
+    /// overwrites the first; a rename that fails still starts the app.
+    fn move_aside(path: &Path, why: String) -> (Self, ConfigRecovery) {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let backup_path = path.with_extension(format!("toml.corrupt.{stamp}"));
+        let backup = match std::fs::rename(path, &backup_path) {
+            Ok(()) => backup_path.to_string_lossy().into_owned(),
+            Err(_) => path.to_string_lossy().into_owned(),
+        };
+        (
+            Self::default(),
+            ConfigRecovery {
+                path: path.to_string_lossy().into_owned(),
+                backup,
+                why,
+            },
+        )
+    }
+}
+
+/// A `config.toml` that would not parse, moved aside so the app could start.
+#[derive(Debug, Clone)]
+pub struct ConfigRecovery {
+    /// Where the broken file was.
+    pub path: String,
+    /// Where it is now, kept so the reader can recover settings by hand.
+    pub backup: String,
+    /// Why it would not parse — the words `toml` gave.
+    pub why: String,
+}
+
+static RECOVERY: OnceLock<ConfigRecovery> = OnceLock::new();
+
+/// The startup recovery, if a broken config was moved aside this run.
+#[must_use]
+pub fn recovery_report() -> Option<&'static ConfigRecovery> {
+    RECOVERY.get()
 }
 
 // ============================================================================
@@ -179,7 +251,7 @@ pub struct ClusterPreferences {
     /// namespace, and a joined list here would have such a build asking the
     /// API server for a namespace called `a,b`.
     #[serde(default)]
-    pub namespaces: std::collections::HashMap<String, String>,
+    pub namespaces: std::collections::BTreeMap<String, String>,
     /// The whole selection per context, where there is more than one.
     ///
     /// Its own field rather than a joined `namespaces` value, for the reason
@@ -187,7 +259,7 @@ pub struct ClusterPreferences {
     /// reading `namespaces`, so downgrading loses the extra namespaces
     /// instead of asking for a namespace that cannot exist.
     #[serde(default)]
-    pub scopes: std::collections::HashMap<String, Vec<String>>,
+    pub scopes: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 #[cfg(test)]
@@ -199,6 +271,40 @@ mod tests {
         let config = AppConfig::default();
         assert_eq!(config.theme.theme, "dark");
         assert_eq!(config.kubernetes.default_namespace, "default");
+    }
+
+    /// A config that will not parse must not be lost and must not stop the
+    /// window: it is moved aside under a name that says what it is, and
+    /// defaults take over so the app starts. The alternative shipped for a
+    /// while — a parse error in `setup` and no window at all.
+    #[test]
+    fn an_unreadable_config_is_moved_aside_and_defaults_take_over() {
+        let path = std::env::temp_dir().join(format!(
+            "rubick-config-{}-{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, "this = is = broken = toml").unwrap();
+
+        let (config, recovery) =
+            AppConfig::move_aside(&path, "Failed to parse config: x".to_string());
+
+        // Defaults, so the app has something to run on.
+        assert_eq!(config.theme.theme, AppConfig::default().theme.theme);
+        // The broken file is gone from its place...
+        assert!(!path.exists(), "the broken file should have moved");
+        // ...and its bytes are preserved under a backup that names the trouble.
+        assert_ne!(recovery.backup, recovery.path, "a rename should have run");
+        assert!(recovery.backup.contains("corrupt"), "{}", recovery.backup);
+        assert_eq!(
+            std::fs::read_to_string(&recovery.backup).unwrap(),
+            "this = is = broken = toml"
+        );
+
+        std::fs::remove_file(&recovery.backup).ok();
     }
 
     /// Every config file written before those three sections were removed

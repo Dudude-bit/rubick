@@ -13,7 +13,7 @@
 //! `integrations::prometheus::get_prometheus_connection`.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Every configured integration, per kubeconfig context.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -21,11 +21,11 @@ use std::collections::HashMap;
 pub struct IntegrationsConfig {
     /// Key is the kubeconfig context name.
     #[serde(default)]
-    pub prometheus: HashMap<String, ConnectionEntry>,
+    pub prometheus: BTreeMap<String, ConnectionEntry>,
     /// Same shape, same rules, and beside the Prometheus on purpose — a
     /// reader looking for where their tokens went finds both in one place.
     #[serde(default)]
-    pub loki: HashMap<String, ConnectionEntry>,
+    pub loki: BTreeMap<String, ConnectionEntry>,
 }
 
 /// One cluster's address for one configured integration.

@@ -13,13 +13,13 @@ use super::app::default_true;
 pub struct CloudConfig {
     /// GCP profiles (key = profile name)
     #[serde(default, alias = "gcp_profiles")]
-    pub gcp_profiles: std::collections::HashMap<String, GcpProfile>,
+    pub gcp_profiles: std::collections::BTreeMap<String, GcpProfile>,
     /// Azure profiles (key = profile name)
     #[serde(default, alias = "azure_profiles")]
-    pub azure_profiles: std::collections::HashMap<String, AzureProfile>,
+    pub azure_profiles: std::collections::BTreeMap<String, AzureProfile>,
     /// Context to profile bindings (key = kubeconfig context name)
     #[serde(default, alias = "context_bindings")]
-    pub context_bindings: std::collections::HashMap<String, ContextBinding>,
+    pub context_bindings: std::collections::BTreeMap<String, ContextBinding>,
 }
 
 /// CLI tools paths configuration
