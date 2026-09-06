@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.2] - 2026-09-06
+
+### Fixed — the console a credential was drawn on was changing it
+
+On Windows a credential plugin runs under a pseudoconsole, and a pseudoconsole
+is a screen buffer rather than a pipe: a line longer than the console is
+wrapped, and what comes back is what was drawn. An `id_token` runs to a few
+kilobytes and the console was 80 columns wide, so the token that arrived was
+not the token the plugin wrote — measured, a 3893-character token came back
+3919 characters long. Every check passed on the way through, because the extra
+characters were as ASCII-graphic and as whitespace-free as the rest, and the
+API server could only answer `Unauthorized`, which reads exactly like a
+rejected login.
+
+The console the credential is drawn on is now wider than any credential, and
+the terminal pane can no longer shrink it: the pane measures itself and asks
+for its own width long before the plugin has printed anything. This is
+reproduced by a test that runs a token through the real console at both widths
+and now runs on Windows in CI, where the failure lives.
+
+Two more from the same reading:
+
+- a token that begins as a JWT and then does not decode is refused before the
+  request, with the reason named, instead of being sent for the cluster to
+  refuse without one; so is one that has already expired;
+- a session that authenticates through the kubeconfig's own `oidc` provider
+  now has a deadline. It had one all along — the provider hands it over, and
+  the token carries its own `exp` — and both were being dropped, so the app
+  could only discover the session had ended by failing.
+
+From [#120](https://github.com/Dudude-bit/rubick/pull/120), reported in
+[#106](https://github.com/Dudude-bit/rubick/issues/106).
+
 ## [4.9.1] - 2026-09-06
 
 ### Fixed — a token the console wrapped is no longer a token the cluster refuses
