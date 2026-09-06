@@ -15,6 +15,7 @@
 //! it, and the watch stream — which builds `PodInfo` through the same
 //! `From` impl — gets it for free.
 
+use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{
     Container, ContainerStateTerminated, ContainerStatus, Pod, PodStatus,
@@ -199,8 +200,8 @@ pub fn display_status(pod: &Pod) -> String {
 pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
     fn note(slot: &mut Option<DateTime<Utc>>, cs: &ContainerStatus) {
         if let Some(at) = last_terminated(cs).and_then(|t| t.finished_at.as_ref()) {
-            if slot.is_none_or(|current| current < at.0) {
-                *slot = Some(at.0);
+            if slot.is_none_or(|current| current < at.moment()) {
+                *slot = Some(at.moment());
             }
         }
     }
@@ -410,7 +411,10 @@ mod tests {
     #[test]
     fn a_deleted_pod_reads_terminating() {
         let mut p = pod("Running");
-        p.metadata.deletion_timestamp = Some(Time(Utc::now()));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().container_statuses = Some(vec![status("app", running(), true)]);
         assert_eq!(display_status(&p), "Terminating");
     }
@@ -418,7 +422,10 @@ mod tests {
     #[test]
     fn a_deleted_pod_on_a_lost_node_reads_unknown() {
         let mut p = pod("Running");
-        p.metadata.deletion_timestamp = Some(Time(Utc::now()));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().reason = Some(NODE_UNREACHABLE.to_string());
         assert_eq!(display_status(&p), "Unknown");
     }
@@ -426,7 +433,10 @@ mod tests {
     #[test]
     fn a_finished_pod_keeps_its_completion_through_deletion() {
         let mut p = pod("Succeeded");
-        p.metadata.deletion_timestamp = Some(Time(Utc::now()));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
         p.status.as_mut().unwrap().container_statuses =
             Some(vec![status("app", terminated(0, Some("Completed")), false)]);
         assert_eq!(display_status(&p), "Completed");
@@ -491,7 +501,10 @@ mod tests {
             terminated: Some(ContainerStateTerminated {
                 exit_code: 1,
                 reason: Some("Error".to_string()),
-                finished_at: Some(Time(when)),
+                finished_at: Some(Time(
+                    crate::utils::moment::as_cluster_time(when)
+                        .expect("an instant this test wrote itself"),
+                )),
                 ..Default::default()
             }),
             ..Default::default()

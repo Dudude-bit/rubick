@@ -2,6 +2,7 @@
 //! Grouped because each is a single struct with one `From` impl,
 //! all driven by the same metadata-extraction pattern.
 
+use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Secret};
 use kube::ResourceExt;
@@ -30,7 +31,7 @@ impl From<&Namespace> for NamespaceInfo {
                 .and_then(|s| s.phase.clone())
                 .unwrap_or_else(|| "Active".to_string()),
             labels: ns.labels().clone(),
-            created_at: ns.creation_timestamp().map(|t| t.0),
+            created_at: ns.creation_timestamp().map(|t| t.moment()),
         }
     }
 }
@@ -65,7 +66,7 @@ impl From<&ConfigMap> for ConfigMapInfo {
                 .collect(),
             labels: cm.labels().clone(),
             annotations: cm.annotations().clone(),
-            created_at: cm.creation_timestamp().map(|t| t.0),
+            created_at: cm.creation_timestamp().map(|t| t.moment()),
         }
     }
 }
@@ -98,7 +99,7 @@ impl From<&Secret> for SecretInfo {
                 .unwrap_or_default(),
             labels: secret.labels().clone(),
             annotations: secret.annotations().clone(),
-            created_at: secret.creation_timestamp().map(|t| t.0),
+            created_at: secret.creation_timestamp().map(|t| t.moment()),
         }
     }
 }
@@ -159,20 +160,20 @@ impl From<&Event> for EventInfo {
             first_timestamp: event
                 .first_timestamp
                 .as_ref()
-                .map(|t| t.0)
-                .or_else(|| event.event_time.as_ref().map(|t| t.0)),
+                .map(Moment::moment)
+                .or_else(|| event.event_time.as_ref().map(Moment::moment)),
             last_timestamp: event
                 .last_timestamp
                 .as_ref()
-                .map(|t| t.0)
+                .map(Moment::moment)
                 .or_else(|| {
                     event
                         .series
                         .as_ref()
                         .and_then(|s| s.last_observed_time.as_ref())
-                        .map(|t| t.0)
+                        .map(Moment::moment)
                 })
-                .or_else(|| event.event_time.as_ref().map(|t| t.0)),
+                .or_else(|| event.event_time.as_ref().map(Moment::moment)),
         }
     }
 }
@@ -187,6 +188,14 @@ mod tests {
         DateTime::parse_from_rfc3339(rfc3339).unwrap().into()
     }
 
+    /// The same instant as the cluster hands it over. `Time` and `MicroTime`
+    /// carry `jiff` since k8s-openapi 0.28, so a fixture builds objects with
+    /// this and asserts against `at`.
+    fn stamp(rfc3339: &str) -> k8s_openapi::jiff::Timestamp {
+        crate::utils::moment::as_cluster_time(at(rfc3339))
+            .expect("an instant this test wrote itself")
+    }
+
     /// An event written through `events.k8s.io` carries its time in
     /// `eventTime` and `series`, and nothing in the core-v1 fields. Read
     /// without the fallback it is undated — and the events feed sorts
@@ -195,10 +204,10 @@ mod tests {
     #[test]
     fn a_new_api_event_is_dated_from_event_time_and_series() {
         let event = Event {
-            event_time: Some(MicroTime(at("2026-08-13T10:00:00Z"))),
+            event_time: Some(MicroTime(stamp("2026-08-13T10:00:00Z"))),
             series: Some(EventSeries {
                 count: Some(7),
-                last_observed_time: Some(MicroTime(at("2026-08-13T10:05:00Z"))),
+                last_observed_time: Some(MicroTime(stamp("2026-08-13T10:05:00Z"))),
             }),
             ..Default::default()
         };
@@ -217,10 +226,10 @@ mod tests {
     #[test]
     fn a_core_v1_event_keeps_its_own_timestamps() {
         let event = Event {
-            first_timestamp: Some(Time(at("2026-08-13T09:00:00Z"))),
-            last_timestamp: Some(Time(at("2026-08-13T09:30:00Z"))),
+            first_timestamp: Some(Time(stamp("2026-08-13T09:00:00Z"))),
+            last_timestamp: Some(Time(stamp("2026-08-13T09:30:00Z"))),
             count: Some(2),
-            event_time: Some(MicroTime(at("2026-08-13T10:00:00Z"))),
+            event_time: Some(MicroTime(stamp("2026-08-13T10:00:00Z"))),
             ..Default::default()
         };
 

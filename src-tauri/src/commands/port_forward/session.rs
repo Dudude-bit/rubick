@@ -476,12 +476,14 @@ mod tests {
     }
 
     fn api_error(code: u16) -> kube::Error {
-        kube::Error::Api(kube::error::ErrorResponse {
-            status: "Failure".into(),
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
             message: format!("the server responded with {code}"),
             reason: "Whatever".into(),
             code,
-        })
+            metadata: None,
+            details: None,
+        }))
     }
 
     /// The reported bug. A user watched "Port-forward reconnecting / Retry in

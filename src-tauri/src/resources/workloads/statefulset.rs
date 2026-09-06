@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{ConditionInfo, DeploymentContainerInfo, OptionTimeExt, TemplateContainers};
+use crate::utils::Moment;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,7 +94,9 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 current: status.and_then(|s| s.current_replicas).unwrap_or(0),
             },
-            service_name: spec.map(|s| s.service_name.clone()),
+            // `serviceName` became optional upstream: a StatefulSet may now
+            // be created without a governing Service.
+            service_name: spec.and_then(|s| s.service_name.clone()),
             pod_management_policy: spec.and_then(|s| s.pod_management_policy.clone()),
             update_strategy: spec
                 .and_then(|s| s.update_strategy.as_ref())
@@ -117,7 +120,7 @@ impl From<&StatefulSetCondition> for ConditionInfo {
             status: cond.status.clone(),
             reason: cond.reason.clone(),
             message: cond.message.clone(),
-            last_transition_time: cond.last_transition_time.as_ref().map(|t| t.0),
+            last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
     }

@@ -95,13 +95,13 @@ pub enum DrainRefusal {
     /// refusal worth asking about again, and the reason this module waits.
     ///
     /// Deliberately not called "budget". Kubernetes answers 429 both for a
-    /// spent `PodDisruptionBudget` and for its own request throttling, and
-    /// `kube::core::ErrorResponse` in 0.97 is flattened to
-    /// status/message/reason/code — it carries neither `details.causes`,
-    /// which is where `DisruptionBudget` would be named, nor `Retry-After`.
-    /// Which of the two this is cannot be known from here, so it is not
-    /// claimed. The drain dialog reads the budgets from the cluster itself
-    /// and names them from that instead.
+    /// spent `PodDisruptionBudget` and for its own eviction-rate throttle.
+    /// The two are told apart in `details`, checked against a live cluster:
+    /// the budget case fills `causes` with a `DisruptionBudget` entry (the
+    /// drain dialog reads the budgets itself and names them anyway), and the
+    /// throttle case sets `retry_after_seconds`, which `outcome_of` honours
+    /// in the wait. The code carries neither, because either way the answer
+    /// is the same — wait, and ask again.
     NotNow,
     /// No controller owns this pod, so evicting it ends it for good.
     /// Terminal: waiting will not change it, only `evict_unmanaged_pods`.
@@ -267,9 +267,10 @@ enum Evicted {
     Yes,
     /// It had already left. Not this drain's doing, and not a refusal either.
     AlreadyGone,
-    /// It is still on the node. There is deliberately no fourth arm that
-    /// reaches for `DELETE` instead.
-    No(DrainRefusal, Option<String>),
+    /// It is still on the node, with the API's message where there is one and
+    /// the server's `retry_after_seconds` where a throttle gave one. There is
+    /// deliberately no fourth arm that reaches for `DELETE` instead.
+    No(DrainRefusal, Option<String>, Option<Duration>),
 }
 
 /// Read one failed eviction.
@@ -281,13 +282,28 @@ fn outcome_of(err: kube::Error) -> Evicted {
     if let kube::Error::Api(response) = &err {
         match response.code {
             404 | 410 => return Evicted::AlreadyGone,
-            429 => return Evicted::No(DrainRefusal::NotNow, None),
+            429 => return Evicted::No(DrainRefusal::NotNow, None, retry_after(response)),
             _ => {}
         }
     }
 
     let message = crate::state::readable_cause(&Error::KubeApi(err));
-    Evicted::No(DrainRefusal::Other, Some(message))
+    Evicted::No(DrainRefusal::Other, Some(message), None)
+}
+
+/// The server's `Retry-After` for a 429, where it gave one.
+///
+/// An eviction throttled by the API's own rate limit comes back with
+/// `retry_after_seconds` set; a `PodDisruptionBudget` block leaves it zero.
+/// Honouring it stops a wide drain from hammering the throttle that is asking
+/// it to slow down.
+fn retry_after(status: &kube::core::Status) -> Option<Duration> {
+    status
+        .details
+        .as_ref()
+        .map(|details| details.retry_after_seconds)
+        .filter(|seconds| *seconds > 0)
+        .map(|seconds| Duration::from_secs(u64::from(seconds)))
 }
 
 // --- running -------------------------------------------------------------
@@ -625,6 +641,7 @@ async fn run(
         progress.leaving.retain(|t| present.contains(&t.uid));
 
         let mut still_waiting = Vec::new();
+        let mut retry_hint: Option<Duration> = None;
         for target in std::mem::take(&mut progress.waiting) {
             if !present.contains(&target.uid) {
                 progress.already_gone += 1;
@@ -652,10 +669,13 @@ async fn run(
                 // here: the rule and its reasoning live on `DrainRefusal`,
                 // and a variant added later that *is* worth retrying would
                 // otherwise be right there and wrong here.
-                Evicted::No(refusal, _) if refusal.worth_asking_again() => {
+                Evicted::No(refusal, _, retry) if refusal.worth_asking_again() => {
+                    if let Some(after) = retry {
+                        retry_hint = Some(retry_hint.map_or(after, |held| held.max(after)));
+                    }
                     still_waiting.push(target);
                 }
-                Evicted::No(refusal, message) => terminal.push(RefusedPod {
+                Evicted::No(refusal, message, _) => terminal.push(RefusedPod {
                     namespace: target.namespace,
                     name: target.name,
                     refusal,
@@ -684,8 +704,14 @@ async fn run(
             bail!(outcome, &report, None);
         }
 
+        // Honour the server's `Retry-After` where a throttled eviction gave
+        // one, but never wait less than the backoff this pass had earned.
+        let wait = retry_hint.map_or_else(
+            || backoff_for(attempt),
+            |after| after.max(backoff_for(attempt)),
+        );
         tokio::select! {
-            () = tokio::time::sleep(backoff_for(attempt)) => {}
+            () = tokio::time::sleep(wait) => {}
             () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &report, None),
         }
     }
@@ -860,12 +886,34 @@ mod tests {
     }
 
     fn api_error(code: u16) -> kube::Error {
-        kube::Error::Api(kube::error::ErrorResponse {
-            status: "Failure".into(),
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
             message: format!("the server responded with {code}"),
             reason: "Whatever".into(),
             code,
-        })
+            metadata: None,
+            details: None,
+        }))
+    }
+
+    /// A 429 shaped like the API's eviction-rate throttle: the `Retry-After`
+    /// rides in `details.retry_after_seconds`, zero meaning none.
+    fn throttled_error(retry_after_seconds: u32) -> kube::Error {
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
+            message: "Too many eviction requests".into(),
+            reason: "TooManyRequests".into(),
+            code: 429,
+            metadata: None,
+            details: Some(kube::core::response::StatusDetails {
+                name: String::new(),
+                group: String::new(),
+                kind: String::new(),
+                uid: String::new(),
+                causes: Vec::new(),
+                retry_after_seconds,
+            }),
+        }))
     }
 
     /// Points nowhere on purpose. Enough to exercise the bookkeeping —
@@ -998,15 +1046,18 @@ mod tests {
     fn a_refused_eviction_leaves_the_pod_where_it_is() {
         assert_eq!(
             outcome_of(api_error(429)),
-            Evicted::No(DrainRefusal::NotNow, None)
+            Evicted::No(DrainRefusal::NotNow, None, None)
         );
     }
 
-    /// Deliberately not named after the budget. Kubernetes answers 429 for
-    /// throttling too, and nothing in `ErrorResponse` tells the two apart.
+    /// Deliberately not named after the budget. Kubernetes answers 429 for its
+    /// eviction-rate throttle too; `details` tells the two apart, but the code
+    /// does not need to — either way the pod waits. A plain 429 with no
+    /// details carries no words (the dialog reads the budgets itself) and no
+    /// wait hint.
     #[test]
     fn the_refusal_does_not_claim_to_know_which_429_it_was() {
-        let Evicted::No(refusal, message) = outcome_of(api_error(429)) else {
+        let Evicted::No(refusal, message, retry) = outcome_of(api_error(429)) else {
             panic!("a 429 leaves the pod");
         };
         assert_eq!(refusal, DrainRefusal::NotNow);
@@ -1014,6 +1065,25 @@ mod tests {
             message.is_none(),
             "no words here: the dialog reads the budgets itself"
         );
+        assert_eq!(retry, None);
+    }
+
+    /// The API's own eviction throttle answers 429 with `retry_after_seconds`,
+    /// checked against a live cluster. The wait honours it, so a wide drain
+    /// stops hammering the limiter that is asking it to slow down; a budget
+    /// block leaves the field zero and falls through to the pass backoff.
+    #[test]
+    fn a_throttled_eviction_is_told_how_long_to_wait() {
+        let Evicted::No(refusal, _, retry) = outcome_of(throttled_error(12)) else {
+            panic!("a 429 leaves the pod");
+        };
+        assert_eq!(refusal, DrainRefusal::NotNow);
+        assert_eq!(retry, Some(Duration::from_secs(12)));
+
+        let Evicted::No(_, _, none) = outcome_of(throttled_error(0)) else {
+            panic!("still a 429");
+        };
+        assert_eq!(none, None);
     }
 
     /// It left on its own between the listing and its turn. Neither an
@@ -1028,7 +1098,7 @@ mod tests {
     /// the API's own sentence so the reader has something to act on.
     #[test]
     fn an_unrecognised_failure_leaves_the_pod_and_quotes_the_server() {
-        let Evicted::No(refusal, Some(message)) = outcome_of(api_error(403)) else {
+        let Evicted::No(refusal, Some(message), _) = outcome_of(api_error(403)) else {
             panic!("an unrecognised failure leaves the pod and says why");
         };
         assert_eq!(refusal, DrainRefusal::Other);
@@ -1041,7 +1111,7 @@ mod tests {
     fn a_transport_failure_also_leaves_the_pod() {
         assert!(matches!(
             outcome_of(kube::Error::LinesCodecMaxLineLengthExceeded),
-            Evicted::No(DrainRefusal::Other, Some(_))
+            Evicted::No(DrainRefusal::Other, Some(_), _)
         ));
     }
 

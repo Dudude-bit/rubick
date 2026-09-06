@@ -16,6 +16,7 @@ use super::common::{
     EnvFromInfo, EnvVarInfo,
 };
 use super::pod_display::is_sidecar;
+use crate::utils::Moment;
 
 /// Deployment information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,7 +150,7 @@ impl From<&Deployment> for DeploymentInfo {
                         status: c.status.clone(),
                         reason: c.reason.clone(),
                         message: c.message.clone(),
-                        last_transition_time: c.last_transition_time.as_ref().map(|t| t.0),
+                        last_transition_time: c.last_transition_time.as_ref().map(Moment::moment),
                         observed_generation: None,
                     })
                     .collect()
@@ -171,7 +172,7 @@ impl From<&Deployment> for DeploymentInfo {
             service_account_name: template.service_account_name,
             labels: deployment.labels().clone(),
             annotations: deployment.annotations().clone(),
-            created_at: deployment.creation_timestamp().map(|t| t.0),
+            created_at: deployment.creation_timestamp().map(|t| t.moment()),
             conditions,
             owner_references: extract_owner_references(
                 deployment.metadata.owner_references.as_ref(),

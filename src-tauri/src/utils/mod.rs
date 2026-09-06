@@ -1,7 +1,9 @@
 //! Utility functions and helpers
 
+pub mod moment;
 pub mod quantities;
 
+pub use moment::Moment;
 pub use quantities::{format_cpu, format_memory, parse_cpu, parse_memory};
 
 use regex::Regex;

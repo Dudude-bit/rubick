@@ -716,14 +716,16 @@ mod tests {
     /// prints — is the only acceptable thing to put on screen.
     #[test]
     fn a_denied_read_reads_like_the_sentence_kubectl_prints() {
-        let error = Error::KubeApi(kube::Error::Api(kube::core::ErrorResponse {
-            status: "Failure".into(),
+        let error = Error::KubeApi(kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
             message: "secrets is forbidden: User \"system:serviceaccount:default:probe\" \
                       cannot list resource \"secrets\" in API group \"\" at the cluster scope"
                 .into(),
             reason: "Forbidden".into(),
             code: 403,
-        }));
+            metadata: None,
+            details: None,
+        })));
 
         let (kind, message) = describe_failure(&error);
         assert_eq!(kind, SearchFailureKind::Forbidden);
@@ -732,8 +734,12 @@ mod tests {
             "secrets is forbidden: User \"system:serviceaccount:default:probe\" \
              cannot list resource \"secrets\" in API group \"\" at the cluster scope",
         );
+        // The type kube wraps a refusal in was renamed under us — this
+        // guard named the old one and would have gone on passing while the
+        // dump it exists to catch changed shape. Both names, so the next
+        // rename fails here rather than on somebody's screen.
         assert!(
-            !message.contains("ErrorResponse {"),
+            !message.contains("Status {") && !message.contains("ErrorResponse {"),
             "a Debug dump reached the UI: {message}"
         );
     }

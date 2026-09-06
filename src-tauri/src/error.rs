@@ -274,12 +274,14 @@ mod tests {
     }
 
     fn api_error(code: u16, reason: &str) -> kube::Error {
-        kube::Error::Api(kube::core::ErrorResponse {
-            status: "Failure".to_string(),
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
             message: "the server has asked for the client to provide credentials".to_string(),
             reason: reason.to_string(),
             code,
-        })
+            metadata: None,
+            details: None,
+        }))
     }
 
     /// Would send the reader back to a screen that says the cluster is empty.

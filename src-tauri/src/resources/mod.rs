@@ -2,6 +2,7 @@
 //!
 //! Provides abstractions for working with Kubernetes resources.
 
+use crate::utils::Moment;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 
 /// Extension trait for Option<Time> convenience
@@ -12,13 +13,13 @@ pub trait OptionTimeExt {
 
 impl OptionTimeExt for Option<Time> {
     fn to_rfc3339_opt(&self) -> Option<String> {
-        self.as_ref().map(|t| t.0.to_rfc3339())
+        self.as_ref().map(|t| t.moment().to_rfc3339())
     }
 }
 
 impl OptionTimeExt for Option<&Time> {
     fn to_rfc3339_opt(&self) -> Option<String> {
-        self.map(|t| t.0.to_rfc3339())
+        self.map(|t| t.moment().to_rfc3339())
     }
 }
 

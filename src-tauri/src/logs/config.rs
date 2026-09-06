@@ -142,7 +142,11 @@ impl LogConfig {
         // left the process. It also wins over `since_seconds`: the API
         // takes only one of the two, kube resolves that tie towards
         // `sinceSeconds`, and an instant is the more specific ask.
-        if let Some(since) = self.since_time.or_else(|| intake_since_time(&self.intake)) {
+        if let Some(since) = self
+            .since_time
+            .or_else(|| intake_since_time(&self.intake))
+            .and_then(crate::utils::moment::as_cluster_time)
+        {
             params.since_time = Some(since);
         } else if let Some(since) = self.since_seconds {
             params.since_seconds = Some(since);
