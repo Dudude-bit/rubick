@@ -25,23 +25,35 @@ pub(super) fn metrics_status_available() -> MetricsStatus {
 
 pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
     match err {
-        kube::Error::Api(api_err) => match api_err.code {
-            404 => MetricsStatus {
-                status: MetricsStatusKind::NotInstalled,
-                message: Some(api_err.message.clone()),
-            },
-            401 | 403 => MetricsStatus {
-                status: MetricsStatusKind::Forbidden,
-                message: Some(api_err.message.clone()),
-            },
-            _ => MetricsStatus {
-                status: MetricsStatusKind::Error,
-                // The banner's title already says this is a metrics error,
-                // in the reader's language. What is left to add is the
-                // server's own code and words.
-                message: Some(format!("{}: {}", api_err.code, api_err.message)),
-            },
-        },
+        kube::Error::Api(api_err) => {
+            // `reason` is checked alongside `code` for the same reason
+            // `Error::is_refusal` does it: kube 4 leaves `code` at 0 when the
+            // Status body omits it, and some distributions send exactly that
+            // on a metrics refusal. Code alone would then paint a no-permission
+            // state (the third state) as a generic error banner.
+            if api_err.code == 404 || api_err.reason == "NotFound" {
+                MetricsStatus {
+                    status: MetricsStatusKind::NotInstalled,
+                    message: Some(api_err.message.clone()),
+                }
+            } else if matches!(api_err.code, 401 | 403)
+                || api_err.reason == "Forbidden"
+                || api_err.reason == "Unauthorized"
+            {
+                MetricsStatus {
+                    status: MetricsStatusKind::Forbidden,
+                    message: Some(api_err.message.clone()),
+                }
+            } else {
+                MetricsStatus {
+                    status: MetricsStatusKind::Error,
+                    // The banner's title already says this is a metrics error,
+                    // in the reader's language. What is left to add is the
+                    // server's own code and words.
+                    message: Some(format!("{}: {}", api_err.code, api_err.message)),
+                }
+            }
+        }
         _ => MetricsStatus {
             status: MetricsStatusKind::Error,
             message: Some(err.to_string()),
@@ -153,4 +165,44 @@ pub(super) async fn fetch_metrics<T>(
 
     let metrics = list.items.iter().filter_map(parse).collect();
     Ok((metrics_status_available(), metrics))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn api_error(code: u16, reason: &str) -> kube::Error {
+        kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
+            message: "metrics.k8s.io is forbidden".to_string(),
+            reason: reason.to_string(),
+            code,
+            metadata: None,
+            details: None,
+        }))
+    }
+
+    /// The metrics panel's own third state: "you cannot read metrics" must not
+    /// collapse into a generic error banner. kube 4 leaves `code` at 0 when the
+    /// Status body omits it, so — like `Error::is_refusal` — the reason has to
+    /// be read too, or a refusal on such a distribution reads as `Error`.
+    #[test]
+    fn a_forbidden_with_no_code_is_still_forbidden() {
+        assert!(matches!(
+            metrics_status_from_error(&api_error(403, "Forbidden")).status,
+            MetricsStatusKind::Forbidden
+        ));
+        assert!(matches!(
+            metrics_status_from_error(&api_error(0, "Forbidden")).status,
+            MetricsStatusKind::Forbidden
+        ));
+        assert!(matches!(
+            metrics_status_from_error(&api_error(0, "NotFound")).status,
+            MetricsStatusKind::NotInstalled
+        ));
+        assert!(matches!(
+            metrics_status_from_error(&api_error(500, "InternalError")).status,
+            MetricsStatusKind::Error
+        ));
+    }
 }
