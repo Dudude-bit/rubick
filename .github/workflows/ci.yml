@@ -64,6 +64,16 @@ jobs:
       - name: Frontend lint
         run: bun run lint
 
+      - name: Comment budget
+        # Only on a pull request, and only over what the patch adds: nothing
+        # already in the tree is judged. A doc comment on a test is exempt —
+        # CLAUDE.md requires one. Label a PR `comments` to skip it, which is
+        # for the rare change that is only about comments.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'comments')
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          python3 scripts/comment-budget.py "origin/${{ github.base_ref }}" HEAD
+
       - name: Frontend formatting
         # Prettier ran in the pre-commit hook and in no CI job at all, so a
         # commit made with --no-verify put unformatted code on a green main.
