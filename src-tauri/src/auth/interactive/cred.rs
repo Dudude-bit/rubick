@@ -689,8 +689,9 @@ mod tests {
     ///
     /// `type`/`cat` is the child on purpose: no shell quoting, and the bytes
     /// on the way in are exactly the bytes in the file.
-    #[tokio::test]
-    async fn a_token_longer_than_the_console_survives_being_drawn_on_it() {
+    /// Run a 3893-character token through the real auth terminal at a given
+    /// console width, and hand back what came out the other side.
+    async fn token_through_a_console(cols: u16) -> (String, String) {
         use crate::terminal::{AuthExecAdapter, TerminalAdapter};
         use std::collections::HashMap;
         use std::time::Duration;
@@ -737,6 +738,10 @@ mod tests {
             .write_input(b"\x1b[1;1R")
             .await
             .expect("the console asked where the cursor is");
+        adapter
+            .resize(cols, 24)
+            .await
+            .expect("the console takes the width it is given");
         // Draining stops on the exit status and then keeps reading: the
         // child is gone long before the reader thread has handed over what
         // the console still had, and stopping at `is_running` loses it.
@@ -775,14 +780,42 @@ mod tests {
             .status
             .and_then(|status| status.token)
             .expect("the payload names a token");
-        let shape = mend_bearer_token(&mut got);
+        mend_bearer_token(&mut got);
+        (token, got)
+    }
+
+    /// The reported failure, reproduced. `ConPTY` is a screen buffer: an
+    /// `id_token` of a few kilobytes does not fit an 80-column console, so
+    /// what reaches us has been wrapped and repainted first. Whatever that
+    /// does, it leaves the token ASCII-graphic and whitespace-free — which is
+    /// why every check before this one passed and the cluster answered
+    /// `Unauthorized` with nothing to say about why.
+    #[tokio::test]
+    async fn a_token_longer_than_the_console_survives_being_drawn_on_it() {
+        let (sent, got) = token_through_a_console(80).await;
 
         assert_eq!(
             got,
-            token,
-            "the console changed the token: {} characters came back where {} went in, shape {shape:?}",
+            sent,
+            "the console changed the token: {} characters came back where {} went in",
             got.len(),
-            token.len()
+            sent.len()
+        );
+    }
+
+    /// The same token down a console wide enough that no line of it wraps.
+    /// If this one comes back whole while the 80-column one does not, the
+    /// wrapping is the damage and a console kept wide is the cure.
+    #[tokio::test]
+    async fn a_token_that_never_wraps_comes_back_whole() {
+        let (sent, got) = token_through_a_console(8192).await;
+
+        assert_eq!(
+            got,
+            sent,
+            "a console that never wrapped still changed the token: {} characters came back where {} went in",
+            got.len(),
+            sent.len()
         );
     }
 }

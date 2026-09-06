@@ -92,4 +92,4 @@ jobs:
         # subject *is* the platform — ConPTY hands back a rendered screen
         # rather than the child's bytes, and no other runner can tell us what
         # that does to a credential.
-        run: cargo test --workspace drawn_on_it -- --nocapture
+        run: cargo test --workspace auth::interactive::cred::tests -- --nocapture
