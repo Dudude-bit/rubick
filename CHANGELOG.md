@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.9.1] - 2026-09-06
+
+### Fixed — a token the console wrapped is no longer a token the cluster refuses
+
+On Windows, a credential plugin run through the console (`kubectl oidc-login`
+and friends) can hand back an `id_token` padded with the spaces the console
+used to draw it. 4.9.0 removed the hard line breaks; the padding survived,
+travelled in the `Authorization` header and came back as a bare
+`Unauthorized` — a rejected login for a token that was fine. Whitespace inside
+the token is now removed before the request, since no valid token carries any;
+a character a console does not explain stops before the request, with the
+character named; and when the token arrives whole, the log says so.
+
+Two more from the same report: a GUI process on Windows opened a console
+window for every tool it probed, so Settings → Diagnostics flashed six windows
+over your work — they are gone; and tools are looked up with every `PATHEXT`
+extension, so `kubectl.exe` and a `.cmd` shim are both found.
+
+From [#113](https://github.com/Dudude-bit/rubick/pull/113), reported in
+[#106](https://github.com/Dudude-bit/rubick/issues/106).
+
+### Fixed — a line a program coloured is shown in colour, not as escape bytes
+
+`[32mINFO[0m` reached the reader as those bytes, and the bytes also hid the
+level word from the level parser and the `{` a JSON line starts with. Every
+escape sequence is now read out of the line before anything parses it; only
+colour and style become style, everything else is dropped. Colours come from
+the theme's own sixteen-colour palette at readable contrast on both canvases;
+a program's own truecolor is pulled toward readable rather than replaced; text
+on a coloured background is drawn in the canvas colour; an underline-colour or
+default-colour code is read as what it is rather than as a reset. Search marks
+its matches inside the runs, so the colour stays. The Exec terminal paints the
+same palette as the Logs pane. Copy, download and the raw view give the whole
+line with the colour codes taken out.
+
+From [#117](https://github.com/Dudude-bit/rubick/pull/117) and
+[#119](https://github.com/Dudude-bit/rubick/pull/119), reported in
+[#116](https://github.com/Dudude-bit/rubick/issues/116).
+
 ## [4.9.0] - 2026-09-05
 
 ### Added — Settings opens over any screen instead of taking over the tab
