@@ -155,6 +155,16 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
     disconnectRef.current = disconnect;
   }, [send, resize, disconnect]);
 
+  // The pane measures itself when it mounts, which is before the session is
+  // connected — and a measurement taken then is dropped. Without this the far
+  // end keeps the API server's default geometry for the life of the shell,
+  // and anything drawing a full screen is drawn to the wrong width.
+  useEffect(() => {
+    const xterm = xtermRef.current;
+    if (status !== "connected" || !xterm) return;
+    resizeRef.current(xterm.cols, xterm.rows);
+  }, [status]);
+
   // Initialize xterm once on mount
   useEffect(() => {
     if (!terminalRef.current || initializedRef.current) return;

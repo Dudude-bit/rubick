@@ -65,6 +65,23 @@ pub struct K8sClientManager {
     credential_deadlines: DashMap<String, chrono::DateTime<chrono::Utc>>,
 }
 
+/// The timeouts this app is willing to have applied under it.
+///
+/// kube 0.97 puts a 295-second read timeout on every connection, and it is an
+/// *inactivity* timer that survives the HTTP upgrade. A pod shell nobody has
+/// typed in for five minutes, an idle `port-forward` to a database, a pod
+/// that logs nothing for a while — each has its socket closed underneath it,
+/// and the app reports the shell exited, the forward dropped, the log stream
+/// broke. None of those happened.
+///
+/// Removing it means watches lose the thing that recycled a stalled one, so
+/// `watch` asks the API server for the same limit instead — see
+/// `WATCH_TIMEOUT_SECS`. kube 4 makes both of these the default.
+fn without_inactivity_timeout(mut config: Config) -> Config {
+    config.read_timeout = None;
+    config
+}
+
 impl K8sClientManager {
     /// Create a new client manager
     #[must_use]
@@ -357,6 +374,7 @@ impl K8sClientManager {
 
         let config = Config::from_custom_kubeconfig(kubeconfig, &options)
             .await
+            .map(without_inactivity_timeout)
             .map_err(|e| {
                 Error::Config(format!(
                     "Failed to create config for context {context}: {e}"
@@ -386,6 +404,7 @@ impl K8sClientManager {
 
         Config::from_custom_kubeconfig(kubeconfig.clone(), &options)
             .await
+            .map(without_inactivity_timeout)
             .map_err(|e| {
                 Error::Config(format!(
                     "Failed to create config for context {context}: {e}"

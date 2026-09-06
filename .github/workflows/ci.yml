@@ -64,6 +64,12 @@ jobs:
       - name: Frontend lint
         run: bun run lint
 
+      - name: Frontend formatting
+        # Prettier ran in the pre-commit hook and in no CI job at all, so a
+        # commit made with --no-verify put unformatted code on a green main.
+        # Same glob as the hook in lefthook.yml, or the two would disagree.
+        run: bunx prettier --check "src/**/*.{ts,tsx,css,json,md}"
+
   windows-console:
     name: Windows console
     runs-on: windows-2025

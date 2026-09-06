@@ -16,7 +16,10 @@
 use crate::error::Result;
 use crate::terminal::TerminalAdapter;
 use k8s_openapi::api::core::v1::Pod;
-use kube::{api::AttachedProcess, Client};
+use kube::{
+    api::{AttachedProcess, TerminalSize},
+    Client,
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Adapter for executing shell in Kubernetes pods
@@ -30,6 +33,9 @@ pub struct PodExecAdapter {
     // Store streams separately since AttachedProcess.stdin()/stdout() consume via .take()
     stdin_writer: Option<Box<dyn AsyncWrite + Unpin + Send + Sync>>,
     stdout_reader: Option<Box<dyn AsyncRead + Unpin + Send + Sync>>,
+    /// Where the pane's measurements go. `AttachedProcess` hands this over
+    /// once, and only when the attach asked for a tty.
+    resize_tx: Option<futures::channel::mpsc::Sender<TerminalSize>>,
     /// Whether the stream has ended.
     ///
     /// Separate from `attached`, because "a connection was made" and "it is
@@ -62,6 +68,7 @@ impl PodExecAdapter {
             attached: None,
             stdin_writer: None,
             stdout_reader: None,
+            resize_tx: None,
             finished: false,
         }
     }
@@ -97,6 +104,8 @@ impl TerminalAdapter for PodExecAdapter {
         self.stdout_reader = attached
             .stdout()
             .map(|r| Box::new(r) as Box<dyn AsyncRead + Unpin + Send + Sync>);
+        // Also a `.take()`, so once, and only present because `tty` is true.
+        self.resize_tx = attached.terminal_size();
 
         self.attached = Some(attached);
         // A reconnect is a new stream, and the old one having ended says
@@ -160,10 +169,27 @@ impl TerminalAdapter for PodExecAdapter {
         Ok(())
     }
 
-    async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
-        // kube exec doesn't support resize currently
-        // This is a known limitation - PTY resize would require kube API extension
-        Ok(())
+    /// Tell the far end how wide the pane is.
+    ///
+    /// This used to throw the numbers away, under a comment saying kube could
+    /// not do it. kube has carried the resize channel since 0.77 and sent it
+    /// correctly since 0.89; the note outlived the limitation. Everything
+    /// above this — xterm's measurement, `terminal_resize`, the manager —
+    /// was already wired, so a shell ran at the API server's default geometry
+    /// for its whole life and anything drawing a full screen, `top` and
+    /// `vim` among them, was drawn to the wrong width.
+    async fn resize(&mut self, cols: u16, rows: u16) -> Result<()> {
+        use futures::SinkExt as _;
+
+        let Some(tx) = self.resize_tx.as_mut() else {
+            return Ok(());
+        };
+        tx.send(TerminalSize {
+            width: cols,
+            height: rows,
+        })
+        .await
+        .map_err(|e| crate::error::Error::Terminal(format!("Resize failed: {e}")))
     }
 
     async fn close(&mut self) -> Result<()> {
