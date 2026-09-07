@@ -45,6 +45,7 @@ export default defineVendor({
       staleTime: ARGO_STALE,
     }),
     load: () => import("./page"),
+    gate: { crd: "applications.argoproj.io", namespaced: true },
   },
   crd,
 });

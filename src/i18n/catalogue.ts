@@ -58,6 +58,7 @@ export const en = {
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
     noListAccess: "You do not have permission to list these",
+    noVendorAccess: "You do not have permission to list {vendor}'s resources",
     relatedResources: "Related resources",
     runsOn: "Runs on",
     whatRunsHere: "What runs here",

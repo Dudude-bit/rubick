@@ -875,6 +875,19 @@ export interface VendorPage {
    * first chunk is the difference between a facet and a cost everybody pays.
    */
   load: () => Promise<{ default: ComponentType }>;
+  /**
+   * The one list this page cannot do without — the custom resource whose 403
+   * makes the screen useless. When the cluster's own authorizer refuses the
+   * reader this list, the sidebar row is drawn disabled with a reason instead
+   * of linking to a page that only errors. Detected-but-forbidden and
+   * detected-and-readable are different states; a not-detected vendor has no
+   * row at all.
+   *
+   * The id is the CRD's `<plural>.<group>` (its `metadata.name`); an array
+   * lists alternative spellings of the SAME kind across a group rename, and
+   * the row is forbidden only when every spelling is refused.
+   */
+  gate?: { crd: string | readonly string[]; namespaced: boolean };
 }
 
 /**

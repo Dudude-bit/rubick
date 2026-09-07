@@ -35,6 +35,7 @@ export const ru: Catalogue = {
     mountedAt: "смонтирован в {path}",
     projectedInto: "проецируется в {path}",
     noListAccess: "У вас нет прав смотреть этот список",
+    noVendorAccess: "У вас нет прав смотреть ресурсы интеграции {vendor}",
     relatedResources: "Связанные ресурсы",
     runsOn: "Работает на",
     whatRunsHere: "Что здесь работает",
