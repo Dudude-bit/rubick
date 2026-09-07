@@ -48,6 +48,7 @@ import { routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { cn } from "@/lib/utils";
 import { verbatim } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
@@ -275,7 +276,7 @@ function GroupCap({
 export function GatewayRoutesList() {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
-  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const scope = useNamespaceScope();
   const {
     detection,
     detectionLoading,
@@ -287,7 +288,7 @@ export function GatewayRoutesList() {
     dataUpdatedAt,
     live,
     resyncing,
-  } = useGatewayRoutes(currentNamespace);
+  } = useGatewayRoutes(scope.scope);
 
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
