@@ -53,6 +53,56 @@ pub struct ListAccess {
 }
 
 /// The attributes that ask "may I list this, here".
+/// One verb on one resource, where a page is about to offer a button.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessQuery {
+    pub group: String,
+    pub resource: String,
+    pub verb: String,
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessAnswer {
+    pub verb: String,
+    pub resource: String,
+    /// `None` where the cluster would not say, which is not "no".
+    pub allowed: Option<bool>,
+}
+
+/// Ask before drawing a control that a 403 would otherwise answer on click.
+#[tauri::command]
+pub async fn check_access(
+    queries: Vec<AccessQuery>,
+    state: State<'_, AppState>,
+) -> Result<Vec<AccessAnswer>> {
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    let answers = join_all(queries.iter().map(|query| {
+        let api = api.clone();
+        let attributes = ResourceAttributes {
+            group: Some(query.group.clone()),
+            resource: Some(query.resource.clone()),
+            verb: Some(query.verb.clone()),
+            namespace: query.namespace.clone(),
+            ..ResourceAttributes::default()
+        };
+        async move { ask(&api, attributes).await }
+    }))
+    .await;
+    Ok(queries
+        .into_iter()
+        .zip(answers)
+        .map(|(query, allowed)| AccessAnswer {
+            verb: query.verb,
+            resource: query.resource,
+            allowed,
+        })
+        .collect())
+}
+
 #[must_use]
 fn list_attributes(query: &ListQuery, namespace: Option<&str>) -> ResourceAttributes {
     ResourceAttributes {

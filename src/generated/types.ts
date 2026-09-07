@@ -1024,6 +1024,19 @@ export interface ListQuery {
   namespaced: boolean;
 }
 
+export interface AccessAnswer {
+  verb: string;
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface AccessQuery {
+  group: string;
+  resource: string;
+  verb: string;
+  namespace: string | null;
+}
+
 export interface CliAvailability {
   available: boolean;
   version: string | null;

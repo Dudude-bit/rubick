@@ -125,6 +125,7 @@ fn main() {
             commands::cluster::get_cluster_info,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
+            commands::access::check_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
             // Namespace management
@@ -143,6 +144,7 @@ fn main() {
             commands::crds::get_custom_resource,
             commands::crds::get_custom_resource_yaml,
             commands::crds::delete_custom_resource,
+            commands::crds::patch_custom_resource,
             // Pod commands
             commands::pods::list_pods,
             commands::pods::get_pod,

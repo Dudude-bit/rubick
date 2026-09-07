@@ -3,6 +3,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccessAnswer,
+  AccessQuery,
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -350,6 +352,20 @@ export async function getCustomResourceYaml(
   });
 }
 
+export async function patchCustomResource(
+  crdName: string,
+  name: string,
+  namespace: string | null,
+  patch: unknown
+): Promise<void> {
+  return invoke<void>("patch_custom_resource", {
+    crdName,
+    name,
+    namespace,
+    patch,
+  });
+}
+
 export async function deleteCustomResource(
   crdName: string,
   name: string,
@@ -410,6 +426,12 @@ export async function getDeploymentReplicasets(
 
 export async function checkKubectlAvailability(): Promise<CliAvailability> {
   return invoke<CliAvailability>("check_kubectl_availability");
+}
+
+export async function checkAccess(
+  queries: AccessQuery[]
+): Promise<AccessAnswer[]> {
+  return invoke<AccessAnswer[]>("check_access", { queries });
 }
 
 export async function checkListAccess(

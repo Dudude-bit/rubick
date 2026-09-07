@@ -136,6 +136,7 @@ export const ru: Catalogue = {
     routes: "Маршруты",
     map: "Карта",
     controller: "Контроллер",
+    operators: "Операторы",
     metadata: "Метаданные",
     allIntegrations: "Все интеграции",
     infrastructureBuilder: "Конструктор инфраструктуры",
@@ -158,6 +159,11 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    instances: "Инстансы",
+    cluster: "Кластер",
+    mode: "Режим",
+    primaryInstance: "Primary",
+    backupMethod: "Метод",
     connections: "Связи",
     providerId: "ID провайдера",
     resourceVersion: "Версия ресурса",
@@ -1462,6 +1468,110 @@ export const ru: Catalogue = {
     downloadFailed: "Не удалось скачать {name}",
     noCatInImage: "В образе нет cat, чтобы скопировать файл.",
   },
+  operators: {
+    cnpgPageDescription:
+      "Сначала сам оператор, потом каждый Cluster словами CloudNativePG, первым тот, которому вы нужны. Бэкапы берутся из объектов Backup, потому что поля статуса устарели и с плагинами пусты.",
+    cnpgOperatorExplained:
+      "CloudNativePG запускает один Deployment, cnpg-controller-manager, который согласует каждый Cluster в каждом namespace. Его версия читается с этого образа; его CRD это то, что нашло определение.",
+    couldNotReadClusters: "Не удалось прочитать объекты Cluster",
+    clustersTab: "Кластеры",
+    backupsTab: "Бэкапы",
+    poolersTab: "Пулеры",
+    operatorTab: "Оператор",
+    clustersNeedAttention: {
+      one: "{n} кластер требует внимания",
+      few: "{n} кластера требуют внимания",
+      many: "{n} кластеров требуют внимания",
+      other: "{n} кластера требуют внимания",
+    },
+    noClusters:
+      "Объектов Cluster нет ни в одном namespace. Оператор здесь; базу у него ещё никто не попросил.",
+    controllerFact: "Контроллер",
+    controllerNotFound:
+      "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
+    inNamespace: "в {namespace}",
+    versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
+    fromImage: "из образа Deployment",
+    canActFact: "Можно действовать",
+    canPatchClusters: "patch clusters",
+    canCreateBackups: "create backups",
+    allowed: "да",
+    refused: "отказано",
+    couldNotTell: "не удалось узнать",
+    checkedAgo: "проверено для вас, {ago}",
+    phaseUnknown: "фаза не записана",
+    primaryFact: "Primary",
+    readyFact: "Готовы",
+    readyOfDeclared: "{ready} из {declared} инстансов",
+    readyConditionFalse: "условие Ready False",
+    archivingFact: "Архивация WAL",
+    archivingNotDeclared: "не объявлена",
+    backupsFact: "Бэкапы",
+    backupsUnknown:
+      "неизвестно: объекты Backup прочитать не удалось, поэтому о них ничего не сказано",
+    backupsNone: "нет: объектов Backup для этого кластера нет",
+    backupsLastCompleted: {
+      one: "последний завершён {ago} · {n} объект Backup",
+      few: "последний завершён {ago} · {n} объекта Backup",
+      many: "последний завершён {ago} · {n} объектов Backup",
+      other: "последний завершён {ago} · {n} объекта Backup",
+    },
+    backupsNoneCompleted: {
+      one: "{n} объект Backup, ни один не завершён",
+      few: "{n} объекта Backup, ни один не завершён",
+      many: "{n} объектов Backup, ни один не завершён",
+      other: "{n} объекта Backup, ни один не завершён",
+    },
+    schedulesUnknown: "расписания прочитать не удалось",
+    suspendedWord: "приостановлено",
+    specSeenFact: "Spec виден оператору",
+    specSeenUnknownCnpg: "нельзя сказать: CNPG не пишет observedGeneration",
+    fencedWord: "fenced",
+    findingNotReady: "Кластер говорит, что он не Ready",
+    findingArchivingFailing: "Архивация WAL не удаётся уже {ago}",
+    findingFailedInstances: "Инстансы, которые оператор числит failed: {names}",
+    findingSwitchover: "Идёт switchover: {from} → {to}",
+    findingFenced: "Изолированы вручную: {names}",
+    fencedExplained:
+      "В изолированном (fenced) инстансе Postgres остановлен, а под остаётся; это держит аннотация cnpg.io/fencedInstances. Снимите изоляцию, когда причина ушла.",
+    findingHibernated: "В спячке",
+    hibernatedExplained:
+      "Поды удалены, PVC primary сохранён; аннотация cnpg.io/hibernation включена. «Разбудить» возвращает поды из этого PVC.",
+    actionRestart: "Перезапустить",
+    actionRestartExplained:
+      "Поочерёдно, сначала реплики, primary последним, через отметку kubectl.kubernetes.io/restartedAt на Cluster. Каждый инстанс перезапускается после того, как вернулся предыдущий.",
+    actionReload: "Перечитать конфигурацию",
+    actionReloadExplained:
+      "Перечитывает postgresql.conf и pg_hba без перезапуска, через отметку cnpg.io/reloadedAt на Cluster.",
+    actionBackup: "Бэкап сейчас",
+    actionBackupExplained:
+      "Создаёт объект Backup для этого кластера; метод тот, что объявлен в настройке бэкапов кластера. Оператор выполняет его и пишет результат на этом объекте.",
+    actionFence: "Изолировать",
+    actionFenceExplained:
+      "Останавливает Postgres в этом инстансе, оставляя под, добавив его в cnpg.io/fencedInstances. Изоляция primary забирает с собой путь записи кластера.",
+    actionUnfence: "Снять изоляцию",
+    actionUnfenceExplained:
+      "Убирает этот инстанс из cnpg.io/fencedInstances; Postgres в нём запускается снова.",
+    actionHibernate: "Усыпить",
+    actionHibernateExplained:
+      "Удаляет все поды и сохраняет PVC primary, установив cnpg.io/hibernation в on. Пока кластер не разбудят, на нём ничего не отвечает.",
+    actionWake: "Разбудить",
+    actionWakeExplained:
+      "Ставит cnpg.io/hibernation в off; оператор пересоздаёт поды из сохранённого PVC.",
+    refusedPatch:
+      "кластер отказывает вам в patch на clusters.postgresql.cnpg.io",
+    refusedCreateBackup:
+      "кластер отказывает вам в create на backups.postgresql.cnpg.io",
+    notDuringSwitchover: "не во время switchover",
+    confirmTitle: "{action} {target}?",
+    actionDone: "{action}: выполнено на {cluster}",
+    actionFailed: "{action} на {cluster} не прошло",
+    noBackupObjects: "Объектов Backup нет ни в одном namespace.",
+    allBackupObjects: "Все объекты Backup списком",
+    poolersUnknown: "Объекты Pooler прочитать не удалось",
+    noPoolers: "Объектов Pooler нет ни в одном namespace.",
+    operatorLogs: "Логи контроллера",
+  },
   tell: {
     askRollout: "Скажи мне, когда раскатка закончится",
     askPod: "Скажи мне, когда он будет готов или упадёт",
@@ -1527,6 +1637,8 @@ export const ru: Catalogue = {
   vendor: {
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
+    cloudnativepgGives:
+      "каждый кластер Postgres словами CloudNativePG: фаза, primary, инстансы, архивация WAL и бэкапы из объектов Backup, и настоящие ручки оператора",
     awsGives:
       "настоящую target group ALB за Service и то, что контроллер не смог применить",
     azureGives:
@@ -2027,6 +2139,18 @@ export const ru: Catalogue = {
       other: "{n} минуты",
     },
     factShowThem: "Показать",
+    factClustersInTrouble: {
+      one: "{n} кластер в беде",
+      few: "{n} кластера в беде",
+      many: "{n} кластеров в беде",
+      other: "{n} кластера в беде",
+    },
+    factArchivingFailing: {
+      one: "архивация WAL не удаётся на {n} кластере",
+      few: "архивация WAL не удаётся на {n} кластерах",
+      many: "архивация WAL не удаётся на {n} кластерах",
+      other: "архивация WAL не удаётся на {n} кластерах",
+    },
     factShowIt: "Показать",
     factNoIngressClass: "не заявляет ни одного IngressClass",
     factNotReady: "не готов",
@@ -2490,6 +2614,8 @@ export const ru: Catalogue = {
       "Что есть у этого кластера из того, чем приложение умеет пользоваться. Большая часть определяется по наличию CRD; всё, у чего есть собственный адрес, настраивается здесь, отдельно для каждого кластера.",
     configuredGroup: "Настроены — адрес для каждого кластера",
     detectedGroup: "Найдены в этом кластере",
+    operatorsGroup:
+      "Операторы — контроллер в кластере, который ведёт для вас базу данных",
     refusalNotNow: "Пока отказано",
     refusalNothingWouldReplaceIt: "Некому пересоздать",
     refusalHoldsLocalData: "Держит локальные данные",

@@ -159,6 +159,7 @@ export const en = {
     routes: "Routes",
     map: "Map",
     controller: "Controller",
+    operators: "Operators",
     metadata: "Metadata",
     allIntegrations: "All integrations",
     infrastructureBuilder: "Infrastructure Builder",
@@ -188,6 +189,11 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    instances: "Instances",
+    cluster: "Cluster",
+    mode: "Mode",
+    primaryInstance: "Primary",
+    backupMethod: "Method",
     connections: "Connections",
     providerId: "Provider ID",
     resourceVersion: "Resource version",
@@ -1454,6 +1460,104 @@ export const en = {
     downloadFailed: "Could not download {name}",
     noCatInImage: "No cat in this image to copy the file with.",
   },
+  operators: {
+    cnpgPageDescription:
+      "First the operator itself, then every Cluster in CloudNativePG's own words, the one that needs you first. Backups come from the Backup objects, because the status fields are deprecated and empty with plugins.",
+    cnpgOperatorExplained:
+      "CloudNativePG runs one Deployment, cnpg-controller-manager, that reconciles every Cluster in every namespace. Its version is read off that image; its CRDs are what detection found.",
+    couldNotReadClusters: "Could not read the Cluster objects",
+    clustersTab: "Clusters",
+    backupsTab: "Backups",
+    poolersTab: "Poolers",
+    operatorTab: "Operator",
+    clustersNeedAttention: {
+      one: "{n} cluster needs attention",
+      other: "{n} clusters need attention",
+    },
+    noClusters:
+      "No Cluster objects in any namespace. The operator is here; nothing has asked it for a database yet.",
+    controllerFact: "Controller",
+    controllerNotFound:
+      "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
+    inNamespace: "in {namespace}",
+    versionUnknown: "unknown: no controller image to read it from",
+    fromImage: "from the Deployment image",
+    canActFact: "Can act",
+    canPatchClusters: "patch clusters",
+    canCreateBackups: "create backups",
+    allowed: "yes",
+    refused: "refused",
+    couldNotTell: "could not tell",
+    checkedAgo: "checked for you, {ago}",
+    phaseUnknown: "phase not written",
+    primaryFact: "Primary",
+    readyFact: "Ready",
+    readyOfDeclared: "{ready} of {declared} instances",
+    readyConditionFalse: "condition Ready False",
+    archivingFact: "WAL archiving",
+    archivingNotDeclared: "not declared",
+    backupsFact: "Backups",
+    backupsUnknown:
+      "unknown: the Backup objects could not be read, so nothing is said about them",
+    backupsNone: "none: no Backup objects for this cluster",
+    backupsLastCompleted: {
+      one: "last completed {ago} · {n} Backup object",
+      other: "last completed {ago} · {n} Backup objects",
+    },
+    backupsNoneCompleted: {
+      one: "{n} Backup object, none completed",
+      other: "{n} Backup objects, none completed",
+    },
+    schedulesUnknown: "schedules could not be read",
+    suspendedWord: "suspended",
+    specSeenFact: "Spec seen by the operator",
+    specSeenUnknownCnpg: "cannot tell: CNPG writes no observedGeneration",
+    fencedWord: "fenced",
+    findingNotReady: "The cluster says it is not Ready",
+    findingArchivingFailing: "WAL archiving has been failing for {ago}",
+    findingFailedInstances: "Instances the operator lists as failed: {names}",
+    findingSwitchover: "Switchover in progress: {from} → {to}",
+    findingFenced: "Fenced by hand: {names}",
+    fencedExplained:
+      "Postgres is stopped in a fenced instance while its pod stays; the annotation cnpg.io/fencedInstances holds it. Unfence when the reason is gone.",
+    findingHibernated: "Hibernated",
+    hibernatedExplained:
+      "The pods are removed and the primary's PVC kept; the annotation cnpg.io/hibernation is on. Wake up puts the pods back from that PVC.",
+    actionRestart: "Restart",
+    actionRestartExplained:
+      "Rolling, replicas first and the primary last, by stamping kubectl.kubernetes.io/restartedAt on the Cluster. Each instance restarts after the previous one is back.",
+    actionReload: "Reload configuration",
+    actionReloadExplained:
+      "Re-reads postgresql.conf and pg_hba without restarting, by stamping cnpg.io/reloadedAt on the Cluster.",
+    actionBackup: "Backup now",
+    actionBackupExplained:
+      "Creates a Backup object for this cluster; the method is whatever the cluster's backup configuration declares. The operator runs it and writes the outcome on that object.",
+    actionFence: "Fence",
+    actionFenceExplained:
+      "Stops Postgres in this instance and keeps its pod, by adding it to cnpg.io/fencedInstances. Fencing the primary takes the cluster's write path with it.",
+    actionUnfence: "Unfence",
+    actionUnfenceExplained:
+      "Removes this instance from cnpg.io/fencedInstances; Postgres starts in it again.",
+    actionHibernate: "Hibernate",
+    actionHibernateExplained:
+      "Removes every pod and keeps the primary's PVC, by setting cnpg.io/hibernation to on. Nothing answers on this cluster until it is woken.",
+    actionWake: "Wake up",
+    actionWakeExplained:
+      "Sets cnpg.io/hibernation to off; the operator recreates the pods from the kept PVC.",
+    refusedPatch:
+      "the cluster refuses patch on clusters.postgresql.cnpg.io for you",
+    refusedCreateBackup:
+      "the cluster refuses create on backups.postgresql.cnpg.io for you",
+    notDuringSwitchover: "not during a switchover",
+    confirmTitle: "{action} {target}?",
+    actionDone: "{action}: done on {cluster}",
+    actionFailed: "{action} on {cluster} did not go through",
+    noBackupObjects: "No Backup objects in any namespace.",
+    allBackupObjects: "Every Backup object, as a list",
+    poolersUnknown: "The Pooler objects could not be read",
+    noPoolers: "No Pooler objects in any namespace.",
+    operatorLogs: "Logs of the controller",
+  },
   tell: {
     askRollout: "Tell me when the rollout finishes",
     askPod: "Tell me when it is ready, or falls over",
@@ -1525,6 +1629,8 @@ export const en = {
   vendor: {
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
+    cloudnativepgGives:
+      "every Postgres cluster in CloudNativePG's own words: phase, primary, instances, WAL archiving and backups from the Backup objects, with the operator's real knobs",
     awsGives:
       "the real ALB target group behind a Service, and what the controller could not apply",
     azureGives:
@@ -1914,6 +2020,14 @@ export const en = {
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
+    factClustersInTrouble: {
+      one: "{n} cluster in trouble",
+      other: "{n} clusters in trouble",
+    },
+    factArchivingFailing: {
+      one: "WAL archiving failing on {n} cluster",
+      other: "WAL archiving failing on {n} clusters",
+    },
     factShowIt: "Show it",
     factNoIngressClass: "claims no IngressClass",
     factNotReady: "not ready",
@@ -2329,6 +2443,8 @@ export const en = {
       "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
     configuredGroup: "Configured — an address per cluster",
     detectedGroup: "Detected in this cluster",
+    operatorsGroup:
+      "Operators — a controller in the cluster running a database for you",
     refusalNotNow: "Refused for now",
     refusalNothingWouldReplaceIt: "Nothing would replace it",
     refusalHoldsLocalData: "Holds local data",

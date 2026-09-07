@@ -6,7 +6,7 @@
 //! a single helper.
 
 use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
-use kube::api::{Api, DeleteParams, DynamicObject};
+use kube::api::{Api, DeleteParams, DynamicObject, Patch, PatchParams};
 use kube::discovery::ApiResource;
 use tauri::State;
 
@@ -130,6 +130,29 @@ pub async fn get_custom_resource_yaml(
 }
 
 /// Delete a custom resource instance
+/// A merge patch on one custom resource: how an operator's knobs are turned
+/// (an annotation, a spec field), never a whole-object replace.
+#[tauri::command]
+pub async fn patch_custom_resource(
+    crd_name: String,
+    name: String,
+    namespace: Option<String>,
+    patch: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_subdomain(&crd_name)?;
+    crate::validation::validate_dns_subdomain(&name)?;
+    if !patch.is_object() {
+        return Err(crate::error::Error::InvalidInput(
+            "a patch is a JSON object".to_string(),
+        ));
+    }
+    let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
+    api.patch(&name, &PatchParams::default(), &Patch::Merge(patch))
+        .await?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn delete_custom_resource(
     crd_name: String,

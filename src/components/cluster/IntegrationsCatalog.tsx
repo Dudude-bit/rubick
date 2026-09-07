@@ -68,7 +68,12 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   // reader scanning this screen is asking two different questions: what does
   // this cluster already have, and what could I plug in.
   const configured = statuses.filter((status) => status.connection !== null);
-  const detected = statuses.filter((status) => status.connection === null);
+  const operators = statuses.filter(
+    (status) => status.connection === null && status.extension.operator
+  );
+  const detected = statuses.filter(
+    (status) => status.connection === null && !status.extension.operator
+  );
   const anyDetected = detected.some((status) => status.installed);
   // `null` is the cluster declining to say. Reporting "none of them is here"
   // on the back of a refusal states a fact nobody established.
@@ -93,6 +98,18 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
       ) : (
         <SettingsGroup title={t("cluster", "detectedGroup")}>
           {detected.map((status) => (
+            <ExtensionRow
+              key={status.vendor.id}
+              status={status}
+              isPending={isPending}
+              asked={asked === status.vendor.id}
+            />
+          ))}
+        </SettingsGroup>
+      )}
+      {operators.length > 0 && (
+        <SettingsGroup title={t("cluster", "operatorsGroup")}>
+          {operators.map((status) => (
             <ExtensionRow
               key={status.vendor.id}
               status={status}
