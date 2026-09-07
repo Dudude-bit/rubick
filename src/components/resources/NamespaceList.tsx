@@ -1,6 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { T } from "@/i18n/T";
-import type { ColumnDef } from "@/components/ui/table-features";
+import type { CellContext, ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
 import { ResourceList } from "./ResourceList";
@@ -20,33 +26,45 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 import type { NamespaceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
-// Exported for `column-widths.test.ts`, at the cost of this file's fast
-// refresh: a save remounts the page instead of hot-swapping it.
+const NamespaceCells = createContext({
+  currentNamespace: "",
+  podCounts: new Map<string, number>(),
+});
+
+function NameCell({ row }: CellContext<NamespaceInfo>) {
+  const { currentNamespace } = useContext(NamespaceCells);
+  return (
+    <span className="flex items-baseline gap-2">
+      <ResourceRef
+        kind={ResourceType.Namespace}
+        name={row.original.name}
+        showKind={false}
+      />
+      {row.original.name === currentNamespace && (
+        <span className="text-[11px] text-fg-fnt">
+          <T section="cluster" k="currentScope" />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function PodsCell({ row }: CellContext<NamespaceInfo>) {
+  const { podCounts } = useContext(NamespaceCells);
+  return (
+    <span className="font-mono text-fg-mut">
+      {podCounts.get(row.original.name) ?? 0}
+    </span>
+  );
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
-export const columns = (
-  currentNamespace: string,
-  podCounts: Map<string, number>
-): ColumnDef<NamespaceInfo>[] => [
+export const columns: ColumnDef<NamespaceInfo>[] = [
   {
-    // Four columns share this table, so the name takes the room the others
-    // do not need rather than a name column's usual share.
     size: 420,
     accessorKey: "name",
     header: () => <T section="columns" k="name" />,
-    cell: ({ row }) => (
-      <span className="flex items-baseline gap-2">
-        <ResourceRef
-          kind={ResourceType.Namespace}
-          name={row.original.name}
-          showKind={false}
-        />
-        {row.original.name === currentNamespace && (
-          <span className="text-[11px] text-fg-fnt">
-            <T section="cluster" k="currentScope" />
-          </span>
-        )}
-      </span>
-    ),
+    cell: NameCell,
   },
   {
     size: 120,
@@ -58,11 +76,7 @@ export const columns = (
     size: 80,
     id: "pods",
     header: () => <T section="columns" k="pods" />,
-    cell: ({ row }) => (
-      <span className="font-mono text-fg-mut">
-        {podCounts.get(row.original.name) ?? 0}
-      </span>
-    ),
+    cell: PodsCell,
   },
   createAgeColumn<NamespaceInfo>(),
 ];
@@ -122,8 +136,8 @@ export function NamespaceList() {
     [namespaces]
   );
 
-  const namespaceColumns = useMemo(
-    () => columns(currentNamespace, podCounts),
+  const cellContext = useMemo(
+    () => ({ currentNamespace, podCounts }),
     [currentNamespace, podCounts]
   );
 
@@ -141,19 +155,21 @@ export function NamespaceList() {
   );
 
   return (
-    <ResourceList<NamespaceInfo>
-      title="Namespaces"
-      searchKey="name"
-      queryKey={queryKey}
-      queryFn={() => commands.listNamespaces()}
-      staleTime={STALE_TIMES.slow}
-      refresh={watchFailed ? undefined : false}
-      live={!watchFailed}
-      resyncing={resyncing}
-      getRowId={getResourceRowId}
-      columns={namespaceColumns}
-      emptyStateLabel="Namespaces"
-      quickActions={quickActions}
-    />
+    <NamespaceCells.Provider value={cellContext}>
+      <ResourceList<NamespaceInfo>
+        title="Namespaces"
+        searchKey="name"
+        queryKey={queryKey}
+        queryFn={() => commands.listNamespaces()}
+        staleTime={STALE_TIMES.slow}
+        refresh={watchFailed ? undefined : false}
+        live={!watchFailed}
+        resyncing={resyncing}
+        getRowId={getResourceRowId}
+        columns={columns}
+        emptyStateLabel="Namespaces"
+        quickActions={quickActions}
+      />
+    </NamespaceCells.Provider>
   );
 }
