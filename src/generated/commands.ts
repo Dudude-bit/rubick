@@ -65,6 +65,7 @@ import type {
   LokiProbe,
   ManifestResult,
   NamespaceInfo,
+  NodeBudget,
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
@@ -264,6 +265,10 @@ export async function debugNode(
   config: DebugConfig
 ): Promise<DebugOperation> {
   return invoke<DebugOperation>("debug_node", { nodeName, namespace, config });
+}
+
+export async function nodeResourceBudget(name: string): Promise<NodeBudget> {
+  return invoke<NodeBudget>("node_resource_budget", { name });
 }
 
 export async function listNodes(

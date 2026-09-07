@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { nodeReadyWord } from "@/lib/node-reporting";
 import { useNavigate } from "react-router-dom";
-import { BadgeCheck, Bug, Info, Tag } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  Bug,
+  Info,
+  Shield,
+  ShieldOff,
+  Tag,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -18,6 +26,13 @@ import {
   UsageRow,
 } from "@/components/resources/detail-blocks";
 import { UsageBlock } from "@/components/resources/usage-block";
+import { NodeResources } from "@/components/resources/NodeResources";
+import { PodListCard } from "@/components/resources/PodListCard";
+import { kindGlyph, podsMark } from "@/components/resources/detail-tab";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useNodeActions } from "@/hooks/useNodeActions";
+import { normalizeTauriError } from "@/lib/error-utils";
+import { STALE_TIMES } from "@/lib/refresh";
 import {
   KeyValueSection,
   type KeyValue,
@@ -29,11 +44,7 @@ import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
-import {
-  formatKubernetesBytes,
-  parseCPU,
-  parseMemory,
-} from "@/lib/k8s-quantity";
+import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -86,6 +97,37 @@ export function NodeDetail() {
     if (!node) return null;
     return mergeNodesWithMetrics([node], nodeMetrics)[0] ?? null;
   }, [node, nodeMetrics]);
+
+  // The scheduler's promise on this machine, summed in Rust over the pods
+  // here; unknown the moment one namespace refuses to list them.
+  const budget = useLiveQuery({
+    queryKey: ["node", "budget", name],
+    queryFn: () => commands.nodeResourceBudget(name ?? ""),
+    enabled: !!node && !!name,
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh: "resourceDetail",
+  });
+
+  // The real pod rows, filtered by `spec.nodeName` on the server. Asked for
+  // only while the tab is open: a node can carry a hundred of them.
+  const podsOnThisNode = useLiveQuery({
+    queryKey: ["node", "pods", name],
+    queryFn: () =>
+      commands.listPods({
+        namespace: null,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+        statusFilter: null,
+        selector: null,
+        nodeName: name ?? null,
+      }),
+    enabled: !!node && !!name && activeTab === "pods",
+    staleTime: STALE_TIMES.resourceList,
+    refresh: "resourceList",
+  });
+
+  const actions = useNodeActions();
 
   if (!node && !isLoading && !error) {
     return null;
@@ -194,21 +236,6 @@ export function NodeDetail() {
       ]
     : [];
 
-  const allocatable: KeyValue[] = [
-    { label: "CPU", value: node?.allocatable.cpu ?? "-", mono: true },
-    {
-      label: t("columns", "memory"),
-      value: formatKubernetesBytes(node?.allocatable.memory),
-      mono: true,
-    },
-    { label: "Pods", value: node?.allocatable.pods ?? "-", mono: true },
-    {
-      label: t("columns", "ephemeralStorage"),
-      value: formatKubernetesBytes(node?.allocatable.ephemeralStorage),
-      mono: true,
-    },
-  ];
-
   const tabs = [
     {
       id: "overview",
@@ -246,13 +273,23 @@ export function NodeDetail() {
             />
           </UsageBlock>
 
+          <NodeResources
+            budget={budget.data}
+            error={budget.error ? normalizeTauriError(budget.error) : null}
+            onRetry={() => void budget.refetch()}
+            usage={
+              nodeWithMetrics
+                ? {
+                    cpuMillicores: nodeWithMetrics.cpuMillicores ?? null,
+                    memoryBytes: nodeWithMetrics.memoryBytes ?? null,
+                  }
+                : null
+            }
+            podsRunning={podCount ?? null}
+          />
+
           <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
             <KeyValueSection title={t("columns", "host")} items={facts} />
-            <KeyValueSection
-              title={t("columns", "allocatable")}
-              count={t("empty", "allocatableNote")}
-              items={allocatable}
-            />
             {placement && statesPlacement(placement) && (
               <KeyValueSection
                 title={t("columns", "placement")}
@@ -269,6 +306,19 @@ export function NodeDetail() {
             />
           )}
         </>
+      ),
+    },
+    {
+      id: "pods",
+      label: "Pods",
+      glyph: kindGlyph(ResourceType.Pod),
+      mark: podsMark(podsOnThisNode.data ?? []),
+      content: (
+        <PodListCard
+          pods={podsOnThisNode.data ?? []}
+          error={podsOnThisNode.error}
+          emptyMessage={t("empty", "noPodsOnNode")}
+        />
       ),
     },
     {
@@ -340,14 +390,39 @@ export function NodeDetail() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         actions={
-          <DetailAction
-            label={t("action", "debugNode")}
-            icon={Bug}
-            onClick={() => setDebugDialogOpen(true)}
-            disabled={!node}
-          />
+          <>
+            {node?.unschedulable ? (
+              <DetailAction
+                label={t("action", "uncordon")}
+                icon={Shield}
+                onClick={() => node && actions.uncordon(node.name)}
+                disabled={!node}
+              />
+            ) : (
+              <DetailAction
+                label={t("action", "cordon")}
+                icon={ShieldOff}
+                onClick={() => node && actions.cordon(node.name)}
+                disabled={!node}
+              />
+            )}
+            <DetailAction
+              label={t("action", "drain")}
+              icon={AlertTriangle}
+              onClick={() => node && actions.drain(node.name)}
+              disabled={!node}
+              danger
+            />
+            <DetailAction
+              label={t("action", "debugNode")}
+              icon={Bug}
+              onClick={() => setDebugDialogOpen(true)}
+              disabled={!node}
+            />
+          </>
         }
       />
+      {actions.dialogs}
 
       {/* Outside the frame: Debug is on the strip's row and so on every tab,
           and a dialog inside the open tab's panel would go with the tab. */}

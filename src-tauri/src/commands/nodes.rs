@@ -5,10 +5,12 @@ use crate::commands::helpers::{
     get_cluster_resource_info, list_cluster_resource_infos, ResourceContext,
 };
 use crate::drain::{DrainHandle, DrainOptions};
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::resources::node_budget::{budget, NodeBudget};
 use crate::resources::NodeInfo;
 use crate::state::AppState;
-use k8s_openapi::api::core::v1::Node;
+use k8s_openapi::api::core::v1::{Namespace, Node, Pod};
+use kube::api::ListParams;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -20,6 +22,70 @@ pub struct NodeFilters {
     pub field_selector: Option<String>,
     pub limit: Option<i64>,
     pub ready_only: Option<bool>,
+}
+
+/// The node's resource table: capacity, allocatable, and what the pods on
+/// it have reserved and may burst to.
+///
+/// One cluster-wide list narrowed by `spec.nodeName`. Where that is refused
+/// the pods are listed namespace by namespace, and a single refusal there
+/// makes the sums unknown rather than smaller.
+#[tauri::command]
+pub async fn node_resource_budget(name: String, state: State<'_, AppState>) -> Result<NodeBudget> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let node = ctx.cluster_api::<Node>().get(&name).await?;
+    let params = ListParams::default().fields(&format!("spec.nodeName={name}"));
+
+    match ctx.cluster_api::<Pod>().list(&params).await {
+        Ok(list) => return Ok(budget(&node, Some(&list.items), Vec::new(), None)),
+        Err(e) => {
+            let err = Error::from(e);
+            if !err.is_refusal() {
+                return Ok(budget(&node, None, Vec::new(), Some(err.to_string())));
+            }
+        }
+    }
+
+    let namespaces = match ctx
+        .cluster_api::<Namespace>()
+        .list(&ListParams::default())
+        .await
+    {
+        Ok(list) => list.items,
+        Err(e) => {
+            return Ok(budget(
+                &node,
+                None,
+                Vec::new(),
+                Some(Error::from(e).to_string()),
+            ));
+        }
+    };
+    let mut pods = Vec::new();
+    let mut refused = Vec::new();
+    for namespace in namespaces {
+        let Some(ns) = namespace.metadata.name else {
+            continue;
+        };
+        let api: kube::Api<Pod> = kube::Api::namespaced(ctx.client.clone(), &ns);
+        match api.list(&params).await {
+            Ok(list) => pods.extend(list.items),
+            Err(e) => {
+                let err = Error::from(e);
+                if err.is_refusal() {
+                    refused.push(ns);
+                } else {
+                    return Ok(budget(&node, None, Vec::new(), Some(err.to_string())));
+                }
+            }
+        }
+    }
+    if refused.is_empty() {
+        Ok(budget(&node, Some(&pods), Vec::new(), None))
+    } else {
+        Ok(budget(&node, None, refused, None))
+    }
 }
 
 /// List all nodes

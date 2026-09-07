@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { NodeInfo } from "@/generated/types";
+import type { NodeBudget, NodeInfo } from "@/generated/types";
 
 // ----- Mocks -----
 //
@@ -23,10 +23,15 @@ vi.mock("@/hooks/useMetrics", () => ({
   })),
 }));
 
+const budgetMock = vi.fn(async (_name: string) => buildBudget());
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getNode: vi.fn(async () => buildNode()),
     listPods: vi.fn(async () => []),
+    nodeResourceBudget: (name: string) => budgetMock(name),
+    cordonNode: vi.fn(async () => undefined),
+    uncordonNode: vi.fn(async () => undefined),
   },
 }));
 
@@ -83,6 +88,63 @@ function buildNode(overrides: Partial<NodeInfo> = {}): NodeInfo {
     },
     providerId: null,
     createdAt: "2026-04-25T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function buildBudget(overrides: Partial<NodeBudget> = {}): NodeBudget {
+  return {
+    pods: 12,
+    known: true,
+    refused: [],
+    error: null,
+    resources: [
+      {
+        name: "cpu",
+        unit: "cpu",
+        capacity: 4000,
+        allocatable: 3800,
+        requested: 2100,
+        limited: 6000,
+        extended: false,
+      },
+      {
+        name: "memory",
+        unit: "memory",
+        capacity: 16 * 1024 ** 3,
+        allocatable: 14 * 1024 ** 3,
+        requested: 7 * 1024 ** 3,
+        limited: 20 * 1024 ** 3,
+        extended: false,
+      },
+      {
+        name: "pods",
+        unit: "count",
+        capacity: 110,
+        allocatable: 110,
+        requested: 12,
+        limited: null,
+        extended: false,
+      },
+      {
+        name: "ephemeral-storage",
+        unit: "memory",
+        capacity: 100 * 1024 ** 3,
+        allocatable: 90 * 1024 ** 3,
+        requested: 0,
+        limited: 0,
+        extended: false,
+      },
+      {
+        name: "nvidia.com/gpu",
+        unit: "count",
+        capacity: 1,
+        allocatable: 1,
+        requested: 1,
+        limited: 1,
+        extended: true,
+      },
+    ],
     ...overrides,
   };
 }
@@ -164,9 +226,10 @@ describe("NodeDetail", () => {
     expect(screen.getByText(/notready/i)).toBeInTheDocument();
   });
 
-  it("renders the four tabs (Overview, Conditions, Labels, YAML)", () => {
+  it("renders the tabs (Overview, Pods, Conditions, Labels, YAML)", () => {
     renderPage();
     expect(screen.getByRole("tab", { name: /overview/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^pods/i })).toBeInTheDocument();
     expect(
       screen.getByRole("tab", { name: /conditions/i })
     ).toBeInTheDocument();
@@ -224,5 +287,68 @@ describe("NodeDetail", () => {
 
     const { container } = renderPage();
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("the resources table", () => {
+  beforeEach(() => {
+    budgetMock.mockReset();
+    budgetMock.mockImplementation(async () => buildBudget());
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+  });
+
+  /** A device plugin's resource is exactly the row somebody with a GPU node opens this page for. */
+  it("lists an extended resource beside the four the kubelet always has", async () => {
+    renderPage();
+    expect(await screen.findByText("nvidia.com/gpu")).toBeInTheDocument();
+    expect(screen.getByText("extended")).toBeInTheDocument();
+  });
+
+  /** A sum over the namespaces that could be read is a smaller number presented as the whole. */
+  it("says unknown, and which namespaces refused, rather than a partial sum", async () => {
+    budgetMock.mockImplementation(async () =>
+      buildBudget({
+        known: false,
+        pods: null,
+        refused: ["kube-system", "monitoring"],
+        resources: buildBudget().resources.map((r) => ({
+          ...r,
+          requested: null,
+          limited: null,
+        })),
+      })
+    );
+    renderPage();
+    const notice = await screen.findByText(/kube-system, monitoring/);
+    expect(notice).toHaveTextContent("2 namespaces");
+    // One "unknown" per resource for requested, and one for limited on all but pods.
+    expect(screen.getAllByText("unknown").length).toBe(5 + 4);
+  });
+});
+
+describe("the header actions", () => {
+  beforeEach(() => {
+    budgetMock.mockImplementation(async () => buildBudget());
+  });
+
+  /** The list had cordon and drain and the page did not, so a reader on the page went back to the list to act. */
+  it("offers cordon and drain on the page, and uncordon once cordoned", () => {
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    const { unmount } = renderPage();
+    expect(screen.getByRole("button", { name: /^cordon$/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^drain$/i })).toBeEnabled();
+    unmount();
+
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(
+        buildNode({ unschedulable: true })
+      ) as never
+    );
+    renderPage();
+    expect(screen.getByRole("button", { name: /uncordon/i })).toBeEnabled();
   });
 });

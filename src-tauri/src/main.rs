@@ -216,6 +216,7 @@ fn main() {
             // Node commands
             commands::nodes::list_nodes,
             commands::nodes::get_node,
+            commands::nodes::node_resource_budget,
             commands::nodes::cordon_node,
             commands::nodes::uncordon_node,
             commands::nodes::start_node_drain,

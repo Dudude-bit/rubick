@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { T } from "@/i18n/T";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -30,9 +29,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { DrainDialog } from "@/components/resources/drain-dialog";
-import { useAsk } from "@/hooks/useAsk";
-import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
+import { useNodeActions } from "@/hooks/useNodeActions";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -171,7 +168,6 @@ export function NodeList() {
   const t = useT();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const queryKey = useMemo(
@@ -216,77 +212,7 @@ export function NodeList() {
     return metricsMap;
   }, [nodeMetrics]);
 
-  const cordonMutation = useMutation({
-    mutationFn: (nodeName: string) => commands.cordonNode(nodeName),
-    onSuccess: (_, nodeName) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.resources(ResourceType.Node, null),
-      });
-      toast({
-        title: t("action", "nodeCordoned"),
-        description: t("action", "nodeCordonedDetail", { name: nodeName }),
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: t("action", "cordonFailed", { error: String(error) }),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const uncordonMutation = useMutation({
-    mutationFn: (nodeName: string) => commands.uncordonNode(nodeName),
-    onSuccess: (_, nodeName) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.resources(ResourceType.Node, null),
-      });
-      toast({
-        title: t("action", "nodeUncordoned"),
-        description: t("action", "nodeUncordonedDetail", { name: nodeName }),
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: t("action", "uncordonFailed", { error: String(error) }),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const [draining, setDraining] = useState<string | null>(null);
-  const asking = useAsk();
-
-  // A drain is not a mutation: it outlives its own command call and reports
-  // as it goes. The hook owns that; the list only owns which node is open.
-  const drain = useNodeDrain({
-    onFinished: (result) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.resources(ResourceType.Node, null),
-      });
-      // A node that emptied has nothing left to read, so it says so in a
-      // toast and gets out of the way. Every other ending left a list of
-      // pods and a reason each, which is not a story a toast can hold — so
-      // it stays in the dialog, unless nobody is looking at the dialog.
-      if (result.outcome === "drained") {
-        setDraining(null);
-        drain.reset();
-        toast({
-          title: t("action", "nodeDrained"),
-          description: t("action", "nodeDrainedDetail", { name: result.node }),
-        });
-        return;
-      }
-      if (draining === null) {
-        toast({
-          title: t("action", "drainEnded", { name: result.node }),
-          description: t("action", "reopenTheNodeToRead"),
-        });
-      }
-    },
-  });
+  const actions = useNodeActions();
 
   const nodeColumns = useMemo(
     () => columns(nodeMetricsByName),
@@ -304,30 +230,24 @@ export function NodeList() {
       {
         icon: ShieldOff,
         label: t("action", "cordon"),
-        onClick: (item) => cordonMutation.mutate(item.name),
+        onClick: (item) => actions.cordon(item.name),
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
-        onClick: (item) => uncordonMutation.mutate(item.name),
+        onClick: (item) => actions.uncordon(item.name),
       },
       {
         icon: AlertTriangle,
         label: t("action", "drain"),
-        // Straight to the dialog rather than to the mutation: a drain is the
+        // Straight to the dialog rather than to a mutation: a drain is the
         // one action here that can be refused by something the reader cannot
         // see from this row.
-        // Reopening the node a drain is running on shows that drain. Any
-        // other node starts clean, so one node's report never appears over
-        // another's name.
-        onClick: (item) => {
-          if (drainingNode(drain.state) !== item.name) drain.reset();
-          setDraining(item.name);
-        },
+        onClick: (item) => actions.drain(item.name),
         variant: "destructive",
       },
     ],
-    [t, navigate, cordonMutation, uncordonMutation, setDraining, drain]
+    [t, navigate, actions]
   );
 
   return (
@@ -352,27 +272,7 @@ export function NodeList() {
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />
-      {asking.dialog}
-      <DrainDialog
-        node={draining}
-        state={drain.state}
-        onOpenChange={(open) => {
-          if (open) return;
-          setDraining(null);
-          // A running drain keeps running when its window is closed — the
-          // panel says so. Only a finished one is cleared, so that reopening
-          // the row does not reread an old report.
-          if (drain.state.phase === "done" || drain.state.phase === "failed") {
-            drain.reset();
-          }
-        }}
-        onConfirm={(node, { tellMeWhen, ...choices }) => {
-          if (tellMeWhen)
-            asking.ask({ kind: "Node", namespace: null, name: node });
-          void drain.start(node, { ignoreDaemonsets: true, ...choices });
-        }}
-        onCancelDrain={drain.cancel}
-      />
+      {actions.dialogs}
     </>
   );
 }
