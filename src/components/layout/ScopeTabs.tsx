@@ -684,6 +684,10 @@ function NamespacePopover({
   /** The namespace the ceiling has just turned down, until anything else
    *  happens. A refusal nobody is told about is a control that broke. */
   const [refused, setRefused] = useState<string | null>(null);
+  /** Which namespaces were selected when the list opened, so the ones the
+   *  reader came to deselect sit at the top — pinned at open rather than live,
+   *  so a row does not slide out from under the pointer as it is toggled. */
+  const [pinned, setPinned] = useState<readonly string[]>([]);
   const listId = useId();
   const noteId = `${listId}-note`;
 
@@ -691,6 +695,16 @@ function NamespacePopover({
   const visible = needle
     ? namespaces.filter((ns) => ns.name.toLowerCase().includes(needle))
     : namespaces;
+
+  // Selected-at-open first, the rest after, each group keeping the summary's
+  // own problem/pod/name order. A stable sort keyed only on membership does
+  // exactly that. Ordering is what changes here; `selected`/`closed`/`full`
+  // below still read the live `scope`, so the ceiling and the checkmarks
+  // stay honest as the reader toggles.
+  const pinnedSet = new Set(pinned);
+  const ordered = [...visible].sort(
+    (a, b) => Number(pinnedSet.has(b.name)) - Number(pinnedSet.has(a.name))
+  );
 
   const full = scope.length >= SCOPE_LIMIT;
 
@@ -706,7 +720,7 @@ function NamespacePopover({
       selected: scope.length === 0,
       closed: false,
     },
-    ...visible.map((ns) => ({
+    ...ordered.map((ns) => ({
       key: ns.name,
       label: ns.name,
       mono: true,
@@ -782,7 +796,10 @@ function NamespacePopover({
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (!next) {
+        if (next) {
+          // Freeze the selection to the top for as long as the list is open.
+          setPinned(scope);
+        } else {
           setFilter("");
           setCursor(-1);
           setRefused(null);

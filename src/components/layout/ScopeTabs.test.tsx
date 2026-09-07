@@ -242,6 +242,32 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
+   * The reader from #137 stands in several namespaces on a cluster of many,
+   * and came to the list to turn one off. The ones already selected float to
+   * the top so they are found and deselected at a glance, instead of hunting
+   * them out of sixty. Would break if the list went back to raw summary order.
+   */
+  it("floats the selected namespaces to the top of the list", async () => {
+    const user = userEvent.setup();
+    // ns-3 and ns-4 are picked, and sit in the middle of the summary order.
+    draw(["ns-3", "ns-4"]);
+    const list = await openPicker(user);
+
+    const label = (option: HTMLElement) => {
+      const name = option.getAttribute("aria-label") ?? "";
+      return /^All namespaces/.test(name)
+        ? "all"
+        : (name.match(/^ns-\d+/)?.[0] ?? "?");
+    };
+    const order = within(list).getAllByRole("option").map(label);
+
+    // Row 0 is "All namespaces"; the two selected come next, then the rest in
+    // the summary's own order.
+    expect(order.slice(0, 3)).toEqual(["all", "ns-3", "ns-4"]);
+    expect(order.slice(3)).toEqual(["ns-0", "ns-1", "ns-2", "ns-5"]);
+  });
+
+  /**
    * Both gestures without a mouse, on a list that is one tab stop. Would
    * break if the rows went back to being focusable controls: an option's
    * children are presentational, so a button in one is announced as nothing
