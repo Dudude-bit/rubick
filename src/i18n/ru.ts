@@ -2690,6 +2690,10 @@ export const ru: Catalogue = {
       "Бэкенд отправил {events} событий, всего {bytes}, самое большое {max}, изменений watch {changes}.",
     perfCopy: "Копировать отчёт",
     perfCopied: "Отчёт скопирован",
+    perfSampled:
+      "Перцентили считаются по последним {cap} замерам каждого вида; счётчики и максимумы охватывают всё.",
+    perfBackendError: "Бэкенд не ответил: {error}",
+    perfRetryStop: "Попробовать остановить ещё раз",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",

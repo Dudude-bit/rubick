@@ -13,7 +13,9 @@ Diagnostics records. Numbers from anything smaller are not numbers.
     scripts/perf-rig.py down
 
 Uses the current kubectl context unless --context is given; `up` creates a
-kind or k3d cluster named rubick-perf when neither exists yet.
+kind or k3d cluster named rubick-perf when neither exists yet. `down` removes
+only what this script made: a cluster it created, or the namespaces it
+labelled, never anything else on a cluster it was merely pointed at.
 """
 
 import argparse
@@ -27,9 +29,12 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 CLUSTER = "rubick-perf"
 NAMESPACES = 10
+LABEL = "perf.rubick/rig=true"
+OWNED = Path.home() / ".cache" / "rubick-perf-rig"
 
 
 def kubectl(context, *args, stdin=None, check=True, capture=False):
@@ -54,20 +59,28 @@ def context_exists(context):
 def create_cluster():
     if shutil.which("kind"):
         subprocess.run(["kind", "create", "cluster", "--name", CLUSTER], check=True)
-        return f"kind-{CLUSTER}"
-    if shutil.which("k3d"):
+        context = f"kind-{CLUSTER}"
+    elif shutil.which("k3d"):
         subprocess.run(["k3d", "cluster", "create", CLUSTER, "--no-lb"], check=True)
-        return f"k3d-{CLUSTER}"
-    sys.exit("neither kind nor k3d is installed; pass --context for an existing cluster")
+        context = f"k3d-{CLUSTER}"
+    else:
+        sys.exit("neither kind nor k3d is installed; pass --context for an existing cluster")
+    OWNED.mkdir(parents=True, exist_ok=True)
+    (OWNED / context).write_text(time.strftime("%Y-%m-%dT%H:%M:%S"))
+    return context
 
 
-def pod(i, ns):
+def namespace_of(i):
+    return f"perf-{i % NAMESPACES}"
+
+
+def pod(i):
     return {
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {
             "name": f"p-{i:05}",
-            "namespace": ns,
+            "namespace": namespace_of(i),
             "labels": {"app": f"app-{i % 50}", "perf.rubick/rig": "true"},
             "annotations": {"perf.rubick/churn": "0"},
         },
@@ -94,23 +107,45 @@ def wait_for_service_accounts(context):
             sys.exit(f"perf-{n}: the default ServiceAccount never appeared")
 
 
+def rig_pods(context):
+    """(namespace, index) of every pod this script made, from its label."""
+    out = kubectl(context, "get", "pods", "-A", "-l", LABEL, "-o", "jsonpath={range .items[*]}{.metadata.namespace} {.metadata.name}{'\\n'}{end}", capture=True, check=False).stdout
+    found = []
+    for line in out.splitlines():
+        ns, _, name = line.partition(" ")
+        if name.startswith("p-") and name[2:].isdigit():
+            found.append((ns, int(name[2:])))
+    return found
+
+
 def up(args):
+    if args.pods < 1:
+        sys.exit("--pods must be at least 1")
     context = args.context
     if not context:
         context = next((c for c in (f"kind-{CLUSTER}", f"k3d-{CLUSTER}") if context_exists(c)), None)
         context = context or create_cluster()
     apply_list(
         context,
-        [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": f"perf-{n}"}} for n in range(NAMESPACES)],
+        [
+            {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": f"perf-{n}", "labels": {"perf.rubick/rig": "true"}}}
+            for n in range(NAMESPACES)
+        ],
     )
     wait_for_service_accounts(context)
-    per_ns = args.pods // NAMESPACES
     batch = 200
     for start in range(0, args.pods, batch):
-        items = [pod(i, f"perf-{min(i // per_ns, NAMESPACES - 1)}") for i in range(start, min(start + batch, args.pods))]
-        apply_list(context, items)
+        apply_list(context, [pod(i) for i in range(start, min(start + batch, args.pods))])
         print(f"\r{min(start + batch, args.pods)} / {args.pods} pods", end="", flush=True)
-    print(f"\ncontext {context}: {args.pods} Pending pods in {NAMESPACES} namespaces")
+    print()
+    surplus = [(ns, i) for ns, i in rig_pods(context) if i >= args.pods]
+    for ns in sorted({ns for ns, _ in surplus}):
+        names = [f"p-{i:05}" for n, i in surplus if n == ns]
+        for k in range(0, len(names), batch):
+            kubectl(context, "delete", "pods", "-n", ns, "--wait=false", *names[k : k + batch])
+    if surplus:
+        print(f"removed {len(surplus)} rig pods above {args.pods}")
+    print(f"context {context}: {args.pods} Pending pods in {NAMESPACES} namespaces")
 
 
 class Proxy:
@@ -142,8 +177,10 @@ class Proxy:
 
 def churn(args):
     context = args.context or current_context()
+    targets = rig_pods(context)
+    if not targets:
+        sys.exit(f"no rig pods on {context}; run `up` first")
     proxy = Proxy(context)
-    per_ns = args.pods // NAMESPACES
     done = 0
     errors = 0
     lock = threading.Lock()
@@ -153,8 +190,7 @@ def churn(args):
     def worker():
         nonlocal done, errors
         while not stop.is_set():
-            i = random.randrange(args.pods)
-            ns = f"perf-{min(i // per_ns, NAMESPACES - 1)}"
+            ns, i = random.choice(targets)
             try:
                 proxy.patch(ns, f"p-{i:05}", {"metadata": {"annotations": {"perf.rubick/churn": str(time.time_ns())}}})
                 with lock:
@@ -208,22 +244,26 @@ def logs(args):
 
 def status(args):
     context = args.context or current_context()
-    out = kubectl(context, "get", "pods", "-A", "-l", "perf.rubick/rig=true", "--no-headers", capture=True, check=False).stdout
+    out = kubectl(context, "get", "pods", "-A", "-l", LABEL, "--no-headers", capture=True, check=False).stdout
     lines = [l for l in out.splitlines() if l.strip()]
     pending = sum(1 for l in lines if " Pending " in l)
-    print(f"context {context}: {len(lines)} rig pods, {pending} Pending")
+    owned = "created by this script" if (OWNED / context).exists() else "not created by this script"
+    print(f"context {context}: {len(lines)} rig pods, {pending} Pending · cluster {owned}")
 
 
 def down(args):
     context = args.context or current_context()
-    if context in (f"kind-{CLUSTER}",) and shutil.which("kind"):
-        subprocess.run(["kind", "delete", "cluster", "--name", CLUSTER], check=True)
-    elif context in (f"k3d-{CLUSTER}",) and shutil.which("k3d"):
-        subprocess.run(["k3d", "cluster", "delete", CLUSTER], check=True)
-    else:
-        for n in range(NAMESPACES):
-            kubectl(context, "delete", "namespace", f"perf-{n}", "--wait=false", check=False)
-        print(f"rig namespaces deleted from {context}; the cluster itself was not ours to remove")
+    if (OWNED / context).exists():
+        if context == f"kind-{CLUSTER}" and shutil.which("kind"):
+            subprocess.run(["kind", "delete", "cluster", "--name", CLUSTER], check=True)
+        elif context == f"k3d-{CLUSTER}" and shutil.which("k3d"):
+            subprocess.run(["k3d", "cluster", "delete", CLUSTER], check=True)
+        else:
+            sys.exit(f"{context} is recorded as ours but no kind or k3d can delete it")
+        (OWNED / context).unlink()
+        return
+    kubectl(context, "delete", "namespaces", "-l", LABEL, "--wait=false", check=False)
+    print(f"rig namespaces (label {LABEL}) deleted from {context}; the cluster was not ours to remove")
 
 
 def current_context():
@@ -240,7 +280,6 @@ def main():
     s = sub.add_parser("churn")
     s.add_argument("-r", "--rate", type=float, default=100, help="updates per second")
     s.add_argument("-s", "--seconds", type=int, default=0, help="0 = until Ctrl-C")
-    s.add_argument("--pods", type=int, default=10_000)
     s.add_argument("--workers", type=int, default=8)
     s.set_defaults(fn=churn)
     s = sub.add_parser("logs")
@@ -255,6 +294,8 @@ def main():
             if context_exists(c):
                 args.context = c
                 break
+    if getattr(args, "rate", 1) <= 0 or getattr(args, "workers", 1) < 1:
+        sys.exit("--rate must be positive and --workers at least 1")
     args.fn(args)
 
 

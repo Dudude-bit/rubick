@@ -17,8 +17,10 @@ editor states its numbers against these, before and after.
 | Rows in the DOM                                                   | bounded by the viewport; anything past 100 rows is virtualised      |
 | Input to paint under load                                         | p95 ≤ 50 ms                                                         |
 
-The IPC limit lives in `shared/` with a test on each side of the boundary,
-the same way `MAX_PROBLEMS` does.
+The IPC numbers live in `shared/ipc-budget.json`, with a test on each side
+of the boundary holding its constant equal to the file, the same way
+`MAX_PROBLEMS` does. Nothing enforces them at runtime yet; the recorder
+paints an answer over the target in the warning tone so a PR cannot miss it.
 
 ## The rig
 

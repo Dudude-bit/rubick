@@ -5,17 +5,26 @@ import { ClipboardCopy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
-import { commands } from "@/lib/commands";
-import { logInfo } from "@/lib/logger";
-import { perf } from "@/lib/perf";
+import { IPC_TARGET_BYTES, perf } from "@/lib/perf";
 import type { PerfReport, PerfStats } from "@/lib/perf";
-import { startFrameWatch } from "@/lib/perf-frames";
+import { perfSession } from "@/lib/perf-session";
+import type { SessionState } from "@/lib/perf-session";
+import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
 function useReport(): PerfReport | null {
   const [report, setReport] = React.useState(() => perf.report());
   React.useEffect(() => perf.subscribe(() => setReport(perf.report())), []);
   return report;
+}
+
+function useSession(): SessionState {
+  const [state, setState] = React.useState(() => perfSession.current);
+  React.useEffect(
+    () => perfSession.subscribe(() => setState(perfSession.current)),
+    []
+  );
+  return state;
 }
 
 const ms = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)} ms`;
@@ -56,12 +65,24 @@ function StatsRows({
           {rows.map(([name, s]) => (
             <tr key={name} className="border-t border-hair">
               <td className="py-1 pr-3 font-sans text-fg">{name}</td>
-              <td className="py-1 pr-3 text-right">{s.count}</td>
+              <td className="py-1 pr-3 text-right">
+                {s.count}
+                {s.sampled < s.count && (
+                  <span className="text-fg-fnt"> · {s.sampled}</span>
+                )}
+              </td>
               <td className="py-1 pr-3 text-right">{ms(s.p50)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.p95)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.max)}</td>
               <td className="py-1 pr-3 text-right">{s.maxRows ?? "–"}</td>
-              <td className="py-1 text-right">
+              <td
+                className={cn(
+                  "py-1 text-right",
+                  s.maxBytes !== undefined &&
+                    s.maxBytes > IPC_TARGET_BYTES &&
+                    "text-warn"
+                )}
+              >
                 {s.maxBytes !== undefined ? kb(s.maxBytes) : "–"}
               </td>
             </tr>
@@ -73,52 +94,16 @@ function StatsRows({
 }
 
 /**
- * Start and stop a recording, and read it back. Off by default because every
- * answer is serialised twice while it runs; the hint says so.
+ * Control and read back the one recording `perfSession` owns. Off by
+ * default because every answer is serialised twice while it runs; the hint
+ * says so.
  */
 export function PerformancePanel() {
   const t = useT();
   const { toast } = useToast();
   const report = useReport();
-  const stopFrames = React.useRef<(() => void) | null>(null);
-  const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => () => stopFrames.current?.(), []);
-
-  const start = async () => {
-    setBusy(true);
-    try {
-      await commands.perfSetRecording(true);
-      perf.start();
-      stopFrames.current = startFrameWatch();
-    } catch (error) {
-      logInfo(`perf recording did not start: ${String(error)}`, {
-        context: "perf",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const stop = async () => {
-    setBusy(true);
-    try {
-      stopFrames.current?.();
-      stopFrames.current = null;
-      try {
-        perf.backend = await commands.perfCounters();
-      } finally {
-        perf.stop();
-        await commands.perfSetRecording(false);
-      }
-    } catch (error) {
-      logInfo(`perf counters were not read: ${String(error)}`, {
-        context: "perf",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const session = useSession();
+  const busy = session.phase === "starting" || session.phase === "stopping";
 
   const ipcRows = Object.entries(report?.ipc ?? {}).sort(
     (a, b) => b[1].p95 - a[1].p95
@@ -126,6 +111,7 @@ export function PerformancePanel() {
   const renderRows = Object.entries(report?.renders ?? {}).sort(
     (a, b) => b[1].p95 - a[1].p95
   );
+  const sampled = ipcRows.some(([, s]) => s.sampled < s.count);
 
   return (
     <SettingsGroup title={t("settings", "perfTitle")} className="mt-6">
@@ -133,17 +119,41 @@ export function PerformancePanel() {
         label={t("settings", "perfRecording")}
         hint={t("settings", "perfHint")}
         control={
-          perf.recording ? (
-            <Button variant="outline" size="sm" disabled={busy} onClick={stop}>
+          session.phase === "recording" || session.phase === "stopping" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void perfSession.stop()}
+            >
               {t("settings", "perfStop")}
             </Button>
           ) : (
-            <Button variant="outline" size="sm" disabled={busy} onClick={start}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void perfSession.start()}
+            >
               {t("settings", "perfStart")}
             </Button>
           )
         }
       />
+      {session.error && (
+        <p className="flex items-center gap-3 py-2 text-xs text-err">
+          {t("settings", "perfBackendError", { error: session.error })}
+          {session.phase === "stopped" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void perfSession.retryBackendStop()}
+            >
+              {t("settings", "perfRetryStop")}
+            </Button>
+          )}
+        </p>
+      )}
       {report && (
         <div className="flex flex-col gap-4 py-3 text-xs">
           <p className="text-fg-mut">
@@ -157,6 +167,8 @@ export function PerformancePanel() {
               : report.taskSource === "longtask"
                 ? t("settings", "perfTaskSourceObserver")
                 : ""}
+            {sampled &&
+              " " + t("settings", "perfSampled", { cap: report.sampleCap })}
           </p>
           {ipcRows.length > 0 && (
             <StatsRows

@@ -1,7 +1,7 @@
 import * as generatedCommands from "@/generated/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { logInfo } from "@/lib/logger";
-import { measured } from "@/lib/perf";
+import { measured, perf } from "@/lib/perf";
 import {
   credentialsExpired,
   expiryReason,
@@ -28,7 +28,9 @@ export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
   return (async (...args: Parameters<T>) => {
     const startedAt = performance.now();
     try {
-      return await measured(name, () => withErrors(...args));
+      return perf.recording
+        ? await measured(name, () => withErrors(...args))
+        : await withErrors(...args);
     } finally {
       const ms = Math.round(performance.now() - startedAt);
       if (ms >= SLOW_COMMAND_MS) {

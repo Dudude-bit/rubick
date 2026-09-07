@@ -2520,6 +2520,10 @@ export const en = {
       "Backend pushed {events} events, {bytes} in total, largest {max}, {changes} watch changes.",
     perfCopy: "Copy report",
     perfCopied: "Report copied",
+    perfSampled:
+      "Percentiles use the last {cap} samples per kind; counts and maxima cover everything.",
+    perfBackendError: "The backend did not answer: {error}",
+    perfRetryStop: "Try stopping again",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
     nothingHereMatches: "nothing here matches “{query}”",
