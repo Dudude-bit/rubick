@@ -1566,6 +1566,11 @@ export interface RegistryConfigInfo {
   token?: string;
 }
 
+export interface NamespaceAccess {
+  namespace: string;
+  allowed: boolean | null;
+}
+
 export interface ListAccess {
   resource: string;
   allowed: boolean | null;
