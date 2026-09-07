@@ -15,7 +15,58 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 mod context;
+pub mod proxy;
 pub use context::{ContextAuth, ContextInfo};
+pub use proxy::{KubectlProxy, ProxyFailure};
+
+/// Which way a session reaches its cluster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionPath {
+    /// The app's own client with the credentials it prepared.
+    Direct,
+    /// Through a `kubectl proxy` the app started, kubectl holding the keys.
+    KubectlProxy,
+}
+
+/// How the app's own path ended.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum PathOutcome {
+    Ok,
+    Failed { error: String },
+}
+
+/// How the fallback ended, or why it never began.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum ProxyOutcome {
+    /// The direct path worked, or the failure was one a proxy cannot fix.
+    NotTried,
+    /// Nothing to fall back to: no kubectl on the search path.
+    NoKubectl,
+    Failed {
+        error: String,
+        stdout: String,
+        stderr: String,
+        kubectl: String,
+    },
+    Ok {
+        port: u16,
+        kubectl: String,
+    },
+}
+
+/// The last attempt to reach a context, both ways, for the diagnostics
+/// panel and the front door's hint.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectAttempt {
+    pub context: String,
+    pub at: String,
+    pub direct: PathOutcome,
+    pub proxy: ProxyOutcome,
+}
 
 /// Manages Kubernetes client connections for multiple clusters
 pub struct K8sClientManager {
@@ -63,6 +114,16 @@ pub struct K8sClientManager {
     /// credential plugin said so. Absent for a context that named no deadline
     /// or uses none — see `ClusterInfo::credentials_expire_at`.
     credential_deadlines: DashMap<String, chrono::DateTime<chrono::Utc>>,
+
+    /// The `kubectl proxy` behind a context connected the second way. Kept
+    /// here so it lives exactly as long as the client that talks through it.
+    proxies: DashMap<String, KubectlProxy>,
+
+    /// Which way each connected context is reached.
+    paths: DashMap<String, ConnectionPath>,
+
+    /// What the last connect to each context found, both ways.
+    attempts: DashMap<String, ConnectAttempt>,
 }
 
 /// The retry policy this app is willing to have applied under it.
@@ -92,6 +153,9 @@ impl K8sClientManager {
             kubeconfig_error: RwLock::new(None),
             context_origins: RwLock::new(HashMap::new()),
             credential_deadlines: DashMap::new(),
+            proxies: DashMap::new(),
+            paths: DashMap::new(),
+            attempts: DashMap::new(),
         }
     }
 
@@ -383,8 +447,56 @@ impl K8sClientManager {
         self.clients.insert(context.to_string(), client.clone());
         self.configs.insert(context.to_string(), config);
 
+        self.paths
+            .insert(context.to_string(), ConnectionPath::Direct);
         tracing::info!("Connected to cluster with prepared config: {}", context);
         Ok(client)
+    }
+
+    /// Connect through a proxy the caller already brought up. The client
+    /// carries no credentials: the proxy has them, and refreshes them.
+    pub fn connect_through_proxy(&self, context: &str, proxy: KubectlProxy) -> Result<Arc<Client>> {
+        self.clients.remove(context);
+        self.configs.remove(context);
+        let url: http::Uri = proxy
+            .url()
+            .parse()
+            .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
+        let config = without_client_retries(Config::new(url));
+        let client = Client::try_from(config.clone())
+            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = Arc::new(client);
+        self.clients.insert(context.to_string(), client.clone());
+        self.configs.insert(context.to_string(), config);
+        self.paths
+            .insert(context.to_string(), ConnectionPath::KubectlProxy);
+        tracing::info!(
+            "Connected to cluster {} through kubectl proxy on port {}",
+            context,
+            proxy.port
+        );
+        self.proxies.insert(context.to_string(), proxy);
+        Ok(client)
+    }
+
+    /// Which way a connected context is reached; `None` when it is not.
+    pub fn path_of(&self, context: &str) -> Option<ConnectionPath> {
+        self.paths.get(context).map(|p| *p)
+    }
+
+    pub fn record_attempt(&self, attempt: ConnectAttempt) {
+        self.attempts.insert(attempt.context.clone(), attempt);
+    }
+
+    pub fn attempt_for(&self, context: &str) -> Option<ConnectAttempt> {
+        self.attempts.get(context).map(|a| a.clone())
+    }
+
+    /// Every context's last attempt, newest first.
+    pub fn attempts(&self) -> Vec<ConnectAttempt> {
+        let mut all: Vec<ConnectAttempt> = self.attempts.iter().map(|a| a.clone()).collect();
+        all.sort_by(|a, b| b.at.cmp(&a.at));
+        all
     }
 
     /// Create kube config for a context
@@ -413,6 +525,9 @@ impl K8sClientManager {
     pub fn disconnect(&self, context: &str) {
         self.clients.remove(context);
         self.configs.remove(context);
+        self.paths.remove(context);
+        // Dropping it kills the process; nothing else talks to that port.
+        self.proxies.remove(context);
         tracing::info!("Disconnected from cluster: {}", context);
     }
 
@@ -423,6 +538,8 @@ impl K8sClientManager {
     pub fn disconnect_all(&self) {
         self.clients.clear();
         self.configs.clear();
+        self.paths.clear();
+        self.proxies.clear();
         tracing::info!("Disconnected from all clusters");
     }
 
@@ -474,6 +591,7 @@ impl K8sClientManager {
                 .credential_deadlines
                 .get(context)
                 .map(|at| at.to_rfc3339()),
+            connected_through: self.path_of(context).unwrap_or(ConnectionPath::Direct),
         })
     }
 }
@@ -500,6 +618,9 @@ pub struct ClusterInfo {
     /// every request in the window starts failing, and a surface that has it
     /// can say so before that happens rather than after.
     pub credentials_expire_at: Option<String>,
+    /// Which way this session reaches the cluster. Through a proxy, kubectl
+    /// holds the credentials and `credentials_expire_at` is nothing.
+    pub connected_through: ConnectionPath,
 }
 
 /// The API server URL a context will dial, as the kubeconfig writes it.

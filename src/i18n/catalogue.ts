@@ -2250,6 +2250,12 @@ export const en = {
     agoSuffix: "ago.",
     connectingToLower: "connecting to {context}…",
     notConnectedLower: "not connected",
+    throughProxy: "through kubectl proxy",
+    throughProxyHint:
+      "The app's own credentials were refused, so this session goes through a kubectl proxy it started. kubectl holds the keys and renews them.",
+    proxyNoKubectl:
+      "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
+    proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     tunnelAsleep: "asleep",
     renameOrRecolour: "{name} — rename or recolour",
@@ -2577,6 +2583,14 @@ export const en = {
     noKubeconfigLoaded:
       "None loaded yet — connect a cluster and this will name the file.",
     applicationBlock: "Application",
+    connectionsBlock: "Connections · {n}",
+    noConnectionsYet: "No connection attempted yet.",
+    pathDirect: "direct",
+    pathProxy: "kubectl proxy",
+    pathOk: "ok",
+    pathProxyOk: "ok on port {port} ({kubectl})",
+    pathNotTried: "not tried",
+    pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
     readingFile: "Reading the file…",

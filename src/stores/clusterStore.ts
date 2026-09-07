@@ -8,6 +8,7 @@
  * @module stores/clusterStore
  */
 
+import type { ConnectionPath } from "@/generated/types";
 import { translate } from "@/i18n";
 import { currentLocale } from "./localeStore";
 import { create } from "zustand";
@@ -53,6 +54,11 @@ interface ClusterState {
    */
   savedScopes: Record<string, string[]>;
   isConnected: boolean;
+  /**
+   * Which way the session reaches the cluster, once connected. Through a
+   * proxy, kubectl holds the credentials and the app's own path failed.
+   */
+  connectedThrough: ConnectionPath | null;
   isLoading: boolean;
   isAuthenticating: boolean;
   error: string | null;
@@ -101,6 +107,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   namespaceScope: [],
   savedScopes: {},
   isConnected: false,
+  connectedThrough: null,
   isLoading: false,
   isAuthenticating: false,
   error: null,
@@ -243,6 +250,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       currentContext: targetContext,
       ...scopeFor(get(), targetContext, changed),
       isConnected: false,
+      connectedThrough: null,
       connectionAttemptId: attemptId,
       connectStartedAt: Date.now(),
     });
@@ -255,6 +263,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       set({
         currentContext: connectedContext,
         isConnected: true,
+        connectedThrough: info.connected_through,
         isLoading: false,
         isAuthenticating: false,
         pendingContext: null,
@@ -288,6 +297,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         isLoading: false,
         isAuthenticating: false,
         isConnected: false,
+        connectedThrough: null,
         pendingContext: null,
         connectStartedAt: null,
       });
@@ -305,6 +315,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     }
     set({
       isConnected: false,
+      connectedThrough: null,
       currentContext: null,
       pendingContext: null,
       error: null,

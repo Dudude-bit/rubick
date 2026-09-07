@@ -2690,6 +2690,7 @@ dependencies = [
  "flate2",
  "futures",
  "gcp_auth",
+ "http",
  "k8s-gui-common",
  "k8s-openapi",
  "kube",

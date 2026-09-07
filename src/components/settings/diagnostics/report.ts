@@ -83,5 +83,38 @@ export function asMarkdown(d: Diagnostics): string {
           d.kubeconfig.parseError ?? `${d.kubeconfig.contextCount} contexts`
         }`
       : "None loaded.",
+    "",
+    "### Connections",
+    ...(d.connections.length === 0
+      ? ["No connection attempted yet."]
+      : d.connections.flatMap((a) => [
+          `- \`${a.context}\` at ${a.at}`,
+          `  - direct: ${a.direct.state === "ok" ? "ok" : a.direct.error}`,
+          `  - kubectl proxy: ${proxyLine(a.proxy)}`,
+          ...(a.proxy.state === "failed" && a.proxy.stderr.trim()
+            ? [
+                "",
+                "    ```",
+                ...a.proxy.stderr
+                  .trim()
+                  .split("\n")
+                  .map((l) => `    ${l}`),
+                "    ```",
+              ]
+            : []),
+        ])),
   ].join("\n");
+}
+
+function proxyLine(proxy: Diagnostics["connections"][number]["proxy"]): string {
+  switch (proxy.state) {
+    case "ok":
+      return `ok on port ${proxy.port} (\`${proxy.kubectl}\`)`;
+    case "notTried":
+      return "not tried";
+    case "noKubectl":
+      return "no kubectl on the search path";
+    case "failed":
+      return proxy.error;
+  }
 }

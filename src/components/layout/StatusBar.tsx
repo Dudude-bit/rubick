@@ -37,6 +37,7 @@ export function StatusBar() {
   const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
+  const connectedThrough = useClusterStore((s) => s.connectedThrough);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
   const error = useClusterStore((s) => s.error);
@@ -91,6 +92,25 @@ export function StatusBar() {
         </Tooltip>
       ) : isConnected ? (
         <>
+          {connectedThrough === "kubectl_proxy" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-warn">
+                    {t("cluster", "throughProxy")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="end"
+                  className="max-w-[420px]"
+                >
+                  {t("cluster", "throughProxyHint")}
+                </TooltipContent>
+              </Tooltip>
+              <span>·</span>
+            </>
+          )}
           <span>{t("cluster", "podCount", { n: podCount })}</span>
           <span>·</span>
           <span className={cn(problemCount > 0 && "text-err")}>
