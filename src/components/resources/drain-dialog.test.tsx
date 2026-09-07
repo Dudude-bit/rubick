@@ -67,6 +67,7 @@ describe("confirming a drain", () => {
     expect(onConfirm).toHaveBeenCalledWith("node-7", {
       evictUnmanagedPods: false,
       evictPodsWithEmptydir: false,
+      tellMeWhen: false,
     });
   });
 
@@ -82,6 +83,7 @@ describe("confirming a drain", () => {
     expect(onConfirm).toHaveBeenCalledWith("node-7", {
       evictUnmanagedPods: true,
       evictPodsWithEmptydir: false,
+      tellMeWhen: false,
     });
   });
 
@@ -121,6 +123,7 @@ describe("confirming a drain", () => {
     expect(onConfirm).toHaveBeenCalledWith("node-8", {
       evictUnmanagedPods: false,
       evictPodsWithEmptydir: false,
+      tellMeWhen: false,
     });
   });
 

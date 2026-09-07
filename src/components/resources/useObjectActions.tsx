@@ -59,6 +59,8 @@ import {
   type PeekActionId,
   type PeekActionPlan,
 } from "./peek-actions";
+import { useAsk } from "@/hooks/useAsk";
+import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
@@ -216,7 +218,14 @@ export function useObjectActions({
     onError: failed("scale"),
   });
 
+  const asking = useAsk();
+  const askTarget = (() => {
+    const askable = askableKind(kind);
+    return askable ? { kind: askable, namespace, name } : null;
+  })();
+
   const plan = planPeekActions(kind, detail, t, {
+    watching: askTarget ? asking.watching(askTarget) : false,
     backend: backendQuery.data,
     backendPending:
       backendQuery.isPending && backendQuery.fetchStatus !== "idle",
@@ -269,6 +278,11 @@ export function useObjectActions({
           : restart.mutate();
       case "delete":
         return setConfirming("delete");
+      case "tell":
+        if (!askTarget) return;
+        return asking.watching(askTarget)
+          ? asking.stop(askTarget)
+          : asking.ask(askTarget);
     }
   };
 
@@ -283,6 +297,7 @@ export function useObjectActions({
 
   const dialogs = (
     <>
+      {asking.dialog}
       {pod && (
         <DebugPodDialog
           open={dialog === "debug"}

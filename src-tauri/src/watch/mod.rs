@@ -119,7 +119,56 @@ impl WatchManager {
             Some(ns) => Api::namespaced(client, ns),
             None => Api::all(client),
         };
-        self.spawn_watcher(api, kind_label, namespace, transform)
+        self.spawn_watcher(api, kind_label, namespace, None, transform)
+    }
+
+    /// One namespaced object by name. The API server does the narrowing
+    /// through a field selector, so watching a single pod in a namespace of
+    /// ten thousand costs one object's worth of traffic, not the namespace's.
+    pub fn subscribe_object<K, F, U>(
+        &self,
+        client: Client,
+        kind_label: &str,
+        namespace: String,
+        name: String,
+        transform: F,
+    ) -> String
+    where
+        K: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        let api: Api<K> = Api::namespaced(client, &namespace);
+        self.spawn_watcher(api, kind_label, Some(namespace), Some(name), transform)
+    }
+
+    /// One cluster-scoped object by name; see `subscribe_object`.
+    pub fn subscribe_cluster_object<K, F, U>(
+        &self,
+        client: Client,
+        kind_label: &str,
+        name: String,
+        transform: F,
+    ) -> String
+    where
+        K: kube::Resource<DynamicType = (), Scope = ClusterResourceScope>
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        let api: Api<K> = Api::all(client);
+        self.spawn_watcher(api, kind_label, None, Some(name), transform)
     }
 
     /// Subscribe to changes on a runtime-discovered custom resource.
@@ -133,6 +182,7 @@ impl WatchManager {
         api_resource: &ApiResource,
         kind_label: &str,
         namespace: Option<String>,
+        name: Option<String>,
         transform: F,
     ) -> String
     where
@@ -143,7 +193,7 @@ impl WatchManager {
             Some(ns) => Api::namespaced_with(client, ns, api_resource),
             None => Api::all_with(client, api_resource),
         };
-        self.spawn_watcher(api, kind_label, namespace, transform)
+        self.spawn_watcher(api, kind_label, namespace, name, transform)
     }
 
     /// Cluster-scoped sibling of `subscribe`. For resources like
@@ -167,7 +217,7 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::all(client);
-        self.spawn_watcher(api, kind_label, None, transform)
+        self.spawn_watcher(api, kind_label, None, None, transform)
     }
 
     /// Shared spawn loop for both subscribe variants: the session-table
@@ -184,6 +234,7 @@ impl WatchManager {
         api: Api<K>,
         kind_label: &str,
         namespace: Option<String>,
+        name: Option<String>,
         transform: F,
     ) -> String
     where
@@ -249,8 +300,11 @@ impl WatchManager {
             // re-lists, which is what recycles one that has gone quiet. Until
             // `read_timeout` was removed from the client, kube's own 295-second
             // socket timer did this by accident; now it is asked for.
-            let mut stream =
-                watcher(api, WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS)).boxed();
+            let mut config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
+            if let Some(name) = &name {
+                config = config.fields(&format!("metadata.name={name}"));
+            }
+            let mut stream = watcher(api, config).boxed();
 
             // Surface watcher failures (RBAC denial, network hiccups) to the
             // frontend as a `Failed` event after a streak of consecutive

@@ -20,7 +20,8 @@
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "notification:default"
   ],
   "remote": {
     "urls": ["https://*", "http://127.0.0.1:*", "http://localhost:*"]

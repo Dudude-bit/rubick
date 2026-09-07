@@ -31,6 +31,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { useAsk } from "@/hooks/useAsk";
 import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { useT } from "@/i18n/useT";
 
@@ -256,6 +257,7 @@ export function NodeList() {
   });
 
   const [draining, setDraining] = useState<string | null>(null);
+  const asking = useAsk();
 
   // A drain is not a mutation: it outlives its own command call and reports
   // as it goes. The hook owns that; the list only owns which node is open.
@@ -350,6 +352,7 @@ export function NodeList() {
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />
+      {asking.dialog}
       <DrainDialog
         node={draining}
         state={drain.state}
@@ -363,7 +366,9 @@ export function NodeList() {
             drain.reset();
           }
         }}
-        onConfirm={(node, choices) => {
+        onConfirm={(node, { tellMeWhen, ...choices }) => {
+          if (tellMeWhen)
+            asking.ask({ kind: "Node", namespace: null, name: node });
           void drain.start(node, { ignoreDaemonsets: true, ...choices });
         }}
         onCancelDrain={drain.cancel}

@@ -1,4 +1,6 @@
 import {
+  Bell,
+  BellOff,
   Bug,
   Network,
   RefreshCw,
@@ -21,6 +23,7 @@ import {
   type ResourceKind,
   type ScalableKind,
 } from "@/lib/resource-registry";
+import { askableKind } from "@/lib/tell-me-when";
 import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
@@ -42,7 +45,7 @@ import type { T } from "@/i18n/useT";
  */
 
 export type PeekActionId =
-  "shell" | "debug" | "portForward" | "restart" | "scale" | "delete";
+  "shell" | "debug" | "portForward" | "restart" | "scale" | "delete" | "tell";
 
 export interface PeekAction {
   id: PeekActionId;
@@ -74,6 +77,8 @@ export interface PeekActionContext {
   backend?: ForwardBackend | null;
   backendPending?: boolean;
   backendError?: string | null;
+  /** A "tell me when" is already open on this object. */
+  watching?: boolean;
 }
 
 /** Open full page and Copy name; the panel shows them for every kind. */
@@ -90,13 +95,16 @@ export function planPeekActions(
 ): PeekActionPlan {
   const resolved = toKind(kind);
   const actions = resolved ? actionsFor(resolved, detail, t, context) : [];
+  // The bell is asked about a lot less than it is glanced at, so it does not
+  // count towards the fold: a row stays whole with it, and folds without it.
+  const tell = tellAction(kind, t, context);
 
   if (ALWAYS_SHOWN + actions.length <= INLINE_LIMIT) {
-    return { inline: actions, menu: [] };
+    return { inline: [...actions, ...tell], menu: [] };
   }
   return {
     inline: actions.filter((action) => !SECONDARY.has(action.id)),
-    menu: actions.filter((action) => SECONDARY.has(action.id)),
+    menu: [...actions.filter((action) => SECONDARY.has(action.id)), ...tell],
   };
 }
 
@@ -128,6 +136,28 @@ function actionsFor(
     default:
       return [...scaleAction(kind), ...deleteAction(kind)];
   }
+}
+
+/* ---------- Tell me when ---------- */
+
+/** The question is the kind's; only whether it is already asked varies. */
+function tellAction(
+  kind: string,
+  t: T,
+  context: PeekActionContext
+): PeekAction[] {
+  const askable = askableKind(kind);
+  if (!askable) return [];
+  if (context.watching) {
+    return [{ id: "tell", label: t("tell", "stopAsking"), icon: BellOff }];
+  }
+  const label =
+    askable === "Pod"
+      ? t("tell", "askPod")
+      : askable === "Job"
+        ? t("tell", "askJob")
+        : t("tell", "askRollout");
+  return [{ id: "tell", label, icon: Bell }];
 }
 
 /* ---------- Scale ---------- */
