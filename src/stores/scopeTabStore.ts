@@ -260,19 +260,12 @@ export const useScopeTabStore = create<ScopeTabState>()(
 
       closeTab: async (id: string) => {
         const { tabs, activeId } = get();
-        // The strip is the only way back to a scope, so it never empties: a
-        // window with no tabs has no scope at all and nothing to put in its
-        // chrome. Closing the last one has two meanings, told apart by where
-        // it sits:
-        //
-        //  - On a page (a pod, a list — any non-overview route), the ✕ beside
-        //    the name reads as "close this view", exactly as the peek panel's
-        //    ✕ and the detail page's back arrow do — both of which keep the
-        //    cluster and the namespace. So the tab returns to the overview
-        //    with its connection and selection intact.
-        //  - Already on the overview, it is the fresh-install reset — an empty
-        //    scope on a disconnected window, which is also the one way back to
-        //    the cluster picker.
+        // The strip never empties — a window with no tabs has no scope. So
+        // closing the last one has two meanings, told apart by where it sits:
+        // on a page, the ✕ reads as "close this view" like the peek ✕ and the
+        // detail back arrow, and returns to the overview keeping the cluster
+        // and namespace; already on the overview, it is the fresh-install
+        // reset (disconnect, empty scope) and the one way back to the picker.
         if (tabs.length < 2) {
           const only = tabs[0];
           if (only.href !== HOME && !only.missing) {

@@ -473,6 +473,7 @@ export const ru: Catalogue = {
     programmed: "Запрограммирован",
   },
   action: {
+    showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
     addressOnClipboard: "Адрес {site} скопирован в буфер обмена: {url}",
@@ -4397,6 +4398,11 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    namespacesHidden: {
+      one: "{n} пространство скрыто — нет доступа",
+      few: "{n} пространства скрыто — нет доступа",
+      other: "{n} пространств скрыто — нет доступа",
+    },
     endpointsAcrossSlices: "{endpoints} в {slices}",
     endpointsCount: {
       one: "{n} эндпоинт",

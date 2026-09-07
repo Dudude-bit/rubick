@@ -784,13 +784,10 @@ export interface IntegrationPageEntry {
    */
   asleep: boolean;
   /**
-   * The cluster's authorizer refused this reader the vendor's primary list,
-   * so its screen would only error — the row is drawn disabled with a reason.
-   *
-   * Set from the authorizer's `allowed === false` alone: a review that could
-   * not be asked (null) leaves this false, so "could not look" never renders
-   * as "forbidden". Distinct from `count === null`, which is a number that is
-   * loading, refused or uncountable.
+   * The authorizer refused this reader the vendor's primary list, so its
+   * screen would only error — the row is drawn disabled with a reason. Set
+   * from `allowed === false` alone, so a review that could not be asked never
+   * reads as forbidden; distinct from `count === null`.
    */
   forbidden: boolean;
 }

@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+/** What the authorizer answers about each namespace, per test. */
+const nsAccess = vi.hoisted(() => ({
+  answers: [] as Array<{ namespace: string; allowed: boolean | null }>,
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -10,6 +15,7 @@ vi.mock("@/lib/commands", () => ({
     disconnectCluster: vi.fn(async () => undefined),
     saveClusterPreferences: vi.fn(async () => undefined),
     listContexts: vi.fn(async () => []),
+    checkNamespaceAccess: vi.fn(async () => nsAccess.answers),
   },
 }));
 
@@ -71,6 +77,7 @@ const tabs = () => screen.getAllByRole("tab");
 beforeEach(() => {
   localStorage.clear();
   summary.namespaces = [];
+  nsAccess.answers = [];
   useClusterIdentityStore.setState({ marks: {} });
   useClusterStore.setState({
     contexts: [],
@@ -265,6 +272,51 @@ describe("watching several namespaces at once", () => {
     // the summary's own order.
     expect(order.slice(0, 3)).toEqual(["all", "ns-3", "ns-4"]);
     expect(order.slice(3)).toEqual(["ns-0", "ns-1", "ns-2", "ns-5"]);
+  });
+
+  /**
+   * #137: on a cluster split across teams the reader can see namespaces they
+   * have no rights in. The picker stops offering the ones the authorizer
+   * firmly refuses — until asked to show them. Fails if a refused namespace
+   * is offered, or if the reveal stops bringing it back.
+   */
+  it("hides the namespaces the reader is refused, with a way to show them", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [{ namespace: "ns-2", allowed: false }];
+    draw([]);
+    const list = await openPicker(user);
+
+    // The refused one is gone; the others stay.
+    await waitFor(() =>
+      expect(within(list).queryByRole("option", { name: /^ns-2,/ })).toBeNull()
+    );
+    expect(
+      within(list).getByRole("option", { name: /^ns-0,/ })
+    ).toBeInTheDocument();
+
+    // The footer says how many, and offers to show them.
+    await user.click(screen.getByRole("button", { name: /show them/i }));
+    expect(
+      within(list).getByRole("option", { name: /^ns-2,/ })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The third state the hide must never swallow: a namespace the authorizer
+   * could not be asked about (null) is not a refusal, and stays offered.
+   */
+  it("keeps offering a namespace whose access could not be checked", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [{ namespace: "ns-2", allowed: null }];
+    draw([]);
+    const list = await openPicker(user);
+
+    expect(
+      within(list).getByRole("option", { name: /^ns-2,/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /show them/i })
+    ).not.toBeInTheDocument();
   });
 
   /**
