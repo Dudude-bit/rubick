@@ -2364,6 +2364,10 @@ export const ru: Catalogue = {
     refusalOther: "Отказано",
     nameMissingParens: "{name} (отсутствует)",
     noClusterSelected: "Кластер не выбран",
+    criticalNoticeTitle: "Критическая инфраструктура",
+    criticalNoticeBody:
+      "Это {context}. Что бы здесь ни делалось, делается там. Введите имя кластера, чтобы продолжить.",
+    criticalStripe: "Критический: {context}",
     metricsNotInstalled: "metrics-server не установлен",
     metricsNotInstalledBody:
       "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
@@ -2536,6 +2540,10 @@ export const ru: Catalogue = {
     contextReady: "готов",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
+    criticalLabel:
+      "Критическая инфраструктура: каждое изменение спросит имя кластера",
+    criticalGuessed: "Судя по имени, да. Отметьте, чтобы так и было.",
+
     searchMissingWords: "not found missing path не найден отсутствует путь",
     searchContextWords:
       "context kubeconfig authentication контекст аутентификация",

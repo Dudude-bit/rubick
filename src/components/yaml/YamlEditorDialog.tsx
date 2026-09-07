@@ -50,6 +50,8 @@ import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
+import { CriticalNotice } from "@/components/ui/critical-notice";
+import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
 interface YamlEditorActionProps {
@@ -106,6 +108,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 // Main Dialog Component
 export function YamlEditorDialog() {
   const t = useT();
+  const critical = useCritical();
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -416,6 +419,9 @@ export function YamlEditorDialog() {
             <DialogTitle>
               {intercept?.title ?? t("action", "applyChangesQuestion")}
             </DialogTitle>
+            {critical.critical && critical.context && (
+              <CriticalNotice context={critical.context} />
+            )}
             <DialogDescription>
               {t("action", "applyManifestConfirm")}
             </DialogDescription>

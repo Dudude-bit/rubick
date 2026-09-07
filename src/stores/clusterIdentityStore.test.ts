@@ -50,15 +50,20 @@ describe("what colour it wears", () => {
   });
 });
 
-describe("what is read back off this machine", () => {
-  const migrate = (persisted: unknown) =>
-    (
-      useClusterIdentityStore.persist.getOptions().migrate as (
-        p: unknown,
-        v: number
-      ) => { marks: Record<string, { alias?: string; hue?: number }> }
-    )(persisted, 0).marks;
+const migrate = (persisted: unknown) =>
+  (
+    useClusterIdentityStore.persist.getOptions().migrate as (
+      p: unknown,
+      v: number
+    ) => {
+      marks: Record<
+        string,
+        { alias?: string; hue?: number; critical?: boolean }
+      >;
+    }
+  )(persisted, 0).marks;
 
+describe("what is read back off this machine", () => {
   it("refuses a hue that is not on the palette", () => {
     // A hue off the ring would be worn at a saturation and lightness the
     // themes were never calibrated for, which is the one thing a fixed
@@ -77,5 +82,23 @@ describe("what is read back off this machine", () => {
   it("starts empty on a payload it did not write", () => {
     expect(migrate(undefined)).toEqual({});
     expect(migrate({ marks: "nonsense" })).toEqual({});
+  });
+});
+
+describe("whether it is critical infrastructure", () => {
+  /** A cleared flag that left `{critical: undefined}` behind would keep the row forever. */
+  it("is unsaid again once unticked, leaving no residue", () => {
+    state().setCritical(ARN, true);
+    expect(state().marks[ARN]).toEqual({ critical: true });
+    state().setCritical(ARN, null);
+    expect(ARN in state().marks).toBe(false);
+  });
+
+  /** Dropping the flag on read would silently disarm every guard after a restart. */
+  it("comes back off this machine, and only as a yes or a no", () => {
+    expect(migrate({ marks: { [ARN]: { critical: true } } })).toEqual({
+      [ARN]: { critical: true },
+    });
+    expect(migrate({ marks: { [ARN]: { critical: "yes" } } })).toEqual({});
   });
 });

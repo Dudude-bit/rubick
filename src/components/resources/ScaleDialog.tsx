@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CriticalNotice } from "@/components/ui/critical-notice";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
+import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
 export interface ScaleDialogProps {
@@ -41,11 +43,15 @@ export function ScaleDialog({
   warnings = [],
 }: ScaleDialogProps) {
   const t = useT();
+  const critical = useCritical();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
+          {critical.critical && critical.context && (
+            <CriticalNotice context={critical.context} />
+          )}
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
