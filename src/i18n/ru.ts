@@ -2667,6 +2667,29 @@ export const ru: Catalogue = {
     sectionRegistriesHint: "Откуда тянутся образы и что до них дотягивается.",
     sectionDiagnostics: "Диагностика",
     sectionDiagnosticsHint: "Что приложение видит на машине, где оно запущено.",
+    perfTitle: "Производительность",
+    perfRecording: "Запись",
+    perfHint:
+      "Пока включено, засекает каждый вызов бэкенда, каждую долгую задачу и каждый профилированный рендер. Каждый ответ сериализуется второй раз ради подсчёта байтов, поэтому держите выключенным, если не измеряете.",
+    perfStart: "Начать",
+    perfStop: "Остановить",
+    perfSummary:
+      "Записано {seconds} с · {ipc} вызовов бэкенда · {tasks} долгих задач.",
+    perfTaskSourceObserver: "Долгие задачи от наблюдателя платформы.",
+    perfTaskSourceFrames:
+      "В этом webview нет наблюдателя долгих задач, поэтому за задачу считается опоздавший кадр.",
+    perfCommand: "Команда",
+    perfCount: "вызовов",
+    perfRows: "строк",
+    perfBytes: "байт",
+    perfTasks: "Долгие задачи",
+    perfRenders: "Рендер",
+    perfNoRenders:
+      "Нет таймингов рендера: React отдаёт их только из dev-сборки или профилирующей сборки.",
+    perfBackend:
+      "Бэкенд отправил {events} событий, всего {bytes}, самое большое {max}, изменений watch {changes}.",
+    perfCopy: "Копировать отчёт",
+    perfCopied: "Отчёт скопирован",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",

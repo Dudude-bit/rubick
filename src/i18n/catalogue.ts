@@ -2497,6 +2497,29 @@ export const en = {
       "Where images are pulled from, and what reaches them.",
     sectionDiagnostics: "Diagnostics",
     sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
+    perfTitle: "Performance",
+    perfRecording: "Recording",
+    perfHint:
+      "Times every call to the backend, every long task and every profiled render while on. Each answer is serialised a second time to count its bytes, so leave it off unless you are measuring.",
+    perfStart: "Start",
+    perfStop: "Stop",
+    perfSummary:
+      "{seconds} s recorded · {ipc} backend calls · {tasks} long tasks.",
+    perfTaskSourceObserver: "Long tasks come from the platform observer.",
+    perfTaskSourceFrames:
+      "This webview has no long-task observer, so a late frame counts as one.",
+    perfCommand: "Command",
+    perfCount: "calls",
+    perfRows: "rows",
+    perfBytes: "bytes",
+    perfTasks: "Long tasks",
+    perfRenders: "Render",
+    perfNoRenders:
+      "No render timings: React reports them only from a dev or profiling build.",
+    perfBackend:
+      "Backend pushed {events} events, {bytes} in total, largest {max}, {changes} watch changes.",
+    perfCopy: "Copy report",
+    perfCopied: "Report copied",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
     nothingHereMatches: "nothing here matches “{query}”",
