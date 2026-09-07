@@ -57,6 +57,7 @@ const params = (name: string, spec: unknown): CustomResourceInfo => ({
   annotations: {},
   createdAt: null,
   ownerReferences: [],
+  generation: null,
 });
 
 const sources = (overrides: Partial<GroupSources> = {}): GroupSources => ({

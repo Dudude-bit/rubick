@@ -32,6 +32,7 @@ function cluster(
     annotations,
     createdAt: "2026-09-01T00:00:00Z",
     ownerReferences: [],
+    generation: null,
   };
 }
 
@@ -186,6 +187,7 @@ function backup(
     annotations: {},
     createdAt: status.startedAt as string,
     ownerReferences: [],
+    generation: null,
   };
 }
 

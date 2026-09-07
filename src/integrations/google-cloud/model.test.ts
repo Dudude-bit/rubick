@@ -36,6 +36,7 @@ const resource = (
   annotations: {},
   createdAt: null,
   ownerReferences: [],
+  generation: null,
 });
 
 describe("what a Service asks for", () => {
