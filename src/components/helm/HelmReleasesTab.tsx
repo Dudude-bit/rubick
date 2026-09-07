@@ -20,13 +20,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -39,7 +32,6 @@ import type { HelmRelease } from "@/generated/types";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
-import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 
@@ -53,9 +45,6 @@ export interface HelmReleasesTabProps {
   releases: HelmRelease[];
   isLoading: boolean;
   helmCliAvailable: boolean;
-  namespaces: string[];
-  selectedNamespace: string;
-  onNamespaceChange: (next: string) => void;
   onRefetch: () => void;
   onShowHistory: (release: HelmRelease) => void;
   onUpgrade: (release: HelmRelease) => void;
@@ -67,9 +56,6 @@ export function HelmReleasesTab({
   releases,
   isLoading,
   helmCliAvailable,
-  namespaces,
-  selectedNamespace,
-  onNamespaceChange,
   onRefetch,
   onShowHistory,
   onUpgrade,
@@ -280,25 +266,7 @@ export function HelmReleasesTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Select value={selectedNamespace} onValueChange={onNamespaceChange}>
-          <SelectTrigger
-            aria-label={t("columns", "namespace")}
-            className="h-6 w-44 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
-          >
-            <SelectValue placeholder={t("action", "allNamespaces")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={EVERY_NAMESPACE}>
-              {t("action", "allNamespaces")}
-            </SelectItem>
-            {namespaces.map((ns) => (
-              <SelectItem key={ns} value={ns}>
-                {ns}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center">
         <div className="ml-auto">
           <DetailAction
             label={t("action", "refresh")}

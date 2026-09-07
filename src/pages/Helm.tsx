@@ -25,8 +25,9 @@ import type {
   HelmChartSearchResult,
   HelmInstallOptions,
 } from "@/generated/types";
-import { EVERY_NAMESPACE } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useT } from "@/i18n/useT";
@@ -46,11 +47,12 @@ export function Helm() {
     null
   );
   const [historyDialog, setHistoryDialog] = useState<HelmRelease | null>(null);
-  // `*`, not the word "all": a namespace can be named `all` — the API server
-  // takes it — and then picking it selected every namespace instead. Names
-  // are RFC-1123 labels, so `*` is one no namespace can answer to.
-  const [selectedNamespace, setSelectedNamespace] =
-    useState<string>(EVERY_NAMESPACE);
+  // The releases list follows the window's namespace selection like every
+  // other list, rather than carrying a second dropdown of its own. A two- or
+  // more namespace scope is read one namespace at a time, so a user with rights
+  // in some namespaces and not others still sees theirs — a single cluster-wide
+  // secret list would 403 and come back empty. See `listAcrossScope`.
+  const scope = useNamespaceScope();
   const [activeTab, setActiveTab] = useState<string>("releases");
 
   const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
@@ -100,16 +102,14 @@ export function Helm() {
     isLoading,
     refetch,
   } = useLiveQuery({
-    queryKey: ["helm-releases-native", selectedNamespace],
-    queryFn: async () => {
+    queryKey: ["helm-releases-native", scopeCacheKey(scope.scope) ?? "all"],
+    queryFn: listAcrossScope(scope.scope, async (ns) => {
       try {
-        const ns =
-          selectedNamespace === EVERY_NAMESPACE ? null : selectedNamespace;
         return await commands.listHelmReleasesNative(ns);
       } catch (err) {
         throw normalizeTauriError(err);
       }
-    },
+    }),
     enabled: isConnected,
     refresh: "steady",
   });
@@ -364,9 +364,6 @@ export function Helm() {
             releases={releases}
             isLoading={isLoading}
             helmCliAvailable={helmCliAvailable}
-            namespaces={namespaces}
-            selectedNamespace={selectedNamespace}
-            onNamespaceChange={setSelectedNamespace}
             onRefetch={() => refetch()}
             onShowHistory={setHistoryDialog}
             onUpgrade={(release) => {
