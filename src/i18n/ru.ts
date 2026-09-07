@@ -405,6 +405,11 @@ export const ru: Catalogue = {
     ready: "Готовность",
     restarts: "Перезапуски",
     node: "Узел",
+    cpuOfAllocatable: "CPU, % от allocatable",
+    memoryOfAllocatable: "Память, % от allocatable",
+    utilisation: "Загрузка",
+    tableView: "Таблица",
+    view: "Вид",
     strategy: "Стратегия",
     desired: "Требуется",
     current: "Запущено",
@@ -1514,6 +1519,12 @@ export const ru: Catalogue = {
     usageNothingYet: "{label}: пока ничего не записано.",
     usageNow: "сейчас {value}",
     usagePeak: "пик {value}",
+    peakAvgPercent: "пик {peak}% · среднее {avg}%",
+    cordonedWord: "cordoned",
+    usageAvg: "среднее {value}",
+    usageAt: "в {clock}",
+    usageNowWord: "сейчас",
+    requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "{noun} не задан, масштаб по {value} потребления",
     usageNoneDeclared: "{noun} не объявлен",
@@ -2101,6 +2112,9 @@ export const ru: Catalogue = {
     promNetworkBytes: "байты, входящие в нагрузку и выходящие из неё",
     promFromCadvisor: "cAdvisor, через kubelet",
     promFromKubelet: "kubelet",
+    promDeclaredHistory:
+      "requests и limits, какими они были на протяжении окна",
+    promFromKsm: "kube-state-metrics",
     promNoNodesListed:
       "Узлы этого кластера перечислить не удалось, поэтому знания Prometheus сравнивать не с чем.",
     promNoNodeLabel:
@@ -3568,6 +3582,18 @@ export const ru: Catalogue = {
     vendorDidNotAnswer:
       "{vendor} не ответил — {reason}. Это окно приложение наблюдало само; более длинные интервалы недоступны, пока он не вернётся.",
     longerNeedsPrometheus: "Для более длинных интервалов нужен Prometheus —",
+    trendsNeedPrometheus: "Для загрузки за период нужен Prometheus —",
+    trendsSortNote: "сначала с наименьшим запасом",
+    trendsNotIncidents:
+      "Один range-запрос на все узлы, в каждом ведре сохранён пик, так что всплеск переживает сводку. Большое число это полный узел, а не инцидент; здесь ничего не красится красным за занятость. Requests это история таблицы Resources, в одном клике.",
+    nodeNoSeries: "в Prometheus нет серий по этому узлу",
+    nodeNoSamplesYet:
+      "в окне нет замеров: новейшая серия {age}, окно просит {range}",
+    noSeriesShort: "нет серий",
+    historyWithoutMetricsServer:
+      "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
+    declaredNowOnly:
+      "kube-state-metrics в этом Prometheus нет, поэтому что было объявлено раньше в окне, неизвестно; request и limit это сегодняшние цифры, нарисованы плоско.",
     declaredSizeNotFullness:
       "Заявленный размер, а не заполненность. metrics-server отдаёт только CPU и память — сколько тома занято, сообщает kubelet, а его может прочитать Prometheus, но не это приложение.",
     declaredSizeForUnreported:

@@ -90,6 +90,14 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     inner: "2m",
     resolution: "12m buckets, max over a 2m resolution",
   },
+  "7d": {
+    id: "7d",
+    windowMs: RANGE_WINDOW_MS["7d"],
+    stepSeconds: 5400,
+    rateWindow: "10m",
+    inner: "5m",
+    resolution: "90m buckets, max over a 5m resolution",
+  },
 };
 
 /** A label value, with the two characters that would end it early escaped. */
@@ -198,6 +206,46 @@ export function memoryQuery(scope: UsageScope, spec: RangeSpec): string {
  * The window is the bucket, so a restart is attributed to the bucket it
  * happened in rather than smeared across the rate window.
  */
+/**
+ * What was declared, as kube-state-metrics recorded it: a step function,
+ * so no peak wrapping — the value at the bucket's edge is the value.
+ * Cores come back as cores and go out as millicores, like everything else.
+ */
+export function declaredQuery(
+  scope: UsageScope,
+  resource: "cpu" | "memory",
+  what: "requests" | "limits"
+): string {
+  const selector =
+    scope.kind === "pod"
+      ? `namespace="${escapeLabel(scope.namespace)}",pod="${escapeLabel(scope.pod)}"`
+      : scope.kind === "workload"
+        ? `namespace="${escapeLabel(scope.namespace)}",pod=~"${escapeLabel(
+            podPattern(scope.ownerKind, scope.owner)
+          )}"`
+        : `node="${escapeLabel(scope.node)}"`;
+  const sum = `sum(kube_pod_container_resource_${what}{resource="${resource}",${selector}})`;
+  return resource === "cpu" ? `${sum} * 1000` : sum;
+}
+
+/** Every node at once, keyed by whatever node label this Prometheus writes. */
+const NODE_GROUPING = "by (node, instance, nodename, kubernetes_io_hostname)";
+
+export function nodesQuery(kind: "cpu" | "memory", spec: RangeSpec): string {
+  const by = NODE_GROUPING;
+  const expression =
+    kind === "cpu"
+      ? `max ${by} (rate(container_cpu_usage_seconds_total{id="/"}[${spec.rateWindow}]))`
+      : `max ${by} (container_memory_working_set_bytes{id="/"})`;
+  const peaked = peak(expression, spec);
+  return kind === "cpu" ? `${peaked} * 1000` : peaked;
+}
+
+/** When each node last reported anything, so an empty window can say how empty. */
+export function nodesNewestQuery(): string {
+  return `max ${NODE_GROUPING} (timestamp(container_cpu_usage_seconds_total{id="/"}))`;
+}
+
 export function restartQuery(scope: UsageScope, spec: RangeSpec): string {
   if (scope.kind === "node") return "";
   return `sum(changes(container_start_time_seconds{${containerSelector(scope)}}[${spec.stepSeconds}s]))`;

@@ -435,6 +435,11 @@ export const en = {
     ready: "Ready",
     restarts: "Restarts",
     node: "Node",
+    cpuOfAllocatable: "CPU, % of allocatable",
+    memoryOfAllocatable: "Memory, % of allocatable",
+    utilisation: "Utilisation",
+    tableView: "Table",
+    view: "View",
     strategy: "Strategy",
     desired: "Desired",
     current: "Current",
@@ -1508,6 +1513,12 @@ export const en = {
     usageNothingYet: "{label}: nothing recorded yet.",
     usageNow: "now {value}",
     usagePeak: "peak {value}",
+    peakAvgPercent: "peak {peak}% · avg {avg}%",
+    cordonedWord: "cordoned",
+    usageAvg: "avg {value}",
+    usageAt: "at {clock}",
+    usageNowWord: "now",
+    requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "no {noun} set, scaled to {value} used",
     usageNoneDeclared: "no {noun}s declared",
@@ -1948,6 +1959,8 @@ export const en = {
     promNetworkBytes: "bytes in and out of a workload",
     promFromCadvisor: "cAdvisor, via the kubelet",
     promFromKubelet: "the kubelet",
+    promDeclaredHistory: "requests and limits as they stood through a window",
+    promFromKsm: "kube-state-metrics",
     promNoNodesListed:
       "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
     promNoNodeLabel:
@@ -3331,6 +3344,18 @@ export const en = {
     vendorDidNotAnswer:
       "{vendor} did not answer — {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
     longerNeedsPrometheus: "Longer than this needs a Prometheus —",
+    trendsNeedPrometheus: "Utilisation over time needs a Prometheus —",
+    trendsSortNote: "least headroom first",
+    trendsNotIncidents:
+      "One range query for every node, the peak of each bucket kept, so a spike survives the summary. A high number is a full node, not an incident; nothing here is painted red for being busy. Requests are the Resources table's story, one click in.",
+    nodeNoSeries: "no series in Prometheus for this node",
+    nodeNoSamplesYet:
+      "no samples in the window: newest series is {age}, the window asks for {range}",
+    noSeriesShort: "no series",
+    historyWithoutMetricsServer:
+      "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
+    declaredNowOnly:
+      "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:

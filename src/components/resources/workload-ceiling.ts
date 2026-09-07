@@ -30,6 +30,35 @@ export type WorkloadTemplate = ContainerLists<DeploymentContainerInfo> & {
  * containers' and the ceiling a chart draws has to match. An ordinary init
  * container has exited before any of this is measured.
  */
+/** What one replica of the template asks for, by the same rule as its ceiling. */
+export function templateRequests(
+  template: WorkloadTemplate | null | undefined
+): {
+  cpu: number | null;
+  memory: number | null;
+} {
+  if (!template) return { cpu: null, memory: null };
+
+  let cpu = 0;
+  let memory = 0;
+  for (const container of declaredContainers(template)) {
+    if (container.phase === "init") continue;
+    const requests = container.resources?.requests;
+    if (requests?.cpu) cpu += parseCPU(requests.cpu);
+    if (requests?.memory) memory += parseMemory(requests.memory);
+  }
+
+  const podRequests = template.podResources?.requests;
+  return {
+    cpu: podRequests?.cpu ? parseCPU(podRequests.cpu) : cpu > 0 ? cpu : null,
+    memory: podRequests?.memory
+      ? parseMemory(podRequests.memory)
+      : memory > 0
+        ? memory
+        : null,
+  };
+}
+
 export function templateCeiling(
   template: WorkloadTemplate | null | undefined
 ): {

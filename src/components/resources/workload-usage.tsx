@@ -24,6 +24,7 @@ import { useT } from "@/i18n/useT";
 import type { PodInfo, ResourceConnections } from "@/generated/types";
 import {
   templateCeiling,
+  templateRequests,
   type WorkloadTemplate,
 } from "@/components/resources/workload-ceiling";
 
@@ -98,6 +99,7 @@ export function WorkloadUsage({
   // measured against what is actually there rather than against what was
   // asked for.
   const ceiling = templateCeiling(template);
+  const requests = templateRequests(template);
 
   const scope: UsageScope | undefined =
     name && namespace
@@ -145,6 +147,10 @@ export function WorkloadUsage({
       cpuLimit={ceiling.cpu === null ? null : ceiling.cpu * running.length}
       memoryLimit={
         ceiling.memory === null ? null : ceiling.memory * running.length
+      }
+      cpuRequest={requests.cpu === null ? null : requests.cpu * running.length}
+      memoryRequest={
+        requests.memory === null ? null : requests.memory * running.length
       }
       noLimitNote={limitNote}
       restarts={withMetrics.reduce((total, pod) => total + pod.restartCount, 0)}

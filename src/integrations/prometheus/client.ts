@@ -13,21 +13,49 @@ import { commands } from "@/lib/commands";
 import type { PromSeries } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
 import type {
+  DeclaredHistory,
+  DeclaredPoint,
+  NodeUsageWindow,
   TrafficWindow,
   UsageRange,
   UsageScope,
   UsageWindow,
   VolumeFullness,
 } from "../registry";
+import { nodeNameOf } from "./coverage";
 import {
   RANGE_SPECS,
   cpuQuery,
+  declaredQuery,
   memoryQuery,
+  nodesNewestQuery,
+  nodesQuery,
   restartQuery,
   trafficQuery,
   volumeCapacityQuery,
   volumeUsedQuery,
 } from "./queries";
+
+function pointsOf(series: PromSeries[]): DeclaredPoint[] {
+  const at = byTime(series);
+  return [...at.keys()]
+    .sort((a, b) => a - b)
+    .map((t) => ({ t, v: at.get(t) ?? null }));
+}
+
+/**
+ * Whether kube-state-metrics is in this Prometheus at all. Asked only when
+ * the declared series came back empty, which is also what a pod with no
+ * requests looks like; the difference is "nothing declared" against
+ * "nobody recorded it", and the chart says which.
+ */
+async function keepsDeclared(): Promise<boolean> {
+  const answer = await commands
+    .prometheusQuery("count(kube_pod_container_resource_requests)")
+    .catch(() => null);
+  if (answer === null) return false;
+  return answer.length > 0 && (answer[0].points[0]?.v ?? 0) > 0;
+}
 
 /** The one series a scoped query is expected to return, flattened by time. */
 function byTime(series: PromSeries[]): Map<number, number> {
@@ -60,23 +88,39 @@ export async function usageHistory(input: {
   const start = end - spec.windowMs;
 
   const restarts = restartQuery(input.scope, spec);
-  const [cpu, memory, started] = await Promise.all([
-    commands.prometheusQueryRange(
-      cpuQuery(input.scope, spec),
-      start,
-      end,
-      spec.stepSeconds
-    ),
-    commands.prometheusQueryRange(
-      memoryQuery(input.scope, spec),
-      start,
-      end,
-      spec.stepSeconds
-    ),
-    restarts
-      ? commands.prometheusQueryRange(restarts, start, end, spec.stepSeconds)
-      : Promise.resolve([] as PromSeries[]),
-  ]);
+  const declared = (resource: "cpu" | "memory", what: "requests" | "limits") =>
+    commands
+      .prometheusQueryRange(
+        declaredQuery(input.scope, resource, what),
+        start,
+        end,
+        spec.stepSeconds
+      )
+      // A declared line that could not be read is a missing line, not a
+      // missing chart: usage still draws.
+      .catch(() => [] as PromSeries[]);
+  const [cpu, memory, started, cpuReq, cpuLim, memReq, memLim] =
+    await Promise.all([
+      commands.prometheusQueryRange(
+        cpuQuery(input.scope, spec),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+      commands.prometheusQueryRange(
+        memoryQuery(input.scope, spec),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+      restarts
+        ? commands.prometheusQueryRange(restarts, start, end, spec.stepSeconds)
+        : Promise.resolve([] as PromSeries[]),
+      declared("cpu", "requests"),
+      declared("cpu", "limits"),
+      declared("memory", "requests"),
+      declared("memory", "limits"),
+    ]);
 
   const cpuAt = byTime(cpu);
   const memoryAt = byTime(memory);
@@ -101,7 +145,66 @@ export async function usageHistory(input: {
     };
   });
 
-  return { samples, resolution: spec.resolution };
+  const declaredSeries: DeclaredHistory = {
+    cpuRequest: pointsOf(cpuReq),
+    cpuLimit: pointsOf(cpuLim),
+    memoryRequest: pointsOf(memReq),
+    memoryLimit: pointsOf(memLim),
+  };
+  const anyDeclared = Object.values(declaredSeries).some(
+    (points) => points.length > 0
+  );
+
+  return {
+    samples,
+    resolution: spec.resolution,
+    declared: anyDeclared || (await keepsDeclared()) ? declaredSeries : null,
+  };
+}
+
+/** Every node's usage in two range queries, plus when each last reported. */
+export async function nodeUsage(input: {
+  range: UsageRange;
+}): Promise<NodeUsageWindow> {
+  const spec = RANGE_SPECS[input.range];
+  const end = Date.now();
+  const start = end - spec.windowMs;
+  const [cpu, memory, newest] = await Promise.all([
+    commands.prometheusQueryRange(
+      nodesQuery("cpu", spec),
+      start,
+      end,
+      spec.stepSeconds
+    ),
+    commands.prometheusQueryRange(
+      nodesQuery("memory", spec),
+      start,
+      end,
+      spec.stepSeconds
+    ),
+    commands
+      .prometheusQuery(nodesNewestQuery())
+      .catch(() => [] as PromSeries[]),
+  ]);
+
+  const nodes: NodeUsageWindow["nodes"] = {};
+  const lane = (name: string) =>
+    (nodes[name] ??= { cpuMillicores: [], memoryBytes: [] });
+  for (const series of cpu) {
+    const name = nodeNameOf(series);
+    if (name) lane(name).cpuMillicores = pointsOf([series]);
+  }
+  for (const series of memory) {
+    const name = nodeNameOf(series);
+    if (name) lane(name).memoryBytes = pointsOf([series]);
+  }
+  const newestAt: Record<string, number> = {};
+  for (const series of newest) {
+    const name = nodeNameOf(series);
+    const seconds = series.points[0]?.v;
+    if (name && typeof seconds === "number") newestAt[name] = seconds * 1000;
+  }
+  return { nodes, newestAt, resolution: spec.resolution };
 }
 
 /** Bytes in and out, on the same clock as {@link usageHistory}. */

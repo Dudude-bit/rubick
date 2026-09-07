@@ -722,6 +722,14 @@ export function PodDetail() {
                       cpu={podWithMetrics?.cpuMillicores}
                       memory={podWithMetrics?.memoryBytes}
                       cpuLimit={pod?.cpuLimits ? parseCPU(pod.cpuLimits) : null}
+                      cpuRequest={
+                        pod?.cpuRequests ? parseCPU(pod.cpuRequests) : null
+                      }
+                      memoryRequest={
+                        pod?.memoryRequests
+                          ? parseMemory(pod.memoryRequests)
+                          : null
+                      }
                       memoryLimit={
                         pod?.memoryLimits ? parseMemory(pod.memoryLimits) : null
                       }

@@ -3,7 +3,10 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { NodeUtilisation } from "@/components/resources/NodeUtilisation";
+import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -214,6 +217,60 @@ export function NodeList() {
 
   const actions = useNodeActions();
 
+  // In the URL, so a deep link can open the view and a reload keeps it.
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "utilisation" ? "utilisation" : "table";
+  const range = (
+    ["1h", "6h", "24h", "7d"].includes(params.get("range") ?? "")
+      ? params.get("range")
+      : "6h"
+  ) as UsageRange;
+  const setView = (next: "table" | "utilisation") =>
+    setParams((current) => {
+      const out = new URLSearchParams(current);
+      if (next === "table") out.delete("view");
+      else out.set("view", next);
+      return out;
+    });
+  const setRange = (next: UsageRange) =>
+    setParams((current) => {
+      const out = new URLSearchParams(current);
+      out.set("range", next);
+      return out;
+    });
+  // The same key the table reads, so the switch costs no second list.
+  const nodesForTrends = useQuery({
+    queryKey,
+    queryFn: () => commands.listNodes(null),
+    enabled: isConnected && view === "utilisation",
+    staleTime: STALE_TIMES.resourceList,
+  });
+
+  const viewToggle = (
+    <span
+      role="tablist"
+      aria-label={t("columns", "view")}
+      className="flex items-center gap-0.5"
+    >
+      {(["table", "utilisation"] as const).map((candidate) => (
+        <button
+          key={candidate}
+          type="button"
+          role="tab"
+          aria-selected={view === candidate}
+          onClick={() => setView(candidate)}
+          className={
+            view === candidate
+              ? "rounded bg-sel px-1.5 py-0.5 text-[11px] text-fg"
+              : "rounded px-1.5 py-0.5 text-[11px] text-fg-mut hover:bg-hover hover:text-fg"
+          }
+        >
+          {t("columns", candidate === "table" ? "tableView" : "utilisation")}
+        </button>
+      ))}
+    </span>
+  );
+
   const nodeColumns = useMemo(
     () => columns(nodeMetricsByName),
     [nodeMetricsByName]
@@ -250,6 +307,25 @@ export function NodeList() {
     [t, navigate, actions]
   );
 
+  if (view === "utilisation") {
+    return (
+      <>
+        <div className="mb-3 flex items-baseline gap-3">
+          <h1 className="text-[13px] font-semibold tracking-tight text-fg">
+            Nodes
+          </h1>
+          {viewToggle}
+        </div>
+        <NodeUtilisation
+          nodes={nodesForTrends.data ?? []}
+          range={range}
+          onRange={setRange}
+        />
+        {actions.dialogs}
+      </>
+    );
+  }
+
   return (
     <>
       <ResourceList<NodeInfo>
@@ -266,9 +342,12 @@ export function NodeList() {
         live={!watchFailed}
         resyncing={resyncing}
         headerContent={
-          nodeStatus?.status !== "available" ? (
-            <MetricsStatusBanner status={nodeStatus} />
-          ) : null
+          <>
+            <div className="mb-2 flex justify-end">{viewToggle}</div>
+            {nodeStatus?.status !== "available" ? (
+              <MetricsStatusBanner status={nodeStatus} />
+            ) : null}
+          </>
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />
