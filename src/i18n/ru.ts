@@ -3378,6 +3378,8 @@ export const ru: Catalogue = {
     budgetRuleHealthyCovering:
       "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
+    noClusterOverviewAccess:
+      "У вас нет прав на просмотр всего кластера. Выберите доступные вам пространства имён сверху.",
     controllerLower: "контроллер",
     noneSet: "не заданы",
     couldNotReadManifest: "Не удалось прочитать манифест",

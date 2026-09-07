@@ -1,5 +1,6 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Lock } from "lucide-react";
 
+import { isRefusal, verbatim } from "@/lib/error-utils";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
@@ -51,20 +52,39 @@ export function ClusterOverview() {
   }
 
   if (error && !overview) {
+    // A refusal is not a failure: the cluster-wide read this page needs was
+    // declined, and retrying it spends requests to be declined again. Say so,
+    // and point at the fix — the scoped overview reads each namespace on its
+    // own, so a user with rights in some can see those by picking them.
+    const refused = isRefusal(error);
     return (
       <Section>
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-          <h2 className="text-[13px] font-semibold tracking-tight text-err">
-            {t("empty", "couldNotReadClusterState")}
+          {refused ? (
+            <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+          )}
+          <h2
+            className={`text-[13px] font-semibold tracking-tight ${
+              refused ? "text-fg" : "text-err"
+            }`}
+          >
+            {refused
+              ? t("empty", "noClusterOverviewAccess")
+              : t("empty", "couldNotReadClusterState")}
           </h2>
         </div>
-        <p className="text-xs text-fg-mut">{error.message}</p>
-        <div className="flex items-center gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            {t("action", "retry")}
-          </Button>
-        </div>
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {verbatim(error.message)}
+        </p>
+        {!refused && (
+          <div className="flex items-center gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              {t("action", "retry")}
+            </Button>
+          </div>
+        )}
       </Section>
     );
   }
