@@ -735,6 +735,19 @@ export interface HelmRelease {
   sourceRef: string | null;
 }
 
+export interface FilePreview {
+  bytesRead: number;
+  truncated: boolean;
+  binary: boolean;
+  nonTextShare: number;
+  text: string | null;
+}
+
+export interface Via {
+  container: string;
+  root: string;
+}
+
 export interface KubeconfigSource {
   candidates: KubeconfigCandidate[];
   kubeconfig_env: string | null;
@@ -1865,6 +1878,11 @@ export type SearchFailureKind =
 
 export type SearchContextStatus =
   "connecting" | "searching" | "done" | "failed" | "skipped";
+
+export type FileRead =
+  | { state: "preview"; preview: FilePreview }
+  | { state: "noTools" }
+  | { state: "failed"; exit_code: number | null; message: string };
 
 export type ContextAuth =
   | { kind: "exec" }

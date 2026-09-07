@@ -435,6 +435,7 @@ export const en = {
     ready: "Ready",
     restarts: "Restarts",
     node: "Node",
+    files: "Files",
     cpuOfAllocatable: "CPU, % of allocatable",
     memoryOfAllocatable: "Memory, % of allocatable",
     utilisation: "Utilisation",
@@ -1292,6 +1293,7 @@ export const en = {
     copied: "Copied",
     openInBrowser: "Open in Browser",
     back: "Back",
+    download: "Download",
     gwFilterPlaceholder: "name, host, gateway…",
     filterRoutes: "Filter routes",
     filterByKind: "Filter by kind",
@@ -1395,6 +1397,62 @@ export const en = {
     watchCount: { one: "{n} watch", other: "{n} watches" },
     watching: "Watching",
     active: "{n} active",
+  },
+  files: {
+    noContainers: "This pod declares no containers.",
+    viaDebug:
+      "Viewing through debug container {debug}, at {root} of container {container}. Mode and owner are as the debug container sees them; a file the app process cannot read may still show here. The debug container stays on the pod.",
+    stopVia: "Read the container directly again",
+    restartedSince:
+      "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
+    readNewContainer: "Read the new container",
+    filterNames: "filter {n} names…",
+    notRunning:
+      "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
+    listingOf: "Files in {path}",
+    mode: "Mode",
+    size: "Size",
+    modified: "Modified",
+    emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
+    readingSoFar: "reading · {n} entries so far · {seconds} s",
+    readVia: "read via {how} · {n} entries · {seconds} s",
+    stoppedAfter:
+      "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    gnuFind: "find (GNU)",
+    busyboxStat: "sh + stat (busybox)",
+    fromMount: "from {name}",
+    noToolsTitle: "The image has nothing to list files with",
+    noToolsBody:
+      "{tried} were each executed directly in container {container} and none exists (exit 127). The image is {image}; the files are there, the tools to read them are not.",
+    openViaDebug: "Open through a debug container",
+    readMountsInstead: "Read the pod's mounts instead",
+    debugExplained:
+      "A debug container adds an ephemeral container to this pod sharing its process namespace and reads files at /proc/1/root. It is a change to the pod, it stays until the pod is replaced, and the listing will say so.",
+    refused: "The cluster refused to exec into this pod",
+    notRunningNow:
+      "Container {container} is not running, so there is nothing to exec into",
+    listFailed: "The listing tool ran and failed (exit {code})",
+    mountsOnlyIntro:
+      "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
+    noMounts: "Nothing is mounted into this container.",
+    binary: "binary",
+    text: "text",
+    lineCount: { one: "{n} line", other: "{n} lines" },
+    mountedFrom: "mounted from {kind} {name}",
+    pathCopied: "Path copied",
+    copyPath: "Copy path",
+    tooBigToDownload: "Downloads over 100 MiB are refused in this version",
+    noHeadInImage: "No head in this image to read the file with.",
+    readFailed: "Could not read the file (exit {code}):",
+    noPreviewBinary:
+      "No preview for a binary file. Download it to look at it elsewhere.",
+    nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
+    previewTruncated:
+      "The preview stops at 1 MiB; the file goes on. Download it for the rest.",
+    downloaded: "Downloaded {name}",
+    downloadFailed: "Could not download {name}",
+    noCatInImage: "No cat in this image to copy the file with.",
   },
   tell: {
     askRollout: "Tell me when the rollout finishes",

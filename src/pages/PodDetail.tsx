@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Bug,
+  FolderOpen,
   Info,
   Network,
   RefreshCw,
@@ -20,6 +21,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
+import { FilesTab } from "@/components/files/FilesTab";
+import type { Via } from "@/generated/types";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodShell } from "@/components/terminal/PodShell";
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -277,6 +280,10 @@ export function PodDetail() {
     container: string | null;
   } | null>(null);
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
+  // Which tab asked for the debug container: the shell opens a terminal in
+  // it, the files tab reads through it.
+  const [debugFor, setDebugFor] = useState<"shell" | "files">("shell");
+  const [filesVia, setFilesVia] = useState<Via | null>(null);
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
   // nobody has asked, so this stays null for an ordinary visit.
@@ -400,6 +407,9 @@ export function PodDetail() {
         `/${toPlural(ResourceType.Pod)}/${result.namespace}/${result.podName}`,
         { replace: false }
       );
+    } else if (debugFor === "files") {
+      setFilesVia({ container: result.containerName, root: "/proc/1/root" });
+      setActiveTab("files");
     } else {
       openTerminal(result.containerName);
     }
@@ -840,8 +850,29 @@ export function PodDetail() {
                 ended={shellEnded}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
-                onDebug={() => setDebugDialogOpen(true)}
+                onDebug={() => {
+                  setDebugFor("shell");
+                  setDebugDialogOpen(true);
+                }}
                 onEnd={handleTerminalClose}
+              />
+            ) : null,
+          },
+          {
+            id: "files",
+            label: t("columns", "files"),
+            glyph: viewGlyph(FolderOpen),
+            kind: "surface",
+            content: pod ? (
+              <FilesTab
+                key={`files:${pod.uid}`}
+                pod={pod}
+                via={filesVia}
+                onDebug={() => {
+                  setDebugFor("files");
+                  setDebugDialogOpen(true);
+                }}
+                onStopVia={() => setFilesVia(null)}
               />
             ) : null,
           },
