@@ -3739,6 +3739,12 @@ export const ru: Catalogue = {
       "Срез несёт порт под именем порта Service. Эти не называют ни один из объявленных, поэтому к ним ничего не маршрутизируется.",
     couldNotReadWhatConnects: "Не удалось прочитать, что с этим связано.",
     clusterDidNotAnswer: "Кластер не ответил.",
+    unknownRefused: "Кластер отказал: {message}",
+    unknownFault: "Чтение не удалось: {message}",
+    unknownRetry: "Прочитать ещё раз",
+    unknownCopyRule: "Скопировать правило, которое попросить",
+    unknownRuleCopied:
+      "Role и RoleBinding, которые разрешили бы это чтение. Отдайте тому, кто выдаёт доступ.",
     inNamespaceWhere: "в пространстве имён {namespace}",
     inClusterWhere: "в кластере",
     nothingStatesEdge: "Ничто {where} не объявляет связь с этим {kind}.",
