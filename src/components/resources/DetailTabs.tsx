@@ -86,8 +86,12 @@ export function DetailTabs({
   /** Controls belonging to the page, pinned to the right of the same row. */
   actions?: React.ReactNode;
 }) {
-  const opened = useOpenedTabs(activeTab);
-  const surface = surfaceIsOpen(tabs, activeTab);
+  // A tab named by a link that this page does not have opens the first one
+  // rather than none: a page with every panel hidden reads as broken.
+  const requested = tabs.some((tab) => tab.id === activeTab);
+  const current = requested || tabs.length === 0 ? activeTab : tabs[0].id;
+  const opened = useOpenedTabs(current);
+  const surface = surfaceIsOpen(tabs, current);
   // Force-mounting a surface keeps its shell attached and its log stream
   // running, which is the point. It must not also keep its queries re-reading
   // the cluster for a panel nobody can see, and since the panel is mounted
@@ -96,7 +100,7 @@ export function DetailTabs({
 
   return (
     <Tabs
-      value={activeTab}
+      value={current}
       onValueChange={onTabChange}
       className={surface ? "flex min-h-0 flex-1 flex-col" : undefined}
     >
@@ -113,7 +117,7 @@ export function DetailTabs({
             <DetailTabTrigger
               key={tab.id}
               tab={tab}
-              isActive={tab.id === activeTab}
+              isActive={tab.id === current}
             />
           ))}
         </TabsList>
@@ -147,9 +151,7 @@ export function DetailTabs({
               : "mt-[18px] flex flex-col gap-[22px]"
           }
         >
-          <SurfaceVisibility.Provider
-            value={pageVisible && tab.id === activeTab}
-          >
+          <SurfaceVisibility.Provider value={pageVisible && tab.id === current}>
             {/* The strip has just said this word; whatever the tab opens
                 with does not have to say it again. */}
             <CaptionScope tab={tab.label}>{tab.content}</CaptionScope>

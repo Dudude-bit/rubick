@@ -2401,6 +2401,17 @@ export const ru: Catalogue = {
     connectingToLower: "подключение к {context}…",
     notConnectedLower: "нет подключения",
     tunnelWaking: "подключение…",
+    linkCopied: "Скопировано, где вы сейчас",
+    linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
+    linkOpenedAt:
+      "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
+    linkContextMissing:
+      "Ссылка указывает на кластер {context}, которого нет в этом kubeconfig. Ничего не открыто.",
+    linkContextMissingKnown:
+      "Кластеры здесь: {known}. Кластер с похожим именем это другой кластер, поэтому ничего не выбрано за вас.",
+    linkContextMissingNone: "На этой машине ещё не настроен ни один кластер.",
+    linkOpenClusters: "Настройки › Кластеры",
+    linkDismiss: "Скрыть",
     tunnelAsleep: "спит",
     renameOrRecolour: "{name} — переименовать или изменить цвет",
     called: "Название",
