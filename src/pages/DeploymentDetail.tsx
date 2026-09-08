@@ -30,6 +30,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { LogViewer } from "@/components/logs/LogViewer";
+import { useAsk } from "@/hooks/useAsk";
+import type { After } from "@/lib/tell-me-when";
 import { lanePodOf } from "@/components/logs/lanes";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -158,6 +160,19 @@ export function DeploymentDetail() {
     refresh: "fast",
   });
 
+  // Every action here is followed for two minutes and answered: rolled
+  // out, failed, or no answer. The generation the page saw before the
+  // click is what the answer is measured against.
+  const asking = useAsk();
+  const generationNow = deployment?.generation ?? null;
+  const follow = (after: After) => {
+    if (!name) return;
+    asking.ask(
+      { kind: "Deployment", namespace: namespace || null, name },
+      after
+    );
+  };
+
   const scaleMutation = useResourceMutation(
     async (replicas: number) => {
       if (!name) return;
@@ -180,8 +195,9 @@ export function DeploymentDetail() {
       },
       invalidateQueryKeys:
         namespace && name ? [["deployment", namespace, name]] : [],
-      onSuccess: () => {
+      onSuccess: (_data, replicas) => {
         setScaleDialogOpen(false);
+        follow({ action: "scale", replicas, generationBefore: generationNow });
       },
     }
   );
@@ -206,6 +222,12 @@ export function DeploymentDetail() {
       },
       invalidateQueryKeys:
         name && namespace ? [["deployment", namespace, name]] : [],
+      onSuccess: () =>
+        follow({
+          action: "restart",
+          replicas: null,
+          generationBefore: generationNow,
+        }),
     }
   );
 
@@ -232,6 +254,11 @@ export function DeploymentDetail() {
         name && namespace ? [["deployment", namespace, name]] : [],
       onSuccess: () => {
         setImageDialogOpen(false);
+        follow({
+          action: "image",
+          replicas: null,
+          generationBefore: generationNow,
+        });
       },
     }
   );
@@ -606,6 +633,7 @@ export function DeploymentDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {asking.dialog}
     </>
   );
 }

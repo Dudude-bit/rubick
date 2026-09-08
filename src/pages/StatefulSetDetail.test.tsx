@@ -47,6 +47,8 @@ function buildSet(
     annotations: {},
     conditions: [],
     ownerReferences: [],
+    generation: null,
+    observedGeneration: null,
     createdAt: "2026-01-01T00:00:00Z",
     ...overrides,
   };

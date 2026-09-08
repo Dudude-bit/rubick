@@ -176,6 +176,12 @@ export function useObjectActions({
       variant: "destructive",
     });
 
+  const asking = useAsk();
+  const askTarget = (() => {
+    const askable = askableKind(kind);
+    return askable ? { kind: askable, namespace, name } : null;
+  })();
+
   const restart = useMutation({
     mutationFn: () =>
       kind === "Deployment"
@@ -186,6 +192,15 @@ export function useObjectActions({
     onSuccess: () => {
       invalidate();
       setConfirming(null);
+      // A restarted Deployment is followed to its answer; a restarted pod
+      // is a deletion, and the pod that replaces it is a different object.
+      if (askTarget && kind === "Deployment") {
+        asking.ask(askTarget, {
+          action: "restart",
+          replicas: null,
+          generationBefore: null,
+        });
+      }
     },
     onError: failed("restart"),
   });
@@ -211,18 +226,19 @@ export function useObjectActions({
       if (!scaleCommand) throw new Error(`No scale command for ${kind}`);
       return scaleCommand(name, replicas, namespace);
     },
-    onSuccess: () => {
+    onSuccess: (_data, replicas) => {
       invalidate();
       setDialog(null);
+      if (askTarget) {
+        asking.ask(askTarget, {
+          action: "scale",
+          replicas,
+          generationBefore: null,
+        });
+      }
     },
     onError: failed("scale"),
   });
-
-  const asking = useAsk();
-  const askTarget = (() => {
-    const askable = askableKind(kind);
-    return askable ? { kind: askable, namespace, name } : null;
-  })();
 
   const plan = planPeekActions(kind, detail, t, {
     watching: askTarget ? asking.watching(askTarget) : false,

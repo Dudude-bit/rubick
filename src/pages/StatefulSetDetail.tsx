@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { LogViewer } from "@/components/logs/LogViewer";
+import { useAsk } from "@/hooks/useAsk";
 import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -128,6 +129,7 @@ export function StatefulSetDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const [scaleOpen, setScaleOpen] = useState(false);
+  const asking = useAsk();
 
   const scaleMutation = useResourceMutation(
     async (replicas: number) => {
@@ -151,7 +153,19 @@ export function StatefulSetDetail() {
       },
       invalidateQueryKeys:
         namespace && name ? [["statefulset", namespace, name]] : [],
-      onSuccess: () => setScaleOpen(false),
+      onSuccess: (_data, replicas) => {
+        setScaleOpen(false);
+        if (name) {
+          asking.ask(
+            { kind: "StatefulSet", namespace: namespace || null, name },
+            {
+              action: "scale",
+              replicas,
+              generationBefore: statefulSet?.generation ?? null,
+            }
+          );
+        }
+      },
     }
   );
 
@@ -420,6 +434,7 @@ export function StatefulSetDetail() {
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />
+      {asking.dialog}
     </>
   );
 }

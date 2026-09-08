@@ -187,3 +187,89 @@ describe("coalescing", () => {
     expect(flush).toHaveBeenLastCalledWith(["d"]);
   });
 });
+
+describe("an action being followed", () => {
+  const after = (
+    action: "restart" | "scale" | "apply" | "image",
+    replicas: number | null = null,
+    generationBefore: number | null = 4
+  ) => ({
+    ...watchOn("Deployment", "rollout"),
+    after: { action, replicas, generationBefore },
+    deadline: 120_000,
+  });
+  const look = (
+    generation: number,
+    observed: number,
+    replicas: Partial<DeploymentInfo["replicas"]> = {},
+    revision = "8"
+  ): DeploymentInfo => ({
+    ...deployment(replicas),
+    generation,
+    observedGeneration: observed,
+    annotations: { "deployment.kubernetes.io/revision": revision },
+  });
+
+  /**
+   * The Deployment looked fine before the click and looks fine for a
+   * second after it. Saying "rolled out" on that second is the lie this
+   * exists to avoid: nothing is said until the generation moved past the
+   * one the page saw before the click.
+   */
+  it("says nothing on a settled look whose generation is the one before the click", () => {
+    expect(walk(after("restart"), [look(4, 4), look(4, 4)])).toEqual([]);
+  });
+
+  it("says rolled out only once the new generation is observed and settled", () => {
+    expect(
+      walk(after("restart"), [
+        look(4, 4),
+        look(5, 4, { updated: 1, ready: 2 }),
+        look(5, 5, { updated: 3, ready: 3 }, "9"),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: "3 of 3 ready, revision 9" }]);
+  });
+
+  it("acknowledges a scale by the count asked for, not by a generation the page did not know", () => {
+    expect(
+      walk(after("scale", 5, null), [
+        look(4, 4, { desired: 3 }),
+        look(5, 5, { desired: 5, ready: 3, updated: 5, available: 3 }),
+        look(5, 5, { desired: 5, ready: 5, updated: 5, available: 5 }),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: "5 of 5 ready, revision 8" }]);
+  });
+
+  it("carries the controller's words when the rollout it follows gives up", () => {
+    expect(
+      walk(after("image"), [
+        look(4, 4),
+        {
+          ...look(5, 5, { updated: 1, ready: 2 }),
+          conditions: [
+            {
+              type: "Progressing",
+              status: "False",
+              reason: "ProgressDeadlineExceeded",
+              message: "ReplicaSet has timed out progressing.",
+              lastTransitionTime: null,
+            },
+          ],
+        },
+      ])
+    ).toEqual([
+      {
+        says: "rolloutFailed",
+        detail: "ReplicaSet has timed out progressing.",
+      },
+    ]);
+  });
+
+  it("remembers the last look in words, for the timeout to say", () => {
+    let current = after("restart");
+    for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {
+      current = { ...current, baseline: judge(current, "applied", l).baseline };
+    }
+    expect(current.baseline?.seen).toBe("2 of 3 ready, revision 8");
+  });
+});
