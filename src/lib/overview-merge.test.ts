@@ -74,6 +74,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
     problemsTruncated: 0,
     scheduler: {} as ClusterOverview["scheduler"],
     nodes: [node("a"), node("b"), node("c")],
+    nodesKnown: true,
     warnings: [],
     namespaces: [],
     counts: counts(),
@@ -226,6 +227,17 @@ describe("adding namespaces up", () => {
         overview({ metricsAvailable: true }),
         overview({ metricsAvailable: false }),
       ]).metricsAvailable
+    ).toBe(false);
+  });
+
+  it("leaves the capacity view unknown when one scope could not read the nodes", () => {
+    // The node list is one cluster-wide read; a part that was refused it makes
+    // the whole scope's capacity view unknown, not a partial count.
+    expect(
+      mergeOverviews([
+        overview({ nodesKnown: true }),
+        overview({ nodesKnown: false }),
+      ]).nodesKnown
     ).toBe(false);
   });
 });

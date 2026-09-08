@@ -250,12 +250,16 @@ export function ProblemsPanel({
   problemsTruncated,
   pods,
   nodes,
+  nodesKnown,
 }: {
   problems: ClusterProblem[];
   /** Rows the backend dropped from the end of the ranked list. */
   problemsTruncated: number;
   pods: PodComposition;
   nodes: NodeSummary[];
+  /** False when the node list was refused: the "N nodes ready" half of the
+   *  healthy line is unknown, not "0 of 0", so it is left off. */
+  nodesKnown: boolean;
 }) {
   const t = useT();
   // The headline counts everything that is wrong, not everything that fits —
@@ -297,8 +301,16 @@ export function ProblemsPanel({
             {t("cluster", "healthy")}
           </span>
           <span className="truncate text-fg-fnt">
-            {t("count", "podsRunning", { n: serving, total: podTotal(pods) })} ·{" "}
-            {t("count", "nodesReady", { n: readyNodes, total: nodes.length })}
+            {t("count", "podsRunning", { n: serving, total: podTotal(pods) })}
+            {nodesKnown && (
+              <>
+                {" · "}
+                {t("count", "nodesReady", {
+                  n: readyNodes,
+                  total: nodes.length,
+                })}
+              </>
+            )}
           </span>
           <span />
           <span />

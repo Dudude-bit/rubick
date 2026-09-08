@@ -3158,6 +3158,8 @@ export const en = {
     couldNotReadClusterState: "Could not read cluster state",
     noClusterOverviewAccess:
       "You do not have permission to read the whole cluster. Pick the namespaces you can see at the top.",
+    noNodeAccess:
+      "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",
     noneSet: "none set",
     couldNotReadManifest: "Could not read the manifest",

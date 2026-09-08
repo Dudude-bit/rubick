@@ -3380,6 +3380,8 @@ export const ru: Catalogue = {
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
     noClusterOverviewAccess:
       "У вас нет прав на просмотр всего кластера. Выберите доступные вам пространства имён сверху.",
+    noNodeAccess:
+      "У вас нет прав на чтение узлов кластера — ёмкость и запас планировщика не показаны.",
     controllerLower: "контроллер",
     noneSet: "не заданы",
     couldNotReadManifest: "Не удалось прочитать манифест",

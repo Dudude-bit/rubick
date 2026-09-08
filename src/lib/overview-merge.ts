@@ -201,5 +201,9 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
     // One namespace failing to report metrics is the whole reading failing:
     // a chart drawn from two of three namespaces is a chart with no axis.
     metricsAvailable: parts.every((part) => part.metricsAvailable),
+    // The node list is the same cluster-wide read in every part, so one part
+    // that could not make it leaves the capacity view unknown for the whole
+    // scope — `nodes`/`scheduler` already came through empty with `first`.
+    nodesKnown: parts.every((part) => part.nodesKnown),
   };
 }

@@ -6,7 +6,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
-import { Section } from "@/components/ui/section";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import {
@@ -100,16 +100,32 @@ export function ClusterOverview() {
         problemsTruncated={overview.problemsTruncated}
         pods={overview.pods}
         nodes={overview.nodes}
+        nodesKnown={overview.nodesKnown}
       />
       <WorkloadsPanel overview={overview} scope={scope} />
-      <SchedulerPanel
-        scheduler={overview.scheduler}
-        metricsAvailable={overview.metricsAvailable}
-      />
-      <NodesPanel
-        nodes={overview.nodes}
-        version={clusterInfo?.server_version}
-      />
+      {overview.nodesKnown ? (
+        <>
+          <SchedulerPanel
+            scheduler={overview.scheduler}
+            metricsAvailable={overview.metricsAvailable}
+          />
+          <NodesPanel
+            nodes={overview.nodes}
+            version={clusterInfo?.server_version}
+          />
+        </>
+      ) : (
+        // The scheduler headroom and node rows both come from the cluster-wide
+        // node read, which this token was refused — one honest note in their
+        // place, not two panels drawing an empty cluster.
+        <Section>
+          <SectionHeader title="Nodes" />
+          <div className="flex items-center gap-2 py-1">
+            <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />
+            <p className="text-xs text-fg-mut">{t("empty", "noNodeAccess")}</p>
+          </div>
+        </Section>
+      )}
       <WarningsPanel warnings={overview.warnings} />
     </div>
   );
