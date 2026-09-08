@@ -102,7 +102,9 @@ export function Helm() {
     isLoading,
     refetch,
   } = useLiveQuery({
-    queryKey: ["helm-releases-native", scopeCacheKey(scope.scope) ?? "all"],
+    // `null` for the whole cluster — not `"all"`, which is a name a namespace
+    // can really carry and would then share this cache entry.
+    queryKey: ["helm-releases-native", scopeCacheKey(scope.scope)],
     queryFn: listAcrossScope(scope.scope, async (ns) => {
       try {
         return await commands.listHelmReleasesNative(ns);

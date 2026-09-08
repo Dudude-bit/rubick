@@ -44,10 +44,11 @@ function useRouteKind(
   // Several namespaces are read one apiece and polled; a watch covers none or
   // one. See `listAcrossScope`.
   const several = scope.length >= 2;
+  // `null` keys the whole cluster — not `"all"`, a name a namespace can carry.
   const cacheKey = scopeCacheKey(scope);
   const watchNamespace = scope.length === 1 ? scope[0] : null;
   const queryKey = useMemo(
-    () => ["gateway-routes", kind, cacheKey ?? "all"],
+    () => ["gateway-routes", kind, cacheKey],
     [kind, cacheKey]
   );
   const query = useLiveQuery<RouteInfo[]>({

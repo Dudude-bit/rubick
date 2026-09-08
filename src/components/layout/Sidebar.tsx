@@ -42,7 +42,7 @@ import { commands } from "@/lib/commands";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { inNamespace } from "@/lib/namespace-scope";
+import { inScope } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
@@ -259,11 +259,12 @@ export function Sidebar() {
 
 function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   const t = useT();
-  // `""` is this app's word for "the whole cluster", not `null` — the store
-  // types it `string` and every other consumer writes `currentNamespace ||
-  // null`. Comparing against `null` here compiled fine and filtered every
-  // row away, so the rail read "Routes 0" above a page listing forty.
-  const scope = useClusterStore((s) => s.currentNamespace) || null;
+  // The whole selection, not the collapsed `currentNamespace` — that is `""`
+  // for any two-or-more namespace window, which narrows to the whole cluster
+  // and put "Routes 40" in the rail above a page (migrated to read per
+  // namespace) listing three. `inScope` narrows by the array for one or
+  // several, and is the identity for an empty selection.
+  const scope = useClusterStore((s) => s.namespaceScope);
   const detection = useGatewayApi().data;
   const installed = detection?.installed ?? false;
   const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
@@ -328,11 +329,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // says so in `ResourceCounts`) and these two did not, so picking a
   // namespace left "Routes 40" in red above a page listing three green ones.
   const scopedRoutes = useMemo(
-    () => inNamespace(routes.data ?? [], scope),
+    () => (routes.data ?? []).filter((r) => inScope(scope, r.namespace)),
     [routes.data, scope]
   );
   const scopedGateways = useMemo(
-    () => inNamespace(gateways.data ?? [], scope),
+    () => (gateways.data ?? []).filter((g) => inScope(scope, g.namespace)),
     [gateways.data, scope]
   );
   const board = useMemo(
@@ -358,7 +359,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     [scopedRoutes, gateways.data, classes.data, backing.data, classesSettled, t]
   );
 
-  const scopedPulse = inNamespace(board.pulse, scope);
+  const scopedPulse = board.pulse.filter((p) => inScope(scope, p.namespace));
 
   if (!installed) return null;
 
