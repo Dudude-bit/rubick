@@ -52,6 +52,7 @@ import { UsageBlock } from "@/components/resources/usage-block";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { MostLikelyPanel } from "@/components/pod/MostLikelyPanel";
 import { VolumeRows } from "@/components/resources/volume-rows";
 import {
   KeyValueSection,
@@ -65,6 +66,7 @@ import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodePlacement } from "@/hooks/useNodePlacement";
 import { SpotMark } from "@/components/resources/spot-mark";
 import { commands } from "@/lib/commands";
@@ -72,6 +74,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -321,6 +324,23 @@ export function PodDetail() {
   });
 
   const connections = useConnections(ResourceType.Pod, name, namespace);
+  // The pod's own events, for the "most likely" sentence: read here rather
+  // than inside the panel so a refusal reaches it as a line, not a crash.
+  const podEvents = useLiveQuery({
+    queryKey: [...queryKeys.events(namespace), "pod", name],
+    queryFn: () =>
+      commands.listEvents({
+        namespace: namespace || null,
+        involved_object_name: name ?? null,
+        involved_object_kind: "Pod",
+        event_type: null,
+        field_selector: null,
+        limit: 200,
+      }),
+    enabled: !!name,
+    refresh: "slow",
+    retry: false,
+  });
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
   // The kubelet on this pod's node writes its status. If the node stopped
   // answering, everything below is the last thing it said, not the state now.
@@ -709,6 +729,18 @@ export function PodDetail() {
               <>
                 {podStatus?.status !== "available" && (
                   <MetricsStatusBanner status={podStatus} />
+                )}
+                {pod && (
+                  <MostLikelyPanel
+                    pod={pod}
+                    events={podEvents.data ?? []}
+                    eventsError={
+                      podEvents.error
+                        ? normalizeTauriError(podEvents.error)
+                        : null
+                    }
+                    onOpenTab={setActiveTab}
+                  />
                 )}
 
                 {/* A Pod is the only member of the family with no count block: it

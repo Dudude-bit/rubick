@@ -1,4 +1,11 @@
-import { Info, Package, Palette, Server, Stethoscope } from "lucide-react";
+import {
+  Info,
+  Package,
+  Palette,
+  Search,
+  Server,
+  Stethoscope,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { en } from "@/i18n/catalogue";
@@ -61,6 +68,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     label: "sectionDiagnostics",
     icon: Stethoscope,
     description: "sectionDiagnosticsHint",
+  },
+  {
+    id: "handoff",
+    label: "sectionHandoff",
+    icon: Search,
+    description: "sectionHandoffHint",
   },
   {
     id: "about",
