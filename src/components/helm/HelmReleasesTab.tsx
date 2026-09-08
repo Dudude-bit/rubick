@@ -32,6 +32,7 @@ import type { HelmRelease } from "@/generated/types";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
+import { isRefusal, verbatim } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 
@@ -44,6 +45,7 @@ const helmReleaseHref = (row: HelmRelease) =>
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
   isLoading: boolean;
+  error: Error | null;
   helmCliAvailable: boolean;
   onRefetch: () => void;
   onShowHistory: (release: HelmRelease) => void;
@@ -55,6 +57,7 @@ export interface HelmReleasesTabProps {
 export function HelmReleasesTab({
   releases,
   isLoading,
+  error,
   helmCliAvailable,
   onRefetch,
   onShowHistory,
@@ -277,15 +280,32 @@ export function HelmReleasesTab({
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={releases}
-        isLoading={isLoading}
-        searchPlaceholder={t("action", "searchReleases")}
-        searchKey="name"
-        getRowId={getHelmReleaseRowId}
-        getRowHref={helmReleaseHref}
-      />
+      {error && releases.length === 0 ? (
+        <div className="max-w-[68ch] py-8">
+          <p className="text-xs text-err">
+            {/* A refusal is not a failure: saying "could not read" about one
+                invites a retry the cluster will refuse again. */}
+            {isRefusal(error)
+              ? t("nav", "noListAccess")
+              : t("empty", "couldNotReadInScope", {
+                  label: t("empty", "helmReleases"),
+                })}
+          </p>
+          <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+            {verbatim(error.message)}
+          </p>
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={releases}
+          isLoading={isLoading}
+          searchPlaceholder={t("action", "searchReleases")}
+          searchKey="name"
+          getRowId={getHelmReleaseRowId}
+          getRowHref={helmReleaseHref}
+        />
+      )}
     </div>
   );
 }

@@ -100,6 +100,7 @@ export function Helm() {
   const {
     data: releases = [],
     isLoading,
+    error: releasesError,
     refetch,
   } = useLiveQuery({
     // `null` for the whole cluster — not `"all"`, which is a name a namespace
@@ -365,6 +366,7 @@ export function Helm() {
           <HelmReleasesTab
             releases={releases}
             isLoading={isLoading}
+            error={(releasesError as Error | null) ?? null}
             helmCliAvailable={helmCliAvailable}
             onRefetch={() => refetch()}
             onShowHistory={setHistoryDialog}
