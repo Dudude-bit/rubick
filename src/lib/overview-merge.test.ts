@@ -232,13 +232,16 @@ describe("adding namespaces up", () => {
 
   it("leaves the capacity view unknown when one scope could not read the nodes", () => {
     // The node list is one cluster-wide read; a part that was refused it makes
-    // the whole scope's capacity view unknown, not a partial count.
-    expect(
-      mergeOverviews([
-        overview({ nodesKnown: true }),
-        overview({ nodesKnown: false }),
-      ]).nodesKnown
-    ).toBe(false);
+    // the whole scope's capacity view unknown, not a partial count. The first
+    // part DID read it, so its node count must be blanked to match — a number
+    // beside the "no node access" note would be the contradiction this guards.
+    const merged = mergeOverviews([
+      overview({ nodesKnown: true, counts: counts({ nodes: 3 }) }),
+      overview({ nodesKnown: false }),
+    ]);
+    expect(merged.nodesKnown).toBe(false);
+    expect(merged.nodes).toEqual([]);
+    expect(merged.counts.nodes).toBeNull();
   });
 });
 

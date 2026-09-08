@@ -49,17 +49,27 @@ function mount(props: Partial<Parameters<typeof HelmReleasesTab>[0]> = {}) {
 }
 
 describe("what the releases tab does when the read fails", () => {
+  // The errors are raw strings on purpose: the query's thrown value is not
+  // guaranteed to be an Error, and reading `.message` off a string (the old
+  // code did) throws mid-render. Passing an Error here would test a shape the
+  // page need not produce and hide that crash — so these are strings, the
+  // harsher case.
   it("names a refusal instead of showing an empty table", () => {
-    mount({ error: new Error("secrets is forbidden (code: 403)") });
+    mount({
+      error:
+        "Tauri command 'listHelmReleasesNative' failed: secrets is forbidden (code: 403)",
+    });
 
     expect(
       screen.getByText(/do not have permission to list/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    // The framing prefix is off the message.
+    expect(screen.queryByText(/Tauri command/)).not.toBeInTheDocument();
   });
 
   it("calls a non-refusal failure a read error, not a refusal", () => {
-    mount({ error: new Error("error trying to connect: connection refused") });
+    mount({ error: "error trying to connect: connection refused" });
 
     expect(
       screen.getByText(/Could not read Helm releases/i)
@@ -72,7 +82,7 @@ describe("what the releases tab does when the read fails", () => {
   it("still shows the rows a readable namespace returned despite a sibling's refusal", () => {
     mount({
       releases: [release("api"), release("web")],
-      error: new Error("secrets is forbidden (code: 403)"),
+      error: "secrets is forbidden (code: 403)",
     });
 
     // Rows present -> the table, not the refusal block.

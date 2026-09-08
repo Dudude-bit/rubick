@@ -106,13 +106,13 @@ export function Helm() {
     // `null` for the whole cluster — not `"all"`, which is a name a namespace
     // can really carry and would then share this cache entry.
     queryKey: ["helm-releases-native", scopeCacheKey(scope.scope)],
-    queryFn: listAcrossScope(scope.scope, async (ns) => {
-      try {
-        return await commands.listHelmReleasesNative(ns);
-      } catch (err) {
-        throw normalizeTauriError(err);
-      }
-    }),
+    // The `commands` wrapper already throws a normalised Error; a second
+    // catch here re-threw a bare string, and the refusal block's
+    // `verbatim(error.message)` then read `.message` off a string and crashed.
+    // Let the wrapper's Error propagate, like every other list.
+    queryFn: listAcrossScope(scope.scope, (ns) =>
+      commands.listHelmReleasesNative(ns)
+    ),
     enabled: isConnected,
     refresh: "steady",
   });
@@ -366,7 +366,7 @@ export function Helm() {
           <HelmReleasesTab
             releases={releases}
             isLoading={isLoading}
-            error={(releasesError as Error | null) ?? null}
+            error={releasesError ?? null}
             helmCliAvailable={helmCliAvailable}
             onRefetch={() => refetch()}
             onShowHistory={setHistoryDialog}

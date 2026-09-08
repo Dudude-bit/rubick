@@ -32,7 +32,7 @@ import type { HelmRelease } from "@/generated/types";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
-import { isRefusal, verbatim } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 
@@ -45,7 +45,9 @@ const helmReleaseHref = (row: HelmRelease) =>
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
   isLoading: boolean;
-  error: Error | null;
+  /** `unknown`, not `Error`: the query's thrown value is not guaranteed to be
+   *  an Error, and `errorToShow`/`isRefusal` both take it as-is. */
+  error: unknown;
   helmCliAvailable: boolean;
   onRefetch: () => void;
   onShowHistory: (release: HelmRelease) => void;
@@ -292,7 +294,7 @@ export function HelmReleasesTab({
                 })}
           </p>
           <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {verbatim(error.message)}
+            {errorToShow(error)}
           </p>
         </div>
       ) : (
