@@ -18,7 +18,8 @@ import type { ColumnDef } from "@/components/ui/table-features";
 
 import { ResourceList } from "./ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
-import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
 import {
@@ -75,21 +76,27 @@ export function createWorkloadListPage<T extends Workload>(
 ) {
   const ListPage = function WorkloadListPage() {
     const t = useT();
-    const currentNamespace = useClusterStore((s) => s.currentNamespace);
+    const scope = useNamespaceScope();
     const navigate = useNavigate();
 
     // Read for the aggregated CPU and memory columns only. The workloads are
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
     const { data: pods, podStatus } = usePodsWithMetrics();
 
-    const queryKey = useMemo(
-      () => queryKeys.resources(config.resourceType, currentNamespace),
-      [currentNamespace]
-    );
+    // Several namespaces are read one apiece and polled; a watch covers none
+    // or one. See `listAcrossScope` / createResourceListPage.
+    const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+    const cacheKey = scopeCacheKey(scope.scope);
     const watchFactory = config.watch;
+    const watchEnabled = !!watchFactory && !scope.several;
+
+    const queryKey = useMemo(
+      () => queryKeys.resources(config.resourceType, cacheKey),
+      [cacheKey]
+    );
     const subscribe = useCallback(
-      () => watchFactory!({ namespace: currentNamespace || null }),
-      [watchFactory, currentNamespace]
+      () => watchFactory!({ namespace: watchNamespace }),
+      [watchFactory, watchNamespace]
     );
 
     // See createResourceListPage for the watch-failure rationale.
@@ -114,12 +121,14 @@ export function createWorkloadListPage<T extends Workload>(
 
     const listQuery = useResourceList(
       queryKey,
-      () => config.fetchList({ namespace: currentNamespace || null }),
-      watchFactory && !watchFailed ? ({ refresh: false } as const) : undefined
+      listAcrossScope(scope.scope, (namespace) =>
+        config.fetchList({ namespace })
+      ),
+      watchEnabled && !watchFailed ? ({ refresh: false } as const) : undefined
     );
 
     const { resyncing } = useResourceWatch<T>({
-      enabled: !!watchFactory,
+      enabled: watchEnabled,
       subscribe,
       queryKey,
       onError: handleWatchError,
@@ -179,7 +188,7 @@ export function createWorkloadListPage<T extends Workload>(
         }
         error={listQuery.error}
         dataUpdatedAt={listQuery.dataUpdatedAt}
-        live={!!watchFactory && !watchFailed}
+        live={watchEnabled && !watchFailed}
         slowed={listQuery.freshness.slowed}
         getRowId={getResourceRowId}
         delivery={deliveryScopeOf(config.resourceType)}
@@ -201,9 +210,7 @@ export function createWorkloadListPage<T extends Workload>(
           mutationFn: async (item) => {
             await config.deleter(item);
           },
-          invalidateQueryKeys: [
-            queryKeys.resources(config.resourceType, currentNamespace),
-          ],
+          invalidateQueryKeys: [queryKey],
           resourceType: config.resourceType,
         }}
       />
