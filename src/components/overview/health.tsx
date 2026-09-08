@@ -429,8 +429,11 @@ export function WorkloadsPanel({
           segments={deploymentSegments(problems, counts.deployments)}
         />
         <Composition
-          total={nodes.length}
-          label={nodes.length === 1 ? "Node" : "Nodes"}
+          // `counts.nodes` is null when the node read was refused, so the bar
+          // reads "— / not readable" like the other refused counts rather than
+          // "0 Nodes". `nodes` is empty then, so its segments fall away.
+          total={counts.nodes}
+          label={counts.nodes === 1 ? "Node" : "Nodes"}
           emptyMessage={t("empty", "noneInScope")}
           segments={nodeSegments(nodes)}
         />
