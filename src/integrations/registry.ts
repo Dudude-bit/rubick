@@ -915,6 +915,15 @@ export interface VendorPage {
    * first chunk is the difference between a facet and a cost everybody pays.
    */
   load: () => Promise<{ default: ComponentType }>;
+  /**
+   * The one list this page cannot do without — the custom resource whose 403
+   * makes the screen useless. When the authorizer refuses the reader this
+   * list, the sidebar row is drawn disabled with a reason rather than linking
+   * to a page that only errors. The id is the CRD's `<plural>.<group>`; an
+   * array is alternative spellings of one kind across a group rename, refused
+   * only when every spelling is.
+   */
+  gate?: { crd: string | readonly string[]; namespaced: boolean };
 }
 
 /**
