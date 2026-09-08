@@ -1,7 +1,8 @@
 import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
-import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import {
   createContext,
@@ -214,16 +215,29 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
 
 export function IngressList() {
   const t = useT();
-  const { currentNamespace } = useClusterStore();
+  const scope = useNamespaceScope();
   const navigate = useNavigate();
 
+  // Several namespaces are read one apiece and polled; a watch covers none or
+  // one. See `listAcrossScope`.
+  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  const cacheKey = scopeCacheKey(scope.scope);
+  const watchEnabled = !scope.several;
+  const listIngressesFor = (namespace: string | null) =>
+    commands.listIngresses({
+      namespace,
+      labelSelector: null,
+      fieldSelector: null,
+      limit: null,
+    });
+
   const queryKey = useMemo(
-    () => queryKeys.resources(ResourceType.Ingress, currentNamespace),
-    [currentNamespace]
+    () => queryKeys.resources(ResourceType.Ingress, cacheKey),
+    [cacheKey]
   );
   const subscribe = useCallback(
-    () => commands.subscribeIngressWatch(currentNamespace || null),
-    [currentNamespace]
+    () => commands.subscribeIngressWatch(watchNamespace),
+    [watchNamespace]
   );
 
   const { toast } = useToast();
@@ -243,7 +257,7 @@ export function IngressList() {
     [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<IngressInfo>({
-    enabled: true,
+    enabled: watchEnabled,
     subscribe,
     queryKey,
     onError: handleWatchError,
@@ -252,13 +266,9 @@ export function IngressList() {
 
   // A second observer on the list's own cache entry, so the rows cost one
   // request and not two — the same trick the sidebar counts use.
-  const listed = useResourceList<IngressInfo[]>(queryKey, () =>
-    commands.listIngresses({
-      namespace: currentNamespace || null,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    })
+  const listed = useResourceList<IngressInfo[]>(
+    queryKey,
+    listAcrossScope(scope.scope, listIngressesFor)
   );
   const asked = useMemo(
     () =>
@@ -326,30 +336,21 @@ export function IngressList() {
     <VendorTls.Provider value={vendorFor}>
       <ResourceList<IngressInfo>
         title="Ingresses"
-        queryKey={queryKeys.resources(ResourceType.Ingress, currentNamespace)}
+        queryKey={queryKey}
         getRowId={getResourceRowId}
-        queryFn={() =>
-          commands.listIngresses({
-            namespace: currentNamespace || null,
-            labelSelector: null,
-            fieldSelector: null,
-            limit: null,
-          })
-        }
+        queryFn={listAcrossScope(scope.scope, listIngressesFor)}
         columns={baseColumns}
         quickActions={quickActions}
         emptyStateLabel={toPlural(ResourceType.Ingress)}
         deleteConfig={{
           mutationFn: (item) =>
             commands.deleteIngress(item.name, item.namespace ?? null),
-          invalidateQueryKeys: [
-            queryKeys.resources(ResourceType.Ingress, currentNamespace),
-          ],
+          invalidateQueryKeys: [queryKey],
           resourceType: ResourceType.Ingress,
         }}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchFailed ? undefined : false}
-        live={!watchFailed}
+        refresh={watchFailed || scope.several ? undefined : false}
+        live={watchEnabled && !watchFailed}
         resyncing={resyncing}
         searchKey="name"
         getRowHref={(row) =>
