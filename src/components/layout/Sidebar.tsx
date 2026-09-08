@@ -510,6 +510,14 @@ function IntegrationsGroup() {
       overview={undefined}
       value={page.count}
       mark={page.tone ?? undefined}
+      // Detected but refused: the row is drawn disabled with a vendor
+      // reason instead of linking to a page that only errors.
+      denied={page.forbidden}
+      deniedReason={
+        page.forbidden
+          ? t("nav", "noVendorAccess", { vendor: page.name })
+          : undefined
+      }
       // A tunnel that is down is not a count and not a fault: it is a
       // thing this row can do something about, and says so.
       note={
@@ -656,6 +664,7 @@ function NavRow({
   mark,
   note,
   denied,
+  deniedReason,
   onPress,
   active,
 }: {
@@ -677,6 +686,12 @@ function NavRow({
    * clears, rather than a screen somebody cannot open.
    */
   denied?: boolean;
+  /**
+   * Why the row is denied, when a kind-agnostic row (an integration) can say
+   * something more specific than the generic "no permission to list". Falls
+   * back to `nav.noListAccess` for the resource rows that carry a kind.
+   */
+  deniedReason?: string;
   /**
    * A word at the end of the row instead of a count — for a state that is
    * neither a number nor a fault. A port-forward that is down is the case
@@ -724,9 +739,9 @@ function NavRow({
             // narrow, and would need translating into a space it does not have.
             <Lock
               className="ml-auto h-3 w-3 flex-none text-fg-fnt"
-              aria-label={t("nav", "noListAccess")}
+              aria-label={deniedReason ?? t("nav", "noListAccess")}
             >
-              <title>{t("nav", "noListAccess")}</title>
+              <title>{deniedReason ?? t("nav", "noListAccess")}</title>
             </Lock>
           )}
           {note !== undefined ? (

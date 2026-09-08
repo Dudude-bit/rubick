@@ -795,6 +795,13 @@ export interface IntegrationPageEntry {
    * says it is asleep; pressing it is what wakes it.
    */
   asleep: boolean;
+  /**
+   * The authorizer refused this reader the vendor's primary list, so its
+   * screen would only error — the row is drawn disabled with a reason. Set
+   * from `allowed === false` alone, so a review that could not be asked never
+   * reads as forbidden; distinct from `count === null`.
+   */
+  forbidden: boolean;
 }
 
 /**
@@ -831,6 +838,8 @@ export function useIntegrationPages(): {
   const connections = useConnections();
 
   const context = useClusterStore((state) => state.currentContext);
+  const isConnected = useClusterStore((state) => state.isConnected);
+  const namespaceScope = useClusterStore((state) => state.namespaceScope);
   const saved = useClusterForwardStore((state) => state.forwards);
   const forwarded = new Set(
     forwardsFor(saved, context).map(([vendorId]) => vendorId)
@@ -889,6 +898,61 @@ export function useIntegrationPages(): {
     }),
   });
 
+  // The one list each detected vendor's page cannot open without. Ask the
+  // cluster's own authorizer once and draw the row disabled where it is
+  // refused — a screen that only errors is worse than one the reader was
+  // told not to open. Only detected vendors that declare a `gate` are asked.
+  const gated = here.filter(
+    (vendor): vendor is (typeof here)[number] & { page: VendorPage } =>
+      vendor.page?.gate !== undefined
+  );
+  const gateIds = (vendor: (typeof gated)[number]): string[] => {
+    const crd = vendor.page.gate!.crd;
+    return typeof crd === "string" ? [crd] : [...crd];
+  };
+  const gateQueries = gated.flatMap((vendor) =>
+    gateIds(vendor).map((id) => {
+      const dot = id.indexOf(".");
+      return {
+        group: id.slice(dot + 1),
+        resource: id.slice(0, dot),
+        namespaced: vendor.page.gate!.namespaced,
+      };
+    })
+  );
+  const namespaces = [...namespaceScope].sort();
+  const { data: gateAnswers } = useQuery({
+    queryKey: [
+      "integration-access",
+      context,
+      namespaces,
+      gateQueries.map((q) => q.resource).sort(),
+    ],
+    queryFn: () => commands.checkListAccess(gateQueries, namespaces),
+    enabled: isConnected && Boolean(context) && gateQueries.length > 0,
+    staleTime: 5 * 60 * 1000,
+    // A cluster that cannot answer leaves every row as it was — the state the
+    // app has always been in — rather than spending requests to hear it again.
+    retry: false,
+  });
+  // Plural resource -> allowed; null/undefined both mean "could not ask".
+  const allowedByResource = new Map(
+    (gateAnswers ?? []).map((answer) => [answer.resource, answer.allowed])
+  );
+  // Forbidden only when EVERY spelling of the gate was answered `false`. A
+  // could-not-ask (null), or any spelling allowed, leaves the row open — so a
+  // failed review never renders as a refusal.
+  const forbidden = new Set(
+    gated
+      .filter((vendor) => {
+        const answers = gateIds(vendor).map((id) =>
+          allowedByResource.get(id.slice(0, id.indexOf(".")))
+        );
+        return answers.length > 0 && answers.every((a) => a === false);
+      })
+      .map((vendor) => vendor.id)
+  );
+
   const pages = here.map((vendor): IntegrationPageEntry => {
     const index = withPages.findIndex(
       (candidate) => candidate.id === vendor.id
@@ -914,6 +978,7 @@ export function useIntegrationPages(): {
       tone: measured?.tone ?? null,
       own: index !== -1,
       operator: vendor.extension.operator === true,
+      forbidden: forbidden.has(vendor.id),
     };
   });
 

@@ -67,6 +67,7 @@ import type {
   LokiPage,
   LokiProbe,
   ManifestResult,
+  NamespaceAccess,
   NamespaceInfo,
   NodeBudget,
   NodeFilters,
@@ -439,6 +440,12 @@ export async function checkListAccess(
   namespaces: string[]
 ): Promise<ListAccess[]> {
   return invoke<ListAccess[]>("check_list_access", { queries, namespaces });
+}
+
+export async function checkNamespaceAccess(
+  namespaces: string[]
+): Promise<NamespaceAccess[]> {
+  return invoke<NamespaceAccess[]>("check_namespace_access", { namespaces });
 }
 
 export async function listDeployments(
