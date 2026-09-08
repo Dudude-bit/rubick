@@ -523,6 +523,13 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    eventsStories: "Stories",
+    eventsAll: "All events",
+    warningsFirst: "Warnings first",
+    newestFirst: "Newest",
+    showTimeline: "Timeline",
+    hideTimeline: "Hide timeline",
+    storyWindow: "Window",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
     addressOnClipboard:
@@ -1725,6 +1732,44 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyJob:
+      "Ran within {span}: {created} jobs created, {completed} completed.",
+    storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
+    storyCrash:
+      "Cannot stay up: the kubelet is backing off from restarting the container, {n} times within {span}.",
+    storyPull: "Cannot pull the image, {n} times within {span}: {detail}",
+    storySchedulingSame:
+      "Cannot be scheduled, the same answer {n} times within {span}: {detail}",
+    storySchedulingVaried:
+      "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
+    storyProbe: "Probes failed {n} times within {span}: {detail}",
+    storyPressure: "Under pressure, {n} times within {span}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {n} times within {span}: {detail}",
+    storyJobTrouble: "Job trouble, {n} times within {span}: {detail}",
+    storyScaling: "Autoscaler trouble, {n} times within {span}: {detail}",
+    storyNode: "Node trouble, {n} times within {span}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {n} times within {span}: {detail}",
+    storyTrouble: "{reason} ×{n} within {span}: {detail}",
+    storyStillHappening: "still happening",
+    storySettled: "settled",
+    storyDone: "done",
+    podsOf: "pods of {name}",
+    groupedByName:
+      "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
+    fromPodStatus: "from the pod status, not an event",
+    lastSeen: "last {ago}",
+    podStatusUnread: {
+      one: "The status of {n} pod could not be read; its exits are not on this clock.",
+      other:
+        "The status of {n} pods could not be read; their exits are not on this clock.",
+    },
+    containerExited: "{container} exited with code {code}",
+    lastSeenStrip: "When each event was last seen across the window.",
+    storiesExplained:
+      "A story is one object's events in this window, ranked with warnings first and summed up from counts and times. Nothing is inferred beyond the events themselves.",
+    membersFolded: { one: "{n} object", other: "{n} objects" },
     twoWord: "Two",
     threeWord: "Three",
     warnUndoThis: "{count} things will undo this.",
@@ -2977,6 +3022,9 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noStoriesInWindow:
+      "Nothing happened in {scope} in the last {range}. The read succeeded and returned no events.",
+    noStoriesMatch: "No story in {scope} matches “{query}”.",
     noEventsMatchInWindow:
       "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
     kindMayBeGone:
@@ -4495,6 +4543,8 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    stories: { one: "{n} story", other: "{n} stories" },
+    eventsSeen: { one: "{n} event", other: "{n} events" },
     endpointsAcrossSlices: "{endpoints} across {slices}",
     endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
     slicesCount: { one: "{n} slice", other: "{n} slices" },

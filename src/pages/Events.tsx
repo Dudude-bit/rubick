@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 
@@ -16,9 +17,19 @@ import { Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
+import { StoryCard } from "@/components/events/StoryCard";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { filterEvents } from "@/lib/event-filter";
+import {
+  sortStories,
+  storiesOf,
+  STORY_WINDOWS,
+  WINDOW_MS,
+  type StoryOrder,
+  type StoryWindow,
+} from "@/lib/event-stories";
+import { useNow } from "@/hooks/useNow";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
@@ -38,6 +49,17 @@ const TYPE_FILTERS: Array<{
 ];
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
+
+type View = "stories" | "list";
+
+const ORDERS: Array<{ value: StoryOrder; label: keyof typeof en.action }> = [
+  { value: "warningsFirst", label: "warningsFirst" },
+  { value: "newest", label: "newestFirst" },
+];
+
+function isWindow(value: string | null): value is StoryWindow {
+  return (STORY_WINDOWS as readonly string[]).includes(value ?? "");
+}
 
 async function read(filters: EventFilters) {
   try {
@@ -69,6 +91,22 @@ export function Events() {
   const [eventType, setEventType] = useState<string>("all");
   const [eventLimit, setEventLimit] = useState<string>("500");
   const [query, setQuery] = useState<string>("");
+  const [params, setParams] = useSearchParams();
+  const view: View = params.get("view") === "list" ? "list" : "stories";
+  const range = params.get("range");
+  const window: StoryWindow = isWindow(range) ? range : "1h";
+  const [order, setOrder] = useState<StoryOrder>("warningsFirst");
+  const setParam = (key: string, value: string | null) =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+        return next;
+      },
+      { replace: true }
+    );
+  const now = useNow();
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
   const several = scope.several;
@@ -151,6 +189,18 @@ export function Events() {
   // than the window. Filtering first spends the pool on the rows asked for.
   const matching = useMemo(() => filterEvents(pool, query), [pool, query]);
 
+  const storyOptions = useMemo(
+    () => ({ now, windowMs: WINDOW_MS[window] }),
+    [now, window]
+  );
+  const stories = useMemo(
+    () =>
+      view === "stories"
+        ? sortStories(storiesOf(matching, storyOptions), order)
+        : [],
+    [view, matching, storyOptions, order]
+  );
+
   const isLoading = several ? parts.isLoading : single.isLoading;
   const freshness = several ? parts.freshness : single.freshness;
 
@@ -183,10 +233,81 @@ export function Events() {
           t,
           warningCount,
           normalCount,
-          windowFull ? eventLimit : null
+          windowFull ? eventLimit : null,
+          view === "stories" ? stories.length : null
         )}
         actions={
           <>
+            <span
+              role="tablist"
+              aria-label={t("columns", "view")}
+              className="flex items-center gap-0.5"
+            >
+              {(["stories", "list"] as const).map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === candidate}
+                  onClick={() =>
+                    setParam("view", candidate === "stories" ? null : "list")
+                  }
+                  className={cn(
+                    "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                    view === candidate ? "bg-sel text-fg" : "text-fg-mut"
+                  )}
+                >
+                  {t(
+                    "action",
+                    candidate === "stories" ? "eventsStories" : "eventsAll"
+                  )}
+                </button>
+              ))}
+            </span>
+            {view === "stories" ? (
+              <>
+                <div
+                  className="flex items-center gap-0.5"
+                  role="group"
+                  aria-label={t("action", "storyWindow")}
+                >
+                  {STORY_WINDOWS.map((candidate) => (
+                    <button
+                      key={candidate}
+                      type="button"
+                      aria-pressed={window === candidate}
+                      onClick={() =>
+                        setParam("range", candidate === "1h" ? null : candidate)
+                      }
+                      className={cn(
+                        "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                        window === candidate ? "bg-sel text-fg" : "text-fg-mut"
+                      )}
+                    >
+                      {candidate}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-0.5" role="group">
+                  {ORDERS.map((candidate) => (
+                    <button
+                      key={candidate.value}
+                      type="button"
+                      aria-pressed={order === candidate.value}
+                      onClick={() => setOrder(candidate.value)}
+                      className={cn(
+                        "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                        order === candidate.value
+                          ? "bg-sel text-fg"
+                          : "text-fg-mut"
+                      )}
+                    >
+                      {t("action", candidate.label)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
             {/* Same shape as the lists' search box: a text entry, not a
               panel, so it only draws a background once it is in use. */}
             <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
@@ -250,6 +371,34 @@ export function Events() {
         <SectionBody>
           {showSkeleton ? (
             <EventsSkeleton />
+          ) : view === "stories" ? (
+            stories.length === 0 ? (
+              <p className="px-1.5 py-1 text-xs text-fg-fnt">
+                {filtering
+                  ? t("empty", "noStoriesMatch", {
+                      scope: scope.inWords,
+                      query: query.trim(),
+                    })
+                  : t("empty", "noStoriesInWindow", {
+                      scope: scope.inWords,
+                      range: window,
+                    })}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2 p-1.5">
+                {stories.map((story) => (
+                  <StoryCard
+                    key={story.key}
+                    story={story}
+                    options={storyOptions}
+                    showNamespace={!currentNamespace}
+                  />
+                ))}
+                <p className="px-1 text-[11px] text-fg-fnt">
+                  {t("readings", "storiesExplained")}
+                </p>
+              </div>
+            )
           ) : (
             <EventRows
               // Not narrowed here: every row came back from a request for a
@@ -291,9 +440,11 @@ function summarise(
   t: ReturnType<typeof useT>,
   warnings: number,
   normal: number,
-  cappedAt: string | null
+  cappedAt: string | null,
+  stories: number | null
 ): string {
   const parts: string[] = [];
+  if (stories !== null) parts.push(t("count", "stories", { n: stories }));
   if (warnings > 0) parts.push(t("count", "warningEvents", { n: warnings }));
   if (normal > 0) parts.push(t("count", "normalEvents", { n: normal }));
   if (parts.length === 0) parts.push(t("empty", "noneInline"));
