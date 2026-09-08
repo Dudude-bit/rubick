@@ -125,6 +125,7 @@ fn main() {
             commands::cluster::connection_attempt,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
+            commands::access::check_namespace_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
             // Namespace management

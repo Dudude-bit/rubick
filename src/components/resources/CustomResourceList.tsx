@@ -6,7 +6,8 @@ import { Eye, Trash2 } from "lucide-react";
 import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -48,13 +49,21 @@ export function CustomResourceList({
   embedded = false,
 }: CustomResourceListProps) {
   const t = useT();
-  const { currentNamespace } = useClusterStore();
+  const nsScope = useNamespaceScope();
 
   // How the vendor that installed this CRD draws it, if the app knows one.
   const crdView = useCrdView(crdGroup, crdKind);
 
   const navigate = useNavigate();
-  const namespace = scope === "Namespaced" ? currentNamespace : null;
+  // A cluster-scoped CRD ignores the namespace selection; a namespaced one is
+  // read across it — several namespaces one apiece and polled, one or none as
+  // a single request/watch. See `listAcrossScope`.
+  const isNamespaced = scope === "Namespaced";
+  const namespaceScope = isNamespaced ? nsScope.scope : [];
+  const watchNamespace =
+    isNamespaced && nsScope.scope.length === 1 ? nsScope.scope[0] : null;
+  const cacheKey = isNamespaced ? scopeCacheKey(nsScope.scope) : null;
+  const watchEnabled = !(isNamespaced && nsScope.several);
 
   // Generate detail path for a custom resource. Wrapped in
   // `useCallback` so the two `useMemo` blocks below can list it as a
@@ -179,8 +188,8 @@ export function CustomResourceList({
   const queryKey = useMemo(
     // Not `as const`: one of the two readers wants a mutable array, and a
     // copy made for it is what defeated this memo in the first place.
-    () => queryKeys.customResourceList(crdName, namespace),
-    [crdName, namespace]
+    () => queryKeys.customResourceList(crdName, cacheKey),
+    [crdName, cacheKey]
   );
   const subscribeCustomResource = useCallback(
     () =>
@@ -189,9 +198,9 @@ export function CustomResourceList({
         crdVersion,
         crdKind,
         crdPlural,
-        namespace || null
+        watchNamespace
       ),
-    [crdGroup, crdVersion, crdKind, crdPlural, namespace]
+    [crdGroup, crdVersion, crdKind, crdPlural, watchNamespace]
   );
   const { toast } = useToast();
   const [watchFailed, setWatchFailed] = useState(false);
@@ -210,7 +219,7 @@ export function CustomResourceList({
     [toast, watchFailed, crdKind, t]
   );
   const { resyncing } = useResourceWatch<CustomResourceListItem>({
-    enabled: true,
+    enabled: watchEnabled,
     subscribe: subscribeCustomResource,
     // The memoised array itself, not a copy of it: the watch effect has this
     // in its dependencies, and a fresh array on every render tore the subscription
@@ -227,10 +236,10 @@ export function CustomResourceList({
       }
       queryKey={queryKey}
       getRowId={getResourceRowId}
-      queryFn={async () => {
+      queryFn={listAcrossScope(namespaceScope, async (ns) => {
         const result = await commands.listCustomResources(
           crdName,
-          namespace || null,
+          ns,
           null,
           null
         );
@@ -238,7 +247,7 @@ export function CustomResourceList({
           ...r,
           namespace: r.namespace || "",
         }));
-      }}
+      })}
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
@@ -246,10 +255,10 @@ export function CustomResourceList({
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.
       emptyMessage={
-        namespace
+        watchNamespace
           ? t("empty", "crdNoInstancesInNamespace", {
               kind: crdKind,
-              namespace,
+              namespace: watchNamespace,
             })
           : t("empty", "crdNoInstances", { kind: crdKind })
       }
@@ -264,8 +273,8 @@ export function CustomResourceList({
         resourceType: crdKind,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refresh={watchFailed ? "resourceList" : false}
-      live={!watchFailed}
+      refresh={watchFailed || !watchEnabled ? "resourceList" : false}
+      live={watchEnabled && !watchFailed}
       resyncing={resyncing}
       searchKey="name"
       searchPlaceholder={t("action", "searchKindPlaceholder", {

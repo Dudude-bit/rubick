@@ -260,13 +260,24 @@ export const useScopeTabStore = create<ScopeTabState>()(
 
       closeTab: async (id: string) => {
         const { tabs, activeId } = get();
-        // The strip is the only way back to a scope, so it never empties: a
-        // window with no tabs has no scope at all and nothing to put in its
-        // chrome. Closing the last one resets it to an empty scope on the
-        // overview instead, which is the state a fresh install boots into.
+        // The strip never empties — a window with no tabs has no scope. So
+        // closing the last one has two meanings, told apart by where it sits:
+        // on a page, the ✕ reads as "close this view" like the peek ✕ and the
+        // detail back arrow, and returns to the overview keeping the cluster
+        // and namespace; already on the overview, it is the fresh-install
+        // reset (disconnect, empty scope) and the one way back to the picker.
         if (tabs.length < 2) {
+          const only = tabs[0];
+          if (only.href !== HOME && !only.missing) {
+            // Snapshot the live scope (the reader may have changed the
+            // namespace via the popover since this tab went live), keep it,
+            // and send the view home — no disconnect, no cleared namespace.
+            const parked = parkActive(tabs, only.id)[0];
+            set({ tabs: [{ ...parked, href: HOME }], pendingHref: HOME });
+            return;
+          }
           set({
-            tabs: [makeTab({ id: tabs[0].id })],
+            tabs: [makeTab({ id: only.id })],
             pendingHref: HOME,
           });
           // Disconnect first: switchNamespace only writes a preference while
