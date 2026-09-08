@@ -58,6 +58,7 @@ export const en = {
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
     noListAccess: "You do not have permission to list these",
+    noVendorAccess: "You do not have permission to list {vendor}'s resources",
     relatedResources: "Related resources",
     runsOn: "Runs on",
     whatRunsHere: "What runs here",
@@ -509,6 +510,7 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    showInaccessibleNamespaces: "Show them",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
     addressOnClipboard:
@@ -4226,6 +4228,10 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    namespacesHidden: {
+      one: "{n} namespace hidden — no access",
+      other: "{n} namespaces hidden — no access",
+    },
     endpointsAcrossSlices: "{endpoints} across {slices}",
     endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
     slicesCount: { one: "{n} slice", other: "{n} slices" },
