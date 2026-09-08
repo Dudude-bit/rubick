@@ -3,7 +3,7 @@
 
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::core::v1::{Container, PodSpec};
+use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,10 @@ pub struct DeploymentInfo {
     pub pod_resources: DeploymentContainerResources,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
+    /// The template's own annotations: where a chart puts its config checksum.
+    pub template_annotations: BTreeMap<String, String>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<DateTime<Utc>>,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
@@ -114,6 +118,20 @@ impl TemplateContainers {
     }
 }
 
+/// Every image the template runs, app containers then init containers.
+#[must_use]
+pub fn template_images(template: Option<&PodTemplateSpec>) -> Vec<String> {
+    let spec = template.and_then(|t| t.spec.as_ref());
+    let app = spec.map(|s| s.containers.as_slice()).unwrap_or_default();
+    let init = spec
+        .and_then(|s| s.init_containers.as_deref())
+        .unwrap_or_default();
+    app.iter()
+        .chain(init.iter())
+        .filter_map(|c| c.image.clone())
+        .collect()
+}
+
 fn init_phase(container: &Container) -> ContainerPhase {
     if is_sidecar(container) {
         ContainerPhase::Sidecar
@@ -185,6 +203,12 @@ impl From<&Deployment> for DeploymentInfo {
             pod_resources: template.pod_resources,
             labels: deployment.labels().clone(),
             annotations: deployment.annotations().clone(),
+            template_annotations: spec
+                .and_then(|s| s.template.metadata.as_ref())
+                .and_then(|m| m.annotations.clone())
+                .unwrap_or_default(),
+            generation: deployment.metadata.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: deployment.creation_timestamp().map(|t| t.moment()),
             conditions,
             owner_references: extract_owner_references(

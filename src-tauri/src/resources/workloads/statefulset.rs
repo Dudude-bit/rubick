@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    ConditionInfo, DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt,
-    TemplateContainers,
+    template_images, ConditionInfo, DeploymentContainerInfo, DeploymentContainerResources,
+    OptionTimeExt, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -30,6 +30,11 @@ pub struct StatefulSetInfo {
     pub name: String,
     pub namespace: String,
     pub replicas: StatefulSetReplicaInfo,
+    /// What the template runs, so a watch on the list can see a rollout.
+    pub images: Vec<String>,
+    pub template_annotations: BTreeMap<String, String>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
 }
 
@@ -47,6 +52,13 @@ impl From<&StatefulSet> for StatefulSetInfo {
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 current: status.and_then(|s| s.current_replicas).unwrap_or(0),
             },
+            images: template_images(spec.map(|s| &s.template)),
+            template_annotations: spec
+                .and_then(|s| s.template.metadata.as_ref())
+                .and_then(|m| m.annotations.clone())
+                .unwrap_or_default(),
+            generation: meta.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: meta.creation_timestamp.as_ref().to_rfc3339_opt(),
         }
     }

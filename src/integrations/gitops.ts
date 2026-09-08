@@ -123,6 +123,24 @@ export interface DeliverySource {
  * behaviour nothing is enforcing. So: three answers, with `null` — no claim
  * at all — as the fourth.
  */
+/**
+ * One thing a delivery owner applied, as it recorded it: a commit Argo
+ * deployed, a chart version a HelmRelease installed. Nothing here is
+ * computed; a vendor that keeps no history answers with an empty list.
+ */
+export interface DeliveryRevision {
+  id: string;
+  /** When it was applied, where the owner wrote a time. */
+  at: string | null;
+  /** The commit, chart version or revision string, as written. */
+  revision: string | null;
+  /** Where it came from: a path in a repository, a chart name. */
+  from: string | null;
+  /** The owner's own word for how it ended: `Succeeded`, `deployed`, `failed`. */
+  status: string | null;
+  owner: DeliveryOwner;
+}
+
 export type Delivery =
   /** The owner names the object back in its own inventory. */
   | { state: "delivered"; source: DeliverySource }

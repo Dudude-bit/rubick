@@ -11,6 +11,7 @@ import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
 import { useTellMeWhen } from "@/hooks/useTellMeWhen";
+import { useChangeJournal } from "@/hooks/useChangeJournal";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { usePortForwardStore } from "@/stores/portForwardStore";
@@ -52,6 +53,9 @@ const NamespaceList = lazy(() =>
 );
 const Events = lazy(() =>
   import("@/pages/Events").then((m) => ({ default: m.Events }))
+);
+const Changes = lazy(() =>
+  import("@/pages/Changes").then((m) => ({ default: m.Changes }))
 );
 const Helm = lazy(() =>
   import("@/pages/Helm").then((m) => ({ default: m.Helm }))
@@ -186,6 +190,7 @@ export default function App() {
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
   useTellMeWhen();
+  useChangeJournal();
   usePortForwardAutoStart();
   useAutoUpdater();
 
@@ -275,6 +280,7 @@ export default function App() {
                 element={<NamespaceList />}
               />
               <Route path="events" element={<Events />} />
+              <Route path="changes" element={<Changes />} />
               <Route path="helm" element={<Helm />} />
               <Route
                 path="helm/:source/:namespace/:name"

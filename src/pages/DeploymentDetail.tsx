@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Scale,
   Trash2,
+  History,
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -52,6 +53,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { RevisionRows } from "@/components/resources/child-rows";
+import { ChangesTab } from "@/components/changes/ChangesTab";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
@@ -447,6 +449,22 @@ export function DeploymentDetail() {
       // rollout leaves behind, not a fault.
       mark: countMark(revisions.length),
       content: <RevisionRows revisions={revisions} />,
+    },
+    {
+      id: "changes",
+      label: t("changes", "title"),
+      glyph: viewGlyph(History),
+      content: deployment ? (
+        <ChangesTab
+          subject={{
+            kind: "Deployment",
+            name: deployment.name,
+            namespace: deployment.namespace,
+            labels: deployment.labels,
+            annotations: deployment.annotations,
+          }}
+        />
+      ) : null,
     },
     {
       id: "logs",

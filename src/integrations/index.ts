@@ -151,6 +151,7 @@ export type {
   Delivery,
   DeliveryOwner,
   DeliveryQuery,
+  DeliveryRevision,
   DeliverySource,
   GitLink,
 } from "./gitops";
