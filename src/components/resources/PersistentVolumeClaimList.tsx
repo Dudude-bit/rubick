@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { useClusterStore } from "@/stores/clusterStore";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
@@ -73,18 +73,29 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
 
 export function PersistentVolumeClaimList() {
   const t = useT();
-  const { currentNamespace } = useClusterStore();
   const scope = useNamespaceScope();
   const navigate = useNavigate();
 
+  // Several namespaces are read one apiece and polled; a watch covers none or
+  // one. See `listAcrossScope`.
+  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  const cacheKey = scopeCacheKey(scope.scope);
+  const watchEnabled = !scope.several;
+  const listPvcsFor = (namespace: string | null) =>
+    commands.listPersistentVolumeClaims({
+      namespace,
+      labelSelector: null,
+      fieldSelector: null,
+      limit: null,
+    });
+
   const queryKey = useMemo(
-    () =>
-      queryKeys.resources(ResourceType.PersistentVolumeClaim, currentNamespace),
-    [currentNamespace]
+    () => queryKeys.resources(ResourceType.PersistentVolumeClaim, cacheKey),
+    [cacheKey]
   );
   const subscribe = useCallback(
-    () => commands.subscribePvcWatch(currentNamespace || null),
-    [currentNamespace]
+    () => commands.subscribePvcWatch(watchNamespace),
+    [watchNamespace]
   );
 
   const { toast } = useToast();
@@ -104,7 +115,7 @@ export function PersistentVolumeClaimList() {
     [t, toast, watchFailed]
   );
   const { resyncing } = useResourceWatch<PersistentVolumeClaimInfo>({
-    enabled: true,
+    enabled: watchEnabled,
     subscribe,
     queryKey,
     onError: handleWatchError,
@@ -145,19 +156,9 @@ export function PersistentVolumeClaimList() {
       description={t("empty", "pvcListDescription", {
         scope: scope.inWords,
       })}
-      queryKey={queryKeys.resources(
-        ResourceType.PersistentVolumeClaim,
-        currentNamespace
-      )}
+      queryKey={queryKey}
       getRowId={getResourceRowId}
-      queryFn={() =>
-        commands.listPersistentVolumeClaims({
-          namespace: currentNamespace || null,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-        })
-      }
+      queryFn={listAcrossScope(scope.scope, listPvcsFor)}
       columns={columns}
       quickActions={quickActions}
       emptyStateLabel={toPlural(ResourceType.PersistentVolumeClaim)}
@@ -167,17 +168,12 @@ export function PersistentVolumeClaimList() {
             item.name,
             item.namespace ?? null
           ),
-        invalidateQueryKeys: [
-          queryKeys.resources(
-            ResourceType.PersistentVolumeClaim,
-            currentNamespace
-          ),
-        ],
+        invalidateQueryKeys: [queryKey],
         resourceType: ResourceType.PersistentVolumeClaim,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refresh={watchFailed ? undefined : false}
-      live={!watchFailed}
+      refresh={watchFailed || scope.several ? undefined : false}
+      live={watchEnabled && !watchFailed}
       resyncing={resyncing}
       searchKey="name"
       getRowHref={(row) =>

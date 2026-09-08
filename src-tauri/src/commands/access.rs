@@ -121,6 +121,62 @@ pub async fn check_list_access(
         .collect())
 }
 
+/// Whether this user may use a namespace at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamespaceAccess {
+    pub namespace: String,
+    /// `None` where the cluster could not be asked — never folded into a
+    /// refusal. A namespace the app merely failed to check must keep being
+    /// offered, or it would vanish from the picker as if the reader had been
+    /// turned away from it.
+    pub allowed: Option<bool>,
+}
+
+/// The one list a namespace is probed with: pods, the verb any grant that
+/// makes a namespace worth selecting carries. One named place, spelled once.
+#[must_use]
+fn namespace_probe_query() -> ListQuery {
+    ListQuery {
+        group: String::new(),
+        resource: "pods".to_string(),
+        namespaced: true,
+    }
+}
+
+/// Ask the cluster which of these namespaces this user may use.
+///
+/// One review per namespace — "may I list pods in it" — asked at once. A
+/// namespace the authorizer will not answer about comes back `None`, kept
+/// offered rather than hidden: the same three-state discipline as
+/// [`check_list_access`].
+///
+/// # Errors
+///
+/// If there is no connected cluster.
+#[tauri::command]
+pub async fn check_namespace_access(
+    namespaces: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<NamespaceAccess>> {
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    let probe = namespace_probe_query();
+
+    let answers = join_all(namespaces.iter().map(|namespace| {
+        let api = api.clone();
+        let attributes = list_attributes(&probe, Some(namespace));
+        async move { ask(&api, attributes).await }
+    }))
+    .await;
+
+    Ok(namespaces
+        .into_iter()
+        .zip(answers)
+        .map(|(namespace, allowed)| NamespaceAccess { namespace, allowed })
+        .collect())
+}
+
 /// The namespaces one kind has to be asked about.
 ///
 /// A cluster-scoped kind has exactly one answer however many namespaces are
@@ -218,6 +274,19 @@ mod tests {
         assert_eq!(resolve(&[]), None);
         assert_eq!(resolve(&[None, Some(true)]), Some(true));
         assert_eq!(resolve(&[None, Some(false)]), Some(false));
+    }
+
+    /// A namespace is probed by asking to list pods *in it* — a namespaced
+    /// question, so the namespace stays on the attributes. Asking cluster-wide
+    /// would answer whether the reader can list pods everywhere, which is the
+    /// opposite of what a team-scoped account has.
+    #[test]
+    fn probes_a_namespace_by_listing_pods_in_it() {
+        let attrs = list_attributes(&namespace_probe_query(), Some("team-a"));
+        assert_eq!(attrs.group.as_deref(), Some(""));
+        assert_eq!(attrs.resource.as_deref(), Some("pods"));
+        assert_eq!(attrs.verb.as_deref(), Some("list"));
+        assert_eq!(attrs.namespace.as_deref(), Some("team-a"));
     }
 
     #[test]
