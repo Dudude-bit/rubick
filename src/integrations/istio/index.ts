@@ -41,6 +41,7 @@ export default defineVendor({
       staleTime: ROUTING_STALE,
     }),
     load: () => import("./page"),
+    gate: { crd: "virtualservices.networking.istio.io", namespaced: true },
   },
   crd,
 });

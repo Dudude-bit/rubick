@@ -12,6 +12,7 @@ import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
 const listIngresses = vi.fn().mockResolvedValue([]);
 const listCustomResources = vi.fn().mockResolvedValue([]);
+const checkListAccess = vi.fn().mockResolvedValue([]);
 const resolveIngressClass = vi.fn().mockResolvedValue({
   requested: null,
   resolved: null,
@@ -27,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
     listCustomResources: (crdName: string) => listCustomResources(crdName),
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
+    checkListAccess: () => checkListAccess(),
   },
 }));
 
@@ -65,6 +67,7 @@ beforeEach(() => {
   listIngresses.mockResolvedValue([]);
   listCustomResources.mockResolvedValue([]);
   detectInClusterExtensions.mockResolvedValue([]);
+  checkListAccess.mockResolvedValue([]);
   overview = undefined;
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   useUpdaterStore.setState({ available: false });
@@ -266,6 +269,48 @@ describe("the Integrations category", () => {
     expect(
       screen.getByRole("link", { name: /AWS Load Balancer Controller/i })
     ).toHaveAttribute("href", "/integrations/aws-load-balancer-controller");
+  });
+
+  /**
+   * #138: a detected integration whose resources the reader is refused (403)
+   * must draw its row disabled with a reason, not link to a page that only
+   * errors. A mark, never a lock — the row stays a link. Fails if the gate
+   * check is dropped or the forbidden state stops reaching the row.
+   */
+  it("draws a detected vendor the reader cannot list as a denied row", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    // The authorizer refuses the flux page's primary list.
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: false },
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The other side of the three states: allowed, or could-not-ask, must never
+   * draw the lock. Fails if `forbidden` were set from anything but a firm
+   * `allowed === false`.
+   */
+  it("leaves a readable vendor row unlocked", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: true },
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
   });
 
   /**

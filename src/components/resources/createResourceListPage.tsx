@@ -18,7 +18,7 @@ import {
   useNamespaceScope,
   type NamespaceScope,
 } from "@/hooks/useNamespaceScope";
-import { useClusterStore } from "@/stores/clusterStore";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -84,10 +84,19 @@ export function createResourceListPage<T extends ListableResource>(
 ) {
   const ListPage = function ResourceListPage() {
     const t = useT();
-    const currentNamespace = useClusterStore((s) => s.currentNamespace);
     const scope = useNamespaceScope();
     const navigate = useNavigate();
-    const namespace = config.scope === "cluster" ? null : currentNamespace;
+    const isCluster = config.scope === "cluster";
+    // The single namespace a watch subscribes to. A watch runs only for a
+    // selection of none or one; several is read per namespace and polled.
+    const watchNamespace = isCluster
+      ? null
+      : scope.scope.length === 1
+        ? scope.scope[0]
+        : null;
+    // The cache key rides on the whole selection, not one namespace, so two
+    // different multi-namespace scopes never read each other's rows.
+    const cacheKey = isCluster ? null : scopeCacheKey(scope.scope);
 
     const columns = useMemo(() => config.columns({ navigate }), [navigate]);
 
@@ -125,14 +134,26 @@ export function createResourceListPage<T extends ListableResource>(
     );
 
     const watchFactory = config.watch;
+    // A watch is one cluster-wide or one single-namespace stream. A selection
+    // of several is polled per namespace instead (see `listAcrossScope`): a
+    // cluster-wide watch needs rights this user may lack and would stream
+    // namespaces they did not ask for.
+    const watchEnabled = !!watchFactory && (isCluster || !scope.several);
     const subscribe = useCallback(
-      () => watchFactory!({ namespace }),
-      [watchFactory, namespace]
+      () => watchFactory!({ namespace: watchNamespace }),
+      [watchFactory, watchNamespace]
     );
     const queryKey = useMemo(
-      () => queryKeys.resources(config.resourceType, namespace),
-      [namespace]
+      () => queryKeys.resources(config.resourceType, cacheKey),
+      [cacheKey]
     );
+    // Rebuilt each render, which React Query is fine with — it keys on
+    // `queryKey`, and `cacheKey` moves with the selection.
+    const queryFn = isCluster
+      ? () => config.fetcher({ namespace: null })
+      : listAcrossScope(scope.scope, (namespace) =>
+          config.fetcher({ namespace })
+        );
 
     // When the backend's watcher fails N times in a row (typical cause: the
     // kubeconfig user lacks the `watch` verb on this kind), fall back to
@@ -156,7 +177,7 @@ export function createResourceListPage<T extends ListableResource>(
     );
 
     const { resyncing } = useResourceWatch<T>({
-      enabled: !!watchFactory,
+      enabled: watchEnabled,
       subscribe,
       queryKey,
       onError: handleWatchError,
@@ -173,9 +194,9 @@ export function createResourceListPage<T extends ListableResource>(
             : config.description
         }
         searchKey={config.searchKey}
-        queryKey={queryKeys.resources(config.resourceType, namespace)}
+        queryKey={queryKey}
         getRowId={getResourceRowId}
-        queryFn={() => config.fetcher({ namespace })}
+        queryFn={queryFn}
         columns={columns}
         quickActions={quickActions}
         emptyStateLabel={config.emptyStateLabel ?? config.title}
@@ -188,17 +209,15 @@ export function createResourceListPage<T extends ListableResource>(
                 mutationFn: async (item) => {
                   await deleter(item);
                 },
-                invalidateQueryKeys: [
-                  queryKeys.resources(config.resourceType, namespace),
-                ],
+                invalidateQueryKeys: [queryKey],
                 resourceType: config.resourceType,
               }
             : undefined
         }
         delivery={deliveryScopeOf(config.resourceType)}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchFactory && !watchFailed ? false : undefined}
-        live={!!watchFactory && !watchFailed}
+        refresh={watchEnabled && !watchFailed ? false : undefined}
+        live={watchEnabled && !watchFailed}
         resyncing={resyncing}
       />
     );
