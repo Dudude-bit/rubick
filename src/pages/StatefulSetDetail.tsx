@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
+  AlignLeft,
   BadgeCheck,
   History,
   Info,
@@ -10,6 +11,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 // The one place that turns replica counts into a word. These pages kept
@@ -289,6 +292,27 @@ export function StatefulSetDetail() {
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
         content: <PodListCard pods={pods} error={podsError} />,
+      },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                laneRule="ordinal"
+                workload={
+                  name ? { owner: name, ownerKind: "StatefulSet" } : null
+                }
+              />
+            </div>
+          </div>
+        ),
       },
       {
         id: "conditions",

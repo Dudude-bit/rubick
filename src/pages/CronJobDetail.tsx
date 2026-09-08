@@ -5,8 +5,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Info, Layers2, Play, Trash2 } from "lucide-react";
+import { AlignLeft, Info, Layers2, Play, Trash2 } from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -369,6 +371,25 @@ export function CronJobDetail() {
             />
             <JobRows jobs={jobs} />
           </Section>
+        ),
+      },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                laneRule="run"
+                workload={name ? { owner: name, ownerKind: "CronJob" } : null}
+              />
+            </div>
+          </div>
         ),
       },
       yamlTab({

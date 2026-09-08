@@ -15,6 +15,9 @@ import { ArrowDown } from "lucide-react";
 import { LogLineComponent, LogRunRow } from "./LogLine";
 import type { LogRun } from "./grouping";
 import { logsToText, type StreamedLogLine, type ViewMode } from "./types";
+
+const byContainer = (log: StreamedLogLine) => log.container;
+const noLabel = () => null;
 import { useT } from "@/i18n/useT";
 
 /**
@@ -56,6 +59,10 @@ interface LogListProps {
   onToggleLine: (id: number) => void;
   /** Container name -> its rule colour, for the whole pod. */
   containerColors: Map<string, string>;
+  /** Which colour a line takes: its container by default, its pod on a workload pane. */
+  laneOf?: (log: StreamedLogLine) => string;
+  /** What a line says its lane is, beside the message; nothing on a single-pod pane. */
+  laneLabelOf?: (log: StreamedLogLine) => string | null;
   viewMode: ViewMode;
   searchQuery: string;
   follow: boolean;
@@ -98,6 +105,8 @@ export function LogList({
   expandedLines,
   onToggleLine,
   containerColors,
+  laneOf = byContainer,
+  laneLabelOf = noLabel,
   viewMode,
   searchQuery,
   follow,
@@ -358,7 +367,8 @@ export function LogList({
                     <LogRunRow
                       run={run}
                       expanded={expandedRuns.has(run.id)}
-                      containerColor={containerColors.get(run.head.container)}
+                      containerColor={containerColors.get(laneOf(run.head))}
+                      laneLabel={laneLabelOf(run.head)}
                       onToggle={onToggleRun}
                     />
                   ) : (
@@ -367,7 +377,8 @@ export function LogList({
                       lineId={run.id}
                       viewMode={viewMode}
                       searchQuery={searchQuery}
-                      containerColor={containerColors.get(run.head.container)}
+                      containerColor={containerColors.get(laneOf(run.head))}
+                      laneLabel={laneLabelOf(run.head)}
                       expanded={expandedLines.has(run.id)}
                       onToggleDetail={onToggleLine}
                       onFieldClick={onFieldClick}

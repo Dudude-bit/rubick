@@ -587,3 +587,108 @@ describe("useLogStream stable line ids", () => {
     expect(result.current.logs[1].id).toBe(idsBefore[1]);
   });
 });
+
+import { commands } from "@/lib/commands";
+import { backfillPerContainer } from "./log-buffer";
+
+describe("useLogStream on a workload whose pods are replaced", () => {
+  beforeEach(reset);
+
+  const line = (message: string) => ({
+    message,
+    timestamp: null,
+    level: null,
+    format: null,
+    fields: null,
+    raw: message,
+  });
+
+  /**
+   * Would put the loss back: a rollout that restarted the session would
+   * drop the old pod's last words, which are the lines somebody reading
+   * a rollout came for, and open the new pod without its tail.
+   */
+  it("keeps the old pod's lines, stops its stream and streams the new pod with its own tail", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const old = { pod: "api-old", namespace: "n", container: "app" };
+    const fresh = { pod: "api-new", namespace: "n", container: "app" };
+    const { result, rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [old] } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-api-old-app",
+          lines: [line("old says hi")],
+        },
+      });
+    });
+    await waitFor(
+      () => expect(result.current.logs).toHaveLength(1),
+      settled(1)
+    );
+
+    rerender({ sources: [fresh] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-old-app");
+    expect(streamConfigs[1].podName).toBe("api-new");
+    expect(streamConfigs[1].tailLines).toBe(
+      backfillPerContainer(DEFAULT_LOG_LIMIT, 1)
+    );
+
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-api-new-app",
+          lines: [line("new says hi")],
+        },
+      });
+    });
+    await waitFor(
+      () =>
+        expect(result.current.logs.map((l) => `${l.pod}:${l.message}`)).toEqual(
+          ["api-old:old says hi", "api-new:new says hi"]
+        ),
+      settled(1)
+    );
+    // One session throughout: the listeners were registered once.
+    expect(listenCalls.filter((c) => c.event === "log-batch")).toHaveLength(1);
+  });
+
+  it("names the pod as well as the container when a stream is refused", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      if (config.podName === "api-b") throw new Error("forbidden");
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const { result } = renderHook(() =>
+      useLogStream({
+        namespace: "n",
+        sources: [
+          { pod: "api-a", namespace: "n", container: "app" },
+          { pod: "api-b", namespace: "n", container: "app" },
+        ],
+        paneKey: "Deployment:api",
+        limit: DEFAULT_LOG_LIMIT,
+      })
+    );
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+    expect(result.current.failures[0]).toMatchObject({
+      pod: "api-b",
+      container: "app",
+      kind: "broken",
+    });
+    expect(result.current.isStreaming).toBe(true);
+  });
+});

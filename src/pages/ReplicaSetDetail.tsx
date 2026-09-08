@@ -1,7 +1,9 @@
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { BadgeCheck, Info, Layers2 } from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2 } from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -240,6 +242,25 @@ export function ReplicaSetDetail() {
           // ordinary end of a rollout, and the page has to say so.
           emptyMessage={emptyPods ? noPods : t("empty", "revisionHasNoPods")}
         />
+      ),
+    },
+    {
+      id: "logs",
+      label: t("action", "logs"),
+      glyph: viewGlyph(AlignLeft),
+      kind: "surface" as const,
+      content: (
+        <div className="flex h-full flex-col">
+          <div className="min-h-0 flex-1">
+            <LogViewer
+              key={`${namespace}/${name}`}
+              namespace={namespace || ""}
+              pods={pods.map(lanePodOf)}
+              laneRule="pod"
+              workload={name ? { owner: name, ownerKind: "ReplicaSet" } : null}
+            />
+          </div>
+        </div>
       ),
     },
     {

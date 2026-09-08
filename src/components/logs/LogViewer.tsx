@@ -29,11 +29,21 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import {
+  containerEntries,
+  laneColors,
+  laneLabel,
+  laneName,
+  sourcesOf,
+  type LaneLabelMode,
+  type LanePod,
+  type LaneRule,
+} from "./lanes";
 import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
 import { LogHistoryBar } from "./LogHistoryBar";
 import { LogToolbar } from "./LogToolbar";
-import { LogLegend } from "./LogLegend";
+import { LogLegend, type LegendEntry } from "./LogLegend";
 import { LogList } from "./LogList";
 import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
@@ -53,6 +63,7 @@ import {
   matchesQuery,
   termLabel,
   type QueryTerm,
+  type StreamedLogLine,
   type ViewMode,
 } from "./types";
 
@@ -562,7 +573,8 @@ function useSoloShortcuts(
 }
 
 interface LogViewerProps {
-  podName: string;
+  /** The pod a single-pod pane reads. Absent on a workload pane. */
+  podName?: string;
   namespace: string;
   /**
    * Every container the pod ran, init first and in run order — see
@@ -571,7 +583,15 @@ interface LogViewerProps {
    * `lastTerminated`, and which run to open on is decided from the same
    * field.
    */
-  containers: ContainerInfo[];
+  containers?: ContainerInfo[];
+  /**
+   * Every pod of a workload, one lane each. The list is live: a rollout
+   * replaces it, and the pane keeps the lines of the pods that left, marks
+   * their lanes gone and streams the new ones. Nothing is hidden on open.
+   */
+  pods?: LanePod[];
+  /** What a lane stands for under this kind, said in the legend. */
+  laneRule?: LaneRule;
   /**
    * A container to open alone, asked for from the Containers tab. Read
    * once, on mount, which is why the caller keys the viewer by it: a
@@ -593,18 +613,47 @@ interface LogViewerProps {
 }
 
 export function LogViewer({
-  podName,
+  podName: podNameProp,
   namespace,
-  containers: containerInfos,
+  containers: containersProp,
+  pods,
+  laneRule = "pod",
   soloContainer,
   workload,
 }: LogViewerProps) {
   const t = useT();
   const { toast } = useToast();
+  // Two panes in one: a pod's containers, or a workload's pods. `lanes`
+  // is the switch, and every "which lane is this line in" question below
+  // asks it once through `laneOf`.
+  const lanes = pods !== undefined;
+  const podName = podNameProp ?? "";
+  const containerInfos = useMemo<ContainerInfo[]>(() => {
+    if (!lanes) return containersProp ?? [];
+    const seen = new Map<string, ContainerInfo>();
+    for (const pod of pods) {
+      for (const container of pod.containers) {
+        if (!seen.has(container.name)) seen.set(container.name, container);
+      }
+    }
+    return [...seen.values()];
+  }, [lanes, containersProp, pods]);
   const containers = useMemo(
     () => containerInfos.map((container) => container.name),
     [containerInfos]
   );
+  const sources = useMemo(
+    () => (lanes ? sourcesOf(pods) : undefined),
+    [lanes, pods]
+  );
+  const pane = lanes
+    ? `${workload?.ownerKind ?? "pods"}:${workload?.owner ?? ""}`
+    : podName;
+  const laneOf = useCallback(
+    (log: StreamedLogLine) => (lanes ? log.pod : log.container),
+    [lanes]
+  );
+  const [labelMode, setLabelMode] = useState<LaneLabelMode>("colour");
   const copyToClipboard = useCopyToClipboard();
   // Every container streams, always. Hiding one is a view filter and
   // nothing more: stopping its stream would make its line count a lie the
@@ -616,7 +665,11 @@ export function LogViewer({
   // nothing — the app container has never started — and the one log that
   // answers the question is the failing init container's previous run.
   // Decided once, on mount, and announced above the output.
-  const [focus] = useState(() => initialFocus(containerInfos, soloContainer));
+  const [focus] = useState(() =>
+    lanes
+      ? { hidden: new Set<string>(), previous: false, reason: null }
+      : initialFocus(containerInfos, soloContainer)
+  );
   const [hidden, setHidden] = useState<ReadonlySet<string>>(focus.hidden);
   const [previousRun, setPreviousRun] = useState(focus.previous);
   /** Retired the moment the reader touches the legend: it describes an
@@ -694,15 +747,56 @@ export function LogViewer({
     togglePause,
     retry,
   } = useLogStream({
-    podName,
+    podName: lanes ? undefined : podName,
     namespace,
-    containers,
+    containers: lanes ? undefined : containers,
+    sources,
+    paneKey: lanes ? pane : undefined,
     limit,
     previous: previousRun,
     intake,
   });
 
-  const colors = useMemo(() => buildContainerColors(containers), [containers]);
+  /**
+   * Every lane the pane has seen: the pods on the list, and the pods no
+   * longer on it whose lines the buffer still holds. Read off the buffer
+   * rather than remembered, so a lane exists exactly as long as a line of
+   * it does.
+   */
+  const laneKeys = useMemo(() => {
+    if (!lanes) return containers;
+    const keys = pods.map((pod) => pod.name);
+    for (const key of fields.values.get("pod")?.keys() ?? []) {
+      if (!keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  }, [lanes, containers, pods, fields]);
+  const gone = useMemo(() => {
+    if (!lanes) return new Set<string>();
+    const present = new Set(pods.map((pod) => pod.name));
+    return new Set(laneKeys.filter((key) => !present.has(key)));
+  }, [lanes, pods, laneKeys]);
+  const colors = useMemo(
+    () =>
+      lanes ? laneColors(laneKeys, gone) : buildContainerColors(containers),
+    [lanes, laneKeys, gone, containers]
+  );
+  const podByName = useMemo(
+    () => new Map((pods ?? []).map((pod) => [pod.name, pod])),
+    [pods]
+  );
+  const laneLabelOf = useCallback(
+    (log: StreamedLogLine) =>
+      lanes
+        ? laneLabel(
+            podByName.get(log.pod) ?? null,
+            log.pod,
+            laneRule,
+            labelMode
+          )
+        : null,
+    [lanes, podByName, laneRule, labelMode]
+  );
 
   // A pod's own lines outlive the pod only if somebody shipped them
   // somewhere. Asked for by facet, so this pane never learns which store
@@ -776,7 +870,7 @@ export function LogViewer({
   // container does not zero the number that says how loud it is. The
   // field index already keeps exactly this tally, incrementally, so the
   // legend no longer costs a pass over the buffer per batch.
-  const counts = fields.values.get("container") ?? EMPTY_COUNTS;
+  const counts = fields.values.get(lanes ? "pod" : "container") ?? EMPTY_COUNTS;
 
   // What is being typed filters live and becomes a chip on Enter, so the
   // box answers immediately and the answer survives being typed past.
@@ -808,7 +902,7 @@ export function LogViewer({
       ? effectiveTerms.filter((term) => term.kind !== "time")
       : effectiveTerms;
     const scoped = logs.filter(
-      (log) => !hidden.has(log.container) && matchesQuery(log, rest)
+      (log) => !hidden.has(laneOf(log)) && matchesQuery(log, rest)
     );
     return {
       scoped,
@@ -816,7 +910,7 @@ export function LogViewer({
         ? scoped.filter((log) => log.epoch >= time.from && log.epoch <= time.to)
         : scoped,
     };
-  }, [logs, hidden, effectiveTerms]);
+  }, [logs, hidden, effectiveTerms, laneOf]);
 
   const timeRange = useMemo(() => {
     const term = terms.find((entry) => entry.kind === "time");
@@ -828,11 +922,11 @@ export function LogViewer({
   // histogram would go on adding to slices built from a different query.
   const scopeKey = useMemo(
     () =>
-      `${namespace}/${podName}|${[...hidden].sort().join(",")}|${effectiveTerms
+      `${namespace}/${pane}|${[...hidden].sort().join(",")}|${effectiveTerms
         .filter((term) => term.kind !== "time")
         .map(termLabel)
         .join(",")}`,
-    [namespace, podName, hidden, effectiveTerms]
+    [namespace, pane, hidden, effectiveTerms]
   );
 
   // Grouping runs after filtering, so a filter that leaves two repeats
@@ -909,27 +1003,27 @@ export function LogViewer({
     (name: string) => {
       setFocusReason(null);
       setHidden((prev) => {
-        const alone = !prev.has(name) && containers.length - prev.size === 1;
+        const alone = !prev.has(name) && laneKeys.length - prev.size === 1;
         return alone
           ? new Set()
-          : new Set(containers.filter((other) => other !== name));
+          : new Set(laneKeys.filter((other) => other !== name));
       });
     },
-    [containers]
+    [laneKeys]
   );
 
   const handleSoloByIndex = useCallback(
     (index: number) => {
-      const name = containers[index];
+      const name = laneKeys[index];
       if (name !== undefined) handleSoloContainer(name);
     },
-    [containers, handleSoloContainer]
+    [laneKeys, handleSoloContainer]
   );
 
   const rootRef = useRef<HTMLDivElement>(null);
   useSoloShortcuts(
     rootRef,
-    containers.length,
+    laneKeys.length,
     handleSoloByIndex,
     handleShowAllContainers
   );
@@ -1009,8 +1103,13 @@ export function LogViewer({
   }, [copyToClipboard, visibleLogs, t]);
 
   const shownContainers = useMemo(
-    () => containers.filter((name) => !hidden.has(name)),
-    [containers, hidden]
+    () => (lanes ? containers : containers.filter((name) => !hidden.has(name))),
+    [lanes, containers, hidden]
+  );
+  /** The lanes in view: pods on a workload pane, containers otherwise. */
+  const shownLanes = useMemo(
+    () => laneKeys.filter((key) => !hidden.has(key)),
+    [laneKeys, hidden]
   );
 
   const handleDownloadLogs = useCallback(async () => {
@@ -1019,13 +1118,22 @@ export function LogViewer({
     // back out would be no answer at all. One file per container, because
     // `get_pod_logs` reads one container and interleaving several
     // one-shot reads would invent an ordering the API never gave.
-    const targets = shownContainers.length > 0 ? shownContainers : containers;
+    // A workload pane downloads every pod still there, the last ten
+    // thousand lines of each stream; a pod that is gone has no log left
+    // to ask for.
+    const targets = lanes
+      ? (sources ?? []).filter(
+          (source) => shownLanes.length === 0 || shownLanes.includes(source.pod)
+        )
+      : (shownContainers.length > 0 ? shownContainers : containers).map(
+          (container) => ({ pod: podName, namespace, container })
+        );
     try {
-      for (const container of targets) {
+      for (const target of targets) {
         const allLogs = await commands.getPodLogs(
-          podName,
-          namespace,
-          container,
+          target.pod,
+          target.namespace,
+          target.container,
           10000,
           null,
           // The file has to be the log on screen. Downloading the current
@@ -1037,7 +1145,7 @@ export function LogViewer({
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `${podName}-${container}${previousRun ? "-previous" : ""}.log`;
+        anchor.download = `${target.pod}-${target.container}${previousRun ? "-previous" : ""}.log`;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -1051,7 +1159,18 @@ export function LogViewer({
         variant: "destructive",
       });
     }
-  }, [containers, namespace, podName, previousRun, shownContainers, t, toast]);
+  }, [
+    containers,
+    lanes,
+    namespace,
+    podName,
+    previousRun,
+    shownContainers,
+    shownLanes,
+    sources,
+    t,
+    toast,
+  ]);
 
   // What the reader is not being shown: dropped by the query or by the
   // legend, plus the lines standing behind a collapsed run.
@@ -1068,7 +1187,7 @@ export function LogViewer({
   // that is over. Derived from the current view rather than from the
   // opening one: it is as true after a solo as it was on mount.
   const finished = useMemo(() => {
-    if (shownContainers.length !== 1) return null;
+    if (lanes || shownContainers.length !== 1) return null;
     const info = containerInfos.find(
       (entry) => entry.name === shownContainers[0]
     );
@@ -1076,7 +1195,13 @@ export function LogViewer({
       return null;
     }
     return info;
-  }, [containerInfos, shownContainers]);
+  }, [lanes, containerInfos, shownContainers]);
+
+  const laneOfFailure = (failure: ContainerFailure) =>
+    lanes ? failure.pod : failure.container;
+  const streamsInView = lanes
+    ? (sources ?? []).filter((source) => !hidden.has(source.pod)).length
+    : shownContainers.length;
 
   // "There is no earlier run of this one" is a fact about a container, not
   // about the pane, and the legend chip already carries it beside the name.
@@ -1085,21 +1210,23 @@ export function LogViewer({
   // three-container pod stacks three warnings over a log that reads fine.
   const absentInView = failures.filter(
     (failure) =>
-      failure.kind === "no-previous-run" && !hidden.has(failure.container)
+      failure.kind === "no-previous-run" && !hidden.has(laneOfFailure(failure))
   );
   const nothingEarlier =
-    shownContainers.length > 0 &&
-    absentInView.length === shownContainers.length;
+    streamsInView > 0 && absentInView.length === streamsInView;
   const bannered = failures.filter((failure) => {
     // Hiding a container hides everything about it, its trouble
     // included. A soloed pane that stacks three banners about
     // containers the reader took out of view is arguing with the
     // filter it was just given — the legend marks them, and unhiding
     // one brings its sentence back with it.
-    if (hidden.has(failure.container)) return false;
+    if (hidden.has(laneOfFailure(failure))) return false;
     if (failure.kind === "no-previous-run") {
       return nothingEarlier && absentInView.length === 1;
     }
+    // On a workload pane a pod that ended is a grey lane, not a banner:
+    // rollouts end pods all the time and the legend already says so.
+    if (lanes && failure.kind === "gone") return false;
     // An init container that finished ends its stream on the way out.
     // That is the read completing, not the container disappearing —
     // the legend says "ended" and the notice above says the log is
@@ -1120,6 +1247,7 @@ export function LogViewer({
    * is. Everywhere else this is `null` and no offer is drawn.
    */
   const stranded = useMemo(() => {
+    if (lanes) return null;
     const gone = bannered
       .filter((failure) => failure.kind === "gone")
       .map((failure) => failure.container);
@@ -1135,7 +1263,41 @@ export function LogViewer({
       return `${podName}/${unstarted.map((info) => info.name).join(", ")}`;
     }
     return null;
-  }, [bannered, containerInfos, hidden, podName]);
+  }, [lanes, bannered, containerInfos, hidden, podName]);
+
+  const legendEntries = useMemo<LegendEntry[]>(
+    () =>
+      lanes
+        ? laneKeys.map((key) => ({
+            key,
+            label:
+              labelMode === "short"
+                ? (laneLabel(
+                    podByName.get(key) ?? null,
+                    key,
+                    laneRule,
+                    "short"
+                  ) ?? key)
+                : laneName(podByName.get(key) ?? null, key, laneRule),
+            gone: gone.has(key),
+          }))
+        : containerEntries(containerInfos),
+    [lanes, laneKeys, labelMode, podByName, laneRule, gone, containerInfos]
+  );
+  const coverage = useMemo(() => {
+    if (!lanes) return null;
+    const refused = failures.filter(
+      (failure) => failure.kind === "broken" && !gone.has(failure.pod)
+    ).length;
+    const streaming = pods.filter(
+      (pod) =>
+        !failures.some(
+          (failure) =>
+            failure.pod === pod.name && failure.kind !== "no-previous-run"
+        )
+    ).length;
+    return { total: pods.length, streaming, refused, gone: gone.size };
+  }, [lanes, pods, failures, gone]);
 
   return (
     <div ref={rootRef} className="flex h-full flex-col">
@@ -1194,14 +1356,25 @@ export function LogViewer({
       />
 
       <LogLegend
-        containers={containerInfos}
+        entries={legendEntries}
         colors={colors}
         counts={counts}
         hidden={hidden}
         failures={failures}
+        failureKey={laneOfFailure}
         onToggle={handleToggleContainer}
         onSolo={handleSoloContainer}
         onShowAll={handleShowAllContainers}
+        trailing={
+          coverage ? (
+            <LaneCoverage
+              coverage={coverage}
+              rule={laneRule}
+              mode={labelMode}
+              onModeChange={setLabelMode}
+            />
+          ) : undefined
+        }
       />
 
       {/* Directly under the legend it narrowed, and above everything that
@@ -1245,9 +1418,9 @@ export function LogViewer({
           could not say which. */}
       {bannered.map((failure) => (
         <StreamFailureNotice
-          key={failure.container}
+          key={`${failure.pod}/${failure.container}`}
           failure={failure}
-          podName={podName}
+          podName={lanes ? failure.pod : podName}
           container={containerInfos.find(
             (info) => info.name === failure.container
           )}
@@ -1298,13 +1471,15 @@ export function LogViewer({
         expandedLines={expandedLines}
         onToggleLine={handleToggleLine}
         containerColors={colors}
+        laneOf={laneOf}
+        laneLabelOf={laneLabelOf}
         viewMode={viewMode}
         searchQuery={highlight}
         follow={autoScroll}
         atBottom={isAtBottom}
         onFollowChange={setAutoScroll}
         onAtBottomChange={setIsAtBottom}
-        resetKey={`${namespace}/${podName}`}
+        resetKey={`${namespace}/${pane}`}
         oldestRetainedId={logs[0]?.id}
         onViewportRangeChange={handleViewportRange}
         scrollTarget={scrollTarget}
@@ -1318,7 +1493,8 @@ export function LogViewer({
           retained={retained}
           filtered={effectiveTerms.length > 0}
           intake={intake.length > 0}
-          allHidden={shownContainers.length === 0 && containers.length > 0}
+          allHidden={shownLanes.length === 0 && laneKeys.length > 0}
+          noPods={lanes && pods.length === 0 && laneKeys.length === 0}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
         />
@@ -1342,6 +1518,83 @@ export function LogViewer({
   );
 }
 
+/**
+ * How much of the workload the pane is reading, in numbers the lanes
+ * alone cannot say: streams attached, streams refused, pods gone whose
+ * lines are kept. Beside it, what a lane stands for and how a line
+ * names its pod.
+ */
+function LaneCoverage({
+  coverage,
+  rule,
+  mode,
+  onModeChange,
+}: {
+  coverage: { total: number; streaming: number; refused: number; gone: number };
+  rule: LaneRule;
+  mode: LaneLabelMode;
+  onModeChange: (mode: LaneLabelMode) => void;
+}) {
+  const t = useT();
+  const ruleWord = {
+    pod: "laneRulePod",
+    ordinal: "laneRuleOrdinal",
+    node: "laneRuleNode",
+    run: "laneRuleRun",
+  } as const;
+  const modes = [
+    ["colour", "laneLabelColour"],
+    ["short", "laneLabelShort"],
+    ["full", "laneLabelFull"],
+  ] as const;
+  return (
+    <span
+      className="ml-auto flex flex-wrap items-center gap-x-2 text-fg-fnt"
+      data-testid="log-lane-coverage"
+    >
+      <span>
+        {[
+          t("count", "podsStreaming", {
+            streaming: coverage.streaming,
+            n: coverage.total,
+          }),
+          coverage.refused > 0
+            ? t("count", "streamsRefused", { n: coverage.refused })
+            : null,
+          coverage.gone > 0
+            ? t("count", "podsGoneKept", { n: coverage.gone })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </span>
+      <span className="font-mono">{t("action", ruleWord[rule])}</span>
+      <span
+        className="flex h-5 items-center gap-px rounded-md border border-hair p-px"
+        role="group"
+        aria-label={t("action", "laneLabelHint")}
+        title={t("action", "laneLabelHint")}
+      >
+        {modes.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={mode === value}
+            onClick={() => onModeChange(value)}
+            className={`flex h-full items-center rounded px-1.5 text-[10px] ${
+              mode === value
+                ? "bg-sel text-fg"
+                : "text-fg-mut hover:bg-hover hover:text-fg"
+            }`}
+          >
+            {t("action", label)}
+          </button>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 /** Why there is nothing to read: five different silences, said apart. */
 function EmptyState({
   failed,
@@ -1351,6 +1604,7 @@ function EmptyState({
   filtered,
   intake,
   allHidden,
+  noPods = false,
   onClearQuery,
   onShowAll,
 }: {
@@ -1362,10 +1616,14 @@ function EmptyState({
   /** Set, so "received" and "kept" are no longer the same number. */
   intake: boolean;
   allHidden: boolean;
+  /** A workload pane with nothing to read from yet. */
+  noPods?: boolean;
   onClearQuery: () => void;
   onShowAll: () => void;
 }) {
   const t = useT();
+
+  if (noPods) return <Note>{t("empty", "noPodsToStream")}</Note>;
 
   // The failure notice above already said what happened; a second verdict
   // under it would only compete with it.
