@@ -53,6 +53,10 @@ export default defineVendor({
       staleTime: FLUX_STALE,
     }),
     load: () => import("./page"),
+    gate: {
+      crd: "kustomizations.kustomize.toolkit.fluxcd.io",
+      namespaced: true,
+    },
   },
   crd,
 });

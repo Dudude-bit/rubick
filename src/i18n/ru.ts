@@ -35,6 +35,7 @@ export const ru: Catalogue = {
     mountedAt: "смонтирован в {path}",
     projectedInto: "проецируется в {path}",
     noListAccess: "У вас нет прав смотреть этот список",
+    noVendorAccess: "У вас нет прав смотреть ресурсы интеграции {vendor}",
     relatedResources: "Связанные ресурсы",
     runsOn: "Работает на",
     whatRunsHere: "Что здесь работает",
@@ -498,6 +499,7 @@ export const ru: Catalogue = {
     showTimeline: "Таймлайн",
     hideTimeline: "Скрыть таймлайн",
     storyWindow: "Окно",
+    showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
     addressOnClipboard: "Адрес {site} скопирован в буфер обмена: {url}",
@@ -4827,6 +4829,11 @@ export const ru: Catalogue = {
       few: "{n} события",
       many: "{n} событий",
       other: "{n} события",
+    },
+    namespacesHidden: {
+      one: "{n} пространство скрыто — нет доступа",
+      few: "{n} пространства скрыто — нет доступа",
+      other: "{n} пространств скрыто — нет доступа",
     },
     endpointsAcrossSlices: "{endpoints} в {slices}",
     endpointsCount: {

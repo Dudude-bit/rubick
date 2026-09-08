@@ -61,6 +61,38 @@ export function wireNamespace(scope: readonly string[]): string {
   return scope.length === 1 ? scope[0] : "";
 }
 
+/**
+ * The cache key a scoped list rides under: `null` or a single namespace as
+ * always, and a selection of several as its own key — sorted and joined, which
+ * no real namespace can be (a name holds no comma), so two multi-namespace
+ * selections never read each other's rows.
+ */
+export function scopeCacheKey(scope: readonly string[]): string | null {
+  if (scope.length === 0) return null;
+  if (scope.length === 1) return scope[0];
+  return [...scope].sort().join(",");
+}
+
+/**
+ * Read a list across the selection: none or one as a single `LIST`, several as
+ * one request per namespace, merged. A cluster-wide `LIST` needs list rights
+ * across the whole cluster, which a namespace-scoped RBAC user lacks — so every
+ * such selection came back empty and unexplained. Each namespace the user can
+ * read on its own, which is the whole point of the picker.
+ */
+export function listAcrossScope<T>(
+  scope: readonly string[],
+  fetchOne: (namespace: string | null) => Promise<T[]>
+): () => Promise<T[]> {
+  return async () => {
+    if (scope.length <= 1) {
+      return fetchOne(scope.length === 1 ? scope[0] : null);
+    }
+    const perNamespace = await Promise.all(scope.map((ns) => fetchOne(ns)));
+    return perNamespace.flat();
+  };
+}
+
 /** What a stored value means, including one an older build wrote. */
 export function decodeScope(stored: string | null | undefined): string[] {
   if (!stored) return [];
