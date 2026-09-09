@@ -19,6 +19,7 @@ import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
@@ -66,13 +67,18 @@ export function DetailError({
             : t("empty", "kindCouldNotRead", { kind })}
         </h2>
       </div>
-      <p className="text-xs text-fg-mut">
-        {isNotFound
-          ? t("empty", "kindMayBeGone", { kind })
-          : typeof error === "string"
-            ? error
-            : (error?.message ?? t("empty", "clusterDidNotAnswer"))}
-      </p>
+      {isNotFound ? (
+        <p className="text-xs text-fg-mut">
+          {t("empty", "kindMayBeGone", { kind })}
+        </p>
+      ) : (
+        <Unknown
+          // The heading already says "could not read this kind"; the box asks
+          // the question the read was, so the same sentence is not stacked twice.
+          question={t("empty", "whatIsThisKind", { kind })}
+          error={error ?? t("empty", "clusterDidNotAnswer")}
+        />
+      )}
       {additionalMessage && (
         <p className="text-xs text-fg-mut">{additionalMessage}</p>
       )}

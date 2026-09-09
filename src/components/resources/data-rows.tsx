@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, Eye, EyeOff, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "./detail-blocks";
 import type { BinaryValue } from "@/generated/types";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 
@@ -79,6 +80,14 @@ export function DataSection({
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // Editing a key writes live config the cluster's workloads read, so on a
+  // cluster marked critical the Save waits on the cluster's own name. Cleared
+  // whenever the edited key changes, so a match never carries to the next key.
+  const gate = useCriticalGate();
+  const gateReset = gate.reset;
+  useEffect(() => {
+    gateReset();
+  }, [editing, gateReset]);
   const copyToClipboard = useCopyToClipboard();
 
   const entries = useMemo(() => {
@@ -272,17 +281,19 @@ export function DataSection({
                 // the whole request: a JSON blob inside a YAML string is an
                 // indentation puzzle, and the puzzle is not the point.
                 <div className="mt-1 border-l border-hair pl-3">
+                  {gate.notice}
                   <Textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     rows={Math.min(20, draft.split("\n").length + 1)}
-                    className="font-mono text-xs"
+                    className="mt-2 font-mono text-xs"
                     aria-label={t("action", "editKeyLabel", { key })}
                   />
+                  {gate.input}
                   <div className="mt-2 flex items-center gap-2">
                     <Button
                       size="sm"
-                      disabled={saving || draft === value}
+                      disabled={saving || draft === value || gate.blocked}
                       onClick={async () => {
                         setSaving(true);
                         try {
