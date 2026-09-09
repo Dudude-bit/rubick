@@ -5,14 +5,29 @@ import type { NodeSilence } from "@/lib/node-reporting";
 import * as metricsModule from "@/lib/metrics";
 import { usePodsWithMetrics } from "./usePodsWithMetrics";
 
+interface ClusterState {
+  isConnected: boolean;
+  currentNamespace: string;
+  namespaceScope: string[];
+}
+
 const state = vi.hoisted(() => ({
   pods: [] as PodInfo[],
   metrics: [] as PodMetrics[],
   silent: new Map<string, NodeSilence>(),
+  cluster: {
+    isConnected: true,
+    currentNamespace: "default",
+    namespaceScope: [],
+  } as ClusterState,
 }));
 
+// Through the selector, not around it: every reader of this store passes one,
+// and a mock that answers with the whole state hands `useNamespaceScope` an
+// object where it expects the array it selected.
 vi.mock("@/stores/clusterStore", () => ({
-  useClusterStore: () => ({ isConnected: true, currentNamespace: "default" }),
+  useClusterStore: (selector?: (cluster: ClusterState) => unknown) =>
+    selector ? selector(state.cluster) : state.cluster,
 }));
 vi.mock("@/hooks/useLiveQuery", () => ({
   useLiveQuery: () => ({ data: state.pods, isLoading: false, error: null }),
