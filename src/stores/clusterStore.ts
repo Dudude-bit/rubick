@@ -8,6 +8,7 @@
  * @module stores/clusterStore
  */
 
+import type { ConnectionPath } from "@/generated/types";
 import { translate } from "@/i18n";
 import { currentLocale } from "./localeStore";
 import { create } from "zustand";
@@ -53,6 +54,11 @@ interface ClusterState {
    */
   savedScopes: Record<string, string[]>;
   isConnected: boolean;
+  /**
+   * Which way the session reaches the cluster, once connected. Through a
+   * proxy, kubectl holds the credentials and the app's own path failed.
+   */
+  connectedThrough: ConnectionPath | null;
   isLoading: boolean;
   isAuthenticating: boolean;
   error: string | null;
@@ -101,6 +107,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   namespaceScope: [],
   savedScopes: {},
   isConnected: false,
+  connectedThrough: null,
   isLoading: false,
   isAuthenticating: false,
   error: null,
@@ -148,8 +155,17 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
               currentNamespace: wireNamespace(scope),
             });
           }
-          // Auto-connect to saved cluster
-          get().connect(prefs.lastContext);
+          // Auto-connect to the saved cluster — but only if nothing has
+          // already claimed the connection. A window launched from a deep
+          // link connects to that link's context (useDeepLinks), and the
+          // saved last cluster must not race it and win, or the link would
+          // silently open the wrong cluster under a "live" banner. Any
+          // explicit connect bumps connectionAttemptId off zero; whichever
+          // ran first, the deep link's connect is issued too and, being the
+          // later one, wins — so this guard only has to not add a competitor.
+          if (get().connectionAttemptId === 0 && !get().pendingContext) {
+            get().connect(prefs.lastContext);
+          }
         }
       } catch {
         // Ignore errors loading preferences - not critical
@@ -243,6 +259,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       currentContext: targetContext,
       ...scopeFor(get(), targetContext, changed),
       isConnected: false,
+      connectedThrough: null,
       connectionAttemptId: attemptId,
       connectStartedAt: Date.now(),
     });
@@ -255,6 +272,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       set({
         currentContext: connectedContext,
         isConnected: true,
+        connectedThrough: info.connected_through,
         isLoading: false,
         isAuthenticating: false,
         pendingContext: null,
@@ -288,6 +306,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         isLoading: false,
         isAuthenticating: false,
         isConnected: false,
+        connectedThrough: null,
         pendingContext: null,
         connectStartedAt: null,
       });
@@ -305,6 +324,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     }
     set({
       isConnected: false,
+      connectedThrough: null,
       currentContext: null,
       pendingContext: null,
       error: null,
