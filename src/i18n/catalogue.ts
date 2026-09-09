@@ -1408,7 +1408,10 @@ export const en = {
       "Ask on a rollout, a pod, a job, a drain or a port forward, and the answer comes as a notification.",
     dismiss: "Dismiss",
     openWatching: "Open Watching",
-    severalAnswered: "{count} things you asked about",
+    severalAnswered: {
+      one: "{n} thing you asked about",
+      other: "{n} things you asked about",
+    },
     full: "Already watching {max} things on this cluster",
     fullBody:
       "Twelve is the most one cluster gets. Pick one to stop watching, or keep all of them and skip this one.",
@@ -1421,7 +1424,9 @@ export const en = {
     saysSucceeded: "{name} succeeded",
     saysFailed: "{name} failed",
     saysDrained: "{name} is drained",
-    saysDrainFailed: "{name} drain did not finish",
+    saysDrainStopped: "{name} drain stopped",
+    saysDrainCancelled: "{name} drain cancelled",
+    saysDrainFailed: "{name} drain broke",
     saysRenewed: "{name} certificate renewed",
     saysIssuanceFailed: "{name} certificate issuance failed",
     saysForwardDied: "Forward to {name} died",
