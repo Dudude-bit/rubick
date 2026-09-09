@@ -48,6 +48,7 @@ import { routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { cn } from "@/lib/utils";
 import { verbatim } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
@@ -275,7 +276,7 @@ function GroupCap({
 export function GatewayRoutesList() {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
-  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const scope = useNamespaceScope();
   const {
     detection,
     detectionLoading,
@@ -287,7 +288,7 @@ export function GatewayRoutesList() {
     dataUpdatedAt,
     live,
     resyncing,
-  } = useGatewayRoutes(currentNamespace);
+  } = useGatewayRoutes(scope.scope);
 
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
@@ -411,28 +412,33 @@ export function GatewayRoutesList() {
       <ResourceListHeader
         title={t("nav", "routes")}
         count={
-          <span className="tabular-nums">
-            {total + board.mesh.length}
-            {board.verdictsKnown && board.notServing.length > 0 && (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  aria-pressed={brokenOnly}
-                  onClick={() => setBrokenOnly((on) => !on)}
-                  className={cn(
-                    "text-err hover:underline",
-                    brokenOnly && "underline"
-                  )}
-                >
-                  {t("count", "gwNotServingCount", {
-                    n: board.notServing.length,
-                  })}
-                </button>
-              </>
-            )}
-            {quietCluster && total > 0 && ` · ${t("empty", "gwAllServing")}`}
-          </span>
+          // No count beside a refusal or a detection failure — the body shows
+          // "could not read" there, and a "0" in the header would contradict
+          // it. These are the same states the body special-cases below.
+          (error && routes.length === 0) || detectionError ? undefined : (
+            <span className="tabular-nums">
+              {total + board.mesh.length}
+              {board.verdictsKnown && board.notServing.length > 0 && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    aria-pressed={brokenOnly}
+                    onClick={() => setBrokenOnly((on) => !on)}
+                    className={cn(
+                      "text-err hover:underline",
+                      brokenOnly && "underline"
+                    )}
+                  >
+                    {t("count", "gwNotServingCount", {
+                      n: board.notServing.length,
+                    })}
+                  </button>
+                </>
+              )}
+              {quietCluster && total > 0 && ` · ${t("empty", "gwAllServing")}`}
+            </span>
+          )
         }
         dataUpdatedAt={dataUpdatedAt}
         live={live && !resyncing}

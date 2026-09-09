@@ -598,6 +598,8 @@ export const ru: Catalogue = {
     noLimit: "Без ограничения",
     latestN: "Последние {n}",
     drainNamed: "Освободить узел {name}",
+    cordonNamed: "Запретить планирование на {name}?",
+    uncordonNamed: "Разрешить планирование на {name}?",
     drainAnyway: "Всё равно освободить",
     stopDraining: "Остановить",
     drainEnded: "Освобождение {name} закончилось",
@@ -2366,6 +2368,10 @@ export const ru: Catalogue = {
     refusalOther: "Отказано",
     nameMissingParens: "{name} (отсутствует)",
     noClusterSelected: "Кластер не выбран",
+    criticalNoticeTitle: "Критическая инфраструктура",
+    criticalNoticeBody:
+      "Это {context}. Что бы здесь ни делалось, делается там. Введите имя кластера, чтобы продолжить.",
+    criticalStripe: "Критический: {context}",
     metricsNotInstalled: "metrics-server не установлен",
     metricsNotInstalledBody:
       "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
@@ -2538,6 +2544,10 @@ export const ru: Catalogue = {
     contextReady: "готов",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
+    criticalLabel:
+      "Критическая инфраструктура: каждое изменение спросит имя кластера",
+    criticalGuessed: "Судя по имени, да. Отметьте, чтобы так и было.",
+
     searchMissingWords: "not found missing path не найден отсутствует путь",
     searchContextWords:
       "context kubeconfig authentication контекст аутентификация",
@@ -2883,6 +2893,7 @@ export const ru: Catalogue = {
     kindMayBeGone:
       "Объект ({kind}) мог быть удалён или пересоздан под новым именем.",
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
+    whatIsThisKind: "Что это за объект ({kind})?",
     kindNotFound: "{kind} не найден",
     pvcListDescription: "Запросы на хранилище от подов в {scope}",
     expandRepeats: "Развернуть повторы: {count}",
@@ -3405,6 +3416,10 @@ export const ru: Catalogue = {
     budgetRuleHealthyCovering:
       "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
+    noClusterOverviewAccess:
+      "У вас нет прав на просмотр всего кластера. Выберите доступные вам пространства имён сверху.",
+    noNodeAccess:
+      "У вас нет прав на чтение узлов кластера — ёмкость и запас планировщика не показаны.",
     controllerLower: "контроллер",
     noneSet: "не заданы",
     couldNotReadManifest: "Не удалось прочитать манифест",
@@ -3768,6 +3783,12 @@ export const ru: Catalogue = {
       "Срез несёт порт под именем порта Service. Эти не называют ни один из объявленных, поэтому к ним ничего не маршрутизируется.",
     couldNotReadWhatConnects: "Не удалось прочитать, что с этим связано.",
     clusterDidNotAnswer: "Кластер не ответил.",
+    unknownRefused: "Кластер отказал: {message}",
+    unknownFault: "Чтение не удалось: {message}",
+    unknownRetry: "Прочитать ещё раз",
+    unknownCopyRule: "Скопировать правило, которое попросить",
+    unknownRuleCopied:
+      "Role и RoleBinding, которые разрешили бы это чтение. Отдайте тому, кто выдаёт доступ.",
     inNamespaceWhere: "в пространстве имён {namespace}",
     inClusterWhere: "в кластере",
     nothingStatesEdge: "Ничто {where} не объявляет связь с этим {kind}.",

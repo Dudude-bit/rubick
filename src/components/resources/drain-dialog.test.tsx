@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -7,6 +7,8 @@ import { MemoryRouter } from "react-router-dom";
 
 import { DrainDialog } from "./drain-dialog";
 import type { DrainReport, DrainState, RefusedPod } from "@/hooks/useNodeDrain";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { useClusterStore } from "@/stores/clusterStore";
 
 const wrap = (ui: ReactNode) =>
   render(
@@ -352,5 +354,44 @@ describe("reading how a drain ended", () => {
     expect(
       screen.queryByRole("button", { name: /stop draining/i })
     ).not.toBeInTheDocument();
+  });
+});
+
+const PROD = "prod-eu-1";
+
+describe("draining a node on critical infrastructure", () => {
+  beforeEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: PROD, isConnected: true });
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+  });
+
+  afterEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * A drain ends pods the cluster will not bring back, so on the marked
+   * cluster it takes the same typed-name gate the confirmations do; without
+   * it the drain was a single click on the one screen that reads like a
+   * report rather than a decision.
+   */
+  it("holds the drain until the cluster's name is typed", async () => {
+    const onConfirm = vi.fn();
+    wrap(dialog({ phase: "idle" }, { onConfirm }));
+
+    const drain = screen.getByRole("button", { name: /drain/i });
+    expect(screen.getByRole("alert")).toHaveTextContent(PROD);
+    expect(drain).toBeDisabled();
+
+    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    expect(drain).toBeEnabled();
+
+    await userEvent.click(drain);
+    expect(onConfirm).toHaveBeenCalledWith("node-7", {
+      evictUnmanagedPods: false,
+      evictPodsWithEmptydir: false,
+    });
   });
 });
