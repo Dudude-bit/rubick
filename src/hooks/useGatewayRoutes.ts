@@ -17,6 +17,7 @@ import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import type { RouteInfo } from "@/generated/types";
@@ -35,29 +36,37 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
  *  broken stream. */
 function useRouteKind(
   kind: ResourceKind,
-  namespace: string | null,
+  scope: string[],
   served: boolean,
   onWatchError: (kind: string, message: string) => void
 ) {
   const [watchFailed, setWatchFailed] = useState(false);
+  // Several namespaces are read one apiece and polled; a watch covers none or
+  // one. See `listAcrossScope`.
+  const several = scope.length >= 2;
+  // `null` keys the whole cluster — not `"all"`, a name a namespace can carry.
+  const cacheKey = scopeCacheKey(scope);
+  const watchNamespace = scope.length === 1 ? scope[0] : null;
   const queryKey = useMemo(
-    () => ["gateway-routes", kind, namespace ?? "all"],
-    [kind, namespace]
+    () => ["gateway-routes", kind, cacheKey],
+    [kind, cacheKey]
   );
   const query = useLiveQuery<RouteInfo[]>({
     queryKey,
-    queryFn: () => commands.listGatewayRoutes(kind, namespace),
+    queryFn: listAcrossScope(scope, (ns) =>
+      commands.listGatewayRoutes(kind, ns)
+    ),
     enabled: served,
     staleTime: STALE_TIMES.resourceList,
-    // The watch feeds the cache; polling is only the fallback after it
-    // fails, same contract as every watched list page.
-    refresh: watchFailed ? "resourceList" : false,
+    // The watch feeds the cache; polling is the fallback after it fails, and
+    // the mode for a multi-namespace scope (no cluster-wide watch).
+    refresh: watchFailed || several ? "resourceList" : false,
   });
   const { resyncing } = useResourceWatch<RouteInfo>({
-    enabled: served,
+    enabled: served && !several,
     subscribe: useCallback(
-      () => commands.subscribeGatewayRouteWatch(kind, namespace),
-      [kind, namespace]
+      () => commands.subscribeGatewayRouteWatch(kind, watchNamespace),
+      [kind, watchNamespace]
     ),
     queryKey,
     onError: useCallback(
@@ -71,10 +80,10 @@ function useRouteKind(
     ),
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
-  return { query, resyncing, served, watchFailed };
+  return { query, resyncing, served, watchFailed, several };
 }
 
-export function useGatewayRoutes(namespace: string | null) {
+export function useGatewayRoutes(scope: string[]) {
   const { toast } = useToast();
   const t = useT();
   // The scan's own state travels with its answer. Without it a page cannot
@@ -103,31 +112,31 @@ export function useGatewayRoutes(namespace: string | null) {
   // nothing — its query and watch stay disabled.
   const http = useRouteKind(
     GATEWAY_ROUTE_KINDS[0],
-    namespace,
+    scope,
     served.has(GATEWAY_ROUTE_KINDS[0]),
     onWatchError
   );
   const grpc = useRouteKind(
     GATEWAY_ROUTE_KINDS[1],
-    namespace,
+    scope,
     served.has(GATEWAY_ROUTE_KINDS[1]),
     onWatchError
   );
   const tls = useRouteKind(
     GATEWAY_ROUTE_KINDS[2],
-    namespace,
+    scope,
     served.has(GATEWAY_ROUTE_KINDS[2]),
     onWatchError
   );
   const tcp = useRouteKind(
     GATEWAY_ROUTE_KINDS[3],
-    namespace,
+    scope,
     served.has(GATEWAY_ROUTE_KINDS[3]),
     onWatchError
   );
   const udp = useRouteKind(
     GATEWAY_ROUTE_KINDS[4],
-    namespace,
+    scope,
     served.has(GATEWAY_ROUTE_KINDS[4]),
     onWatchError
   );
@@ -163,7 +172,11 @@ export function useGatewayRoutes(namespace: string | null) {
       0,
       ...active.map((entry) => entry.query.dataUpdatedAt ?? 0)
     ),
-    live: active.length > 0 && !active.some((entry) => entry.watchFailed),
+    // A multi-namespace scope polls rather than watches, so it is not "live"
+    // even though no watch failed.
+    live:
+      active.length > 0 &&
+      !active.some((entry) => entry.watchFailed || entry.several),
     resyncing: active.some((entry) => entry.resyncing),
   };
 }

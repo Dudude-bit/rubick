@@ -448,12 +448,22 @@ export function GatewayDetail() {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(RouteGlyph),
-      mark: countMark(attached.length),
+      // A refused cluster-wide route read is unknown, not zero: no tab digit
+      // and no header count while the body says "could not read", the same way
+      // the routes list page and the sidebar treat it.
+      mark:
+        routes.isError && attached.length === 0
+          ? undefined
+          : countMark(attached.length),
       content: (
         <Section>
           <SectionHeader
             title={t("nav", "attachedRoutes")}
-            count={attached.length}
+            count={
+              routes.isError && attached.length === 0
+                ? undefined
+                : attached.length
+            }
           />
           {detectionQuery.isLoading ? (
             <p className="text-xs text-fg-fnt">{t("empty", "readingRoutes")}</p>

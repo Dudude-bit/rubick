@@ -2,13 +2,76 @@ import { describe, expect, it } from "vitest";
 
 import type { ConditionInfo, NodeInfo } from "@/generated/types";
 
-import { silenceNote, silenceOf, silentNodes } from "./node-reporting";
+import {
+  silenceNote,
+  silenceOf,
+  silentNodes,
+  withNodeSilence,
+  type NodeSilence,
+} from "./node-reporting";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
+
+/** Reattaching unchanged node warnings must not defeat metrics row memoization. */
+it("reuses annotated rows while the node silence values stay the same", () => {
+  const rows = [{ nodeName: "gone" }, { nodeName: "fine" }];
+  const silence: NodeSilence = { node: "gone", since: null, reason: null };
+  const first = withNodeSilence(rows, new Map([["gone", silence]]));
+  const next = withNodeSilence(rows, new Map([["gone", { ...silence }]]));
+  expect(next[0]).toBe(first[0]);
+  expect(next[1]).toBe(rows[1]);
+});
+
+/** Caching a warning must not hide new evidence or leave a recovered node marked silent. */
+it("updates changed silence values and removes the warning after recovery", () => {
+  const rows = [{ nodeName: "gone" }];
+  const silence: NodeSilence = { node: "gone", since: null, reason: null };
+  let previous = withNodeSilence(rows, new Map([["gone", silence]]))[0];
+  for (const update of [
+    { ...silence, since: "2026-09-07T00:00:00Z" },
+    { ...silence, since: "2026-09-07T00:00:00Z", reason: "NodeStatusUnknown" },
+  ]) {
+    const next = withNodeSilence(rows, new Map([["gone", update]]))[0];
+    expect(next).not.toBe(previous);
+    expect(next.nodeSilence).toEqual(update);
+    previous = next;
+  }
+  const recovered = withNodeSilence(rows, new Map());
+  expect(recovered[0]).toBe(rows[0]);
+  expect(recovered[0].nodeSilence).toBeUndefined();
+});
+
+/**
+ * The realistic recovery: one node comes back while the cluster still has
+ * other silent nodes, so the map is not empty and the empty-map short-circuit
+ * never runs. The per-row branch has to hand back the bare row, not the
+ * annotation still sitting in the WeakMap — a cache that answered "still
+ * silent" for a node now healthy would be the stale-warning the whole third
+ * state exists to prevent, and the empty-map case cannot catch it.
+ */
+it("drops a recovered node's warning even while other nodes stay silent", () => {
+  const row = { nodeName: "gone" };
+  const silence: NodeSilence = {
+    node: "gone",
+    since: null,
+    reason: "NodeStatusUnknown",
+  };
+  // First tick caches an annotated row for `row` in the silenceRows WeakMap.
+  const first = withNodeSilence([row], new Map([["gone", silence]]));
+  expect(first[0].nodeSilence?.reason).toBe("NodeStatusUnknown");
+
+  // `gone` recovers, but `other` is still silent, so the map is non-empty.
+  const next = withNodeSilence(
+    [row],
+    new Map([["other", { node: "other", since: null, reason: null }]])
+  );
+  expect(next[0]).toBe(row);
+  expect(next[0].nodeSilence).toBeUndefined();
+});
 
 function condition(
   status: string,
