@@ -631,8 +631,9 @@ interface NamespaceOption {
   key: string;
   label: string;
   mono: boolean;
-  podCount: number;
-  problemCount: number;
+  /** `null` when the cluster-wide overview was refused — unknown, drawn "—". */
+  podCount: number | null;
+  problemCount: number | null;
   selected: boolean;
   /** The selection is full, so this row can only be opened on its own. */
   closed: boolean;
@@ -964,7 +965,8 @@ function NamespaceRow({
   onToggle: () => void;
 }) {
   const t = useT();
-  const pods = t("cluster", "podCount", { n: row.podCount });
+  const pods =
+    row.podCount === null ? "—" : t("cluster", "podCount", { n: row.podCount });
   return (
     <div
       id={id}
@@ -974,8 +976,8 @@ function NamespaceRow({
       aria-label={[
         row.label,
         pods,
-        row.problemCount > 0
-          ? t("count", "withAProblem", { n: row.problemCount })
+        (row.problemCount ?? 0) > 0
+          ? t("count", "withAProblem", { n: row.problemCount ?? 0 })
           : null,
       ]
         .filter(Boolean)
@@ -1026,12 +1028,14 @@ function NamespaceRow({
       <span
         className={cn(
           "font-mono text-[11px]",
-          row.problemCount > 0 ? "text-err" : "text-fg-fnt"
+          (row.problemCount ?? 0) > 0 ? "text-err" : "text-fg-fnt"
         )}
       >
-        {row.problemCount > 0
-          ? `${row.podCount} · ${t("count", "badPods", { n: row.problemCount })}`
-          : row.podCount}
+        {row.podCount === null
+          ? "—"
+          : (row.problemCount ?? 0) > 0
+            ? `${row.podCount} · ${t("count", "badPods", { n: row.problemCount ?? 0 })}`
+            : row.podCount}
       </span>
     </div>
   );
