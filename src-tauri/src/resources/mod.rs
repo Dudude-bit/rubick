@@ -26,6 +26,7 @@ impl OptionTimeExt for Option<&Time> {
 mod connections;
 mod gateway;
 mod network;
+pub mod node_budget;
 pub mod published;
 mod selector;
 mod serialization;

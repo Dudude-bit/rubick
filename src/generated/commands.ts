@@ -67,6 +67,7 @@ import type {
   ManifestResult,
   NamespaceAccess,
   NamespaceInfo,
+  NodeBudget,
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
@@ -992,6 +993,10 @@ export async function searchRegistryImages(
   request: RegistrySearchRequest
 ): Promise<RegistryImageResult[]> {
   return invoke<RegistryImageResult[]>("search_registry_images", { request });
+}
+
+export async function nodeResourceBudget(name: string): Promise<NodeBudget> {
+  return invoke<NodeBudget>("node_resource_budget", { name });
 }
 
 export async function listNodes(

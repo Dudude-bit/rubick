@@ -677,6 +677,24 @@ export interface NodeFilters {
   readyOnly: boolean | null;
 }
 
+export interface NodeBudget {
+  pods: number | null;
+  known: boolean;
+  refused: string[];
+  error: string | null;
+  resources: ResourceBudget[];
+}
+
+export interface ResourceBudget {
+  name: string;
+  unit: BudgetUnit;
+  capacity: number | null;
+  allocatable: number | null;
+  requested: number | null;
+  limited: number | null;
+  extended: boolean;
+}
+
 export interface RegistryImageResult {
   id: string;
   name: string;
@@ -1834,6 +1852,8 @@ export type SearchFailureKind =
 
 export type SearchContextStatus =
   "connecting" | "searching" | "done" | "failed" | "skipped";
+
+export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";

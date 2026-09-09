@@ -424,6 +424,11 @@ export const en = {
     age: "Age",
     memory: "Memory",
     capacity: "Capacity",
+    resource: "Resource",
+    requested: "Requested",
+    limited: "Limited",
+    used: "Used",
+    extendedResource: "extended",
     accessModes: "Access Modes",
     replicas: "Replicas",
     keys: "Keys",
@@ -3024,6 +3029,23 @@ export const en = {
     accessInternalShortHint: "From same namespace only",
     mountedByNothing: "mounted by nothing",
     allocatableNote: "what the scheduler may hand out",
+    nodeResourcesNote:
+      "capacity is the machine, allocatable is what the kubelet offers, requested is what the scheduler has already promised",
+    nodeBudgetQuestion: "Could not read what is reserved on this node.",
+    nodeBudgetFailed: "Requested and limited are unknown: {error}",
+    nodeBudgetRefused: {
+      one: "Requested and limited are unknown: listing pods in {n} namespace was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
+      other:
+        "Requested and limited are unknown: listing pods in {n} namespaces was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
+    },
+    nodeBudgetRule: {
+      one: "requested: max(init, Σ containers) + overhead, over {n} pod holding a place here",
+      other:
+        "requested: max(init, Σ containers) + overhead, over {n} pods holding a place here",
+    },
+    unknownWord: "unknown",
+    noUsageSource: "no usage source",
+    noPodsOnNode: "No pods on this node",
     placementNote: "what the cloud says this node is and where",
     everyPort: "every port",
     portNumber: "port {port}",
