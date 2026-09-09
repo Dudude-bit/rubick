@@ -46,6 +46,15 @@ fn main() {
     tracing::info!(?shell_env, "login shell environment");
 
     tauri::Builder::default()
+        // Registered first: a second launch (a `rubick://` link opened while
+        // the app runs) hands its arguments to this instance and exits, and
+        // the deep-link plugin below turns them into an `open-url` event.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -53,6 +62,18 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            // A packaged build registers `rubick://` through its installer
+            // (Info.plist, the Windows registry, the .desktop file); a dev
+            // build has no installer, so it registers itself on the platforms
+            // that allow it at runtime.
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(error) = app.deep_link().register_all() {
+                    tracing::warn!(%error, "could not register the rubick:// scheme");
+                }
+            }
+
             // Initialize application state
             let state = AppState::new()?;
 
