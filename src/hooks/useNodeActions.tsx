@@ -2,8 +2,10 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useAsk } from "@/hooks/useAsk";
+import { useCritical } from "@/hooks/useCritical";
 import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -78,6 +80,15 @@ export function useNodeActions(): NodeActions {
   });
 
   const [open, setOpen] = useState<string | null>(null);
+  // Cordon and uncordon fire straight from a list row. On a critical cluster
+  // they are still a change to that cluster, so they route through the
+  // typed-name gate the ConfirmDialog carries; elsewhere they stay one-click.
+  const critical = useCritical();
+  const criticalActive = critical.critical && !!critical.context;
+  const [pendingSchedulable, setPendingSchedulable] = useState<{
+    action: "cordon" | "uncordon";
+    node: string;
+  } | null>(null);
 
   // A drain is not a mutation: it outlives its own command call and reports
   // as it goes. The hook owns that; this one only owns which node is open.
@@ -109,6 +120,33 @@ export function useNodeActions(): NodeActions {
   const dialogs = (
     <>
       {asking.dialog}
+      <ConfirmDialog
+        open={pendingSchedulable !== null}
+        onOpenChange={(next) => !next && setPendingSchedulable(null)}
+        title={
+          pendingSchedulable
+            ? t(
+                "action",
+                pendingSchedulable.action === "cordon"
+                  ? "cordonNamed"
+                  : "uncordonNamed",
+                { name: pendingSchedulable.node }
+              )
+            : ""
+        }
+        confirmLabel={t(
+          "action",
+          pendingSchedulable?.action === "uncordon" ? "uncordon" : "cordon"
+        )}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          if (!pendingSchedulable) return;
+          const { action, node } = pendingSchedulable;
+          setPendingSchedulable(null);
+          if (action === "cordon") cordonMutation.mutate(node);
+          else uncordonMutation.mutate(node);
+        }}
+      />
       <DrainDialog
         node={open}
         state={drain.state}
@@ -134,8 +172,14 @@ export function useNodeActions(): NodeActions {
   );
 
   return {
-    cordon: (node) => cordonMutation.mutate(node),
-    uncordon: (node) => uncordonMutation.mutate(node),
+    cordon: (node) =>
+      criticalActive
+        ? setPendingSchedulable({ action: "cordon", node })
+        : cordonMutation.mutate(node),
+    uncordon: (node) =>
+      criticalActive
+        ? setPendingSchedulable({ action: "uncordon", node })
+        : uncordonMutation.mutate(node),
     // Reopening the node a drain is running on shows that drain. Any other
     // node starts clean, so one node's report never appears over another's.
     drain: (node) => {

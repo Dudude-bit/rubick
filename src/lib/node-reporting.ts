@@ -78,6 +78,8 @@ export function silenceOf(
   return silent.get(nodeName) ?? null;
 }
 
+const silenceRows = new WeakMap<object, WithNodeSilence<object>>();
+
 /**
  * Attach each row's silence, if any.
  *
@@ -91,7 +93,18 @@ export function withNodeSilence<T extends { nodeName?: string | null }>(
   if (silent.size === 0) return rows;
   return rows.map((row) => {
     const silence = silenceOf(row.nodeName, silent);
-    return silence ? { ...row, nodeSilence: silence } : row;
+    if (!silence) return row;
+    const cached = silenceRows.get(row);
+    if (
+      cached?.nodeSilence?.node === silence.node &&
+      cached.nodeSilence.since === silence.since &&
+      cached.nodeSilence.reason === silence.reason
+    ) {
+      return cached as WithNodeSilence<T>;
+    }
+    const annotated = { ...row, nodeSilence: silence };
+    silenceRows.set(row, annotated);
+    return annotated;
   });
 }
 

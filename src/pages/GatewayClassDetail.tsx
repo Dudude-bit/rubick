@@ -49,7 +49,12 @@ function GatewayRows({ className }: { className: string }) {
 
   return (
     <Section>
-      <SectionHeader title={t("nav", "gatewaysUsingIt")} count={users.length} />
+      {/* No count while the gateways read is refused or still loading — a `0`
+          beside the body's "could not read" would contradict it. */}
+      <SectionHeader
+        title={t("nav", "gatewaysUsingIt")}
+        count={gateways ? users.length : undefined}
+      />
       {error && gateways === undefined ? (
         <p className="text-xs text-err">
           {t("empty", "couldNotReadGateways", {
