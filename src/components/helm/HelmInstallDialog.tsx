@@ -19,7 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { HelmChartSearchResult } from "@/generated/types";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { useEffect } from "react";
 
 export interface HelmInstallDialogProps {
   /** Chart to install */
@@ -72,6 +74,13 @@ export function HelmInstallDialog({
   isInstalling,
 }: HelmInstallDialogProps) {
   const t = useT();
+  // Installing a chart creates a whole release on the cluster, so on a critical
+  // one it takes the typed-name gate — as uninstall and rollback already do.
+  const gate = useCriticalGate();
+  const gateReset = gate.reset;
+  useEffect(() => {
+    if (chart === null) gateReset();
+  }, [chart, gateReset]);
   return (
     <Dialog open={chart !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
@@ -80,6 +89,7 @@ export function HelmInstallDialog({
           <DialogDescription>
             {t("action", "installChartHint", { name: chart?.name ?? "" })}
           </DialogDescription>
+          {gate.notice}
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -157,6 +167,7 @@ export function HelmInstallDialog({
               </Label>
             </div>
           </div>
+          {gate.input}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
@@ -164,7 +175,9 @@ export function HelmInstallDialog({
           </Button>
           <Button
             onClick={onInstall}
-            disabled={!releaseName || !namespace || isInstalling}
+            disabled={
+              !releaseName || !namespace || isInstalling || gate.blocked
+            }
           >
             {isInstalling ? t("action", "installing") : t("action", "install")}
           </Button>

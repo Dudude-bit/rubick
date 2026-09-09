@@ -20,6 +20,8 @@ export interface ResourceMetrics {
   memoryBytes: number | null;
 }
 
+const podRows = new WeakMap<PodInfo, PodWithMetrics>();
+
 export function mergePodsWithMetrics(
   pods: PodInfo[],
   metrics: PodMetrics[]
@@ -31,11 +33,23 @@ export function mergePodsWithMetrics(
 
   return pods.map((pod) => {
     const metric = metricsByKey.get(`${pod.namespace}/${pod.name}`);
-    return {
+    const cpuMillicores = metric?.cpuMillicores ?? null;
+    const memoryBytes = metric?.memoryBytes ?? null;
+    const cached = podRows.get(pod);
+    if (
+      cached &&
+      cached.cpuMillicores === cpuMillicores &&
+      cached.memoryBytes === memoryBytes
+    ) {
+      return cached;
+    }
+    const row = {
       ...pod,
-      cpuMillicores: metric?.cpuMillicores ?? null,
-      memoryBytes: metric?.memoryBytes ?? null,
+      cpuMillicores,
+      memoryBytes,
     };
+    podRows.set(pod, row);
+    return row;
   });
 }
 

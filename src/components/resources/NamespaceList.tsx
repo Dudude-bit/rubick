@@ -25,7 +25,9 @@ import { useT } from "@/i18n/useT";
 // eslint-disable-next-line react-refresh/only-export-components
 export const columns = (
   currentNamespace: string,
-  podCounts: Map<string, number>
+  // `null`/absent = the cluster-wide overview did not answer, so the count is
+  // unknown and drawn "—" — never silently 0.
+  podCounts: Map<string, number | null>
 ): ColumnDef<NamespaceInfo>[] => [
   {
     // Four columns share this table, so the name takes the room the others
@@ -58,11 +60,14 @@ export const columns = (
     size: 80,
     id: "pods",
     header: () => <T section="columns" k="pods" />,
-    cell: ({ row }) => (
-      <span className="font-mono text-fg-mut">
-        {podCounts.get(row.original.name) ?? 0}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const count = podCounts.get(row.original.name);
+      return (
+        <span className="font-mono text-fg-mut">
+          {count == null ? "—" : count}
+        </span>
+      );
+    },
   },
   createAgeColumn<NamespaceInfo>(),
 ];

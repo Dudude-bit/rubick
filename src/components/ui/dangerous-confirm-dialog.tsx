@@ -9,9 +9,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { CriticalNotice } from "@/components/ui/critical-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buttonVariants } from "@/components/ui/button";
+import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 
 interface DangerousConfirmDialogProps {
@@ -43,8 +45,14 @@ export function DangerousConfirmDialog({
 }: DangerousConfirmDialogProps) {
   const t = useT();
   const [inputValue, setInputValue] = useState("");
+  // On critical infrastructure the word to type is the cluster's, not the
+  // object's: the mistake this guards against is the cluster, and typing a
+  // pod's name proves nothing about which cluster the pod is on.
+  const critical = useCritical();
+  const expected =
+    critical.critical && critical.context ? critical.context : confirmationText;
 
-  const isConfirmEnabled = inputValue === confirmationText && !isLoading;
+  const isConfirmEnabled = inputValue === expected && !isLoading;
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -61,11 +69,12 @@ export function DangerousConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
-        aria-describedby={description ? undefined : undefined}
-      >
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
+          {critical.critical && critical.context && (
+            <CriticalNotice context={critical.context} />
+          )}
           <AlertDialogDescription className={description ? "" : "sr-only"}>
             {description || t("action", "confirmByTyping")}
           </AlertDialogDescription>
@@ -75,7 +84,7 @@ export function DangerousConfirmDialog({
           <Label htmlFor="confirmation-input" className="text-sm">
             {t("action", "typeWord")}{" "}
             <code className="rounded bg-err/16 px-1.5 py-0.5 font-mono text-xs text-err">
-              {confirmationText}
+              {expected}
             </code>{" "}
             {t("action", "toConfirm")}
           </Label>
@@ -83,7 +92,7 @@ export function DangerousConfirmDialog({
             id="confirmation-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={confirmationPlaceholder ?? confirmationText}
+            placeholder={confirmationPlaceholder ?? expected}
             autoComplete="off"
             autoFocus
           />
