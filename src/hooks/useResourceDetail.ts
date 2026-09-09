@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   useMutation,
   useQueryClient,
@@ -113,7 +113,12 @@ export function useResourceDetail<T>(
   const copyToClipboard = useCopyToClipboard();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  // A link may name the tab it was copied from; the page's own default is
+  // for arrivals that did not say.
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get("tab") ?? defaultTab
+  );
 
   // Fetch resource data
   const {

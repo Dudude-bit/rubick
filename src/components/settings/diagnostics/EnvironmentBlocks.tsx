@@ -42,6 +42,7 @@ export function EnvironmentBlocks({
     contexts,
     kubeconfig,
     app,
+    connections,
   } = diagnostics;
   const t = useT();
 
@@ -183,6 +184,57 @@ export function EnvironmentBlocks({
           <p className="text-xs text-fg-mut">
             {t("settings", "noKubeconfigLoaded")}
           </p>
+        )}
+      </Block>
+
+      <Block
+        title={t("settings", "connectionsBlock", { n: connections.length })}
+      >
+        {connections.length === 0 ? (
+          <p className="text-xs text-fg-mut">
+            {t("settings", "noConnectionsYet")}
+          </p>
+        ) : (
+          <ul className="space-y-2 text-xs text-fg-mut">
+            {connections.map((attempt) => (
+              <li key={attempt.context}>
+                <span className="font-mono text-fg">{attempt.context}</span>
+                <span className="ml-2 text-fg-fnt">{attempt.at}</span>
+                <div className="mt-0.5">
+                  {t("settings", "pathDirect")}:{" "}
+                  {attempt.direct.state === "ok" ? (
+                    t("settings", "pathOk")
+                  ) : (
+                    <Missing label={attempt.direct.error} />
+                  )}
+                </div>
+                <div>
+                  {t("settings", "pathProxy")}:{" "}
+                  {attempt.proxy.state === "ok" ? (
+                    <span className="font-mono">
+                      {t("settings", "pathProxyOk", {
+                        port: attempt.proxy.port,
+                        kubectl: attempt.proxy.kubectl,
+                      })}
+                    </span>
+                  ) : attempt.proxy.state === "notTried" ? (
+                    t("settings", "pathNotTried")
+                  ) : attempt.proxy.state === "noKubectl" ? (
+                    <Missing label={t("settings", "pathNoKubectl")} />
+                  ) : (
+                    <>
+                      <Missing label={attempt.proxy.error} />
+                      {attempt.proxy.stderr && (
+                        <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px] text-fg-fnt">
+                          {attempt.proxy.stderr}
+                        </pre>
+                      )}
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Block>
 
