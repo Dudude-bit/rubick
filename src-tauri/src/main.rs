@@ -88,6 +88,7 @@ fn main() {
             // silently broke the frontend modal (v2.1.0 bug).
             let mut event_rx = state.subscribe();
             let app_handle = app.handle().clone();
+            let perf = state.perf.clone();
 
             // Lagging is survivable; this loop treating it as the end was not.
             //
@@ -125,6 +126,17 @@ fn main() {
                     let event_name = event.channel();
                     let payload = event.payload();
 
+                    if perf.is_recording() {
+                        let bytes = serde_json::to_vec(&payload).map_or(0, |v| v.len());
+                        let changes = match &event {
+                            k8s_gui_lib::state::AppEvent::ResourceWatchEvent {
+                                changes, ..
+                            } => changes.len(),
+                            _ => 0,
+                        };
+                        perf.observe(bytes, changes);
+                    }
+
                     if let Err(e) = app_handle.emit(event_name, payload) {
                         tracing::error!("Failed to emit event {}: {}", event_name, e);
                     }
@@ -150,6 +162,8 @@ fn main() {
             commands::access::check_namespace_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
+            commands::perf::perf_set_recording,
+            commands::perf::perf_counters,
             // Namespace management
             commands::namespace::list_namespaces,
             commands::namespace::get_namespace,

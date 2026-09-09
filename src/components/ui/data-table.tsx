@@ -1,4 +1,5 @@
 import * as React from "react";
+import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
 import { useNavigate } from "react-router-dom";
 import {
@@ -228,7 +229,15 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
   }
 }
 
-export function DataTable<TData extends RowData>({
+export function DataTable<TData extends RowData>(props: DataTableProps<TData>) {
+  return (
+    <PerfProfiler id="data-table">
+      <DataTableInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function DataTableInner<TData extends RowData>({
   columns,
   data,
   isLoading = false,
