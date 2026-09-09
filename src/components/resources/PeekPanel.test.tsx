@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -83,6 +89,8 @@ status:
 import { commands } from "@/lib/commands";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import {
   PEEK_WIDTH_DEFAULT,
   useDisplaySettingsStore,
@@ -1395,5 +1403,54 @@ describe("PeekPanel traffic chain", () => {
     wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(screen.queryByText("Traffic path")).toBeNull();
+  });
+});
+
+describe("restarting a managed workload from the peek on critical infrastructure", () => {
+  const PROD = "prod-eu-1";
+
+  beforeEach(() => {
+    mockCluster();
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: PROD, isConnected: true });
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+  });
+
+  afterEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * A managed restart is reversible and fires on one click everywhere else,
+   * which is exactly why it was the last change on the marked cluster that
+   * still had no gate. Here it takes the cluster's name like the rest.
+   */
+  it("holds the restart until the cluster's name is typed", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Restart/ }));
+
+    // Not fired on the click: the peek's one-click restart is what the gate closes.
+    expect(commands.restartPod).not.toHaveBeenCalled();
+
+    const confirm = await screen.findByRole("alertdialog");
+    expect(within(confirm).getByRole("alert")).toHaveTextContent(PROD);
+    const button = within(confirm).getByRole("button", { name: /^Restart$/ });
+    expect(button).toBeDisabled();
+
+    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    expect(button).toBeEnabled();
+
+    await userEvent.click(button);
+    await waitFor(() =>
+      expect(commands.restartPod).toHaveBeenCalledWith(
+        "log-demo-1",
+        "k8s-gui-test"
+      )
+    );
   });
 });

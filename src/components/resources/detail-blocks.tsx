@@ -431,7 +431,9 @@ export function Composition({
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
         {total == null ? (
-          <span className="text-fg-fnt">not readable with this access</span>
+          <span className="text-fg-fnt">
+            <T section="empty" k="notReadableWithAccess" />
+          </span>
         ) : visible.length === 0 ? (
           <span className="text-fg-fnt">
             {emptyMessage ?? <T section="empty" k="nothingScheduled" />}

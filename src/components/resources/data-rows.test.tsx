@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DataSection } from "./data-rows";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { useClusterStore } from "@/stores/clusterStore";
 
 const writeText = vi.fn().mockResolvedValue(undefined);
 Object.defineProperty(navigator, "clipboard", {
@@ -236,5 +238,49 @@ describe("editing one key", () => {
       />
     );
     expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+});
+
+describe("editing a key on critical infrastructure", () => {
+  const PROD = "prod-eu-1";
+
+  beforeEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: PROD, isConnected: true });
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+  });
+
+  afterEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * Editing a key writes live config the cluster's workloads read; on the
+   * marked cluster the Save waits on the cluster's own name, the same gate the
+   * destructive dialogs use.
+   */
+  it("holds Save until the cluster's name is typed", async () => {
+    const onEditKey = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DataSection data={{ "log.level": "debug" }} onEditKey={onEditKey} />
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Value of log.level" })
+    );
+    const box = screen.getByRole("textbox", { name: "Value of log.level" });
+    await userEvent.clear(box);
+    await userEvent.type(box, "info");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(screen.getByRole("alert")).toHaveTextContent(PROD);
+    expect(save).toBeDisabled();
+
+    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    expect(save).toBeEnabled();
+
+    await userEvent.click(save);
+    expect(onEditKey).toHaveBeenCalledWith("log.level", "info");
   });
 });

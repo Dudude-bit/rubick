@@ -1,7 +1,12 @@
 import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
+import { Checkbox } from "@/components/ui/checkbox";
 import { clusterColor, clusterNameParts } from "@/lib/cluster-identity";
+import { criticalityOf } from "@/lib/critical";
 import { cn } from "@/lib/utils";
-import { useClusterMark } from "@/stores/clusterIdentityStore";
+import {
+  useClusterIdentityStore,
+  useClusterMark,
+} from "@/stores/clusterIdentityStore";
 import { useSettingSearchMatch } from "../settings-search";
 import { VENDOR_LABEL, binaryLabel, readContext } from "./context-reading";
 import { useT } from "@/i18n/useT";
@@ -52,6 +57,8 @@ export function ContextRow({
   const reading = readContext(context, { binaries, binding, connected }, t);
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
+  const setCritical = useClusterIdentityStore((s) => s.setCritical);
+  const criticality = criticalityOf(context.name, mark);
   const colour = clusterColor(context.name, mark.hue);
   const { prefix, label } = clusterNameParts(context.name);
 
@@ -147,6 +154,29 @@ export function ContextRow({
             </button>
           </div>
         )}
+        <label className="mt-1.5 flex cursor-pointer items-start gap-2 text-[11px]">
+          <Checkbox
+            checked={criticality.critical}
+            onCheckedChange={(checked) =>
+              // Unticking clears the mark back to undecided rather than storing
+              // an explicit `false` — that residue would suppress the guessed
+              // hint on a prod-looking name the reader never meant to overrule.
+              setCritical(context.name, checked === true ? true : null)
+            }
+            className="mt-px"
+          />
+          <span className="min-w-0">
+            <span className={criticality.critical ? "text-err" : "text-fg-mut"}>
+              {t("settings", "criticalLabel")}
+            </span>
+            {criticality.guessed && (
+              <span className="ml-1.5 text-warn">
+                {t("settings", "criticalGuessed")}
+              </span>
+            )}
+          </span>
+        </label>
+
         {unbound === "aws" && (
           <div className="mt-1 text-[11px] text-fg-fnt">
             {t("settings", "awsNoProfilesPrefix")}{" "}

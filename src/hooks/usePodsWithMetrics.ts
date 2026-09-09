@@ -19,6 +19,8 @@ import type { PodInfo } from "@/generated/types";
 
 export type { PodWithMetrics } from "@/lib/metrics";
 
+const EMPTY_PODS: PodInfo[] = [];
+
 interface UsePodsWithMetricsOptions {
   /** Whether the query should be enabled (default: true when connected) */
   enabled?: boolean;
@@ -67,7 +69,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   );
 
   const {
-    data: pods = [],
+    data: pods = EMPTY_PODS,
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
@@ -117,10 +119,14 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   // moment that has passed, and nothing in the pod object says so.
   const silent = useSilentNodes(enabled);
 
-  // Merge pods with their metrics - memoized for performance
-  const podsWithMetrics = useMemo<WithNodeSilence<PodWithMetrics>[]>(() => {
-    return withNodeSilence(mergePodsWithMetrics(pods, podMetrics), silent);
-  }, [pods, podMetrics, silent]);
+  const mergedPods = useMemo(
+    () => mergePodsWithMetrics(pods, podMetrics),
+    [pods, podMetrics]
+  );
+  const podsWithMetrics = useMemo<WithNodeSilence<PodWithMetrics>[]>(
+    () => withNodeSilence(mergedPods, silent),
+    [mergedPods, silent]
+  );
 
   return {
     data: podsWithMetrics,
