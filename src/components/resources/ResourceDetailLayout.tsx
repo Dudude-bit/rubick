@@ -73,7 +73,9 @@ export function DetailError({
         </p>
       ) : (
         <Unknown
-          question={t("empty", "kindCouldNotRead", { kind })}
+          // The heading already says "could not read this kind"; the box asks
+          // the question the read was, so the same sentence is not stacked twice.
+          question={t("empty", "whatIsThisKind", { kind })}
           error={error ?? t("empty", "clusterDidNotAnswer")}
         />
       )}

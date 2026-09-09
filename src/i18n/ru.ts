@@ -2854,6 +2854,7 @@ export const ru: Catalogue = {
     kindMayBeGone:
       "Объект ({kind}) мог быть удалён или пересоздан под новым именем.",
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
+    whatIsThisKind: "Что это за объект ({kind})?",
     kindNotFound: "{kind} не найден",
     pvcListDescription: "Запросы на хранилище от подов в {scope}",
     expandRepeats: "Развернуть повторы: {count}",

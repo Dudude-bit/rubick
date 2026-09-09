@@ -2674,6 +2674,7 @@ export const en = {
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",
+    whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
     pvcListDescription: "Requests for storage by pods in {scope}",
     expandRepeats: "Expand {count} repeats",
