@@ -68,6 +68,29 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
     // finding says it is *about* the shell; the report itself lives once, on
     // `Diagnostics`, and is scrubbed above. A second copy on the wire was a
     // second thing to remember to scrub, and it was not remembered.
+    // What kubectl printed names the context, the home directory and
+    // sometimes the issuer; the same scrub the rest of the report gets.
+    for attempt in &mut d.connections {
+        attempt.context = scrub(&attempt.context);
+        if let crate::client::PathOutcome::Failed { error } = &mut attempt.direct {
+            *error = scrub(error);
+        }
+        match &mut attempt.proxy {
+            crate::client::ProxyOutcome::Failed {
+                error,
+                stdout,
+                stderr,
+                kubectl,
+            } => {
+                *error = scrub(error);
+                *stdout = scrub(stdout);
+                *stderr = scrub(stderr);
+                *kubectl = scrub(kubectl);
+            }
+            crate::client::ProxyOutcome::Ok { kubectl, .. } => *kubectl = scrub(kubectl),
+            crate::client::ProxyOutcome::NotTried | crate::client::ProxyOutcome::NoKubectl => {}
+        }
+    }
     for finding in &mut d.findings {
         finding.title = scrub(&finding.title);
         finding.detail = scrub(&finding.detail);
@@ -131,7 +154,36 @@ mod tests {
                 subject: Some("orders-stage".into()),
                 about_shell: false,
             }],
+            connections: vec![crate::client::ConnectAttempt {
+                context: "orders-prod".into(),
+                at: "2026-09-07T07:00:00Z".into(),
+                direct: crate::client::PathOutcome::Failed {
+                    error: "orders-prod: Unauthorized".into(),
+                },
+                proxy: crate::client::ProxyOutcome::Failed {
+                    error: "kubectl proxy exited".into(),
+                    stdout: String::new(),
+                    stderr: "error: /Users/someone/.kube/config: orders-prod refused".into(),
+                    kubectl: "/Users/someone/bin/kubectl".into(),
+                },
+            }],
         }
+    }
+
+    /// kubectl's stderr is the one field in the report the app never wrote,
+    /// and it names the home directory and the context as freely as any.
+    #[test]
+    fn what_kubectl_said_is_scrubbed_like_the_rest() {
+        let Some(home) = dirs::home_dir() else { return };
+        let home = home.to_string_lossy().into_owned();
+        let mut d = sample();
+        if let crate::client::ProxyOutcome::Failed { stderr, .. } = &mut d.connections[0].proxy {
+            *stderr = format!("error: {home}/.kube/config: orders-prod refused");
+        }
+        let scrubbed = redacted(d);
+        let text = serde_json::to_string(&scrubbed.connections).expect("serialises");
+        assert!(!text.contains("orders-prod"), "{text}");
+        assert!(!text.contains(&home), "{text}");
     }
 
     #[test]

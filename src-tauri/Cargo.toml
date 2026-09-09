@@ -95,6 +95,9 @@ portable-pty = "0.9"
 # Replacing a kubeconfig means writing beside it and renaming over the
 # original, so a crash mid-write cannot leave somebody without one.
 tempfile = "3"
+http = "1"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 
 # kill(2) on a process group: the login-shell probe in `shell::env` has to

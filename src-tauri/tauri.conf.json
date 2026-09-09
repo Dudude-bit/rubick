@@ -72,6 +72,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["rubick"]
+      }
+    },
     "shell": {
       "open": true
     },

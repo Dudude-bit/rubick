@@ -12,6 +12,9 @@ import { YamlEditorDialog } from "@/components/yaml";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "@/hooks/useScopeTabs";
+import { useDeepLinks } from "@/hooks/useDeepLinks";
+import { useCopyLink } from "@/hooks/useCopyLink";
+import { DeepLinkBanner } from "./DeepLinkBanner";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
 import { useCritical } from "@/hooks/useCritical";
@@ -28,6 +31,8 @@ export function Layout() {
   const expired = useExpiredCredentials();
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   useScopeTabs();
+  useDeepLinks();
+  useCopyLink();
   // Opens the tunnels this cluster asked to have up. Only the ones marked
   // for it — everything else waits to be pressed in the rail.
   useClusterForwards();
@@ -88,7 +93,10 @@ export function Layout() {
                 ) : catchingUp ? (
                   <PageSkeleton className="p-0" />
                 ) : (
-                  <Outlet />
+                  <>
+                    <DeepLinkBanner />
+                    <Outlet />
+                  </>
                 )}
               </Suspense>
             </div>
