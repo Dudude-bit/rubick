@@ -1295,6 +1295,7 @@ export interface ClusterOverview {
   problemsTruncated: number;
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
+  nodesKnown: boolean;
   warnings: WarningGroup[];
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;

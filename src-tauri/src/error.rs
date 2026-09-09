@@ -22,10 +22,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Error, Debug)]
 pub enum Error {
     /// Kubernetes API errors
-    #[error("Kubernetes API error: {0}")]
+    #[error("Kubernetes API error: {}", .0.display_clean())]
     // `#[source]` is explicit because the `#[from]` that used to imply it is
     // gone: the conversion now branches on the status code, and the search
     // fan-out walks this chain to find the sentence a reader can act on.
+    // `display_clean` rather than the plain `Display`: kube 4 appends the whole
+    // `Status` struct's `Debug` to an API error, and that dump reaches the
+    // reader — see `KubeErrorExt` below.
     KubeApi(#[source] kube::Error),
 
     /// The cluster no longer accepts the credentials this session holds.
@@ -181,6 +184,30 @@ impl From<kube::Error> for Error {
     }
 }
 
+/// The one sentence in a kube error a reader can act on.
+///
+/// kube 4 made `Error::Api` carry a boxed `Status`, and its `Display` now ends
+/// with that struct's `Debug` — `pods is forbidden: … Forbidden (Status {
+/// status: Some(Failure), metadata: Some(ListMeta { … }), details: … })`. The
+/// tail is a wall of `None`s no reader wants, and it crosses the IPC boundary
+/// onto the screen. Rebuild the message from the status; leave every other
+/// kube error exactly as it displays.
+trait KubeErrorExt {
+    fn display_clean(&self) -> String;
+}
+
+impl KubeErrorExt for kube::Error {
+    fn display_clean(&self) -> String {
+        match self {
+            kube::Error::Api(status) if !status.reason.is_empty() => {
+                format!("ApiError: {}: {}", status.message, status.reason)
+            }
+            kube::Error::Api(status) => format!("ApiError: {}", status.message),
+            other => other.to_string(),
+        }
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Error::Serialization(err.to_string())
@@ -282,6 +309,29 @@ mod tests {
             metadata: None,
             details: None,
         }))
+    }
+
+    /// kube 4 ends an API error's `Display` with the whole `Status` struct's
+    /// `Debug`, and that string is what crosses to the screen. The reader gets
+    /// the sentence and the reason; the struct dump — `Status { … }`,
+    /// `ListMeta { … }` — is gone.
+    #[test]
+    fn a_kube_api_error_is_shown_without_the_status_struct_dump() {
+        let err: Error = api_error(403, "Forbidden").into();
+        let shown = err.to_string();
+        assert!(
+            shown.contains("the server has asked for the client to provide credentials"),
+            "the message a reader acts on is lost: {shown}"
+        );
+        assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
+        assert!(
+            !shown.contains("Status {"),
+            "the Status struct dump leaked onto the screen: {shown}"
+        );
+        assert!(
+            !shown.contains("ListMeta"),
+            "the metadata dump leaked onto the screen: {shown}"
+        );
     }
 
     /// Would send the reader back to a screen that says the cluster is empty.

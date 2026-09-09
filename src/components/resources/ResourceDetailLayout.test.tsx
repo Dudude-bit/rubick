@@ -9,7 +9,7 @@ import { Info } from "lucide-react";
 import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
-import { ResourceDetailLayout } from "./ResourceDetailLayout";
+import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
 
 /**
  * A client, because the frame now asks a capability where this object came
@@ -738,5 +738,31 @@ describe("the breadcrumb's namespace segment", () => {
     );
     expect(screen.getByText("k8s-gui-test")).toBeInTheDocument();
     expect(screen.queryByTitle(/k8s-gui-test/)).toBeNull();
+  });
+});
+
+describe("DetailError does not stack the same sentence twice", () => {
+  /**
+   * The red heading already says "could not read this kind"; #128 wired an
+   * Unknown box below it. Passing the heading's own key as the box's question
+   * printed the sentence twice. The box asks the question the read was instead.
+   */
+  it("says 'could not read' once, and asks a distinct question", () => {
+    wrap(
+      <DetailError
+        error={
+          new Error(
+            'deployments.apps "api" is forbidden: User "system:serviceaccount:team:x" cannot get resource "deployments" in API group "apps" in the namespace "team"'
+          )
+        }
+        resourceKind="Deployment"
+        onBack={() => {}}
+      />
+    );
+
+    expect(screen.getAllByText(/could not read this deployment/i)).toHaveLength(
+      1
+    );
+    expect(screen.getByText(/what is this deployment/i)).toBeInTheDocument();
   });
 });
