@@ -91,6 +91,129 @@ describe("useResourceWatch", () => {
     vi.clearAllMocks();
   });
 
+  async function start(client: QueryClient) {
+    const hook = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    return hook;
+  }
+
+  /** Rebuilding the index rescans 10,000 keys; cloning rows invalidates untouched row memos. */
+  it("updates one of 10,000 rows without rereading untouched keys or replacing their objects", async () => {
+    let keyReads = 0;
+    const rows = Array.from({ length: 10_000 }, (_, index) => ({
+      get name() {
+        keyReads++;
+        return `pod-${index}`;
+      },
+      namespace: "default",
+      data: 0,
+    }));
+    const client = new QueryClient();
+    client.setQueryData(KEY, rows);
+    await start(client);
+    emit("stream-cm-1", "applied", {
+      name: "pod-9999",
+      namespace: "default",
+      data: 1,
+    });
+
+    for (const data of [1, 2]) {
+      const before = client.getQueryData<Item[]>(KEY)!;
+      keyReads = 0;
+      emit("stream-cm-1", "applied", {
+        name: "pod-1234",
+        namespace: "default",
+        data,
+      });
+      const after = client.getQueryData<Item[]>(KEY)!;
+      expect(after).not.toBe(before);
+      expect(after).toHaveLength(10_000);
+      expect(after[1234]).not.toBe(before[1234]);
+      expect(after[1234].data).toBe(data);
+      expect(before[1234].data).toBe(data - 1);
+      for (let index = 0; index < before.length; index++) {
+        if (index !== 1234) expect(after[index]).toBe(before[index]);
+      }
+      expect(keyReads).toBeLessThan(10);
+    }
+  });
+
+  /** Publishing staged rows early would expose an incomplete collection to cache readers. */
+  it("replaces the complete collection in one atomic resync write", async () => {
+    const client = new QueryClient();
+    const before = [{ name: "old", data: 1 }];
+    client.setQueryData(KEY, before);
+    await start(client);
+    const writes: Item[][] = [];
+    const off = client.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "success") {
+        writes.push(client.getQueryData<Item[]>(KEY)!);
+      }
+    });
+
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "first" });
+    emit("stream-cm-1", "applied", { name: "second" });
+    expect(client.getQueryData(KEY)).toBe(before);
+    expect(writes).toEqual([]);
+    emit("stream-cm-1", "synced", null);
+    expect(writes).toEqual([[{ name: "first" }, { name: "second" }]]);
+    emit("stream-cm-1", "applied", { name: "second", data: 2 });
+    expect(client.getQueryData(KEY)).toEqual([
+      { name: "first" },
+      { name: "second", data: 2 },
+    ]);
+    off();
+  });
+
+  /** Stale positions after deletion would update the wrong row or move a replacement to the front. */
+  it("keeps updates in place and appends a deleted row when it is added again", async () => {
+    const client = new QueryClient();
+    client.setQueryData(
+      KEY,
+      ["a", "b", "c"].map((name) => ({ name }))
+    );
+    await start(client);
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", data: 1 } },
+      { op: "deleted", resource: { name: "a" } },
+      { op: "applied", resource: { name: "a", data: 2 } },
+    ]);
+    expect(client.getQueryData(KEY)).toEqual([
+      { name: "b", data: 1 },
+      { name: "c" },
+      { name: "a", data: 2 },
+    ]);
+    emit("stream-cm-1", "deleted", { name: "c" });
+    emit("stream-cm-1", "applied", { name: "c", data: 3 });
+    emit("stream-cm-1", "applied", { name: "b", data: 4 });
+    expect(client.getQueryData(KEY)).toEqual([
+      { name: "b", data: 4 },
+      { name: "a", data: 2 },
+      { name: "c", data: 3 },
+    ]);
+  });
+
+  /** Polling or another observer can replace the array and invalidate every cached position. */
+  it("rebuilds positions after another writer replaces the cached list", async () => {
+    const client = new QueryClient();
+    client.setQueryData(KEY, [{ name: "a" }, { name: "b" }]);
+    await start(client);
+    emit("stream-cm-1", "applied", { name: "a", data: 1 });
+    client.setQueryData(KEY, [{ name: "b" }, { name: "c" }]);
+    emit("stream-cm-1", "applied", { name: "b", data: 2 });
+    emit("stream-cm-1", "deleted", { name: "c" });
+    expect(client.getQueryData(KEY)).toEqual([{ name: "b", data: 2 }]);
+  });
+
   it("registers resource-event listener before calling resourceWatchSubscribed", async () => {
     const client = new QueryClient();
     renderHook(

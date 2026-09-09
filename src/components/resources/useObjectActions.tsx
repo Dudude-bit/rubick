@@ -25,10 +25,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DebugNodeDialog, DebugPodDialog } from "@/components/debug";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useCritical } from "@/hooks/useCritical";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { commands } from "@/lib/commands";
 import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
@@ -112,6 +114,8 @@ export function useObjectActions({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: clusterInfo } = useClusterInfo();
+  const critical = useCritical();
+  const criticalActive = critical.critical && !!critical.context;
 
   const kind = toKind(rawKind) ?? rawKind;
   const pod = kind === "Pod" ? (detail as PodInfo | undefined) : undefined;
@@ -139,9 +143,9 @@ export function useObjectActions({
   const [dialog, setDialog] = useState<
     "debug" | "portForward" | "scale" | null
   >(null);
-  const [confirming, setConfirming] = useState<"delete" | "restart" | null>(
-    null
-  );
+  const [confirming, setConfirming] = useState<
+    "delete" | "restart" | "managedRestart" | null
+  >(null);
 
   // Asked for only once the dialog is open — a neighbourhood read on every row
   // somebody arrows past would be six lists per keystroke, and the query key
@@ -273,8 +277,13 @@ export function useObjectActions({
       case "restart":
         // A bare pod has no controller to put it back, so its "restart" is a
         // one-way door and gets the same gate as a delete.
-        return kind === "Pod" && !pod?.ownerReferences?.length
-          ? setConfirming("restart")
+        if (kind === "Pod" && !pod?.ownerReferences?.length)
+          return setConfirming("restart");
+        // A managed restart is reversible and normally fires straight through,
+        // but on a critical cluster it is still a change, so it takes the gate
+        // — the peek's one-click restart was the last way past it.
+        return criticalActive
+          ? setConfirming("managedRestart")
           : restart.mutate();
       case "delete":
         return setConfirming("delete");
@@ -363,6 +372,23 @@ export function useObjectActions({
         confirmationText={name}
         confirmLabel={t("action", "restart")}
         isLoading={restart.isPending}
+        onConfirm={() => restart.mutate()}
+      />
+
+      {/* A reversible restart has no object-name gate of its own, so this only
+          ever opens on a critical cluster, where the ConfirmDialog grows the
+          typed-name gate itself. Warned like the others where a controller
+          would also undo it. */}
+      <ConfirmDialog
+        open={confirming === "managedRestart"}
+        onOpenChange={(open) => setConfirming(open ? "managedRestart" : null)}
+        title={t("action", "restartSubjectTitle", {
+          subject: `${kind.toLowerCase()} ${namespace ? `${namespace}/${name}` : name}`,
+        })}
+        description={warned("", intercept("Restart")).trim() || undefined}
+        confirmLabel={t("action", "restart")}
+        confirmVariant="destructive"
+        confirmDisabled={restart.isPending}
         onConfirm={() => restart.mutate()}
       />
     </>

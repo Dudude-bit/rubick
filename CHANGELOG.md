@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.10.0] - 2026-09-09
+
+### Added — a window can watch several namespaces at once
+
+The namespace selector takes more than one namespace now, and the whole window
+follows the set: the lists, the counts in the rail, the overview and the
+events feed all narrow to exactly the namespaces picked. Two things teach the
+picker who is reading it — the namespaces a token may not list are set aside behind a
+"show them" reveal rather than offered and then refused, and the ones already
+picked float to the top so they are the easy ones to switch off.
+
+Reported in [#137](https://github.com/Dudude-bit/rubick/issues/137).
+
+### Fixed — "I can't see that" no longer reads as "there is nothing there"
+
+A token scoped to a few namespaces is refused the cluster-wide reads much of
+the app was making, and a refusal was coming back as an empty list, a `0`, or
+a raw error where the answer should have been "you do not have access". That
+was the same mistake in a dozen places, and it is corrected in all of them:
+
+- A selection of several namespaces is read one namespace at a time and the
+  answers joined, instead of one cluster-wide list narrowed afterward — so a
+  user who can list pods in their own namespaces, but not across the cluster,
+  sees them. A namespace that refuses one kind no longer erases the rows of the
+  ones that answered. This covers the resource lists, pods, ingresses, PVCs,
+  custom resources, Helm releases and the Gateway API routes.
+- The cluster overview, refused the cluster-wide read it opens with, now says
+  so and points at the fix — pick the namespaces you can see — and a scoped
+  overview genuinely loads: the workloads you can read are shown, with the node
+  and scheduler panels marked "no access" rather than drawn as an empty
+  cluster with no capacity.
+- The status bar, the namespace picker and the Namespaces page draw "—" for a
+  count they could not read, never "0"; the Helm tab, the routes list, the
+  Gateway and GatewayClass detail pages do the same. The integrations a token
+  cannot reach (Flux, Istio, cert-manager, Argo CD, Traefik) are shown locked
+  rather than loaded into an error.
+
+Reported in [#138](https://github.com/Dudude-bit/rubick/issues/138), from
+[#141](https://github.com/Dudude-bit/rubick/pull/141),
+[#142](https://github.com/Dudude-bit/rubick/pull/142) and
+[#144](https://github.com/Dudude-bit/rubick/pull/144).
+
+### Fixed — the tab close button no longer drops the cluster
+
+Closing the last tab while a resource was open reset the whole session —
+cluster, namespace and all. It now steps back to the overview, keeping the
+connection and the namespaces in view; only closing a tab already on the
+overview disconnects.
+
+Reported in [#137](https://github.com/Dudude-bit/rubick/issues/137).
+
+### Changed — kube 4
+
+The Kubernetes client moves to kube 4 with k8s-openapi 0.28, pinned to the
+v1_32 API surface so older clusters keep working. A PodDisruptionBudget that
+blocks an eviction is now recognised from the API's own `causes` (KEP-2837),
+and a throttled request is retried after the interval the server asks for
+rather than a guess.
+
+From [#121](https://github.com/Dudude-bit/rubick/pull/121).
+
 ## [4.9.2] - 2026-09-06
 
 ### Fixed — the console a credential was drawn on was changing it

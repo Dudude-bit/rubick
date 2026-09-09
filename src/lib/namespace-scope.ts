@@ -88,8 +88,32 @@ export function listAcrossScope<T>(
     if (scope.length <= 1) {
       return fetchOne(scope.length === 1 ? scope[0] : null);
     }
-    const perNamespace = await Promise.all(scope.map((ns) => fetchOne(ns)));
-    return perNamespace.flat();
+    // One read per namespace, settled independently. A user with rights in
+    // some of the selected namespaces and not others keeps the rows they can
+    // read rather than losing every namespace's rows to one namespace's
+    // refusal — the failure of the old `Promise.all`, which rejected whole.
+    //
+    // But a failed read is still never answered with an empty list: if
+    // nothing came back and a namespace refused, that refusal is the answer,
+    // thrown so the list shows it. The one thing not carried here is *which*
+    // namespace refused when other namespaces did return rows — surfacing that
+    // beside the rows needs a richer return than this shared shape allows.
+    const settled = await Promise.allSettled(scope.map((ns) => fetchOne(ns)));
+    const rows: T[] = [];
+    let firstError: unknown;
+    let failed = false;
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        rows.push(...result.value);
+      } else if (!failed) {
+        failed = true;
+        firstError = result.reason;
+      }
+    }
+    if (failed && rows.length === 0) {
+      throw firstError;
+    }
+    return rows;
   };
 }
 

@@ -147,9 +147,20 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
   // repeated, and picking one is what says so.
   const [first] = parts;
   const problems = rank(dedupe(parts.flatMap((part) => part.problems)));
+  // The node list is the same cluster-wide read in every part, so one part
+  // that could not make it leaves the capacity view unknown for the whole
+  // scope. `first` may still be the part that DID read it, so its node fields
+  // are blanked to match — otherwise `WorkloadsPanel` would draw a real node
+  // count beside the "no node access" note the page shows.
+  const nodesKnown = parts.every((part) => part.nodesKnown);
+  const counts = addCounts(
+    parts.map((part) => part.counts),
+    first.counts
+  );
 
   return {
     ...first,
+    nodes: nodesKnown ? first.nodes : [],
     problems: problems.slice(0, MAX_PROBLEMS),
     // Every part cut its own lowest-ranked tail, so the rows it dropped rank
     // below this cut too: what survives is still the worst of the whole scope,
@@ -164,10 +175,7 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
     // returns an empty one for any scoped read (`overview.rs`). Every part of a
     // fan-out is scoped, so the empty vec comes through with `first` and the
     // picker goes on reading the cluster-wide overview.
-    counts: addCounts(
-      parts.map((part) => part.counts),
-      first.counts
-    ),
+    counts: nodesKnown ? counts : { ...counts, nodes: null },
     pods: {
       running: parts.reduce((sum, part) => sum + part.pods.running, 0),
       pending: parts.reduce((sum, part) => sum + part.pods.pending, 0),
@@ -201,5 +209,6 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
     // One namespace failing to report metrics is the whole reading failing:
     // a chart drawn from two of three namespaces is a chart with no axis.
     metricsAvailable: parts.every((part) => part.metricsAvailable),
+    nodesKnown,
   };
 }

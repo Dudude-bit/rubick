@@ -74,6 +74,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
     problemsTruncated: 0,
     scheduler: {} as ClusterOverview["scheduler"],
     nodes: [node("a"), node("b"), node("c")],
+    nodesKnown: true,
     warnings: [],
     namespaces: [],
     counts: counts(),
@@ -227,6 +228,20 @@ describe("adding namespaces up", () => {
         overview({ metricsAvailable: false }),
       ]).metricsAvailable
     ).toBe(false);
+  });
+
+  it("leaves the capacity view unknown when one scope could not read the nodes", () => {
+    // The node list is one cluster-wide read; a part that was refused it makes
+    // the whole scope's capacity view unknown, not a partial count. The first
+    // part DID read it, so its node count must be blanked to match — a number
+    // beside the "no node access" note would be the contradiction this guards.
+    const merged = mergeOverviews([
+      overview({ nodesKnown: true, counts: counts({ nodes: 3 }) }),
+      overview({ nodesKnown: false }),
+    ]);
+    expect(merged.nodesKnown).toBe(false);
+    expect(merged.nodes).toEqual([]);
+    expect(merged.counts.nodes).toBeNull();
   });
 });
 
