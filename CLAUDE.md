@@ -169,6 +169,27 @@ each has a contract nothing checks for you.
   — same length as the input, a hole rather than a dropped element. The caller
   indexes the answer by row.
 
+## Performance
+
+A stall is a defect. [docs/perf.md](docs/perf.md) has the budget, the rig and
+the recorder; the rules that fail silently are these.
+
+- **A change to a list, a watch, a chart, logs or the YAML editor quotes
+  numbers** from the rig (`make perf-rig`) recorded in Settings › Diagnostics
+  › Performance, before and after. "Feels fine" on a 40-pod cluster is not a
+  number.
+- **Work is proportional to the change, not to the collection.** A watch
+  batch touching one row must not rebuild the cache, re-derive every row or
+  re-sort the table; untouched rows keep their identity.
+- **One IPC message stays under 256 KiB**, 1 MiB at most; a bigger answer
+  is chunked and streamed. Whole-collection answers with `limit: null` are
+  how a 10 000-pod list became a 78 MiB message.
+- **Nothing synchronous on the main thread runs longer than 8 ms.** A diff,
+  a parse, a filter over a 40 000-line buffer goes to a worker or is done
+  incrementally.
+- **The recorder is off unless someone turns it on.** Measuring serialises
+  every answer twice; that cost must never reach a screen nobody is timing.
+
 ## Words the reader sees
 
 - **Never translate** kind names, status values, condition types and reasons,
