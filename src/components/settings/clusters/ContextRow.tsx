@@ -158,7 +158,10 @@ export function ContextRow({
           <Checkbox
             checked={criticality.critical}
             onCheckedChange={(checked) =>
-              setCritical(context.name, checked === true)
+              // Unticking clears the mark back to undecided rather than storing
+              // an explicit `false` — that residue would suppress the guessed
+              // hint on a prod-looking name the reader never meant to overrule.
+              setCritical(context.name, checked === true ? true : null)
             }
             className="mt-px"
           />

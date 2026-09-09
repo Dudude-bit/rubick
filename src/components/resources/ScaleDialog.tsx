@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { CriticalNotice } from "@/components/ui/critical-notice";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
-import { useCritical } from "@/hooks/useCritical";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
 export interface ScaleDialogProps {
@@ -43,15 +42,22 @@ export function ScaleDialog({
   warnings = [],
 }: ScaleDialogProps) {
   const t = useT();
-  const critical = useCritical();
+  // Scaling a workload to zero on a cluster the person marked critical is a
+  // change to that cluster, so the same typed-name gate the confirm dialogs
+  // use guards the Scale button here too — notice and field cannot part ways.
+  const gate = useCriticalGate();
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) gate.reset();
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
-          {critical.critical && critical.context && (
-            <CriticalNotice context={critical.context} />
-          )}
+          {gate.notice}
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
@@ -59,12 +65,14 @@ export function ScaleDialog({
         <ScaleForm
           current={current}
           busy={busy}
+          blocked={gate.blocked}
+          gateInput={gate.input}
           confirmLabel={
             warnings.length > 0
               ? t("action", "scaleAnyway")
               : t("action", "scale")
           }
-          onCancel={() => onOpenChange(false)}
+          onCancel={() => handleOpenChange(false)}
           onSubmit={onSubmit}
         />
       </DialogContent>
@@ -75,12 +83,18 @@ export function ScaleDialog({
 function ScaleForm({
   current,
   busy,
+  blocked,
+  gateInput,
   confirmLabel,
   onCancel,
   onSubmit,
 }: {
   current: number;
   busy: boolean;
+  /** True while the critical-cluster name has not been typed back. */
+  blocked: boolean;
+  /** The typed-name field, rendered next to the button it guards. */
+  gateInput: ReactNode;
   confirmLabel: string;
   onCancel: () => void;
   onSubmit: (replicas: number) => void;
@@ -102,11 +116,12 @@ function ScaleForm({
           }
         />
       </div>
+      {gateInput}
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
           {t("action", "cancel")}
         </Button>
-        <Button onClick={() => onSubmit(replicas)} disabled={busy}>
+        <Button onClick={() => onSubmit(replicas)} disabled={busy || blocked}>
           {confirmLabel}
         </Button>
       </DialogFooter>
