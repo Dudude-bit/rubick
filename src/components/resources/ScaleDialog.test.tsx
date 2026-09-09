@@ -54,6 +54,27 @@ describe("scaling on critical infrastructure", () => {
   });
 
   /**
+   * The Scale button is a plain button, not a Radix close, so the success path
+   * closes the dialog by the parent flipping `open` — which never fires
+   * onOpenChange. If the gate is reset only there, the typed name survives and
+   * the next scale on the same still-mounted surface fires on a stale match.
+   */
+  it("forgets the typed name once closed, so the next scale re-asks", async () => {
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+    const { rerender } = render(scale());
+
+    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    expect(scaleButton()).toBeEnabled();
+
+    // The success path: the parent closes the dialog without onOpenChange.
+    rerender(scale({ open: false }));
+    rerender(scale({ open: true }));
+
+    expect(screen.getByPlaceholderText(PROD)).toHaveValue("");
+    expect(scaleButton()).toBeDisabled();
+  });
+
+  /**
    * A production-looking name is a guess, never the answer: a guard armed by
    * the name alone would sit on `prod-catalog-dev` until someone found the
    * setting that turns it off.

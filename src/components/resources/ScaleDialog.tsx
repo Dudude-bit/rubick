@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -47,13 +47,17 @@ export function ScaleDialog({
   // use guards the Scale button here too — notice and field cannot part ways.
   const gate = useCriticalGate();
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) gate.reset();
-    onOpenChange(next);
-  };
+  // The Scale button is a plain button, not a Radix close, so the success path
+  // closes this by the parent flipping `open` — which never fires
+  // onOpenChange. Reset on every close regardless of who closed it, or the
+  // typed name survives a scale and the next one fires on a stale match.
+  const gateReset = gate.reset;
+  useEffect(() => {
+    if (!open) gateReset();
+  }, [open, gateReset]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
@@ -72,7 +76,7 @@ export function ScaleDialog({
               ? t("action", "scaleAnyway")
               : t("action", "scale")
           }
-          onCancel={() => handleOpenChange(false)}
+          onCancel={() => onOpenChange(false)}
           onSubmit={onSubmit}
         />
       </DialogContent>

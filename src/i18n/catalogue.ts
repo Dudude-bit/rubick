@@ -625,6 +625,8 @@ export const en = {
     noLimit: "No limit",
     latestN: "Latest {n}",
     drainNamed: "Drain {name}",
+    cordonNamed: "Cordon {name}?",
+    uncordonNamed: "Uncordon {name}?",
     drainAnyway: "Drain anyway",
     stopDraining: "Stop draining",
     drainEnded: "The drain of {name} ended",

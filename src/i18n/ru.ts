@@ -596,6 +596,8 @@ export const ru: Catalogue = {
     noLimit: "Без ограничения",
     latestN: "Последние {n}",
     drainNamed: "Освободить узел {name}",
+    cordonNamed: "Запретить планирование на {name}?",
+    uncordonNamed: "Разрешить планирование на {name}?",
     drainAnyway: "Всё равно освободить",
     stopDraining: "Остановить",
     drainEnded: "Освобождение {name} закончилось",
