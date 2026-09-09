@@ -3662,6 +3662,14 @@ export const ru: Catalogue = {
     trendsSortNote: "сначала с наименьшим запасом",
     trendsNotIncidents:
       "Один range-запрос на все узлы, в каждом ведре сохранён пик, так что всплеск переживает сводку. Большое число это полный узел, а не инцидент; здесь ничего не красится красным за занятость. Requests это история таблицы Resources, в одном клике.",
+    notLookedShort: "не посмотрели",
+    noAllocatableShort: "allocatable не прочитан",
+    nodesDidNotList:
+      "Не удалось прочитать список узлов, поэтому не к чему привязать замеры: {reason}",
+    nodeNotLooked:
+      "Окно прочитать не удалось, поэтому неизвестно, отчитывался ли этот узел.",
+    nodeNoAllocatable:
+      "Замеры есть, но allocatable этого узла прочитать не удалось, поэтому долю от него не нарисовать.",
     nodeNoSeries: "в Prometheus нет серий по этому узлу",
     nodeNoSamplesYet:
       "в окне нет замеров: новейшая серия {age}, окно просит {range}",
@@ -3670,6 +3678,8 @@ export const ru: Catalogue = {
       "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
     declaredNowOnly:
       "kube-state-metrics в этом Prometheus нет, поэтому что было объявлено раньше в окне, неизвестно; request и limit это сегодняшние цифры, нарисованы плоско.",
+    declaredUnknown:
+      "Не удалось прочитать, хранит ли kube-state-metrics объявленное, поэтому окно неизвестно в любом случае; request и limit это сегодняшние цифры, нарисованы плоско.",
     declaredSizeNotFullness:
       "Заявленный размер, а не заполненность. metrics-server отдаёт только CPU и память — сколько тома занято, сообщает kubelet, а его может прочитать Prometheus, но не это приложение.",
     declaredSizeForUnreported:

@@ -3422,6 +3422,14 @@ export const en = {
     trendsSortNote: "least headroom first",
     trendsNotIncidents:
       "One range query for every node, the peak of each bucket kept, so a spike survives the summary. A high number is a full node, not an incident; nothing here is painted red for being busy. Requests are the Resources table's story, one click in.",
+    notLookedShort: "could not look",
+    noAllocatableShort: "allocatable unreadable",
+    nodesDidNotList:
+      "Could not read the node list, so there is nothing to put a reading against: {reason}",
+    nodeNotLooked:
+      "Could not read the window, so whether this node reported is unknown.",
+    nodeNoAllocatable:
+      "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
       "no samples in the window: newest series is {age}, the window asks for {range}",
@@ -3430,6 +3438,8 @@ export const en = {
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
     declaredNowOnly:
       "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
+    declaredUnknown:
+      "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:

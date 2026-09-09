@@ -123,16 +123,31 @@ function containerSelector(scope: UsageScope): string {
 }
 
 /**
- * Which label names the node — asked three ways, because the answer depends
+ * Which label names the node — asked every way, because the answer depends
  * on how somebody else's Prometheus was configured.
  *
  * `instance` is what a kubelet job scraped through the API server proxy
- * reports, `node` is what kube-prometheus-stack relabels to, and
- * `kubernetes_io_hostname` is what a `labelmap` of the node's own labels
- * leaves behind. Guessing one would be the sniffing this app refuses; asking
- * for their union costs one `or` and is right on all three.
+ * reports, `node` is what kube-prometheus-stack relabels to, `nodename` is
+ * node-exporter's, and `kubernetes_io_hostname` is what a `labelmap` of the
+ * node's own labels leaves behind. Guessing one would be the sniffing this
+ * app refuses; asking for their union costs one `or` and is right on all.
+ *
+ * **One list, three readers.** The grouping, the per-node selector and
+ * `nodeNameOf` — which keys a returned series back to a node — all read it.
+ * They used to carry three different lists: the grouping asked for
+ * `kubernetes_io_hostname`, the reader could not spell it, and every series
+ * a Prometheus labelled that way was keyed to nothing and dropped, so the
+ * node reported "no series in Prometheus" while its samples sat in hand.
+ *
+ * Order is trust: `instance` is `10.0.0.4:9100`, whose host half often is
+ * not a node name at all, so it is tried last.
  */
-const NODE_LABELS = ["instance", "node", "kubernetes_io_hostname"] as const;
+export const NODE_LABELS = [
+  "node",
+  "nodename",
+  "kubernetes_io_hostname",
+  "instance",
+] as const;
 
 /**
  * The same selector once per candidate label, joined by `or`.
@@ -228,8 +243,13 @@ export function declaredQuery(
   return resource === "cpu" ? `${sum} * 1000` : sum;
 }
 
-/** Every node at once, keyed by whatever node label this Prometheus writes. */
-const NODE_GROUPING = "by (node, instance, nodename, kubernetes_io_hostname)";
+/**
+ * Every node at once, keyed by whatever node label this Prometheus writes.
+ *
+ * Derived from {@link NODE_LABELS} rather than spelled again: a label this
+ * groups by that the reader cannot spell is a series keyed to nothing.
+ */
+const NODE_GROUPING = `by (${NODE_LABELS.join(", ")})`;
 
 export function nodesQuery(kind: "cpu" | "memory", spec: RangeSpec): string {
   const by = NODE_GROUPING;
