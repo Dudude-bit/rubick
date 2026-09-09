@@ -51,7 +51,7 @@ const PAGES: [string, Column[]][] = [
   ["Endpoints", endpoints()],
   ["Ingresses", ingresses],
   ["Jobs", jobs()],
-  ["Namespaces", namespaces("prod", new Map())],
+  ["Namespaces", namespaces],
   ["Nodes", nodes(new Map())],
   ["PersistentVolumeClaims", persistentVolumeClaims],
   ["PersistentVolumes", persistentVolumes()],

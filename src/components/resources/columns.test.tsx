@@ -28,7 +28,7 @@ const lists: [string, ColumnDef<never>[]][] = [
   ["PersistentVolume", persistentVolumeColumns() as ColumnDef<never>[]],
   ["PersistentVolumeClaim", persistentVolumeClaimColumns as ColumnDef<never>[]],
   ["StorageClass", storageClassColumns() as ColumnDef<never>[]],
-  ["Namespace", namespaceColumns("all", new Map()) as ColumnDef<never>[]],
+  ["Namespace", namespaceColumns as ColumnDef<never>[]],
   ["Node", nodeColumns(new Map()) as ColumnDef<never>[]],
 ];
 
