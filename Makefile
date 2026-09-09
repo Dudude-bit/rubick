@@ -1,4 +1,4 @@
-.PHONY: gen-entities-tauri gen-icons dev build test clean help apply-test-manifests dist
+.PHONY: gen-entities-tauri gen-icons dev build test clean help apply-test-manifests dist perf-rig perf-churn perf-rig-down
 
 MISE := $(shell command -v mise 2>/dev/null)
 MISE_EXEC := $(if $(MISE),$(MISE) exec --,)
@@ -92,3 +92,14 @@ clean:
 apply-test-manifests:
 	kubectl apply -f test-manifests/k8s-gui-crds.yaml
 	kubectl apply -f test-manifests/k8s-gui-all.yaml
+
+# A 10 000-pod cluster to measure against; docs/perf.md says how.
+PERF_RATE ?= 100
+perf-rig:
+	python3 scripts/perf-rig.py up
+
+perf-churn:
+	python3 scripts/perf-rig.py churn -r $(PERF_RATE)
+
+perf-rig-down:
+	python3 scripts/perf-rig.py down
