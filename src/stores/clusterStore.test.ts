@@ -5,6 +5,13 @@ vi.mock("@/lib/commands", () => ({
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
     saveClusterPreferences: vi.fn(async () => undefined),
+    listContexts: vi.fn(async () => [{ name: "dev" }, { name: "prod" }]),
+    getCurrentContext: vi.fn(async () => "dev"),
+    getClusterPreferences: vi.fn(async () => ({
+      lastContext: "prod",
+      namespaces: {},
+      scopes: {},
+    })),
   },
 }));
 
@@ -178,5 +185,38 @@ describe("an expired session and the reconnect", () => {
     await state().connect("prod-eu");
     expect(readExpiredCredentials()).not.toBeNull();
     expect(state().isConnected).toBe(false);
+  });
+});
+
+describe("restoring the last cluster on launch", () => {
+  beforeEach(() => {
+    vi.mocked(commands.connectCluster).mockClear();
+    useClusterStore.setState({
+      currentContext: null,
+      connectionAttemptId: 0,
+      pendingContext: null,
+      isAuthenticating: false,
+    });
+  });
+
+  /** The plain launch: reconnect to the saved cluster. */
+  it("auto-connects to the saved cluster when nothing else has claimed one", async () => {
+    await state().loadContexts();
+    expect(vi.mocked(commands.connectCluster)).toHaveBeenCalledWith("prod");
+  });
+
+  /**
+   * A window launched from a deep link connects to the link's own context;
+   * the saved-cluster restore must not race it and win, or the link opens
+   * the wrong cluster under a "live" banner. A claimed connection (attempt id
+   * off zero) is the signal to stand down.
+   */
+  it("stands down when a deep link has already claimed the connection", async () => {
+    useClusterStore.setState({
+      connectionAttemptId: 1,
+      pendingContext: "staging",
+    });
+    await state().loadContexts();
+    expect(vi.mocked(commands.connectCluster)).not.toHaveBeenCalledWith("prod");
   });
 });

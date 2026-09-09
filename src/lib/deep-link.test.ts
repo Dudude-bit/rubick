@@ -44,6 +44,34 @@ describe("parseDeepLink", () => {
     expect(parseDeepLink("rubick://open/ctx/pods/%E0%A4%A")).toBeNull();
   });
 
+  /**
+   * A link opens unattended, so it must never carry a param that makes the
+   * destination act. `?shell=<container>` and `?tab=shell` both open an exec
+   * session into a container the moment the pod page mounts — a change to the
+   * cluster from a link someone was handed. Only view-selection params survive.
+   */
+  it("drops the shell param and the shell tab, keeps read-only view params", () => {
+    expect(parseDeepLink("rubick://open/ctx/pods/ns/api?shell=app")?.path).toBe(
+      "/pods/ns/api"
+    );
+    expect(parseDeepLink("rubick://open/ctx/pods/ns/api?tab=shell")?.path).toBe(
+      "/pods/ns/api"
+    );
+    // The safe ones are preserved.
+    expect(parseDeepLink("rubick://open/ctx/pods/ns/api?tab=logs")?.path).toBe(
+      "/pods/ns/api?tab=logs"
+    );
+    expect(
+      parseDeepLink("rubick://open/ctx/integrations?vendor=argocd&type=app")
+        ?.path
+    ).toBe("/integrations?vendor=argocd&type=app");
+    // An unknown param is not forwarded either — allowlist, not blocklist.
+    expect(
+      parseDeepLink("rubick://open/ctx/pods/ns/api?exec=1&shell=app&tab=logs")
+        ?.path
+    ).toBe("/pods/ns/api?tab=logs");
+  });
+
   /** A link without a time is still a link; a bad time is not a time. */
   it("leaves capturedAt null when absent or unreadable", () => {
     expect(parseDeepLink("rubick://open/ctx/pods/a/b")?.capturedAt).toBeNull();

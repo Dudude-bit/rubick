@@ -43,7 +43,12 @@ export function useDeepLinks(): void {
       const cluster = useClusterStore.getState();
       if (cluster.currentContext !== link.context) {
         await cluster.switchContext(link.context);
-        void cluster.connect(link.context);
+        // Awaited, not fired-and-forgotten: the banner says "you are looking
+        // at it live", so it must not appear until the connect has actually
+        // landed — and awaiting is what makes this connect the one that wins
+        // the launch race with the saved-cluster auto-restore.
+        await cluster.connect(link.context);
+        if (cancelled) return;
       }
       useDeepLinkStore.getState().arrive({ status: "live", link });
       navigate(link.path);
