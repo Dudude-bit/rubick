@@ -244,6 +244,10 @@ export async function checkListAccess(
   return invoke<ListAccess[]>("check_list_access", { queries, namespaces });
 }
 
+export async function checkCrdReadAccess(): Promise<boolean | null> {
+  return invoke<boolean | null>("check_crd_read_access");
+}
+
 export async function checkNamespaceAccess(
   namespaces: string[]
 ): Promise<NamespaceAccess[]> {
