@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.11.0] - 2026-09-09
+
+### Added — a cluster you mark critical asks for its own name before any change
+
+Mark a cluster critical in its settings row and every destructive action on it
+— scaling, restarting, deleting, applying a manifest, draining or cordoning a
+node, a Helm install or upgrade, rolling a new image — stops to ask you to type
+the cluster's own context name first. The cluster's name, not the object's:
+what this guards against is doing the right thing to the wrong cluster. A name
+that merely looks like production only suggests it; nothing is armed until you
+say so, so the guard never sits on `prod-catalog-dev` until someone finds the
+setting that turns it off. It is a step, never a wall — the row still works,
+you just name the cluster on the way through.
+
+From [#129](https://github.com/Dudude-bit/rubick/pull/129).
+
+### Added — a rubick:// link opens the same place on another machine
+
+Copy the place you are looking at with `mod+shift+c` and hand it to a
+colleague: `rubick://open/<context>/<path>` opens the same object on the same
+cluster in their Rubick, if their kubeconfig has that context. A link only ever
+opens a read-only view — it carries no action, so an arriving link can never
+open a shell or change anything — and a context the machine does not have opens
+nothing and says which ones it does have, rather than guessing at a similarly
+named cluster.
+
+From [#127](https://github.com/Dudude-bit/rubick/pull/127).
+
+### Added — kubectl proxy, a second way in
+
+When the app's own credential path fails but `kubectl` on the same machine
+still works, Rubick falls back to `kubectl proxy`: kubectl runs the exec plugin
+and holds the token, and the app talks to the cluster through a loopback port
+with no credentials of its own — so a context kubectl can open, Rubick can
+open. The direct path always goes first; the proxy is tried only after a
+genuine failure, never after a login you cancelled or one that timed out. The
+status bar says when a session is going through kubectl, and the proxy lives
+exactly as long as the connection that uses it.
+
+From [#131](https://github.com/Dudude-bit/rubick/pull/131).
+
+### Added — a performance recorder in Diagnostics
+
+Settings › Diagnostics gains a Performance recorder, off by default. While it
+is on, every command, long task and heavy render is timed and "Copy report"
+hands back numbers a bug report can quote; a repeatable ten-thousand-pod rig
+(`make perf-rig`) and a stated budget come with it. Measuring costs nothing
+while it is off.
+
+From [#124](https://github.com/Dudude-bit/rubick/pull/124).
+
+### Fixed — a refused read points at the rule to ask for, not a dead end
+
+Where a page could not read part of what it draws — the traffic a Service
+connects, what kind an object is — it was left as a bare error. It now says
+what it could not read and what would answer it, the same "could not look"
+state the rest of the app uses, and a long refusal wraps inside its box instead
+of spilling its buttons past the edge.
+
+From [#128](https://github.com/Dudude-bit/rubick/pull/128).
+
+### Fixed — the lock reaches every integration and route it should
+
+A token that may list customresourcedefinitions but not get one saw
+cert-manager, Traefik, Istio and the Routes and Gateways rows offered as
+normal, and met the refusal only after clicking in. Those rows now carry the
+same lock the rest of the nav does, read from whether the cluster-scoped get of
+the CRD each page actually makes would be allowed — a mark, so the row stays a
+link.
+
+Reported in [#138](https://github.com/Dudude-bit/rubick/issues/138), from
+[#152](https://github.com/Dudude-bit/rubick/pull/152).
+
+### Performance — a big cluster's lists stop rebuilding themselves
+
+Two changes for a ten-thousand-pod cluster, invisible except as fewer stalls: a
+watch batch that touches one row replaces only that row instead of rebuilding
+the whole cache, and scrolling a table no longer re-derives every row
+descriptor on every frame. Pod rows keep their identity across a metrics tick,
+so nothing below them redraws for a number that did not change.
+
+From [#125](https://github.com/Dudude-bit/rubick/pull/125) and
+[#126](https://github.com/Dudude-bit/rubick/pull/126).
+
 ## [4.10.0] - 2026-09-09
 
 ### Added — a window can watch several namespaces at once

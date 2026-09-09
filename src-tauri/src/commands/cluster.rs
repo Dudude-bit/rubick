@@ -4,8 +4,10 @@ use tauri::State;
 use tokio::time::{timeout, Duration};
 
 use crate::auth::prepare_kubeconfig_for_context;
-use crate::client::{ClusterInfo, ContextInfo};
-use crate::error::Result;
+use crate::client::{
+    ClusterInfo, ConnectAttempt, ContextInfo, KubectlProxy, PathOutcome, ProxyOutcome,
+};
+use crate::error::{Error, Result};
 use crate::state::AppState;
 
 /// The pinned kubeconfig files, in merge order.
@@ -93,51 +95,65 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
     state.client_manager.disconnect(&context);
     state.remove_session(&context);
 
+    let overrides = read_kubeconfig_overrides();
     // Load kubeconfig if not already loaded
     state
         .client_manager
-        .load_kubeconfig_resolved(read_kubeconfig_overrides())
+        .load_kubeconfig_resolved(overrides.clone())
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
 
-    let kubeconfig = state
-        .client_manager
-        .kubeconfig_clone()
-        .await
-        .map_err(|e| crate::error::Error::Config(e.to_string()))?;
-    let prepared = prepare_kubeconfig_for_context(&state, kubeconfig, &context)
-        .await
-        .map_err(|e| {
-            crate::error::Error::Auth(crate::error::AuthError::Kubeconfig(e.to_string()))
-        })?;
-    state
-        .client_manager
-        .set_credential_deadline(&context, prepared.expires_at);
-    state
-        .client_manager
-        .connect_with_kubeconfig(&context, prepared.kubeconfig)
-        .await
-        .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
-
-    // Test connection and get cluster info (timeout to avoid hanging auth flows)
-    let info = match timeout(
-        Duration::from_mins(2),
-        state.client_manager.test_connection(&context),
-    )
-    .await
-    {
-        Ok(Ok(info)) => info,
-        Ok(Err(e)) => {
-            state.client_manager.disconnect(&context);
-            state.remove_session(&context);
-            return Err(crate::error::Error::Connection(e.to_string()));
+    let info = match connect_direct(&state, &context).await {
+        Ok(info) => {
+            state.client_manager.record_attempt(ConnectAttempt {
+                context: context.clone(),
+                at: chrono::Utc::now().to_rfc3339(),
+                direct: PathOutcome::Ok,
+                proxy: ProxyOutcome::NotTried,
+            });
+            info
         }
-        Err(_) => {
+        Err(direct) => {
             state.client_manager.disconnect(&context);
             state.remove_session(&context);
-            return Err(crate::error::Error::Timeout(
-                "Connection timed out. Please retry the authentication flow.".to_string(),
-            ));
+            let mut attempt = ConnectAttempt {
+                context: context.clone(),
+                at: chrono::Utc::now().to_rfc3339(),
+                direct: PathOutcome::Failed {
+                    error: direct.to_string(),
+                },
+                proxy: ProxyOutcome::NotTried,
+            };
+            if !proxy_could_help(&direct) {
+                state.client_manager.record_attempt(attempt);
+                return Err(direct);
+            }
+            let Some(kubectl) = crate::commands::binaries::locate_on_user_path("kubectl") else {
+                attempt.proxy = ProxyOutcome::NoKubectl;
+                state.client_manager.record_attempt(attempt);
+                return Err(direct);
+            };
+            match connect_through_proxy(&state, &context, &kubectl, &overrides).await {
+                Ok((info, port)) => {
+                    attempt.proxy = ProxyOutcome::Ok { port, kubectl };
+                    state.client_manager.record_attempt(attempt);
+                    info
+                }
+                Err(failure) => {
+                    state.client_manager.disconnect(&context);
+                    state.remove_session(&context);
+                    attempt.proxy = ProxyOutcome::Failed {
+                        error: failure.error,
+                        stdout: failure.stdout,
+                        stderr: failure.stderr,
+                        kubectl,
+                    };
+                    state.client_manager.record_attempt(attempt);
+                    // The first failure is the one to read; the proxy's is
+                    // in the attempt record, one click away.
+                    return Err(direct);
+                }
+            }
         }
     };
 
@@ -154,6 +170,111 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
     state.create_session(&context);
 
     Ok(info)
+}
+
+/// The app's own way in: prepare credentials, build a client, ask `/version`.
+async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> {
+    let kubeconfig = state
+        .client_manager
+        .kubeconfig_clone()
+        .await
+        .map_err(|e| Error::Config(e.to_string()))?;
+    let prepared = prepare_kubeconfig_for_context(state, kubeconfig, context)
+        .await
+        .map_err(prepared_failure)?;
+    state
+        .client_manager
+        .set_credential_deadline(context, prepared.expires_at);
+    state
+        .client_manager
+        .connect_with_kubeconfig(context, prepared.kubeconfig)
+        .await
+        .map_err(|e| Error::Connection(e.to_string()))?;
+    probe(state, context).await
+}
+
+/// Through `kubectl proxy`: kubectl runs the plugin and holds the token.
+async fn connect_through_proxy(
+    state: &AppState,
+    context: &str,
+    kubectl: &str,
+    kubeconfig: &[std::path::PathBuf],
+) -> std::result::Result<(ClusterInfo, u16), crate::client::ProxyFailure> {
+    let proxy = KubectlProxy::start(kubectl, context, kubeconfig).await?;
+    let port = proxy.port;
+    let stderr = proxy.stderr();
+    state
+        .client_manager
+        .connect_through_proxy(context, proxy)
+        .map_err(|e| crate::client::ProxyFailure {
+            error: e.to_string(),
+            stdout: String::new(),
+            stderr: stderr.clone(),
+        })?;
+    // No deadline: kubectl renews what it holds, and the app never sees it.
+    state.client_manager.set_credential_deadline(context, None);
+    let info = probe(state, context)
+        .await
+        .map_err(|e| crate::client::ProxyFailure {
+            error: e.to_string(),
+            stdout: String::new(),
+            stderr,
+        })?;
+    Ok((info, port))
+}
+
+/// `/version`, with a ceiling so an auth flow nobody finishes does not hang.
+async fn probe(state: &AppState, context: &str) -> Result<ClusterInfo> {
+    match timeout(
+        Duration::from_mins(2),
+        state.client_manager.test_connection(context),
+    )
+    .await
+    {
+        Ok(Ok(info)) => Ok(info),
+        Ok(Err(e)) => Err(Error::Connection(e.to_string())),
+        Err(_) => Err(Error::Timeout(
+            "Connection timed out. Please retry the authentication flow.".to_string(),
+        )),
+    }
+}
+
+/// A failure from preparing credentials, filed the way the connect flow reads
+/// it back.
+///
+/// A timeout keeps its own variant. It has to: `proxy_could_help` tells a
+/// timeout apart from an auth failure by the variant, and flattening every
+/// error into `Error::Auth` turned a timed-out login (exec's 30-minute
+/// ceiling, OIDC's 3-minute redirect wait) into one the proxy would retry —
+/// popping a fresh browser at a person who just let one lapse. Cancellation
+/// still rides through as `Error::Auth`; its word survives in the string,
+/// which is how `proxy_could_help` already recognises it.
+fn prepared_failure(error: Error) -> Error {
+    match error {
+        Error::Timeout(_) => error,
+        other => Error::Auth(crate::error::AuthError::Kubeconfig(other.to_string())),
+    }
+}
+
+/// Whether a failure of the app's own path is one kubectl might get past.
+///
+/// A person who cancelled the login did not ask for a second one; a flow
+/// still waiting at the two-minute mark would wait at kubectl's too. Every
+/// other failure is worth the try: the proxy costs a second, and "could not
+/// tell" is the more expensive answer.
+pub(crate) fn proxy_could_help(direct: &Error) -> bool {
+    match direct {
+        Error::Timeout(_) => false,
+        Error::Auth(auth) => !auth.to_string().to_lowercase().contains("cancel"),
+        _ => true,
+    }
+}
+
+/// The last attempt at a context, both ways, for the front door's hint.
+#[tauri::command]
+#[must_use]
+pub fn connection_attempt(context: String, state: State<'_, AppState>) -> Option<ConnectAttempt> {
+    state.client_manager.attempt_for(&context)
 }
 
 /// Disconnect from a cluster
@@ -342,6 +463,61 @@ pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<Kubecon
         counts,
         error,
     })
+}
+
+#[cfg(test)]
+mod proxy_tests {
+    use super::{prepared_failure, proxy_could_help};
+    use crate::error::{AuthError, Error};
+
+    /// The regression: the connect flow used to flatten a timed-out login
+    /// into `Error::Auth`, and `proxy_could_help` tells a timeout apart by
+    /// its variant — so a login that timed out got relaunched through
+    /// kubectl proxy, exactly what a timeout must never do. The variant has
+    /// to survive the filing.
+    #[test]
+    fn a_timed_out_login_keeps_its_variant_and_is_not_retried() {
+        let filed = prepared_failure(Error::Timeout("Authentication timed out".into()));
+        assert!(matches!(filed, Error::Timeout(_)));
+        assert!(!proxy_could_help(&filed));
+    }
+
+    /// Cancellation is filed as an auth error, but keeps its word — which is
+    /// how it is still recognised as not-worth-retrying.
+    #[test]
+    fn a_cancelled_login_files_as_auth_and_is_still_not_retried() {
+        let filed = prepared_failure(Error::Auth(AuthError::Oidc(
+            "Authentication cancelled".into(),
+        )));
+        assert!(matches!(filed, Error::Auth(_)));
+        assert!(!proxy_could_help(&filed));
+    }
+
+    /// A broken plugin is filed as auth and is worth kubectl's try.
+    #[test]
+    fn a_broken_plugin_files_as_auth_and_is_retried() {
+        let filed = prepared_failure(Error::Connection("exec plugin not found".into()));
+        assert!(proxy_could_help(&filed));
+    }
+
+    /// A cancelled login turning into a `kubectl proxy` login is the app
+    /// answering "no" with "are you sure".
+    #[test]
+    fn a_cancelled_login_is_not_retried_through_kubectl() {
+        let cancelled = Error::Auth(AuthError::Kubeconfig("Authentication cancelled".into()));
+        assert!(!proxy_could_help(&cancelled));
+    }
+
+    #[test]
+    fn a_rejected_token_or_a_broken_plugin_is() {
+        assert!(proxy_could_help(&Error::Connection(
+            "Failed to get server version: Unauthorized".into()
+        )));
+        assert!(proxy_could_help(&Error::Auth(AuthError::Kubeconfig(
+            "exec plugin kubectl-oidc_login not found".into()
+        ))));
+        assert!(!proxy_could_help(&Error::Timeout("2 minutes".into())));
+    }
 }
 
 #[cfg(test)]

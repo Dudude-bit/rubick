@@ -121,6 +121,40 @@ pub async fn check_list_access(
         .collect())
 }
 
+/// The attributes that ask "may I get a customresourcedefinition".
+///
+/// A different verb from `list`, and that difference is the whole reason this
+/// exists: a CRD-backed page (a route kind, a CRD-based integration) resolves
+/// its kind by `get`ting the CRD before it reads a single object, and a token
+/// granted `list` on `customresourcedefinitions` but not `get` — a real and
+/// common split — sails past the nav's list reviews and then meets the wall on
+/// the page. The nav asks the question the page will actually ask.
+#[must_use]
+fn crd_read_attributes() -> ResourceAttributes {
+    ResourceAttributes {
+        group: Some("apiextensions.k8s.io".to_string()),
+        resource: Some("customresourcedefinitions".to_string()),
+        verb: Some("get".to_string()),
+        ..ResourceAttributes::default()
+    }
+}
+
+/// Whether this user may `get` customresourcedefinitions cluster-wide.
+///
+/// `None` where the cluster could not be asked — never folded into a refusal,
+/// the same three-state discipline as [`check_list_access`]: a review that did
+/// not answer must leave the rows as they were, not lock them.
+///
+/// # Errors
+///
+/// If there is no connected cluster.
+#[tauri::command]
+pub async fn check_crd_read_access(state: State<'_, AppState>) -> Result<Option<bool>> {
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    Ok(ask(&api, crd_read_attributes()).await)
+}
+
 /// Whether this user may use a namespace at all.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -233,6 +267,18 @@ mod tests {
         assert_eq!(core.resource.as_deref(), Some("pods"));
         assert_eq!(core.verb.as_deref(), Some("list"));
         assert_eq!(core.namespace.as_deref(), Some("default"));
+    }
+
+    /// The CRD review asks `get`, not `list` — the verb the CRD-backed pages
+    /// use — cluster-wide. A `list` review here would miss the token that may
+    /// list customresourcedefinitions but not get one.
+    #[test]
+    fn the_crd_review_asks_to_get_a_definition_cluster_wide() {
+        let crd = crd_read_attributes();
+        assert_eq!(crd.group.as_deref(), Some("apiextensions.k8s.io"));
+        assert_eq!(crd.resource.as_deref(), Some("customresourcedefinitions"));
+        assert_eq!(crd.verb.as_deref(), Some("get"));
+        assert_eq!(crd.namespace, None);
     }
 
     /// A cluster-scoped kind is not in a namespace. Naming one asks whether

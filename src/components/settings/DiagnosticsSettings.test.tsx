@@ -40,6 +40,7 @@ const empty: Diagnostics = {
     logDestination: "stdout",
   },
   findings: [],
+  connections: [],
 };
 
 function renderPane() {
