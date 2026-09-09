@@ -12,6 +12,7 @@
  * crossing point of the lines on screen, and that point means nothing.
  */
 import * as React from "react";
+import { PerfProfiler } from "@/lib/perf-profiler";
 import {
   Area,
   AreaChart,
@@ -175,7 +176,15 @@ function stepAlong(
  * A band, plus whichever sentence the data has earned: none when there is
  * a limit and a line, one when either is missing.
  */
-export function UsageChart({
+export function UsageChart(props: UsageChartProps) {
+  return (
+    <PerfProfiler id="usage-chart">
+      <UsageChartInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function UsageChartInner({
   label,
   type,
   samples,

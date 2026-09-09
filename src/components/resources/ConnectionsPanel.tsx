@@ -10,8 +10,11 @@
  * The traffic edges are not repeated: the chain on the Overview draws them.
  */
 
+import * as React from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
+
+import { PerfProfiler } from "@/lib/perf-profiler";
 
 import { Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -167,7 +170,17 @@ function Nothing({ subject }: { subject: ResourceConnections["subject"] }) {
   );
 }
 
-export function ConnectionsPanel({
+export function ConnectionsPanel(
+  props: React.ComponentProps<typeof ConnectionsPanelInner>
+) {
+  return (
+    <PerfProfiler id="connections">
+      <ConnectionsPanelInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function ConnectionsPanelInner({
   query,
   delivery,
 }: {
