@@ -177,7 +177,7 @@ mod tests {
 
     /// Pi/Ei and P/E are valid Kubernetes suffixes the table lacked; an
     /// unhandled suffix fell through to the no-suffix path and parsed to a
-    /// silent zero — the collapse node_budget's `parse` must not make.
+    /// silent zero — the collapse `node_budget`'s `parse` must not make.
     #[test]
     fn the_large_binary_and_decimal_suffixes_parse() {
         assert_eq!(parse_memory("1Pi"), 1024_u64.pow(5));
