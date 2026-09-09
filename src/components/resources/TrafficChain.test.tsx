@@ -561,4 +561,30 @@ describe("TrafficChain", () => {
       vi.doUnmock("@/hooks/useServiceEdge");
     });
   });
+
+  /**
+   * The chain reads the same `useConnections` query as the Connections tab, so
+   * a refusal must end in the rule to ask for and a retry here too — not the
+   * bare red dead-end it used to. Same fact, two readers.
+   */
+  it("offers the rule and a retry when the connections read is refused", () => {
+    const refetch = vi.fn();
+    const refused = {
+      data: undefined,
+      isPending: false,
+      error: new Error(
+        'services is forbidden: User "system:serviceaccount:team:x" cannot list resource "services" in API group "" at the cluster scope'
+      ),
+      refetch,
+    } as unknown as ConnectionsQuery;
+
+    wrap(<TrafficChain query={refused} />);
+
+    expect(
+      screen.getByRole("button", { name: /copy the rule to ask for/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try the read again/i })
+    ).toBeInTheDocument();
+  });
 });

@@ -12,7 +12,7 @@
  * `useDelivery` would pass with the interception wired to nothing.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
@@ -203,5 +204,41 @@ describe("applying an edited manifest", () => {
     expect(
       screen.queryByRole("button", { name: /Apply anyway/ })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("applying on critical infrastructure", () => {
+  beforeEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterIdentityStore.getState().setCritical("test", true);
+  });
+
+  afterEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+  });
+
+  /**
+   * Applying a manifest replaces the whole object — the most powerful write
+   * here — so on the marked cluster it takes the same typed-name gate the
+   * confirmations do. Without it the apply's own confirmation, which delivery
+   * had already taught the reader to click through, was the way past.
+   */
+  it("holds Apply until the cluster's name is typed", async () => {
+    const user = await openWith(PLAIN);
+
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    expect(await screen.findByText("Apply Changes?")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("test");
+
+    const confirm = screen
+      .getAllByRole("button", { name: /^Apply$/ })
+      .at(-1) as HTMLElement;
+    expect(confirm).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("test"), "test");
+    expect(confirm).toBeEnabled();
+
+    await user.click(confirm);
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
   });
 });
