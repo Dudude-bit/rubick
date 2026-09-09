@@ -314,11 +314,24 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // same way). A whole-cluster window is one call.
   const routes = useLiveQuery({
     queryKey: ["gateway-rail-routes", cacheKey, ...routeKinds],
-    queryFn: listAcrossScope(scope, (ns) =>
-      Promise.all(
+    queryFn: listAcrossScope(scope, async (ns) => {
+      // Each served kind on its own: a token may list HTTPRoutes and not
+      // TCPRoutes, and one refused kind must not blank the whole count — the
+      // routes page reads each kind as its own query for the same reason. A
+      // kind that answered contributes its rows; only when every kind was
+      // refused is the refusal the answer, thrown for `listAcrossScope`.
+      const settled = await Promise.allSettled(
         routeKinds.map((kind) => commands.listGatewayRoutes(kind, ns))
-      ).then((lists) => lists.flat())
-    ),
+      );
+      const rows = settled.flatMap((r) =>
+        r.status === "fulfilled" ? r.value : []
+      );
+      const refused = settled.find((r) => r.status === "rejected");
+      if (refused && settled.every((r) => r.status === "rejected")) {
+        throw (refused as PromiseRejectedResult).reason;
+      }
+      return rows;
+    }),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && routeKinds.length > 0 && !routesDenied,

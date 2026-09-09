@@ -540,4 +540,38 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
     expect(routeNamespacesAsked).toContain("team-b");
     expect(routeNamespacesAsked).not.toContain(null);
   });
+
+  /**
+   * A token may list one served route kind and not another. One refused kind
+   * must not blank the whole count — the routes page reads each kind on its
+   * own for the same reason, so the rail (one fetch over all kinds) has to
+   * tolerate a refusal the same way or the two disagree.
+   */
+  it("keeps the count when one served route kind is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }, { kind: "TCPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    listGateways.mockResolvedValue([]);
+    listGatewayRoutes.mockImplementation(async (kind: string) => {
+      if (kind === "TCPRoute") {
+        throw new Error("tcproutes is forbidden (code: 403)");
+      }
+      return [routeIn("team-a")];
+    });
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    // The one readable kind's route is counted; the refused kind is dropped,
+    // not fatal.
+    await waitFor(() =>
+      expect(within(routes).getByText("1")).toBeInTheDocument()
+    );
+  });
 });

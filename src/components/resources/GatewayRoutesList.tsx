@@ -412,28 +412,33 @@ export function GatewayRoutesList() {
       <ResourceListHeader
         title={t("nav", "routes")}
         count={
-          <span className="tabular-nums">
-            {total + board.mesh.length}
-            {board.verdictsKnown && board.notServing.length > 0 && (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  aria-pressed={brokenOnly}
-                  onClick={() => setBrokenOnly((on) => !on)}
-                  className={cn(
-                    "text-err hover:underline",
-                    brokenOnly && "underline"
-                  )}
-                >
-                  {t("count", "gwNotServingCount", {
-                    n: board.notServing.length,
-                  })}
-                </button>
-              </>
-            )}
-            {quietCluster && total > 0 && ` · ${t("empty", "gwAllServing")}`}
-          </span>
+          // No count beside a refusal or a detection failure — the body shows
+          // "could not read" there, and a "0" in the header would contradict
+          // it. These are the same states the body special-cases below.
+          (error && routes.length === 0) || detectionError ? undefined : (
+            <span className="tabular-nums">
+              {total + board.mesh.length}
+              {board.verdictsKnown && board.notServing.length > 0 && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    aria-pressed={brokenOnly}
+                    onClick={() => setBrokenOnly((on) => !on)}
+                    className={cn(
+                      "text-err hover:underline",
+                      brokenOnly && "underline"
+                    )}
+                  >
+                    {t("count", "gwNotServingCount", {
+                      n: board.notServing.length,
+                    })}
+                  </button>
+                </>
+              )}
+              {quietCluster && total > 0 && ` · ${t("empty", "gwAllServing")}`}
+            </span>
+          )
         }
         dataUpdatedAt={dataUpdatedAt}
         live={live && !resyncing}

@@ -343,7 +343,13 @@ export function Helm() {
             panels wired together. */}
         <SectionHeader
           title="Helm"
-          count={t("count", "releases", { n: releases.length })}
+          // No count beside a refused read — "0 releases" there would say the
+          // opposite of the tab's "no access". The tab reads the same error.
+          count={
+            releasesError && releases.length === 0
+              ? undefined
+              : t("count", "releases", { n: releases.length })
+          }
           actions={
             <TabsList>
               <TabsTrigger value="releases">
