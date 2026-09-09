@@ -395,6 +395,7 @@ describe("draining a node on critical infrastructure", () => {
     expect(onConfirm).toHaveBeenCalledWith("node-7", {
       evictUnmanagedPods: false,
       evictPodsWithEmptydir: false,
+      tellMeWhen: false,
     });
   });
 });
