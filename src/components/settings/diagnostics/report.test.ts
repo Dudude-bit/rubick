@@ -44,6 +44,7 @@ const base: Diagnostics = {
       aboutShell: false,
     },
   ],
+  connections: [],
 };
 
 describe("asMarkdown", () => {
@@ -117,5 +118,39 @@ describe("asMarkdown", () => {
     expect(out).toContain("`kubectl` — /usr/local/bin/kubectl · v1.31.0");
     expect(out).toContain("`helm` — /usr/local/bin/helm · no version reported");
     expect(out).toContain("`az` — not installed");
+  });
+});
+
+describe("connections in the paste", () => {
+  /** The maintainer reading the paste has to see that kubectl was tried, and what it printed. */
+  it("lists both paths and quotes kubectl proxy's stderr", () => {
+    const out = asMarkdown({
+      ...base,
+      connections: [
+        {
+          context: "context-1",
+          at: "2026-09-07T07:00:00Z",
+          direct: { state: "failed", error: "Unauthorized" },
+          proxy: {
+            state: "failed",
+            error: "kubectl proxy exited: exit status 1",
+            stdout: "",
+            stderr: 'error: unknown command "oidc-login" for "kubectl"',
+            kubectl: "/opt/homebrew/bin/kubectl",
+          },
+        },
+      ],
+    });
+    expect(out).toContain("- direct: Unauthorized");
+    expect(out).toContain(
+      "- kubectl proxy: kubectl proxy exited: exit status 1"
+    );
+    expect(out).toContain(
+      '    error: unknown command "oidc-login" for "kubectl"'
+    );
+  });
+
+  it("says when nothing was attempted rather than printing an empty heading", () => {
+    expect(asMarkdown(base)).toContain("No connection attempted yet.");
   });
 });
