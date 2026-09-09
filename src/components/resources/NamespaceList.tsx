@@ -28,7 +28,9 @@ import { useT } from "@/i18n/useT";
 
 const NamespaceCells = createContext({
   currentNamespace: "",
-  podCounts: new Map<string, number>(),
+  // `null`/absent = the cluster-wide overview did not answer, so the count is
+  // unknown and drawn "—" — never silently 0.
+  podCounts: new Map<string, number | null>(),
 });
 
 function NameCell({ row }: CellContext<NamespaceInfo>) {
@@ -51,10 +53,9 @@ function NameCell({ row }: CellContext<NamespaceInfo>) {
 
 function PodsCell({ row }: CellContext<NamespaceInfo>) {
   const { podCounts } = useContext(NamespaceCells);
+  const count = podCounts.get(row.original.name);
   return (
-    <span className="font-mono text-fg-mut">
-      {podCounts.get(row.original.name) ?? 0}
-    </span>
+    <span className="font-mono text-fg-mut">{count == null ? "—" : count}</span>
   );
 }
 

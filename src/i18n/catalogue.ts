@@ -58,6 +58,7 @@ export const en = {
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
     noListAccess: "You do not have permission to list these",
+    noVendorAccess: "You do not have permission to list {vendor}'s resources",
     relatedResources: "Related resources",
     runsOn: "Runs on",
     whatRunsHere: "What runs here",
@@ -504,6 +505,7 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    showInaccessibleNamespaces: "Show them",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
     addressOnClipboard:
@@ -625,6 +627,8 @@ export const en = {
     noLimit: "No limit",
     latestN: "Latest {n}",
     drainNamed: "Drain {name}",
+    cordonNamed: "Cordon {name}?",
+    uncordonNamed: "Uncordon {name}?",
     drainAnyway: "Drain anyway",
     stopDraining: "Stop draining",
     drainEnded: "The drain of {name} ended",
@@ -2213,6 +2217,10 @@ export const en = {
     refusalOther: "Refused",
     nameMissingParens: "{name} (missing)",
     noClusterSelected: "No cluster selected",
+    criticalNoticeTitle: "Critical infrastructure",
+    criticalNoticeBody:
+      "This is {context}. Whatever this does, it does there. Type the cluster's name to go on.",
+    criticalStripe: "Critical: {context}",
     metricsNotInstalled: "Metrics server not installed",
     metricsNotInstalledBody:
       "Install metrics-server to see CPU and memory usage.",
@@ -2369,6 +2377,10 @@ export const en = {
     contextReady: "ready",
     contextCannotConnect: "cannot connect",
     contextCannotTell: "cannot tell",
+    criticalLabel:
+      "Critical infrastructure: every change asks for the cluster's name",
+    criticalGuessed: "The name suggests it. Tick to make it so.",
+
     searchMissingWords: "not found missing path",
     searchContextWords: "context kubeconfig authentication",
     searchKubeconfigWords:
@@ -2674,6 +2686,7 @@ export const en = {
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",
+    whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
     pvcListDescription: "Requests for storage by pods in {scope}",
     expandRepeats: "Expand {count} repeats",
@@ -3154,6 +3167,10 @@ export const en = {
     budgetRuleHealthyCovering:
       "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
     couldNotReadClusterState: "Could not read cluster state",
+    noClusterOverviewAccess:
+      "You do not have permission to read the whole cluster. Pick the namespaces you can see at the top.",
+    noNodeAccess:
+      "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",
     noneSet: "none set",
     couldNotReadManifest: "Could not read the manifest",
@@ -3505,6 +3522,12 @@ export const en = {
       "A slice carries a port by the Service port's name. These name none it declares, so nothing routes to them.",
     couldNotReadWhatConnects: "Could not read what connects to this.",
     clusterDidNotAnswer: "The cluster did not answer.",
+    unknownRefused: "The cluster refused: {message}",
+    unknownFault: "The read failed: {message}",
+    unknownRetry: "Try the read again",
+    unknownCopyRule: "Copy the rule to ask for",
+    unknownRuleCopied:
+      "A Role and a RoleBinding that would allow this read. Give it to whoever owns access.",
     inNamespaceWhere: "in {namespace}",
     inClusterWhere: "in the cluster",
     nothingStatesEdge: "Nothing {where} states an edge to this {kind}.",
@@ -4158,6 +4181,10 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    namespacesHidden: {
+      one: "{n} namespace hidden — no access",
+      other: "{n} namespaces hidden — no access",
+    },
     endpointsAcrossSlices: "{endpoints} across {slices}",
     endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
     slicesCount: { one: "{n} slice", other: "{n} slices" },

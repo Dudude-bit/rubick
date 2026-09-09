@@ -9,6 +9,8 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
@@ -33,17 +35,21 @@ interface UsePodsWithMetricsOptions {
  */
 export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const t = useT();
-  const { isConnected, currentNamespace } = useClusterStore();
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const scope = useNamespaceScope();
   const enabled = isConnected && options?.enabled !== false;
+
+  // The one namespace a watch or metrics call is scoped to. Several is read
+  // per namespace and polled instead — a cluster-wide LIST needs rights a
+  // namespace-scoped user may not have. See `listAcrossScope`.
+  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  const cacheKey = scopeCacheKey(scope.scope);
 
   // Fetch pods - cached by TanStack Query. Real-time updates after
   // the initial fetch arrive through `useResourceWatch` below.
   // Polling falls back on if the watcher reports a sustained failure
   // (e.g. RBAC `watch` denial); see handleWatchError below.
-  const queryKey = useMemo(
-    () => queryKeys.pods(currentNamespace),
-    [currentNamespace]
-  );
+  const queryKey = useMemo(() => queryKeys.pods(cacheKey), [cacheKey]);
 
   const { toast } = useToast();
   const [watchFailed, setWatchFailed] = useState(false);
@@ -69,10 +75,10 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     dataUpdatedAt,
   } = useLiveQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: listAcrossScope(scope.scope, async (namespace) => {
       try {
         return await commands.listPods({
-          namespace: currentNamespace || null,
+          namespace,
           labelSelector: null,
           fieldSelector: null,
           limit: null,
@@ -83,19 +89,20 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
-    },
+    }),
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    refresh: watchFailed ? "resourceList" : false,
+    // A watch covers none or one; several is polled (the watch is off below).
+    refresh: watchFailed || scope.several ? "resourceList" : false,
   });
 
   const subscribePods = useCallback(
-    () => commands.subscribePodWatch(currentNamespace || null),
-    [currentNamespace]
+    () => commands.subscribePodWatch(watchNamespace),
+    [watchNamespace]
   );
   const { resyncing } = useResourceWatch<PodInfo>({
-    enabled,
+    enabled: enabled && !scope.several,
     subscribe: subscribePods,
     queryKey,
     onError: handleWatchError,
@@ -103,7 +110,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   });
 
   const { podMetrics, podStatus } = useMetrics({
-    namespace: currentNamespace || null,
+    namespace: watchNamespace,
     enabled,
     includeNodes: false,
   });
