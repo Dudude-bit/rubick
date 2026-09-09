@@ -16,7 +16,7 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
-import { useListAccess } from "@/hooks/useListAccess";
+import { useCrdReadDenied, useListAccess } from "@/hooks/useListAccess";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
@@ -281,10 +281,17 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
     ...(routeKinds as ResourceKind[]),
   ]);
-  const gatewaysDenied = access[ResourceType.Gateway] === false;
+  // These pages resolve each kind's CRD first — a cluster-scoped get on
+  // `customresourcedefinitions` — so a token refused that cannot open them at
+  // all, whatever its rights on the routes themselves. The list reviews above
+  // cannot see this: a token may list a route kind (or even list CRDs) and
+  // still be refused the get. A mark, never a lock — the row stays a link.
+  const crdDenied = useCrdReadDenied();
+  const gatewaysDenied = crdDenied || access[ResourceType.Gateway] === false;
   const routesDenied =
-    routeKinds.length > 0 &&
-    routeKinds.every((kind) => access[kind as ResourceKind] === false);
+    crdDenied ||
+    (routeKinds.length > 0 &&
+      routeKinds.every((kind) => access[kind as ResourceKind] === false));
 
   const cacheKey = scopeCacheKey(scope);
 

@@ -70,3 +70,30 @@ export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
   }
   return marks;
 }
+
+/**
+ * Whether the reader may not `get` customresourcedefinitions cluster-wide —
+ * the read every CRD-backed page (a route kind, a CRD-based integration)
+ * makes to resolve its kind before it reads a single object.
+ *
+ * `get`, not `list`, on purpose: a token granted `list` on
+ * `customresourcedefinitions` but not `get` — a real split — passes every
+ * list review the nav runs and then meets the wall on the page. This asks the
+ * question the page will actually ask, so the row can be marked before the
+ * click. A mark, never a lock: `null`/`undefined` ("could not ask") returns
+ * `false`, so a review that never answered leaves the rows open.
+ */
+export function useCrdReadDenied(): boolean {
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const isConnected = useClusterStore((s) => s.isConnected);
+
+  const { data } = useQuery({
+    queryKey: ["crd-read-access", currentContext],
+    queryFn: () => commands.checkCrdReadAccess(),
+    enabled: isConnected && Boolean(currentContext),
+    staleTime: REVIEW_FRESH_MS,
+    retry: false,
+  });
+
+  return data === false;
+}
