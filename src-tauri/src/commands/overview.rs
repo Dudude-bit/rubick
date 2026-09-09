@@ -289,6 +289,11 @@ pub struct ClusterOverview {
     /// unlike pods they do not multiply per workload), and a truncated node
     /// list would hide exactly the node someone is looking for.
     pub nodes: Vec<NodeSummary>,
+    /// False when the cluster-wide node/pod reads the capacity view needs were
+    /// refused — a namespace-scoped token has no cluster read rights. `nodes`
+    /// and `scheduler` are then empty and mean "unknown", not "no capacity":
+    /// the panels say so rather than drawing a cluster with zero headroom.
+    pub nodes_known: bool,
     pub warnings: Vec<WarningGroup>,
     pub namespaces: Vec<NamespaceLoad>,
     /// Objects per kind in the requested scope, for the sidebar and the
@@ -962,6 +967,9 @@ struct OverviewInputs<'a> {
     /// allocatable. Same slice as `scoped_pods` when nothing is selected.
     accounting_pods: &'a [Pod],
     nodes: &'a [Node],
+    /// False when the node list (or the cluster-wide accounting pods) was
+    /// refused: the capacity view is unknown, not empty.
+    nodes_known: bool,
     /// `None` when the Deployment list was refused: the problems it feeds are
     /// one section of the screen, not the screen.
     deployments: Option<&'a [Deployment]>,
@@ -976,9 +984,13 @@ struct OverviewInputs<'a> {
 
 fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     let metrics_available = input.usage_by_node.is_some();
+    // A refused capacity read is unknown, not an empty cluster: draw from no
+    // nodes so the scheduler headroom is not a confident zero, and let the
+    // `nodes_known` flag below tell the panels to say "no access" instead.
+    let nodes: &[Node] = if input.nodes_known { input.nodes } else { &[] };
     let accounting = account_by_node(input.accounting_pods);
     let aggregate = summarize_nodes(
-        input.nodes,
+        nodes,
         &accounting.requests,
         &accounting.pods,
         input.usage_by_node.as_ref(),
@@ -986,16 +998,17 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
 
     let mut problems = pod_problems(input.scoped_pods, input.now);
     problems.extend(deployment_problems(input.deployments.unwrap_or_default()));
-    problems.extend(node_problems(input.nodes));
+    problems.extend(node_problems(nodes));
     let (problems, problems_truncated) = rank_and_cap(problems);
 
     // The lists this query already had to read answer their own counts, so
-    // those four kinds cost no extra request.
+    // those four kinds cost no extra request. A refused node read is `None`,
+    // not `Some(0)` — the same distinction the other counts make.
     let counts = ResourceCounts {
         pods: Some(input.scoped_pods.len()),
         deployments: input.deployments.map(<[Deployment]>::len),
         jobs: input.jobs.map(<[Job]>::len),
-        nodes: Some(input.nodes.len()),
+        nodes: input.nodes_known.then_some(input.nodes.len()),
         ..input.counts.clone()
     };
 
@@ -1004,6 +1017,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         problems_truncated,
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
+        nodes_known: input.nodes_known,
         warnings: recent_warnings(input.events),
         counts,
         pods: pod_composition(input.scoped_pods),
@@ -1092,22 +1106,38 @@ pub async fn get_cluster_overview(
         count_of(&events_api),
     );
 
+    // The scoped pod read is the one load-bearing read: with no pods in the
+    // selected scope there is no screen to draw. On the whole cluster it is
+    // the cluster-wide list, so a token with no cluster read rights fails here
+    // and the page shows the refusal (and says to pick a namespace).
     let pods = pods_result.map_err(Error::from)?.items;
+    // The node list and the cluster-wide accounting pods are cluster-scoped
+    // reads a namespace-restricted token is refused. They degrade to "unknown"
+    // rather than failing the whole overview, so a scoped user still sees the
+    // workloads they CAN read with the capacity view marked no-access.
     let cluster_pods = cluster_pods_result
         .transpose()
-        .map_err(Error::from)?
+        .ok()
+        .flatten()
         .map(|list| list.items);
-    let nodes = nodes_result.map_err(Error::from)?.items;
-    // Pods and nodes are load-bearing — the scheduler panel and every node row
-    // are built from them, so losing either means there is no screen to draw.
-    // Deployments and Jobs feed one section each and degrade instead.
+    let nodes = nodes_result.ok().map(|list| list.items);
     let deployments = deployments_result.ok().map(|list| list.items);
     let jobs = jobs_result.ok().map(|list| list.items);
+
+    // The capacity view needs both the nodes and cluster-wide pod requests.
+    // When a namespace is selected those are a separate cluster-wide fetch;
+    // on the whole cluster the scoped pods already are that fetch.
+    let accounting_known = match ctx.namespace {
+        Some(_) => cluster_pods.is_some(),
+        None => true,
+    };
+    let nodes_known = nodes.is_some() && accounting_known;
 
     Ok(build_overview(&OverviewInputs {
         scoped_pods: &pods,
         accounting_pods: cluster_pods.as_deref().unwrap_or(&pods),
-        nodes: &nodes,
+        nodes: nodes.as_deref().unwrap_or_default(),
+        nodes_known,
         deployments: deployments.as_deref(),
         jobs: jobs.as_deref(),
         events: &events,
@@ -1259,6 +1289,7 @@ mod tests {
             scoped_pods,
             accounting_pods,
             nodes: &[node("n1", "4", "8Gi"), node("n2", "4", "8Gi")],
+            nodes_known: true,
             deployments: Some(&[]),
             jobs: Some(&[]),
             events: &[],
@@ -1293,6 +1324,58 @@ mod tests {
             since: since.map(str::to_string),
             restarts: None,
         }
+    }
+
+    /// A namespace-scoped token is refused the cluster-wide node and pod reads
+    /// the capacity view needs, so those come back unknown. The workloads the
+    /// user CAN read stay on the screen; the nodes and scheduler are marked
+    /// no-access, and the node count is `None`, never a confident `Some(0)`.
+    #[test]
+    fn a_refused_node_read_leaves_the_capacity_view_unknown_not_empty() {
+        let pods = [
+            pod(
+                "api",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    ..Default::default()
+                },
+            ),
+            pod(
+                "web",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    ..Default::default()
+                },
+            ),
+        ];
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &pods,
+            accounting_pods: &pods,
+            // Nodes were handed in, but the flag says they could not be read:
+            // they must be ignored, not drawn and not counted.
+            nodes: &[node("n1", "4", "8Gi")],
+            nodes_known: false,
+            deployments: Some(&[]),
+            jobs: Some(&[]),
+            events: &[],
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            namespace: Some("team-a"),
+            now: Utc::now(),
+        });
+
+        assert!(!result.nodes_known, "a refused node read is unknown");
+        assert!(
+            result.nodes.is_empty(),
+            "no node rows are drawn from a read that was refused"
+        );
+        assert_eq!(
+            result.counts.nodes, None,
+            "the node count is unknown, not zero"
+        );
+        // The workloads the user could read are still on the screen.
+        assert_eq!(result.counts.pods, Some(2));
+        assert_eq!(result.pods.running, 2);
     }
 
     /// A missing metrics-server comes back as `Ok` with a `NotInstalled`
@@ -1342,6 +1425,7 @@ mod tests {
             scoped_pods: &[],
             accounting_pods: &[],
             nodes: &[node("n1", "4", "8Gi")],
+            nodes_known: true,
             deployments: Some(&[]),
             jobs: Some(&[]),
             events: &[],
@@ -1799,6 +1883,7 @@ mod tests {
             scoped_pods: &pods,
             accounting_pods: &pods,
             nodes: &[node("n1", "4", "8Gi")],
+            nodes_known: true,
             deployments: None,
             jobs: None,
             events: &[],
@@ -1839,6 +1924,7 @@ mod tests {
             scoped_pods: &scoped,
             accounting_pods: &cluster,
             nodes: &[node("n1", "4", "8Gi"), node("n2", "4", "8Gi")],
+            nodes_known: true,
             deployments: Some(&deployments),
             jobs: Some(&jobs),
             events: &[],

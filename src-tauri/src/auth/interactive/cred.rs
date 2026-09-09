@@ -703,6 +703,13 @@ mod tests {
         // and does not get on with the child until something answers. In the
         // app xterm answers; here nothing would, and the plugin would sit
         // there printing nothing until the flow timed out.
+        //
+        // Only `ConPTY` asks. A Unix pty asks nothing, and `cat FILE` never
+        // reads stdin — so on Unix this write reaches only the line
+        // discipline, which echoes it (`^[[1;1R`) back into the same stream
+        // the reader is collecting and, under load, into the middle of the
+        // token. Answer only where the question is actually asked.
+        #[cfg(windows)]
         adapter
             .write_input(b"\x1b[1;1R")
             .await
