@@ -70,6 +70,7 @@ import type {
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
+  PerfSnapshot,
   PersistentVolumeClaimInfo,
   PersistentVolumeInfo,
   PodFilters,
@@ -738,6 +739,14 @@ export async function logFrontendEventsBatch(
 
 export async function cancelAuthSession(sessionId: string): Promise<void> {
   return invoke<void>("cancel_auth_session", { sessionId });
+}
+
+export async function perfSetRecording(recording: boolean): Promise<void> {
+  return invoke<void>("perf_set_recording", { recording });
+}
+
+export async function perfCounters(): Promise<PerfSnapshot> {
+  return invoke<PerfSnapshot>("perf_counters");
 }
 
 export async function listServices(
