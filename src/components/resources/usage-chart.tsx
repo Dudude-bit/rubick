@@ -16,11 +16,13 @@ import { PerfProfiler } from "@/lib/perf-profiler";
 import {
   Area,
   AreaChart,
+  Line,
   ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import type { DeclaredPoint } from "@/integrations";
 import { cn } from "@/lib/utils";
 import { UnitValue } from "@/components/ui/metric-value";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
@@ -122,6 +124,52 @@ export interface UsageChartProps {
    * window nobody is watching.
    */
   live?: boolean;
+  /**
+   * A supplier's window is on screen rather than the watched buffer. The
+   * number on the right then carries the window's average and peak as well,
+   * because "now" alone says nothing about a day.
+   */
+  ranged?: boolean;
+  /** What the object asks for today, drawn as a line like the ceiling is. */
+  request?: number | null;
+  /**
+   * Requests and limits as they stood through the window. `null` when the
+   * supplier keeps no such record: the lines are then today's figures drawn
+   * flat, and labelled "now". Absent when nothing was asked.
+   */
+  declared?: {
+    request: readonly DeclaredPoint[];
+    limit: readonly DeclaredPoint[];
+  } | null;
+}
+
+/** Average of what was drawn; `null` when nothing was. */
+function averageOf(points: readonly UsagePoint[]): number | null {
+  let sum = 0;
+  let n = 0;
+  for (const point of points) {
+    if (point.v !== null) {
+      sum += point.v;
+      n += 1;
+    }
+  }
+  return n === 0 ? null : sum / n;
+}
+
+/** The declared value in force at each bucket: the last one written at or before it. */
+function stepAlong(
+  points: readonly UsagePoint[],
+  declared: readonly DeclaredPoint[]
+): Array<number | null> {
+  let cursor = 0;
+  let current: number | null = null;
+  return points.map((point) => {
+    while (cursor < declared.length && declared[cursor].t <= point.t) {
+      current = declared[cursor].v;
+      cursor += 1;
+    }
+    return current;
+  });
 }
 
 /**
@@ -146,6 +194,9 @@ function UsageChartInner({
   current,
   suppressNote = false,
   live = true,
+  ranged = false,
+  request = null,
+  declared,
 }: UsageChartProps) {
   const t = useT();
   const channel = type === "cpu" ? "cpuMillicores" : "memoryBytes";
@@ -159,6 +210,9 @@ function UsageChartInner({
   const value = live ? (latestValue(points) ?? current) : peakOf(points);
   const ratio =
     limit !== null && limit > 0 && value !== null ? value / limit : null;
+  const average = ranged ? averageOf(points) : null;
+  const peak = ranged && live ? peakOf(points) : null;
+  const peakAt = peak === null ? null : points.find((p) => p.v === peak)?.t;
 
   return (
     <div>
@@ -177,6 +231,8 @@ function UsageChartInner({
             drawn={drawn}
             max={max}
             limit={limit}
+            request={request}
+            declared={declared}
             type={type}
             label={label}
             limitNoun={limitNoun}
@@ -197,6 +253,7 @@ function UsageChartInner({
           ) : (
             <>
               {!live && <span className="text-fg-fnt">peak </span>}
+              {live && ranged && <span className="text-fg-fnt">now </span>}
               <UnitValue value={formatQuantity(value, type)} />
               {limit !== null && limit > 0 && (
                 <>
@@ -215,6 +272,22 @@ function UsageChartInner({
           )}
         </span>
       </div>
+      {ranged && average !== null && (
+        <p className="-mt-1 pb-1 pr-1.5 text-right font-mono text-[10px] tabular-nums text-fg-fnt">
+          {t("readings", "usageAvg", { value: formatQuantity(average, type) })}
+          {peak !== null && (
+            <>
+              {" · "}
+              {t("readings", "usagePeak", {
+                value: formatQuantity(peak, type),
+              })}
+              {peakAt
+                ? ` ${t("readings", "usageAt", { clock: clockOf(peakAt) })}`
+                : ""}
+            </>
+          )}
+        </p>
+      )}
       <Note>
         {suppressNote || (drawn === 0 && value === null)
           ? null
@@ -243,6 +316,8 @@ interface BandProps {
   drawn: number;
   max: number;
   limit: number | null;
+  request: number | null;
+  declared: UsageChartProps["declared"];
   type: "cpu" | "memory";
   label: string;
   limitNoun: "limitWord" | "capacityWord";
@@ -257,17 +332,45 @@ interface Row {
   t: number;
   v: number | null;
   restart: boolean;
+  /** What was asked for and allowed at this bucket, where a supplier kept it. */
+  request?: number | null;
+  ceiling?: number | null;
 }
 
 function Band(props: BandProps) {
   const t = useT();
-  const { points, drawn, max, limit, type, limitNoun } = props;
+  const { points, drawn, max, limit, request, declared, type, limitNoun } =
+    props;
   const gradient = React.useId();
   const [band, width] = useBandWidth();
-  const rows: Row[] = React.useMemo(
-    () => points.map((point, i) => ({ i, ...point })),
-    [points]
+  const rows: Row[] = React.useMemo(() => {
+    const base = points.map((point, i) => ({ i, ...point }));
+    if (!declared) return base;
+    const requests = stepAlong(points, declared.request);
+    const ceilings = stepAlong(points, declared.limit);
+    return base.map((row, i) => ({
+      ...row,
+      request: requests[i],
+      ceiling: ceilings[i],
+    }));
+  }, [points, declared]);
+  // A recorded line replaces the flat one; a flat one is today's figure and
+  // is labelled as such where the record is known to be missing.
+  //
+  // On whether the record has values, not on whether the object exists: a
+  // declared history that came back empty — or whose range query was
+  // swallowed to `[]` — is an object, and `!!declared` then switched off
+  // both the flat fallback and the label, erasing the request and limit
+  // rules from the chart entirely rather than drawing today's figure.
+  const recorded = React.useMemo(
+    () =>
+      declared !== null &&
+      declared !== undefined &&
+      rows.some((row) => row.request !== null || row.ceiling !== null),
+    [declared, rows]
   );
+  const flatLabel =
+    declared === null ? ` ${t("readings", "usageNowWord")}` : "";
   const restarts = React.useMemo(() => restartIndices(points), [points]);
 
   // A lone reading pins to the right edge: it is the newest one, and the
@@ -345,15 +448,62 @@ function Band(props: BandProps) {
             />
           ))}
 
-          {limitInView(limit, max) && (
+          {!recorded && limitInView(limit, max) && (
             <ReferenceLine
               y={limit!}
               stroke="hsl(var(--warn))"
               strokeOpacity={0.8}
               strokeWidth={1}
               strokeDasharray="3 3"
-              label={<LimitLabel text={formatQuantity(limit!, type)} />}
+              label={
+                <LimitLabel
+                  text={`${formatQuantity(limit!, type)}${flatLabel}`}
+                />
+              }
             />
+          )}
+          {!recorded && request !== null && request > 0 && request <= max && (
+            <ReferenceLine
+              y={request}
+              stroke="hsl(var(--fg-fnt))"
+              strokeOpacity={0.9}
+              strokeWidth={1}
+              strokeDasharray="1 3"
+              label={
+                <LimitLabel
+                  word={t("readings", "requestWord")}
+                  text={`${formatQuantity(request, type)}${flatLabel}`}
+                />
+              }
+            />
+          )}
+          {recorded && (
+            <>
+              <Line
+                type="stepAfter"
+                dataKey="ceiling"
+                stroke="hsl(var(--warn))"
+                strokeOpacity={0.8}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                dot={false}
+                activeDot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+              <Line
+                type="stepAfter"
+                dataKey="request"
+                stroke="hsl(var(--fg-fnt))"
+                strokeOpacity={0.9}
+                strokeWidth={1}
+                strokeDasharray="1 3"
+                dot={false}
+                activeDot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            </>
           )}
 
           <Area
@@ -439,9 +589,11 @@ function useBandWidth(): [React.RefObject<HTMLDivElement | null>, number] {
 /** The rule's own value, so "how close am I" is read rather than computed. */
 function LimitLabel({
   text,
+  word = "limit",
   viewBox,
 }: {
   text: string;
+  word?: string;
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
 }) {
   if (!viewBox) return null;
@@ -456,7 +608,7 @@ function LimitLabel({
       textAnchor="end"
       className="fill-warn font-mono text-[9px] opacity-90"
     >
-      limit {text}
+      {word} {text}
     </text>
   );
 }

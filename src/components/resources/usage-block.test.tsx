@@ -27,7 +27,7 @@ import type {
 const getPrometheusConnection =
   vi.fn<() => Promise<PrometheusConnection | null>>();
 const probePrometheus = vi.fn<() => Promise<PrometheusProbe>>();
-const prometheusQueryRange = vi.fn<() => Promise<PromSeries[]>>();
+const prometheusQueryRange = vi.fn<(query: string) => Promise<PromSeries[]>>();
 const prometheusQuery = vi.fn<() => Promise<PromSeries[]>>();
 
 vi.mock("@/lib/commands", () => ({
@@ -35,7 +35,7 @@ vi.mock("@/lib/commands", () => ({
     detectInClusterExtensions: () => Promise.resolve([]),
     getPrometheusConnection: () => getPrometheusConnection(),
     probePrometheus: () => probePrometheus(),
-    prometheusQueryRange: () => prometheusQueryRange(),
+    prometheusQueryRange: (query: string) => prometheusQueryRange(query),
     prometheusQuery: () => prometheusQuery(),
   },
 }));
@@ -613,5 +613,55 @@ describe("UsageBlock storage fullness", () => {
       await screen.findByText(/Declared size, not how full/i)
     ).toBeInTheDocument();
     expect(screen.queryByText(/used of/)).toBeNull();
+  });
+});
+
+describe("UsageBlock without metrics-server but with a history supplier", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  /**
+   * The chart used to need metrics-server to draw at all, so a cluster
+   * without it and with a Prometheus full of history showed an empty row.
+   * The history is a different source and stands on its own; only the live
+   * line depends on the sampler.
+   */
+  it("draws what Prometheus kept and says there is no current sample", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    probePrometheus.mockResolvedValue(ANSWERED);
+    prometheusQueryRange.mockImplementation(async (query) =>
+      query.includes("kube_pod_container_resource") ? [] : series()
+    );
+    prometheusQuery.mockResolvedValue([]);
+
+    wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-nms"
+        cpu={null}
+        memory={null}
+        cpuLimit={200}
+        memoryLimit={null}
+        sampledAt={null}
+        status={{ status: "notInstalled", message: null }}
+        history={{
+          kind: "pod",
+          namespace: "k8s-gui-test",
+          pod: "busy-demo-cb8d8b486-4r2jl",
+        }}
+      />
+    );
+
+    expect(
+      await screen.findByText(
+        /metrics-server is not installed: there is no current sample/
+      )
+    ).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector("svg")).not.toBeNull());
+    expect(screen.queryByText("no metrics-server")).toBeNull();
+    // kube-state-metrics answered nothing, so the declared lines are today's
+    // figures and the chart says so rather than drawing history it lacks.
+    expect(
+      await screen.findByText(/kube-state-metrics is not in this Prometheus/)
+    ).toBeInTheDocument();
   });
 });

@@ -11,7 +11,12 @@ import {
   type ProbeResult,
   type SavedConnection,
 } from "../registry";
-import { networkTraffic, usageHistory, volumeFullness } from "./client";
+import {
+  networkTraffic,
+  nodeUsage,
+  usageHistory,
+  volumeFullness,
+} from "./client";
 import { RANGE_SPECS } from "./queries";
 
 /**
@@ -178,6 +183,7 @@ export default defineVendor({
   },
   provides: {
     "usage.history": usageHistory,
+    "usage.nodes": nodeUsage,
     "volume.fullness": volumeFullness,
     "network.traffic": networkTraffic,
   },

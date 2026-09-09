@@ -18,7 +18,12 @@ import {
 } from "@/components/resources/usage-chart";
 import { useUsageHistory } from "@/hooks/useUsageHistory";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
-import type { UsageRange, UsageScope, VolumeFullness } from "@/integrations";
+import type {
+  DeclaredHistory,
+  UsageRange,
+  UsageScope,
+  VolumeFullness,
+} from "@/integrations";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
@@ -41,6 +46,9 @@ export interface UsageBlockProps {
   memory: number | null | undefined;
   cpuLimit: number | null;
   memoryLimit: number | null;
+  /** What the object asks for today; drawn as a line beside the ceiling. */
+  cpuRequest?: number | null;
+  memoryRequest?: number | null;
   /** What the ceiling is called here: a pod has limits, a node a capacity. */
   limitNoun?: "limitWord" | "capacityWord";
   /** The sentence shown when there is no ceiling at all. */
@@ -93,6 +101,8 @@ export function UsageBlock({
   memory,
   cpuLimit,
   memoryLimit,
+  cpuRequest = null,
+  memoryRequest = null,
   limitNoun = "limitWord",
   noLimitNote = NO_LIMIT_NOTE,
   restarts,
@@ -154,6 +164,15 @@ export function UsageBlock({
   // The integration extends the core answer and never replaces it: until a
   // range has actually arrived, this is the watched window, unchanged.
   const drawing = past.window ?? { samples, resolution: null };
+  // With no metrics-server there is no live line to draw, but a window
+  // Prometheus kept is a chart on its own: the block used to refuse to
+  // draw anything at all, and the history it could have shown went unseen.
+  const drawable = available || past.window !== null;
+  const liveLine = live && available;
+  const declared = past.window?.declared;
+  // Absent flag means answered: a supplier that never had the question
+  // cannot be the one that failed to answer it.
+  const declaredKnown = past.window?.declaredKnown !== false;
 
   const caption = !available
     ? // The block cannot promise a comparison the workload does not
@@ -191,7 +210,7 @@ export function UsageBlock({
         title={title ?? t("columns", "usage")}
         count={caption}
         actions={
-          available ? (
+          available || past.status !== "absent" ? (
             <RangePicker
               enabled={past.enabled}
               selected={past.range}
@@ -202,30 +221,72 @@ export function UsageBlock({
         }
       />
       <div>
-        {available ? (
+        {drawable ? (
           <>
             <UsageChart
               label="CPU"
               type="cpu"
               samples={drawing.samples}
               limit={cpuLimit}
+              request={cpuRequest}
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
-              current={cpu ?? null}
+              current={available ? (cpu ?? null) : null}
               suppressNote={shared !== null}
-              live={live}
+              live={liveLine}
+              ranged={past.window !== null}
+              declared={
+                declared === undefined
+                  ? undefined
+                  : declared === null
+                    ? null
+                    : { request: declared.cpuRequest, limit: declared.cpuLimit }
+              }
             />
             <UsageChart
               label={t("columns", "memory")}
               type="memory"
               samples={drawing.samples}
               limit={memoryLimit}
+              request={memoryRequest}
               limitNoun={limitNoun}
               noLimitNote={neither ? null : noLimitNote}
-              current={memory ?? null}
+              current={available ? (memory ?? null) : null}
               suppressNote={shared !== null}
-              live={live}
+              live={liveLine}
+              ranged={past.window !== null}
+              declared={
+                declared === undefined
+                  ? undefined
+                  : declared === null
+                    ? null
+                    : {
+                        request: declared.memoryRequest,
+                        limit: declared.memoryLimit,
+                      }
+              }
             />
+            {!available && (
+              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+                {t("empty", "historyWithoutMetricsServer", {
+                  vendor: past.vendor,
+                })}
+              </p>
+            )}
+            {/* Only where the supplier actually answered. A refused or
+             *  failed probe also lands here as `null`, and saying
+             *  "kube-state-metrics is not in this Prometheus" about an
+             *  install that is there and answering is the collapse. */}
+            {declared === null && declaredKnown && (
+              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+                {t("empty", "declaredNowOnly")}
+              </p>
+            )}
+            {declared === null && !declaredKnown && (
+              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+                {t("empty", "declaredUnknown")}
+              </p>
+            )}
             {past.traffic && <TrafficChart window={past.traffic} />}
             {shared && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
@@ -248,7 +309,6 @@ export function UsageBlock({
                       })}
               </p>
             )}
-            <HistoryNote state={past} />
           </>
         ) : (
           <>
@@ -263,6 +323,11 @@ export function UsageBlock({
             />
           </>
         )}
+        {/* Outside the branch on purpose: with no metrics-server and a
+         *  Prometheus read that failed there is nothing to draw, and this
+         *  note is the only place that failure is spoken. Inside, it was
+         *  the silent fallback its own doc comment warns about. */}
+        <HistoryNote state={past} />
         {children}
       </div>
       {storage && <StorageRow summary={storage} />}
@@ -367,7 +432,13 @@ interface RangedHistory {
   range: UsageRange | null;
   select: (range: UsageRange | null) => void;
   loading: boolean;
-  window: { samples: readonly UsageSampleLike[]; resolution: string } | null;
+  window: {
+    samples: readonly UsageSampleLike[];
+    resolution: string;
+    declared?: DeclaredHistory | null;
+    /** See {@link UsageWindow.declaredKnown}: `false` is "could not tell". */
+    declaredKnown?: boolean;
+  } | null;
   traffic: TrafficLike | null;
   endpoint: string;
   vendor: string;
@@ -398,11 +469,14 @@ function useRangedHistory(
   // draw an empty plot over a supplier that has the answer. 6h rather than
   // 15m because the workloads this happens to stopped hours ago.
   const [range, setRange] = React.useState<UsageRange | null>(
-    live ? null : "6h"
+    live && available ? null : "6h"
   );
 
   const ready = power.state === "ready";
-  const enabled = ready && scope !== undefined && available;
+  // Not gated on metrics-server: what Prometheus kept is a different source
+  // and stands on its own. `available` only decides whether a live line
+  // joins it.
+  const enabled = ready && scope !== undefined;
 
   const query = useQuery({
     queryKey: ["usage-history", scope, range],
@@ -449,12 +523,13 @@ function useRangedHistory(
     enabled,
     // Offered only where a scope exists to ask about: a block that cannot be
     // upgraded must not advertise an upgrade.
-    offerable: scope !== undefined && available,
+    offerable: scope !== undefined,
     range,
     // Deselecting means "back to the live window", and there is not one to
     // go back to when nothing is running: it would empty the block rather
     // than reveal anything.
-    select: live ? setRange : (next) => next !== null && setRange(next),
+    select:
+      live && available ? setRange : (next) => next !== null && setRange(next),
     loading: query.isFetching,
     window: range !== null && query.data ? query.data : null,
     traffic: range !== null ? (trafficQuery.data ?? null) : null,

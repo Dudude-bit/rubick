@@ -13,6 +13,14 @@ import {
   volumeUsedQuery,
 } from "./queries";
 import { USAGE_RANGES, type UsageScope } from "../registry";
+import {
+  NODE_LABELS,
+  declaredQuery,
+  nodesNewestQuery,
+  nodesQuery,
+} from "./queries";
+import { nodeNameOf } from "./coverage";
+import type { PromSeries } from "@/generated/types";
 
 const pod: UsageScope = {
   kind: "pod",
@@ -295,5 +303,76 @@ describe("the ranges", () => {
     for (const range of USAGE_RANGES) {
       expect(RANGE_SPECS[range].resolution).toMatch(/bucket/);
     }
+  });
+});
+
+describe("what was declared", () => {
+  const pod: UsageScope = { kind: "pod", namespace: "shop", pod: "payments-0" };
+
+  /** kube-state-metrics writes cores; the chart reads millicores like everything else on it. */
+  it("asks kube-state-metrics for the pod's requests in the chart's units", () => {
+    expect(declaredQuery(pod, "cpu", "requests")).toBe(
+      'sum(kube_pod_container_resource_requests{resource="cpu",namespace="shop",pod="payments-0"}) * 1000'
+    );
+    expect(declaredQuery(pod, "memory", "limits")).toBe(
+      'sum(kube_pod_container_resource_limits{resource="memory",namespace="shop",pod="payments-0"})'
+    );
+  });
+
+  /** A declared value is a step function; peaking over it would invent nothing but also gain nothing. */
+  it("never wraps a declared line in a peak", () => {
+    for (const range of USAGE_RANGES) {
+      void range;
+      expect(declaredQuery(pod, "cpu", "requests")).not.toContain(
+        "max_over_time"
+      );
+    }
+  });
+
+  it("scopes a node's declared figures by the node label", () => {
+    expect(
+      declaredQuery({ kind: "node", node: "ip-10-0-1-2" }, "cpu", "requests")
+    ).toContain('node="ip-10-0-1-2"');
+  });
+});
+
+describe("every node at once", () => {
+  /** One query for the whole cluster, grouped by whichever node label this Prometheus writes. */
+  it("groups by every node label the app knows and keeps the peak", () => {
+    const query = nodesQuery("cpu", RANGE_SPECS["6h"]);
+    expect(query).toContain(`by (${NODE_LABELS.join(", ")})`);
+    expect(query).toContain("max_over_time");
+    expect(query).toContain('id="/"');
+    expect(query.endsWith("* 1000")).toBe(true);
+    expect(nodesNewestQuery()).toContain("timestamp(");
+  });
+
+  /**
+   * The grouping and the reader are one list. They were two: the query asked
+   * for `kubernetes_io_hostname`, `nodeNameOf` could not spell it, and every
+   * series a Prometheus labelled that way was keyed to nothing and dropped —
+   * so the node reported "no series in Prometheus" with its samples in hand.
+   * Fails if a label is grouped by that the reader cannot read back.
+   */
+  it("keys a series back to a node for every label it groups by", () => {
+    const grouping = nodesQuery("cpu", RANGE_SPECS["6h"]);
+    for (const label of NODE_LABELS) {
+      expect(grouping).toContain(label);
+      expect(nodesNewestQuery()).toContain(label);
+      const series = {
+        labels: { [label]: "worker-1" },
+        points: [],
+      } as unknown as PromSeries;
+      expect(nodeNameOf(series)).toBe("worker-1");
+    }
+  });
+});
+
+describe("a week", () => {
+  it("reaches seven days back at a resolution that still holds a spike", () => {
+    const spec = RANGE_SPECS["7d"];
+    expect(spec.windowMs).toBe(7 * 24 * 60 * 60_000);
+    expect(spec.inner).not.toBeNull();
+    expect(spec.resolution).toMatch(/max over/);
   });
 });

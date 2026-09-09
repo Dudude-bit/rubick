@@ -34,8 +34,10 @@ type Reading = keyof (typeof en)["readings"];
 import { commands } from "@/lib/commands";
 import type { PromSeries } from "@/generated/types";
 
-/** The label a node's name lands in, per exporter, most specific first. */
-const NODE_LABELS = ["node", "instance", "nodename"] as const;
+// The label a node's name lands in, per exporter, most specific first. The
+// one list the queries group by: a spelling this reader lacked meant every
+// series carrying it was keyed to nothing and silently dropped.
+import { NODE_LABELS } from "./queries";
 
 /**
  * The families each capability is built on, named so a gap can be attributed,
@@ -71,6 +73,11 @@ export const FAMILIES: Array<{
     powers: "promNetworkBytes",
     from: "promFromCadvisor",
   },
+  {
+    metric: "kube_pod_container_resource_requests",
+    powers: "promDeclaredHistory",
+    from: "promFromKsm",
+  },
 ];
 
 export interface Coverage {
@@ -92,6 +99,11 @@ export interface Coverage {
   series: Record<string, number | null>;
   /** Set where the comparison could not be made at all. */
   problem: Reading | null;
+}
+
+/** The node a series is about, under whichever label this Prometheus writes. */
+export function nodeNameOf(series: PromSeries): string | null {
+  return nameFrom(series);
 }
 
 const nameFrom = (series: PromSeries): string | null => {

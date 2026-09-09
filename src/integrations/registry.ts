@@ -68,7 +68,7 @@ import type { InClusterHint } from "./forwarded";
  * vocabulary across every history capability — the log viewer's picker offers
  * the same four words the usage chart does.
  */
-export const USAGE_RANGES = ["15m", "1h", "6h", "24h"] as const;
+export const USAGE_RANGES = ["15m", "1h", "6h", "24h", "7d"] as const;
 
 export type UsageRange = (typeof USAGE_RANGES)[number];
 
@@ -79,6 +79,7 @@ export const RANGE_WINDOW_MS: Readonly<Record<UsageRange, number>> = {
   "1h": 60 * 60_000,
   "6h": 6 * 60 * 60_000,
   "24h": 24 * 60 * 60_000,
+  "7d": 7 * 24 * 60 * 60_000,
 };
 
 /**
@@ -108,6 +109,58 @@ export type UsageScope =
 export interface UsageWindow {
   samples: readonly UsageSample[];
   /** "30s buckets, max over a 15s resolution". */
+  resolution: string;
+  /**
+   * What was declared over the window, where the supplier kept it.
+   * `null` when it did not: the lines are then drawn flat at today's
+   * figures and labelled so. Absent when the supplier does not answer
+   * the question at all.
+   */
+  declared?: DeclaredHistory | null;
+  /**
+   * Whether `declared` is an answer. `false` says the supplier was asked and
+   * could not tell — a refused or failed read — and the reader must not turn
+   * `declared: null` into the sentence "kube-state-metrics is not in this
+   * Prometheus". Defaults to known, so forgetting it claims an answer only
+   * where one was really had.
+   */
+  declaredKnown?: boolean;
+}
+
+/** One value per bucket; `null` where nothing was declared then. */
+export interface DeclaredPoint {
+  t: number;
+  v: number | null;
+}
+
+/** Requests and limits as they stood through the window, from kube-state-metrics. */
+export interface DeclaredHistory {
+  cpuRequest: readonly DeclaredPoint[];
+  cpuLimit: readonly DeclaredPoint[];
+  memoryRequest: readonly DeclaredPoint[];
+  memoryLimit: readonly DeclaredPoint[];
+}
+
+/** One node's usage over a window, in the node's own units. */
+export interface NodeUsageSeries {
+  cpuMillicores: readonly DeclaredPoint[];
+  memoryBytes: readonly DeclaredPoint[];
+}
+
+/**
+ * Every node at once, one range query per measure. Keyed by the name the
+ * supplier uses, which may be the short form of the cluster's.
+ */
+export interface NodeUsageWindow {
+  nodes: Record<string, NodeUsageSeries>;
+  /** When each node's newest sample landed, in epoch ms; absent for a node with none. */
+  newestAt: Record<string, number>;
+  /**
+   * Whether `newestAt` is an answer. `false` says the staleness probe itself
+   * failed, so a node missing from it is a node we could not ask about —
+   * never one the supplier has never seen.
+   */
+  newestKnown?: boolean;
   resolution: string;
 }
 
@@ -426,6 +479,7 @@ export interface Capabilities {
     scope: UsageScope;
     range: UsageRange;
   }) => Promise<UsageWindow>;
+  "usage.nodes": (input: { range: UsageRange }) => Promise<NodeUsageWindow>;
   /**
    * The lines a pod wrote before it stopped existing.
    *
