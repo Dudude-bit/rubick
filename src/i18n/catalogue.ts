@@ -2265,6 +2265,17 @@ export const en = {
       "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
+    linkCopied: "Copied where you are",
+    linkOpened: "Opened from a link. You are looking at it live.",
+    linkOpenedAt:
+      "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
+    linkContextMissing:
+      "This link points at cluster {context}, which is not in this kubeconfig. Nothing was opened.",
+    linkContextMissingKnown:
+      "Clusters here: {known}. A cluster with a similar name is not the same cluster, so none was picked for you.",
+    linkContextMissingNone: "No cluster is configured on this machine yet.",
+    linkOpenClusters: "Settings › Clusters",
+    linkDismiss: "Dismiss",
     tunnelAsleep: "asleep",
     renameOrRecolour: "{name} — rename or recolour",
     called: "Called",

@@ -155,8 +155,17 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
               currentNamespace: wireNamespace(scope),
             });
           }
-          // Auto-connect to saved cluster
-          get().connect(prefs.lastContext);
+          // Auto-connect to the saved cluster — but only if nothing has
+          // already claimed the connection. A window launched from a deep
+          // link connects to that link's context (useDeepLinks), and the
+          // saved last cluster must not race it and win, or the link would
+          // silently open the wrong cluster under a "live" banner. Any
+          // explicit connect bumps connectionAttemptId off zero; whichever
+          // ran first, the deep link's connect is issued too and, being the
+          // later one, wins — so this guard only has to not add a competitor.
+          if (get().connectionAttemptId === 0 && !get().pendingContext) {
+            get().connect(prefs.lastContext);
+          }
         }
       } catch {
         // Ignore errors loading preferences - not critical
