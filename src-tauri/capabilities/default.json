@@ -21,7 +21,8 @@
     "clipboard-manager:allow-write-text",
     "deep-link:default",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "notification:default"
   ],
   "remote": {
     "urls": ["https://*", "http://127.0.0.1:*", "http://localhost:*"]

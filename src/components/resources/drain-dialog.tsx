@@ -46,7 +46,10 @@ import type { T } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
 
 /** What the operator ticked, alongside the node. */
-export type DrainChoices = Omit<DrainOptions, "ignoreDaemonsets">;
+export type DrainChoices = Omit<DrainOptions, "ignoreDaemonsets"> & {
+  /** Ask for a desktop notification when the drain ends, either way. */
+  tellMeWhen?: boolean;
+};
 
 const REFUSAL_LABEL: Record<DrainRefusal, keyof typeof en.cluster> = {
   notNow: "refusalNotNow",
@@ -145,6 +148,7 @@ function DrainConfirm({
   const [choices, setChoices] = useState<DrainChoices>({
     evictUnmanagedPods: false,
     evictPodsWithEmptydir: false,
+    tellMeWhen: false,
   });
   // Draining a node on a cluster the person marked critical is a change to
   // that cluster, so the drain waits on the cluster's own name — the same gate
@@ -214,6 +218,14 @@ function DrainConfirm({
             }
             label={t("action", "evictPodsWithLocalData")}
             explained={t("empty", "evictPodsWithLocalDataExplained")}
+          />
+          <OptIn
+            checked={choices.tellMeWhen === true}
+            onChange={(next) =>
+              setChoices((was) => ({ ...was, tellMeWhen: next }))
+            }
+            label={t("tell", "askDrain")}
+            explained={t("tell", "askDrainExplained")}
           />
         </div>
         {node && (

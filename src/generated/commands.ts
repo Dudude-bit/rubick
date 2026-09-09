@@ -935,6 +935,32 @@ export async function subscribeCustomResourceWatch(
   });
 }
 
+export async function subscribeObjectWatch(
+  kind: string,
+  namespace: string | null,
+  name: string
+): Promise<string> {
+  return invoke<string>("subscribe_object_watch", { kind, namespace, name });
+}
+
+export async function subscribeCustomObjectWatch(
+  group: string,
+  version: string,
+  kind: string,
+  plural: string,
+  namespace: string | null,
+  name: string
+): Promise<string> {
+  return invoke<string>("subscribe_custom_object_watch", {
+    group,
+    version,
+    kind,
+    plural,
+    namespace,
+    name,
+  });
+}
+
 export async function resourceWatchSubscribed(streamId: string): Promise<void> {
   return invoke<void>("resource_watch_subscribed", { streamId });
 }

@@ -32,6 +32,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useAsk } from "@/hooks/useAsk";
 import { useCritical } from "@/hooks/useCritical";
 import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { useT } from "@/i18n/useT";
@@ -258,6 +259,7 @@ export function NodeList() {
   });
 
   const [draining, setDraining] = useState<string | null>(null);
+  const asking = useAsk();
   // Cordon/uncordon fire straight from a list row. On a critical cluster they
   // are still a change to that cluster, so they route through the typed-name
   // gate the ConfirmDialog carries; on an ordinary cluster they stay one-click.
@@ -376,6 +378,7 @@ export function NodeList() {
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />
+      {asking.dialog}
       <DrainDialog
         node={draining}
         state={drain.state}
@@ -389,7 +392,9 @@ export function NodeList() {
             drain.reset();
           }
         }}
-        onConfirm={(node, choices) => {
+        onConfirm={(node, { tellMeWhen, ...choices }) => {
+          if (tellMeWhen)
+            asking.ask({ kind: "Node", namespace: null, name: node });
           void drain.start(node, { ignoreDaemonsets: true, ...choices });
         }}
         onCancelDrain={drain.cancel}

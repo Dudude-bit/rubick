@@ -94,19 +94,44 @@ describe("planPeekActions", () => {
   it("keeps the two most-used pod actions in the row and folds the rest away", () => {
     const plan = planPeekActions("Pod", pod(), t);
     expect(labels(plan.inline)).toEqual(["Shell", "Port forward"]);
-    expect(labels(plan.menu)).toEqual(["Debug", "Restart", "Delete"]);
+    expect(labels(plan.menu)).toEqual([
+      "Debug",
+      "Restart",
+      "Delete",
+      "Tell me when it is ready, or falls over",
+    ]);
   });
 
   // Five controls or fewer and there is nothing to hide behind.
   it("leaves a short row whole", () => {
     const plan = planPeekActions("Deployment", undefined, t);
-    expect(labels(plan.inline)).toEqual(["Scale", "Restart", "Delete"]);
+    expect(labels(plan.inline)).toEqual([
+      "Scale",
+      "Restart",
+      "Delete",
+      "Tell me when the rollout finishes",
+    ]);
     expect(plan.menu).toEqual([]);
   });
 
   it("offers a plain Delete for a kind with nothing else to do", () => {
     expect(labels(all("ConfigMap"))).toEqual(["Delete"]);
-    expect(labels(all("DaemonSet"))).toEqual(["Delete"]);
+    expect(labels(all("DaemonSet"))).toEqual([
+      "Delete",
+      "Tell me when the rollout finishes",
+    ]);
+  });
+
+  /** A Job asks its own question — how it ends — not the rollout's. Fails if the askJob arm is dropped to the rollout default. */
+  it("offers the job's own tell-me-when question", () => {
+    expect(labels(all("Job"))).toContain("Tell me how it ends");
+  });
+
+  /** A bell that read "Tell me when" on an object already asked about would ask twice. */
+  it("offers to stop once the object is already being watched", () => {
+    expect(labels(all("Deployment", undefined, { watching: true }))).toContain(
+      "Stop watching"
+    );
   });
 
   // The trap this guards is a control on one surface and not the other: a

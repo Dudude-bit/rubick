@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { activityLabel } from "./activity-label";
 
-const none = { ports: 0, terminals: 0 };
+const none = { ports: 0, terminals: 0, watching: 0 };
 
 describe("what the activity trigger calls itself", () => {
   it("is a plain invitation when nothing is running", () => {
@@ -24,10 +24,15 @@ describe("what the activity trigger calls itself", () => {
     expect(activityLabel({ ...none, terminals: 2 })).toBe("2 terminals");
   });
 
+  it("names watches when they are the only thing running", () => {
+    expect(activityLabel({ ...none, watching: 1 })).toBe("1 watch");
+    expect(activityLabel({ ...none, watching: 3 })).toBe("3 watches");
+  });
+
   /** Two nouns do not fit an eleven-pixel status line, so the total wins. */
   it("falls back to a total once two kinds are running", () => {
-    expect(activityLabel({ ports: 1, terminals: 2 })).toBe("3 active");
-    expect(activityLabel({ ports: 2, terminals: 1 })).toBe("3 active");
+    expect(activityLabel({ ...none, ports: 1, terminals: 2 })).toBe("3 active");
+    expect(activityLabel({ ...none, ports: 2, terminals: 1 })).toBe("3 active");
   });
 
   /**
@@ -42,6 +47,8 @@ describe("what the activity trigger calls itself", () => {
     expect(ports(5)).toBe("5 пробросов");
     expect(ports(21)).toBe("21 проброс");
     expect(activityLabel(none, "ru")).toBe("активность");
-    expect(activityLabel({ ports: 2, terminals: 1 }, "ru")).toBe("активных: 3");
+    expect(activityLabel({ ...none, ports: 2, terminals: 1 }, "ru")).toBe(
+      "активных: 3"
+    );
   });
 });

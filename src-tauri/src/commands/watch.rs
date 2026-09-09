@@ -208,6 +208,116 @@ pub async fn subscribe_custom_resource_watch(
         &api_resource,
         &kind,
         namespace,
+        None,
+        |obj| Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj)),
+    ))
+}
+
+// ----- One object -----
+
+/// Watch a single built-in object by name, for "tell me when" on it.
+///
+/// The kinds are the ones a person waits on: a rollout, a pod, a job, a node.
+/// Anything else is refused by name rather than watched as the wrong type.
+#[tauri::command]
+pub async fn subscribe_object_watch(
+    kind: String,
+    namespace: Option<String>,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let client = current_client(&state)?;
+    let namespaced = |ns: Option<String>| -> Result<String> {
+        let ns = ns.ok_or_else(|| {
+            Error::Internal(format!("{kind} is namespaced; a namespace is required"))
+        })?;
+        crate::validation::validate_namespace(&ns)?;
+        Ok(ns)
+    };
+    let manager = &state.watch_manager;
+    let id = match kind.as_str() {
+        "Pod" => manager.subscribe_object::<Pod, _, _>(
+            client,
+            "Pod",
+            namespaced(namespace)?,
+            name,
+            |o| Some(PodInfo::from(o)),
+        ),
+        "Deployment" => manager.subscribe_object::<Deployment, _, _>(
+            client,
+            "Deployment",
+            namespaced(namespace)?,
+            name,
+            |o| Some(DeploymentInfo::from(o)),
+        ),
+        "StatefulSet" => manager.subscribe_object::<StatefulSet, _, _>(
+            client,
+            "StatefulSet",
+            namespaced(namespace)?,
+            name,
+            |o| Some(StatefulSetInfo::from(o)),
+        ),
+        "DaemonSet" => manager.subscribe_object::<DaemonSet, _, _>(
+            client,
+            "DaemonSet",
+            namespaced(namespace)?,
+            name,
+            |o| Some(DaemonSetInfo::from(o)),
+        ),
+        "Job" => manager.subscribe_object::<Job, _, _>(
+            client,
+            "Job",
+            namespaced(namespace)?,
+            name,
+            |o| Some(JobInfo::from(o)),
+        ),
+        "Node" => manager.subscribe_cluster_object::<Node, _, _>(client, "Node", name, |o| {
+            Some(NodeInfo::from(o))
+        }),
+        other => {
+            return Err(Error::Internal(format!(
+                "no single-object watch for kind {other}"
+            )))
+        }
+    };
+    Ok(id)
+}
+
+/// Watch a single custom resource by name; the CRD coordinates come from
+/// the integration that knows them.
+#[tauri::command]
+pub async fn subscribe_custom_object_watch(
+    group: String,
+    version: String,
+    kind: String,
+    plural: String,
+    namespace: Option<String>,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    if let Some(ns) = &namespace {
+        crate::validation::validate_namespace(ns)?;
+    }
+    let client = current_client(&state)?;
+    let api_resource = kube::discovery::ApiResource {
+        group: group.clone(),
+        version: version.clone(),
+        api_version: if group.is_empty() {
+            version.clone()
+        } else {
+            format!("{group}/{version}")
+        },
+        kind: kind.clone(),
+        plural,
+    };
+    Ok(state.watch_manager.subscribe_custom_resource(
+        client,
+        &api_resource,
+        &kind,
+        namespace,
+        Some(name),
         |obj| Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj)),
     ))
 }
@@ -249,6 +359,7 @@ pub async fn subscribe_gateway_watch(
         &api_resource,
         "Gateway",
         namespace,
+        None,
         move |obj| {
             // Watch events strip apiVersion/kind like list items do; put
             // them back so the payload matches what the fetcher returned.
@@ -277,6 +388,7 @@ pub async fn subscribe_gateway_route_watch(
         &api_resource,
         &kind,
         namespace,
+        None,
         move |obj| {
             Some(crate::resources::RouteInfo::read(
                 &crate::commands::gateway::with_types(obj.clone(), &stamp),

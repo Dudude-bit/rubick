@@ -10,6 +10,7 @@ import { ErrorProvider } from "@/contexts/error-context";
 import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
+import { useTellMeWhen } from "@/hooks/useTellMeWhen";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { usePortForwardStore } from "@/stores/portForwardStore";
@@ -184,6 +185,7 @@ export default function App() {
   // Global event hooks (ErrorProvider now handles error toasts)
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
+  useTellMeWhen();
   usePortForwardAutoStart();
   useAutoUpdater();
 

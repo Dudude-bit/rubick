@@ -60,6 +60,7 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // A packaged build registers `rubick://` through its installer
             // (Info.plist, the Windows registry, the .desktop file); a dev
@@ -291,6 +292,8 @@ fn main() {
             commands::watch::subscribe_persistentvolume_watch,
             commands::watch::subscribe_storageclass_watch,
             commands::watch::subscribe_custom_resource_watch,
+            commands::watch::subscribe_object_watch,
+            commands::watch::subscribe_custom_object_watch,
             commands::watch::resource_watch_subscribed,
             commands::watch::unsubscribe_resource_watch,
             // kubectl commands

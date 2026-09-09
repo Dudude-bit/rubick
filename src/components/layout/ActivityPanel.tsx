@@ -5,7 +5,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Activity, Network, Terminal } from "lucide-react";
+import { Activity, Bell, Network, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
@@ -17,6 +17,10 @@ import { activityLabel } from "@/lib/activity-label";
 import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
+import { WatchingTab } from "./activity/WatchingTab";
+import { isOpen } from "@/lib/tell-me-when";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -29,6 +33,7 @@ const TABS: Array<{
 }> = [
   { id: "ports", label: "ports", icon: Network },
   { id: "terminals", label: "terminals", icon: Terminal },
+  { id: "watching", label: "watching", icon: Bell },
 ];
 
 export function ActivityPanel() {
@@ -51,6 +56,8 @@ export function ActivityPanel() {
   // loop with React error #185 ("Maximum update depth exceeded").
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
   const terminalSessions = useTerminalSessionStore((state) => state.sessions);
+  const watches = useTellMeWhenStore((state) => state.watches);
+  const currentContext = useClusterStore((state) => state.currentContext);
 
   const activeTerminals = terminalSessions.filter(
     (s) => s.status === "connected"
@@ -59,9 +66,11 @@ export function ActivityPanel() {
   const counts: Record<TabId, number> = {
     ports: portForwardSessions.length,
     terminals: activeTerminals,
+    watching: watches.filter((w) => w.context === currentContext && isOpen(w))
+      .length,
   };
 
-  const totalActive = counts.ports + counts.terminals;
+  const totalActive = counts.ports + counts.terminals + counts.watching;
   const label = activityLabel(counts, useLocale());
 
   const handleClose = () => setOpen(false);
@@ -126,6 +135,7 @@ export function ActivityPanel() {
         <div className="min-h-0 flex-1 overflow-auto">
           {tab === "ports" && <PortForwardsTab />}
           {tab === "terminals" && <TerminalsTab onClose={handleClose} />}
+          {tab === "watching" && <WatchingTab />}
         </div>
       </SheetContent>
     </Sheet>

@@ -20,11 +20,13 @@ import { translate, type Locale } from "@/i18n";
 export interface ActivityCounts {
   ports: number;
   terminals: number;
+  watching: number;
 }
 
 const KEYS = {
   ports: "portForwards",
   terminals: "terminalCount",
+  watching: "watchCount",
 } as const;
 
 export function activityLabel(
@@ -43,6 +45,6 @@ export function activityLabel(
   }
 
   return translate(locale, "activity", "active", {
-    n: counts.ports + counts.terminals,
+    n: counts.ports + counts.terminals + counts.watching,
   });
 }

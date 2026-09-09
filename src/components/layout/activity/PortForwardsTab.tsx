@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  Bell,
+  BellRing,
   Loader2,
   MoreHorizontal,
   Network,
@@ -36,6 +38,7 @@ import {
   ActivityEmpty,
   ActivityGroup,
 } from "./primitives";
+import { useAsk } from "@/hooks/useAsk";
 import { useT } from "@/i18n/useT";
 
 /** Same shape the store keys sessions by; do not reorder the parts. */
@@ -67,12 +70,17 @@ function SessionRow({
   isBusy,
   onStop,
   namesCluster = false,
+  watched,
+  onWatch,
 }: {
   session: PortForwardSession;
   status: PortForwardStatus | undefined;
   isBusy: boolean;
   onStop: () => void;
   namesCluster?: boolean;
+  /** Absent on a row whose cluster this is not: its events never arrive here. */
+  watched?: boolean;
+  onWatch?: () => void;
 }) {
   const t = useT();
   const isError = status?.status === "error";
@@ -110,6 +118,22 @@ function SessionRow({
           {isReconnecting && ` · ${t("activity", "reconnectingInline")}`}
         </span>
       </span>
+      {onWatch && (
+        <ActivityAction
+          aria-label={
+            watched ? t("tell", "stopAsking") : t("tell", "askForward")
+          }
+          aria-pressed={watched}
+          onClick={onWatch}
+          className={cn(watched && "text-fg")}
+        >
+          {watched ? (
+            <BellRing className="h-3.5 w-3.5" />
+          ) : (
+            <Bell className="h-3.5 w-3.5" />
+          )}
+        </ActivityAction>
+      )}
       <ActivityAction
         aria-label={t("activity", "stopForwarding", { pod: session.pod })}
         onClick={onStop}
@@ -150,6 +174,7 @@ export function PortForwardsTab() {
   );
 
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const asking = useAsk();
   const [editing, setEditing] = useState<Editing>(undefined);
   const [startingAll, setStartingAll] = useState(false);
 
@@ -285,20 +310,34 @@ export function PortForwardsTab() {
 
   return (
     <div className="pb-3">
+      {asking.dialog}
       {contextSessions.length > 0 && (
         <ActivityGroup
           title={t("activity", "running")}
           count={contextSessions.length}
         >
-          {contextSessions.map((session) => (
-            <SessionRow
-              key={session.id}
-              session={session}
-              status={statusBySession[session.id]}
-              isBusy={busyIds.has(session.id)}
-              onStop={() => handleStop(session.id)}
-            />
-          ))}
+          {contextSessions.map((session) => {
+            const target = {
+              kind: "PortForward" as const,
+              namespace: session.namespace,
+              name: session.pod,
+              sessionId: session.id,
+            };
+            const watched = asking.watching(target);
+            return (
+              <SessionRow
+                key={session.id}
+                session={session}
+                status={statusBySession[session.id]}
+                isBusy={busyIds.has(session.id)}
+                onStop={() => handleStop(session.id)}
+                watched={watched}
+                onWatch={() =>
+                  watched ? asking.stop(target) : asking.ask(target)
+                }
+              />
+            );
+          })}
         </ActivityGroup>
       )}
 
