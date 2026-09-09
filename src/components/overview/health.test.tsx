@@ -54,6 +54,7 @@ describe("the overview's two event panels", () => {
             crashLooping: 0,
           }}
           nodes={[]}
+          nodesKnown={true}
         />
         <WarningsPanel warnings={[warning]} />
       </>
@@ -110,6 +111,7 @@ describe("the detail line on a problem row", () => {
           crashLooping: 0,
         }}
         nodes={[]}
+        nodesKnown={true}
       />
     );
     const cordoned: ClusterProblem = {
@@ -142,5 +144,48 @@ describe("the detail line on a problem row", () => {
     ).toBeInTheDocument();
     quoted.unmount();
     useLocaleStore.setState({ choice: null });
+  });
+});
+
+describe("the healthy line when the node read was refused", () => {
+  const pods = {
+    running: 1,
+    pending: 0,
+    succeeded: 0,
+    failed: 0,
+    unknown: 0,
+    crashLooping: 0,
+  };
+
+  /**
+   * A namespace-scoped token cannot read the cluster's nodes, so "N of M
+   * nodes ready" would be "0 of 0" — a healthy-looking lie. With the nodes
+   * unknown the clause is left off entirely; deleting the `nodesKnown` guard
+   * puts "0 of 0 nodes ready" back on a screen that just said "no access".
+   */
+  it("drops the nodes-ready clause when the nodes are unknown", () => {
+    const { queryByText, unmount } = wrap(
+      <ProblemsPanel
+        problems={[]}
+        problemsTruncated={0}
+        pods={pods}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    expect(queryByText(/nodes ready/)).toBeNull();
+    unmount();
+
+    const known = wrap(
+      <ProblemsPanel
+        problems={[]}
+        problemsTruncated={0}
+        pods={pods}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    expect(known.getByText(/nodes ready/)).toBeInTheDocument();
+    known.unmount();
   });
 });

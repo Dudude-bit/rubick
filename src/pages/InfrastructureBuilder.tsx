@@ -28,6 +28,7 @@ import { SectionHeader } from "@/components/ui/section";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useCritical } from "@/hooks/useCritical";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
@@ -113,6 +114,12 @@ export function InfrastructureBuilder() {
   const [isValidating, setIsValidating] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Applying a built manifest is the same kubectl-apply the YAML editor gates;
+  // on a critical cluster it goes through a typed-name confirmation too. Kept
+  // to critical clusters so the ordinary builder stays one click.
+  const [applyConfirmOpen, setApplyConfirmOpen] = useState(false);
+  const critical = useCritical();
+  const criticalActive = critical.critical && !!critical.context;
   const [includeImported, setIncludeImported] = useState(false);
   const [selection, setSelection] = useState<{
     nodes: Node<ResourceNodeData>[];
@@ -571,7 +578,15 @@ export function InfrastructureBuilder() {
                 )}
                 {t("action", "validate")}
               </Button>
-              <Button size="sm" onClick={handleApply} disabled={isApplying}>
+              <Button
+                size="sm"
+                onClick={() =>
+                  criticalActive
+                    ? setApplyConfirmOpen(true)
+                    : void handleApply()
+                }
+                disabled={isApplying}
+              >
                 {isApplying ? (
                   <Spinner size="sm" className="mr-1.5" />
                 ) : (
@@ -725,6 +740,17 @@ export function InfrastructureBuilder() {
           </div>
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={applyConfirmOpen}
+        onOpenChange={setApplyConfirmOpen}
+        title={t("action", "applyChangesQuestion")}
+        description={t("action", "applyManifestConfirm")}
+        confirmLabel={t("action", "apply")}
+        onConfirm={() => {
+          setApplyConfirmOpen(false);
+          void handleApply();
+        }}
+      />
       <ConfirmDialog
         open={clearOpen}
         onOpenChange={setClearOpen}

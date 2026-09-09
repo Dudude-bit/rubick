@@ -111,14 +111,24 @@ export function StatusBar() {
               <span>·</span>
             </>
           )}
-          <span>{t("cluster", "podCount", { n: podCount })}</span>
-          <span>·</span>
-          <span className={cn(problemCount > 0 && "text-err")}>
-            {t("cluster", "problemCount", { n: problemCount })}
-            {/* The backend caps its ranked list; saying "12+" is the
-                difference between a count and a guess. */}
-            {problemsTruncated > 0 && "+"}
-          </span>
+          {podCount === null ? (
+            // The cluster-wide overview was refused or failed: the count is
+            // unknown, and "0 pods · 0 problems" here would say the opposite
+            // of the Overview page's own "no access". A dash is the honest
+            // chrome. The path the connection took is known either way.
+            <span className="text-fg-fnt">{"—"}</span>
+          ) : (
+            <>
+              <span>{t("cluster", "podCount", { n: podCount })}</span>
+              <span>·</span>
+              <span className={cn((problemCount ?? 0) > 0 && "text-err")}>
+                {t("cluster", "problemCount", { n: problemCount ?? 0 })}
+                {/* The backend caps its ranked list; saying "12+" is the
+                    difference between a count and a guess. */}
+                {problemsTruncated > 0 && "+"}
+              </span>
+            </>
+          )}
         </>
       ) : (
         <span>{t("cluster", "notConnectedLower")}</span>
