@@ -108,6 +108,8 @@ export function useResourceWatch<
     // The rows a resync has delivered so far, held here rather than in
     // the cache until the backend says the burst is complete.
     let staged: Map<string, T> | null = null;
+    const positions = new Map<string, number>();
+    let indexedList: T[] | undefined;
 
     // Give up on a resync that can no longer complete. What was staged is
     // dropped rather than committed — a half-delivered burst is not a
@@ -182,6 +184,8 @@ export function useResourceWatch<
                 setResyncing(false);
                 if (rows) {
                   queryClient.setQueryData<T[]>(queryKey, [...rows.values()]);
+                  positions.clear();
+                  indexedList = undefined;
                 }
                 continue;
               }
@@ -194,9 +198,15 @@ export function useResourceWatch<
 
             if (live.length > 0) {
               const changes = live;
-              queryClient.setQueryData<T[]>(queryKey, (prev) =>
-                applyChanges(prev ?? [], changes)
-              );
+              indexedList = queryClient.setQueryData<T[]>(queryKey, (prev) => {
+                if (prev !== indexedList) {
+                  positions.clear();
+                  prev?.forEach((item, index) =>
+                    positions.set(identify(item), index)
+                  );
+                }
+                return applyChanges(prev ?? [], changes, positions);
+              });
             }
           }
         );
@@ -272,23 +282,42 @@ function stage<T extends { name: string; namespace?: string | null }>(
   else rows.set(identify(incoming), incoming);
 }
 
-/**
- * The list with a batch of changes folded in.
- *
- * Keyed rather than scanned: `findIndex` per change is O(N) against a list
- * the same burst is growing, so an init burst of a thousand objects costs
- * half a million name comparisons and as many copied array slots to build
- * what one pass builds.
- *
- * A `Map` keeps insertion order and leaves a replaced row where it was,
- * so rows do not jump around under an update.
- */
+// Lookup and replacement touch only changes; immutable publication and
+// ordered deletion still copy O(N) array slots.
 function applyChanges<T extends { name: string; namespace?: string | null }>(
   list: T[],
-  changes: Array<WatchChange<T>>
+  changes: Array<WatchChange<T>>,
+  positions: Map<string, number>
 ): T[] {
-  const rows = new Map<string, T>();
-  for (const item of list) rows.set(identify(item), item);
-  for (const change of changes) stage(rows, change);
-  return [...rows.values()];
+  let next: T[] | undefined;
+  let deleted = false;
+  for (const change of changes) {
+    const incoming = change.resource;
+    if (!incoming) continue;
+    const key = identify(incoming);
+    const index = positions.get(key);
+    if (change.op === "deleted") {
+      if (index === undefined) continue;
+      positions.delete(key);
+      deleted = true;
+    } else {
+      if (index !== undefined && (next ?? list)[index] === incoming) continue;
+      next ??= list.slice();
+      if (index === undefined) {
+        positions.set(key, next.length);
+        next.push(incoming);
+      } else {
+        next[index] = incoming;
+      }
+    }
+  }
+  if (deleted) {
+    const rows = next ?? list;
+    next = [];
+    for (const [key, index] of positions) {
+      positions.set(key, next.length);
+      next.push(rows[index]);
+    }
+  }
+  return next ?? list;
 }

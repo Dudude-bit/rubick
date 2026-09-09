@@ -38,6 +38,7 @@ import type {
   RefusedPod,
 } from "@/hooks/useNodeDrain";
 import { useConnections } from "@/hooks/useConnections";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { budgetRule, drainBlockers } from "@/lib/governance";
 import { ResourceType } from "@/lib/resource-registry";
 import type { en } from "@/i18n/catalogue";
@@ -149,6 +150,10 @@ function DrainConfirm({
     evictPodsWithEmptydir: false,
     tellMeWhen: false,
   });
+  // Draining a node on a cluster the person marked critical is a change to
+  // that cluster, so the drain waits on the cluster's own name — the same gate
+  // Scale, Apply and every confirmation use, notice and field inseparable.
+  const gate = useCriticalGate();
 
   // Asked for only while the dialog is open: a node's neighbourhood is every
   // pod on it in every namespace, which is not a read to make from a list row.
@@ -162,6 +167,7 @@ function DrainConfirm({
 
   return (
     <>
+      {gate.notice}
       <div className="flex flex-col gap-1.5">
         <p className="text-xs text-fg-mut">{t("empty", "drainExplained")}</p>
         {query.isPending && node && (
@@ -231,12 +237,14 @@ function DrainConfirm({
           </Link>
         )}
       </div>
+      {gate.input}
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
           {t("action", "cancel")}
         </Button>
         <Button
           variant="destructive"
+          disabled={gate.blocked}
           onClick={() => node && onConfirm(node, choices)}
         >
           {blockers.length > 0

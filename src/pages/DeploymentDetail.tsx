@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
@@ -61,6 +61,7 @@ import {
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
   Composition,
@@ -90,6 +91,13 @@ export function DeploymentDetail() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [newImage, setNewImage] = useState("");
   const [selectedContainer, setSelectedContainer] = useState("");
+  // Updating a container image rolls out new code — a change to the cluster,
+  // gated on a critical one exactly like Scale, Restart and Delete beside it.
+  const imageGate = useCriticalGate();
+  const imageGateReset = imageGate.reset;
+  useEffect(() => {
+    if (!imageDialogOpen) imageGateReset();
+  }, [imageDialogOpen, imageGateReset]);
   const {
     name,
     namespace,
@@ -604,6 +612,7 @@ export function DeploymentDetail() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("action", "updateContainerImage")}</DialogTitle>
+            {imageGate.notice}
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -619,6 +628,7 @@ export function DeploymentDetail() {
                 placeholder={t("action", "imagePlaceholder")}
               />
             </div>
+            {imageGate.input}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
@@ -626,7 +636,9 @@ export function DeploymentDetail() {
             </Button>
             <Button
               onClick={() => updateImageMutation.mutate()}
-              disabled={updateImageMutation.isPending || !newImage}
+              disabled={
+                updateImageMutation.isPending || !newImage || imageGate.blocked
+              }
             >
               {t("action", "update")}
             </Button>

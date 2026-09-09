@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
 interface ConfirmDialogProps {
@@ -45,16 +46,27 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const t = useT();
+  // On critical infrastructure the reader also types the cluster's name:
+  // what this guards against is not the object but the window it is in.
+  const gate = useCriticalGate();
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) gate.reset();
+    onOpenChange(next);
+  };
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
+          {gate.notice}
           {description && (
             <AlertDialogDescription>{description}</AlertDialogDescription>
           )}
         </AlertDialogHeader>
         {children}
+        {gate.input}
         <AlertDialogFooter>
           <AlertDialogCancel>
             {cancelLabel ?? t("action", "cancel")}
@@ -62,7 +74,7 @@ export function ConfirmDialog({
           <AlertDialogAction
             className={buttonVariants({ variant: confirmVariant })}
             onClick={onConfirm}
-            disabled={confirmDisabled}
+            disabled={confirmDisabled || gate.blocked}
           >
             {confirmLabel ?? t("action", "confirm")}
           </AlertDialogAction>

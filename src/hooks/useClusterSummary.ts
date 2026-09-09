@@ -8,14 +8,20 @@ import { useClusterStore } from "@/stores/clusterStore";
 
 export interface NamespaceScope {
   name: string;
-  podCount: number;
-  /** Problems the backend attributed to this namespace, cluster-wide. */
-  problemCount: number;
+  /** `null` when the cluster-wide overview was refused or failed — the count
+   *  is unknown, not zero. */
+  podCount: number | null;
+  /** Problems the backend attributed to this namespace, cluster-wide. `null`
+   *  when the overview could not be read. */
+  problemCount: number | null;
 }
 
 export interface ClusterSummary {
-  podCount: number;
-  problemCount: number;
+  /** `null` when the cluster-wide overview was refused or failed. The chrome
+   *  shows "—", not "0", so a token without cluster read rights is never told
+   *  its cluster is empty and healthy. */
+  podCount: number | null;
+  problemCount: number | null;
   /** Problems the backend dropped from its ranked list, if any. */
   problemsTruncated: number;
   namespaces: NamespaceScope[];
@@ -47,6 +53,10 @@ export function useClusterSummary(): ClusterSummary {
   });
 
   return useMemo(() => {
+    // The overview carries the counts; when it was refused or failed there is
+    // no count to state, and a `0` there would tell a namespace-scoped user
+    // their cluster is empty and healthy. `known` is what keeps that honest.
+    const known = overview !== undefined;
     const pods = new Map(
       (overview?.namespaces ?? []).map((ns) => [ns.name, ns.podCount])
     );
@@ -68,19 +78,19 @@ export function useClusterSummary(): ClusterSummary {
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: pods.get(name) ?? 0,
-        problemCount: problems.get(name) ?? 0,
+        podCount: known ? (pods.get(name) ?? 0) : null,
+        problemCount: known ? (problems.get(name) ?? 0) : null,
       }))
       .sort(
         (a, b) =>
-          b.problemCount - a.problemCount ||
-          b.podCount - a.podCount ||
+          (b.problemCount ?? 0) - (a.problemCount ?? 0) ||
+          (b.podCount ?? 0) - (a.podCount ?? 0) ||
           a.name.localeCompare(b.name)
       );
 
     return {
-      podCount: overview?.counts.pods ?? 0,
-      problemCount: overview?.problems.length ?? 0,
+      podCount: overview ? overview.counts.pods : null,
+      problemCount: overview ? overview.problems.length : null,
       problemsTruncated: overview?.problemsTruncated ?? 0,
       namespaces,
       isLoading: overviewLoading || namespacesLoading,

@@ -43,7 +43,7 @@ import { commands } from "@/lib/commands";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { inNamespace } from "@/lib/namespace-scope";
+import { inScope, listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
@@ -261,11 +261,12 @@ export function Sidebar() {
 
 function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   const t = useT();
-  // `""` is this app's word for "the whole cluster", not `null` — the store
-  // types it `string` and every other consumer writes `currentNamespace ||
-  // null`. Comparing against `null` here compiled fine and filtered every
-  // row away, so the rail read "Routes 0" above a page listing forty.
-  const scope = useClusterStore((s) => s.currentNamespace) || null;
+  // The whole selection, not the collapsed `currentNamespace` — that is `""`
+  // for any two-or-more namespace window, which narrows to the whole cluster
+  // and put "Routes 40" in the rail above a page (migrated to read per
+  // namespace) listing three. `inScope` narrows by the array for one or
+  // several, and is the identity for an empty selection.
+  const scope = useClusterStore((s) => s.namespaceScope);
   const detection = useGatewayApi().data;
   const installed = detection?.installed ?? false;
   const served = new Set(detection?.kinds.map((k) => k.kind) ?? []);
@@ -287,9 +288,15 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     routeKinds.length > 0 &&
     routeKinds.every((kind) => access[kind as ResourceKind] === false);
 
-  // Same keys as the routes list and the trace — the rail's numbers and
-  // the pages they open can never disagree.
-  const gateways = useLiveQuery({
+  const cacheKey = scopeCacheKey(scope);
+
+  // Verdict sources, read cluster-wide on purpose: a route can attach to a
+  // Gateway (or a GatewayClass) in a namespace the window is not on, and a
+  // verdict computed without it is wrong. These are the same keys the routes
+  // list and the trace read, so the pages share the answer. A namespace-scoped
+  // token is refused them — the board reads that absence as `topologyKnown:
+  // false` and asserts nothing, rather than a red dot for what it cannot see.
+  const gatewaysAll = useLiveQuery({
     queryKey: ["gateway-map-gateways"],
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
@@ -303,17 +310,44 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     refresh: "overview",
     enabled: installed && served.has("GatewayClass"),
   });
+  // The rail's own count follows the window's namespaces, like every other
+  // row — read per namespace so a token with rights in some and not the whole
+  // cluster still gets a number instead of a blank (the routes page reads the
+  // same way). A whole-cluster window is one call.
   const routes = useLiveQuery({
-    queryKey: ["gateway-attached-routes", ...routeKinds],
-    queryFn: async () => {
-      const lists = await Promise.all(
-        routeKinds.map((kind) => commands.listGatewayRoutes(kind, null))
+    queryKey: ["gateway-rail-routes", cacheKey, ...routeKinds],
+    queryFn: listAcrossScope(scope, async (ns) => {
+      // Each served kind on its own: a token may list HTTPRoutes and not
+      // TCPRoutes, and one refused kind must not blank the whole count — the
+      // routes page reads each kind as its own query for the same reason. A
+      // kind that answered contributes its rows; only when every kind was
+      // refused is the refusal the answer, thrown for `listAcrossScope`.
+      const settled = await Promise.allSettled(
+        routeKinds.map((kind) => commands.listGatewayRoutes(kind, ns))
       );
-      return lists.flat();
-    },
+      const rows = settled.flatMap((r) =>
+        r.status === "fulfilled" ? r.value : []
+      );
+      const refused = settled.find((r) => r.status === "rejected");
+      if (refused && settled.every((r) => r.status === "rejected")) {
+        throw (refused as PromiseRejectedResult).reason;
+      }
+      return rows;
+    }),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && routeKinds.length > 0 && !routesDenied,
+  });
+  // Gateways for the COUNT, scoped like the routes. The cluster-wide read above
+  // stays the verdict source; on a whole-cluster window it already is this
+  // list, so this second read only runs once a namespace is selected.
+  const gatewaysScoped = useLiveQuery({
+    queryKey: ["gateway-rail-gateways", cacheKey],
+    queryFn: listAcrossScope(scope, (ns) => commands.listGateways(ns)),
+    staleTime: ROUTING_STALE,
+    refresh: "overview",
+    enabled:
+      installed && served.has("Gateway") && !gatewaysDenied && scope.length > 0,
   });
   const backing = useBackingLists(
     installed && routeKinds.length > 0 && !routesDenied
@@ -321,34 +355,37 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
 
   const classesSettled =
     classes.data !== undefined || !served.has("GatewayClass");
-  // The subject list is scoped; the sources are not. A route in this
-  // namespace can attach to a Gateway in another one, and a verdict computed
-  // without that Gateway would be wrong — so the rail narrows what it counts,
-  // never what it judges against.
-  //
-  // Every other row in the rail follows the selected namespace (the backend
-  // says so in `ResourceCounts`) and these two did not, so picking a
-  // namespace left "Routes 40" in red above a page listing three green ones.
+  // The subject list is scoped, and now read that way rather than narrowed
+  // from a cluster-wide list — an RBAC token that cannot list cluster-wide
+  // still gets its own namespaces' rows. The verdict sources stay cluster-wide
+  // (above): a route can attach to a Gateway in a namespace the window is not
+  // on, and a verdict computed without it is wrong.
   const scopedRoutes = useMemo(
-    () => inNamespace(routes.data ?? [], scope),
+    () => (routes.data ?? []).filter((r) => inScope(scope, r.namespace)),
     [routes.data, scope]
   );
+  // The count follows the scope; on a whole-cluster window the verdict read
+  // already is that list, so reuse it and skip the second fetch.
+  const gatewayCount = scope.length === 0 ? gatewaysAll : gatewaysScoped;
   const scopedGateways = useMemo(
-    () => inNamespace(gateways.data ?? [], scope),
-    [gateways.data, scope]
+    () => (gatewayCount.data ?? []).filter((g) => inScope(scope, g.namespace)),
+    [gatewayCount.data, scope]
   );
   const board = useMemo(
     () =>
       routesBoard(
         scopedRoutes,
         {
-          gateways: gateways.data ?? [],
+          // Cluster-wide, deliberately: the verdict for a scoped route can
+          // depend on a Gateway or class in another namespace. Refused for a
+          // namespace-scoped token -> `topologyKnown` false -> no verdict.
+          gateways: gatewaysAll.data ?? [],
           classes: classes.data ?? [],
           // Classes count as read only once their list answered (or the
           // kind is not served at all) — a gateway judged against an
           // empty class list reads "class does not exist", which would
           // put a red dot on a healthy cluster for one render.
-          topologyKnown: gateways.data !== undefined && classesSettled,
+          topologyKnown: gatewaysAll.data !== undefined && classesSettled,
           backing: {
             services: backing.data?.services ?? [],
             published: backing.data?.published ?? [],
@@ -357,10 +394,17 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         },
         t
       ),
-    [scopedRoutes, gateways.data, classes.data, backing.data, classesSettled, t]
+    [
+      scopedRoutes,
+      gatewaysAll.data,
+      classes.data,
+      backing.data,
+      classesSettled,
+      t,
+    ]
   );
 
-  const scopedPulse = inNamespace(board.pulse, scope);
+  const scopedPulse = board.pulse.filter((p) => inScope(scope, p.namespace));
 
   if (!installed) return null;
 
@@ -370,11 +414,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={resource(ResourceType.Gateway)}
           overview={overview}
-          value={gateways.data ? scopedGateways.length : null}
+          value={gatewayCount.data ? scopedGateways.length : null}
           mark={gatewaysMark(
             scopedGateways,
             scopedPulse,
-            gateways.data !== undefined && classesSettled
+            gatewaysAll.data !== undefined && classesSettled
           )}
           denied={gatewaysDenied}
         />

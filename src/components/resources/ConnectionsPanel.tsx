@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 
 import { Section } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
 import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
 import {
@@ -189,12 +190,11 @@ export function ConnectionsPanel({
   if (error || !data) {
     return (
       <Section>
-        <p className="text-xs text-err">
-          {t("empty", "couldNotReadWhatConnects")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">
-          {error?.message ?? t("empty", "clusterDidNotAnswer")}
-        </p>
+        <Unknown
+          question={t("empty", "couldNotReadWhatConnects")}
+          error={error ?? t("empty", "clusterDidNotAnswer")}
+          onRetry={() => void query.refetch()}
+        />
       </Section>
     );
   }

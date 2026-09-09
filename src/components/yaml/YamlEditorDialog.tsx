@@ -52,6 +52,7 @@ import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
 interface YamlEditorActionProps {
@@ -109,6 +110,13 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
+  // Applying an edited manifest replaces the whole object — the most powerful
+  // write here — so on a critical cluster it takes the same typed-name gate,
+  // and the field is bound to the notice so neither can appear without the other.
+  const gate = useCriticalGate();
+  // Stable (memoised in the hook), so the apply callback can depend on it
+  // without being rebuilt every render.
+  const gateReset = gate.reset;
   const { toast } = useToast();
   const currentNamespace = useClusterStore((state) => state.currentNamespace);
 
@@ -221,6 +229,7 @@ export function YamlEditorDialog() {
 
   const handleApply = useCallback(async () => {
     setShowApplyConfirm(false);
+    gateReset();
     setIsApplying(true);
     setApplyResult(null);
 
@@ -281,6 +290,7 @@ export function YamlEditorDialog() {
     setIsApplying,
     setApplyResult,
     addHistoryEntry,
+    gateReset,
     toast,
     t,
   ]);
@@ -425,12 +435,19 @@ export function YamlEditorDialog() {
       </Dialog>
 
       {/* Apply Confirmation Dialog */}
-      <Dialog open={showApplyConfirm} onOpenChange={setShowApplyConfirm}>
+      <Dialog
+        open={showApplyConfirm}
+        onOpenChange={(next) => {
+          if (!next) gate.reset();
+          setShowApplyConfirm(next);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {intercept?.title ?? t("action", "applyChangesQuestion")}
             </DialogTitle>
+            {gate.notice}
             <DialogDescription>
               {t("action", "applyManifestConfirm")}
             </DialogDescription>
@@ -463,14 +480,19 @@ export function YamlEditorDialog() {
             </div>
           )}
 
+          {gate.input}
+
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowApplyConfirm(false)}
+              onClick={() => {
+                gate.reset();
+                setShowApplyConfirm(false);
+              }}
             >
               {t("action", "cancel")}
             </Button>
-            <Button onClick={handleApply}>
+            <Button onClick={handleApply} disabled={gate.blocked}>
               <Play className="mr-2 h-4 w-4" />
               {/* The intercept decides its own word where it has one — a
                   disowned label confirms with a plain "Apply", because there

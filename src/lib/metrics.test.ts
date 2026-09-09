@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
+import type { PodMetrics } from "@/generated/types";
 
 import {
   attachAggregatedPodMetrics,
   matchDeploymentPods,
   matchStatefulSetPods,
+  mergePodsWithMetrics,
   type PodWithMetrics,
 } from "./metrics";
 
@@ -50,6 +52,76 @@ function byFilter<T extends { name: string; namespace: string }>(
 
 const usage = (rows: Array<{ name: string; cpuMillicores: number | null }>) =>
   rows.map((row) => [row.name, row.cpuMillicores] as const);
+
+describe("mergePodsWithMetrics", () => {
+  const sample = (name: string, cpuMillicores = 10): PodMetrics => ({
+    name,
+    namespace: "default",
+    cpuMillicores,
+    memoryBytes: 100,
+  });
+
+  /** Fresh metric objects with identical values must not invalidate every pod row memo. */
+  it("returns the same row objects when a tick repeats the metric values", () => {
+    const pods = [pod({ name: "a" }), pod({ name: "b" })];
+    const first = mergePodsWithMetrics(pods, [sample("a"), sample("b")]);
+    const next = mergePodsWithMetrics(pods, [sample("b"), sample("a")]);
+    expect(next[0]).toBe(first[0]);
+    expect(next[1]).toBe(first[1]);
+  });
+
+  /** CPU or memory changes must reach the affected row without reallocating its neighbours. */
+  it.each(["cpuMillicores", "memoryBytes"] as const)(
+    "replaces only the row whose %s changed",
+    (field) => {
+      const pods = [pod({ name: "a" }), pod({ name: "b" })];
+      const first = mergePodsWithMetrics(pods, [sample("a"), sample("b")]);
+      const next = mergePodsWithMetrics(pods, [
+        { ...sample("a"), [field]: 200 },
+        sample("b"),
+      ]);
+      expect(next[0]).not.toBe(first[0]);
+      expect(next[0][field]).toBe(200);
+      expect(first[0][field]).toBe(field === "cpuMillicores" ? 10 : 100);
+      expect(next[1]).toBe(first[1]);
+    }
+  );
+
+  /** Losing a sample must erase stale usage as unknown, while a measured zero stays zero. */
+  it("returns null usage when a pod loses its sample and preserves measured zero", () => {
+    const pods = [pod({ name: "a" }), pod({ name: "b" })];
+    const zero = { ...sample("b", 0), memoryBytes: 0 };
+    const first = mergePodsWithMetrics(pods, [sample("a"), zero]);
+    const next = mergePodsWithMetrics(pods, [zero]);
+    expect(next[0]).not.toBe(first[0]);
+    expect(next[0]).toEqual({
+      ...pods[0],
+      cpuMillicores: null,
+      memoryBytes: null,
+    });
+    expect(next[1]).toBe(first[1]);
+    expect(next[1].cpuMillicores).toBe(0);
+    expect(next[1].memoryBytes).toBe(0);
+    expect(mergePodsWithMetrics(pods, [zero])[0]).toBe(next[0]);
+    expect(
+      mergePodsWithMetrics(pods, [sample("a"), zero])[0].cpuMillicores
+    ).toBe(10);
+  });
+
+  /** A cache keyed only by name would hide watch updates or reuse rows from another namespace. */
+  it("uses pod identity and namespace when reusing merged rows", () => {
+    const pods = [pod({ name: "a" }), pod({ name: "a", namespace: "other" })];
+    const metrics = [sample("a"), { ...sample("a", 20), namespace: "other" }];
+    const first = mergePodsWithMetrics(pods, metrics);
+    const updated = { ...pods[0], restartCount: 3 };
+    const next = mergePodsWithMetrics([updated, pods[1]], metrics);
+    expect(next[0]).not.toBe(first[0]);
+    expect(next[0].restartCount).toBe(3);
+    expect(next[0].cpuMillicores).toBe(10);
+    expect(next[1]).toBe(first[1]);
+    expect(next[1].cpuMillicores).toBe(20);
+  });
+});
 
 describe("attachAggregatedPodMetrics", () => {
   /**
