@@ -1037,6 +1037,14 @@ export type ServiceFilters = {
   serviceType: string | null;
 } & ResourceFilters;
 
+export interface PerfSnapshot {
+  recording: boolean;
+  eventsEmitted: number;
+  eventBytes: number;
+  maxEventBytes: number;
+  watchChanges: number;
+}
+
 export interface BatchLogResult {
   processed: number;
   failed: number;
