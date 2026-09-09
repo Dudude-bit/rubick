@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
@@ -20,6 +20,12 @@ const resolveIngressClass = vi.fn().mockResolvedValue({
   viaDefault: false,
   available: [],
 });
+const detectGatewayApi = vi.fn();
+const listGatewayRoutes = vi.fn();
+const listGateways = vi.fn();
+const listGatewayClasses = vi.fn();
+const listServices = vi.fn();
+const listServiceEndpoints = vi.fn();
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -29,6 +35,13 @@ vi.mock("@/lib/commands", () => ({
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
     checkListAccess: () => checkListAccess(),
+    detectGatewayApi: () => detectGatewayApi(),
+    listGatewayRoutes: (kind: string, ns: string | null) =>
+      listGatewayRoutes(kind, ns),
+    listGateways: (ns: string | null) => listGateways(ns),
+    listGatewayClasses: () => listGatewayClasses(),
+    listServices: (ns: string | null) => listServices(ns),
+    listServiceEndpoints: (ns: string | null) => listServiceEndpoints(ns),
   },
 }));
 
@@ -68,6 +81,12 @@ beforeEach(() => {
   listCustomResources.mockResolvedValue([]);
   detectInClusterExtensions.mockResolvedValue([]);
   checkListAccess.mockResolvedValue([]);
+  detectGatewayApi.mockResolvedValue({ installed: false, kinds: [] });
+  listGatewayRoutes.mockResolvedValue([]);
+  listGateways.mockResolvedValue([]);
+  listGatewayClasses.mockResolvedValue([]);
+  listServices.mockResolvedValue([]);
+  listServiceEndpoints.mockResolvedValue([]);
   overview = undefined;
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   useUpdaterStore.setState({ available: false });
@@ -444,5 +463,81 @@ describe("the rail in another language", () => {
     // "Поды" would be this app inventing a word no cluster answers to.
     expect(screen.getByText("Pods")).toBeInTheDocument();
     expect(screen.getByText("Helm")).toBeInTheDocument();
+  });
+});
+
+describe("the Gateway and Routes rows for a namespace-scoped token", () => {
+  const routeIn = (ns: string) => ({
+    kind: "HTTPRoute",
+    apiVersion: "gateway.networking.k8s.io/v1",
+    name: `route-${ns}`,
+    namespace: ns,
+    hostnames: [],
+    parentRefs: [],
+    rules: [],
+    parents: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+  const gatewayIn = (ns: string) => ({
+    name: `gw-${ns}`,
+    namespace: ns,
+    apiVersion: "gateway.networking.k8s.io/v1",
+    className: "istio",
+    listeners: [],
+    listenerSets: [],
+    listenerSetsKnown: true,
+    addresses: [],
+    conditions: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+
+  /**
+   * The whole point of #137/#138: a team token can list its own namespaces
+   * and not the whole cluster. The routes page reads per namespace, so the
+   * rail must too — a cluster-wide read here 403s and would leave the count
+   * blank above a page that lists the user's routes. The verdict sources stay
+   * cluster-wide (refused -> no health mark), which is honest, not a red dot.
+   */
+  it("counts routes per namespace when the cluster-wide read is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-a", "team-b"],
+    });
+    listGateways.mockImplementation(async (ns: string | null) => {
+      if (ns === null) throw new Error("gateways is forbidden (code: 403)");
+      return [gatewayIn(ns)];
+    });
+    listGatewayRoutes.mockImplementation(
+      async (_kind: string, ns: string | null) => {
+        if (ns === null) throw new Error("httproutes is forbidden (code: 403)");
+        return [routeIn(ns)];
+      }
+    );
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    // Two namespaces, one route each — the fan-out, not a cluster-wide blank.
+    await waitFor(() =>
+      expect(within(routes).getByText("2")).toBeInTheDocument()
+    );
+    // Read per namespace, never cluster-wide.
+    const routeNamespacesAsked = listGatewayRoutes.mock.calls.map(
+      ([, ns]) => ns
+    );
+    expect(routeNamespacesAsked).toContain("team-a");
+    expect(routeNamespacesAsked).toContain("team-b");
+    expect(routeNamespacesAsked).not.toContain(null);
   });
 });
