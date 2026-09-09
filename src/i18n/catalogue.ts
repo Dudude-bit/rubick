@@ -627,6 +627,8 @@ export const en = {
     noLimit: "No limit",
     latestN: "Latest {n}",
     drainNamed: "Drain {name}",
+    cordonNamed: "Cordon {name}?",
+    uncordonNamed: "Uncordon {name}?",
     drainAnyway: "Drain anyway",
     stopDraining: "Stop draining",
     drainEnded: "The drain of {name} ended",
@@ -2215,6 +2217,10 @@ export const en = {
     refusalOther: "Refused",
     nameMissingParens: "{name} (missing)",
     noClusterSelected: "No cluster selected",
+    criticalNoticeTitle: "Critical infrastructure",
+    criticalNoticeBody:
+      "This is {context}. Whatever this does, it does there. Type the cluster's name to go on.",
+    criticalStripe: "Critical: {context}",
     metricsNotInstalled: "Metrics server not installed",
     metricsNotInstalledBody:
       "Install metrics-server to see CPU and memory usage.",
@@ -2371,6 +2377,10 @@ export const en = {
     contextReady: "ready",
     contextCannotConnect: "cannot connect",
     contextCannotTell: "cannot tell",
+    criticalLabel:
+      "Critical infrastructure: every change asks for the cluster's name",
+    criticalGuessed: "The name suggests it. Tick to make it so.",
+
     searchMissingWords: "not found missing path",
     searchContextWords: "context kubeconfig authentication",
     searchKubeconfigWords:

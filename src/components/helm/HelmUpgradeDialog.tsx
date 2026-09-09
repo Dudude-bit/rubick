@@ -13,7 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { KeyValueRow } from "@/components/resources/detail-kv";
 import type { HelmRelease } from "@/generated/types";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { useEffect } from "react";
 
 export interface HelmUpgradeDialogProps {
   /** Release to upgrade */
@@ -48,6 +50,13 @@ export function HelmUpgradeDialog({
   isUpgrading,
 }: HelmUpgradeDialogProps) {
   const t = useT();
+  // Upgrading replaces a release on the cluster, so on a critical one it takes
+  // the typed-name gate — as uninstall and rollback already do.
+  const gate = useCriticalGate();
+  const gateReset = gate.reset;
+  useEffect(() => {
+    if (release === null) gateReset();
+  }, [release, gateReset]);
 
   return (
     <Dialog open={release !== null} onOpenChange={(open) => !open && onClose()}>
@@ -60,6 +69,7 @@ export function HelmUpgradeDialog({
               namespace: release?.namespace ?? "",
             })}
           </DialogDescription>
+          {gate.notice}
         </DialogHeader>
         <div className="space-y-4 py-4">
           <dl className="max-w-sm">
@@ -103,12 +113,13 @@ export function HelmUpgradeDialog({
               {t("action", "waitForReady")}
             </Label>
           </div>
+          {gate.input}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {t("action", "cancel")}
           </Button>
-          <Button onClick={onUpgrade} disabled={isUpgrading}>
+          <Button onClick={onUpgrade} disabled={isUpgrading || gate.blocked}>
             {isUpgrading ? t("action", "upgrading") : t("action", "upgrade")}
           </Button>
         </DialogFooter>
