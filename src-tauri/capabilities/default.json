@@ -19,6 +19,7 @@
     "clipboard-manager:default",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-text",
+    "deep-link:default",
     "updater:default",
     "process:allow-restart"
   ],
