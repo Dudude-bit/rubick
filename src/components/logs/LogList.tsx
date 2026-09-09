@@ -1,3 +1,4 @@
+import { PerfProfiler } from "@/lib/perf-profiler";
 import {
   useCallback,
   useEffect,
@@ -90,7 +91,15 @@ interface LogListProps {
   children?: ReactNode;
 }
 
-export function LogList({
+export function LogList(props: LogListProps) {
+  return (
+    <PerfProfiler id="log-list">
+      <LogListInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function LogListInner({
   logs,
   rows,
   expandedRuns,
