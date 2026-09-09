@@ -8,6 +8,7 @@
 //!   `LogStream` bookkeeping types
 
 mod events;
+pub mod perf;
 mod sessions;
 
 pub use events::{
@@ -83,6 +84,9 @@ pub struct AppState {
 
     /// Active debug operations (ephemeral container/debug pod creation)
     pub debug_operations: DashMap<String, crate::commands::debug::DebugOperation>,
+
+    /// What went over the IPC bridge while Diagnostics recorded.
+    pub perf: Arc<perf::PerfCounters>,
 }
 
 impl AppState {
@@ -118,6 +122,7 @@ impl AppState {
             auth_sessions: DashMap::new(),
             connect_generation: AtomicU64::new(0),
             debug_operations: DashMap::new(),
+            perf: Arc::new(perf::PerfCounters::default()),
         })
     }
 

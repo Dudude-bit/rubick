@@ -18,6 +18,7 @@ import type {
   ClusterPreferences,
   ConfigData,
   ConfigMapInfo,
+  ConnectAttempt,
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
@@ -74,6 +75,7 @@ import type {
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
+  PerfSnapshot,
   PersistentVolumeClaimInfo,
   PersistentVolumeInfo,
   PodFilters,
@@ -443,6 +445,10 @@ export async function checkListAccess(
   return invoke<ListAccess[]>("check_list_access", { queries, namespaces });
 }
 
+export async function checkCrdReadAccess(): Promise<boolean | null> {
+  return invoke<boolean | null>("check_crd_read_access");
+}
+
 export async function checkNamespaceAccess(
   namespaces: string[]
 ): Promise<NamespaceAccess[]> {
@@ -638,6 +644,12 @@ export async function getCurrentContext(): Promise<string | null> {
 
 export async function connectCluster(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("connect_cluster", { context });
+}
+
+export async function connectionAttempt(
+  context: string
+): Promise<ConnectAttempt | null> {
+  return invoke<ConnectAttempt | null>("connection_attempt", { context });
 }
 
 export async function disconnectCluster(context: string): Promise<void> {
@@ -1188,6 +1200,14 @@ export async function probeTcpConnect(
   port: number
 ): Promise<TcpProbe> {
   return invoke<TcpProbe>("probe_tcp_connect", { address, port });
+}
+
+export async function perfSetRecording(recording: boolean): Promise<void> {
+  return invoke<void>("perf_set_recording", { recording });
+}
+
+export async function perfCounters(): Promise<PerfSnapshot> {
+  return invoke<PerfSnapshot>("perf_counters");
 }
 
 export async function locateBinaries(

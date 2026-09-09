@@ -2728,7 +2728,24 @@ export const en = {
     agoSuffix: "ago.",
     connectingToLower: "connecting to {context}…",
     notConnectedLower: "not connected",
+    throughProxy: "through kubectl proxy",
+    throughProxyHint:
+      "The app's own credentials were refused, so this session goes through a kubectl proxy it started. kubectl holds the keys and renews them.",
+    proxyNoKubectl:
+      "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
+    proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
+    linkCopied: "Copied where you are",
+    linkOpened: "Opened from a link. You are looking at it live.",
+    linkOpenedAt:
+      "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
+    linkContextMissing:
+      "This link points at cluster {context}, which is not in this kubeconfig. Nothing was opened.",
+    linkContextMissingKnown:
+      "Clusters here: {known}. A cluster with a similar name is not the same cluster, so none was picked for you.",
+    linkContextMissingNone: "No cluster is configured on this machine yet.",
+    linkOpenClusters: "Settings › Clusters",
+    linkDismiss: "Dismiss",
     tunnelAsleep: "asleep",
     renameOrRecolour: "{name} — rename or recolour",
     called: "Called",
@@ -2979,6 +2996,33 @@ export const en = {
       "Where images are pulled from, and what reaches them.",
     sectionDiagnostics: "Diagnostics",
     sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
+    perfTitle: "Performance",
+    perfRecording: "Recording",
+    perfHint:
+      "Times every call to the backend, every long task and every profiled render while on. Each answer is serialised a second time to count its bytes, so leave it off unless you are measuring.",
+    perfStart: "Start",
+    perfStop: "Stop",
+    perfSummary:
+      "{seconds} s recorded · {ipc} backend calls · {tasks} long tasks.",
+    perfTaskSourceObserver: "Long tasks come from the platform observer.",
+    perfTaskSourceFrames:
+      "This webview has no long-task observer, so a late frame counts as one.",
+    perfCommand: "Command",
+    perfCount: "calls",
+    perfRows: "rows",
+    perfBytes: "bytes",
+    perfTasks: "Long tasks",
+    perfRenders: "Render",
+    perfNoRenders:
+      "No render timings: React reports them only from a dev or profiling build.",
+    perfBackend:
+      "Backend pushed {events} events, {bytes} in total, largest {max}, {changes} watch changes.",
+    perfCopy: "Copy report",
+    perfCopied: "Report copied",
+    perfSampled:
+      "Percentiles use the last {cap} samples per kind; counts and maxima cover everything.",
+    perfBackendError: "The backend did not answer: {error}",
+    perfRetryStop: "Try stopping again",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
     sectionHandoff: "Search and hand-off",
@@ -3077,6 +3121,14 @@ export const en = {
     noKubeconfigLoaded:
       "None loaded yet — connect a cluster and this will name the file.",
     applicationBlock: "Application",
+    connectionsBlock: "Connections · {n}",
+    noConnectionsYet: "No connection attempted yet.",
+    pathDirect: "direct",
+    pathProxy: "kubectl proxy",
+    pathOk: "ok",
+    pathProxyOk: "ok on port {port} ({kubectl})",
+    pathNotTried: "not tried",
+    pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
     readingFile: "Reading the file…",

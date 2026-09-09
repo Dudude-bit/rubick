@@ -34,6 +34,7 @@
         "@tanstack/react-virtual": "^3.14.10",
         "@tauri-apps/api": "^2.10.3",
         "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
+        "@tauri-apps/plugin-deep-link": "2",
         "@tauri-apps/plugin-dialog": "^2.7.0",
         "@tauri-apps/plugin-notification": "2",
         "@tauri-apps/plugin-process": "^2.3.1",
@@ -492,6 +493,8 @@
     "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.11.4", "", { "os": "win32", "cpu": "x64" }, "sha512-+vDiqBIU5dMISg/wNvX3sF+ZHfgJGJ5T0AcO+EHNXV9GGAG+P5fzodlDXD3QdKCRgZxMoCm5PPvj3BqLNjBthw=="],
 
     "@tauri-apps/plugin-clipboard-manager": ["@tauri-apps/plugin-clipboard-manager@2.3.3", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-KnyoTs9gj1yEgDkSPUNjOIOHjJTr5wk8IWcYMOWxYTIJCip6QwlyPW8u2X+6bd6kHM4fAdZNpxoal0gy/TwJbg=="],
+
+    "@tauri-apps/plugin-deep-link": ["@tauri-apps/plugin-deep-link@2.4.10", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-SuXI47ORUzYuwG6c8dluLDrStTvli5bAZDRa2+VuUEzK/9TEa7FZz7UKXBQriL7+CPFXRHQsz5tSocc47tRXQQ=="],
 
     "@tauri-apps/plugin-dialog": ["@tauri-apps/plugin-dialog@2.7.3", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-CRgE+7TP4tvq9MjBU6f04NLTFIqVMLKHk3hAqlhil00ngK9ACTrXPH3oHpKMProxILodd3YjBoKbMwSI4IEcfA=="],
 

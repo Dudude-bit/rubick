@@ -126,6 +126,8 @@ pub struct Diagnostics {
     pub kubeconfig: Option<KubeconfigInfo>,
     pub app: InstallationInfo,
     pub findings: Vec<super::Finding>,
+    /// The last connect to each context, both ways, newest first.
+    pub connections: Vec<crate::client::ConnectAttempt>,
 }
 
 /// The exec block a named user declares, if any.
@@ -356,6 +358,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
             kubeconfig,
             app,
             findings,
+            connections: client.attempts(),
         };
     };
 
@@ -401,6 +404,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         }),
         app,
         findings,
+        connections: client.attempts(),
     }
 }
 
