@@ -543,6 +543,18 @@ impl K8sClientManager {
         tracing::info!("Disconnected from all clusters");
     }
 
+    /// Kill every `kubectl proxy` child, on the way out.
+    ///
+    /// Their own `Drop` kills them, but on app exit it never runs: the macOS
+    /// event loop ends the process with `exit()` and unwinds nothing, so a
+    /// managed proxy would be left an orphan — an unauthenticated loopback
+    /// door to the API server outliving the window. Clearing the map here
+    /// drops each one while the stack is still standing.
+    pub fn shutdown_proxies(&self) {
+        self.proxies.clear();
+        self.paths.clear();
+    }
+
     /// Get an existing client
     pub fn get_client(&self, context: &str) -> Option<Arc<Client>> {
         self.clients.get(context).map(|c| c.clone())

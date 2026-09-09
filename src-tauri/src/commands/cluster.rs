@@ -181,7 +181,7 @@ async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> 
         .map_err(|e| Error::Config(e.to_string()))?;
     let prepared = prepare_kubeconfig_for_context(state, kubeconfig, context)
         .await
-        .map_err(|e| Error::Auth(crate::error::AuthError::Kubeconfig(e.to_string())))?;
+        .map_err(prepared_failure)?;
     state
         .client_manager
         .set_credential_deadline(context, prepared.expires_at);
@@ -236,6 +236,23 @@ async fn probe(state: &AppState, context: &str) -> Result<ClusterInfo> {
         Err(_) => Err(Error::Timeout(
             "Connection timed out. Please retry the authentication flow.".to_string(),
         )),
+    }
+}
+
+/// A failure from preparing credentials, filed the way the connect flow reads
+/// it back.
+///
+/// A timeout keeps its own variant. It has to: `proxy_could_help` tells a
+/// timeout apart from an auth failure by the variant, and flattening every
+/// error into `Error::Auth` turned a timed-out login (exec's 30-minute
+/// ceiling, OIDC's 3-minute redirect wait) into one the proxy would retry —
+/// popping a fresh browser at a person who just let one lapse. Cancellation
+/// still rides through as `Error::Auth`; its word survives in the string,
+/// which is how `proxy_could_help` already recognises it.
+fn prepared_failure(error: Error) -> Error {
+    match error {
+        Error::Timeout(_) => error,
+        other => Error::Auth(crate::error::AuthError::Kubeconfig(other.to_string())),
     }
 }
 
@@ -450,8 +467,38 @@ pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<Kubecon
 
 #[cfg(test)]
 mod proxy_tests {
-    use super::proxy_could_help;
+    use super::{prepared_failure, proxy_could_help};
     use crate::error::{AuthError, Error};
+
+    /// The regression: the connect flow used to flatten a timed-out login
+    /// into `Error::Auth`, and `proxy_could_help` tells a timeout apart by
+    /// its variant — so a login that timed out got relaunched through
+    /// kubectl proxy, exactly what a timeout must never do. The variant has
+    /// to survive the filing.
+    #[test]
+    fn a_timed_out_login_keeps_its_variant_and_is_not_retried() {
+        let filed = prepared_failure(Error::Timeout("Authentication timed out".into()));
+        assert!(matches!(filed, Error::Timeout(_)));
+        assert!(!proxy_could_help(&filed));
+    }
+
+    /// Cancellation is filed as an auth error, but keeps its word — which is
+    /// how it is still recognised as not-worth-retrying.
+    #[test]
+    fn a_cancelled_login_files_as_auth_and_is_still_not_retried() {
+        let filed = prepared_failure(Error::Auth(AuthError::Oidc(
+            "Authentication cancelled".into(),
+        )));
+        assert!(matches!(filed, Error::Auth(_)));
+        assert!(!proxy_could_help(&filed));
+    }
+
+    /// A broken plugin is filed as auth and is worth kubectl's try.
+    #[test]
+    fn a_broken_plugin_files_as_auth_and_is_retried() {
+        let filed = prepared_failure(Error::Connection("exec plugin not found".into()));
+        assert!(proxy_could_help(&filed));
+    }
 
     /// A cancelled login turning into a `kubectl proxy` login is the app
     /// answering "no" with "are you sure".
