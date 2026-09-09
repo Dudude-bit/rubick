@@ -1,4 +1,5 @@
 import * as React from "react";
+import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
 import { useNavigate } from "react-router-dom";
 import {
@@ -42,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import { buildTableRows, type BodyItem } from "./data-table-rows";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -211,16 +213,6 @@ function createActionsColumn<TData extends RowData>(
   };
 }
 
-/**
- * One entry per line the table draws, captions included.
- *
- * Descriptors rather than rendered nodes: the virtualiser needs to count and
- * measure the lines before anything decides which of them to draw.
- */
-type BodyItem<TData extends RowData> =
-  | { key: string; caption: React.ReactNode; row?: undefined }
-  | { key: string; caption?: undefined; row: Row<TData>; rowIndex: number };
-
 /** Where a nav key wants to go, or null if it is not a nav key. */
 function navTarget(key: string, from: number, rowCount: number): number | null {
   switch (key) {
@@ -237,7 +229,15 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
   }
 }
 
-export function DataTable<TData extends RowData>({
+export function DataTable<TData extends RowData>(props: DataTableProps<TData>) {
+  return (
+    <PerfProfiler id="data-table">
+      <DataTableInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function DataTableInner<TData extends RowData>({
   columns,
   data,
   isLoading = false,
@@ -385,48 +385,10 @@ export function DataTable<TData extends RowData>({
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;
 
-  // One caption per group, rows beneath it in first-seen order. Flat, so the
-  // keyboard-nav index stays the visual position and does not skip captions.
-  const items: BodyItem<TData>[] = [];
-  // Where each data row sits among those lines. The two numberings come apart
-  // wherever a caption is inserted, and the virtualiser counts lines while the
-  // keyboard counts rows.
-  const rowLine: number[] = [];
-  const pushRow = (row: Row<TData>, rowIndex: number) => {
-    rowLine[rowIndex] = items.length;
-    items.push({ key: row.id, row, rowIndex });
-  };
-
-  if (groupingActive && grouping) {
-    const groups = new Map<string, Row<TData>[]>();
-    const ungrouped: Row<TData>[] = [];
-    for (const row of rows) {
-      const key = grouping.keyOf(row.original);
-      if (key === null) {
-        ungrouped.push(row);
-        continue;
-      }
-      const bucket = groups.get(key);
-      if (bucket) bucket.push(row);
-      else groups.set(key, [row]);
-    }
-    let index = 0;
-    // No caption over these: the data did not say which group they are in,
-    // and a heading reading "ungrouped" would turn that silence into a claim.
-    for (const row of ungrouped) pushRow(row, index++);
-    for (const [key, groupRows] of groups) {
-      items.push({
-        key: `group-${key}`,
-        caption: grouping.caption(
-          key,
-          groupRows.map((row) => row.original)
-        ),
-      });
-      for (const row of groupRows) pushRow(row, index++);
-    }
-  } else {
-    rows.forEach((row, index) => pushRow(row, index));
-  }
+  const { items, rowLine } = React.useMemo(
+    () => buildTableRows(rows, groupingActive ? grouping : null),
+    [rows, groupingActive, grouping]
+  );
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
 

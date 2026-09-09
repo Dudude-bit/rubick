@@ -1,6 +1,6 @@
 [package]
 name = "k8s-gui"
-version = "4.10.0"
+version = "4.11.0"
 edition = "2021"
 rust-version = "1.91"
 authors = ["Rubick Team"]
@@ -96,6 +96,9 @@ portable-pty = "0.9"
 # original, so a crash mid-write cannot leave somebody without one.
 tempfile = "3"
 tauri-plugin-notification = "2"
+http = "1"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 
 # kill(2) on a process group: the login-shell probe in `shell::env` has to

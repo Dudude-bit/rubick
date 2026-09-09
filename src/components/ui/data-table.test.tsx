@@ -12,12 +12,18 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+
+vi.mock("./data-table-rows", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./data-table-rows")>();
+  return { ...original, buildTableRows: vi.fn(original.buildTableRows) };
+});
 
 interface Item {
   name: string;
@@ -397,6 +403,38 @@ describe("sorting a column", () => {
       .slice(1)
       .map((row) => row.querySelector("td")?.textContent);
 
+  /** Equal sort values must preserve input order, including after an unrelated render. */
+  it("preserves the input order of ties when sorting and rerendering", () => {
+    const data: Item[] = [
+      { name: "b", namespace: "first" },
+      { name: "a", namespace: "second" },
+      { name: "b", namespace: "third" },
+    ];
+    const stableColumns: ColumnDef<Item>[] = [
+      sortable[0],
+      { accessorKey: "namespace", header: "Namespace" },
+    ];
+    const tree = () => (
+      <MemoryRouter>
+        <TooltipProvider>
+          <DataTable columns={stableColumns} data={data} />
+        </TooltipProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(tree());
+    const namespaces = () =>
+      screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.querySelectorAll("td")[1].textContent);
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(namespaces()).toEqual(["second", "first", "third"]);
+    fireEvent.click(screen.getByRole("button", { name: "Name" }));
+    expect(namespaces()).toEqual(["first", "third", "second"]);
+    rerender(tree());
+    expect(namespaces()).toEqual(["first", "third", "second"]);
+  });
+
   it("reverses the rows when its header is toggled twice", () => {
     wrap(<DataTable<Item> columns={sortable} data={DATA} />);
     expect(namesInOrder()).toEqual(["a-1", "b-2"]);
@@ -577,6 +615,91 @@ describe("a list past the virtualisation threshold", () => {
         grouping={null}
       />
     );
+
+  /** Rebuilding descriptors or sorting on scroll makes windowing cost the entire list. */
+  it.each([false, true])(
+    "reuses descriptors and navigation indexes when the scroll offset changes with grouping %s",
+    (grouped) => {
+      const sortFn = vi.fn((a: { original: Item }, b: { original: Item }) =>
+        a.original.name.localeCompare(b.original.name)
+      );
+      const sortable: ColumnDef<Item>[] = [
+        {
+          accessorKey: "name",
+          header: ({ column }) => (
+            <button onClick={() => column.toggleSorting()}>Sort</button>
+          ),
+          cell: ({ row }) => row.original.name,
+          sortFn,
+        },
+      ];
+      wrap(
+        <DataTable
+          columns={sortable}
+          data={pods(10_000)}
+          getRowHref={href}
+          grouping={
+            grouped
+              ? { keyOf: (row) => row.namespace, caption: (key) => key }
+              : null
+          }
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+      expect(sortFn).toHaveBeenCalled();
+      const builder = vi.mocked(buildTableRows);
+      const before = builder.mock.results.at(-1)!.value;
+      builder.mockClear();
+      sortFn.mockClear();
+
+      const port = scrollPort()!;
+      port.scrollTop = 6000;
+      fireEvent.scroll(port);
+
+      expect(rowAt(0)).toBeNull();
+      expect(
+        document.querySelectorAll("tr[data-row-index]").length
+      ).toBeGreaterThan(0);
+      expect(builder).not.toHaveBeenCalled();
+      expect(sortFn).not.toHaveBeenCalled();
+      expect(before.rowLine).toHaveLength(10_000);
+    }
+  );
+
+  /** Stale line indexes after sorting send a virtual keyboard jump to another row. */
+  it("moves the keyboard through the visible grouped order after sorting", () => {
+    const sortable: ColumnDef<Item>[] = [
+      {
+        accessorKey: "name",
+        sortFn: (a, b) =>
+          a.original.name.localeCompare(b.original.name, undefined, {
+            numeric: true,
+          }),
+        header: ({ column }) => (
+          <button onClick={() => column.toggleSorting()}>Sort</button>
+        ),
+        cell: ({ row }) => row.original.name,
+      },
+    ];
+    wrap(
+      <DataTable
+        columns={sortable}
+        data={pods(500, 50)}
+        getRowHref={href}
+        grouping={{ keyOf: (row) => row.namespace, caption: (key) => key }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+    expect(rowAt(0)).toHaveTextContent("pod-499");
+    fireEvent.keyDown(rowAt(0)!, { key: "ArrowDown" });
+    expect(document.activeElement).toHaveTextContent("pod-449");
+    expect(document.activeElement).toHaveAttribute("data-row-index", "1");
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    fireEvent.scroll(scrollPort()!);
+    expect(document.activeElement).toHaveTextContent("pod-0");
+    expect(document.activeElement).toHaveAttribute("data-row-index", "499");
+  });
 
   /**
    * Before this, "virtual scroll" was a max-height and an overflow: all 500
