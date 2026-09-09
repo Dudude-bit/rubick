@@ -45,6 +45,10 @@ export default defineVendor({
       staleTime: ROUTE_STALE,
     }),
     load: () => import("./page"),
+    gate: {
+      crd: ["ingressroutes.traefik.io", "ingressroutes.traefik.containo.us"],
+      namespaced: true,
+    },
   },
   crd,
 });

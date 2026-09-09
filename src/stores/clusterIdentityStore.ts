@@ -30,12 +30,19 @@ export interface ClusterMark {
   alias?: string;
   /** One of `CLUSTER_HUES`, or absent for the colour derived from the name. */
   hue?: number;
+  /**
+   * Critical infrastructure, said by the person: every change on it asks
+   * for the context name. Absent means never decided, which a name that
+   * looks like production turns into a question, never into the answer.
+   */
+  critical?: boolean;
 }
 
 interface ClusterIdentityState {
   marks: Record<string, ClusterMark>;
   setAlias: (context: string, alias: string) => void;
   setHue: (context: string, hue: number | null) => void;
+  setCritical: (context: string, critical: boolean | null) => void;
 }
 
 /** Drop a mark that no longer says anything, so a reset leaves no residue. */
@@ -45,7 +52,12 @@ function write(
   mark: ClusterMark
 ): Record<string, ClusterMark> {
   const next = { ...marks };
-  if (mark.alias === undefined && mark.hue === undefined) delete next[context];
+  if (
+    mark.alias === undefined &&
+    mark.hue === undefined &&
+    mark.critical === undefined
+  )
+    delete next[context];
   else next[context] = mark;
   return next;
 }
@@ -66,6 +78,13 @@ export const useClusterIdentityStore = create<ClusterIdentityState>()(
           marks: write(state.marks, context, {
             ...state.marks[context],
             hue: hue ?? undefined,
+          }),
+        })),
+      setCritical: (context, critical) =>
+        set((state) => ({
+          marks: write(state.marks, context, {
+            ...state.marks[context],
+            critical: critical ?? undefined,
           }),
         })),
     }),
@@ -93,7 +112,14 @@ export const useClusterIdentityStore = create<ClusterIdentityState>()(
             ) {
               mark.hue = raw.hue;
             }
-            if (mark.alias !== undefined || mark.hue !== undefined) {
+            if (typeof raw?.critical === "boolean") {
+              mark.critical = raw.critical;
+            }
+            if (
+              mark.alias !== undefined ||
+              mark.hue !== undefined ||
+              mark.critical !== undefined
+            ) {
               marks[context] = mark;
             }
           }

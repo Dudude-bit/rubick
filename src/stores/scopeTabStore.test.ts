@@ -169,19 +169,74 @@ describe("closing", () => {
     expect(state().pendingHref).toBeNull();
   });
 
-  // Zero tabs is a window with no scope and no chrome to pick one in.
-  it("resets the last tab instead of emptying the strip", async () => {
+  /**
+   * The reported #137 bug: the ✕ beside an open pod's name read as "close
+   * this view" but the store treated it as "leave the cluster", resetting
+   * context + namespace. A last tab on a page now returns to the overview
+   * with its connection and selection intact — like the peek ✕ and the
+   * detail back arrow. Fails if the route-aware branch of closeTab is deleted.
+   */
+  it("keeps the cluster and namespace when the last tab closes on a page", async () => {
     live("prod", "web");
-    seed([tab({ id: "a", context: "prod", namespace: "web", href: "/nodes" })]);
+    seed([
+      tab({
+        id: "a",
+        context: "prod",
+        namespace: "web",
+        href: "/pods/web/api",
+      }),
+    ]);
     await state().closeTab("a");
     expect(state().tabs).toHaveLength(1);
+    expect(state().tabs[0]).toMatchObject({
+      context: "prod",
+      namespace: "web",
+      href: "/",
+    });
+    expect(state().pendingHref).toBe("/");
+    expect(useClusterStore.getState().currentContext).toBe("prod");
+    expect(useClusterStore.getState().isConnected).toBe(true);
+  });
+
+  /**
+   * The one that must still reset: a last tab already at the overview is the
+   * fresh-install state and the only in-UI way back to the cluster picker.
+   * Fails if the keep-scope branch swallows the overview case too.
+   */
+  it("disconnects only when the last tab is already at the overview", async () => {
+    live("prod", "web");
+    seed([tab({ id: "a", context: "prod", namespace: "web", href: "/" })]);
+    await state().closeTab("a");
     expect(state().tabs[0]).toMatchObject({
       context: null,
       namespace: "",
       href: "/",
     });
-    expect(state().pendingHref).toBe("/");
     expect(useClusterStore.getState().currentContext).toBeNull();
+  });
+
+  /**
+   * The RBAC-split reader from #137 stands in several namespaces at once;
+   * closing a pod must carry that whole selection home, not throw it away.
+   */
+  it("carries a multi-namespace selection home when the last tab closes", async () => {
+    liveScope("prod", ["web", "api"]);
+    seed([
+      tab({
+        id: "a",
+        context: "prod",
+        namespace: "",
+        scope: ["web", "api"],
+        href: "/pods/web/burst",
+      }),
+    ]);
+    await state().closeTab("a");
+    expect(state().tabs[0]).toMatchObject({
+      context: "prod",
+      href: "/",
+      scope: ["web", "api"],
+    });
+    expect(useClusterStore.getState().isConnected).toBe(true);
   });
 });
 

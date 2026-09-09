@@ -5,7 +5,9 @@ import {
   clampScope,
   decodeScope,
   inScope,
+  listAcrossScope,
   sameScope,
+  scopeCacheKey,
   scopeIn,
   scopeLabel,
   inNamespace,
@@ -143,5 +145,82 @@ describe("the items a scoped rail counts", () => {
    *  fall back to all of them. */
   it("counts none when the picked namespace holds none", () => {
     expect(inNamespace(rows, "kube-system")).toHaveLength(0);
+  });
+});
+
+describe("reading a list across the selection", () => {
+  it("keys a multi-namespace selection apart from a single one and the cluster", () => {
+    expect(scopeCacheKey([])).toBeNull();
+    expect(scopeCacheKey(["prod"])).toBe("prod");
+    // Sorted and joined, so the same two namespaces in either order share a
+    // key, and a comma is a thing no real namespace name can hold.
+    expect(scopeCacheKey(["staging", "prod"])).toBe("prod,staging");
+    expect(scopeCacheKey(["prod", "staging"])).toBe(
+      scopeCacheKey(["staging", "prod"])
+    );
+  });
+
+  it("asks the cluster once for none selected, and that namespace for one", async () => {
+    const calls: Array<string | null> = [];
+    const fetchOne = async (ns: string | null) => {
+      calls.push(ns);
+      return [{ ns }];
+    };
+
+    expect(await listAcrossScope([], fetchOne)()).toEqual([{ ns: null }]);
+    expect(await listAcrossScope(["prod"], fetchOne)()).toEqual([
+      { ns: "prod" },
+    ]);
+    expect(calls).toEqual([null, "prod"]);
+  });
+
+  it("asks each namespace on its own and merges, for a selection of several", async () => {
+    // The bug this fixes: a cluster-wide LIST needs rights across the whole
+    // cluster, which a namespace-scoped user lacks — so several selected
+    // namespaces came back empty. Each is now read on its own.
+    const calls: Array<string | null> = [];
+    const fetchOne = async (ns: string | null) => {
+      calls.push(ns);
+      return [`${ns}-a`, `${ns}-b`];
+    };
+
+    const merged = await listAcrossScope(["prod", "staging"], fetchOne)();
+    expect(calls).toEqual(["prod", "staging"]);
+    expect(merged).toEqual(["prod-a", "prod-b", "staging-a", "staging-b"]);
+  });
+
+  it("keeps a readable namespace's rows when a sibling namespace refuses", async () => {
+    // The point of the picker: rights in some namespaces and not others. One
+    // namespace's 403 must not erase the rows of the ones the user can read.
+    const fetchOne = async (ns: string | null) => {
+      if (ns === "restricted") throw new Error("pods is forbidden");
+      return [`${ns}-a`, `${ns}-b`];
+    };
+
+    const rows = await listAcrossScope(["prod", "restricted"], fetchOne)();
+    expect(rows).toEqual(["prod-a", "prod-b"]);
+  });
+
+  it("answers a refusal, never an empty list, when nothing readable came back", async () => {
+    // A refused read that returns no rows must surface as the refusal, not as
+    // "there are none" — the whole thesis of the app.
+    const fetchOne = async (ns: string | null) => {
+      if (ns === "restricted") throw new Error("pods is forbidden");
+      return [] as string[];
+    };
+
+    await expect(
+      listAcrossScope(["empty", "restricted"], fetchOne)()
+    ).rejects.toThrow("pods is forbidden");
+  });
+
+  it("throws when every namespace refuses", async () => {
+    const fetchOne = async (ns: string | null) => {
+      throw new Error(`${ns} is forbidden`);
+    };
+
+    await expect(listAcrossScope(["a", "b"], fetchOne)()).rejects.toThrow(
+      "forbidden"
+    );
   });
 });

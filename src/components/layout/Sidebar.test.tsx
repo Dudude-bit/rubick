@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
@@ -12,6 +12,8 @@ import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
 const listIngresses = vi.fn().mockResolvedValue([]);
 const listCustomResources = vi.fn().mockResolvedValue([]);
+const checkListAccess = vi.fn().mockResolvedValue([]);
+const checkCrdReadAccess = vi.fn().mockResolvedValue(null);
 const resolveIngressClass = vi.fn().mockResolvedValue({
   requested: null,
   resolved: null,
@@ -19,6 +21,12 @@ const resolveIngressClass = vi.fn().mockResolvedValue({
   viaDefault: false,
   available: [],
 });
+const detectGatewayApi = vi.fn();
+const listGatewayRoutes = vi.fn();
+const listGateways = vi.fn();
+const listGatewayClasses = vi.fn();
+const listServices = vi.fn();
+const listServiceEndpoints = vi.fn();
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -27,6 +35,15 @@ vi.mock("@/lib/commands", () => ({
     listCustomResources: (crdName: string) => listCustomResources(crdName),
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
+    checkListAccess: () => checkListAccess(),
+    checkCrdReadAccess: () => checkCrdReadAccess(),
+    detectGatewayApi: () => detectGatewayApi(),
+    listGatewayRoutes: (kind: string, ns: string | null) =>
+      listGatewayRoutes(kind, ns),
+    listGateways: (ns: string | null) => listGateways(ns),
+    listGatewayClasses: () => listGatewayClasses(),
+    listServices: (ns: string | null) => listServices(ns),
+    listServiceEndpoints: (ns: string | null) => listServiceEndpoints(ns),
   },
 }));
 
@@ -65,6 +82,14 @@ beforeEach(() => {
   listIngresses.mockResolvedValue([]);
   listCustomResources.mockResolvedValue([]);
   detectInClusterExtensions.mockResolvedValue([]);
+  checkListAccess.mockResolvedValue([]);
+  checkCrdReadAccess.mockResolvedValue(null);
+  detectGatewayApi.mockResolvedValue({ installed: false, kinds: [] });
+  listGatewayRoutes.mockResolvedValue([]);
+  listGateways.mockResolvedValue([]);
+  listGatewayClasses.mockResolvedValue([]);
+  listServices.mockResolvedValue([]);
+  listServiceEndpoints.mockResolvedValue([]);
   overview = undefined;
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   useUpdaterStore.setState({ available: false });
@@ -269,6 +294,74 @@ describe("the Integrations category", () => {
   });
 
   /**
+   * #138: a detected integration whose resources the reader is refused (403)
+   * must draw its row disabled with a reason, not link to a page that only
+   * errors. A mark, never a lock — the row stays a link. Fails if the gate
+   * check is dropped or the forbidden state stops reaching the row.
+   */
+  it("draws a detected vendor the reader cannot list as a denied row", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    // The authorizer refuses the flux page's primary list.
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: false },
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The other side of the three states: allowed, or could-not-ask, must never
+   * draw the lock. Fails if `forbidden` were set from anything but a firm
+   * `allowed === false`.
+   */
+  it("leaves a readable vendor row unlocked", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: true },
+    ]);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
+  });
+
+  /**
+   * The gap #138's reporter hit: the reader can list the vendor's own CRs but
+   * cannot get `customresourcedefinitions` cluster-wide — which the page
+   * resolves first, so it can never open. The CR review alone said "allowed"
+   * and left the row unlocked; the CRD review has to lock it. Fails if the
+   * CRD-access gate is dropped from the vendor's forbidden state.
+   */
+  it("locks a CRD-based vendor the reader may list but whose CRD it cannot read", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    // The reader may list flux's own CRs — so the gate below says "allowed" —
+    // but cannot get the CRD the page resolves first.
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: true },
+    ]);
+    checkCrdReadAccess.mockResolvedValue(false);
+
+    wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
    * The dot beside the number. A row that is all inventory stays quiet; a
    * page with something worth opening says so in one pixel, because the
    * count itself is not allowed to borrow a colour.
@@ -399,5 +492,154 @@ describe("the rail in another language", () => {
     // "Поды" would be this app inventing a word no cluster answers to.
     expect(screen.getByText("Pods")).toBeInTheDocument();
     expect(screen.getByText("Helm")).toBeInTheDocument();
+  });
+});
+
+describe("the Gateway and Routes rows for a namespace-scoped token", () => {
+  const routeIn = (ns: string) => ({
+    kind: "HTTPRoute",
+    apiVersion: "gateway.networking.k8s.io/v1",
+    name: `route-${ns}`,
+    namespace: ns,
+    hostnames: [],
+    parentRefs: [],
+    rules: [],
+    parents: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+  const gatewayIn = (ns: string) => ({
+    name: `gw-${ns}`,
+    namespace: ns,
+    apiVersion: "gateway.networking.k8s.io/v1",
+    className: "istio",
+    listeners: [],
+    listenerSets: [],
+    listenerSetsKnown: true,
+    addresses: [],
+    conditions: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+
+  /**
+   * The whole point of #137/#138: a team token can list its own namespaces
+   * and not the whole cluster. The routes page reads per namespace, so the
+   * rail must too — a cluster-wide read here 403s and would leave the count
+   * blank above a page that lists the user's routes. The verdict sources stay
+   * cluster-wide (refused -> no health mark), which is honest, not a red dot.
+   */
+  it("counts routes per namespace when the cluster-wide read is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-a", "team-b"],
+    });
+    listGateways.mockImplementation(async (ns: string | null) => {
+      if (ns === null) throw new Error("gateways is forbidden (code: 403)");
+      return [gatewayIn(ns)];
+    });
+    listGatewayRoutes.mockImplementation(
+      async (_kind: string, ns: string | null) => {
+        if (ns === null) throw new Error("httproutes is forbidden (code: 403)");
+        return [routeIn(ns)];
+      }
+    );
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    // Two namespaces, one route each — the fan-out, not a cluster-wide blank.
+    await waitFor(() =>
+      expect(within(routes).getByText("2")).toBeInTheDocument()
+    );
+    // Read per namespace, never cluster-wide.
+    const routeNamespacesAsked = listGatewayRoutes.mock.calls.map(
+      ([, ns]) => ns
+    );
+    expect(routeNamespacesAsked).toContain("team-a");
+    expect(routeNamespacesAsked).toContain("team-b");
+    expect(routeNamespacesAsked).not.toContain(null);
+  });
+
+  /**
+   * A token may list one served route kind and not another. One refused kind
+   * must not blank the whole count — the routes page reads each kind on its
+   * own for the same reason, so the rail (one fetch over all kinds) has to
+   * tolerate a refusal the same way or the two disagree.
+   */
+  it("keeps the count when one served route kind is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }, { kind: "TCPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    listGateways.mockResolvedValue([]);
+    listGatewayRoutes.mockImplementation(async (kind: string) => {
+      if (kind === "TCPRoute") {
+        throw new Error("tcproutes is forbidden (code: 403)");
+      }
+      return [routeIn("team-a")];
+    });
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    // The one readable kind's route is counted; the refused kind is dropped,
+    // not fatal.
+    await waitFor(() =>
+      expect(within(routes).getByText("1")).toBeInTheDocument()
+    );
+  });
+
+  /**
+   * Same gap as the vendor rows: the route pages resolve each kind's CRD
+   * first — a cluster-scoped get on `customresourcedefinitions` — so a reader
+   * who may list httproutes/gateways but cannot read CRDs still cannot open
+   * them. Both rows must lock. Fails if the CRD gate is dropped from
+   * routesDenied / gatewaysDenied.
+   */
+  it("locks Routes and Gateways when the reader cannot read CRDs", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    listGateways.mockResolvedValue([]);
+    listGatewayRoutes.mockResolvedValue([]);
+    // The reader may list the routes and gateways themselves, but cannot get
+    // the CRD each page resolves first.
+    checkListAccess.mockResolvedValue([
+      { resource: "httproutes", allowed: true },
+      { resource: "gateways", allowed: true },
+    ]);
+    checkCrdReadAccess.mockResolvedValue(false);
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    expect(
+      within(routes).getByLabelText(/permission to list these/i)
+    ).toBeInTheDocument();
+    const gateways = await screen.findByRole("link", { name: /gateways/i });
+    expect(
+      within(gateways).getByLabelText(/permission to list these/i)
+    ).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { TriangleAlert } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { CredentialsExpired } from "@/components/cluster/CredentialsExpired";
@@ -16,13 +17,17 @@ import { useCopyLink } from "@/hooks/useCopyLink";
 import { DeepLinkBanner } from "./DeepLinkBanner";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
+import { useCritical } from "@/hooks/useCritical";
+import { useT } from "@/i18n/useT";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 export function Layout() {
+  const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const { hue } = useClusterMark(currentContext);
+  const { critical } = useCritical();
   const expired = useExpiredCredentials();
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   useScopeTabs();
@@ -48,8 +53,20 @@ export function Layout() {
       }
     >
       {/* 2px along the top edge: unmissable in peripheral vision, zero
-          competition with the content below it. */}
-      <div className="h-0.5 flex-none bg-(--cluster)" />
+          competition with the content below it. Critical infrastructure
+          gets a band with words instead: the colour alone is what the
+          reader has stopped seeing by the time it matters. */}
+      {critical && currentContext ? (
+        <div
+          role="status"
+          className="flex h-5 flex-none items-center justify-center gap-2 bg-err px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-canvas"
+        >
+          <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+          {t("cluster", "criticalStripe", { context: currentContext })}
+        </div>
+      ) : (
+        <div className="h-0.5 flex-none bg-(--cluster)" />
+      )}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">

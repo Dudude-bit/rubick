@@ -63,6 +63,7 @@ export default defineVendor({
       staleTime: CERT_MANAGER_STALE,
     }),
     load: () => import("./page"),
+    gate: { crd: "certificates.cert-manager.io", namespaced: true },
   },
   crd,
 });

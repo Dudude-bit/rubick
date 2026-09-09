@@ -145,6 +145,8 @@ fn main() {
             commands::cluster::get_cluster_info,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
+            commands::access::check_crd_read_access,
+            commands::access::check_namespace_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
             // Namespace management

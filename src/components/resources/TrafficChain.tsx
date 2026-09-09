@@ -16,6 +16,7 @@ import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
 import {
   CopyableAddress,
   CopyableAddresses,
@@ -533,12 +534,15 @@ export function TrafficChain({
     );
   }
   if (error || !data) {
+    // The same read the Connections tab escapes: this chain reads the one
+    // `useConnections` query too, so a refusal offers the rule here as well,
+    // not a bare red dead-end. See `ConnectionsPanel`.
     return (
-      <p className="text-xs text-err">
-        {t("empty", "couldNotReadConnections", {
-          reason: error?.message ?? t("empty", "noAnswer"),
-        })}
-      </p>
+      <Unknown
+        question={t("empty", "couldNotReadWhatConnects")}
+        error={error ?? t("empty", "clusterDidNotAnswer")}
+        onRetry={() => void query.refetch()}
+      />
     );
   }
 

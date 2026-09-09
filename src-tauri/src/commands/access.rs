@@ -121,6 +121,96 @@ pub async fn check_list_access(
         .collect())
 }
 
+/// The attributes that ask "may I get a customresourcedefinition".
+///
+/// A different verb from `list`, and that difference is the whole reason this
+/// exists: a CRD-backed page (a route kind, a CRD-based integration) resolves
+/// its kind by `get`ting the CRD before it reads a single object, and a token
+/// granted `list` on `customresourcedefinitions` but not `get` — a real and
+/// common split — sails past the nav's list reviews and then meets the wall on
+/// the page. The nav asks the question the page will actually ask.
+#[must_use]
+fn crd_read_attributes() -> ResourceAttributes {
+    ResourceAttributes {
+        group: Some("apiextensions.k8s.io".to_string()),
+        resource: Some("customresourcedefinitions".to_string()),
+        verb: Some("get".to_string()),
+        ..ResourceAttributes::default()
+    }
+}
+
+/// Whether this user may `get` customresourcedefinitions cluster-wide.
+///
+/// `None` where the cluster could not be asked — never folded into a refusal,
+/// the same three-state discipline as [`check_list_access`]: a review that did
+/// not answer must leave the rows as they were, not lock them.
+///
+/// # Errors
+///
+/// If there is no connected cluster.
+#[tauri::command]
+pub async fn check_crd_read_access(state: State<'_, AppState>) -> Result<Option<bool>> {
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    Ok(ask(&api, crd_read_attributes()).await)
+}
+
+/// Whether this user may use a namespace at all.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamespaceAccess {
+    pub namespace: String,
+    /// `None` where the cluster could not be asked — never folded into a
+    /// refusal. A namespace the app merely failed to check must keep being
+    /// offered, or it would vanish from the picker as if the reader had been
+    /// turned away from it.
+    pub allowed: Option<bool>,
+}
+
+/// The one list a namespace is probed with: pods, the verb any grant that
+/// makes a namespace worth selecting carries. One named place, spelled once.
+#[must_use]
+fn namespace_probe_query() -> ListQuery {
+    ListQuery {
+        group: String::new(),
+        resource: "pods".to_string(),
+        namespaced: true,
+    }
+}
+
+/// Ask the cluster which of these namespaces this user may use.
+///
+/// One review per namespace — "may I list pods in it" — asked at once. A
+/// namespace the authorizer will not answer about comes back `None`, kept
+/// offered rather than hidden: the same three-state discipline as
+/// [`check_list_access`].
+///
+/// # Errors
+///
+/// If there is no connected cluster.
+#[tauri::command]
+pub async fn check_namespace_access(
+    namespaces: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<NamespaceAccess>> {
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
+    let probe = namespace_probe_query();
+
+    let answers = join_all(namespaces.iter().map(|namespace| {
+        let api = api.clone();
+        let attributes = list_attributes(&probe, Some(namespace));
+        async move { ask(&api, attributes).await }
+    }))
+    .await;
+
+    Ok(namespaces
+        .into_iter()
+        .zip(answers)
+        .map(|(namespace, allowed)| NamespaceAccess { namespace, allowed })
+        .collect())
+}
+
 /// The namespaces one kind has to be asked about.
 ///
 /// A cluster-scoped kind has exactly one answer however many namespaces are
@@ -179,6 +269,18 @@ mod tests {
         assert_eq!(core.namespace.as_deref(), Some("default"));
     }
 
+    /// The CRD review asks `get`, not `list` — the verb the CRD-backed pages
+    /// use — cluster-wide. A `list` review here would miss the token that may
+    /// list customresourcedefinitions but not get one.
+    #[test]
+    fn the_crd_review_asks_to_get_a_definition_cluster_wide() {
+        let crd = crd_read_attributes();
+        assert_eq!(crd.group.as_deref(), Some("apiextensions.k8s.io"));
+        assert_eq!(crd.resource.as_deref(), Some("customresourcedefinitions"));
+        assert_eq!(crd.verb.as_deref(), Some("get"));
+        assert_eq!(crd.namespace, None);
+    }
+
     /// A cluster-scoped kind is not in a namespace. Naming one asks whether
     /// the user may list nodes *in* `default`, which is not the question the
     /// nav row stands for.
@@ -218,6 +320,19 @@ mod tests {
         assert_eq!(resolve(&[]), None);
         assert_eq!(resolve(&[None, Some(true)]), Some(true));
         assert_eq!(resolve(&[None, Some(false)]), Some(false));
+    }
+
+    /// A namespace is probed by asking to list pods *in it* — a namespaced
+    /// question, so the namespace stays on the attributes. Asking cluster-wide
+    /// would answer whether the reader can list pods everywhere, which is the
+    /// opposite of what a team-scoped account has.
+    #[test]
+    fn probes_a_namespace_by_listing_pods_in_it() {
+        let attrs = list_attributes(&namespace_probe_query(), Some("team-a"));
+        assert_eq!(attrs.group.as_deref(), Some(""));
+        assert_eq!(attrs.resource.as_deref(), Some("pods"));
+        assert_eq!(attrs.verb.as_deref(), Some("list"));
+        assert_eq!(attrs.namespace.as_deref(), Some("team-a"));
     }
 
     #[test]

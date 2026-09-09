@@ -173,6 +173,7 @@ export interface ClusterOverview {
   problemsTruncated: number;
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
+  nodesKnown: boolean;
   warnings: WarningGroup[];
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
@@ -1564,6 +1565,11 @@ export interface RegistryConfigInfo {
   username?: string;
   password?: string;
   token?: string;
+}
+
+export interface NamespaceAccess {
+  namespace: string;
+  allowed: boolean | null;
 }
 
 export interface ListAccess {
