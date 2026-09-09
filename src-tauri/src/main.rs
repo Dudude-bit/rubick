@@ -259,6 +259,7 @@ fn main() {
             commands::files::stop_files_listing,
             commands::files::read_container_file,
             commands::files::download_container_file,
+            commands::files::write_text_file,
             // Terminal/Exec commands
             commands::terminal::terminal_input,
             commands::terminal::terminal_resize,

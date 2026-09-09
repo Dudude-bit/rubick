@@ -692,6 +692,13 @@ export async function readContainerFile(
   });
 }
 
+export async function writeTextFile(
+  destination: string,
+  contents: string
+): Promise<void> {
+  return invoke<void>("write_text_file", { destination, contents });
+}
+
 export async function downloadContainerFile(
   pod: string,
   namespace: string | null,
