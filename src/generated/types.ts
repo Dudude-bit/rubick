@@ -88,12 +88,20 @@ export interface KubeconfigCandidate {
   contexts: string[];
 }
 
+export interface ConnectAttempt {
+  context: string;
+  at: string;
+  direct: PathOutcome;
+  proxy: ProxyOutcome;
+}
+
 export interface ClusterInfo {
   context: string;
   server_version: string;
   platform: string;
   git_version: string;
   credentials_expire_at: string | null;
+  connected_through: ConnectionPath;
 }
 
 export interface ContextInfo {
@@ -1169,6 +1177,7 @@ export interface Diagnostics {
   kubeconfig: KubeconfigInfo | null;
   app: InstallationInfo;
   findings: Finding[];
+  connections: ConnectAttempt[];
 }
 
 export interface Finding {
@@ -1712,6 +1721,22 @@ export type QueryTerm =
 export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
+
+export type ProxyOutcome =
+  | { state: "notTried" }
+  | { state: "noKubectl" }
+  | {
+      state: "failed";
+      error: string;
+      stdout: string;
+      stderr: string;
+      kubectl: string;
+    }
+  | { state: "ok"; port: number; kubectl: string };
+
+export type PathOutcome = { state: "ok" } | { state: "failed"; error: string };
+
+export type ConnectionPath = "direct" | "kubectl_proxy";
 
 export type ContextAuth =
   | { kind: "exec" }

@@ -16,6 +16,7 @@ import type {
   ClusterPreferences,
   ConfigData,
   ConfigMapInfo,
+  ConnectAttempt,
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
@@ -1342,6 +1343,12 @@ export async function getCurrentContext(): Promise<string | null> {
 
 export async function connectCluster(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("connect_cluster", { context });
+}
+
+export async function connectionAttempt(
+  context: string
+): Promise<ConnectAttempt | null> {
+  return invoke<ConnectAttempt | null>("connection_attempt", { context });
 }
 
 export async function disconnectCluster(context: string): Promise<void> {

@@ -143,6 +143,7 @@ fn main() {
             commands::cluster::connect_cluster,
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
+            commands::cluster::connection_attempt,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
             commands::access::check_crd_read_access,
@@ -408,6 +409,17 @@ fn main() {
             // Logging commands
             commands::logging::log_frontend_events_batch,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // On the way out, kill any kubectl proxy — Drop does not run when the
+        // macOS loop ends the process, and an unauthenticated loopback proxy
+        // must not outlive the window.
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                app_handle
+                    .state::<AppState>()
+                    .client_manager
+                    .shutdown_proxies();
+            }
+        });
 }

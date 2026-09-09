@@ -1,6 +1,9 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { Spinner } from "@/components/ui/spinner";
+import { useQuery } from "@tanstack/react-query";
+
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
+import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useClusterStore } from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
@@ -436,6 +439,7 @@ function Failed({
       <Machine tone="error">
         <Mono>{verbatim(message)}</Mono>
       </Machine>
+      <SecondWay context={context} message={message} />
       {server && (
         <Machine>
           <span>{t("cluster", "server")}</span>
@@ -443,6 +447,38 @@ function Failed({
         </Machine>
       )}
     </>
+  );
+}
+
+/**
+ * What became of the second way in. The error above is the app's own path;
+ * whether kubectl was asked, and what it said, is the thing a reader who
+ * "can connect with kubectl" needs next.
+ */
+function SecondWay({ context, message }: { context: string; message: string }) {
+  const t = useT();
+  // Keyed on the message too: the same context failing again is a new
+  // attempt, and the record behind it has moved on.
+  const attempt = useQuery({
+    queryKey: ["connection-attempt", context, message],
+    queryFn: () => commands.connectionAttempt(context),
+    staleTime: Infinity,
+  });
+  const proxy = attempt.data?.proxy;
+  if (!proxy || proxy.state === "notTried" || proxy.state === "ok") return null;
+
+  if (proxy.state === "noKubectl") {
+    return (
+      <Machine>
+        <span>{t("cluster", "proxyNoKubectl")}</span>
+      </Machine>
+    );
+  }
+  return (
+    <Machine tone="error">
+      <span>{t("cluster", "proxyFailed", { kubectl: proxy.kubectl })}</span>
+      <Mono>{verbatim(proxy.stderr.trim() || proxy.error)}</Mono>
+    </Machine>
   );
 }
 

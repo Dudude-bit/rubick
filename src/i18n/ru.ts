@@ -2408,6 +2408,12 @@ export const ru: Catalogue = {
     agoSuffix: "назад.",
     connectingToLower: "подключение к {context}…",
     notConnectedLower: "нет подключения",
+    throughProxy: "через kubectl proxy",
+    throughProxyHint:
+      "Собственные учётные данные приложения отклонены, поэтому сессия идёт через kubectl proxy, который приложение запустило. Ключи держит и обновляет kubectl.",
+    proxyNoKubectl:
+      "kubectl нет в пути поиска. С ним Rubick попробовал бы kubectl proxy как второй путь.",
+    proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
@@ -2780,6 +2786,14 @@ export const ru: Catalogue = {
     noKubeconfigLoaded:
       "Пока ничего не загружено — подключитесь к кластеру, и здесь появится имя файла.",
     applicationBlock: "Приложение",
+    connectionsBlock: "Подключения · {n}",
+    noConnectionsYet: "Подключений ещё не было.",
+    pathDirect: "напрямую",
+    pathProxy: "kubectl proxy",
+    pathOk: "ок",
+    pathProxyOk: "ок на порту {port} ({kubectl})",
+    pathNotTried: "не пробовали",
+    pathNoKubectl: "kubectl нет в пути поиска",
     appVersion: "Версия {version}",
     logsTo: "Логи: {destination}",
     readingFile: "Чтение файла…",
