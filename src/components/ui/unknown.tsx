@@ -55,8 +55,18 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
       </p>
       <div className="flex flex-wrap gap-1.5 pl-[22px] pt-0.5">
         {onRetry && (
-          <Button variant="outline" size="sm" onClick={onRetry}>
-            <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            // A long label (Russian runs longer than English) must wrap inside
+            // the button rather than run past the box's edge.
+            className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"
+          >
+            <RefreshCw
+              className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
+              aria-hidden="true"
+            />
             {t("empty", "unknownRetry")}
           </Button>
         )}
@@ -67,8 +77,12 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
             onClick={() =>
               void copy(rbacRule(refusal), t("empty", "unknownRuleCopied"))
             }
+            className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"
           >
-            <ClipboardCopy className="mr-1.5 h-3 w-3" aria-hidden="true" />
+            <ClipboardCopy
+              className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
+              aria-hidden="true"
+            />
             {t("empty", "unknownCopyRule")}
           </Button>
         )}
