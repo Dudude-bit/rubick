@@ -2676,6 +2676,7 @@ export const en = {
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",
+    whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
     pvcListDescription: "Requests for storage by pods in {scope}",
     expandRepeats: "Expand {count} repeats",
@@ -3511,6 +3512,12 @@ export const en = {
       "A slice carries a port by the Service port's name. These name none it declares, so nothing routes to them.",
     couldNotReadWhatConnects: "Could not read what connects to this.",
     clusterDidNotAnswer: "The cluster did not answer.",
+    unknownRefused: "The cluster refused: {message}",
+    unknownFault: "The read failed: {message}",
+    unknownRetry: "Try the read again",
+    unknownCopyRule: "Copy the rule to ask for",
+    unknownRuleCopied:
+      "A Role and a RoleBinding that would allow this read. Give it to whoever owns access.",
     inNamespaceWhere: "in {namespace}",
     inClusterWhere: "in the cluster",
     nothingStatesEdge: "Nothing {where} states an edge to this {kind}.",

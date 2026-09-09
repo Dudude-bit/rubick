@@ -178,6 +178,6 @@ describe("ConnectionsPanel", () => {
         query={query({ error: new Error("connection refused") })}
       />
     );
-    expect(screen.getByText("connection refused")).toBeInTheDocument();
+    expect(screen.getByText(/connection refused/)).toBeInTheDocument();
   });
 });
