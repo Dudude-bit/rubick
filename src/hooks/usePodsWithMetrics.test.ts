@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import type { PodInfo, PodMetrics } from "@/generated/types";
 import type { NodeSilence } from "@/lib/node-reporting";
+import * as metricsModule from "@/lib/metrics";
 import { usePodsWithMetrics } from "./usePodsWithMetrics";
 
 const state = vi.hoisted(() => ({
@@ -50,6 +51,29 @@ it("keeps final pod row references across identical ticks even on a silent node"
   expect(result.current.data[0]).toBe(before[0]);
   expect(result.current.data[1]).toBe(before[1]);
   expect(result.current.data[0].nodeSilence?.reason).toBe("NodeStatusUnknown");
+});
+
+/**
+ * The two memos are split so a node-silence change re-runs only the
+ * annotation, not the pod/metrics merge. The output is byte-identical either
+ * way (the merge is idempotent on identity), so only the merge's call count
+ * tells the split from the combined memo it replaced.
+ */
+it("does not re-run the merge when only node silence changes", () => {
+  const merge = vi.spyOn(metricsModule, "mergePodsWithMetrics");
+  try {
+    const { result, rerender } = renderHook(() => usePodsWithMetrics());
+    const calls = merge.mock.calls.length;
+    // Only the silence changes; pods and metrics keep their references.
+    state.silent = new Map([
+      ["gone", { node: "gone", since: null, reason: "NodeNotReady" }],
+    ]);
+    rerender();
+    expect(merge.mock.calls.length).toBe(calls);
+    expect(result.current.data[0].nodeSilence?.reason).toBe("NodeNotReady");
+  } finally {
+    merge.mockRestore();
+  }
 });
 
 /** The hook must expose changed CPU while leaving other annotated rows stable. */

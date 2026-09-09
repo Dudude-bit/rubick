@@ -45,6 +45,34 @@ it("updates changed silence values and removes the warning after recovery", () =
   expect(recovered[0].nodeSilence).toBeUndefined();
 });
 
+/**
+ * The realistic recovery: one node comes back while the cluster still has
+ * other silent nodes, so the map is not empty and the empty-map short-circuit
+ * never runs. The per-row branch has to hand back the bare row, not the
+ * annotation still sitting in the WeakMap — a cache that answered "still
+ * silent" for a node now healthy would be the stale-warning the whole third
+ * state exists to prevent, and the empty-map case cannot catch it.
+ */
+it("drops a recovered node's warning even while other nodes stay silent", () => {
+  const row = { nodeName: "gone" };
+  const silence: NodeSilence = {
+    node: "gone",
+    since: null,
+    reason: "NodeStatusUnknown",
+  };
+  // First tick caches an annotated row for `row` in the silenceRows WeakMap.
+  const first = withNodeSilence([row], new Map([["gone", silence]]));
+  expect(first[0].nodeSilence?.reason).toBe("NodeStatusUnknown");
+
+  // `gone` recovers, but `other` is still silent, so the map is non-empty.
+  const next = withNodeSilence(
+    [row],
+    new Map([["other", { node: "other", since: null, reason: null }]])
+  );
+  expect(next[0]).toBe(row);
+  expect(next[0].nodeSilence).toBeUndefined();
+});
+
 function condition(
   status: string,
   extra?: Partial<ConditionInfo>
