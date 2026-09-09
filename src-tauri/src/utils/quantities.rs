@@ -19,11 +19,16 @@ pub const MEBIBYTE: u64 = 1024 * 1024;
 pub const GIBIBYTE: u64 = 1024 * 1024 * 1024;
 pub const TEBIBYTE: u64 = 1024 * 1024 * 1024 * 1024;
 
+pub const PEBIBYTE: u64 = 1024 * TEBIBYTE;
+pub const EXBIBYTE: u64 = 1024 * PEBIBYTE;
+
 /// Decimal unit multipliers (K, M, G, T)
 pub const KILOBYTE: u64 = 1000;
 pub const MEGABYTE: u64 = 1000 * 1000;
 pub const GIGABYTE: u64 = 1000 * 1000 * 1000;
 pub const TERABYTE: u64 = 1000 * 1000 * 1000 * 1000;
+pub const PETABYTE: u64 = 1000 * TERABYTE;
+pub const EXABYTE: u64 = 1000 * PETABYTE;
 
 /// Suffix to the divisor that turns the number in front of it into millicores.
 const CPU_UNITS: [(char, f64); 3] = [('m', 1.0), ('n', 1_000_000.0), ('u', 1_000.0)];
@@ -31,43 +36,63 @@ const CPU_UNITS: [(char, f64); 3] = [('m', 1.0), ('n', 1_000_000.0), ('u', 1_000
 /// Suffix to the number of bytes it stands for. Binary units are listed
 /// first, though nothing depends on the order: a value ending in `Ki` does
 /// not end in `K`.
-const MEMORY_UNITS: [(&str, u64); 8] = [
+const MEMORY_UNITS: [(&str, u64); 12] = [
     ("Ki", KIBIBYTE),
     ("Mi", MEBIBYTE),
     ("Gi", GIBIBYTE),
     ("Ti", TEBIBYTE),
+    ("Pi", PEBIBYTE),
+    ("Ei", EXBIBYTE),
     ("K", KILOBYTE),
     ("M", MEGABYTE),
     ("G", GIGABYTE),
     ("T", TERABYTE),
+    ("P", PETABYTE),
+    ("E", EXABYTE),
 ];
 
 /// Parse CPU quantity string to millicores (f64)
 /// Supports formats: "500m", "0.5", "2", "2.5", "100n" (nanocores)
 #[must_use]
 pub fn parse_cpu(cpu_str: &str) -> f64 {
+    parse_cpu_checked(cpu_str).unwrap_or(0.0)
+}
+
+/// Like [`parse_cpu`], but `None` when the number itself will not parse, so a
+/// caller can tell "could not read" from a real zero rather than collapse the
+/// two. An unknown *suffix* still falls through to the no-suffix (cores) path.
+#[must_use]
+pub fn parse_cpu_checked(cpu_str: &str) -> Option<f64> {
     let cpu_str = cpu_str.trim();
     for (suffix, per_millicore) in CPU_UNITS {
         if let Some(num) = cpu_str.strip_suffix(suffix) {
-            return num.parse::<f64>().unwrap_or(0.0) / per_millicore;
+            return num.parse::<f64>().ok().map(|n| n / per_millicore);
         }
     }
     // No suffix means cores: "2", "0.5", "2.5".
-    cpu_str.parse::<f64>().unwrap_or(0.0) * 1000.0
+    cpu_str.parse::<f64>().ok().map(|n| n * 1000.0)
 }
 
 /// Parse memory quantity string to bytes (u64)
 /// Supports formats: "512Mi", "1Gi", "1024Ki", "1073741824", "128974848", "100M", "1G"
 #[must_use]
 pub fn parse_memory(mem_str: &str) -> u64 {
+    parse_memory_checked(mem_str).unwrap_or(0)
+}
+
+/// Like [`parse_memory`], but `None` when the number itself will not parse, so
+/// a caller can tell "could not read" from a real zero rather than collapse
+/// the two.
+#[must_use]
+pub fn parse_memory_checked(mem_str: &str) -> Option<u64> {
     let mem_str = mem_str.trim();
     for (suffix, bytes) in MEMORY_UNITS {
         if let Some(num) = mem_str.strip_suffix(suffix) {
-            return (num.parse::<f64>().unwrap_or(0.0) * bytes as f64) as u64;
+            return num.parse::<f64>().ok().map(|n| (n * bytes as f64) as u64);
         }
     }
     // No suffix means the quantity is already in bytes.
-    mem_str.parse::<u64>().unwrap_or(0)
+    mem_str.parse::<u64>().ok()
 }
 
 /// Format millicores to string representation
@@ -148,6 +173,29 @@ mod tests {
         assert_eq!(parse_memory(""), 0);
         assert_eq!(parse_memory("nonsense"), 0);
         assert_eq!(parse_memory("Gi"), 0);
+    }
+
+    /// Pi/Ei and P/E are valid Kubernetes suffixes the table lacked; an
+    /// unhandled suffix fell through to the no-suffix path and parsed to a
+    /// silent zero — the collapse node_budget's `parse` must not make.
+    #[test]
+    fn the_large_binary_and_decimal_suffixes_parse() {
+        assert_eq!(parse_memory("1Pi"), 1024_u64.pow(5));
+        assert_eq!(parse_memory("1Ei"), 1024_u64.pow(6));
+        assert_eq!(parse_memory("1P"), 1_000_000_000_000_000);
+        assert_eq!(parse_memory("1E"), 1_000_000_000_000_000_000);
+    }
+
+    /// The checked parsers tell "could not read" from a real zero, so a caller
+    /// can carry unknown rather than answer a confident 0.
+    #[test]
+    fn the_checked_parsers_return_none_for_an_unreadable_quantity() {
+        assert_eq!(parse_memory_checked("nonsense"), None);
+        assert_eq!(parse_memory_checked("Gi"), None);
+        assert_eq!(parse_memory_checked("2Gi"), Some(2 * 1024 * 1024 * 1024));
+        assert_eq!(parse_memory_checked("0"), Some(0));
+        assert_eq!(parse_cpu_checked("banana"), None);
+        assert_eq!(parse_cpu_checked("500m"), Some(500.0));
     }
 
     #[test]
