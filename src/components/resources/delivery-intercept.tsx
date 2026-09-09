@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import type { DeliveryIntercept } from "@/lib/delivery";
 import { deliveryWarning } from "@/lib/governance";
+import { useCritical } from "@/hooks/useCritical";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { ActionWarnings } from "./action-warnings";
 import { DetailAction, type DetailActionProps } from "./detail-blocks";
 import { useT } from "@/i18n/useT";
@@ -34,9 +36,11 @@ import { useT } from "@/i18n/useT";
  * A {@link DetailAction} that asks first, and only when there is something to
  * ask about.
  *
- * With `intercept` null this is the control exactly as it was — same click,
- * same handler, no dialog — which is what every object on a cluster with no
- * delivery controller gets.
+ * With `intercept` null this was the control exactly as it was — same click,
+ * same handler, no dialog. It still is on an ordinary cluster; on one the
+ * person marked critical it grows the typed-name gate every other destructive
+ * control here has, because "before any change" has to mean this control too —
+ * a restart that fired on one click was the last way past the gate.
  */
 export function InterceptedAction({
   intercept,
@@ -45,16 +49,22 @@ export function InterceptedAction({
   ...props
 }: DetailActionProps & { intercept: DeliveryIntercept | null }) {
   const [open, setOpen] = useState(false);
+  const critical = useCritical();
+  // A dialog is owed when a delivery controller would undo this, or when the
+  // cluster is critical and so the gate must be typed first.
+  const guarded =
+    intercept !== null || (critical.critical && !!critical.context);
 
   return (
     <>
       <DetailAction
         {...props}
         label={label}
-        onClick={() => (intercept ? setOpen(true) : onClick())}
+        onClick={() => (guarded ? setOpen(true) : onClick())}
       />
       <DeliveryInterceptDialog
         intercept={intercept}
+        label={label}
         open={open}
         onOpenChange={setOpen}
         onConfirm={onClick}
@@ -65,36 +75,52 @@ export function InterceptedAction({
 
 export function DeliveryInterceptDialog({
   intercept,
+  label,
   open,
   onOpenChange,
   onConfirm,
 }: {
   intercept: DeliveryIntercept | null;
+  /** The action verb, used to title the dialog when there is no intercept of
+   *  its own to name it — the critical-cluster gate case. */
+  label?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
   const t = useT();
-  if (!intercept) return null;
+  const gate = useCriticalGate();
+  // Nothing to ask when neither a delivery controller owns this nor the cluster
+  // is critical — the caller fires straight through in that case.
+  if (!intercept && !gate.active) return null;
+
+  const close = (next: boolean) => {
+    if (!next) gate.reset();
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={close}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{intercept.title}</DialogTitle>
+          <DialogTitle>{intercept?.title ?? label}</DialogTitle>
+          {gate.notice}
         </DialogHeader>
-        <DeliveryInterceptBody intercept={intercept} />
+        {intercept && <DeliveryInterceptBody intercept={intercept} />}
+        {gate.input}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => close(false)}>
             {t("action", "cancel")}
           </Button>
           <Button
             variant="destructive"
+            disabled={gate.blocked}
             onClick={() => {
-              onOpenChange(false);
+              close(false);
               onConfirm();
             }}
           >
-            {intercept.confirmLabel}
+            {intercept?.confirmLabel ?? label}
           </Button>
         </DialogFooter>
       </DialogContent>

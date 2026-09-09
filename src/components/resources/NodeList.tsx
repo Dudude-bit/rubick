@@ -31,7 +31,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { DrainDialog } from "@/components/resources/drain-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAsk } from "@/hooks/useAsk";
+import { useCritical } from "@/hooks/useCritical";
 import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
 import { useT } from "@/i18n/useT";
 
@@ -258,6 +260,15 @@ export function NodeList() {
 
   const [draining, setDraining] = useState<string | null>(null);
   const asking = useAsk();
+  // Cordon/uncordon fire straight from a list row. On a critical cluster they
+  // are still a change to that cluster, so they route through the typed-name
+  // gate the ConfirmDialog carries; on an ordinary cluster they stay one-click.
+  const critical = useCritical();
+  const criticalActive = critical.critical && !!critical.context;
+  const [pendingSchedulable, setPendingSchedulable] = useState<{
+    action: "cordon" | "uncordon";
+    node: string;
+  } | null>(null);
 
   // A drain is not a mutation: it outlives its own command call and reports
   // as it goes. The hook owns that; the list only owns which node is open.
@@ -304,12 +315,18 @@ export function NodeList() {
       {
         icon: ShieldOff,
         label: t("action", "cordon"),
-        onClick: (item) => cordonMutation.mutate(item.name),
+        onClick: (item) =>
+          criticalActive
+            ? setPendingSchedulable({ action: "cordon", node: item.name })
+            : cordonMutation.mutate(item.name),
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
-        onClick: (item) => uncordonMutation.mutate(item.name),
+        onClick: (item) =>
+          criticalActive
+            ? setPendingSchedulable({ action: "uncordon", node: item.name })
+            : uncordonMutation.mutate(item.name),
       },
       {
         icon: AlertTriangle,
@@ -327,7 +344,16 @@ export function NodeList() {
         variant: "destructive",
       },
     ],
-    [t, navigate, cordonMutation, uncordonMutation, setDraining, drain]
+    [
+      t,
+      navigate,
+      cordonMutation,
+      uncordonMutation,
+      setDraining,
+      drain,
+      criticalActive,
+      setPendingSchedulable,
+    ]
   );
 
   return (
@@ -372,6 +398,33 @@ export function NodeList() {
           void drain.start(node, { ignoreDaemonsets: true, ...choices });
         }}
         onCancelDrain={drain.cancel}
+      />
+      <ConfirmDialog
+        open={pendingSchedulable !== null}
+        onOpenChange={(open) => !open && setPendingSchedulable(null)}
+        title={
+          pendingSchedulable
+            ? t(
+                "action",
+                pendingSchedulable.action === "cordon"
+                  ? "cordonNamed"
+                  : "uncordonNamed",
+                { name: pendingSchedulable.node }
+              )
+            : ""
+        }
+        confirmLabel={t(
+          "action",
+          pendingSchedulable?.action === "uncordon" ? "uncordon" : "cordon"
+        )}
+        confirmVariant="destructive"
+        onConfirm={() => {
+          if (!pendingSchedulable) return;
+          const { action, node } = pendingSchedulable;
+          setPendingSchedulable(null);
+          if (action === "cordon") cordonMutation.mutate(node);
+          else uncordonMutation.mutate(node);
+        }}
       />
     </>
   );
