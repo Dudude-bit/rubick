@@ -260,6 +260,12 @@ fn main() {
             commands::files::read_container_file,
             commands::files::download_container_file,
             commands::files::write_text_file,
+            commands::sharing::list_share_targets,
+            commands::sharing::save_share_target,
+            commands::sharing::remove_share_target,
+            commands::sharing::verify_share_target,
+            commands::sharing::publish_report,
+            commands::sharing::import_postplan_key,
             // Terminal/Exec commands
             commands::terminal::terminal_input,
             commands::terminal::terminal_resize,

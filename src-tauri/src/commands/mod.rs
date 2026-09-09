@@ -47,6 +47,7 @@ pub mod revisions;
 pub mod search;
 pub mod services;
 pub mod settings;
+pub mod sharing;
 pub mod storage;
 pub mod terminal;
 pub mod watch;
