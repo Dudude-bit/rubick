@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -16,6 +18,15 @@ export const DATABASES_CRD = `databases.${GROUP}`;
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=cloudnative-pg";
 
 export const CNPG_STALE = 30_000;
+
+/**
+ * A Cluster's phase, its primary and its archiving condition all turn over
+ * on the operator's clock, not on a deploy — this page is watched during a
+ * switchover. Plain `useQuery` with a stale time refetched only on a
+ * remount, so the page sat on its first answer for as long as it was open
+ * and "checked for you" just counted upwards.
+ */
+const CNPG_REFRESH = "resourceList" as const;
 export const CLUSTERS_KEY = ["cloudnativepg", "clusters"] as const;
 
 /**
@@ -42,7 +53,8 @@ export function fetchClusters(): Promise<CustomResourceInfo[]> {
 
 export function useClusters() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: CNPG_REFRESH,
     queryKey: [context, ...CLUSTERS_KEY],
     queryFn: fetchClusters,
     staleTime: CNPG_STALE,
@@ -58,7 +70,8 @@ export interface Companions {
 
 export function useCompanions() {
   const context = useClusterStore((state) => state.currentContext);
-  return useQuery({
+  return useLiveQuery({
+    refresh: CNPG_REFRESH,
     queryKey: [context, "cloudnativepg", "companions"],
     queryFn: async (): Promise<Companions> => {
       const [backups, scheduled, poolers] = await Promise.all([
