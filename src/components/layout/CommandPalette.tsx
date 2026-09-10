@@ -28,6 +28,12 @@ import {
   type ActivityTab,
 } from "@/stores/activityPanelStore";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertReadingPanel,
+  type AlertTarget,
+} from "@/components/alerts/AlertReadingPanel";
+import { looksLikeAlert, parseAlert, type AlertReading } from "@/lib/alerts";
+import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
@@ -636,6 +642,40 @@ export function CommandPalette() {
 
   const close = useCallback(() => setOpen(false), []);
 
+  /**
+   * An alert somebody pasted, instead of a search.
+   *
+   * It has to be caught on paste rather than read out of the field: an
+   * `input` drops the newlines on the way in, and the newlines are the whole
+   * grammar. Nothing is opened by arriving here, and `esc` puts the search
+   * back.
+   */
+  const [alert, setAlert] = useState<AlertReading | null>(null);
+  const arriveFromAlert = useAlertArrivalStore((s) => s.arrive);
+  const openFromAlert = useCallback(
+    (target: AlertTarget) => {
+      arriveFromAlert(alert!, {
+        kind: target.kind,
+        name: target.name,
+        namespace: target.namespace,
+      });
+      setAlert(null);
+      if (target.context !== currentContext) {
+        openTab({
+          href: target.path,
+          context: target.context,
+          namespace: target.namespace ?? "",
+          background: false,
+        });
+        close();
+        return;
+      }
+      close();
+      requestAnimationFrame(() => navigate(target.path));
+    },
+    [alert, arriveFromAlert, currentContext, openTab, close, navigate]
+  );
+
   const go = useCallback(
     (
       path: string,
@@ -948,36 +988,66 @@ export function CommandPalette() {
             }
             value={text}
             onChange={(event) => setText(event.target.value)}
-            onKeyDown={handleKeyDown}
+            onPaste={(event) => {
+              const pasted = event.clipboardData.getData("text");
+              if (!looksLikeAlert(pasted)) return;
+              // The field would swallow the newlines, and the newlines are
+              // the grammar this is read by.
+              event.preventDefault();
+              setAlert(parseAlert(pasted));
+            }}
+            onKeyDown={(event) => {
+              if (alert !== null) {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setAlert(null);
+                }
+                return;
+              }
+              handleKeyDown(event);
+            }}
             className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
 
-        <div
-          id={listId}
-          role="listbox"
-          aria-label={t("action", "results")}
-          className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
-        >
-          {entries.map((entry) => (
-            <EntryRow
-              key={entry.id}
-              domId={`${listId}-${entry.id}`}
-              entry={entry}
-              selected={entry.id === activeId}
-              onHover={() => isSelectable(entry) && setSelectedId(entry.id)}
-              onPick={(event) =>
-                activate(
-                  entry,
-                  event.metaKey || event.ctrlKey || event.button === 1
-                )
-              }
-            />
-          ))}
-        </div>
+        {alert !== null ? (
+          <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
+            <AlertReadingPanel reading={alert} onOpen={openFromAlert} />
+          </div>
+        ) : (
+          <div
+            id={listId}
+            role="listbox"
+            aria-label={t("action", "results")}
+            className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
+          >
+            {entries.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                domId={`${listId}-${entry.id}`}
+                entry={entry}
+                selected={entry.id === activeId}
+                onHover={() => isSelectable(entry) && setSelectedId(entry.id)}
+                onPick={(event) =>
+                  activate(
+                    entry,
+                    event.metaKey || event.ctrlKey || event.button === 1
+                  )
+                }
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
-          {bang ? (
+          {alert !== null ? (
+            <>
+              <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+              <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+              <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
+            </>
+          ) : bang ? (
             <>
               <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
               <FootKey shortcut="⇥">{t("action", "hintComplete")}</FootKey>
