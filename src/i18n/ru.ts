@@ -1695,6 +1695,8 @@ export const ru: Catalogue = {
     canPatchScyllaClusters: "patch scyllaclusters",
     noStatusYet: "статуса ещё нет",
     upgradingWord: "апгрейд",
+    conditionsNotWritten: "условия не записаны",
+    conditionsUnsure: "оператор не уверен",
     rolledOut: "раскатан",
     conditionsFact: "Условия",
     membersFact: "Члены",

@@ -363,7 +363,14 @@ function ClusterRow({
           ? "Unavailable"
           : cluster.conditions.progressing === "True"
             ? "Progressing"
-            : t("operators", "rolledOut");
+            : // "Rolled out" is a verdict off the three conditions. Without
+              // them there is no verdict, and the label said one anyway —
+              // contradicting the finding printed directly underneath it.
+              cluster.findings.some((f) => f.kind === "conditionsUnwritten")
+              ? t("operators", "conditionsNotWritten")
+              : cluster.findings.some((f) => f.kind === "conditionsUnknown")
+                ? t("operators", "conditionsUnsure")
+                : t("operators", "rolledOut");
 
   const run = async (action: ScyllaAction) => {
     setBusy(true);

@@ -1659,6 +1659,8 @@ export const en = {
     canPatchScyllaClusters: "patch scyllaclusters",
     noStatusYet: "no status yet",
     upgradingWord: "upgrading",
+    conditionsNotWritten: "conditions not written",
+    conditionsUnsure: "operator unsure",
     rolledOut: "rolled out",
     conditionsFact: "Conditions",
     membersFact: "Members",
