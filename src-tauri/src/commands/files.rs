@@ -252,6 +252,26 @@ pub async fn read_container_file(
 
 /// Copy one file to a path the person chose. Nothing is written into the
 /// container; nothing over the cap is written anywhere.
+/// Writes a report the frontend composed to a path the reader picked.
+///
+/// The path came back from the save dialog, so it is the reader's own
+/// choice and not a name from the cluster; what is validated is that this
+/// is a write of text to a file, not a directory traversal built from a
+/// resource name. Existing content is replaced, the way a save dialog's
+/// "replace?" already promised.
+#[tauri::command]
+pub async fn write_text_file(destination: String, contents: String) -> Result<()> {
+    let path = std::path::PathBuf::from(&destination);
+    if path.is_dir() {
+        return Err(Error::InvalidInput(format!(
+            "{destination} is a directory, not a file"
+        )));
+    }
+    std::fs::write(&path, contents.as_bytes())
+        .map_err(|e| Error::InvalidInput(format!("could not write {destination}: {e}")))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn download_container_file(
     pod: String,
