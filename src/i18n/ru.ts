@@ -1471,6 +1471,66 @@ export const ru: Catalogue = {
     window24h: "24ч",
     window7d: "7д",
   },
+  hints: {
+    mostLikely: "Скорее всего",
+    notTested:
+      "«Скорее всего» это слова приложения о цепочке, которую оно прочитало до конца, но не проверило: ни один пакет отсюда не отправлялся.",
+    googleIt: "Найти в поиске",
+    copyForAgent: "Скопировать для агента",
+    copiedForAgent: "Скопировано: {n} символов, секретов нет.",
+    searchOpens: "откроется {site}; движок меняется в настройках",
+    guessCrashLoop:
+      "Скорее всего: {container} сам завершается сразу после старта, уже {n} перезапусков. Причина, скорее всего, в его последних строках перед выходом.",
+    guessCrashRefusedSidecar:
+      "Скорее всего: на {host}:{port} внутри этого пода никто не отвечает. Этот адрес у сайдкара {sidecar}, который сейчас {state}; само приложение, скорее всего, в порядке и ждёт его.",
+    guessCrashRefusedServiceEmpty:
+      "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
+    guessCrashRefusedServiceReady:
+      "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что отказ, скорее всего, идёт от процесса за ним, а не от кластера.",
+    guessCrashInClusterUnknown:
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера, на который не отвечает ни один Service в этом namespace. Скорее всего, адрес неверный или Service в другом namespace.",
+    guessCrashTimeoutOutside:
+      "Скорее всего: {host} снаружи кластера, и пакеты теряются по дороге, обычно из-за egress-политики, файрвола или allow-list без адреса этого кластера. Приложение видит только дорогу, не то, что в её конце.",
+    guessCrashRefusedOutside:
+      "Скорее всего: {host}:{port} ответил и отказал. Что-то снаружи кластера отклонило соединение, обычно сам сервис или прокси перед ним; файрвол дал бы таймаут.",
+    guessOom:
+      "Скорее всего: {container} убивают за память сверх лимита{limit}. Скорее всего, ему нужен лимит выше, или в нём утечка.",
+    guessImagePull:
+      "Скорее всего: образ {image} не скачивается, обычно неверный тег, приватный registry без pull secret или registry с лимитом запросов.",
+    guessFailedMount:
+      "Скорее всего: том{volume} не монтируется, уже {n} попыток, обычно Secret или ConfigMap, которых ещё нет, или несвязанный PersistentVolumeClaim.",
+    guessPendingSame:
+      "Скорее всего: ни одна нода не подходит. Планировщик дал один и тот же ответ {n} раз, так что, скорее всего, с нодами ничего не менялось с первого вопроса.",
+    guessPendingVaried:
+      "Скорее всего: ни одна нода не подходит, и ответ планировщика менялся за {n} попыток, так что ноды, скорее всего, меняются у него под руками.",
+    guessProbe:
+      "Скорее всего: проба {probe} падает, и kubelet на это реагирует, уже {n} раз. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
+    factLastLineSaid: "Последняя строка перед выходом: {line}",
+    factExited: "{container} завершился с кодом {code}, уже {n} перезапусков.",
+    factRestarts: "{container} перезапускался {n} раз.",
+    factKubeletSaid: "Kubelet сказал: {message}",
+    factSchedulerSaid: "Планировщик сказал: {message}",
+    checkLastLines: "Прочитать последние строки {container} перед выходом",
+    checkSidecarLines: "Прочитать последние строки {sidecar}",
+    checkService: "Проверить Service {service}: эндпоинты и что за ними",
+    checkConfig:
+      "Посмотреть {kind} {name}, если адрес неверный, а не недоступный",
+    checkLimits: "Сравнить лимит памяти с тем, сколько контейнер потребляет",
+    checkNode: "Посмотреть ноду {node}: давление памяти и что ещё там работает",
+    checkImageRef:
+      "Проверить ссылку на образ {image}: тег, registry, pull secret",
+    checkPullSecret: "Secret {name}: pull secret, который монтирует под",
+    checkVolumeRef: "{kind} {name}: существует ли, связан ли",
+    checkRequests: "Сравнить requests с тем, сколько свободно на нодах",
+    checkNodes: "Посмотреть ноды: taints, ёмкость, что уже размещено",
+    checkProbe:
+      "Прочитать пробу: порт, путь, начальная задержка, против того, что слушает контейнер",
+    notReadService: "Service в {namespace} ({reason})",
+    notReadEndpoints: "эндпоинты Service {service} ({reason})",
+    notReadLogs: "последние строки {container} ({reason})",
+    notReadEvents: "события этого пода ({reason})",
+    notReadPolicies: "NetworkPolicy: у приложения пока нет для них читателя",
+  },
   files: {
     noContainers: "У этого пода не объявлено контейнеров.",
     viaDebug:
@@ -1735,6 +1795,12 @@ export const ru: Catalogue = {
     saysForwardDied: "Проброс к {name} оборвался",
     saysGone: "{name} исчез",
     saysLostSight: "{name} потерян из виду",
+    saysTimedOut: "{name}: нет ответа за две минуты",
+    afterRestart: "после рестарта",
+    afterScale: "после масштабирования до {n}",
+    afterApply: "после apply",
+    afterImage: "после смены образа",
+    withinDeadline: "ответ за две минуты, иначе ответ это его отсутствие",
     askRolloutShort: "раскатка",
     askPodShort: "готов или упадёт",
     askJobShort: "чем кончится",
@@ -3158,6 +3224,24 @@ export const ru: Catalogue = {
     perfRetryStop: "Попробовать остановить ещё раз",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",
+    sectionHandoff: "Поиск и передача",
+    sectionHandoffHint: "Куда уходит поиск и что попадает в передачу.",
+    searchEngine: "Поисковик",
+    searchEngineHint:
+      "Запрос это причина плюс точное сообщение и utm_source=rubick.tech, чтобы сайт видел, откуда приходят люди.",
+    searchEngineCustom: "Свой, любой URL с {q}",
+    searchCustomUrl: "Свой URL поиска",
+    stripNames: "Вырезать имена из поискового запроса",
+    stripNamesHint:
+      "Имена подов, namespace, образов и хостов заменяются на … до того, как запрос покинет приложение. Выключите, если ваши имена не чувствительны.",
+    handoffLogLines: "«Скопировать для агента» включает строки лога",
+    handoffLogLinesHint:
+      "До 40 строк перед последним выходом. Значения секретов не включаются никогда, что бы тут ни стояло.",
+    showMostLikely: "Показывать панель «Скорее всего»",
+    showMostLikelyHint:
+      "Только на подах с проблемой, по которой приложение может прочитать цепочку. Выключение прячет панель, не факты.",
+    searchHandoffWords:
+      "google duckduckgo search agent copy hand-off most likely поиск агент копировать передача скорее всего",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",
     searchSettings: "Поиск по настройкам",
     clearSearch: "Очистить поиск",
@@ -4943,6 +5027,7 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    notReadList: "Не прочитано: {list}",
     podsStreaming: {
       one: "{streaming} из {n} пода стримится",
       few: "{streaming} из {n} подов стримится",
