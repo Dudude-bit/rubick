@@ -170,6 +170,9 @@ export function UsageBlock({
   const drawable = available || past.window !== null;
   const liveLine = live && available;
   const declared = past.window?.declared;
+  // Absent flag means answered: a supplier that never had the question
+  // cannot be the one that failed to answer it.
+  const declaredKnown = past.window?.declaredKnown !== false;
 
   const caption = !available
     ? // The block cannot promise a comparison the workload does not
@@ -270,9 +273,18 @@ export function UsageBlock({
                 })}
               </p>
             )}
-            {declared === null && (
+            {/* Only where the supplier actually answered. A refused or
+             *  failed probe also lands here as `null`, and saying
+             *  "kube-state-metrics is not in this Prometheus" about an
+             *  install that is there and answering is the collapse. */}
+            {declared === null && declaredKnown && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
                 {t("empty", "declaredNowOnly")}
+              </p>
+            )}
+            {declared === null && !declaredKnown && (
+              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
+                {t("empty", "declaredUnknown")}
               </p>
             )}
             {past.traffic && <TrafficChart window={past.traffic} />}
@@ -297,7 +309,6 @@ export function UsageBlock({
                       })}
               </p>
             )}
-            <HistoryNote state={past} />
           </>
         ) : (
           <>
@@ -312,6 +323,11 @@ export function UsageBlock({
             />
           </>
         )}
+        {/* Outside the branch on purpose: with no metrics-server and a
+         *  Prometheus read that failed there is nothing to draw, and this
+         *  note is the only place that failure is spoken. Inside, it was
+         *  the silent fallback its own doc comment warns about. */}
+        <HistoryNote state={past} />
         {children}
       </div>
       {storage && <StorageRow summary={storage} />}
@@ -420,6 +436,8 @@ interface RangedHistory {
     samples: readonly UsageSampleLike[];
     resolution: string;
     declared?: DeclaredHistory | null;
+    /** See {@link UsageWindow.declaredKnown}: `false` is "could not tell". */
+    declaredKnown?: boolean;
   } | null;
   traffic: TrafficLike | null;
   endpoint: string;

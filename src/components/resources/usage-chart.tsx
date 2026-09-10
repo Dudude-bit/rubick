@@ -12,6 +12,7 @@
  * crossing point of the lines on screen, and that point means nothing.
  */
 import * as React from "react";
+import { PerfProfiler } from "@/lib/perf-profiler";
 import {
   Area,
   AreaChart,
@@ -175,7 +176,15 @@ function stepAlong(
  * A band, plus whichever sentence the data has earned: none when there is
  * a limit and a line, one when either is missing.
  */
-export function UsageChart({
+export function UsageChart(props: UsageChartProps) {
+  return (
+    <PerfProfiler id="usage-chart">
+      <UsageChartInner {...props} />
+    </PerfProfiler>
+  );
+}
+
+function UsageChartInner({
   label,
   type,
   samples,
@@ -347,7 +356,19 @@ function Band(props: BandProps) {
   }, [points, declared]);
   // A recorded line replaces the flat one; a flat one is today's figure and
   // is labelled as such where the record is known to be missing.
-  const recorded = !!declared;
+  //
+  // On whether the record has values, not on whether the object exists: a
+  // declared history that came back empty — or whose range query was
+  // swallowed to `[]` — is an object, and `!!declared` then switched off
+  // both the flat fallback and the label, erasing the request and limit
+  // rules from the chart entirely rather than drawing today's figure.
+  const recorded = React.useMemo(
+    () =>
+      declared !== null &&
+      declared !== undefined &&
+      rows.some((row) => row.request !== null || row.ceiling !== null),
+    [declared, rows]
+  );
   const flatLabel =
     declared === null ? ` ${t("readings", "usageNowWord")}` : "";
   const restarts = React.useMemo(() => restartIndices(points), [points]);

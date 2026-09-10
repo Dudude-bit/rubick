@@ -45,6 +45,20 @@ const sample: Diagnostics = {
     logDestination: "stdout",
   },
   findings: [],
+  connections: [
+    {
+      context: "context-1",
+      at: "2026-09-07T07:00:00Z",
+      direct: { state: "failed", error: "Unauthorized" },
+      proxy: {
+        state: "failed",
+        error: "kubectl proxy exited: exit status 1",
+        stdout: "",
+        stderr: 'error: unknown command "oidc-login" for "kubectl"',
+        kubectl: "/opt/homebrew/bin/kubectl",
+      },
+    },
+  ],
 };
 
 describe("EnvironmentBlocks", () => {
@@ -156,5 +170,33 @@ describe("EnvironmentBlocks", () => {
   it("says nothing of the sort when the path is real", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.queryAllByText(/did not|не ответила/i)).toHaveLength(0);
+  });
+});
+
+describe("the second way in", () => {
+  /** "Works in kubectl" is the report half these tickets open with; what kubectl itself said is the half that closes them. */
+  it("shows both paths of the last attempt, with kubectl's own words", () => {
+    render(<EnvironmentBlocks diagnostics={sample} />);
+    expect(screen.getByText("Unauthorized")).toBeInTheDocument();
+    expect(
+      screen.getByText(/unknown command "oidc-login"/)
+    ).toBeInTheDocument();
+  });
+
+  /** A blank line where the proxy should be reads as "it was fine"; the reason it was never tried has to be said. */
+  it("says when there was no kubectl to fall back to", () => {
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          connections: [
+            { ...sample.connections[0], proxy: { state: "noKubectl" } },
+          ],
+        }}
+      />
+    );
+    expect(
+      screen.getByText("no kubectl on the search path")
+    ).toBeInTheDocument();
   });
 });

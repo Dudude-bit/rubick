@@ -189,6 +189,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    files: "Files",
     connections: "Connections",
     providerId: "Provider ID",
     resourceVersion: "Resource version",
@@ -436,7 +437,6 @@ export const en = {
     ready: "Ready",
     restarts: "Restarts",
     node: "Node",
-    files: "Files",
     cpuOfAllocatable: "CPU, % of allocatable",
     memoryOfAllocatable: "Memory, % of allocatable",
     utilisation: "Utilisation",
@@ -1292,12 +1292,12 @@ export const en = {
     save: "Save",
     delete: "Delete",
     retry: "Retry",
+    download: "Download",
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
     openInBrowser: "Open in Browser",
     back: "Back",
-    download: "Download",
     gwFilterPlaceholder: "name, host, gateway…",
     filterRoutes: "Filter routes",
     filterByKind: "Filter by kind",
@@ -1476,7 +1476,10 @@ export const en = {
       "Ask on a rollout, a pod, a job, a drain or a port forward, and the answer comes as a notification.",
     dismiss: "Dismiss",
     openWatching: "Open Watching",
-    severalAnswered: "{count} things you asked about",
+    severalAnswered: {
+      one: "{n} thing you asked about",
+      other: "{n} things you asked about",
+    },
     full: "Already watching {max} things on this cluster",
     fullBody:
       "Twelve is the most one cluster gets. Pick one to stop watching, or keep all of them and skip this one.",
@@ -1489,7 +1492,9 @@ export const en = {
     saysSucceeded: "{name} succeeded",
     saysFailed: "{name} failed",
     saysDrained: "{name} is drained",
-    saysDrainFailed: "{name} drain did not finish",
+    saysDrainStopped: "{name} drain stopped",
+    saysDrainCancelled: "{name} drain cancelled",
+    saysDrainFailed: "{name} drain broke",
     saysRenewed: "{name} certificate renewed",
     saysIssuanceFailed: "{name} certificate issuance failed",
     saysForwardDied: "Forward to {name} died",
@@ -2380,7 +2385,24 @@ export const en = {
     agoSuffix: "ago.",
     connectingToLower: "connecting to {context}…",
     notConnectedLower: "not connected",
+    throughProxy: "through kubectl proxy",
+    throughProxyHint:
+      "The app's own credentials were refused, so this session goes through a kubectl proxy it started. kubectl holds the keys and renews them.",
+    proxyNoKubectl:
+      "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
+    proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
+    linkCopied: "Copied where you are",
+    linkOpened: "Opened from a link. You are looking at it live.",
+    linkOpenedAt:
+      "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
+    linkContextMissing:
+      "This link points at cluster {context}, which is not in this kubeconfig. Nothing was opened.",
+    linkContextMissingKnown:
+      "Clusters here: {known}. A cluster with a similar name is not the same cluster, so none was picked for you.",
+    linkContextMissingNone: "No cluster is configured on this machine yet.",
+    linkOpenClusters: "Settings › Clusters",
+    linkDismiss: "Dismiss",
     tunnelAsleep: "asleep",
     renameOrRecolour: "{name} — rename or recolour",
     called: "Called",
@@ -2631,6 +2653,33 @@ export const en = {
       "Where images are pulled from, and what reaches them.",
     sectionDiagnostics: "Diagnostics",
     sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
+    perfTitle: "Performance",
+    perfRecording: "Recording",
+    perfHint:
+      "Times every call to the backend, every long task and every profiled render while on. Each answer is serialised a second time to count its bytes, so leave it off unless you are measuring.",
+    perfStart: "Start",
+    perfStop: "Stop",
+    perfSummary:
+      "{seconds} s recorded · {ipc} backend calls · {tasks} long tasks.",
+    perfTaskSourceObserver: "Long tasks come from the platform observer.",
+    perfTaskSourceFrames:
+      "This webview has no long-task observer, so a late frame counts as one.",
+    perfCommand: "Command",
+    perfCount: "calls",
+    perfRows: "rows",
+    perfBytes: "bytes",
+    perfTasks: "Long tasks",
+    perfRenders: "Render",
+    perfNoRenders:
+      "No render timings: React reports them only from a dev or profiling build.",
+    perfBackend:
+      "Backend pushed {events} events, {bytes} in total, largest {max}, {changes} watch changes.",
+    perfCopy: "Copy report",
+    perfCopied: "Report copied",
+    perfSampled:
+      "Percentiles use the last {cap} samples per kind; counts and maxima cover everything.",
+    perfBackendError: "The backend did not answer: {error}",
+    perfRetryStop: "Try stopping again",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
     nothingHereMatches: "nothing here matches “{query}”",
@@ -2711,6 +2760,14 @@ export const en = {
     noKubeconfigLoaded:
       "None loaded yet — connect a cluster and this will name the file.",
     applicationBlock: "Application",
+    connectionsBlock: "Connections · {n}",
+    noConnectionsYet: "No connection attempted yet.",
+    pathDirect: "direct",
+    pathProxy: "kubectl proxy",
+    pathOk: "ok",
+    pathProxyOk: "ok on port {port} ({kubectl})",
+    pathNotTried: "not tried",
+    pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
     readingFile: "Reading the file…",
@@ -3423,6 +3480,14 @@ export const en = {
     trendsSortNote: "least headroom first",
     trendsNotIncidents:
       "One range query for every node, the peak of each bucket kept, so a spike survives the summary. A high number is a full node, not an incident; nothing here is painted red for being busy. Requests are the Resources table's story, one click in.",
+    notLookedShort: "could not look",
+    noAllocatableShort: "allocatable unreadable",
+    nodesDidNotList:
+      "Could not read the node list, so there is nothing to put a reading against: {reason}",
+    nodeNotLooked:
+      "Could not read the window, so whether this node reported is unknown.",
+    nodeNoAllocatable:
+      "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
       "no samples in the window: newest series is {age}, the window asks for {range}",
@@ -3431,6 +3496,8 @@ export const en = {
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
     declaredNowOnly:
       "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
+    declaredUnknown:
+      "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:

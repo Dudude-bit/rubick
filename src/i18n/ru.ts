@@ -159,6 +159,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    files: "Файлы",
     connections: "Связи",
     providerId: "ID провайдера",
     resourceVersion: "Версия ресурса",
@@ -406,7 +407,6 @@ export const ru: Catalogue = {
     ready: "Готовность",
     restarts: "Перезапуски",
     node: "Узел",
-    files: "Файлы",
     cpuOfAllocatable: "CPU, % от allocatable",
     memoryOfAllocatable: "Память, % от allocatable",
     utilisation: "Загрузка",
@@ -1276,12 +1276,12 @@ export const ru: Catalogue = {
     save: "Сохранить",
     delete: "Удалить",
     retry: "Повторить",
+    download: "Скачать",
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
     openInBrowser: "Открыть в браузере",
     back: "Назад",
-    download: "Скачать",
     gwFilterPlaceholder: "имя, хост, шлюз…",
     filterRoutes: "Фильтр маршрутов",
     filterByKind: "Фильтр по типу",
@@ -1484,7 +1484,12 @@ export const ru: Catalogue = {
       "Спросите про раскатку, под, задание, drain или проброс, и ответ придёт уведомлением.",
     dismiss: "Убрать",
     openWatching: "Открыть наблюдение",
-    severalAnswered: "{count} ответа на ваши вопросы",
+    severalAnswered: {
+      one: "{n} ответ на ваши вопросы",
+      few: "{n} ответа на ваши вопросы",
+      many: "{n} ответов на ваши вопросы",
+      other: "{n} ответа на ваши вопросы",
+    },
     full: "На этом кластере уже {max} наблюдений",
     fullBody:
       "Двенадцать на кластер, больше нельзя. Выберите, какое снять, или оставьте все и пропустите это.",
@@ -1497,7 +1502,9 @@ export const ru: Catalogue = {
     saysSucceeded: "{name} завершился успешно",
     saysFailed: "{name} завершился с ошибкой",
     saysDrained: "{name} опустел",
-    saysDrainFailed: "{name}: drain не завершился",
+    saysDrainStopped: "{name}: drain остановлен",
+    saysDrainCancelled: "{name}: drain отменён",
+    saysDrainFailed: "{name}: drain сломался",
     saysRenewed: "{name}: сертификат обновлён",
     saysIssuanceFailed: "{name}: выпуск сертификата не удался",
     saysForwardDied: "Проброс к {name} оборвался",
@@ -2540,7 +2547,24 @@ export const ru: Catalogue = {
     agoSuffix: "назад.",
     connectingToLower: "подключение к {context}…",
     notConnectedLower: "нет подключения",
+    throughProxy: "через kubectl proxy",
+    throughProxyHint:
+      "Собственные учётные данные приложения отклонены, поэтому сессия идёт через kubectl proxy, который приложение запустило. Ключи держит и обновляет kubectl.",
+    proxyNoKubectl:
+      "kubectl нет в пути поиска. С ним Rubick попробовал бы kubectl proxy как второй путь.",
+    proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
+    linkCopied: "Скопировано, где вы сейчас",
+    linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
+    linkOpenedAt:
+      "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
+    linkContextMissing:
+      "Ссылка указывает на кластер {context}, которого нет в этом kubeconfig. Ничего не открыто.",
+    linkContextMissingKnown:
+      "Кластеры здесь: {known}. Кластер с похожим именем это другой кластер, поэтому ничего не выбрано за вас.",
+    linkContextMissingNone: "На этой машине ещё не настроен ни один кластер.",
+    linkOpenClusters: "Настройки › Кластеры",
+    linkDismiss: "Скрыть",
     tunnelAsleep: "спит",
     renameOrRecolour: "{name} — переименовать или изменить цвет",
     called: "Название",
@@ -2811,6 +2835,33 @@ export const ru: Catalogue = {
     sectionRegistriesHint: "Откуда тянутся образы и что до них дотягивается.",
     sectionDiagnostics: "Диагностика",
     sectionDiagnosticsHint: "Что приложение видит на машине, где оно запущено.",
+    perfTitle: "Производительность",
+    perfRecording: "Запись",
+    perfHint:
+      "Пока включено, засекает каждый вызов бэкенда, каждую долгую задачу и каждый профилированный рендер. Каждый ответ сериализуется второй раз ради подсчёта байтов, поэтому держите выключенным, если не измеряете.",
+    perfStart: "Начать",
+    perfStop: "Остановить",
+    perfSummary:
+      "Записано {seconds} с · {ipc} вызовов бэкенда · {tasks} долгих задач.",
+    perfTaskSourceObserver: "Долгие задачи от наблюдателя платформы.",
+    perfTaskSourceFrames:
+      "В этом webview нет наблюдателя долгих задач, поэтому за задачу считается опоздавший кадр.",
+    perfCommand: "Команда",
+    perfCount: "вызовов",
+    perfRows: "строк",
+    perfBytes: "байт",
+    perfTasks: "Долгие задачи",
+    perfRenders: "Рендер",
+    perfNoRenders:
+      "Нет таймингов рендера: React отдаёт их только из dev-сборки или профилирующей сборки.",
+    perfBackend:
+      "Бэкенд отправил {events} событий, всего {bytes}, самое большое {max}, изменений watch {changes}.",
+    perfCopy: "Копировать отчёт",
+    perfCopied: "Отчёт скопирован",
+    perfSampled:
+      "Перцентили считаются по последним {cap} замерам каждого вида; счётчики и максимумы охватывают всё.",
+    perfBackendError: "Бэкенд не ответил: {error}",
+    perfRetryStop: "Попробовать остановить ещё раз",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",
@@ -2901,6 +2952,14 @@ export const ru: Catalogue = {
     noKubeconfigLoaded:
       "Пока ничего не загружено — подключитесь к кластеру, и здесь появится имя файла.",
     applicationBlock: "Приложение",
+    connectionsBlock: "Подключения · {n}",
+    noConnectionsYet: "Подключений ещё не было.",
+    pathDirect: "напрямую",
+    pathProxy: "kubectl proxy",
+    pathOk: "ок",
+    pathProxyOk: "ок на порту {port} ({kubectl})",
+    pathNotTried: "не пробовали",
+    pathNoKubectl: "kubectl нет в пути поиска",
     appVersion: "Версия {version}",
     logsTo: "Логи: {destination}",
     readingFile: "Чтение файла…",
@@ -3665,6 +3724,14 @@ export const ru: Catalogue = {
     trendsSortNote: "сначала с наименьшим запасом",
     trendsNotIncidents:
       "Один range-запрос на все узлы, в каждом ведре сохранён пик, так что всплеск переживает сводку. Большое число это полный узел, а не инцидент; здесь ничего не красится красным за занятость. Requests это история таблицы Resources, в одном клике.",
+    notLookedShort: "не посмотрели",
+    noAllocatableShort: "allocatable не прочитан",
+    nodesDidNotList:
+      "Не удалось прочитать список узлов, поэтому не к чему привязать замеры: {reason}",
+    nodeNotLooked:
+      "Окно прочитать не удалось, поэтому неизвестно, отчитывался ли этот узел.",
+    nodeNoAllocatable:
+      "Замеры есть, но allocatable этого узла прочитать не удалось, поэтому долю от него не нарисовать.",
     nodeNoSeries: "в Prometheus нет серий по этому узлу",
     nodeNoSamplesYet:
       "в окне нет замеров: новейшая серия {age}, окно просит {range}",
@@ -3673,6 +3740,8 @@ export const ru: Catalogue = {
       "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
     declaredNowOnly:
       "kube-state-metrics в этом Prometheus нет, поэтому что было объявлено раньше в окне, неизвестно; request и limit это сегодняшние цифры, нарисованы плоско.",
+    declaredUnknown:
+      "Не удалось прочитать, хранит ли kube-state-metrics объявленное, поэтому окно неизвестно в любом случае; request и limit это сегодняшние цифры, нарисованы плоско.",
     declaredSizeNotFullness:
       "Заявленный размер, а не заполненность. metrics-server отдаёт только CPU и память — сколько тома занято, сообщает kubelet, а его может прочитать Prometheus, но не это приложение.",
     declaredSizeForUnreported:

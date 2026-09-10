@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rubick",
-  "version": "4.10.0",
+  "version": "4.11.0",
   "identifier": "com.k8s-gui.app",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -72,6 +72,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["rubick"]
+      }
+    },
     "shell": {
       "open": true
     },

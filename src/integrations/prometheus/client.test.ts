@@ -99,3 +99,68 @@ describe("nodeUsage", () => {
     expect(window.newestAt.n1).toBe(1_700_000_000_000);
   });
 });
+
+describe("a read that failed is not an answer", () => {
+  const scope = { kind: "pod" as const, namespace: "shop", pod: "payments-0" };
+
+  /**
+   * A refused or rate-limited probe used to read as "absent", and the chart
+   * then stated as fact that kube-state-metrics is not in this Prometheus.
+   * Fails if the probe's failure is folded back into `false`.
+   */
+  it("does not call kube-state-metrics absent when the probe itself failed", async () => {
+    prometheusQueryRange.mockImplementation(async (query) =>
+      query.includes("kube_pod_container_resource") ? [] : points([40, 41])
+    );
+    prometheusQuery.mockRejectedValue(new Error("429 Too Many Requests"));
+
+    const window = await usageHistory({ scope, range: "1h" });
+    expect(window.declared).toBeNull();
+    expect(window.declaredKnown).toBe(false);
+  });
+
+  /** A swallowed declared range left a sibling series standing, which made the whole record look answered. */
+  it("marks the record unknown when a declared range query failed", async () => {
+    prometheusQueryRange.mockImplementation(async (query) => {
+      if (!query.includes("kube_pod_container_resource")) return points([40]);
+      if (query.includes("limits")) throw new Error("400 too many samples");
+      return points([100]);
+    });
+    prometheusQuery.mockResolvedValue(points([1]));
+
+    const window = await usageHistory({ scope, range: "1h" });
+    expect(window.declaredKnown).toBe(false);
+  });
+
+  /** An empty `newestAt` used to read as "Prometheus never had a series for this node". */
+  it("marks node staleness unknown when the staleness probe failed", async () => {
+    prometheusQueryRange.mockResolvedValue(points([10]));
+    prometheusQuery.mockRejectedValue(new Error("403 Forbidden"));
+
+    const window = await nodeUsage({ range: "1h" });
+    expect(window.newestKnown).toBe(false);
+    expect(window.newestAt).toEqual({});
+  });
+
+  /** A dropped bucket closes the line up and an outage is drawn straight across it. */
+  it("keeps a bucket the supplier had nothing for as a gap", async () => {
+    prometheusQueryRange.mockResolvedValue([
+      {
+        labels: { node: "worker-1" },
+        points: [
+          { t: 1, v: 5 },
+          { t: 2, v: null },
+          { t: 3, v: 7 },
+        ],
+      } as unknown as PromSeries,
+    ]);
+    prometheusQuery.mockResolvedValue([]);
+
+    const window = await nodeUsage({ range: "1h" });
+    expect(window.nodes["worker-1"].cpuMillicores).toEqual([
+      { t: 1, v: 5 },
+      { t: 2, v: null },
+      { t: 3, v: 7 },
+    ]);
+  });
+});

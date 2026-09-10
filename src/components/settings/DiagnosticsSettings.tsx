@@ -9,6 +9,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { EnvironmentBlocks } from "./diagnostics/EnvironmentBlocks";
 import { FindingsList } from "./diagnostics/FindingsList";
+import { PerformancePanel } from "./diagnostics/PerformancePanel";
 import { asMarkdown } from "./diagnostics/report";
 import { useT } from "@/i18n/useT";
 
@@ -61,6 +62,8 @@ export function DiagnosticsSettings() {
           {t("settings", "redactNamesAndPaths")}
         </label>
       </div>
+
+      <PerformancePanel />
     </div>
   );
 }

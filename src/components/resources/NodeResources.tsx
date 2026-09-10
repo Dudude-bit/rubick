@@ -82,7 +82,20 @@ export function NodeResources({
     );
   }
 
-  const rows = budget?.resources ?? [];
+  if (budget === undefined) {
+    // Still reading. An empty table here would read as "this node reports no
+    // resources", which is an answer we do not have yet.
+    return (
+      <Section>
+        <SectionHeader title={t("columns", "resources")} />
+        <p className="px-3 py-2 text-xs text-fg-mut" role="status">
+          {t("action", "reading")}
+        </p>
+      </Section>
+    );
+  }
+
+  const rows = budget.resources;
 
   return (
     <Section>
