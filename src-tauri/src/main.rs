@@ -183,6 +183,7 @@ fn main() {
             commands::crds::get_custom_resource_yaml,
             commands::crds::delete_custom_resource,
             commands::crds::patch_custom_resource,
+            commands::crds::patch_custom_resource_json,
             // Pod commands
             commands::pods::list_pods,
             commands::pods::get_pod,
