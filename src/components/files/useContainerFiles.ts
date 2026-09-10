@@ -173,11 +173,20 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
           setSnapshot(
             only((was) => ({
               phase: "done",
-              entries: was.phase === "reading" ? was.entries : EMPTY,
+              // The backend emits `files-done` after a cancel too, and by
+              // then `stop()` has already moved the state to "done" — so
+              // testing for "reading" threw away every row that had arrived
+              // and the tab announced the directory as empty.
+              entries:
+                was.phase === "reading" || was.phase === "done"
+                  ? was.entries
+                  : EMPTY,
               with: event.payload.with,
               elapsedMs: event.payload.elapsed_ms,
               at: Date.now(),
-              stopped: false,
+              // A listing the reader cut short stays cut short. Overwriting
+              // this relabelled a partial read as the whole directory.
+              stopped: was.phase === "done" ? was.stopped : false,
             }))
           );
         });

@@ -39,6 +39,7 @@ import { formatShortcut } from "@/lib/platform";
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
 import type { PodInfo, Via } from "@/generated/types";
+import { podContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
 
@@ -61,7 +62,10 @@ export interface FilesTabProps {
  */
 export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   const t = useT();
-  const containers = pod.containers;
+  // podContainers, not pod.containers: every other pod surface counts the
+  // init containers too, and a sidecar that only exists as an initContainer
+  // was simply missing from the strip here.
+  const containers = podContainers(pod);
   const [containerName, setContainerName] = useState(
     () =>
       containers.find((c) => c.state.type === "running")?.name ??
@@ -354,8 +358,16 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
                 right
               />
             </div>
-            {state.phase === "done" && state.entries.length === 0 ? (
+            {state.phase === "done" &&
+            state.entries.length === 0 &&
+            !state.stopped ? (
               <Sentence>{t("files", "emptyDirectory", { path })}</Sentence>
+            ) : state.phase === "done" &&
+              state.entries.length === 0 &&
+              state.stopped ? (
+              // A read the reader cut short before anything arrived says so.
+              // "This directory is empty" is an answer we never got.
+              <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
             ) : (
               <Rows
                 rows={rows}

@@ -1417,6 +1417,8 @@ export const en = {
     mode: "Mode",
     size: "Size",
     modified: "Modified",
+    stoppedBeforeAnything:
+      "You stopped this listing before anything arrived, so what is in here is unknown.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
     keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
     readingSoFar: "reading · {n} entries so far · {seconds} s",

@@ -9,7 +9,7 @@
 
 pub mod parse;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Status;
@@ -22,8 +22,14 @@ use crate::error::{Error, Result};
 pub use parse::{FileEntry, FileKind};
 
 /// A preview stops here; a text file longer than this is a download.
-pub const PREVIEW_MAX_BYTES: usize = 1024 * 1024;
-/// Downloads past this are refused before a byte moves.
+///
+/// Half the IPC budget, not all of it: the whole preview comes back in one
+/// command reply, and at exactly `maxMessageBytes` a reply carrying any
+/// envelope at all is over it. See `shared/ipc-budget.json`.
+pub const PREVIEW_MAX_BYTES: usize = 512 * 1024;
+/// The cap a download is cut off at — counted as the bytes arrive, into a
+/// scratch file beside the destination, so nothing over it is ever renamed
+/// onto the reader's own file.
 pub const DOWNLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
 /// Rows per event on the way to the frontend.
 pub const BATCH_ROWS: usize = 500;
@@ -270,7 +276,16 @@ pub async fn list_dir(
         let reader = tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             let pump = async {
-                while let Ok(Some(line)) = lines.next_line().await {
+                // A filename that is not valid UTF-8 makes `next_line`
+                // return InvalidData. Stopping there ended the listing at
+                // that entry and reported what had arrived as the whole
+                // directory; skipping the line keeps reading the rest.
+                loop {
+                    let line = match lines.next_line().await {
+                        Ok(Some(line)) => line,
+                        Ok(None) => break,
+                        Err(_) => continue,
+                    };
                     if line_tx.send(line).await.is_err() {
                         break;
                     }
@@ -324,6 +339,12 @@ pub async fn list_dir(
             }
         }
         if cancelled {
+            // The rows already parsed are the reader's answer to a listing
+            // they cut short; dropping the tail batch threw away up to
+            // BATCH_ROWS of them.
+            if !batch.is_empty() {
+                emit(batch);
+            }
             return Ok(Listing::Listed {
                 with,
                 entries: total,
@@ -444,6 +465,19 @@ pub async fn read_preview(
 }
 
 /// Copy one file out, byte for byte, refusing past the cap.
+/// A scratch path beside the destination, so the rename onto it is atomic.
+///
+/// The destination itself is never opened until the bytes are known good.
+/// `File::create` truncates, and both failure paths below delete — so a
+/// container read that was refused, or whose exit was merely *unknown*, used
+/// to destroy whatever the reader had picked in the save dialog. They agreed
+/// to have that file replaced by the download, not to be left with nothing.
+fn scratch_beside(destination: &Path) -> PathBuf {
+    let mut name = destination.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".rubick-{}.part", uuid::Uuid::new_v4()));
+    destination.with_file_name(name)
+}
+
 pub async fn download(
     client: Client,
     namespace: &str,
@@ -471,7 +505,8 @@ pub async fn download(
         .ok_or_else(|| Error::Internal("exec opened without a stderr channel".to_string()))?;
     let status = attached.take_status();
 
-    let mut file = tokio::fs::File::create(destination).await?;
+    let scratch = scratch_beside(destination);
+    let mut file = tokio::fs::File::create(&scratch).await?;
     let mut written = 0u64;
     let mut buf = vec![0u8; 64 * 1024];
     loop {
@@ -486,7 +521,7 @@ pub async fn download(
         if written > DOWNLOAD_MAX_BYTES {
             attached.abort();
             drop(file);
-            let _ = tokio::fs::remove_file(destination).await;
+            let _ = tokio::fs::remove_file(&scratch).await;
             return Err(Error::InvalidInput(format!(
                 "the file is over {} MiB; downloads that large are refused",
                 DOWNLOAD_MAX_BYTES / (1024 * 1024)
@@ -502,13 +537,17 @@ pub async fn download(
         None => None,
     });
     if !exit.ok() {
-        let _ = tokio::fs::remove_file(destination).await;
+        drop(file);
+        let _ = tokio::fs::remove_file(&scratch).await;
         let mut exit = exit;
         if exit.message.is_none() && !err.is_empty() {
             exit.message = Some(String::from_utf8_lossy(&err).trim().to_string());
         }
         return Ok(Err(exit));
     }
+    // Only now, on a confirmed exit 0, does the reader's file change.
+    drop(file);
+    tokio::fs::rename(&scratch, destination).await?;
     Ok(Ok(written))
 }
 

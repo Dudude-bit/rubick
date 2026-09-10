@@ -7,9 +7,28 @@ pub const GNU_FORMAT: &str = "%y\\t%m\\t%s\\t%T@\\t%u\\t%g\\t%f\\t%l\\n";
 
 /// A `sh` loop over busybox `stat`, one tab-separated line per entry.
 /// `%N` quotes the name and, for a link, appends ` -> 'target'`.
+///
+/// The two guards are the whole point of the first two lines. Without them a
+/// directory this container may not open expands neither glob, every `[ -e ]`
+/// fails, the loop `continue`s twice and exits **0 with no output** — which
+/// the caller could only read as "the directory is empty". A refusal drawn as
+/// an empty directory is exactly what this module says it must never do, and
+/// on any busybox image (where this rung is the one that answers) it was what
+/// every unreadable or absent path did. `exit 2` puts it in `Listing::Failed`
+/// instead; 2 is neither 0 nor 127, so it is a failure and not a missing tool.
+///
+/// The `.`/`..` arm skips unconditionally. It used to run
+/// `[ -e "$f" ] || [ -L "$f" ] || continue`, which short-circuits on the first
+/// success — and `.` and `..` always exist — so the skip never fired and both
+/// were listed as rows.
 pub const BUSYBOX_SCRIPT: &str = r#"d="$1"
+[ -d "$d" ] || exit 2
+ls -A "$d" >/dev/null 2>&1 || exit 2
 for f in "$d"/.* "$d"/*; do
-  case "${f##*/}" in .|..|'*'|'.*') [ -e "$f" ] || [ -L "$f" ] || continue;; esac
+  case "${f##*/}" in
+    .|..) continue;;
+    '*'|'.*') [ -e "$f" ] || [ -L "$f" ] || continue;;
+  esac
   [ -e "$f" ] || [ -L "$f" ] || continue
   stat -c '%F	%a	%s	%Y	%U	%G	%n	%N' "$f" 2>/dev/null
 done"#;
@@ -159,5 +178,34 @@ mod tests {
     fn garbage_is_dropped_rather_than_listed() {
         assert!(gnu_find_line("find: warning: something").is_none());
         assert!(busybox_stat_line("").is_none());
+    }
+
+    /// The rung that answers on every busybox image used to exit 0 with no
+    /// output for a directory it could not open, which the caller can only
+    /// read as "empty". Reproduced live in alpine: `/root` as non-root gave
+    /// rc=0 and no lines. The guards make it `exit 2`, which is neither 0 nor
+    /// 127, so it lands in `Listing::Failed`. Fails if a guard is removed.
+    #[test]
+    fn the_busybox_rung_refuses_rather_than_reporting_an_empty_directory() {
+        assert!(
+            BUSYBOX_SCRIPT.contains(r#"[ -d "$d" ] || exit 2"#),
+            "lost the not-a-directory guard"
+        );
+        assert!(
+            BUSYBOX_SCRIPT.contains(r#"ls -A "$d" >/dev/null 2>&1 || exit 2"#),
+            "lost the unreadable-directory guard"
+        );
+    }
+
+    /// `.` and `..` always exist, so the old
+    /// `[ -e "$f" ] || [ -L "$f" ] || continue` short-circuited on the first
+    /// success and never skipped them: both were listed as rows, and the same
+    /// directory had two different counts depending on which rung answered.
+    #[test]
+    fn the_busybox_rung_skips_dot_and_dotdot_unconditionally() {
+        assert!(
+            BUSYBOX_SCRIPT.contains(".|..) continue;;"),
+            "the dot skip must not depend on the entry existing"
+        );
     }
 }
