@@ -30,6 +30,14 @@ export interface MountTag {
   name: string;
   /** The mount point the path is under. */
   at: string;
+  /**
+   * Every source the volume declares, which for a `projected` volume is
+   * several — a ConfigMap, a Secret and a token in one directory. Naming
+   * `refs[0]` said a file had come from the ConfigMap when the pod does not
+   * say which of the three it came from, and the Connections tab the footer
+   * points at lists them all.
+   */
+  sources: ReadonlyArray<{ kind: string; name: string }>;
 }
 
 function under(path: string, mount: string): boolean {
@@ -53,13 +61,18 @@ export function mountFor(
       if (mount.container !== container || !under(path, mount.path)) continue;
       const depth = mount.path.split("/").filter(Boolean).length;
       if (best !== null && depth <= best.depth) continue;
-      const ref = volume.refs[0];
+      const sources = volume.refs.map((r) => ({ kind: r.kind, name: r.name }));
+      const only = sources.length === 1 ? sources[0] : null;
       best = {
         depth,
         tag: {
-          kind: ref?.kind ?? volume.source,
-          name: ref?.name ?? volume.name,
+          // With one source the tag can name it. With several, what is
+          // certain is the volume; which of its sources wrote this file is
+          // not something the pod says.
+          kind: only?.kind ?? volume.source,
+          name: only?.name ?? volume.name,
           at: mount.path,
+          sources,
         },
       };
     }

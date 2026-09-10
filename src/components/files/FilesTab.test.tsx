@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -452,5 +452,62 @@ describe("FilesTab", () => {
       screen.getByRole("button", { name: "Open through a debug container" })
     );
     expect(onDebug).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The preview execs into the container. Holding ArrowDown down a directory
+   * opened one exec session per keypress, all but the last for a row nobody
+   * ever looked at.
+   */
+  it("does not exec for a row the arrow keys only passed through", async () => {
+    listing.mockReturnValue(
+      done([file("a.conf"), file("b.conf"), file("c.conf")])
+    );
+    readContainerFile.mockResolvedValue({
+      state: "preview",
+      preview: {
+        bytesRead: 4,
+        truncated: false,
+        binary: false,
+        nonTextShare: 0,
+        lossy: false,
+        text: "hi",
+      },
+    });
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    const grid = screen.getByRole("grid");
+    grid.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    expect(readContainerFile).not.toHaveBeenCalled();
+    await waitFor(() => expect(readContainerFile).toHaveBeenCalledTimes(1));
+    expect(readContainerFile.mock.calls[0][3]).toBe("/etc/app/c.conf");
+  });
+
+  /**
+   * `life` is `uid:container:restarts`, so switching the strip changes it
+   * too — and comparing it to the current one announced "app has restarted
+   * since this listing" about a container that had not restarted at all.
+   */
+  it("does not call a container switch a restart", async () => {
+    listing.mockReturnValue(done([file("app.conf")]));
+    const two = pod();
+    two.containers.push({
+      ...two.containers[0],
+      name: "sidecar",
+      phase: "sidecar",
+      restartCount: 0,
+    });
+    wrap(
+      <FilesTab pod={two} via={null} onDebug={() => {}} onStopVia={() => {}} />
+    );
+    await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));
+    expect(screen.queryByText(/has restarted since/)).toBeNull();
   });
 });

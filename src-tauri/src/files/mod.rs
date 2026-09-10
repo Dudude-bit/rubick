@@ -39,6 +39,16 @@ pub const BATCH_ROWS: usize = 500;
 /// is answered as `partial`, never as though it were the whole of it.
 pub const MAX_ENTRIES: usize = 20_000;
 
+/// How long a download may go without a byte before it is given up on.
+///
+/// Not a bound on the whole read — 100 MiB over a slow link is a legitimate
+/// several minutes — but on silence. `cat` on a FIFO, a character device or
+/// a symlink into `/proc/self/fd` never reaches EOF, and with no bound the
+/// loop never ended: the command's future never resolved, the exec session
+/// stayed open on the apiserver, and the scratch file stayed in the folder
+/// the reader had picked. Stock `nginx:alpine` ships such a file.
+pub const DOWNLOAD_IDLE: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Reading through an ephemeral debug container: its name, and where the
 /// target container's root shows up in it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,6 +254,17 @@ pub enum Listing {
     Failed { exit: Exit, stderr: String },
 }
 
+/// One line off the tool's stdout, or the fact that one could not be read.
+///
+/// The pump used to answer both with a `String` and drop the second case, so
+/// a filename that is not valid UTF-8 — legal on any Linux filesystem, and
+/// written verbatim by `find -printf %f` — left a listing that said it was
+/// whole with a row missing from it.
+enum Pumped {
+    Line(String),
+    Undecodable,
+}
+
 /// Whether a non-zero exit is the busybox rung's own guard rather than the
 /// tool's. Only that rung writes `exit 2`, and only with nothing on stderr —
 /// anything the tool said itself is a better answer than our sentence.
@@ -292,21 +313,29 @@ pub async fn list_dir(
         // Both streams are read by one task, together, the way `exec_capture`
         // does: the multiplexer writes them through small buffers and stalls
         // on whichever nobody is draining. Lines come out through a channel.
-        let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(BATCH_ROWS);
+        let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<Pumped>(BATCH_ROWS);
         let reader = tokio::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             let pump = async {
                 // A filename that is not valid UTF-8 makes `next_line`
                 // return InvalidData. Stopping there ended the listing at
                 // that entry and reported what had arrived as the whole
-                // directory; skipping the line keeps reading the rest.
+                // directory; skipping it keeps reading the rest — but
+                // skipping it *silently* was the same lie one step later,
+                // so the skip is sent on and counted like any other row
+                // nobody could read.
                 loop {
-                    let line = match lines.next_line().await {
-                        Ok(Some(line)) => line,
-                        Ok(None) => break,
-                        Err(_) => continue,
+                    let pumped = match lines.next_line().await {
+                        Ok(Some(line)) => Pumped::Line(line),
+                        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                            Pumped::Undecodable
+                        }
+                        // End of stream, or the stream itself failing — and
+                        // reading on past the latter would spin. Either way
+                        // the exit status is what decides what happened.
+                        Ok(None) | Err(_) => break,
                     };
-                    if line_tx.send(line).await.is_err() {
+                    if line_tx.send(pumped).await.is_err() {
                         break;
                     }
                 }
@@ -342,7 +371,14 @@ pub async fn list_dir(
                 }
                 next = line_rx.recv() => {
                     match next {
-                        Some(line) => {
+                        // A name the stream could not decode. There is no
+                        // row to draw and no name to draw it under; what is
+                        // left is that one is missing, which is what the
+                        // tab is told.
+                        Some(Pumped::Undecodable) => {
+                            unreadable += 1;
+                        }
+                        Some(Pumped::Line(line)) => {
                             let parsed = match with {
                                 ListedWith::GnuFind => parse::gnu_find_line(&line),
                                 ListedWith::BusyboxStat => parse::busybox_stat_line(&line),
@@ -555,6 +591,35 @@ fn scratch_beside(destination: &Path) -> PathBuf {
     destination.with_file_name(name)
 }
 
+/// The scratch file, removed on every way out but the one that renames it.
+///
+/// There are seven ways out of `download` before the rename — two deliberate
+/// refusals and five `?`s — and each one that was not spelled out by hand
+/// left a `.rubick-<uuid>.part` beside the file the reader had picked. A
+/// guard cannot forget a path a `?` takes.
+struct Scratch(Option<PathBuf>);
+
+impl Scratch {
+    fn path(&self) -> &Path {
+        self.0.as_deref().unwrap_or(Path::new(""))
+    }
+
+    /// The bytes are good; the file is about to become the reader's.
+    fn keep(&mut self) -> PathBuf {
+        self.0.take().unwrap_or_default()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            // Blocking, and deliberately: a `Drop` cannot await, and this is
+            // one unlink of a local file the process just created.
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 pub async fn download(
     client: Client,
     namespace: &str,
@@ -582,23 +647,28 @@ pub async fn download(
         .ok_or_else(|| Error::Internal("exec opened without a stderr channel".to_string()))?;
     let status = attached.take_status();
 
-    let scratch = scratch_beside(destination);
-    let mut file = tokio::fs::File::create(&scratch).await?;
+    // Declared before the handle, so the handle is dropped first and the
+    // unlink is of a closed file — which is the only kind Windows removes.
+    let mut scratch = Scratch(Some(scratch_beside(destination)));
+    let mut file = tokio::fs::File::create(scratch.path()).await?;
     let mut written = 0u64;
     let mut buf = vec![0u8; 64 * 1024];
     loop {
-        let n = stdout
-            .read(&mut buf)
-            .await
-            .map_err(|e| Error::Internal(format!("exec stdout: {e}")))?;
+        let Ok(read) = tokio::time::timeout(DOWNLOAD_IDLE, stdout.read(&mut buf)).await else {
+            attached.abort();
+            return Err(Error::Internal(format!(
+                "nothing arrived for {}s; the file may be a pipe or a device rather than \
+                 something with an end",
+                DOWNLOAD_IDLE.as_secs()
+            )));
+        };
+        let n = read.map_err(|e| Error::Internal(format!("exec stdout: {e}")))?;
         if n == 0 {
             break;
         }
         written += n as u64;
         if written > DOWNLOAD_MAX_BYTES {
             attached.abort();
-            drop(file);
-            let _ = tokio::fs::remove_file(&scratch).await;
             return Err(Error::InvalidInput(format!(
                 "the file is over {} MiB; downloads that large are refused",
                 DOWNLOAD_MAX_BYTES / (1024 * 1024)
@@ -614,8 +684,6 @@ pub async fn download(
         None => None,
     });
     if !exit.ok() {
-        drop(file);
-        let _ = tokio::fs::remove_file(&scratch).await;
         let mut exit = exit;
         let said = String::from_utf8_lossy(&err);
         let said = said.trim();
@@ -626,7 +694,7 @@ pub async fn download(
     }
     // Only now, on a confirmed exit 0, does the reader's file change.
     drop(file);
-    tokio::fs::rename(&scratch, destination).await?;
+    tokio::fs::rename(scratch.keep(), destination).await?;
     Ok(Ok(written))
 }
 

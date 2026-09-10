@@ -42,15 +42,20 @@ export type ListingState =
   | {
       phase: "done";
       entries: FileEntry[];
-      with: ListedWith;
-      elapsedMs: number;
+      /** Which rung answered, or null when Stop came before it had said. */
+      with: ListedWith | null;
+      /** How long it took, or null when nobody recorded the start. */
+      elapsedMs: number | null;
       at: number;
       /** The person pressed Stop; what arrived is not the whole directory. */
       stopped: boolean;
       /** The listing was cut short by the row cap, so this is not all of it. */
       partial: boolean;
-      /** Lines the parser could not read, so the count is not the whole. */
-      unreadable: number;
+      /**
+       * Lines the parser could not read, so the count is not the whole —
+       * or null when the backend has not answered yet. Zero is a claim.
+       */
+      unreadable: number | null;
     }
   | {
       phase: "failed";
@@ -95,6 +100,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
     state: ListingState;
   }>({ key: null, state: { phase: "idle" } });
   const streamRef = useRef<string | null>(null);
+  const stopWanted = useRef(false);
 
   const key = target
     ? [
@@ -118,6 +124,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
 
   useEffect(() => {
     if (!target || key === null) return;
+    stopWanted.current = false;
     let active = true;
     let off: Array<() => void> = [];
     let streamId: string | null = null;
@@ -151,12 +158,12 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
           target.path,
           target.via
         );
-        if (!active) {
+        if (!active || stopWanted.current) {
           void commands.stopFilesListing(id).catch(() => {});
-          return;
+          if (!active) return;
         }
         streamId = id;
-        streamRef.current = id;
+        streamRef.current = stopWanted.current ? null : id;
         setSnapshot({
           key,
           state: { phase: "reading", entries: EMPTY, startedAt: Date.now() },
@@ -165,14 +172,18 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
         const onBatch = await listen<BatchPayload>("files-batch", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
-            only((was) =>
-              was.phase === "reading"
-                ? {
-                    ...was,
-                    entries: [...was.entries, ...event.payload.entries],
-                  }
-                : was
-            )
+            only((was) => {
+              // The backend flushes its last batch *after* the cancel, and
+              // by then `stop()` has already moved this to "done" — so
+              // testing only for "reading" threw those rows away and the
+              // tab said fewer had arrived than the reader had watched
+              // arrive. No batch ever follows `files-done` for a stream id.
+              if (was.phase !== "reading" && was.phase !== "done") return was;
+              return {
+                ...was,
+                entries: [...was.entries, ...event.payload.entries],
+              };
+            })
           );
         });
         const onDone = await listen<DonePayload>("files-done", (event) => {
@@ -206,7 +217,13 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             setSnapshot(
               only((was) => ({
                 phase: "failed",
-                entries: was.phase === "reading" ? was.entries : EMPTY,
+                // Whatever arrived is what the reader saw arrive; a failure
+                // at the end does not unsee it. Wiping the rows here turned
+                // a stop-then-fail into "nothing was ever read".
+                entries:
+                  was.phase === "reading" || was.phase === "done"
+                    ? was.entries
+                    : EMPTY,
                 reason: event.payload.reason,
                 message: event.payload.message,
                 exitCode: event.payload.exit_code,
@@ -249,10 +266,16 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
   }, [key]);
 
   const stop = useCallback(() => {
+    // Pressed before `listContainerFiles` has answered, the button used to
+    // do nothing at all — not even record that it had been pressed — and
+    // the read went on. The intent is kept; the subscribe path honours it
+    // the moment it has an id.
+    stopWanted.current = true;
     const id = streamRef.current;
-    if (!id) return;
-    streamRef.current = null;
-    void commands.stopFilesListing(id).catch(() => {});
+    if (id) {
+      streamRef.current = null;
+      void commands.stopFilesListing(id).catch(() => {});
+    }
     setSnapshot((was) =>
       was.state.phase === "reading"
         ? {
@@ -260,12 +283,19 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             state: {
               phase: "done",
               entries: was.state.entries,
-              with: "gnuFind",
-              elapsedMs: Date.now() - was.state.startedAt,
+              // Nothing has said which rung answered, how long it took, or
+              // how many lines it could not read. `files-done` follows and
+              // fills them in; until it does they are unknown, not
+              // "gnuFind", not 0.
+              with: null,
+              elapsedMs:
+                was.state.startedAt === 0
+                  ? null
+                  : Date.now() - was.state.startedAt,
               at: Date.now(),
               stopped: true,
               partial: true,
-              unreadable: 0,
+              unreadable: null,
             },
           }
         : was

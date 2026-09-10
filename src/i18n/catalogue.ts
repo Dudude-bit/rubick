@@ -1410,7 +1410,10 @@ export const en = {
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
-    filterNames: "filter {n} names…",
+    filterNames: {
+      one: "filter {n} name…",
+      other: "filter {n} names…",
+    },
     notRunning:
       "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
     listingOf: "Files in {path}",
@@ -1448,6 +1451,10 @@ export const en = {
       one: "read via {how} · {n} entry · {seconds} s",
       other: "read via {how} · {n} entries · {seconds} s",
     },
+    stoppedUntimed: {
+      one: "stopped · {n} entry arrived, not the whole directory",
+      other: "stopped · {n} entries arrived, not the whole directory",
+    },
     stoppedAfter: {
       one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
       other:
@@ -1481,6 +1488,11 @@ export const en = {
       other: "{n} lines read of more",
     },
     mountedFrom: "mounted from {kind} {name}",
+    mountedFromSeveral: {
+      one: "mounted from volume {name}, which projects {n} source",
+      other:
+        "mounted from volume {name}, which projects {n} sources — the pod does not say which one this file came from",
+    },
     pathCopied: "Path copied",
     copyPath: "Copy path",
     tooBigToDownload: "Downloads over {cap} are refused in this version",

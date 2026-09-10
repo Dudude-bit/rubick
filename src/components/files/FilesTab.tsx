@@ -38,14 +38,24 @@ import {
 import { normalizeTauriError } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { cn, formatSince } from "@/lib/utils";
 import type { PodInfo, Via } from "@/generated/types";
-import { podContainers } from "@/lib/container-sequence";
+import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
 
 const ROW_PX = 26;
+
+/**
+ * The key of the ".." row. A NUL, because that and `/` are the only bytes a
+ * filename cannot hold — a plain `"up"` collided with a directory that had a
+ * file called `up` in it, and React drew one of the two rows.
+ */
+const UP_ROW_KEY = "\u0000up";
+
+/** One array, so an idle tab's memo is not invalidated by a fresh `[]`. */
+const NO_ENTRIES: FileEntry[] = [];
 
 export interface FilesTabProps {
   pod: PodInfo;
@@ -64,10 +74,13 @@ export interface FilesTabProps {
  */
 export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   const t = useT();
-  // podContainers, not pod.containers: every other pod surface counts the
-  // init containers too, and a sidecar that only exists as an initContainer
-  // was simply missing from the strip here.
-  const containers = podContainers(pod);
+  // offeredContainers, not pod.containers: every other pod surface counts
+  // the init containers too, and a sidecar that only exists as an
+  // initContainer was simply missing from the strip here — but *run* order
+  // then put the mesh proxy first, and the tab opened on it rather than on
+  // the container the reader came to look at. The Shell tab asks the same
+  // question and gets the same order.
+  const containers = offeredContainers(pod);
   const [containerName, setContainerName] = useState(
     () =>
       containers.find((c) => c.state.type === "running")?.name ??
@@ -94,11 +107,15 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   // The life a listing was taken from. A restart makes the current life a
   // different container; the old rows stay, with a banner, until asked.
   const currentLife = `${pod.uid}:${containerName}:${container?.restartCount ?? 0}`;
-  // Keyed by container too: `life` is only ever set from the container that
-  // was selected when the listing began, so switching to one with a
-  // different restart count fired "has restarted since this was read" about
-  // a container that had not.
   const [life, setLife] = useState(currentLife);
+  // Keying `life` by container name was half the fix. The other half is
+  // that a `life` belonging to a *different* container is not a restart of
+  // this one — it is a stale value from before the reader used the strip,
+  // and comparing it fired "app has restarted since this listing" about a
+  // container that had not restarted at all. Held rather than warned about.
+  const sameContainer = life.startsWith(`${pod.uid}:${containerName}:`);
+  const readingLife = sameContainer ? life : currentLife;
+  const restartedSinceRead = sameContainer && life !== currentLife;
   const running = via !== null || container?.state.type === "running";
 
   const target = useMemo(
@@ -110,21 +127,45 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
             container: container.name,
             path,
             via,
-            life,
+            life: readingLife,
           }
         : null,
-    [container, running, mountsOnly, pod.name, pod.namespace, path, via, life]
+    [
+      container,
+      running,
+      mountsOnly,
+      pod.name,
+      pod.namespace,
+      path,
+      via,
+      readingLife,
+    ]
   );
   const { state, stop, reload } = useContainerFiles(target);
 
-  const rows = useMemo(() => {
-    const entries = state.phase === "idle" ? [] : state.entries;
-    return sortEntries(
-      entries.filter((e) => matches(e, filter)),
-      sort.key,
-      sort.descending
-    );
-  }, [state, filter, sort]);
+  // Two stages, and in this order. Sorting the filtered list meant every
+  // keystroke re-sorted up to MAX_ENTRIES rows, and every 100 ms batch
+  // re-filtered them; and the memo watched the whole `state`, so a phase
+  // change with the same rows did the work again. Filtering preserves order,
+  // so a keystroke is now a walk and no sort at all.
+  const entries = state.phase === "idle" ? NO_ENTRIES : state.entries;
+  const sorted = useMemo(
+    () => sortEntries(entries, sort.key, sort.descending),
+    [entries, sort]
+  );
+  const rows = useMemo(
+    () => (filter ? sorted.filter((e) => matches(e, filter)) : sorted),
+    [sorted, filter]
+  );
+
+  // The preview execs into the container, and every selection is one exec.
+  // Holding ArrowDown down a directory opened one session per keypress, all
+  // but the last of them for a row nobody looked at.
+  const previewed = useDebounced(selected, 200);
+  const previewEntry =
+    previewed === null
+      ? null
+      : (rows.find((r) => r.name === previewed) ?? null);
 
   const open = useCallback(
     (entry: FileEntry) => {
@@ -148,6 +189,19 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
   const download = useCallback(async () => {
     if (!selectedEntry || !container) return;
+    // The button is disabled past the cap; ⌘S reached the same command with
+    // nothing in its way, and the reader got a refusal from the backend
+    // instead of the sentence the button's tooltip had been showing.
+    if (selectedEntry.size > DOWNLOAD_MAX_BYTES) {
+      toast({
+        title: t("files", "downloadFailed", { name: selectedEntry.name }),
+        description: t("files", "tooBigToDownload", {
+          cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+        }),
+        variant: "destructive",
+      });
+      return;
+    }
     const destination = await save({ defaultPath: selectedEntry.name });
     if (!destination) return;
     try {
@@ -279,7 +333,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           </button>
         </Notice>
       )}
-      {life !== currentLife && state.phase !== "idle" && (
+      {restartedSinceRead && state.phase !== "idle" && (
         <Notice tone="warn">
           {t("files", "restartedSince", {
             container: container.name,
@@ -386,7 +440,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               // other answers — and neither is "there is nothing here".
               state.stopped ? (
                 <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
-              ) : state.unreadable > 0 ? (
+              ) : state.unreadable ? (
                 <Sentence>
                   {t("files", "nothingReadable", { n: state.unreadable })}
                 </Sentence>
@@ -410,12 +464,13 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               {t("files", "keys", { download: formatShortcut("mod+s") })}
             </p>
           </div>
-          {selectedEntry && selectedEntry.kind !== "dir" && (
+          {previewEntry && previewEntry.kind !== "dir" && (
             <Preview
               pod={pod}
               container={container.name}
-              path={joinPath(path, selectedEntry.name)}
-              entry={selectedEntry}
+              path={joinPath(path, previewEntry.name)}
+              entry={previewEntry}
+              life={readingLife}
               via={via}
               onDownload={download}
             />
@@ -424,6 +479,20 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
       )}
     </div>
   );
+}
+
+/**
+ * `value`, once it has stopped changing for `ms`. Its own timer rather than
+ * a shared clock: it is following a person's finger on the arrow keys, and
+ * the point is the pause between presses.
+ */
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return settled;
 }
 
 function Sentence({ children }: { children: React.ReactNode }) {
@@ -460,7 +529,11 @@ function Reading({
   onStop: () => void;
 }) {
   const t = useT();
-  const now = useNowTenths();
+  // Ten times a second, but only while somebody is looking: Radix
+  // force-mounts a detail tab once it has been opened, so a Files tab
+  // switched away from mid-read kept the whole subtree re-rendering at
+  // nobody for as long as the page stayed open.
+  const now = useNowTenths(useSurfaceVisible());
   // A listing whose start nobody recorded is timed by nobody: the sentence
   // without the seconds, rather than a confident "0.0 s".
   const seconds =
@@ -503,11 +576,19 @@ function Status({
   if (state.phase === "done") {
     return (
       <span className="text-fg-fnt">
-        {t("files", state.stopped ? "stoppedAfter" : "readVia", {
-          how: t("files", state.with === "gnuFind" ? "gnuFind" : "busyboxStat"),
-          n: state.entries.length,
-          seconds: (state.elapsedMs / 1000).toFixed(1),
-        })}
+        {/* Which rung answered and how long it took are two more things the
+         *  reader can be told or not told. Cut short before the backend
+         *  said, the sentence is the one without them. */}
+        {state.with === null || state.elapsedMs === null
+          ? t("files", "stoppedUntimed", { n: state.entries.length })
+          : t("files", state.stopped ? "stoppedAfter" : "readVia", {
+              how: t(
+                "files",
+                state.with === "gnuFind" ? "gnuFind" : "busyboxStat"
+              ),
+              n: state.entries.length,
+              seconds: (state.elapsedMs / 1000).toFixed(1),
+            })}
         {/* The count is what was seen, and says so when that is not the
          *  whole: cut off at the row cap, or with lines nobody could read. */}
         {state.partial && !state.stopped && (
@@ -515,7 +596,7 @@ function Status({
             {t("files", "cappedAt", { n: state.entries.length })}
           </span>
         )}
-        {state.unreadable > 0 && (
+        {state.unreadable !== null && state.unreadable > 0 && (
           <span className="ml-1 text-warn">
             {t("files", "unreadableLines", { n: state.unreadable })}
           </span>
@@ -594,10 +675,16 @@ function Rows({
   });
   const now = useNow();
 
+  // Scroll to the selection when the *selection* moves. With `rows` in the
+  // deps this re-fired on every streamed batch, so a reader scrolling
+  // through a directory that was still arriving was yanked back to their
+  // selected row ten times a second. `rows` is read, not watched.
+  const latestRows = useRef(rows);
+  latestRows.current = rows;
   useEffect(() => {
-    const index = rows.findIndex((r) => r.name === selected);
+    const index = latestRows.current.findIndex((r) => r.name === selected);
     if (index >= 0) virtualizer.scrollToIndex(index + (canGoUp ? 1 : 0));
-  }, [selected, rows, canGoUp, virtualizer]);
+  }, [selected, canGoUp, virtualizer]);
 
   return (
     <div
@@ -617,7 +704,7 @@ function Rows({
           if (canGoUp && item.index === 0) {
             return (
               <button
-                key="up"
+                key={UP_ROW_KEY}
                 type="button"
                 style={style}
                 onDoubleClick={onUp}
@@ -665,7 +752,11 @@ function Rows({
                 {tag && (
                   <span
                     className="ml-1 truncate rounded border border-hair px-1 text-[10px] text-fg-mut"
-                    title={`${tag.kind} ${tag.name} · ${tag.at}`}
+                    // Every source, because with more than one the badge
+                    // deliberately names none of them.
+                    title={`${tag.sources
+                      .map((r) => `${r.kind} ${r.name}`)
+                      .join(" · ")} ${tag.at}`.trim()}
                   >
                     {t("files", "fromMount", { name: tag.name })}
                   </span>
@@ -675,8 +766,15 @@ function Rows({
               <span className="text-right tabular-nums text-fg-mut">
                 {entry.kind === "dir" ? "" : formatBytes(entry.size, 1)}
               </span>
-              <span className="text-right tabular-nums text-fg-fnt">
-                {entry.modified ? agoOf(entry.modified * 1000, now) : ""}
+              <span
+                className="text-right tabular-nums text-fg-fnt"
+                title={
+                  entry.modified
+                    ? new Date(entry.modified * 1000).toLocaleString()
+                    : undefined
+                }
+              >
+                {entry.modified ? formatSince(entry.modified * 1000, now) : ""}
               </span>
             </div>
           );
@@ -829,6 +927,7 @@ function Preview({
   container,
   path,
   entry,
+  life,
   via,
   onDownload,
 }: {
@@ -836,6 +935,8 @@ function Preview({
   container: string;
   path: string;
   entry: FileEntry;
+  /** The listing's `uid:container:restarts`, keyed on for the same reason. */
+  life: string;
   via: Via | null;
   onDownload: () => void;
 }) {
@@ -844,7 +945,10 @@ function Preview({
   const query = useQuery({
     queryKey: [
       "container-file",
-      pod.uid,
+      // The life, like the listing: a restart replaces the filesystem
+      // outside the mounts, so a cached preview is of a container that no
+      // longer exists.
+      life,
       container,
       path,
       via?.container ?? "",
@@ -885,7 +989,14 @@ function Preview({
                 : t("files", "lineCount", { n: lines })
             }`}
           {tag &&
-            ` · ${t("files", "mountedFrom", { kind: tag.kind, name: tag.name })}`}
+            ` · ${
+              tag.sources.length > 1
+                ? t("files", "mountedFromSeveral", {
+                    name: tag.name,
+                    n: tag.sources.length,
+                  })
+                : t("files", "mountedFrom", { kind: tag.kind, name: tag.name })
+            }`}
         </p>
         <p className="mt-1 flex gap-3">
           <button
