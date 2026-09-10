@@ -1531,6 +1531,31 @@ export const ru: Catalogue = {
     notReadEvents: "события этого пода ({reason})",
     notReadPolicies: "NetworkPolicy: у приложения пока нет для них читателя",
   },
+  services: {
+    myServices: "Мои сервисы",
+    pin: "Закрепить",
+    unpin: "Открепить",
+    noneYet: "В этом кластере пока ничего не закреплено.",
+    noneYetHint:
+      "Откройте Deployment, StatefulSet, DaemonSet или CronJob и нажмите «Закрепить». Здесь появляется только то, что закреплено руками.",
+    readyOf: "{ready}/{total} готовы",
+    gone: "не существует",
+    couldNotRead: "не удалось прочитать",
+    wayIn: "Вход",
+    notReadYet: "ещё не прочитано",
+    nothingPublishes: "ничто его не публикует",
+    nothingBehind: "за ним ничего нет",
+    moreWays: "ещё {n}",
+    lastChange: "Последнее изменение",
+    nothingSeen: "приложение ничего не видело, пока смотрело",
+    waitingOn: "Ждём",
+    notLookedAt: "Не смотрели",
+    pinsFull: "В этом кластере уже закреплено {n}",
+    pinsFullHint:
+      "Открепите что-нибудь на домашней странице, чтобы освободить место.",
+    pinWords:
+      "pin закрепить мои сервисы домашняя страница избранное favourite my services home page",
+  },
   share: {
     publish: "Опубликовать",
     publishTo: "Опубликовать на {target}",

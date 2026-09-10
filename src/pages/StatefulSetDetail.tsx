@@ -59,6 +59,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { PinAction } from "@/components/services/PinAction";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -398,6 +399,7 @@ export function StatefulSetDetail() {
         onBack={goBack}
         actions={
           <>
+            <PinAction kind="StatefulSet" namespace={namespace} name={name} />
             {/* Plain, not intercepted: the Scale dialog carries the delivery
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}

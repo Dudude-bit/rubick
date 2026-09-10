@@ -3,7 +3,7 @@ import { Bell, Square, X } from "lucide-react";
 
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
-import { isOpen, type After, type Ask, type Watch } from "@/lib/tell-me-when";
+import { ASK_SHORT, isOpen, type After, type Watch } from "@/lib/tell-me-when";
 import { SAYS_KEY } from "@/hooks/useTellMeWhen";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
@@ -16,15 +16,6 @@ const AFTER_KEY: Record<After["action"], keyof typeof en.tell> = {
   scale: "afterScale",
   apply: "afterApply",
   image: "afterImage",
-};
-
-const ASK_SHORT: Record<Ask, keyof typeof en.tell> = {
-  rollout: "askRolloutShort",
-  podReady: "askPodShort",
-  jobOutcome: "askJobShort",
-  drain: "askDrainShort",
-  renewed: "askRenewedShort",
-  forwardAlive: "askForwardShort",
 };
 
 /**

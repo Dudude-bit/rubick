@@ -51,6 +51,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { PinAction } from "@/components/services/PinAction";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
@@ -379,14 +380,17 @@ export function DaemonSetDetail() {
       }
       onBack={goBack}
       actions={
-        <InterceptedAction
-          intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
-        />
+        <>
+          <PinAction kind="DaemonSet" namespace={namespace} name={name} />
+          <InterceptedAction
+            intercept={intercept("Delete")}
+            label={t("action", "delete")}
+            icon={Trash2}
+            onClick={() => deleteMutation?.mutate()}
+            busy={deleteMutation?.isPending}
+            danger
+          />
+        </>
       }
       tabs={tabs}
       activeTab={activeTab}
