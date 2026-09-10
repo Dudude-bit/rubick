@@ -1581,7 +1581,12 @@ export const ru: Catalogue = {
     phaseUnknown: "фаза не записана",
     primaryFact: "Primary",
     readyFact: "Готовы",
-    readyOfDeclared: "{ready} из {declared} инстансов",
+    readyOfDeclared: {
+      one: "{ready} из {n} инстанса",
+      few: "{ready} из {n} инстансов",
+      many: "{ready} из {n} инстансов",
+      other: "{ready} из {n} инстансов",
+    },
     readyConditionFalse: "условие Ready False",
     archivingFact: "Архивация WAL",
     archivingNotDeclared: "не объявлена",

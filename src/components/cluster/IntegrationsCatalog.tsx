@@ -74,10 +74,15 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   const detected = statuses.filter(
     (status) => status.connection === null && !status.extension.operator
   );
-  const anyDetected = detected.some((status) => status.installed);
+  // Over both scanned groups, not just one. "Nothing is installed" is a
+  // verdict on the whole scan, and computing it over `detected` alone let it
+  // fire — replacing the detected group with that sentence — while the
+  // Operators group right below it listed an installed operator.
+  const scanned = [...detected, ...operators];
+  const anyDetected = scanned.some((status) => status.installed);
   // `null` is the cluster declining to say. Reporting "none of them is here"
   // on the back of a refusal states a fact nobody established.
-  const couldNotLook = detected.some((status) => status.installed === null);
+  const couldNotLook = scanned.some((status) => status.installed === null);
 
   return (
     <div className="flex flex-col gap-6">

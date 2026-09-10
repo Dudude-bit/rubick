@@ -1549,7 +1549,10 @@ export const en = {
     phaseUnknown: "phase not written",
     primaryFact: "Primary",
     readyFact: "Ready",
-    readyOfDeclared: "{ready} of {declared} instances",
+    readyOfDeclared: {
+      one: "{ready} of {n} instance",
+      other: "{ready} of {n} instances",
+    },
     readyConditionFalse: "condition Ready False",
     archivingFact: "WAL archiving",
     archivingNotDeclared: "not declared",

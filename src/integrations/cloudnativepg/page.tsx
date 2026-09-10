@@ -131,7 +131,9 @@ export default function CloudNativePgPage() {
       id: "operator",
       label: t("operators", "operatorTab"),
       glyph: viewGlyph(Box),
-      content: <OperatorTab operator={operator.data} />,
+      content: (
+        <OperatorTab operator={operator.data} pending={operator.isPending} />
+      ),
     },
   ];
 
@@ -249,7 +251,9 @@ function OperatorStrip({
           <span className="font-mono">{operator.version}</span>
         ) : (
           <span className="text-fg-fnt">
-            {t("operators", "versionUnknown")}
+            {operator && !operator.controllerKnown
+              ? t("operators", "controllerUnknown")
+              : t("operators", "versionUnknown")}
           </span>
         )}
         {operator?.version && (
@@ -460,9 +464,11 @@ function ClusterRow({
               )}
             </Fact>
             <Fact label={t("operators", "readyFact")}>
+              {/* `n` is what the plural resolver reads, and the noun it
+               *  governs is the declared count, not the ready one. */}
               {t("operators", "readyOfDeclared", {
                 ready: cluster.ready,
-                declared: cluster.declared,
+                n: cluster.declared,
               })}
               {cluster.readyCondition.status === "False" && (
                 <span className="ml-2 text-err">
@@ -895,12 +901,21 @@ function PoolersTab({ companions }: { companions: Companions | undefined }) {
   );
 }
 
-function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
+function OperatorTab({
+  operator,
+  pending,
+}: {
+  operator: OperatorInfo | undefined;
+  /** The read has not answered yet, which is not the same as answering no. */
+  pending: boolean;
+}) {
   const t = useT();
   return (
     <div className="flex max-w-[64ch] flex-col gap-3 text-xs text-fg-mut">
       <p>{t("operators", "cnpgOperatorExplained")}</p>
-      {operator?.controller ? (
+      {pending ? (
+        <p className="text-fg-fnt">{t("action", "readingInline")}</p>
+      ) : operator?.controller ? (
         <p>
           <Link
             to={`${getResourceDetailUrl(
