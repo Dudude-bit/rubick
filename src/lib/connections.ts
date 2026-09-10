@@ -869,6 +869,11 @@ export function trafficChains(
  */
 export function chainSilence(conns: ResourceConnections, t: T): string | null {
   const subject = conns.subject;
+  // Every sentence below states a negative, and a negative is only ours to
+  // state about a list that answered. With Services unread, "no Service
+  // selects this pod" is the app reporting its own blind spot as a fact
+  // about the cluster, which is the one thing this file exists to prevent.
+  if (conns.notLookedAt.some((entry) => entry.kind === "Service")) return null;
   const facts = subject.facts;
   if (subject.kind === "Service") {
     if (facts?.kind === "service" && facts.externalName !== null) {
@@ -1022,9 +1027,19 @@ const OWNABLE = new Set([
   "CronJob",
 ]);
 
-const UNASKED_LABEL: Record<string, "autoscaling" | "disruptionBudget"> = {
+const UNASKED_LABEL: Record<
+  string,
+  | "autoscaling"
+  | "disruptionBudget"
+  | "theServices"
+  | "theIngresses"
+  | "thePods"
+> = {
   HorizontalPodAutoscaler: "autoscaling",
   PodDisruptionBudget: "disruptionBudget",
+  Service: "theServices",
+  Ingress: "theIngresses",
+  Pod: "thePods",
 };
 
 /**

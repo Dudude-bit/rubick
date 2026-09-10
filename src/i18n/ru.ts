@@ -50,6 +50,9 @@ export const ru: Catalogue = {
     governedByNote:
       "— действует по своему расписанию, и никто отсюда об этом не просил",
     madeByAndMakes: "Кем создано и что создаёт",
+    theServices: "Service в этом namespace",
+    theIngresses: "Ingress в этом namespace",
+    thePods: "поды в этом namespace",
     notLookedAt: "Не проверялось",
     notLookedAtNote:
       "— названо, чтобы отсутствующая группа не читалась как пустая",

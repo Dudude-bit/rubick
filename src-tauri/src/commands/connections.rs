@@ -249,7 +249,7 @@ fn traffic_into(
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
 ) {
-    for svc in &snapshot.services {
+    for svc in snapshot.services() {
         let selector = service_selector(svc);
         let Some(text) = Selector::Equality(&selector).says() else {
             continue;
@@ -453,7 +453,7 @@ fn gateway_traffic_into(
 
 /// The Ingresses whose backend names this Service.
 fn routes_into(ns: &str, svc_ref: &ObjectRef, snapshot: &Snapshot, out: &mut Neighbourhood) {
-    for ing in &snapshot.ingresses {
+    for ing in snapshot.ingresses() {
         for (backend, relation) in ingress_backends(ing) {
             if backend != Backend::Service(svc_ref.name.clone()) {
                 continue;
@@ -496,7 +496,7 @@ fn note_reach(
     let selector = service_selector(svc);
     let query = Selector::Equality(&selector);
     let selected: Vec<&Pod> = snapshot
-        .pods
+        .pods()
         .iter()
         .filter(|pod| query.matches(pod.labels()))
         .collect();
@@ -1127,12 +1127,23 @@ fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
     // quiet either way, and a reader owed an explanation for a volume the
     // page will not talk about gets it in the one place the page collects
     // them.
-    if let Err(why) = &snapshot.claims {
-        unread.push(UnexploredKind::unanswered(
+    for (kind, version, why) in [
+        (
             "PersistentVolumeClaim",
             "v1",
-            why,
-        ));
+            snapshot.claims.as_ref().err(),
+        ),
+        ("Pod", "v1", snapshot.pods.as_ref().err()),
+        ("Service", "v1", snapshot.services.as_ref().err()),
+        (
+            "Ingress",
+            "networking.k8s.io/v1",
+            snapshot.ingresses.as_ref().err(),
+        ),
+    ] {
+        if let Some(why) = why {
+            unread.push(UnexploredKind::unanswered(kind, version, why));
+        }
     }
     unread
 }
@@ -1236,9 +1247,14 @@ async fn fetch_owners(
 
 /// One list per kind, taken once and read from both ends.
 struct Snapshot {
-    pods: Vec<Pod>,
-    services: Vec<Service>,
-    ingresses: Vec<Ingress>,
+    /// All three carry their failure rather than aborting the call. A
+    /// neighbourhood is a set of independent reads, and one the cluster
+    /// refused is a gap in the answer, not the end of it: the subject is
+    /// usually still readable, and a page that dies whole tells a person
+    /// nothing at all about the object they opened.
+    pods: Read<Pod>,
+    services: Read<Service>,
+    ingresses: Read<Ingress>,
     /// `Err` carries the refusal, and it is not an empty list. A token
     /// without `persistentvolumeclaims` used to reach `named_object` with no
     /// claims at all, which resolved every claim a pod mounts to
@@ -1274,6 +1290,30 @@ type Read<K> = std::result::Result<Vec<K>, String>;
 
 fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Read<K> {
     list.map(|list| list.items).map_err(|err| err.to_string())
+}
+
+/// The subject, out of the list it would be in.
+///
+/// The two failures are different answers, and this is the only place that
+/// keeps them apart. A list that answered and does not hold the name means
+/// the object is gone. A list nobody could read means nobody knows, and
+/// "not found" there tells a person their object was deleted while it is
+/// running.
+fn found<'a, K>(
+    list: &'a Read<K>,
+    kind: &str,
+    name: &str,
+    is_it: impl Fn(&K) -> bool,
+) -> Result<&'a K> {
+    let items = list.as_ref().map_err(|said| Error::ListUnread {
+        kind: kind.to_string(),
+        name: name.to_string(),
+        said: said.clone(),
+    })?;
+    items
+        .iter()
+        .find(|item| is_it(item))
+        .ok_or_else(|| Error::not_found(kind, name, ""))
 }
 
 impl Snapshot {
@@ -1316,9 +1356,9 @@ impl Snapshot {
         };
         let (gateway_routes, gateways) = gateway_lists(ctx, gateway).await;
         Ok(Self {
-            pods: pods?.items,
-            services: services?.items,
-            ingresses: ingresses?.items,
+            pods: read(pods),
+            services: read(services),
+            ingresses: read(ingresses),
             claims: read(claims),
             autoscalers: read(autoscalers),
             budgets: read(budgets),
@@ -1327,6 +1367,24 @@ impl Snapshot {
             gateway_routes,
             gateways,
         })
+    }
+
+    /// The items, or none where the read did not answer.
+    ///
+    /// A caller that turns an empty answer into a *statement* — "no Service
+    /// fronts this", "this selects no pods" — must not lean on these alone:
+    /// the refusal is named in `not_looked_at`, and the surface owes the
+    /// reader that instead of the negative.
+    fn pods(&self) -> &[Pod] {
+        self.pods.as_deref().unwrap_or_default()
+    }
+
+    fn services(&self) -> &[Service] {
+        self.services.as_deref().unwrap_or_default()
+    }
+
+    fn ingresses(&self) -> &[Ingress] {
+        self.ingresses.as_deref().unwrap_or_default()
     }
 
     /// What one Service publishes, from whichever object answered.
@@ -1448,11 +1506,7 @@ async fn pod_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, gateway).await?;
-    let pod = snapshot
-        .pods
-        .iter()
-        .find(|pod| pod.name_any() == name)
-        .ok_or_else(|| Error::not_found("Pod", name, ns))?;
+    let pod = found(&snapshot.pods, "Pod", name, |pod| pod.name_any() == name)?;
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
@@ -1658,7 +1712,7 @@ async fn workload_connections(
 
     let selector = Selector::Query(template.selector.as_ref());
     let mine: Vec<&Pod> = snapshot
-        .pods
+        .pods()
         .iter()
         .filter(|pod| selector.matches(pod.labels()))
         .collect();
@@ -1799,11 +1853,9 @@ async fn service_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, gateway).await?;
-    let svc = snapshot
-        .services
-        .iter()
-        .find(|svc| svc.name_any() == name)
-        .ok_or_else(|| Error::not_found("Service", name, ns))?;
+    let svc = found(&snapshot.services, "Service", name, |svc| {
+        svc.name_any() == name
+    })?;
 
     let subject = service_ref(svc, ns);
     out.subject = Some(subject.clone());
@@ -1837,7 +1889,7 @@ async fn workloads_behind(
     let query = Selector::Equality(selector);
     let mut walked = HashSet::new();
     for pod in snapshot
-        .pods
+        .pods()
         .iter()
         .filter(|pod| query.matches(pod.labels()))
     {
@@ -1853,11 +1905,9 @@ async fn ingress_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, None).await?;
-    let ing = snapshot
-        .ingresses
-        .iter()
-        .find(|ing| ing.name_any() == name)
-        .ok_or_else(|| Error::not_found("Ingress", name, ns))?;
+    let ing = found(&snapshot.ingresses, "Ingress", name, |ing| {
+        ing.name_any() == name
+    })?;
 
     let subject = ingress_ref(ing, ns);
     out.subject = Some(subject.clone());
@@ -1881,7 +1931,7 @@ async fn ingress_connections(
     for (backend, relation) in ingress_backends(ing) {
         match backend {
             Backend::Service(service) => {
-                if let Some(svc) = snapshot.services.iter().find(|s| s.name_any() == service) {
+                if let Some(svc) = snapshot.services().iter().find(|s| s.name_any() == service) {
                     let svc_ref = service_ref(svc, ns);
                     out.edge(subject.clone(), svc_ref.clone(), relation);
                     if !reached.insert(service.clone()) {
@@ -2686,9 +2736,9 @@ mod refused_claim_tests {
     #[test]
     fn the_refusal_is_named_among_the_kinds_nobody_looked_at() {
         let snapshot = Snapshot {
-            pods: Vec::new(),
-            services: Vec::new(),
-            ingresses: Vec::new(),
+            pods: Ok(Vec::new()),
+            services: Ok(Vec::new()),
+            ingresses: Ok(Vec::new()),
             claims: Err(REFUSED.to_string()),
             autoscalers: Ok(Vec::new()),
             budgets: Ok(Vec::new()),
@@ -2708,6 +2758,94 @@ mod refused_claim_tests {
                 assert!(said.contains("is forbidden"));
             }
             other => panic!("the cluster's own words, not {other:?}"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod refused_list_tests {
+    use super::*;
+
+    const REFUSED: &str = "ApiError: services is forbidden: User \
+         \"system:serviceaccount:k8s-gui-test:narrow\" cannot list resource \
+         \"services\" in API group \"\" in the namespace \"k8s-gui-test\": Forbidden";
+
+    fn named(name: &str) -> Service {
+        Service {
+            metadata: kube::core::ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// The failure this half of the fix is about. A token refused `services`
+    /// was told the Service it had open did not exist, which sends a person
+    /// to rebuild something that is running.
+    #[test]
+    fn a_subject_whose_list_was_refused_is_unknown_rather_than_gone() {
+        let refused: Read<Service> = Err(REFUSED.to_string());
+        let err = found(&refused, "Service", "shop", |svc| svc.name_any() == "shop")
+            .expect_err("a refused list cannot answer");
+
+        match err {
+            Error::ListUnread { kind, name, said } => {
+                assert_eq!(kind, "Service");
+                assert_eq!(name, "shop");
+                assert!(said.contains("is forbidden"), "the cluster's own words");
+            }
+            other => panic!("a refusal is not {other:?}"),
+        }
+    }
+
+    /// The other half, and why the first is not "always say unknown": a list
+    /// that really answered and really lacks the name is the object being
+    /// gone, which is worth saying plainly.
+    #[test]
+    fn a_subject_absent_from_a_list_that_answered_is_still_not_found() {
+        let answered: Read<Service> = Ok(vec![named("carts")]);
+        let err = found(&answered, "Service", "shop", |svc| svc.name_any() == "shop")
+            .expect_err("the list answered and does not hold it");
+
+        assert!(
+            matches!(err, Error::NotFound { .. }),
+            "a list that answered still reports a missing object as missing"
+        );
+    }
+
+    #[test]
+    fn a_subject_a_list_holds_is_returned() {
+        let answered: Read<Service> = Ok(vec![named("shop")]);
+        let svc = found(&answered, "Service", "shop", |svc| svc.name_any() == "shop")
+            .expect("it is right there");
+        assert_eq!(svc.name_any(), "shop");
+    }
+
+    /// Every refused list reaches the one place the page collects them, so a
+    /// group that goes quiet has a reason beside it rather than reading as
+    /// "there are none".
+    #[test]
+    fn each_refused_list_is_named_among_the_kinds_nobody_looked_at() {
+        let snapshot = Snapshot {
+            pods: Err("pods is forbidden".to_string()),
+            services: Err(REFUSED.to_string()),
+            ingresses: Err("ingresses.networking.k8s.io is forbidden".to_string()),
+            claims: Err("persistentvolumeclaims is forbidden".to_string()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            slices: Ok(Vec::new()),
+            legacy: Err("the slices answered".to_string()),
+            gateway_routes: Vec::new(),
+            gateways: None,
+        };
+
+        let unread = unanswered(&snapshot);
+        for kind in ["Pod", "Service", "Ingress", "PersistentVolumeClaim"] {
+            assert!(
+                unread.iter().any(|entry| entry.kind == kind),
+                "{kind} was refused and is not named"
+            );
         }
     }
 }
