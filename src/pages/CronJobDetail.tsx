@@ -44,6 +44,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { PinAction } from "@/components/services/PinAction";
 import { useResourceDetail } from "@/hooks";
 import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
 import { commands } from "@/lib/commands";
@@ -428,6 +429,7 @@ export function CronJobDetail() {
         onBack={goBack}
         actions={
           <>
+            <PinAction kind="CronJob" namespace={namespace} name={name} />
             <InterceptedAction
               intercept={intercept("Run")}
               label={t("action", "runNow")}

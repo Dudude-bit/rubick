@@ -52,6 +52,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { PinAction } from "@/components/services/PinAction";
 import { useAsk } from "@/hooks/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
@@ -420,6 +421,7 @@ export function DaemonSetDetail() {
         onBack={goBack}
         actions={
           <>
+            <PinAction kind="DaemonSet" namespace={namespace} name={name} />
             <InterceptedAction
               intercept={intercept("Restart")}
               label={t("action", "restart")}

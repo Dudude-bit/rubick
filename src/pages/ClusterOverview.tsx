@@ -6,6 +6,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
+import { MyServices } from "@/components/services/MyServices";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
@@ -95,6 +96,7 @@ export function ClusterOverview() {
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
+      <MyServices />
       <ProblemsPanel
         problems={overview.problems}
         problemsTruncated={overview.problemsTruncated}
