@@ -200,6 +200,16 @@ function OperatorStrip({
             {operator.controller.name} {operator.controller.ready}/
             {operator.controller.desired}
           </Link>
+        ) : operator && !operator.controllerKnown ? (
+          // The Deployment list was refused or failed. "No Deployment
+          // carries the operator's label" is a claim about a read nobody
+          // got, and a reader with namespace-scoped RBAC gets it every time.
+          <span
+            className="text-warn"
+            title={operator.controllerReason ?? undefined}
+          >
+            {t("operators", "controllerUnknown")}
+          </span>
         ) : (
           <span className="text-warn">
             {t("operators", "controllerNotFound")}
@@ -832,6 +842,10 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
           >
             {t("operators", "operatorLogs")}
           </Link>
+        </p>
+      ) : operator && !operator.controllerKnown ? (
+        <p className="text-warn" title={operator.controllerReason ?? undefined}>
+          {t("operators", "controllerUnknown")}
         </p>
       ) : (
         <p className="text-warn">{t("operators", "controllerNotFound")}</p>

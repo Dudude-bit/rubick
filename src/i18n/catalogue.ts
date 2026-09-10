@@ -1534,6 +1534,8 @@ export const en = {
     controllerFact: "Controller",
     controllerNotFound:
       "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
+    controllerUnknown:
+      "the Deployments could not be read, so whether the operator's controller is running is unknown — not that it is absent",
     inNamespace: "in {namespace}",
     versionUnknown: "unknown: no controller image to read it from",
     fromImage: "from the Deployment image",

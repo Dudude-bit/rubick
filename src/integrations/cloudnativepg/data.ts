@@ -72,15 +72,27 @@ export function useCompanions() {
   });
 }
 
+export interface Controller {
+  name: string;
+  namespace: string;
+  ready: number;
+  desired: number;
+  image: string | null;
+}
+
 export interface OperatorInfo {
   /** `null` when no Deployment carries the operator's label. */
-  controller: {
-    name: string;
-    namespace: string;
-    ready: number;
-    desired: number;
-    image: string | null;
-  } | null;
+  controller: Controller | null;
+  /**
+   * Whether `controller` is an answer. `false` says the Deployment list was
+   * refused or failed — and a reader who may see CNPG's Clusters but not the
+   * cluster's Deployments is an ordinary RBAC user, for whom "no Deployment
+   * carries the operator's label" was a confident lie about a read that
+   * never happened.
+   */
+  controllerKnown: boolean;
+  /** The cluster's own words for why, when it would not say. */
+  controllerReason: string | null;
   /** From the image tag; the CRDs' label is the fallback the catalog uses. */
   version: string | null;
   /** Whether `patch clusters` and `create backups` are allowed; `null` = the cluster would not say. */
@@ -101,14 +113,14 @@ export function useOperator() {
     queryKey: [context, "cloudnativepg", "operator"],
     queryFn: async (): Promise<OperatorInfo> => {
       const [deployments, access] = await Promise.all([
-        commands
-          .listDeployments({
+        read<DeploymentInfo>(() =>
+          commands.listDeployments({
             namespace: null,
             labelSelector: CONTROLLER_SELECTOR,
             fieldSelector: null,
             limit: null,
           })
-          .catch((): DeploymentInfo[] => []),
+        ),
         commands
           .checkAccess([
             {
@@ -126,7 +138,7 @@ export function useOperator() {
           ])
           .catch(() => null),
       ]);
-      const deployment = deployments[0] ?? null;
+      const deployment = deployments.ok ? (deployments.items[0] ?? null) : null;
       return {
         controller: deployment
           ? {
@@ -137,6 +149,8 @@ export function useOperator() {
               image: deployment.containers[0]?.image ?? null,
             }
           : null,
+        controllerKnown: deployments.ok,
+        controllerReason: deployments.ok ? null : deployments.reason,
         version: versionOf(deployment?.containers[0]?.image ?? null),
         canPatchClusters: access?.[0]?.allowed ?? null,
         canCreateBackups: access?.[1]?.allowed ?? null,

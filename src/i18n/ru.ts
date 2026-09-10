@@ -1566,6 +1566,8 @@ export const ru: Catalogue = {
     controllerFact: "Контроллер",
     controllerNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
+    controllerUnknown:
+      "Deployment'ы прочитать не удалось, поэтому работает ли контроллер оператора — неизвестно; это не значит, что его нет",
     inNamespace: "в {namespace}",
     versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
     fromImage: "из образа Deployment",
