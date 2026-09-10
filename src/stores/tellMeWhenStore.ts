@@ -26,6 +26,8 @@ interface TellMeWhenState {
   setBaseline: (id: string, baseline: Baseline) => void;
   /** Ages every open watch against the clock; returns how many expired. */
   expire: (now: number) => number;
+  /** Closes every open watch past its deadline with "no answer", and returns them. */
+  timeOut: (now: number) => Watch[];
 }
 
 export const useTellMeWhenStore = create<TellMeWhenState>()(
@@ -71,6 +73,31 @@ export const useTellMeWhenStore = create<TellMeWhenState>()(
             w.id === id ? { ...w, baseline } : w
           ),
         })),
+      timeOut: (now) => {
+        const due = get().watches.filter(
+          (w) => isOpen(w) && w.deadline != null && w.deadline <= now
+        );
+        if (due.length === 0) return [];
+        const ids = new Set(due.map((w) => w.id));
+        set((state) => ({
+          watches: state.watches.map((w) =>
+            ids.has(w.id)
+              ? {
+                  ...w,
+                  status: {
+                    state: "done" as const,
+                    verdict: {
+                      says: "timedOut" as const,
+                      detail: w.baseline?.seen ?? null,
+                    },
+                    at: now,
+                  },
+                }
+              : w
+          ),
+        }));
+        return due;
+      },
       expire: (now) => {
         let expired = 0;
         const watches = get().watches.map((w) => {
