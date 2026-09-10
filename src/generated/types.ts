@@ -781,6 +781,7 @@ export interface FilePreview {
   truncated: boolean;
   binary: boolean;
   nonTextShare: number;
+  lossy: boolean;
   text: string | null;
 }
 
@@ -1873,6 +1874,7 @@ export type MetricsStatusKind =
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
+  | { state: "written"; bytes: number }
   | { state: "noTools" }
   | { state: "failed"; exit_code: number | null; message: string };
 

@@ -347,6 +347,10 @@ pub enum AppEvent {
         stream_id: String,
         with: crate::files::ListedWith,
         entries: usize,
+        /// The listing was cut short; `entries` is what was seen, not a total.
+        partial: bool,
+        /// Lines the parser could not read, so the count is not the whole.
+        unreadable: usize,
         elapsed_ms: u64,
     },
     /// The listing ended without an answer, and why: `noTools`, `refused`,
@@ -554,11 +558,15 @@ impl AppEvent {
                 stream_id,
                 with,
                 entries,
+                partial,
+                unreadable,
                 elapsed_ms,
             } => serde_json::json!({
                 "stream_id": stream_id,
                 "with": with,
                 "entries": entries,
+                "partial": partial,
+                "unreadable": unreadable,
                 "elapsed_ms": elapsed_ms,
             }),
             AppEvent::FilesFailed {

@@ -20,9 +20,11 @@ import {
 
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { useNow } from "@/hooks/useNow";
+import { useNow, useNowTenths } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
 import {
+  DOWNLOAD_MAX_BYTES,
+  PREVIEW_MAX_BYTES,
   crumbs,
   joinPath,
   matches,
@@ -49,7 +51,7 @@ export interface FilesTabProps {
   pod: PodInfo;
   /** Reading through a debug container the page started for this tab. */
   via: Via | null;
-  onDebug: () => void;
+  onDebug: (container: string) => void;
   onStopVia: () => void;
 }
 
@@ -91,7 +93,11 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
 
   // The life a listing was taken from. A restart makes the current life a
   // different container; the old rows stay, with a banner, until asked.
-  const currentLife = `${pod.uid}:${container?.restartCount ?? 0}`;
+  const currentLife = `${pod.uid}:${containerName}:${container?.restartCount ?? 0}`;
+  // Keyed by container too: `life` is only ever set from the container that
+  // was selected when the listing began, so switching to one with a
+  // different restart count fired "has restarted since this was read" about
+  // a container that had not.
   const [life, setLife] = useState(currentLife);
   const running = via !== null || container?.state.type === "running";
 
@@ -139,7 +145,6 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   }, [path]);
 
   const { toast } = useToast();
-  const now = useNow();
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
   const download = useCallback(async () => {
     if (!selectedEntry || !container) return;
@@ -154,12 +159,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
         via,
         destination
       );
-      if (result.state === "preview") {
-        toast({
-          title: t("files", "downloaded", { name: selectedEntry.name }),
-          description: destination,
-        });
-      } else {
+      if (result.state === "noTools" || result.state === "failed") {
         toast({
           title: t("files", "downloadFailed", { name: selectedEntry.name }),
           description:
@@ -167,6 +167,14 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               ? t("files", "noCatInImage")
               : result.message,
           variant: "destructive",
+        });
+      } else {
+        toast({
+          title: t("files", "downloaded", { name: selectedEntry.name }),
+          description:
+            result.state === "written"
+              ? `${destination} · ${formatBytes(result.bytes, 1)}`
+              : destination,
         });
       }
     } catch (error) {
@@ -221,6 +229,16 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               type="button"
               role="tab"
               aria-selected={c.name === containerName}
+              // While a debug container is the way in, the bytes come from
+              // its /proc/1/root — one specific container. Switching used to
+              // change only the label, so the rows of one container were
+              // shown under another's name.
+              disabled={via !== null && c.name !== containerName}
+              title={
+                via !== null && c.name !== containerName
+                  ? t("files", "cannotSwitchViaDebug")
+                  : undefined
+              }
               onClick={() => {
                 setContainerName(c.name);
                 setSelected(null);
@@ -230,7 +248,9 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
                 "rounded px-1.5 py-0.5 font-mono",
                 c.name === containerName
                   ? "bg-sel text-fg"
-                  : "text-fg-mut hover:bg-hover hover:text-fg"
+                  : via !== null
+                    ? "cursor-not-allowed text-fg-fnt"
+                    : "text-fg-mut hover:bg-hover hover:text-fg"
               )}
             >
               {c.name}
@@ -240,7 +260,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
             </button>
           ))}
         </span>
-        <Status state={state} onStop={stop} now={now} />
+        <Status state={state} onStop={stop} />
       </div>
 
       {via && (
@@ -358,16 +378,20 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
                 right
               />
             </div>
-            {state.phase === "done" &&
-            state.entries.length === 0 &&
-            !state.stopped ? (
-              <Sentence>{t("files", "emptyDirectory", { path })}</Sentence>
-            ) : state.phase === "done" &&
-              state.entries.length === 0 &&
+            {state.phase === "done" && state.entries.length === 0 ? (
+              // "This directory is empty" is a claim about a read that
+              // finished and saw everything. A read the reader cut short,
+              // and a read whose every line the parser refused, are two
+              // other answers — and neither is "there is nothing here".
               state.stopped ? (
-              // A read the reader cut short before anything arrived says so.
-              // "This directory is empty" is an answer we never got.
-              <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
+                <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
+              ) : state.unreadable > 0 ? (
+                <Sentence>
+                  {t("files", "nothingReadable", { n: state.unreadable })}
+                </Sentence>
+              ) : (
+                <Sentence>{t("files", "emptyDirectory", { path })}</Sentence>
+              )
             ) : (
               <Rows
                 rows={rows}
@@ -425,36 +449,54 @@ function Notice({
   );
 }
 
+function Reading({
+  entries,
+  startedAt,
+  onStop,
+}: {
+  entries: number;
+  startedAt: number;
+  onStop: () => void;
+}) {
+  const t = useT();
+  const now = useNowTenths();
+  // A listing whose start nobody recorded is timed by nobody: the sentence
+  // without the seconds, rather than a confident "0.0 s".
+  const seconds =
+    startedAt === 0 ? null : (Math.max(0, now - startedAt) / 1000).toFixed(1);
+  return (
+    <span className="flex items-center gap-2 text-fg-fnt">
+      {seconds === null
+        ? t("files", "readingSoFarUntimed", { n: entries })
+        : t("files", "readingSoFar", { n: entries, seconds })}
+      <button
+        type="button"
+        onClick={onStop}
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-fg-mut hover:bg-hover hover:text-fg"
+      >
+        <Square className="h-3 w-3" />
+        {t("action", "stop")}
+      </button>
+    </span>
+  );
+}
+
 function Status({
   state,
   onStop,
-  now,
 }: {
   state: ListingState;
   onStop: () => void;
-  now: number;
 }) {
   const t = useT();
   if (state.phase === "idle") return null;
   if (state.phase === "reading") {
     return (
-      <span className="flex items-center gap-2 text-fg-fnt">
-        {t("files", "readingSoFar", {
-          n: state.entries.length,
-          seconds:
-            state.startedAt === 0
-              ? "0.0"
-              : (Math.max(0, now - state.startedAt) / 1000).toFixed(1),
-        })}
-        <button
-          type="button"
-          onClick={onStop}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-fg-mut hover:bg-hover hover:text-fg"
-        >
-          <Square className="h-3 w-3" />
-          {t("action", "stop")}
-        </button>
-      </span>
+      <Reading
+        entries={state.entries.length}
+        startedAt={state.startedAt}
+        onStop={onStop}
+      />
     );
   }
   if (state.phase === "done") {
@@ -465,6 +507,18 @@ function Status({
           n: state.entries.length,
           seconds: (state.elapsedMs / 1000).toFixed(1),
         })}
+        {/* The count is what was seen, and says so when that is not the
+         *  whole: cut off at the row cap, or with lines nobody could read. */}
+        {state.partial && !state.stopped && (
+          <span className="ml-1 text-warn">
+            {t("files", "cappedAt", { n: state.entries.length })}
+          </span>
+        )}
+        {state.unreadable > 0 && (
+          <span className="ml-1 text-warn">
+            {t("files", "unreadableLines", { n: state.unreadable })}
+          </span>
+        )}
       </span>
     );
   }
@@ -642,7 +696,7 @@ function Failure({
   state: Extract<ListingState, { phase: "failed" }>;
   container: string;
   image: string;
-  onDebug: () => void;
+  onDebug: (container: string) => void;
   onMounts: () => void;
   onRetry: () => void;
 }) {
@@ -660,7 +714,11 @@ function Failure({
           })}
         </p>
         <p className="mt-3 flex gap-4">
-          <button type="button" onClick={onDebug} className={link}>
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
             {t("files", "openViaDebug")}
           </button>
           <button type="button" onClick={onMounts} className={link}>
@@ -771,11 +829,16 @@ function Preview({
   });
   const tag = mountFor(path, container, pod.volumes);
   const read = query.data;
-  const lines =
-    read?.state === "preview" && read.preview.text
-      ? read.preview.text.split("\n").length
-      : null;
-  const tooBig = entry.size > 100 * 1024 * 1024;
+  // Split once per answer, not once per render: the preview is up to
+  // PREVIEW_MAX_BYTES of text and this sat in the component body.
+  const lines = useMemo(
+    () =>
+      read?.state === "preview" && read.preview.text
+        ? read.preview.text.split("\n").length
+        : null,
+    [read]
+  );
+  const tooBig = entry.size > DOWNLOAD_MAX_BYTES;
 
   return (
     <div className="flex w-[46%] min-w-0 flex-col border-l border-hair">
@@ -785,7 +848,15 @@ function Preview({
           {formatBytes(entry.size, 1)}
           {read?.state === "preview" &&
             ` · ${read.preview.binary ? t("files", "binary") : t("files", "text")}`}
-          {lines !== null && ` · ${t("files", "lineCount", { n: lines })}`}
+          {/* Beside the file's whole size, a bare count reads as the file's
+           *  line count — and the preview stopped at the cap, so it is the
+           *  count of what was read and a floor on the rest. */}
+          {lines !== null &&
+            ` · ${
+              read?.state === "preview" && read.preview.truncated
+                ? t("files", "lineCountAtLeast", { n: lines })
+                : t("files", "lineCount", { n: lines })
+            }`}
           {tag &&
             ` · ${t("files", "mountedFrom", { kind: tag.kind, name: tag.name })}`}
         </p>
@@ -802,7 +873,13 @@ function Preview({
             onClick={onDownload}
             disabled={tooBig}
             className="flex items-center gap-1 text-info hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            title={tooBig ? t("files", "tooBigToDownload") : undefined}
+            title={
+              tooBig
+                ? t("files", "tooBigToDownload", {
+                    cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+                  })
+                : undefined
+            }
           >
             <Download className="h-3 w-3" />
             {t("action", "download")}
@@ -832,12 +909,20 @@ function Preview({
           </div>
         ) : read?.state === "preview" ? (
           <>
+            {/* The bytes were not UTF-8 and what is below is our repair of
+             *  them. Drawn above the text, because a reader who scrolls to
+             *  the bottom for it has already read a file we changed. */}
+            {read.preview.lossy && (
+              <p className="mb-2 text-warn">{t("files", "previewRepaired")}</p>
+            )}
             <pre className="whitespace-pre-wrap break-all text-fg-mid">
               {read.preview.text}
             </pre>
             {read.preview.truncated && (
               <p className="mt-2 text-fg-fnt">
-                {t("files", "previewTruncated")}
+                {t("files", "previewTruncated", {
+                  cap: formatBytes(PREVIEW_MAX_BYTES, 0),
+                })}
               </p>
             )}
           </>

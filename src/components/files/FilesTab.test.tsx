@@ -111,15 +111,32 @@ function wrap(node: ReactElement) {
   );
 }
 
-const done = (entries: FileEntry[]) =>
-  ({
-    phase: "done",
-    entries,
-    with: "gnuFind",
-    elapsedMs: 300,
-    at: Date.now(),
-    stopped: false,
-  }) as ListingState;
+const done = (
+  entries: FileEntry[],
+  over: Partial<Extract<ListingState, { phase: "done" }>> = {}
+): ListingState => ({
+  phase: "done",
+  entries,
+  with: "gnuFind",
+  elapsedMs: 300,
+  at: Date.now(),
+  stopped: false,
+  partial: false,
+  unreadable: 0,
+  ...over,
+});
+
+const file = (name: string, over: Partial<FileEntry> = {}): FileEntry => ({
+  name,
+  kind: "file",
+  mode: "644",
+  size: 1229,
+  modified: null,
+  owner: "root",
+  group: "root",
+  target: null,
+  ...over,
+});
 
 beforeEach(() => {
   listing.mockReset();
@@ -281,6 +298,7 @@ describe("FilesTab", () => {
         truncated: true,
         binary: true,
         nonTextShare: 0.31,
+        lossy: false,
         text: null,
       },
     });
@@ -297,5 +315,112 @@ describe("FilesTab", () => {
       await screen.findByText(/No preview for a binary file/)
     ).toBeInTheDocument();
     expect(screen.getByText(/31% non-text bytes/)).toBeInTheDocument();
+  });
+
+  /**
+   * "Reading, and nothing has arrived yet" and "the tool finished and found
+   * nothing" are two different answers. Only the second one is emptiness, and
+   * a listing that streams its rows in spends every read in the first.
+   */
+  it("does not call a directory empty while the rows are still arriving", () => {
+    listing.mockReturnValue({
+      phase: "reading",
+      entries: [],
+      startedAt: Date.now(),
+    });
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.queryByText(/is empty/)).toBeNull();
+    expect(screen.getByText(/reading · 0 entries so far/)).toBeInTheDocument();
+  });
+
+  /**
+   * Every line the tool printed was refused by the parser. The directory is
+   * not empty — nobody has any idea what is in it, and saying "empty" here
+   * is the same lie as answering a 403 with an empty list.
+   */
+  it("says what is in a directory is unknown when no line could be read", () => {
+    listing.mockReturnValue(done([], { unreadable: 4 }));
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.queryByText(/is empty/)).toBeNull();
+    expect(
+      screen.getByText(/none of them could be read, so what is in here/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The bytes were repaired to be printable. Saying "text" and showing the
+   * repair is telling the reader they are looking at the file when they are
+   * looking at something we made.
+   */
+  it("says a preview was repaired rather than presenting it as the file", async () => {
+    listing.mockReturnValue(done([file("greeting.bin", { size: 12 })]));
+    readContainerFile.mockResolvedValue({
+      state: "preview",
+      preview: {
+        bytesRead: 12,
+        truncated: false,
+        binary: false,
+        nonTextShare: 0.0,
+        lossy: true,
+        text: "hello\uFFFDworld",
+      },
+    });
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("greeting.bin"));
+    expect(
+      await screen.findByText(/not valid UTF-8. What is below is a repair/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The line count sits beside the file's whole size, and the preview stopped
+   * at the cap — so a bare "8 lines" claims a count of a file nobody read to
+   * the end of.
+   */
+  it("counts the lines it read as a floor when the preview was cut short", async () => {
+    listing.mockReturnValue(done([file("app.log", { size: 4_000_000 })]));
+    readContainerFile.mockResolvedValue({
+      state: "preview",
+      preview: {
+        bytesRead: 512 * 1024,
+        truncated: true,
+        binary: false,
+        nonTextShare: 0.0,
+        lossy: false,
+        text: "one\ntwo\nthree",
+      },
+    });
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("app.log"));
+    expect(await screen.findByText(/3 lines read of more/)).toBeInTheDocument();
+    expect(screen.queryByText(/· 3 lines$/)).toBeNull();
   });
 });

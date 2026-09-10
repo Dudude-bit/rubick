@@ -47,9 +47,16 @@ async fn a_busybox_image_lists_through_the_stat_rung() {
     .await
     .expect("listing runs");
     match listing {
-        Listing::Listed { with, entries } => {
+        Listing::Listed {
+            with,
+            entries,
+            partial,
+            unreadable,
+        } => {
             println!("traefik /etc: {entries} entries via {with:?}");
             assert!(entries > 0);
+            assert!(!partial, "/etc fitted under the cap");
+            assert_eq!(unreadable, 0, "every line of /etc parsed");
             assert!(
                 rows.iter().any(|r| r.name == "hosts" || r.name == "passwd"),
                 "{rows:?}"
@@ -104,7 +111,7 @@ async fn a_distroless_image_says_it_has_nothing_to_list_with() {
             println!("coredns: no tools, tried {tried:?}");
             assert_eq!(tried, vec!["find".to_string(), "sh".to_string()]);
         }
-        Listing::Listed { with, entries } => {
+        Listing::Listed { with, entries, .. } => {
             panic!("coredns listed {entries} entries via {with:?}; the image grew tools?")
         }
         Listing::Failed { exit, stderr } => {

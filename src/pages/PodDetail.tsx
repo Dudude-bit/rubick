@@ -283,6 +283,10 @@ export function PodDetail() {
   // Which tab asked for the debug container: the shell opens a terminal in
   // it, the files tab reads through it.
   const [debugFor, setDebugFor] = useState<"shell" | "files">("shell");
+  // Which container the Files tab wants read. The debug container's
+  // /proc/1/root is whatever it targets, so defaulting the dialog to
+  // containers[0] could read one container and label it another.
+  const [debugTarget, setDebugTarget] = useState<string | null>(null);
   const [filesVia, setFilesVia] = useState<Via | null>(null);
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
@@ -868,8 +872,9 @@ export function PodDetail() {
                 key={`files:${pod.uid}`}
                 pod={pod}
                 via={filesVia}
-                onDebug={() => {
+                onDebug={(target) => {
                   setDebugFor("files");
+                  setDebugTarget(target);
                   setDebugDialogOpen(true);
                 }}
                 onStopVia={() => setFilesVia(null)}
@@ -927,6 +932,7 @@ export function PodDetail() {
           podName={pod.name}
           namespace={pod.namespace}
           containers={lifetimeContainers(pod).map((c) => c.name)}
+          preferredTarget={debugTarget ?? undefined}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />

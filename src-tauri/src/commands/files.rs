@@ -8,6 +8,10 @@ use tauri::State;
 use tokio::sync::oneshot;
 
 use crate::error::{Error, Result};
+
+/// How long a preview may take before it is given up on. A FIFO or a device
+/// node never ends on its own.
+const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 use crate::files::{self, Exit, FilePreview, Listing, Via};
 use crate::state::{AppEvent, AppState, LogStream};
 use crate::utils::normalize_optional_namespace;
@@ -139,20 +143,29 @@ pub async fn list_container_files(
         .await;
         let elapsed_ms = began.elapsed().as_millis() as u64;
         let terminal = match outcome {
-            Ok(Listing::Listed { with, entries }) => AppEvent::FilesDone {
+            Ok(Listing::Listed {
+                with,
+                entries,
+                partial,
+                unreadable,
+            }) => AppEvent::FilesDone {
                 stream_id: id.clone(),
                 with,
                 entries,
+                partial,
+                unreadable,
                 elapsed_ms,
             },
+            // No code, and no sentence. A rung counts as missing on `exit
+            // 127` *or* on the runtime's own "executable file not found",
+            // which carries no code at all — so `Some(127)` was a number
+            // this side made up. The words are built from `tried` on the
+            // other side, where a scanner can see them.
             Ok(Listing::NoTools { tried }) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
                 reason: "noTools".into(),
-                message: format!(
-                    "{} were each executed directly in the container and none exists",
-                    tried.join(", ")
-                ),
-                exit_code: Some(127),
+                message: String::new(),
+                exit_code: None,
                 stderr: String::new(),
                 tried,
             },
@@ -209,6 +222,13 @@ pub enum FileRead {
     Preview {
         preview: FilePreview,
     },
+    /// A download landed. Its own variant because a download reads no
+    /// bytes into memory: reporting it as a `Preview` meant answering
+    /// "is it binary" and "how much of it is not text" about a file
+    /// nothing had looked at, with a confident `false` and `0.0`.
+    Written {
+        bytes: u64,
+    },
     /// The tool is not in the image.
     NoTools,
     /// The tool ran and refused.
@@ -245,8 +265,21 @@ pub async fn read_container_file(
     check_via(via.as_ref())?;
     let namespace = normalize_optional_namespace(namespace).unwrap_or_else(|| "default".into());
     let client = current_client(&state)?;
-    let result =
-        files::read_preview(client, &namespace, &pod, &container, via.as_ref(), &path).await?;
+    // A preview that can never finish — a FIFO nobody writes to, a device
+    // that blocks — left the panel on "reading…" for as long as the tab was
+    // open and leaked the exec session. Every other read here that can hang
+    // is bounded; this one was not.
+    let result = tokio::time::timeout(
+        PREVIEW_TIMEOUT,
+        files::read_preview(client, &namespace, &pod, &container, via.as_ref(), &path),
+    )
+    .await
+    .map_err(|_| {
+        Error::Timeout(format!(
+            "reading {path} took longer than {}s and was given up on",
+            PREVIEW_TIMEOUT.as_secs()
+        ))
+    })??;
     Ok(read_outcome(result))
 }
 
@@ -279,15 +312,7 @@ pub async fn download_container_file(
     )
     .await?;
     Ok(match written {
-        Ok(bytes) => FileRead::Preview {
-            preview: FilePreview {
-                bytes_read: usize::try_from(bytes).unwrap_or(usize::MAX),
-                truncated: false,
-                binary: false,
-                non_text_share: 0.0,
-                text: None,
-            },
-        },
+        Ok(bytes) => FileRead::Written { bytes },
         Err(exit) => read_outcome(Err(exit)),
     })
 }

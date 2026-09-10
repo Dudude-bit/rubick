@@ -1419,18 +1419,46 @@ export const en = {
     modified: "Modified",
     stoppedBeforeAnything:
       "You stopped this listing before anything arrived, so what is in here is unknown.",
+    cappedAt: {
+      one: "· stopped at {n} row, so this is not the whole directory",
+      other: "· stopped at {n} rows, so this is not the whole directory",
+    },
+    unreadableLines: {
+      one: "· {n} line could not be read, so a row is missing",
+      other: "· {n} lines could not be read, so rows are missing",
+    },
+    cannotSwitchViaDebug:
+      "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    nothingReadable: {
+      one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
+      other:
+        "The tool printed {n} lines and none of them could be read, so what is in here is unknown.",
+    },
     keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
-    readingSoFar: "reading · {n} entries so far · {seconds} s",
-    readVia: "read via {how} · {n} entries · {seconds} s",
-    stoppedAfter:
-      "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    readingSoFar: {
+      one: "reading · {n} entry so far · {seconds} s",
+      other: "reading · {n} entries so far · {seconds} s",
+    },
+    readingSoFarUntimed: {
+      one: "reading · {n} entry so far",
+      other: "reading · {n} entries so far",
+    },
+    readVia: {
+      one: "read via {how} · {n} entry · {seconds} s",
+      other: "read via {how} · {n} entries · {seconds} s",
+    },
+    stoppedAfter: {
+      one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
+      other:
+        "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    },
     gnuFind: "find (GNU)",
     busyboxStat: "sh + stat (busybox)",
     fromMount: "from {name}",
     noToolsTitle: "The image has nothing to list files with",
     noToolsBody:
-      "{tried} were each executed directly in container {container} and none exists (exit 127). The image is {image}; the files are there, the tools to read them are not.",
+      "{tried} were each executed directly in container {container} and none exists. The image is {image}; the files are there, the tools to read them are not.",
     openViaDebug: "Open through a debug container",
     readMountsInstead: "Read the pod's mounts instead",
     debugExplained:
@@ -1438,24 +1466,31 @@ export const en = {
     refused: "The cluster refused to exec into this pod",
     notRunningNow:
       "Container {container} is not running, so there is nothing to exec into",
-    listFailed: "The listing tool ran and failed (exit {code})",
+    listFailed: "The listing did not finish: {code}",
+
     mountsOnlyIntro:
       "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
     noMounts: "Nothing is mounted into this container.",
     binary: "binary",
     text: "text",
     lineCount: { one: "{n} line", other: "{n} lines" },
+    lineCountAtLeast: {
+      one: "{n} line read of more",
+      other: "{n} lines read of more",
+    },
     mountedFrom: "mounted from {kind} {name}",
     pathCopied: "Path copied",
     copyPath: "Copy path",
-    tooBigToDownload: "Downloads over 100 MiB are refused in this version",
+    tooBigToDownload: "Downloads over {cap} are refused in this version",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
       "No preview for a binary file. Download it to look at it elsewhere.",
     nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
     previewTruncated:
-      "The preview stops at 1 MiB; the file goes on. Download it for the rest.",
+      "The preview stops at {cap}; the file goes on. Download it for the rest.",
+    previewRepaired:
+      "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
     downloaded: "Downloaded {name}",
     downloadFailed: "Could not download {name}",
     noCatInImage: "No cat in this image to copy the file with.",

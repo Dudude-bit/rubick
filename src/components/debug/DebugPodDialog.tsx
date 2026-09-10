@@ -41,6 +41,13 @@ export interface DebugPodDialogProps {
   podName: string;
   namespace: string;
   containers: string[];
+  /**
+   * Which container the caller is actually interested in. The Files tab
+   * reads `/proc/1/root` of whatever this debug container targets, so a
+   * default of `containers[0]` meant it could read a different container
+   * than the one the reader had selected — and label it with theirs.
+   */
+  preferredTarget?: string;
   /** Kubernetes version (e.g., "v1.28.0") for feature detection */
   kubernetesVersion?: string;
   onDebugStart: (result: DebugResult) => void;
@@ -52,6 +59,7 @@ export function DebugPodDialog({
   podName,
   namespace,
   containers,
+  preferredTarget,
   kubernetesVersion,
   onDebugStart,
 }: DebugPodDialogProps) {
@@ -70,7 +78,9 @@ export function DebugPodDialog({
   const [selectedImage, setSelectedImage] = useState("busybox:latest");
   const [customImage, setCustomImage] = useState("");
   const [targetContainer, setTargetContainer] = useState<string>(
-    containers[0] || ""
+    preferredTarget && containers.includes(preferredTarget)
+      ? preferredTarget
+      : containers[0] || ""
   );
   const [shareProcesses, setShareProcesses] = useState(true);
 

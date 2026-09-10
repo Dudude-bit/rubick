@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import type { PodVolumeInfo } from "@/generated/types";
 import {
+  DOWNLOAD_MAX_BYTES,
+  MAX_ENTRIES,
+  PREVIEW_MAX_BYTES,
   type FileEntry,
   crumbs,
   joinPath,
@@ -122,5 +127,26 @@ describe("modeText", () => {
     expect(modeText(entry({ mode: "777", kind: "symlink" }))).toBe(
       "lrwxrwxrwx"
     );
+  });
+});
+
+describe("the caps both halves apply", () => {
+  /**
+   * A comment saying "mirrored" is not a check. The download cap was spelled
+   * three times — a literal in the tab, `DOWNLOAD_MAX_BYTES` in Rust and a
+   * number inside the catalogue sentence — with nothing holding them equal.
+   * Fails if this side drifts from `shared/file-limits.json`.
+   */
+  it("matches shared/file-limits.json", () => {
+    const shared = JSON.parse(
+      readFileSync(resolve(process.cwd(), "shared/file-limits.json"), "utf8")
+    ) as {
+      downloadMaxBytes: number;
+      previewMaxBytes: number;
+      maxEntries: number;
+    };
+    expect(DOWNLOAD_MAX_BYTES).toBe(shared.downloadMaxBytes);
+    expect(PREVIEW_MAX_BYTES).toBe(shared.previewMaxBytes);
+    expect(MAX_ENTRIES).toBe(shared.maxEntries);
   });
 });

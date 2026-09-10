@@ -33,6 +33,11 @@ pub const PREVIEW_MAX_BYTES: usize = 512 * 1024;
 pub const DOWNLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
 /// Rows per event on the way to the frontend.
 pub const BATCH_ROWS: usize = 500;
+/// The most rows one listing hands over. Nothing capped this: `list_dir`
+/// streamed every line the tool printed, and the frontend accumulated,
+/// filtered and sorted all of it on the main thread. A directory past this
+/// is answered as `partial`, never as though it were the whole of it.
+pub const MAX_ENTRIES: usize = 20_000;
 
 /// Reading through an ephemeral debug container: its name, and where the
 /// target container's root shows up in it.
@@ -220,16 +225,17 @@ pub enum Listing {
     Listed {
         with: ListedWith,
         entries: usize,
+        /// The listing did not run to the end — cut short by the reader or by
+        /// `MAX_ENTRIES`. `entries` is then what was seen, never the total.
+        partial: bool,
+        /// Lines the parser could not read. Dropped silently, they made
+        /// `entries` assert a completeness nothing had established.
+        unreadable: usize,
     },
     /// Neither rung exists in this image.
-    NoTools {
-        tried: Vec<String>,
-    },
+    NoTools { tried: Vec<String> },
     /// The tool ran and refused: no such directory, permission, …
-    Failed {
-        exit: Exit,
-        stderr: String,
-    },
+    Failed { exit: Exit, stderr: String },
 }
 
 /// List one directory, handing entries out in batches as they arrive.
@@ -301,6 +307,8 @@ pub async fn list_dir(
 
         let mut batch = Vec::new();
         let mut total = 0usize;
+        let mut unreadable = 0usize;
+        let mut capped = false;
         let mut ticker = tokio::time::interval(std::time::Duration::from_millis(100));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut cancelled = false;
@@ -331,6 +339,16 @@ pub async fn list_dir(
                                 if batch.len() >= BATCH_ROWS {
                                     emit(std::mem::take(&mut batch));
                                 }
+                                if total >= MAX_ENTRIES {
+                                    capped = true;
+                                    attached.abort();
+                                    reader.abort();
+                                    break;
+                                }
+                            } else {
+                                // Counted, not shrugged off: a line nobody
+                                // could read is a row missing from the answer.
+                                unreadable += 1;
                             }
                         }
                         None => break,
@@ -348,6 +366,8 @@ pub async fn list_dir(
             return Ok(Listing::Listed {
                 with,
                 entries: total,
+                partial: true,
+                unreadable,
             });
         }
         if !batch.is_empty() {
@@ -359,10 +379,12 @@ pub async fn list_dir(
             Some(future) => future.await,
             None => None,
         });
-        if ended.ok() {
+        if ended.ok() || capped {
             return Ok(Listing::Listed {
                 with,
                 entries: total,
+                partial: capped,
+                unreadable,
             });
         }
         // GNU find in name only: busybox find rejects `-printf` and says so
@@ -392,8 +414,37 @@ pub struct FilePreview {
     pub binary: bool,
     /// Share of the first 4 KiB that is not text, 0..1.
     pub non_text_share: f32,
+    /// The bytes were not valid UTF-8 and the text below is a repair, with
+    /// every bad byte replaced by U+FFFD. Without this the reader is shown
+    /// a file that differs from the one on disk and told it is the file.
+    pub lossy: bool,
     /// The text, when it is text.
     pub text: Option<String>,
+}
+
+/// The bytes as text, and whether that cost anything.
+///
+/// `from_utf8_lossy` alone cannot tell a file with bad bytes in it from a
+/// clean file whose last character the cap cut in half — both come back with
+/// a U+FFFD in them. The half character is an artefact of our own reading, so
+/// it is dropped; anything else is a real difference between what is on disk
+/// and what the reader is looking at, and is reported.
+#[must_use]
+pub fn decode_text(bytes: &[u8], truncated: bool) -> (String, bool) {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => (text.to_string(), false),
+        Err(error) => {
+            let good = error.valid_up_to();
+            // `error_len() == None` means the input simply stops mid-character.
+            let only_the_cut = truncated && error.error_len().is_none();
+            if only_the_cut {
+                // Valid by construction: `valid_up_to` is a boundary.
+                (String::from_utf8_lossy(&bytes[..good]).into_owned(), false)
+            } else {
+                (String::from_utf8_lossy(bytes).into_owned(), true)
+            }
+        }
+    }
 }
 
 /// Non-text bytes in a sample: NUL, or control bytes that are not whitespace.
@@ -440,8 +491,14 @@ pub async fn read_preview(
     .await?;
     if !captured.exit.ok() {
         let mut exit = captured.exit;
-        if exit.message.is_none() && !captured.stderr.is_empty() {
-            exit.message = Some(captured.stderr.trim().to_string());
+        // The tool's own words win. The apiserver sets `Status.message` on
+        // every non-zero exit ("command terminated with exit code 1"), so
+        // `is_none()` was never true and the container's actual reason —
+        // "Permission denied", "No such file or directory" — was thrown
+        // away, leaving a refusal indistinguishable from any other failure.
+        let said = captured.stderr.trim();
+        if !said.is_empty() {
+            exit.message = Some(said.to_string());
         }
         return Ok(Err(exit));
     }
@@ -451,16 +508,19 @@ pub async fn read_preview(
     let sample = &bytes[..bytes.len().min(4096)];
     let share = non_text_share(sample);
     let binary = looks_binary(sample);
+    let (text, lossy) = if binary {
+        (None, false)
+    } else {
+        let (decoded, lossy) = decode_text(&bytes, truncated);
+        (Some(decoded), lossy)
+    };
     Ok(Ok(FilePreview {
         bytes_read: bytes.len(),
         truncated,
         binary,
         non_text_share: share,
-        text: if binary {
-            None
-        } else {
-            Some(String::from_utf8_lossy(&bytes).into_owned())
-        },
+        lossy,
+        text,
     }))
 }
 
@@ -540,8 +600,10 @@ pub async fn download(
         drop(file);
         let _ = tokio::fs::remove_file(&scratch).await;
         let mut exit = exit;
-        if exit.message.is_none() && !err.is_empty() {
-            exit.message = Some(String::from_utf8_lossy(&err).trim().to_string());
+        let said = String::from_utf8_lossy(&err);
+        let said = said.trim();
+        if !said.is_empty() {
+            exit.message = Some(said.to_string());
         }
         return Ok(Err(exit));
     }
@@ -634,5 +696,53 @@ mod tests {
         let mostly_text = [b"plain text with one stray \x01 byte in it".as_slice()].concat();
         assert!(!looks_binary(&mostly_text));
         assert!(non_text_share(b"\x00\x00ab") > 0.4);
+    }
+
+    /// The other half of `shared/file-limits.json`. A comment saying
+    /// "mirrored" is not a check: these three numbers are applied on both
+    /// sides of the IPC boundary, and the download cap used to be spelled
+    /// three times with nothing holding them equal.
+    #[test]
+    fn the_caps_match_the_shared_file() {
+        const LIMITS: &str = include_str!("../../../shared/file-limits.json");
+        let shared: serde_json::Value = serde_json::from_str(LIMITS).expect("valid json");
+        assert_eq!(
+            shared["downloadMaxBytes"].as_u64(),
+            Some(DOWNLOAD_MAX_BYTES)
+        );
+        assert_eq!(
+            shared["previewMaxBytes"].as_u64(),
+            Some(PREVIEW_MAX_BYTES as u64)
+        );
+        assert_eq!(shared["maxEntries"].as_u64(), Some(MAX_ENTRIES as u64));
+    }
+
+    /// `from_utf8_lossy` repairs a file silently: a byte the tool never wrote
+    /// becomes U+FFFD and the reader is told they are looking at the file. A
+    /// preview stopped mid-character by our own cap is a different thing and
+    /// must not be reported as a difference. Fails if either arm is dropped.
+    #[test]
+    fn a_repaired_preview_says_it_was_repaired_and_a_cut_character_does_not() {
+        let (text, lossy) = decode_text(b"port: 8080\n", false);
+        assert_eq!(text, "port: 8080\n");
+        assert!(!lossy, "clean ASCII is not a repair");
+
+        // 0xff never appears in UTF-8.
+        let (text, lossy) = decode_text(b"key=\xffvalue", false);
+        assert!(lossy, "a byte no UTF-8 file contains is a repair");
+        assert!(text.contains('\u{fffd}'));
+
+        // "\u{43f}" is 0xd0 0xbf; the cap kept only the first byte.
+        let (text, lossy) = decode_text(b"\xd0\xbf\xd0", true);
+        assert_eq!(
+            text, "\u{43f}",
+            "the half character our cap made is dropped"
+        );
+        assert!(!lossy, "our own cut is not the file being different");
+
+        // The same half byte with no cap in play is the file really ending
+        // mid-character, and that is a repair.
+        let (_, lossy) = decode_text(b"\xd0\xbf\xd0", false);
+        assert!(lossy);
     }
 }

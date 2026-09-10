@@ -15,6 +15,8 @@ interface DonePayload {
   stream_id: string;
   with: ListedWith;
   entries: number;
+  partial: boolean;
+  unreadable: number;
   elapsed_ms: number;
 }
 
@@ -44,6 +46,10 @@ export type ListingState =
       at: number;
       /** The person pressed Stop; what arrived is not the whole directory. */
       stopped: boolean;
+      /** The listing was cut short by the row cap, so this is not all of it. */
+      partial: boolean;
+      /** Lines the parser could not read, so the count is not the whole. */
+      unreadable: number;
     }
   | {
       phase: "failed";
@@ -187,6 +193,8 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
               // A listing the reader cut short stays cut short. Overwriting
               // this relabelled a partial read as the whole directory.
               stopped: was.phase === "done" ? was.stopped : false,
+              partial: event.payload.partial,
+              unreadable: event.payload.unreadable,
             }))
           );
         });
@@ -255,6 +263,8 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
               elapsedMs: Date.now() - was.state.startedAt,
               at: Date.now(),
               stopped: true,
+              partial: true,
+              unreadable: 0,
             },
           }
         : was
