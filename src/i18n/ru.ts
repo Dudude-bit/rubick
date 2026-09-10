@@ -1685,6 +1685,8 @@ export const ru: Catalogue = {
     nodeConfigsTab: "Конфиги узлов",
     noScyllaClusters:
       "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
+    deploymentsUnreadable:
+      "Deployment'ы прочитать не удалось, поэтому работает ли оператор — неизвестно; это не значит, что его нет",
     scyllaOperatorNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=scylla-operator; CRD есть, а оператора может и не быть, и каждый ScyllaCluster останется без статуса",
     managerPresent: "ремонты и бэкапы могут выполняться",
@@ -1715,10 +1717,22 @@ export const ru: Catalogue = {
     findingUnavailable: "Не Available",
     findingProgressing: "Progressing",
     findingUpgrading: "Идёт rolling upgrade",
+    findingUpgradingFromTo: "Идёт rolling-обновление: {from} → {to}",
+    upgradeAtRack: "Сейчас на стойке {rack}, узел {node}.",
     findingStale: "Стойки, на которые оператор не смотрел после изменения spec",
     findingMembersMissing: "Члены не готовы",
     findingTasksWithoutManager:
       "Объявлены ремонты или бэкапы, но выполнять их некому: нет ScyllaDB Manager",
+    findingConditionsUnwritten:
+      "Оператор не записал условия для этого кластера",
+    findingConditionsUnknown:
+      "Оператор записал Unknown в условие — значит, он и сам не знает",
+    membersNotWritten: {
+      one: "объявлен {n}, сколько готово — не записано",
+      few: "объявлено {n}, сколько готово — не записано",
+      many: "объявлено {n}, сколько готово — не записано",
+      other: "объявлено {n}, сколько готово — не записано",
+    },
     findingNoStatus: "Оператор ещё ничего не записал на этот объект",
     actionRollingRestart: "Rolling restart",
     actionRollingRestartExplained:
@@ -1739,6 +1753,8 @@ export const ru: Catalogue = {
     nodeConfigsUnknown: "Объекты NodeConfig прочитать не удалось",
     noNodeConfigs:
       "Объектов NodeConfig нет. Локальные диски тогда такие, какими пришли узлы; оператор ничего не готовит.",
+    nodeStatusesNotWritten:
+      "оператор не записал статусы узлов, поэтому сколько узлов он настроил — неизвестно",
     nodesSetUp: "{tuned} из {nodes} узлов подготовлено",
   },
   tell: {

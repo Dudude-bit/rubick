@@ -120,7 +120,10 @@ export function patchFor(
       throw new Error(SCALE_IS_A_JSON_PATCH);
     case "upgrade": {
       const version = value.trim();
-      if (!/^\d+\.\d+/.test(version)) {
+      // Anchored at both ends: an unanchored prefix let
+      // `2025.2.1; rm -rf` and `2025.2.1-latest-please` through, and the
+      // value goes straight into `spec.version` for the operator to pull.
+      if (!/^\d+(\.\d+){1,3}$/.test(version)) {
         throw new Error(`a ScyllaDB version looks like 2025.2.1, not ${value}`);
       }
       return { spec: { version } };

@@ -220,6 +220,14 @@ pub async fn delete_custom_resource(
 
 #[cfg(test)]
 mod tests {
+    /// Every command in this file that writes. A new one is a new place a
+    /// name from the frontend reaches a request path.
+    const WRITES: [&str; 3] = [
+        "pub async fn patch_custom_resource(",
+        "pub async fn patch_custom_resource_json(",
+        "pub async fn delete_custom_resource(",
+    ];
+
     /// Every name that reaches a request path is checked. `crd_name` and
     /// `name` always were; `namespace` was not, and
     /// `normalize_optional_namespace` only trims — so the one command here
@@ -237,11 +245,6 @@ mod tests {
 
         // The guard is in the source of every writing command. The test
         // module names them too, so only the code above it is scanned.
-        const WRITES: [&str; 3] = [
-            "pub async fn patch_custom_resource(",
-            "pub async fn patch_custom_resource_json(",
-            "pub async fn delete_custom_resource(",
-        ];
         let source = include_str!("instance.rs");
         let code = source.split("#[cfg(test)]").next().expect("has code");
         let writes: Vec<&str> = code

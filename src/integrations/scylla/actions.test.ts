@@ -72,6 +72,10 @@ describe("Scylla actions", () => {
   it("refuses a version that is not one, and holds every knob during an upgrade", () => {
     const upgrade = actionsFor(cluster, true).find((a) => a.id === "upgrade")!;
     expect(() => patchFor(upgrade, "latest")).toThrow(/looks like/);
+    // The prefix was unanchored, so anything after a plausible start passed
+    // and went into `spec.version` for the operator to try to pull.
+    expect(() => patchFor(upgrade, "2025.2.1-nightly")).toThrow(/looks like/);
+    expect(() => patchFor(upgrade, "2025.2.1 && echo")).toThrow(/looks like/);
     expect(patchFor(upgrade, "2025.3.0")).toEqual({
       spec: { version: "2025.3.0" },
     });

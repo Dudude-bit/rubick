@@ -1649,6 +1649,8 @@ export const en = {
     nodeConfigsTab: "Node configs",
     noScyllaClusters:
       "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
+    deploymentsUnreadable:
+      "the Deployments could not be read, so whether the operator is running is unknown — not that it is absent",
     scyllaOperatorNotFound:
       "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
     managerPresent: "repairs and backups can run",
@@ -1678,10 +1680,20 @@ export const en = {
     findingUnavailable: "Not Available",
     findingProgressing: "Progressing",
     findingUpgrading: "Rolling upgrade in progress",
+    findingUpgradingFromTo: "Rolling upgrade in progress: {from} → {to}",
+    upgradeAtRack: "Currently on rack {rack}, node {node}.",
     findingStale: "Racks the operator has not looked at since the spec changed",
     findingMembersMissing: "Members not ready",
     findingTasksWithoutManager:
       "Repairs or backups are declared, but there is no ScyllaDB Manager to run them",
+    findingConditionsUnwritten:
+      "The operator has written no conditions for this cluster",
+    findingConditionsUnknown:
+      "The operator wrote Unknown for a condition, so it does not know either",
+    membersNotWritten: {
+      one: "{n} declared, ready not written",
+      other: "{n} declared, ready not written",
+    },
     findingNoStatus: "The operator has written nothing on this object yet",
     actionRollingRestart: "Rolling restart",
     actionRollingRestartExplained:
@@ -1702,6 +1714,8 @@ export const en = {
     nodeConfigsUnknown: "The NodeConfig objects could not be read",
     noNodeConfigs:
       "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
+    nodeStatusesNotWritten:
+      "the operator has written no node statuses, so how many nodes it tuned is unknown",
     nodesSetUp: "{tuned} of {nodes} nodes set up",
   },
   tell: {

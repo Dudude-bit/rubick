@@ -45,7 +45,6 @@ export default function ScyllaPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "clusters";
   const clustersQuery = useClusters();
-  const operator = useOperator();
   const nodeConfigs = useNodeConfigs();
 
   const clusters = useMemo(
@@ -57,6 +56,14 @@ export default function ScyllaPage() {
       ),
     [clustersQuery.data]
   );
+  // The verb is asked where the ScyllaClusters actually are; asked with no
+  // namespace it means "in every one", which a namespace-scoped grant
+  // answers no to.
+  const namespaces = useMemo(
+    () => [...new Set(clusters.map((c) => c.namespace))].sort(),
+    [clusters]
+  );
+  const operator = useOperator(namespaces);
 
   if (clustersQuery.error) {
     return (
@@ -149,11 +156,23 @@ function clustersMark(
 function ControllerLine({
   controller,
   missing,
+  known = true,
+  reason = null,
 }: {
   controller: Controller | null;
   missing: string;
+  /** `false`: the Deployment list was refused, so absence is not the answer. */
+  known?: boolean;
+  reason?: string | null;
 }) {
   const t = useT();
+  if (!controller && !known) {
+    return (
+      <span className="text-warn" title={reason ?? undefined}>
+        {t("operators", "deploymentsUnreadable")}
+      </span>
+    );
+  }
   if (!controller) return <span className="text-warn">{missing}</span>;
   return (
     <>
@@ -203,6 +222,8 @@ function OperatorStrip({
         <ControllerLine
           controller={operator.operator}
           missing={t("operators", "scyllaOperatorNotFound")}
+          known={operator.operatorKnown}
+          reason={operator.operatorReason}
         />
       </Fact>
       <Fact label={t("columns", "version")}>
@@ -210,7 +231,12 @@ function OperatorStrip({
           <span className="font-mono">{operator.version}</span>
         ) : (
           <span className="text-fg-fnt">
-            {t("operators", "versionUnknown")}
+            {t(
+              "operators",
+              operator.operatorKnown
+                ? "versionUnknown"
+                : "deploymentsUnreadable"
+            )}
           </span>
         )}
       </Fact>
@@ -223,7 +249,15 @@ function OperatorStrip({
             </span>
           </>
         ) : (
-          <span className="text-warn">{t("operators", "managerAbsent")}</span>
+          <span
+            className="text-warn"
+            title={operator.managerReason ?? undefined}
+          >
+            {t(
+              "operators",
+              operator.managerKnown ? "managerAbsent" : "deploymentsUnreadable"
+            )}
+          </span>
         )}
       </Fact>
       <Fact label={t("operators", "canActFact")}>
@@ -313,7 +347,12 @@ function ClusterRow({
   const [pending, setPending] = useState<ScyllaAction | null>(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const actions = actionsFor(cluster, operator?.canPatchClusters ?? null);
+  const actions = actionsFor(
+    cluster,
+    operator?.patchIn.get(cluster.namespace) ??
+      operator?.canPatchClusters ??
+      null
+  );
   const stateText = cluster.silent
     ? t("operators", "noStatusYet")
     : cluster.upgrade
@@ -457,13 +496,21 @@ function ClusterRow({
                 <span className="w-24 font-mono text-fg">{rack.name}</span>
                 <span
                   className={cn(
-                    rack.ready < rack.members && !cluster.silent && "text-warn"
+                    rack.ready !== null &&
+                      rack.ready < rack.members &&
+                      !cluster.silent &&
+                      "text-warn",
+                    // Unknown is its own tone: not the green of a full rack
+                    // and not the warn of a short one.
+                    rack.ready === null && "text-fg-fnt"
                   )}
                 >
-                  {t("operators", "readyMembersOfDeclared", {
-                    ready: rack.ready,
-                    n: rack.members,
-                  })}
+                  {rack.ready === null
+                    ? t("operators", "membersNotWritten", { n: rack.members })
+                    : t("operators", "readyMembersOfDeclared", {
+                        ready: rack.ready,
+                        n: rack.members,
+                      })}
                 </span>
                 {rack.version && (
                   <span className="text-fg-fnt">
@@ -635,13 +682,30 @@ function FindingLine({ finding }: { finding: ScyllaFinding }) {
     membersMissing: "findingMembersMissing",
     tasksWithoutManager: "findingTasksWithoutManager",
     noStatus: "findingNoStatus",
+    conditionsUnwritten: "findingConditionsUnwritten",
+    conditionsUnknown: "findingConditionsUnknown",
   } as const;
+  // The upgrade's parts become the reader's words here; the model used to
+  // join them into English prose and hand it to `verbatim`, which is
+  // contracted to carry the controller's own words and nothing else.
+  const title =
+    finding.kind === "upgrading" && finding.upgrade
+      ? t("operators", "findingUpgradingFromTo", {
+          from: finding.upgrade.fromVersion ?? "?",
+          to: finding.upgrade.toVersion ?? "?",
+        })
+      : t("operators", key[finding.kind]);
+  const where =
+    finding.kind === "upgrading" && finding.upgrade?.currentRack
+      ? t("operators", "upgradeAtRack", {
+          rack: finding.upgrade.currentRack,
+          node: finding.upgrade.currentNode ?? "?",
+        })
+      : null;
   return (
-    <Finding
-      tone={finding.severity}
-      title={t("operators", key[finding.kind])}
-      verbatim={finding.detail}
-    />
+    <Finding tone={finding.severity} title={title} verbatim={finding.detail}>
+      {where}
+    </Finding>
   );
 }
 
@@ -678,11 +742,22 @@ function NodeConfigsTab({
         <li key={setup.name}>
           <span className="font-mono text-fg">{setup.name}</span>
           <span className="ml-2 text-fg-mut">
-            {t("operators", "nodesSetUp", {
-              tuned: setup.tuned,
-              nodes: setup.nodes,
-            })}
+            {setup.nodes === null || setup.tuned === null
+              ? t("operators", "nodeStatusesNotWritten")
+              : t("operators", "nodesSetUp", {
+                  tuned: setup.tuned,
+                  nodes: setup.nodes,
+                })}
           </span>
+          {setup.unsure.length > 0 && (
+            <div className="mt-1">
+              <Finding
+                tone="warn"
+                title={t("operators", "findingConditionsUnknown")}
+                verbatim={setup.unsure.join(", ")}
+              />
+            </div>
+          )}
           {setup.problems.map((problem) => (
             <div key={problem.type} className="mt-1">
               <Finding
@@ -713,7 +788,14 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
           </Link>
         </p>
       ) : (
-        <p className="text-warn">{t("operators", "scyllaOperatorNotFound")}</p>
+        <p className="text-warn">
+          {t(
+            "operators",
+            operator?.operatorKnown === false
+              ? "deploymentsUnreadable"
+              : "scyllaOperatorNotFound"
+          )}
+        </p>
       )}
     </div>
   );
