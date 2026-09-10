@@ -46,6 +46,7 @@ import {
 import { integrationPagePath, integrationSettingsPath } from "./paths";
 import { pageDecision } from "./page-state";
 import argocd from "./argocd";
+import cloudnativepg from "./cloudnativepg";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
@@ -170,6 +171,7 @@ const VENDORS: Vendor[] = [
   argocd,
   flux,
   istio,
+  cloudnativepg,
   prometheus,
   loki,
   k3s,
@@ -783,6 +785,8 @@ export interface IntegrationPageEntry {
    * about the query string rather than about the path.
    */
   own: boolean;
+  /** Drawn under Operators rather than Integrations; see `Extension.operator`. */
+  operator: boolean;
   /**
    * Configured, and its connection is not up.
    *
@@ -983,6 +987,7 @@ export function useIntegrationPages(): {
       count: measured?.count ?? null,
       tone: measured?.tone ?? null,
       own: index !== -1,
+      operator: vendor.extension.operator === true,
       forbidden: forbidden.has(vendor.id),
     };
   });

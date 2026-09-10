@@ -835,6 +835,12 @@ export interface Extension {
    * objects it would count do not exist.
    */
   facts?: () => Promise<VendorFact[]>;
+  /**
+   * A controller that runs a workload for the reader: a database operator.
+   * Drawn under "Operators" in the rail and the catalog, and nothing else
+   * changes: it is detected, it has a page, it is one folder like the rest.
+   */
+  operator?: boolean;
 }
 
 /**

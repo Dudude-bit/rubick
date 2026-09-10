@@ -3,6 +3,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccessAnswer,
+  AccessQuery,
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -242,6 +244,12 @@ export async function getTlsCertificates(
   });
 }
 
+export async function checkAccess(
+  queries: AccessQuery[]
+): Promise<AccessAnswer[]> {
+  return invoke<AccessAnswer[]>("check_access", { queries });
+}
+
 export async function checkListAccess(
   queries: ListQuery[],
   namespaces: string[]
@@ -476,6 +484,20 @@ export async function getCustomResourceYaml(
     crdName,
     name,
     namespace,
+  });
+}
+
+export async function patchCustomResource(
+  crdName: string,
+  name: string,
+  namespace: string | null,
+  patch: unknown
+): Promise<void> {
+  return invoke<void>("patch_custom_resource", {
+    crdName,
+    name,
+    namespace,
+    patch,
   });
 }
 
