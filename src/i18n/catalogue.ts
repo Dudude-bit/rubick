@@ -73,6 +73,9 @@ export const en = {
     governedByNote:
       "— acts on this on its own schedule, and nothing here asked for it",
     madeByAndMakes: "Made by, and makes",
+    theServices: "the Services here",
+    theIngresses: "the Ingresses here",
+    thePods: "the pods here",
     notLookedAt: "Not looked at",
     notLookedAtNote:
       "— named, so a group that is absent is never read as a group that is empty",

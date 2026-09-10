@@ -1213,3 +1213,44 @@ describe("where a pod's replica count is really set", () => {
     expect(rows[0].detail ?? "").not.toContain("replica count");
   });
 });
+
+describe("a list the cluster refused", () => {
+  const pod = (): ResourceConnections => ({
+    subject: {
+      kind: "Pod",
+      name: "shell-demo",
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    },
+    edges: [],
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  });
+
+  /**
+   * "No Service selects this pod" is a statement about the cluster, and it is
+   * only ours to make about a list that answered. With Services unread it is
+   * the app reporting its own blind spot as a fact, which is the failure this
+   * whole module is organised against.
+   */
+  it("says nothing about Services nobody was allowed to read", () => {
+    const conns = pod();
+    conns.notLookedAt = [
+      {
+        kind: "Service",
+        why: {
+          says: "unanswered",
+          version: "v1",
+          said: "services is forbidden: User cannot list resource",
+        },
+      },
+    ];
+    expect(chainSilence(conns, t)).toBeNull();
+  });
+
+  it("still says so when the Services really were read", () => {
+    expect(chainSilence(pod(), t)).not.toBeNull();
+  });
+});
