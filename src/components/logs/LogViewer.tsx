@@ -126,6 +126,10 @@ function StreamFailureNotice({
   // previous run that was asked for does not exist. Reconnecting would
   // ask the same unanswerable question again.
   const absent = failure.kind === "no-previous-run";
+  // A read that failed, and one no retry fixes: the run happened, and the
+  // node dropped its log first. Neither the warn-and-move-on of "there was
+  // never anything here" nor the red offer to reconnect.
+  const notKept = failure.kind === "log-not-kept";
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
   // the container is no longer running, and the exit code, the reason
@@ -141,15 +145,19 @@ function StreamFailureNotice({
     >
       <div className="min-w-0">
         <p
-          className={`text-xs ${gone || absent || unstarted ? "text-warn" : "text-err"}`}
+          className={`text-xs ${
+            gone || absent || unstarted || notKept ? "text-warn" : "text-err"
+          }`}
         >
-          {absent
-            ? t("empty", "noPreviousRunOf", { container })
-            : unstarted
-              ? t("empty", "containerNotStarted", { container })
-              : gone
-                ? t("empty", "streamEndedGone", { pod: podName, container })
-                : t("empty", "streamLost", { pod: podName, container })}
+          {notKept
+            ? t("empty", "logNotKept", { container })
+            : absent
+              ? t("empty", "noPreviousRunOf", { container })
+              : unstarted
+                ? t("empty", "containerNotStarted", { container })
+                : gone
+                  ? t("empty", "streamEndedGone", { pod: podName, container })
+                  : t("empty", "streamLost", { pod: podName, container })}
         </p>
         {unstarted && info.state.type === "waiting" && info.state.reason && (
           <p className="mt-0.5 text-[11px] text-fg-mut">
@@ -179,7 +187,7 @@ function StreamFailureNotice({
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
-        {intake && !gone && !absent && (
+        {intake && !gone && !absent && !notKept && (
           <p className="mt-0.5 text-[11px] text-fg-fnt">
             {t("empty", "intakeStillSet")}
           </p>
@@ -188,6 +196,12 @@ function StreamFailureNotice({
       {/* Not a retry: asking again cannot conjure a run that never
           happened. The way out is the run that does exist. */}
       {absent ? (
+        <NoticeAction onClick={onShowCurrentRun}>
+          {t("action", "showCurrentRun")}
+        </NoticeAction>
+      ) : notKept ? (
+        // The same way out as an absent run, and for a nearer reason: the
+        // run that is still readable is the one on screen now.
         <NoticeAction onClick={onShowCurrentRun}>
           {t("action", "showCurrentRun")}
         </NoticeAction>

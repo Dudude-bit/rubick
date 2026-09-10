@@ -87,6 +87,30 @@ pub enum StreamFailureKind {
     /// answer, and the control that asked it should say so instead of
     /// reporting a failure.
     NoPreviousRun,
+    /// The run happened and its log is gone: the container restarted, so
+    /// there was something to read, and the node's runtime dropped it
+    /// before anyone asked. Neither "nothing to show" nor a transport
+    /// failure — retrying reaches the same node, which still does not
+    /// have it.
+    LogNotKept,
+}
+
+/// What the kubelet answers, with **200 and `text/plain`**, when the node's
+/// runtime no longer has the log it was asked for.
+///
+/// There is no status code to read and no `Status` object: the refusal
+/// arrives in the body, shaped exactly like output. Left alone it is drawn
+/// as a line the container printed, which is this codebase's one defect
+/// class aimed at the log panel — and, through the hint chain, at a
+/// diagnosis built on a sentence no program ever wrote.
+///
+/// Matched as the whole body rather than as a substring. A program that
+/// prints this line among others keeps its logs; only a body that is
+/// nothing else is the kubelet talking.
+#[must_use]
+pub fn is_runtime_dropped_log(body: &str) -> bool {
+    let body = body.trim();
+    !body.contains('\n') && body.starts_with("unable to retrieve container logs for ")
 }
 
 /// The apiserver's phrasing when `--previous` is asked of a container
@@ -116,6 +140,9 @@ impl StreamFailureKind {
     pub fn classify(error: &crate::error::Error) -> Self {
         if matches!(error, crate::error::Error::NoPreviousRun { .. }) {
             return Self::NoPreviousRun;
+        }
+        if matches!(error, crate::error::Error::LogNotKept { .. }) {
+            return Self::LogNotKept;
         }
         if matches!(error, crate::error::Error::NotFound { .. }) {
             return Self::Gone;
@@ -909,5 +936,53 @@ mod tests {
             readable_cause(&Error::Connection("kube-apiserver unreachable".into())),
             "kube-apiserver unreachable",
         );
+    }
+}
+
+#[cfg(test)]
+mod runtime_dropped_log_tests {
+    use super::*;
+
+    /// Recorded from a v1.36 node whose containerd had already collected the
+    /// previous container. The apiserver answered 200 with `text/plain` and
+    /// this as the whole body, so nothing but the words tells it from output.
+    const SAID: &str = "unable to retrieve container logs for containerd://3bb6fd00e2a155012f125f8daba848e7614637b61bbbcd51720e2baa5cbeff8a";
+
+    #[test]
+    fn a_refusal_the_kubelet_returned_with_a_200_is_not_a_log_line() {
+        assert!(is_runtime_dropped_log(SAID));
+        assert!(is_runtime_dropped_log(&format!("{SAID}\n")));
+        assert_eq!(
+            StreamFailureKind::classify(&crate::error::Error::LogNotKept {
+                container: "migrate".to_string(),
+                said: SAID.to_string(),
+            }),
+            StreamFailureKind::LogNotKept
+        );
+    }
+
+    /// The sentence is only the kubelet's when it is the whole body. A
+    /// program that prints it among its own lines still has its logs, and
+    /// hiding them behind a refusal would be the same lie pointed the other
+    /// way.
+    #[test]
+    fn a_container_that_prints_the_sentence_itself_keeps_its_logs() {
+        assert!(!is_runtime_dropped_log(&format!("starting\n{SAID}\ndone")));
+        assert!(!is_runtime_dropped_log("applying 015_backfill.sql"));
+        assert!(!is_runtime_dropped_log(""));
+    }
+
+    /// The neighbouring case, which the apiserver phrases completely
+    /// differently: a 400 with a `Status` object. Reading one as the other
+    /// turns "the run never happened" into "the node lost it", and the two
+    /// send a reader to different places.
+    #[test]
+    fn a_run_that_never_happened_is_still_its_own_answer() {
+        assert!(!is_runtime_dropped_log(
+            "previous terminated container \"seed\" in pod \"init-demo\" not found"
+        ));
+        assert!(is_missing_previous_run(
+            "previous terminated container \"seed\" in pod \"init-demo\" not found"
+        ));
     }
 }

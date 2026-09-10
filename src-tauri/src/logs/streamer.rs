@@ -6,7 +6,8 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::state::{
-    is_missing_previous_run, readable_cause, AppEvent, LogLineEvent, StreamFailureKind,
+    is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, LogLineEvent,
+    StreamFailureKind,
 };
 use chrono::Utc;
 use k8s_openapi::api::core::v1::Pod;
@@ -63,6 +64,16 @@ impl LogStreamer {
             .logs(&config.pod, &params)
             .await
             .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?;
+
+        // The kubelet refuses in the body, with a 200. Parsed as logs it
+        // becomes a line the container never printed, and the panel, the
+        // hint chain and the hand-off all quote it as one.
+        if is_runtime_dropped_log(&logs) {
+            return Err(Error::LogNotKept {
+                container,
+                said: logs.trim().to_string(),
+            });
+        }
 
         Ok(parser::parse_logs(
             &logs,
@@ -125,6 +136,10 @@ impl LogStreamer {
                         StreamFailureKind::NoPreviousRun => format!(
                             "There is no previous run of {container} to show — \
                              it has not restarted since {target} started."
+                        ),
+                        StreamFailureKind::LogNotKept => format!(
+                            "The node running {target} no longer has that log of \
+                             {container} — {cause}."
                         ),
                     },
                 );

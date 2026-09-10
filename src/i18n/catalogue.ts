@@ -3931,6 +3931,8 @@ export const en = {
     addResourcesFirst: "Add resources or paste a manifest first.",
     dragResourcesHere: "Drag resources here, or click one in the palette.",
     selectResourceToEdit: "Select a resource to edit its configuration.",
+    logNotKept:
+      "The node no longer has that log of {container}. It restarted, so the run happened; the runtime dropped its log before anyone read it.",
     noPreviousRunOf: "No previous run of {container} — it has not restarted.",
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
