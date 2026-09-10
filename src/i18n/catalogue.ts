@@ -191,6 +191,8 @@ export const en = {
    */
   columns: {
     files: "Files",
+    members: "Members",
+    racks: "Racks",
     instances: "Instances",
     cluster: "Cluster",
     mode: "Mode",
@@ -1553,6 +1555,12 @@ export const en = {
       one: "{ready} of {n} instance",
       other: "{ready} of {n} instances",
     },
+    // Scylla counts members, not instances. One string for both vendors made
+    // a ScyllaCluster report "instances", which is not the operator's word.
+    readyMembersOfDeclared: {
+      one: "{ready} of {n} member",
+      other: "{ready} of {n} members",
+    },
     readyConditionFalse: "condition Ready False",
     archivingFact: "WAL archiving",
     archivingNotDeclared: "not declared",
@@ -1633,6 +1641,84 @@ export const en = {
     poolersUnknown: "The Pooler objects could not be read",
     noPoolers: "No Pooler objects in any namespace.",
     operatorLogs: "Logs of the controller",
+    scyllaPageDescription:
+      "First the operator: controller, ScyllaDB Manager, the NodeConfigs that set up local disks. Then every ScyllaCluster as racks and members with Scylla's three conditions, an upgrade in progress, and the Manager tasks it declares.",
+    scyllaOperatorExplained:
+      "The Scylla operator runs one Deployment, scylla-operator, and reconciles every ScyllaCluster. Repairs and backups run in ScyllaDB Manager, a separate Deployment; without it they are declared and never run.",
+    couldNotReadScyllaClusters: "Could not read the ScyllaCluster objects",
+    nodeConfigsTab: "Node configs",
+    noScyllaClusters:
+      "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
+    deploymentsUnreadable:
+      "the Deployments could not be read, so whether the operator is running is unknown — not that it is absent",
+    scyllaOperatorNotFound:
+      "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
+    managerPresent: "repairs and backups can run",
+    managerAbsent:
+      "not installed: spec.repairs and spec.backups are ignored, and status.managerId stays empty",
+    canPatchScyllaClusters: "patch scyllaclusters",
+    noStatusYet: "no status yet",
+    upgradingWord: "upgrading",
+    conditionsNotWritten: "conditions not written",
+    conditionsUnsure: "operator unsure",
+    rolledOut: "rolled out",
+    conditionsFact: "Conditions",
+    membersFact: "Members",
+    notWritten: "not written by the operator",
+    specSeenUnknownScylla: "cannot tell: no observedGeneration on this read",
+    specSeenYes: "yes · observedGeneration {n} = generation {n}",
+    specSeenBehind:
+      "behind: observedGeneration {observed}, generation {generation}",
+    repairFact: "Repair",
+    backupFact: "Backup",
+    noneDeclared: "none declared",
+    notDeclared: "not declared",
+    taskInManager:
+      "runs in ScyllaDB Manager; outcomes live there, not on this object",
+    taskNoManager: "declared, but no Manager to run it",
+    rackUpdated: "{updated} of {members} on {version}",
+    staleWord: "stale: not reconciled since the spec changed",
+    findingDegraded: "Degraded, in the operator's words",
+    findingUnavailable: "Not Available",
+    findingProgressing: "Progressing",
+    findingUpgrading: "Rolling upgrade in progress",
+    findingUpgradingFromTo: "Rolling upgrade in progress: {from} → {to}",
+    upgradeAtRack: "Currently on rack {rack}, node {node}.",
+    findingStale: "Racks the operator has not looked at since the spec changed",
+    findingMembersMissing: "Members not ready",
+    findingTasksWithoutManager:
+      "Repairs or backups are declared, but there is no ScyllaDB Manager to run them",
+    findingConditionsUnwritten:
+      "The operator has written no conditions for this cluster",
+    findingConditionsUnknown:
+      "The operator wrote Unknown for a condition, so it does not know either",
+    membersNotWritten: {
+      one: "{n} declared, ready not written",
+      other: "{n} declared, ready not written",
+    },
+    findingNoStatus: "The operator has written nothing on this object yet",
+    actionRollingRestart: "Rolling restart",
+    actionRollingRestartExplained:
+      "Sets spec.forceRedeploymentReason to a new value. The operator restarts the members one at a time, highest ordinal first, rack by rack, each waiting for the previous to be ready.",
+    rollingRestartConfirm:
+      "Sets spec.forceRedeploymentReason on {cluster}. The operator then restarts the {members} members one at a time, highest ordinal first, rack by rack; each waits for the previous to be ready. Nothing here can be cancelled once a member is down.",
+    actionScaleRack: "Scale",
+    actionScaleRackExplained:
+      "Sets racks[].members for this rack. Scaling down decommissions the highest ordinals first, which streams their data away and takes as long as the data is big.",
+    actionUpgrade: "Upgrade",
+    actionUpgradeExplained:
+      "Sets spec.version. The operator upgrades rack by rack, member by member, taking system and data snapshots first; the progress lands in status.upgrade.",
+    membersInput: "Members in {rack}",
+    versionInput: "ScyllaDB version, e.g. 2025.2.1",
+    refusedPatchScylla:
+      "the cluster refuses patch on scyllaclusters.scylla.scylladb.com for you",
+    notDuringUpgrade: "not during an upgrade",
+    nodeConfigsUnknown: "The NodeConfig objects could not be read",
+    noNodeConfigs:
+      "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
+    nodeStatusesNotWritten:
+      "the operator has written no node statuses, so how many nodes it tuned is unknown",
+    nodesSetUp: "{tuned} of {nodes} nodes set up",
   },
   tell: {
     askRollout: "Tell me when the rollout finishes",
@@ -1710,6 +1796,8 @@ export const en = {
   vendor: {
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
+    scyllaGives:
+      "every ScyllaDB cluster as racks and members with Scylla's three conditions, upgrade progress and Manager tasks, with the operator's real knobs",
     cloudnativepgGives:
       "every Postgres cluster in CloudNativePG's own words: phase, primary, instances, WAL archiving and backups from the Backup objects, with the operator's real knobs",
     awsGives:
@@ -2101,6 +2189,10 @@ export const en = {
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
+    factUpgrading: {
+      one: "{n} cluster upgrading",
+      other: "{n} clusters upgrading",
+    },
     factClustersInTrouble: {
       one: "{n} cluster in trouble",
       other: "{n} clusters in trouble",

@@ -25,6 +25,7 @@ const binding = (
   annotations: {},
   createdAt: null,
   ownerReferences: [],
+  generation: null,
 });
 
 const ARN =

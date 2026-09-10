@@ -501,6 +501,20 @@ export async function patchCustomResource(
   });
 }
 
+export async function patchCustomResourceJson(
+  crdName: string,
+  name: string,
+  namespace: string | null,
+  operations: unknown
+): Promise<void> {
+  return invoke<void>("patch_custom_resource_json", {
+    crdName,
+    name,
+    namespace,
+    operations,
+  });
+}
+
 export async function deleteCustomResource(
   crdName: string,
   name: string,

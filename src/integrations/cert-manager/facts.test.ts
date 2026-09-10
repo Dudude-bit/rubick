@@ -67,6 +67,7 @@ function certificate(over: {
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

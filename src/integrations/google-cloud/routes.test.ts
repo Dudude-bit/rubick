@@ -79,6 +79,7 @@ const custom = (
   annotations: {},
   createdAt: null,
   ownerReferences: [],
+  generation: null,
 });
 
 const service = (annotations: Record<string, string> = {}): ServiceInfo =>

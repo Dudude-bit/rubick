@@ -33,6 +33,7 @@ function cluster(
     labels: {},
     annotations,
     createdAt: "2026-09-01T00:00:00Z",
+    generation: 1,
     ownerReferences: [],
   };
 }
@@ -187,6 +188,7 @@ function backup(
     labels: {},
     annotations: {},
     createdAt: status.startedAt as string,
+    generation: 1,
     ownerReferences: [],
   };
 }

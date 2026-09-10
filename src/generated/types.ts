@@ -1488,6 +1488,7 @@ export interface CustomResourceDetailInfo {
   ownerReferences: OwnerReferenceInfo[];
   finalizers: string[];
   resourceVersion: string | null;
+  generation: number | null;
 }
 
 export interface OwnerReferenceInfo {
@@ -1510,6 +1511,7 @@ export interface CustomResourceInfo {
   annotations: Record<string, string>;
   createdAt: string | null;
   ownerReferences: OwnerReferenceInfo[];
+  generation: number | null;
 }
 
 export interface ClusterPreferences {

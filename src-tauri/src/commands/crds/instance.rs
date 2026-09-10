@@ -158,6 +158,46 @@ pub async fn patch_custom_resource(
     Ok(())
 }
 
+/// A JSON Patch (RFC 6902) on one custom resource: the only kind of patch
+/// that can change one element of a list.
+///
+/// A JSON *merge* patch replaces a list wholesale, so editing one rack of a
+/// `ScyllaCluster` by re-sending the list rebuilt from what the page happened
+/// to model deleted every field the model does not carry — storage,
+/// resources, placement — from **every** rack. Reproduced against a real
+/// apiserver: scaling one rack from 3 to 5 left `[{name, members}]` and
+/// nothing else.
+///
+/// The operations pass through as the caller wrote them, so a `test` op can
+/// guard the index about to be written: if the list moved since the page
+/// read it, the apiserver rejects the whole patch rather than writing to the
+/// wrong element.
+#[tauri::command]
+pub async fn patch_custom_resource_json(
+    crd_name: String,
+    name: String,
+    namespace: Option<String>,
+    operations: serde_json::Value,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_subdomain(&crd_name)?;
+    crate::validation::validate_dns_subdomain(&name)?;
+    if let Some(ns) = namespace.as_deref() {
+        crate::validation::validate_namespace(ns)?;
+    }
+    let patch: json_patch::Patch = serde_json::from_value(operations)
+        .map_err(|e| crate::error::Error::InvalidInput(format!("not a JSON Patch: {e}")))?;
+    if patch.0.is_empty() {
+        return Err(crate::error::Error::InvalidInput(
+            "a JSON Patch with no operations changes nothing".to_string(),
+        ));
+    }
+    let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
+    api.patch(&name, &PatchParams::default(), &Patch::Json::<()>(patch))
+        .await?;
+    Ok(())
+}
+
 /// Delete a custom resource instance
 #[tauri::command]
 pub async fn delete_custom_resource(
@@ -180,6 +220,14 @@ pub async fn delete_custom_resource(
 
 #[cfg(test)]
 mod tests {
+    /// Every command in this file that writes. A new one is a new place a
+    /// name from the frontend reaches a request path.
+    const WRITES: [&str; 3] = [
+        "pub async fn patch_custom_resource(",
+        "pub async fn patch_custom_resource_json(",
+        "pub async fn delete_custom_resource(",
+    ];
+
     /// Every name that reaches a request path is checked. `crd_name` and
     /// `name` always were; `namespace` was not, and
     /// `normalize_optional_namespace` only trims — so the one command here
@@ -195,18 +243,19 @@ mod tests {
         assert!(validate_dns_subdomain("clusters.postgresql.cnpg.io").is_ok());
         assert!(validate_dns_subdomain("../clusters").is_err());
 
-        // The guard is in the source of both writing commands. The test
+        // The guard is in the source of every writing command. The test
         // module names them too, so only the code above it is scanned.
         let source = include_str!("instance.rs");
         let code = source.split("#[cfg(test)]").next().expect("has code");
         let writes: Vec<&str> = code
             .split("#[tauri::command]")
-            .filter(|f| {
-                f.contains("pub async fn patch_custom_resource")
-                    || f.contains("pub async fn delete_custom_resource")
-            })
+            .filter(|f| WRITES.iter().any(|w| f.contains(w)))
             .collect();
-        assert_eq!(writes.len(), 2, "both writing commands must be found");
+        assert_eq!(
+            writes.len(),
+            WRITES.len(),
+            "a writing command was added or renamed; add it to WRITES"
+        );
         for f in writes {
             assert!(
                 f.contains("validate_namespace(ns)"),

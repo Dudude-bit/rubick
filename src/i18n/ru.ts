@@ -161,6 +161,8 @@ export const ru: Catalogue = {
   },
   columns: {
     files: "Файлы",
+    members: "Члены",
+    racks: "Стойки",
     instances: "Инстансы",
     cluster: "Кластер",
     mode: "Режим",
@@ -1587,6 +1589,12 @@ export const ru: Catalogue = {
       many: "{ready} из {n} инстансов",
       other: "{ready} из {n} инстансов",
     },
+    readyMembersOfDeclared: {
+      one: "{ready} из {n} участника",
+      few: "{ready} из {n} участников",
+      many: "{ready} из {n} участников",
+      other: "{ready} из {n} участников",
+    },
     readyConditionFalse: "условие Ready False",
     archivingFact: "Архивация WAL",
     archivingNotDeclared: "не объявлена",
@@ -1669,6 +1677,87 @@ export const ru: Catalogue = {
     poolersUnknown: "Объекты Pooler прочитать не удалось",
     noPoolers: "Объектов Pooler нет ни в одном namespace.",
     operatorLogs: "Логи контроллера",
+    scyllaPageDescription:
+      "Сначала оператор: контроллер, ScyllaDB Manager, NodeConfig, которые готовят локальные диски. Потом каждый ScyllaCluster как стойки и члены с тремя условиями Scylla, идущий апгрейд и задачи Manager, которые он объявляет.",
+    scyllaOperatorExplained:
+      "Оператор Scylla запускает один Deployment, scylla-operator, и согласует каждый ScyllaCluster. Ремонты и бэкапы выполняет ScyllaDB Manager, отдельный Deployment; без него они объявлены и никогда не выполняются.",
+    couldNotReadScyllaClusters: "Не удалось прочитать объекты ScyllaCluster",
+    nodeConfigsTab: "Конфиги узлов",
+    noScyllaClusters:
+      "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
+    deploymentsUnreadable:
+      "Deployment'ы прочитать не удалось, поэтому работает ли оператор — неизвестно; это не значит, что его нет",
+    scyllaOperatorNotFound:
+      "ни один Deployment не несёт app.kubernetes.io/name=scylla-operator; CRD есть, а оператора может и не быть, и каждый ScyllaCluster останется без статуса",
+    managerPresent: "ремонты и бэкапы могут выполняться",
+    managerAbsent:
+      "не установлен: spec.repairs и spec.backups игнорируются, а status.managerId остаётся пустым",
+    canPatchScyllaClusters: "patch scyllaclusters",
+    noStatusYet: "статуса ещё нет",
+    upgradingWord: "апгрейд",
+    conditionsNotWritten: "условия не записаны",
+    conditionsUnsure: "оператор не уверен",
+    rolledOut: "раскатан",
+    conditionsFact: "Условия",
+    membersFact: "Члены",
+    notWritten: "оператором не записано",
+    specSeenUnknownScylla:
+      "нельзя сказать: в этом чтении нет observedGeneration",
+    specSeenYes: "да · observedGeneration {n} = generation {n}",
+    specSeenBehind:
+      "отстаёт: observedGeneration {observed}, generation {generation}",
+    repairFact: "Ремонт",
+    backupFact: "Бэкап",
+    noneDeclared: "не объявлено",
+    notDeclared: "не объявлено",
+    taskInManager:
+      "выполняется в ScyllaDB Manager; результаты там, а не на этом объекте",
+    taskNoManager: "объявлено, но выполнять некому: нет Manager",
+    rackUpdated: "{updated} из {members} на {version}",
+    staleWord: "устарело: не согласовано после изменения spec",
+    findingDegraded: "Degraded, словами оператора",
+    findingUnavailable: "Не Available",
+    findingProgressing: "Progressing",
+    findingUpgrading: "Идёт rolling upgrade",
+    findingUpgradingFromTo: "Идёт rolling-обновление: {from} → {to}",
+    upgradeAtRack: "Сейчас на стойке {rack}, узел {node}.",
+    findingStale: "Стойки, на которые оператор не смотрел после изменения spec",
+    findingMembersMissing: "Члены не готовы",
+    findingTasksWithoutManager:
+      "Объявлены ремонты или бэкапы, но выполнять их некому: нет ScyllaDB Manager",
+    findingConditionsUnwritten:
+      "Оператор не записал условия для этого кластера",
+    findingConditionsUnknown:
+      "Оператор записал Unknown в условие — значит, он и сам не знает",
+    membersNotWritten: {
+      one: "объявлен {n}, сколько готово — не записано",
+      few: "объявлено {n}, сколько готово — не записано",
+      many: "объявлено {n}, сколько готово — не записано",
+      other: "объявлено {n}, сколько готово — не записано",
+    },
+    findingNoStatus: "Оператор ещё ничего не записал на этот объект",
+    actionRollingRestart: "Rolling restart",
+    actionRollingRestartExplained:
+      "Ставит новое значение в spec.forceRedeploymentReason. Оператор перезапускает члены по одному, сначала старшие ординалы, стойка за стойкой, каждый ждёт готовности предыдущего.",
+    rollingRestartConfirm:
+      "Ставит spec.forceRedeploymentReason на {cluster}. Оператор затем перезапускает {members} членов по одному, сначала старшие ординалы, стойка за стойкой; каждый ждёт готовности предыдущего. Когда член уже остановлен, отменить это нельзя.",
+    actionScaleRack: "Масштабировать",
+    actionScaleRackExplained:
+      "Ставит racks[].members для этой стойки. Уменьшение выводит из строя сначала старшие ординалы, что переливает их данные и длится столько, сколько данных.",
+    actionUpgrade: "Апгрейд",
+    actionUpgradeExplained:
+      "Ставит spec.version. Оператор обновляет стойку за стойкой, член за членом, сначала снимая снапшоты system и данных; ход пишется в status.upgrade.",
+    membersInput: "Членов в {rack}",
+    versionInput: "Версия ScyllaDB, например 2025.2.1",
+    refusedPatchScylla:
+      "кластер отказывает вам в patch на scyllaclusters.scylla.scylladb.com",
+    notDuringUpgrade: "не во время апгрейда",
+    nodeConfigsUnknown: "Объекты NodeConfig прочитать не удалось",
+    noNodeConfigs:
+      "Объектов NodeConfig нет. Локальные диски тогда такие, какими пришли узлы; оператор ничего не готовит.",
+    nodeStatusesNotWritten:
+      "оператор не записал статусы узлов, поэтому сколько узлов он настроил — неизвестно",
+    nodesSetUp: "{tuned} из {nodes} узлов подготовлено",
   },
   tell: {
     askRollout: "Скажи мне, когда раскатка закончится",
@@ -1742,6 +1831,8 @@ export const ru: Catalogue = {
   vendor: {
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
+    scyllaGives:
+      "каждый кластер ScyllaDB как стойки и члены с тремя условиями Scylla, ход апгрейда и задачи Manager, и настоящие ручки оператора",
     cloudnativepgGives:
       "каждый кластер Postgres словами CloudNativePG: фаза, primary, инстансы, архивация WAL и бэкапы из объектов Backup, и настоящие ручки оператора",
     awsGives:
@@ -2242,6 +2333,12 @@ export const ru: Catalogue = {
       few: "{n} минуты",
       many: "{n} минут",
       other: "{n} минуты",
+    },
+    factUpgrading: {
+      one: "{n} кластер обновляется",
+      few: "{n} кластера обновляются",
+      many: "{n} кластеров обновляются",
+      other: "{n} кластера обновляются",
     },
     factShowThem: "Показать",
     factClustersInTrouble: {

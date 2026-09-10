@@ -47,6 +47,7 @@ import { integrationPagePath, integrationSettingsPath } from "./paths";
 import { pageDecision } from "./page-state";
 import argocd from "./argocd";
 import cloudnativepg from "./cloudnativepg";
+import scylla from "./scylla";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
@@ -172,6 +173,7 @@ const VENDORS: Vendor[] = [
   flux,
   istio,
   cloudnativepg,
+  scylla,
   prometheus,
   loki,
   k3s,
