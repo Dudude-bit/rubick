@@ -206,7 +206,14 @@ function Field({ change }: { change: FieldChange }) {
   );
 }
 
-function Journal({ item }: { item: JournalEntry }) {
+/**
+ * One journal entry in words.
+ *
+ * Exported because the pinned-service cards say the same sentence about the
+ * same entry, and a second switch over `field` is how the two surfaces come
+ * to disagree the next time a field is added.
+ */
+export function Journal({ item }: { item: JournalEntry }) {
   const t = useT();
   const from = item.from ?? "∅";
   const to = item.to ?? "∅";
