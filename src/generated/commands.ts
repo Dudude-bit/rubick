@@ -39,6 +39,7 @@ import type {
   EndpointsInfo,
   EventFilters,
   EventInfo,
+  FileRead,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -110,6 +111,7 @@ import type {
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
+  Via,
   YamlHistoryEntryDto,
 } from "./types";
 
@@ -878,6 +880,64 @@ export async function probeTcpConnect(
   port: number
 ): Promise<TcpProbe> {
   return invoke<TcpProbe>("probe_tcp_connect", { address, port });
+}
+
+export async function listContainerFiles(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null
+): Promise<string> {
+  return invoke<string>("list_container_files", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+  });
+}
+
+export async function filesSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("files_subscribed", { streamId });
+}
+
+export async function stopFilesListing(streamId: string): Promise<void> {
+  return invoke<void>("stop_files_listing", { streamId });
+}
+
+export async function readContainerFile(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null
+): Promise<FileRead> {
+  return invoke<FileRead>("read_container_file", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+  });
+}
+
+export async function downloadContainerFile(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null,
+  destination: string
+): Promise<FileRead> {
+  return invoke<FileRead>("download_container_file", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+    destination,
+  });
 }
 
 export async function getPodsMetrics(

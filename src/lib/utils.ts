@@ -28,17 +28,28 @@ export function formatAge(createdAt: string | null, t: T): string {
 
   const created = new Date(createdAt);
   if (Number.isNaN(created.getTime())) return t("cluster", "unknownAge");
-  const now = new Date();
-  const diffMs = now.getTime() - created.getTime();
-  const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
+  return formatSince(created.getTime(), Date.now());
+}
 
-  if (diffDays > 0) return `${diffDays}d`;
-  if (diffHours > 0) return `${diffHours}h`;
-  if (diffMins > 0) return `${diffMins}m`;
-  return `${diffSecs}s`;
+/**
+ * The same `5d` / `3h` / `12m` / `40s` as {@link formatAge}, from a
+ * timestamp and a clock the caller owns.
+ *
+ * The suffixes are kubectl's and are deliberately not translated; what
+ * matters is that every age in this window reads the same way. Split out
+ * because a second age format had appeared — `${n}h ago`, in English, and
+ * with nothing above hours, so a file last written a week ago said
+ * "168h ago".
+ */
+export function formatSince(at: number, now: number): string {
+  const seconds = Math.max(0, Math.floor((now - at) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${seconds}s`;
 }
 
 /**

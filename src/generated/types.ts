@@ -776,6 +776,20 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface FilePreview {
+  bytesRead: number;
+  truncated: boolean;
+  binary: boolean;
+  nonTextShare: number;
+  lossy: boolean;
+  text: string | null;
+}
+
+export interface Via {
+  container: string;
+  root: string;
+}
+
 export interface TcpProbe {
   ms: number | null;
   error: string | null;
@@ -1857,6 +1871,12 @@ export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
+
+export type FileRead =
+  | { state: "preview"; preview: FilePreview }
+  | { state: "written"; bytes: number }
+  | { state: "noTools" }
+  | { state: "failed"; exit_code: number | null; message: string };
 
 export type TcpProbeReason = "refused" | "timedOut";
 

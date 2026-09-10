@@ -337,6 +337,32 @@ pub enum AppEvent {
         /// Only for `Failed`, and quoted from whatever broke.
         message: Option<String>,
     },
+    /// Rows of one directory listing, as the tool prints them; never empty.
+    FilesBatch {
+        stream_id: String,
+        entries: Vec<crate::files::FileEntry>,
+    },
+    /// The listing ended with rows, or with none and that being the answer.
+    FilesDone {
+        stream_id: String,
+        with: crate::files::ListedWith,
+        entries: usize,
+        /// The listing was cut short; `entries` is what was seen, not a total.
+        partial: bool,
+        /// Lines the parser could not read, so the count is not the whole.
+        unreadable: usize,
+        elapsed_ms: u64,
+    },
+    /// The listing ended without an answer, and why: `noTools`, `refused`,
+    /// `notRunning` or `failed`. Exactly one of this or `FilesDone`.
+    FilesFailed {
+        stream_id: String,
+        reason: String,
+        message: String,
+        exit_code: Option<i32>,
+        stderr: String,
+        tried: Vec<String>,
+    },
     /// Error occurred
     Error { code: String, message: String },
 }
@@ -361,6 +387,9 @@ impl AppEvent {
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
             AppEvent::DrainProgress { .. } => "drain-progress",
             AppEvent::DrainFinished { .. } => "drain-finished",
+            AppEvent::FilesBatch { .. } => "files-batch",
+            AppEvent::FilesDone { .. } => "files-done",
+            AppEvent::FilesFailed { .. } => "files-failed",
             AppEvent::Error { .. } => "app-error",
         }
     }
@@ -520,6 +549,40 @@ impl AppEvent {
                 "outcome": outcome,
                 "report": report,
                 "message": message,
+            }),
+            AppEvent::FilesBatch { stream_id, entries } => serde_json::json!({
+                "stream_id": stream_id,
+                "entries": entries,
+            }),
+            AppEvent::FilesDone {
+                stream_id,
+                with,
+                entries,
+                partial,
+                unreadable,
+                elapsed_ms,
+            } => serde_json::json!({
+                "stream_id": stream_id,
+                "with": with,
+                "entries": entries,
+                "partial": partial,
+                "unreadable": unreadable,
+                "elapsed_ms": elapsed_ms,
+            }),
+            AppEvent::FilesFailed {
+                stream_id,
+                reason,
+                message,
+                exit_code,
+                stderr,
+                tried,
+            } => serde_json::json!({
+                "stream_id": stream_id,
+                "reason": reason,
+                "message": message,
+                "exit_code": exit_code,
+                "stderr": stderr,
+                "tried": tried,
             }),
             AppEvent::Error { code, message } => serde_json::json!({
                 "code": code,

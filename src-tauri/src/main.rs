@@ -267,6 +267,11 @@ fn main() {
             commands::logs::stop_log_stream,
             commands::logs::stream_pod_logs,
             commands::logs::log_stream_subscribed,
+            commands::files::list_container_files,
+            commands::files::files_subscribed,
+            commands::files::stop_files_listing,
+            commands::files::read_container_file,
+            commands::files::download_container_file,
             // Terminal/Exec commands
             commands::terminal::terminal_input,
             commands::terminal::terminal_resize,
