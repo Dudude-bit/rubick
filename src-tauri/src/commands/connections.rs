@@ -704,7 +704,7 @@ fn uses_from_spec(
     ns: &str,
     subject: &ObjectRef,
     spec: &PodSpec,
-    claims: &[PersistentVolumeClaim],
+    claims: &Read<PersistentVolumeClaim>,
     out: &mut Neighbourhood,
 ) {
     let mut targets: Vec<(String, String)> = Vec::new();
@@ -765,14 +765,27 @@ fn uses_from_spec(
 
 /// A name a pod spec states, resolved as far as this call actually looked.
 ///
-/// Claims were listed, so they carry their phase and size and can be called
-/// present or missing. `ConfigMaps`, Secrets and `ServiceAccounts` were not, and
-/// saying `notChecked` is the difference between "the app did not ask" and
-/// "the cluster does not have it".
-fn named_object(ns: &str, kind: &str, name: &str, claims: &[PersistentVolumeClaim]) -> ObjectRef {
+/// Claims that were listed carry their phase and size and can be called
+/// present or missing. `ConfigMaps`, Secrets and `ServiceAccounts` were never
+/// listed, and saying `notChecked` is the difference between "the app did not
+/// ask" and "the cluster does not have it".
+///
+/// A claim list the cluster **refused** belongs with the second group, not
+/// the first. Reading `Err` as "no claims came back" is how a 403 became
+/// "this volume does not exist", in red, on a pod whose volume is mounted
+/// and healthy.
+fn named_object(
+    ns: &str,
+    kind: &str,
+    name: &str,
+    claims: &Read<PersistentVolumeClaim>,
+) -> ObjectRef {
     if kind != "PersistentVolumeClaim" {
         return ObjectRef::unchecked(kind, name, Some(ns.to_string()));
     }
+    let Ok(claims) = claims else {
+        return ObjectRef::unchecked(kind, name, Some(ns.to_string()));
+    };
     match claims.iter().find(|claim| claim.name_any() == name) {
         Some(claim) => claim_ref(claim, ns),
         None => ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Missing),
@@ -1098,7 +1111,7 @@ fn budgets_over(
 
 /// What the reads that failed leave the answer unable to say.
 fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
-    UnexploredKind::governance(
+    let mut unread = UnexploredKind::governance(
         snapshot
             .autoscalers
             .as_ref()
@@ -1109,7 +1122,19 @@ fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
             .as_ref()
             .err()
             .map(std::string::String::as_str),
-    )
+    );
+    // Named here as well as left `notChecked` on the reference: the row goes
+    // quiet either way, and a reader owed an explanation for a volume the
+    // page will not talk about gets it in the one place the page collects
+    // them.
+    if let Err(why) = &snapshot.claims {
+        unread.push(UnexploredKind::unanswered(
+            "PersistentVolumeClaim",
+            "v1",
+            why,
+        ));
+    }
+    unread
 }
 
 // --- ownership ---------------------------------------------------------
@@ -1214,7 +1239,12 @@ struct Snapshot {
     pods: Vec<Pod>,
     services: Vec<Service>,
     ingresses: Vec<Ingress>,
-    claims: Vec<PersistentVolumeClaim>,
+    /// `Err` carries the refusal, and it is not an empty list. A token
+    /// without `persistentvolumeclaims` used to reach `named_object` with no
+    /// claims at all, which resolved every claim a pod mounts to
+    /// `Existence::Missing` and told a person, in red, that a volume that is
+    /// mounted and healthy does not exist.
+    claims: Read<PersistentVolumeClaim>,
     /// `Err` carries why the read failed, and is not the same answer as an
     /// empty list: `autoscaling/v2` is not served by every cluster this app
     /// connects to, and "nothing scales this" is not what a 404 means.
@@ -1289,7 +1319,7 @@ impl Snapshot {
             pods: pods?.items,
             services: services?.items,
             ingresses: ingresses?.items,
-            claims: claims.map(|list| list.items).unwrap_or_default(),
+            claims: read(claims),
             autoscalers: read(autoscalers),
             budgets: read(budgets),
             slices,
@@ -2605,6 +2635,79 @@ mod ownership_tests {
                 None,
                 "{kind} is not in a namespace"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod refused_claim_tests {
+    use super::*;
+
+    /// What a v1.36 apiserver said to a token without
+    /// `persistentvolumeclaims`, recorded through the live harness.
+    const REFUSED: &str = "ApiError: persistentvolumeclaims is forbidden: User \
+         \"system:serviceaccount:k8s-gui-test:narrow\" cannot list resource \
+         \"persistentvolumeclaims\" in API group \"\" in the namespace \
+         \"k8s-gui-test\": Forbidden";
+
+    /// The defect this file's own doc comment describes, found in it: a
+    /// refused list read as "no claims came back", so every claim a pod
+    /// mounts resolved to `Missing` and the page said, in red, that a
+    /// volume that is mounted and healthy does not exist.
+    ///
+    /// Deleting the `Err` arm of `named_object` puts that back, and this
+    /// fails.
+    #[test]
+    fn a_claim_list_the_cluster_refused_leaves_the_claim_unchecked() {
+        let refused: Read<PersistentVolumeClaim> = Err(REFUSED.to_string());
+        let object = named_object("shop", "PersistentVolumeClaim", "data", &refused);
+
+        assert_eq!(object.existence, Existence::NotChecked);
+        assert!(
+            object.facts.is_none(),
+            "a claim nobody read has no phase or size to state"
+        );
+    }
+
+    /// The other half, and the reason the first is not simply "always say
+    /// notChecked": a list that really came back and really does not hold
+    /// the claim is the app finding a broken pod, which is worth saying.
+    #[test]
+    fn a_claim_absent_from_a_list_that_answered_is_still_missing() {
+        let answered: Read<PersistentVolumeClaim> = Ok(Vec::new());
+        let object = named_object("shop", "PersistentVolumeClaim", "data", &answered);
+
+        assert_eq!(object.existence, Existence::Missing);
+    }
+
+    /// A refusal the reader is owed an explanation for reaches the one
+    /// place the page collects them, beside the governance kinds that have
+    /// carried theirs all along.
+    #[test]
+    fn the_refusal_is_named_among_the_kinds_nobody_looked_at() {
+        let snapshot = Snapshot {
+            pods: Vec::new(),
+            services: Vec::new(),
+            ingresses: Vec::new(),
+            claims: Err(REFUSED.to_string()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            slices: Ok(Vec::new()),
+            legacy: Err("the slices answered".to_string()),
+            gateway_routes: Vec::new(),
+            gateways: None,
+        };
+
+        let unread = unanswered(&snapshot);
+        let claim = unread
+            .iter()
+            .find(|entry| entry.kind == "PersistentVolumeClaim")
+            .expect("the refused claim list is named");
+        match &claim.why {
+            crate::resources::Unread::Unanswered { said, .. } => {
+                assert!(said.contains("is forbidden"));
+            }
+            other => panic!("the cluster's own words, not {other:?}"),
         }
     }
 }
