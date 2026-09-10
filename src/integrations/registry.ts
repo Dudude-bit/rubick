@@ -117,6 +117,14 @@ export interface UsageWindow {
    * the question at all.
    */
   declared?: DeclaredHistory | null;
+  /**
+   * Whether `declared` is an answer. `false` says the supplier was asked and
+   * could not tell — a refused or failed read — and the reader must not turn
+   * `declared: null` into the sentence "kube-state-metrics is not in this
+   * Prometheus". Defaults to known, so forgetting it claims an answer only
+   * where one was really had.
+   */
+  declaredKnown?: boolean;
 }
 
 /** One value per bucket; `null` where nothing was declared then. */
@@ -147,6 +155,12 @@ export interface NodeUsageWindow {
   nodes: Record<string, NodeUsageSeries>;
   /** When each node's newest sample landed, in epoch ms; absent for a node with none. */
   newestAt: Record<string, number>;
+  /**
+   * Whether `newestAt` is an answer. `false` says the staleness probe itself
+   * failed, so a node missing from it is a node we could not ask about —
+   * never one the supplier has never seen.
+   */
+  newestKnown?: boolean;
   resolution: string;
 }
 

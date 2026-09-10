@@ -36,8 +36,28 @@ import {
   volumeUsedQuery,
 } from "./queries";
 
+/**
+ * The buckets a series answered for, gaps kept as gaps.
+ *
+ * A bucket the supplier had nothing for stays `null` rather than vanishing
+ * from the array: a dropped bucket closes the line up, and a scrape outage
+ * is then drawn as a confident straight segment across the minutes nobody
+ * measured. `byTime` is for the sample clock, where the union of three
+ * queries decides which buckets exist; here the series is its own clock.
+ */
 function pointsOf(series: PromSeries[]): DeclaredPoint[] {
-  const at = byTime(series);
+  const at = new Map<number, number | null>();
+  for (const one of series) {
+    for (const point of one.points) {
+      const value = point.v ?? null;
+      const seen = at.get(point.t);
+      if (value === null) {
+        if (seen === undefined) at.set(point.t, null);
+      } else {
+        at.set(point.t, (seen ?? 0) + value);
+      }
+    }
+  }
   return [...at.keys()]
     .sort((a, b) => a - b)
     .map((t) => ({ t, v: at.get(t) ?? null }));
@@ -49,11 +69,15 @@ function pointsOf(series: PromSeries[]): DeclaredPoint[] {
  * requests looks like; the difference is "nothing declared" against
  * "nobody recorded it", and the chart says which.
  */
-async function keepsDeclared(): Promise<boolean> {
+async function keepsDeclared(): Promise<boolean | null> {
+  // `null` is "could not tell", never "absent": a refused or rate-limited
+  // probe used to read as `false`, and the chart then stated as fact that
+  // kube-state-metrics was not installed. `coverage.ts` has always drawn
+  // this distinction for the same metric; both readers now agree.
   const answer = await commands
     .prometheusQuery("count(kube_pod_container_resource_requests)")
     .catch(() => null);
-  if (answer === null) return false;
+  if (answer === null) return null;
   return answer.length > 0 && (answer[0].points[0]?.v ?? 0) > 0;
 }
 
@@ -88,6 +112,12 @@ export async function usageHistory(input: {
   const start = end - spec.windowMs;
 
   const restarts = restartQuery(input.scope, spec);
+  // A declared line that could not be read is a missing line, not a missing
+  // chart: usage still draws. But the failure is remembered — a swallowed
+  // read that left a sibling series standing used to make the whole record
+  // look answered, which silently dropped both the flat fallback and the
+  // sentence explaining it.
+  let declaredFailed = false;
   const declared = (resource: "cpu" | "memory", what: "requests" | "limits") =>
     commands
       .prometheusQueryRange(
@@ -96,9 +126,10 @@ export async function usageHistory(input: {
         end,
         spec.stepSeconds
       )
-      // A declared line that could not be read is a missing line, not a
-      // missing chart: usage still draws.
-      .catch(() => [] as PromSeries[]);
+      .catch(() => {
+        declaredFailed = true;
+        return [] as PromSeries[];
+      });
   const [cpu, memory, started, cpuReq, cpuLim, memReq, memLim] =
     await Promise.all([
       commands.prometheusQueryRange(
@@ -155,10 +186,15 @@ export async function usageHistory(input: {
     (points) => points.length > 0
   );
 
+  // A series in hand is its own proof the record is kept; only an empty one
+  // has to ask. `null` from the probe is "could not tell", and then the
+  // record is not claimed either way.
+  const keeps = anyDeclared ? true : await keepsDeclared();
   return {
     samples,
     resolution: spec.resolution,
-    declared: anyDeclared || (await keepsDeclared()) ? declaredSeries : null,
+    declared: keeps === true ? declaredSeries : null,
+    declaredKnown: keeps !== null && !declaredFailed,
   };
 }
 
@@ -182,9 +218,10 @@ export async function nodeUsage(input: {
       end,
       spec.stepSeconds
     ),
-    commands
-      .prometheusQuery(nodesNewestQuery())
-      .catch(() => [] as PromSeries[]),
+    // Remembered rather than swallowed: an empty `newestAt` used to read as
+    // "Prometheus has never had a series for this node", which is a claim
+    // about the cluster made out of a failed request.
+    commands.prometheusQuery(nodesNewestQuery()).catch(() => null),
   ]);
 
   const nodes: NodeUsageWindow["nodes"] = {};
@@ -199,12 +236,17 @@ export async function nodeUsage(input: {
     if (name) lane(name).memoryBytes = pointsOf([series]);
   }
   const newestAt: Record<string, number> = {};
-  for (const series of newest) {
+  for (const series of newest ?? []) {
     const name = nodeNameOf(series);
     const seconds = series.points[0]?.v;
     if (name && typeof seconds === "number") newestAt[name] = seconds * 1000;
   }
-  return { nodes, newestAt, resolution: spec.resolution };
+  return {
+    nodes,
+    newestAt,
+    newestKnown: newest !== null,
+    resolution: spec.resolution,
+  };
 }
 
 /** Bytes in and out, on the same clock as {@link usageHistory}. */

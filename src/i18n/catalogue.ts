@@ -190,6 +190,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    files: "Files",
     instances: "Instances",
     cluster: "Cluster",
     mode: "Mode",
@@ -442,7 +443,6 @@ export const en = {
     ready: "Ready",
     restarts: "Restarts",
     node: "Node",
-    files: "Files",
     cpuOfAllocatable: "CPU, % of allocatable",
     memoryOfAllocatable: "Memory, % of allocatable",
     utilisation: "Utilisation",
@@ -1298,12 +1298,12 @@ export const en = {
     save: "Save",
     delete: "Delete",
     retry: "Retry",
+    download: "Download",
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
     openInBrowser: "Open in Browser",
     back: "Back",
-    download: "Download",
     gwFilterPlaceholder: "name, host, gateway…",
     filterRoutes: "Filter routes",
     filterByKind: "Filter by kind",
@@ -1416,25 +1416,62 @@ export const en = {
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
-    filterNames: "filter {n} names…",
+    filterNames: {
+      one: "filter {n} name…",
+      other: "filter {n} names…",
+    },
     notRunning:
       "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
     listingOf: "Files in {path}",
     mode: "Mode",
     size: "Size",
     modified: "Modified",
+    stoppedBeforeAnything:
+      "You stopped this listing before anything arrived, so what is in here is unknown.",
+    cappedAt: {
+      one: "· stopped at {n} row, so this is not the whole directory",
+      other: "· stopped at {n} rows, so this is not the whole directory",
+    },
+    unreadableLines: {
+      one: "· {n} line could not be read, so a row is missing",
+      other: "· {n} lines could not be read, so rows are missing",
+    },
+    cannotSwitchViaDebug:
+      "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    nothingReadable: {
+      one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
+      other:
+        "The tool printed {n} lines and none of them could be read, so what is in here is unknown.",
+    },
     keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
-    readingSoFar: "reading · {n} entries so far · {seconds} s",
-    readVia: "read via {how} · {n} entries · {seconds} s",
-    stoppedAfter:
-      "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    readingSoFar: {
+      one: "reading · {n} entry so far · {seconds} s",
+      other: "reading · {n} entries so far · {seconds} s",
+    },
+    readingSoFarUntimed: {
+      one: "reading · {n} entry so far",
+      other: "reading · {n} entries so far",
+    },
+    readVia: {
+      one: "read via {how} · {n} entry · {seconds} s",
+      other: "read via {how} · {n} entries · {seconds} s",
+    },
+    stoppedUntimed: {
+      one: "stopped · {n} entry arrived, not the whole directory",
+      other: "stopped · {n} entries arrived, not the whole directory",
+    },
+    stoppedAfter: {
+      one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
+      other:
+        "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    },
     gnuFind: "find (GNU)",
     busyboxStat: "sh + stat (busybox)",
     fromMount: "from {name}",
     noToolsTitle: "The image has nothing to list files with",
     noToolsBody:
-      "{tried} were each executed directly in container {container} and none exists (exit 127). The image is {image}; the files are there, the tools to read them are not.",
+      "{tried} were each executed directly in container {container} and none exists. The image is {image}; the files are there, the tools to read them are not.",
     openViaDebug: "Open through a debug container",
     readMountsInstead: "Read the pod's mounts instead",
     debugExplained:
@@ -1442,24 +1479,38 @@ export const en = {
     refused: "The cluster refused to exec into this pod",
     notRunningNow:
       "Container {container} is not running, so there is nothing to exec into",
-    listFailed: "The listing tool ran and failed (exit {code})",
+    listFailed: "The listing did not finish: {code}",
+    unopenable:
+      "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
+
     mountsOnlyIntro:
       "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
     noMounts: "Nothing is mounted into this container.",
     binary: "binary",
     text: "text",
     lineCount: { one: "{n} line", other: "{n} lines" },
+    lineCountAtLeast: {
+      one: "{n} line read of more",
+      other: "{n} lines read of more",
+    },
     mountedFrom: "mounted from {kind} {name}",
+    mountedFromSeveral: {
+      one: "mounted from volume {name}, which projects {n} source",
+      other:
+        "mounted from volume {name}, which projects {n} sources — the pod does not say which one this file came from",
+    },
     pathCopied: "Path copied",
     copyPath: "Copy path",
-    tooBigToDownload: "Downloads over 100 MiB are refused in this version",
+    tooBigToDownload: "Downloads over {cap} are refused in this version",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
       "No preview for a binary file. Download it to look at it elsewhere.",
     nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
     previewTruncated:
-      "The preview stops at 1 MiB; the file goes on. Download it for the rest.",
+      "The preview stops at {cap}; the file goes on. Download it for the rest.",
+    previewRepaired:
+      "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
     downloaded: "Downloaded {name}",
     downloadFailed: "Could not download {name}",
     noCatInImage: "No cat in this image to copy the file with.",
@@ -1580,7 +1631,10 @@ export const en = {
       "Ask on a rollout, a pod, a job, a drain or a port forward, and the answer comes as a notification.",
     dismiss: "Dismiss",
     openWatching: "Open Watching",
-    severalAnswered: "{count} things you asked about",
+    severalAnswered: {
+      one: "{n} thing you asked about",
+      other: "{n} things you asked about",
+    },
     full: "Already watching {max} things on this cluster",
     fullBody:
       "Twelve is the most one cluster gets. Pick one to stop watching, or keep all of them and skip this one.",
@@ -1593,7 +1647,9 @@ export const en = {
     saysSucceeded: "{name} succeeded",
     saysFailed: "{name} failed",
     saysDrained: "{name} is drained",
-    saysDrainFailed: "{name} drain did not finish",
+    saysDrainStopped: "{name} drain stopped",
+    saysDrainCancelled: "{name} drain cancelled",
+    saysDrainFailed: "{name} drain broke",
     saysRenewed: "{name} certificate renewed",
     saysIssuanceFailed: "{name} certificate issuance failed",
     saysForwardDied: "Forward to {name} died",
@@ -3591,6 +3647,14 @@ export const en = {
     trendsSortNote: "least headroom first",
     trendsNotIncidents:
       "One range query for every node, the peak of each bucket kept, so a spike survives the summary. A high number is a full node, not an incident; nothing here is painted red for being busy. Requests are the Resources table's story, one click in.",
+    notLookedShort: "could not look",
+    noAllocatableShort: "allocatable unreadable",
+    nodesDidNotList:
+      "Could not read the node list, so there is nothing to put a reading against: {reason}",
+    nodeNotLooked:
+      "Could not read the window, so whether this node reported is unknown.",
+    nodeNoAllocatable:
+      "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
       "no samples in the window: newest series is {age}, the window asks for {range}",
@@ -3599,6 +3663,8 @@ export const en = {
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
     declaredNowOnly:
       "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
+    declaredUnknown:
+      "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:
