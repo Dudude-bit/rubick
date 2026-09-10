@@ -20,7 +20,8 @@ interface DonePayload {
   elapsed_ms: number;
 }
 
-export type FailureReason = "noTools" | "refused" | "notRunning" | "failed";
+export type FailureReason =
+  "noTools" | "unopenable" | "refused" | "notRunning" | "failed";
 
 interface FailedPayload {
   stream_id: string;

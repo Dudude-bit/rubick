@@ -63,6 +63,7 @@ async fn a_busybox_image_lists_through_the_stat_rung() {
             );
         }
         Listing::NoTools { tried } => panic!("no tools in traefik? tried {tried:?}"),
+        Listing::Unopenable => panic!("traefik cannot open its own /etc?"),
         Listing::Failed { exit, stderr } => panic!("failed: {exit:?} {stderr}"),
     }
 
@@ -114,6 +115,7 @@ async fn a_distroless_image_says_it_has_nothing_to_list_with() {
         Listing::Listed { with, entries, .. } => {
             panic!("coredns listed {entries} entries via {with:?}; the image grew tools?")
         }
+        Listing::Unopenable => panic!("unopenable rather than noTools"),
         Listing::Failed { exit, stderr } => {
             panic!("failed rather than noTools: {exit:?} {stderr}")
         }

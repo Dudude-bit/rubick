@@ -234,8 +234,22 @@ pub enum Listing {
     },
     /// Neither rung exists in this image.
     NoTools { tried: Vec<String> },
+    /// The busybox rung's own `exit 2`, which it reaches only at its two
+    /// guards: the path is not a directory, or this container may not open
+    /// it. Its own outcome because the code is a contract we wrote, so the
+    /// reader can be told what it means instead of "the listing did not
+    /// finish: 2" over the apiserver's boilerplate.
+    Unopenable,
     /// The tool ran and refused: no such directory, permission, …
     Failed { exit: Exit, stderr: String },
+}
+
+/// Whether a non-zero exit is the busybox rung's own guard rather than the
+/// tool's. Only that rung writes `exit 2`, and only with nothing on stderr —
+/// anything the tool said itself is a better answer than our sentence.
+#[must_use]
+fn unopenable(with: ListedWith, code: Option<i32>, stderr: &str) -> bool {
+    with == ListedWith::BusyboxStat && code == Some(2) && stderr.trim().is_empty()
 }
 
 /// List one directory, handing entries out in batches as they arrive.
@@ -394,6 +408,9 @@ pub async fn list_dir(
             || stderr_text.contains("printf");
         if ended.tool_missing() || (with == ListedWith::GnuFind && rejected_flag && total == 0) {
             continue;
+        }
+        if unopenable(with, ended.code, &stderr_text) {
+            return Ok(Listing::Unopenable);
         }
         return Ok(Listing::Failed {
             exit: ended,
@@ -744,5 +761,28 @@ mod tests {
         // mid-character, and that is a repair.
         let (_, lossy) = decode_text(b"\xd0\xbf\xd0", false);
         assert!(lossy);
+    }
+
+    /// The rung's own `exit 2` is a contract this module wrote: it fires only
+    /// at the two guards, so it can be named rather than shown to the reader
+    /// as a number over the apiserver's "command terminated with exit code 2".
+    /// A code the rung did not choose, or one with the tool's own words on
+    /// stderr, stays an ordinary failure — those words are worth more than
+    /// our sentence. Fails if the arm stops checking any of the three.
+    #[test]
+    fn the_rungs_own_refusal_is_told_apart_from_a_tool_that_failed() {
+        assert!(unopenable(ListedWith::BusyboxStat, Some(2), ""));
+        assert!(
+            !unopenable(ListedWith::GnuFind, Some(2), ""),
+            "find did not write our guard and its 2 means something else"
+        );
+        assert!(
+            !unopenable(ListedWith::BusyboxStat, Some(1), ""),
+            "only 2 is the guard"
+        );
+        assert!(
+            !unopenable(ListedWith::BusyboxStat, Some(2), "stat: Permission denied"),
+            "the tool's own words beat ours"
+        );
     }
 }

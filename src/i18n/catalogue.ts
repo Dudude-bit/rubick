@@ -1467,6 +1467,8 @@ export const en = {
     notRunningNow:
       "Container {container} is not running, so there is nothing to exec into",
     listFailed: "The listing did not finish: {code}",
+    unopenable:
+      "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
 
     mountsOnlyIntro:
       "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",

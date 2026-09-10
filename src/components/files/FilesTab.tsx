@@ -342,6 +342,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           state={state}
           container={container.name}
           image={container.image}
+          path={path}
           onDebug={onDebug}
           onMounts={() => setMountsOnly(true)}
           onRetry={reload}
@@ -689,6 +690,7 @@ function Failure({
   state,
   container,
   image,
+  path,
   onDebug,
   onMounts,
   onRetry,
@@ -696,6 +698,7 @@ function Failure({
   state: Extract<ListingState, { phase: "failed" }>;
   container: string;
   image: string;
+  path: string;
   onDebug: (container: string) => void;
   onMounts: () => void;
   onRetry: () => void;
@@ -727,6 +730,30 @@ function Failure({
         </p>
         <p className="mt-2 text-[11px] text-fg-fnt">
           {t("files", "debugExplained")}
+        </p>
+      </div>
+    );
+  }
+  // The path itself could not be opened. Retrying reads the same
+  // permissions again; a debug container is the way in, so it is offered
+  // here the way it is for an image with no tools.
+  if (state.reason === "unopenable") {
+    return (
+      <div className="px-3 py-6 text-xs">
+        <p className="font-medium text-err">
+          {t("files", "unopenable", { path })}
+        </p>
+        <p className="mt-3 flex gap-4">
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
+            {t("files", "openViaDebug")}
+          </button>
+          <button type="button" onClick={onRetry} className={link}>
+            {t("action", "retry")}
+          </button>
         </p>
       </div>
     );

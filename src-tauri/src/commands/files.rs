@@ -169,6 +169,16 @@ pub async fn list_container_files(
                 stderr: String::new(),
                 tried,
             },
+            // Our own script's exit 2. The words are the frontend's; this
+            // side carries only which of the ladder's contracts was hit.
+            Ok(Listing::Unopenable) => AppEvent::FilesFailed {
+                stream_id: id.clone(),
+                reason: "unopenable".into(),
+                message: String::new(),
+                exit_code: None,
+                stderr: String::new(),
+                tried: Vec::new(),
+            },
             Ok(Listing::Failed { exit, stderr }) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
                 reason: "failed".into(),

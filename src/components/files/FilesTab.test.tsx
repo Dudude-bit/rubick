@@ -423,4 +423,34 @@ describe("FilesTab", () => {
     expect(await screen.findByText(/3 lines read of more/)).toBeInTheDocument();
     expect(screen.queryByText(/· 3 lines$/)).toBeNull();
   });
+
+  /**
+   * The busybox rung's `exit 2` is our own guard firing on a directory the
+   * container may not open. Drawn as "the listing did not finish: 2" over
+   * the apiserver's doubled boilerplate, it told the reader nothing; and the
+   * one thing that would work — a debug container — was not offered.
+   */
+  it("names a directory it could not open and offers the way in", async () => {
+    const onDebug = vi.fn();
+    listing.mockReturnValue({
+      phase: "failed",
+      entries: [],
+      reason: "unopenable",
+      message: "",
+      exitCode: null,
+      stderr: "",
+      tried: [],
+    });
+    wrap(
+      <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
+    );
+    expect(
+      screen.getByText(/\/etc\/app could not be opened/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/did not finish/)).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open through a debug container" })
+    );
+    expect(onDebug).toHaveBeenCalledTimes(1);
+  });
 });
