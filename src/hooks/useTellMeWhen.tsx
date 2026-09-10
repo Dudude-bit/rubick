@@ -57,12 +57,27 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
   succeeded: "saysSucceeded",
   failed: "saysFailed",
   drained: "saysDrained",
+  drainStopped: "saysDrainStopped",
+  drainCancelled: "saysDrainCancelled",
   drainFailed: "saysDrainFailed",
   renewed: "saysRenewed",
   issuanceFailed: "saysIssuanceFailed",
   forwardDied: "saysForwardDied",
   gone: "saysGone",
   lostSight: "saysLostSight",
+};
+
+/**
+ * Each drain outcome as its own verdict. Stopped (the node would not empty
+ * and needs an opt-in) and Cancelled (the reader stopped it) are explicitly
+ * not failures — folding them into `drainFailed` painted an expected ending
+ * red, the third state collapsing into the second.
+ */
+const DRAIN_SAYS: Record<DrainFinished["outcome"], Says> = {
+  drained: "drained",
+  stopped: "drainStopped",
+  cancelled: "drainCancelled",
+  failed: "drainFailed",
 };
 
 export function answerLine(answer: Answer, t: T): string {
@@ -79,7 +94,7 @@ export function notice(
     return { title: lines[0], body: answers[0].verdict.detail ?? "" };
   }
   return {
-    title: t("tell", "severalAnswered", { count: answers.length }),
+    title: t("tell", "severalAnswered", { n: answers.length }),
     body: lines.join("\n"),
   };
 }
@@ -322,21 +337,21 @@ export function useTellMeWhen() {
     let offForward: null | (() => void) = null;
     void listen<DrainFinished>("drain-finished", (event) => {
       const { node, outcome, message } = event.payload;
+      // No current-context filter: the payload carries no context and the
+      // drain keeps running across a cluster switch, so match by identity
+      // the way the port-forward handler below does. Filtering by the shown
+      // context silently dropped the answer after a switch — the one thing
+      // this feature exists to prevent.
       const watch = useTellMeWhenStore
         .getState()
-        .watches.find(
-          (w) =>
-            w.context === context &&
-            w.kind === "Node" &&
-            w.name === node &&
-            isOpen(w)
-        );
+        .watches.find((w) => w.kind === "Node" && w.name === node && isOpen(w));
       if (!watch) return;
       settle(
         watch.id,
-        outcome === "drained"
-          ? { says: "drained", detail: null }
-          : { says: "drainFailed", detail: message ?? outcome },
+        {
+          says: DRAIN_SAYS[outcome],
+          detail: outcome === "drained" ? null : (message ?? null),
+        },
         coalescer.current
       );
     }).then((off) => {
@@ -363,7 +378,9 @@ export function useTellMeWhen() {
       offDrain?.();
       offForward?.();
     };
-  }, [context]);
+    // No context in the body any more: these listeners resolve the watch by
+    // identity, so they register once and survive a cluster switch.
+  }, []);
 
   useEffect(() => {
     const tick = setInterval(

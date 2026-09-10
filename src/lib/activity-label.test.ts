@@ -24,6 +24,11 @@ describe("what the activity trigger calls itself", () => {
     expect(activityLabel({ ...none, terminals: 2 })).toBe("2 terminals");
   });
 
+  it("names watches when they are the only thing running", () => {
+    expect(activityLabel({ ...none, watching: 1 })).toBe("1 watch");
+    expect(activityLabel({ ...none, watching: 3 })).toBe("3 watches");
+  });
+
   /** Two nouns do not fit an eleven-pixel status line, so the total wins. */
   it("falls back to a total once two kinds are running", () => {
     expect(activityLabel({ ...none, ports: 1, terminals: 2 })).toBe("3 active");

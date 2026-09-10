@@ -122,6 +122,11 @@ describe("planPeekActions", () => {
     ]);
   });
 
+  /** A Job asks its own question — how it ends — not the rollout's. Fails if the askJob arm is dropped to the rollout default. */
+  it("offers the job's own tell-me-when question", () => {
+    expect(labels(all("Job"))).toContain("Tell me how it ends");
+  });
+
   /** A bell that read "Tell me when" on an object already asked about would ask twice. */
   it("offers to stop once the object is already being watched", () => {
     expect(labels(all("Deployment", undefined, { watching: true }))).toContain(
