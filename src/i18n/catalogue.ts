@@ -1555,6 +1555,12 @@ export const en = {
       one: "{ready} of {n} instance",
       other: "{ready} of {n} instances",
     },
+    // Scylla counts members, not instances. One string for both vendors made
+    // a ScyllaCluster report "instances", which is not the operator's word.
+    readyMembersOfDeclared: {
+      one: "{ready} of {n} member",
+      other: "{ready} of {n} members",
+    },
     readyConditionFalse: "condition Ready False",
     archivingFact: "WAL archiving",
     archivingNotDeclared: "not declared",

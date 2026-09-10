@@ -404,11 +404,11 @@ function ClusterRow({
             <Fact label={t("operators", "membersFact")}>
               {cluster.readyMembers === null
                 ? t("operators", "notWritten")
-                : t("operators", "readyOfDeclared", {
+                : t("operators", "readyMembersOfDeclared", {
                     ready: cluster.readyMembers,
-                    declared:
+                    n:
                       cluster.members ??
-                      cluster.racks.reduce((n, r) => n + r.members, 0),
+                      cluster.racks.reduce((sum, r) => sum + r.members, 0),
                   })}
             </Fact>
             <Fact label={t("operators", "specSeenFact")}>
@@ -460,9 +460,9 @@ function ClusterRow({
                     rack.ready < rack.members && !cluster.silent && "text-warn"
                   )}
                 >
-                  {t("operators", "readyOfDeclared", {
+                  {t("operators", "readyMembersOfDeclared", {
                     ready: rack.ready,
-                    declared: rack.members,
+                    n: rack.members,
                   })}
                 </span>
                 {rack.version && (

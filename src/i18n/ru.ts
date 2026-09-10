@@ -1589,6 +1589,12 @@ export const ru: Catalogue = {
       many: "{ready} из {n} инстансов",
       other: "{ready} из {n} инстансов",
     },
+    readyMembersOfDeclared: {
+      one: "{ready} из {n} участника",
+      few: "{ready} из {n} участников",
+      many: "{ready} из {n} участников",
+      other: "{ready} из {n} участников",
+    },
     readyConditionFalse: "условие Ready False",
     archivingFact: "Архивация WAL",
     archivingNotDeclared: "не объявлена",
