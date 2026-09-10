@@ -1574,7 +1574,23 @@ export const en = {
     findingArchivingFailing: "WAL archiving has been failing for {ago}",
     findingFailedInstances: "Instances the operator lists as failed: {names}",
     findingSwitchover: "Switchover in progress: {from} → {to}",
+    findingFailover: "Failing over from {from}",
+    failoverExplained:
+      "This is not a switchover: the primary went away and the operator is promoting a replica without being asked. Writes are refused until it finishes.",
+    findingPhaseUnwritten:
+      "The operator has written no status for this Cluster",
+    phaseUnwrittenExplained:
+      "Nothing here has been reconciled — the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
     findingFenced: "Fenced by hand: {names}",
+    backupNotCreated:
+      "the cluster did not create the Backup, and said nothing about why",
+    fencedAllOne:
+      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed — one cannot be taken out of it without unfencing the rest",
+    fencingUnknown:
+      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown — and fencing is written back as a whole list, so acting would overwrite it",
+    fencedUnknownWord: "fencing unreadable",
+    findingFencedUnknown:
+      "The annotation naming the fenced instances could not be read, so whether any instance is stopped is unknown.",
     fencedExplained:
       "Postgres is stopped in a fenced instance while its pod stays; the annotation cnpg.io/fencedInstances holds it. Unfence when the reason is gone.",
     findingHibernated: "Hibernated",

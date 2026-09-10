@@ -129,7 +129,6 @@ pub async fn get_custom_resource_yaml(
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 
-/// Delete a custom resource instance
 /// A merge patch on one custom resource: how an operator's knobs are turned
 /// (an annotation, a spec field), never a whole-object replace.
 #[tauri::command]
@@ -159,6 +158,7 @@ pub async fn patch_custom_resource(
     Ok(())
 }
 
+/// Delete a custom resource instance
 #[tauri::command]
 pub async fn delete_custom_resource(
     crd_name: String,

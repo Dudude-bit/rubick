@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { actionsFor } from "./actions";
+import { FENCED } from "./model";
 import {
   backupsOf,
   byTrouble,
@@ -237,5 +239,91 @@ describe("backupsOf", () => {
     expect(summary.lastCompletedAt).toBe("2026-09-05T03:04:00Z");
     expect(summary.lastPhase).toBe("failed");
     expect(summary.lastError).toBe("403 from s3://shop-wal");
+  });
+});
+
+describe("fencing, which is written back as a whole list", () => {
+  /**
+   * The annotation is there and this version cannot read it. Answering `[]`
+   * said "nothing is fenced" — and the Fence control then sent
+   * `["the-one-you-clicked"]`, overwriting whatever the operator was really
+   * holding and unfencing the rest of a live database cluster. The list is
+   * unknown, and every control that would rewrite it says so.
+   */
+  it("does not read an unparseable annotation as nothing fenced", () => {
+    const read = readCluster(
+      cluster("shop-db", HEALTHY, { [FENCED]: "{not json" })
+    );
+    expect(read.fencedKnown).toBe(false);
+    expect(read.findings.map((f) => f.kind)).toContain("fencedUnknown");
+    expect(read.findings.map((f) => f.kind)).not.toContain("fenced");
+    expect(read.instances.every((i) => i.fenced === null)).toBe(true);
+
+    const acts = actionsFor(read, { patchClusters: true, createBackups: true });
+    const fencing = acts.filter((a) => a.id === "fence" || a.id === "unfence");
+    expect(fencing.length).toBeGreaterThan(0);
+    for (const a of fencing) expect(a.reason).toBe("fencingUnknown");
+  });
+
+  /** A JSON object where a list belongs is just as unreadable as bad syntax. */
+  it("does not read a non-list annotation as nothing fenced", () => {
+    const read = readCluster(
+      cluster("shop-db", HEALTHY, { [FENCED]: '{"a":1}' })
+    );
+    expect(read.fencedKnown).toBe(false);
+  });
+
+  /** No annotation at all is the other answer: nothing is fenced, and we know. */
+  it("reads an absent annotation as nothing fenced, and knows it", () => {
+    const read = readCluster(cluster("shop-db", HEALTHY));
+    expect(read.fencedKnown).toBe(true);
+    expect(read.fenced).toEqual([]);
+    expect(read.instances.every((i) => i.fenced === false)).toBe(true);
+    const acts = actionsFor(read, { patchClusters: true, createBackups: true });
+    for (const a of acts.filter((x) => x.id === "fence")) {
+      expect(a.reason).toBeNull();
+    }
+  });
+
+  /** And a real list is read, with the controls it earns. */
+  it("reads the named instances, and offers Unfence only for those", () => {
+    const read = readCluster(
+      cluster("shop-db", HEALTHY, { [FENCED]: '["shop-db-2"]' })
+    );
+    expect(read.fencedKnown).toBe(true);
+    expect(read.fenced).toEqual(["shop-db-2"]);
+    const acts = actionsFor(read, { patchClusters: true, createBackups: true });
+    expect(
+      acts.filter((a) => a.id === "unfence").map((a) => a.instance)
+    ).toEqual(["shop-db-2"]);
+  });
+
+  /** CNPG's `"*"` means every instance, written bare rather than as a list. */
+  it("reads a bare star as every instance", () => {
+    const read = readCluster(cluster("shop-db", HEALTHY, { [FENCED]: "*" }));
+    expect(read.fencedKnown).toBe(true);
+    expect(read.instances.every((i) => i.fenced === true)).toBe(true);
+  });
+});
+
+describe("versions off an image reference", () => {
+  /**
+   * A registry may carry a port. `image.split(":").pop()` then returned the
+   * port, so `registry.internal:5000/cnpg/postgresql` reported PostgreSQL
+   * "5000" — a number with the shape of an answer, which is the worst kind
+   * of wrong one.
+   */
+  it("reads the tag and not a registry port", () => {
+    expect(postgresVersionOf("ghcr.io/cloudnative-pg/postgresql:17.5")).toBe(
+      "17.5"
+    );
+    expect(postgresVersionOf("registry.internal:5000/cnpg/postgresql")).toBe(
+      null
+    );
+    expect(
+      postgresVersionOf("registry.internal:5000/cnpg/postgresql:16.2")
+    ).toBe("16.2");
+    expect(postgresVersionOf("postgresql@sha256:abc123")).toBe(null);
+    expect(postgresVersionOf("postgresql:latest")).toBe(null);
   });
 });

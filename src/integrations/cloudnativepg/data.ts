@@ -95,22 +95,64 @@ export interface OperatorInfo {
   controllerReason: string | null;
   /** From the image tag; the CRDs' label is the fallback the catalog uses. */
   version: string | null;
-  /** Whether `patch clusters` and `create backups` are allowed; `null` = the cluster would not say. */
+  /**
+   * Cluster-wide `patch clusters` / `create backups`; `null` = the cluster
+   * would not say. A `false` here is not "you may not act" — see `patchIn`.
+   */
   canPatchClusters: boolean | null;
   canCreateBackups: boolean | null;
+  /** The same two verbs, per namespace a Cluster was found in. */
+  patchIn: AllowedIn;
+  createIn: AllowedIn;
   checkedAt: number;
 }
 
 function versionOf(image: string | null): string | null {
   if (!image) return null;
-  const tag = image.split("@")[0].split(":").pop() ?? "";
+  // The tag is what follows the LAST colon *after* the last slash. A
+  // registry may carry a port — `registry.internal:5000/cnpg/postgresql` —
+  // and splitting the whole reference on ":" then reported 5000 as the
+  // version of PostgreSQL.
+  const ref = image.split("@")[0];
+  const lastSlash = ref.lastIndexOf("/");
+  const namePart = ref.slice(lastSlash + 1);
+  const colon = namePart.lastIndexOf(":");
+  const tag = colon === -1 ? "" : namePart.slice(colon + 1);
   return /^v?\d/.test(tag) ? tag.replace(/^v/, "") : null;
 }
 
-export function useOperator() {
+/**
+ * Whether the reader may act, asked once per namespace they have a Cluster
+ * in — plus cluster-wide.
+ *
+ * A `SelfSubjectAccessReview` with no namespace asks "in every namespace",
+ * and an ordinary reader granted `patch clusters` in their own namespace
+ * answers no to that. Asked that way, every action on every cluster came up
+ * disabled with "the cluster refuses this", which is a different sentence
+ * from the truth and the opposite of useful.
+ */
+export type AllowedIn = Map<string | null, boolean | null>;
+
+const allowedFor = (
+  answers: { allowed: boolean | null }[] | null,
+  index: number,
+  stride: number,
+  namespaces: (string | null)[]
+): AllowedIn => {
+  const out: AllowedIn = new Map();
+  namespaces.forEach((ns, i) =>
+    out.set(ns, answers?.[i * stride + index]?.allowed ?? null)
+  );
+  return out;
+};
+
+export function useOperator(namespaces: readonly string[] = []) {
   const context = useClusterStore((state) => state.currentContext);
+  // Cluster-wide first, so the Operator tab still has one answer to state,
+  // then one per namespace a Cluster was found in.
+  const scopes: (string | null)[] = [null, ...[...new Set(namespaces)].sort()];
   return useQuery({
-    queryKey: [context, "cloudnativepg", "operator"],
+    queryKey: [context, "cloudnativepg", "operator", scopes.join(",")],
     queryFn: async (): Promise<OperatorInfo> => {
       const [deployments, access] = await Promise.all([
         read<DeploymentInfo>(() =>
@@ -122,20 +164,12 @@ export function useOperator() {
           })
         ),
         commands
-          .checkAccess([
-            {
-              group: GROUP,
-              resource: "clusters",
-              verb: "patch",
-              namespace: null,
-            },
-            {
-              group: GROUP,
-              resource: "backups",
-              verb: "create",
-              namespace: null,
-            },
-          ])
+          .checkAccess(
+            scopes.flatMap((namespace) => [
+              { group: GROUP, resource: "clusters", verb: "patch", namespace },
+              { group: GROUP, resource: "backups", verb: "create", namespace },
+            ])
+          )
           .catch(() => null),
       ]);
       const deployment = deployments.ok ? (deployments.items[0] ?? null) : null;
@@ -154,6 +188,8 @@ export function useOperator() {
         version: versionOf(deployment?.containers[0]?.image ?? null),
         canPatchClusters: access?.[0]?.allowed ?? null,
         canCreateBackups: access?.[1]?.allowed ?? null,
+        patchIn: allowedFor(access, 0, 2, scopes),
+        createIn: allowedFor(access, 1, 2, scopes),
         checkedAt: Date.now(),
       };
     },

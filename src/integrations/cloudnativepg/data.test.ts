@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeploymentInfo } from "@/generated/types";
 
@@ -30,8 +30,10 @@ vi.mock("@tanstack/react-query", () => ({
 const { useOperator } = await import("./data");
 
 /** The queryFn as `useQuery` would call it, without React. */
-function useOperatorRead(): () => Promise<unknown> {
-  useOperator();
+function useOperatorRead(
+  namespaces: readonly string[] = []
+): () => Promise<unknown> {
+  useOperator(namespaces);
   const fn = lastQueryFn.current;
   if (!fn) throw new Error("useOperator did not register a queryFn");
   return fn;
@@ -45,6 +47,10 @@ function deployment(): DeploymentInfo {
     containers: [{ image: "ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0" }],
   } as unknown as DeploymentInfo;
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("useOperator", () => {
   /**
@@ -93,6 +99,45 @@ describe("useOperator", () => {
     expect(info.controller?.name).toBe("cnpg-controller-manager");
     expect(info.version).toBe("1.30.0");
     expect(info.canCreateBackups).toBe(false);
+  });
+
+  /**
+   * A `SelfSubjectAccessReview` with no namespace asks "in EVERY namespace",
+   * and a reader granted `patch clusters` in their own namespace answers no.
+   * Asked only that way, every action on their own cluster came up disabled
+   * saying the cluster refuses it. The verbs are asked where the Clusters are.
+   */
+  it("asks the verbs in each namespace a cluster was found in", async () => {
+    listDeployments.mockResolvedValue([deployment()]);
+    // cluster-wide: no. shop: yes. billing: no.
+    checkAccess.mockResolvedValue([
+      { allowed: false },
+      { allowed: false },
+      { allowed: true },
+      { allowed: true },
+      { allowed: false },
+      { allowed: false },
+    ]);
+    const info = (await useOperatorRead(["shop", "billing"])()) as {
+      canPatchClusters: boolean | null;
+      patchIn: Map<string | null, boolean | null>;
+      createIn: Map<string | null, boolean | null>;
+    };
+    const asked = checkAccess.mock.lastCall?.[0] as {
+      namespace: string | null;
+    }[];
+    expect(asked.map((q) => q.namespace)).toEqual([
+      null,
+      null,
+      "billing",
+      "billing",
+      "shop",
+      "shop",
+    ]);
+    expect(info.canPatchClusters).toBe(false);
+    expect(info.patchIn.get("billing")).toBe(true);
+    expect(info.patchIn.get("shop")).toBe(false);
+    expect(info.createIn.get("billing")).toBe(true);
   });
 
   /**
