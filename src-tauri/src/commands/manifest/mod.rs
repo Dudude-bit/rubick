@@ -48,6 +48,53 @@ impl ManifestResult {
     }
 }
 
+/// What a server-side dry run said about one document.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DryRun {
+    pub documents: Vec<DryRunDocument>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DryRunDocument {
+    /// `deployment/shop api`, the way apply names it.
+    pub id: String,
+    pub outcome: DryRunOutcome,
+    /// The object as it stands, cleaned the way the editor shows it. `None`
+    /// when there is none, and also when it could not be read: `outcome`
+    /// tells those two apart, and nothing else may.
+    pub live: Option<String>,
+    /// The object as the server would store it, defaults and admission
+    /// included. `None` when the server refused.
+    pub would: Option<String>,
+}
+
+/// Five answers, because "would be created" and "could not read what is
+/// there" both arrive with no current object and mean opposite things.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum DryRunOutcome {
+    Created,
+    Configured,
+    Unchanged,
+    /// The server accepts the manifest, but the current object could not be
+    /// read, so whether anything changes is unknown.
+    LiveUnread {
+        said: String,
+    },
+    /// The server refused it; a real apply would be refused the same way.
+    Refused {
+        said: String,
+    },
+    /// Nobody answered: a 5xx, a transport failure, a proxy in the way. Not
+    /// a refusal, and not a reason to block the apply, only to say that the
+    /// question went unanswered and the editor's own diff is what is left.
+    Unanswered {
+        said: String,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
