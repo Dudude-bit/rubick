@@ -20,6 +20,7 @@ pub mod access;
 pub mod auth;
 pub mod binaries;
 pub mod certificates;
+pub mod checks;
 pub mod cluster;
 pub mod config_resources;
 pub mod connections;

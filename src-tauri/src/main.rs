@@ -189,6 +189,8 @@ fn main() {
             commands::pods::get_pod,
             commands::pods::delete_pod,
             commands::pods::restart_pod,
+            // Checks: a hypothesis tested from the pod
+            commands::checks::run_pod_check,
             // Debug commands
             commands::debug::debug_pod_ephemeral,
             commands::debug::debug_pod_copy,
