@@ -107,6 +107,16 @@ pub enum Error {
     #[error("Operation timed out: {0}")]
     Timeout(String),
 
+    /// The cluster did not answer a request within the read deadline.
+    ///
+    /// Its own variant, and not `Timeout`, because the frontend acts on it:
+    /// a list that ran out of time on a large cluster is offered a narrower
+    /// scope before it is offered a retry. The `READ_DEADLINE:` prefix is the
+    /// wire format the frontend matches, the way `CREDENTIALS_EXPIRED:` is;
+    /// errors cross the IPC boundary as this string and nothing else.
+    #[error("READ_DEADLINE: the cluster did not answer within {after_secs} s")]
+    ReadDeadline { after_secs: u64 },
+
     /// Internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -180,8 +190,31 @@ impl From<kube::Error> for Error {
                 return Error::CredentialsExpired(response.message.clone());
             }
         }
+        if let kube::Error::Service(inner) = &err {
+            if ran_out_of_time(inner.as_ref()) {
+                return Error::ReadDeadline {
+                    after_secs: crate::client::READ_DEADLINE.as_secs(),
+                };
+            }
+        }
         Error::KubeApi(err)
     }
+}
+
+/// Whether the timeout layer fired, wherever in the stack its error sits.
+///
+/// The layer's `Elapsed` is boxed on the way out, and tower's buffer wraps
+/// it once more before kube sees it, so it is looked for down the `source`
+/// chain rather than at the top.
+fn ran_out_of_time(err: &(dyn std::error::Error + 'static)) -> bool {
+    let mut cursor = Some(err);
+    while let Some(current) = cursor {
+        if current.is::<tower::timeout::error::Elapsed>() {
+            return true;
+        }
+        cursor = current.source();
+    }
+    false
 }
 
 /// The one sentence in a kube error a reader can act on.
@@ -343,6 +376,40 @@ mod tests {
         let err = Error::from(api_error(401, "Unauthorized"));
         assert!(matches!(err, Error::CredentialsExpired(_)));
         assert!(err.to_string().starts_with("CREDENTIALS_EXPIRED:"));
+    }
+
+    /// A read that ran out of time is its own answer, and the frontend can
+    /// only tell from the prefix. It is boxed the way tower returns it and
+    /// wrapped once more the way tower's buffer would, so the check walks the
+    /// chain rather than trusting the top.
+    #[test]
+    fn a_read_past_its_deadline_says_so_on_the_wire() {
+        // What tower's buffer does on the way out: its own error type, with
+        // the layer's underneath as `source()`. `io::Error` would not do as a
+        // stand-in — its `source()` skips the error it wraps.
+        #[derive(Debug)]
+        struct Wrapped(tower::BoxError);
+        impl std::fmt::Display for Wrapped {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "buffered service failed: {}", self.0)
+            }
+        }
+        impl std::error::Error for Wrapped {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(self.0.as_ref())
+            }
+        }
+        let elapsed: tower::BoxError = Box::new(tower::timeout::error::Elapsed::new());
+        let err = Error::from(kube::Error::Service(elapsed));
+        assert!(matches!(err, Error::ReadDeadline { .. }));
+        assert!(err.to_string().starts_with("READ_DEADLINE:"));
+
+        let wrapped: tower::BoxError =
+            Box::new(Wrapped(Box::new(tower::timeout::error::Elapsed::new())));
+        assert!(matches!(
+            Error::from(kube::Error::Service(wrapped)),
+            Error::ReadDeadline { .. }
+        ));
     }
 
     /// A 403 answers *this* request and leaves the session working. Folding it

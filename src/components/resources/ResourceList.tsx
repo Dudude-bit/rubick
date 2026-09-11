@@ -21,6 +21,15 @@ import {
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { isRefusal, verbatim } from "@/lib/error-utils";
 import {
+  isReadDeadline,
+  LIST_DEADLINE_SECONDS,
+  openNamespacePicker,
+  SLOW_READ_MS,
+} from "@/lib/read-deadline";
+import { useNowSeconds } from "@/hooks/useNow";
+import { Button } from "@/components/ui/button";
+import { TriangleAlert } from "lucide-react";
+import {
   DeliveryColumnCell,
   DeliveryFilterControl,
   DeliveryRowsProvider,
@@ -315,14 +324,22 @@ export function ResourceList<
     [quickActions]
   );
 
-  if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
-  }
-
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
   const showSkeleton =
     (loading || resyncing) && resources.length === 0 && !failed;
+  // How long the skeleton has been one. A clock that only runs while there
+  // is a skeleton to time: a list with rows on it is never woken by this.
+  const now = useNowSeconds(showSkeleton);
+  const waitingSince = queryResult.freshness.waitingSince;
+  const waitedMs =
+    showSkeleton && waitingSince !== null ? now - waitingSince : 0;
+  const slow = waitedMs >= SLOW_READ_MS;
+  const ranOutOfTime = failed !== null && isReadDeadline(failed);
+
+  if (!isConnected) {
+    return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
+  }
   const resolvedTitle =
     typeof title === "function" ? title(resources.length) : title;
 
@@ -350,7 +367,86 @@ export function ResourceList<
           deliveries={resources.map(deliveriesOf)}
         />
       )}
-      {failed && resources.length === 0 ? (
+      {slow && (
+        <div
+          role="status"
+          data-testid="slow-read"
+          className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
+        >
+          <p className="flex items-baseline gap-2 text-fg">
+            <span>
+              {t("empty", "stillReading", {
+                label: emptyStateLabel.toLowerCase(),
+                scope: scope.inWords,
+              })}
+            </span>
+            <span className="font-mono tabular-nums text-warn">
+              {t("count", "secondsShort", {
+                n: Math.round(waitedMs / 1000),
+              })}
+            </span>
+          </p>
+          {(scope.isAll || scope.several) && (
+            <>
+              <p className="mt-0.5 text-fg-mut">
+                {t("empty", "narrowerIsFaster")}
+              </p>
+              <div className="mt-1.5 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openNamespacePicker}
+                >
+                  {t("action", "pickOneNamespace")}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {failed && resources.length === 0 && ranOutOfTime ? (
+        <div
+          role="status"
+          data-testid="read-deadline"
+          className="max-w-[68ch] py-6"
+        >
+          <p className="flex items-start gap-2 text-xs text-fg">
+            <TriangleAlert
+              className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
+              aria-hidden="true"
+            />
+            <span>
+              {t("empty", "readDeadline", {
+                label: emptyStateLabel.toLowerCase(),
+                scope: scope.inWords,
+                seconds: LIST_DEADLINE_SECONDS,
+              })}
+            </span>
+          </p>
+          {/* Not a fault to retry into: a deadline on a big cluster is the
+              cluster being big, so the narrower question comes first. */}
+          <p className="mt-1 pl-[22px] text-xs text-fg-mut">
+            {t("empty", "readDeadlineHint")}
+          </p>
+          <p className="mt-1 select-text pl-[22px] font-mono text-[11px] text-fg-fnt">
+            {verbatim(failed.message)}
+          </p>
+          <div className="mt-2 flex gap-2 pl-[22px]">
+            {(scope.isAll || scope.several) && (
+              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
+                {t("action", "pickOneNamespace")}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void queryResult.refetch()}
+            >
+              {t("action", "retry")}
+            </Button>
+          </div>
+        </div>
+      ) : failed && resources.length === 0 ? (
         <div className="max-w-[68ch] py-8">
           <p className="text-xs text-err">
             {/* A refusal is not a failure, and saying "could not read" about

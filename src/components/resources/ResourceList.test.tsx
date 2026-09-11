@@ -6,8 +6,9 @@
  * only ever entitled to the first one.
  */
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -28,6 +29,7 @@ vi.mock("@/stores/clusterStore", () => {
 });
 
 import { ResourceList } from "./ResourceList";
+import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
 
 interface Item {
   name: string;
@@ -108,5 +110,89 @@ describe("a list whose rows come from outside", () => {
 
     expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
+  });
+});
+
+describe("a read on a large cluster", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * A deadline is not a fault. "Could not read" invites the retry that just
+   * ran out of time; what shortens the next read is a narrower question,
+   * so that is what comes first, and the number in the sentence is the one
+   * the backend applied.
+   */
+  it("ends in words that offer the narrower question before a retry", async () => {
+    const opened = vi.fn();
+    window.addEventListener(SCOPE_PICKER_OPEN, opened);
+    list({
+      data: [],
+      error: new Error(
+        "Tauri command 'list_pods' failed: READ_DEADLINE: the cluster did not answer within 60 s"
+      ),
+    });
+
+    expect(
+      screen.getByText(/Reading pods in .* did not finish within 60 s/)
+    ).toBeVisible();
+    expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Pick one namespace/ })
+    );
+    expect(opened).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SCOPE_PICKER_OPEN, opened);
+  });
+
+  /**
+   * The eternal skeleton. Nothing here had a deadline on either side, so a
+   * slow list was a shape that never stopped; past the threshold it has to
+   * say what it is waiting for and what would make the wait shorter.
+   */
+  it("says what it is still reading once the wait is long enough to notice", async () => {
+    vi.useFakeTimers();
+    let resolve: (rows: Item[]) => void = () => {};
+    const pending = new Promise<Item[]>((done) => {
+      resolve = done;
+    });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              queryKey={["pods", "slow"]}
+              queryFn={() => pending}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_READ_MS + 1000);
+    });
+    expect(screen.getByTestId("slow-read")).toHaveTextContent(
+      /Still reading pods/
+    );
+
+    resolve([{ name: "web", namespace: "default" }]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
   });
 });
