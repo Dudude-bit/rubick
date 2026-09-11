@@ -4118,6 +4118,7 @@ export const ru: Catalogue = {
     integrationsNoCluster:
       "Подключите кластер, и здесь будет видно, что у него есть. Каждое расширение определяется запросом CRD к API-серверу, а спрашивать сейчас некого.",
     yamlNoteDefault: "объект в том виде, в каком его хранит API-сервер",
+    diffComputing: "Сравниваю…",
     noChangesDetected: "Изменений нет",
     addRepositoryThenSearch: "Добавьте репозиторий, затем ищите в нём чарты.",
     manifestsAreAt: "Манифесты лежат в",
