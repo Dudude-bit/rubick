@@ -4,6 +4,7 @@ import live from "@/lib/__fixtures__/live-prometheus-operator.json";
 import type {
   CustomResourceInfo,
   NamespaceInfo,
+  ScrapeTarget,
   ServiceInfo,
 } from "@/generated/types";
 import {
@@ -35,7 +36,10 @@ const namespaces = {
   ok: true as const,
   items: live.namespaces as unknown as NamespaceInfo[],
 };
-const targets: TargetsRead = { state: "read", targets: live.targets };
+const targets: TargetsRead = {
+  state: "read",
+  targets: live.targets as unknown as ScrapeTarget[],
+};
 const rows = rowsOf(monitors, instances, services, namespaces, targets);
 const row = (name: string): MonitorRow => {
   const found = rows.find((r) => r.monitor.name === name);
