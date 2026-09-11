@@ -93,6 +93,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
 
     // Reset any cached client/config for this context to ensure fresh auth
     state.client_manager.disconnect(&context);
+    state.overview_cache.forget(&context);
     state.remove_session(&context);
 
     let overrides = read_kubeconfig_overrides();
