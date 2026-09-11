@@ -29,6 +29,7 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import { useFilteredLogs } from "./hooks/useFilteredLogs";
 import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
 import { LogHistoryBar } from "./LogHistoryBar";
@@ -50,7 +51,6 @@ import {
   formatCount,
   formatSpan,
   logsToText,
-  matchesQuery,
   termLabel,
   type QueryTerm,
   type ViewMode,
@@ -802,21 +802,23 @@ export function LogViewer({
    * the strip by its own selection and dragging out four minutes leaves a
    * strip of four minutes, with nowhere left to drag back to.
    */
-  const { scoped, visibleLogs } = useMemo(() => {
+  const { time, rest } = useMemo(() => {
     const time = effectiveTerms.find((term) => term.kind === "time");
-    const rest = time
-      ? effectiveTerms.filter((term) => term.kind !== "time")
-      : effectiveTerms;
-    const scoped = logs.filter(
-      (log) => !hidden.has(log.container) && matchesQuery(log, rest)
-    );
     return {
-      scoped,
-      visibleLogs: time
+      time,
+      rest: time
+        ? effectiveTerms.filter((term) => term.kind !== "time")
+        : effectiveTerms,
+    };
+  }, [effectiveTerms]);
+  const { scoped, settling } = useFilteredLogs(logs, hidden, rest);
+  const visibleLogs = useMemo(
+    () =>
+      time
         ? scoped.filter((log) => log.epoch >= time.from && log.epoch <= time.to)
         : scoped,
-    };
-  }, [logs, hidden, effectiveTerms]);
+    [scoped, time]
+  );
 
   const timeRange = useMemo(() => {
     const term = terms.find((entry) => entry.kind === "time");
@@ -1317,6 +1319,7 @@ export function LogViewer({
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
+          settling={settling}
           intake={intake.length > 0}
           allHidden={shownContainers.length === 0 && containers.length > 0}
           onClearQuery={handleClearQuery}
@@ -1332,6 +1335,7 @@ export function LogViewer({
         retained={retained}
         limit={limit}
         shownCount={rows.length}
+        settling={settling}
         hiddenCount={hiddenByView}
         intake={intake}
         intakeFrom={intakeFrom}
@@ -1349,6 +1353,7 @@ function EmptyState({
   streaming,
   retained,
   filtered,
+  settling,
   intake,
   allHidden,
   onClearQuery,
@@ -1359,6 +1364,8 @@ function EmptyState({
   streaming: boolean;
   retained: number;
   filtered: boolean;
+  /** The query is still being walked over the buffer: no verdict yet. */
+  settling: boolean;
   /** Set, so "received" and "kept" are no longer the same number. */
   intake: boolean;
   allHidden: boolean;
@@ -1387,6 +1394,19 @@ function EmptyState({
           })}
         </span>
         <Action onClick={onShowAll}>{t("action", "showAllContainers")}</Action>
+      </Note>
+    );
+  }
+
+  // An empty view mid-walk is "not looked yet", and drawing it as "no line
+  // matches" would be the verdict before the evidence.
+  if (settling && retained > 0) {
+    return (
+      <Note>
+        {t("empty", "filteringLines", {
+          n: retained,
+          count: formatCount(retained),
+        })}
       </Note>
     );
   }
