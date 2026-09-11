@@ -1299,6 +1299,7 @@ export const en = {
     close: "Close",
     save: "Save",
     delete: "Delete",
+    pickOneNamespace: "Pick one namespace",
     retry: "Retry",
     download: "Download",
     refresh: "Refresh",
@@ -4258,6 +4259,13 @@ export const en = {
       "Could not read what this Service publishes:",
     noAnswer: "no answer",
     registeredByHand: "registered by hand",
+    stillReading: "Still reading {label} in {scope}",
+    narrowerIsFaster:
+      "A large cluster answers a narrower question faster: one namespace is one list instead of several.",
+    readDeadline:
+      "Reading {label} in {scope} did not finish within {seconds} s.",
+    readDeadlineHint:
+      "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
@@ -4679,6 +4687,7 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    secondsShort: "{n} s",
     namespacesHidden: {
       one: "{n} namespace hidden — no access",
       other: "{n} namespaces hidden — no access",

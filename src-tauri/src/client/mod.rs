@@ -140,6 +140,25 @@ fn without_client_retries(mut config: Config) -> Config {
     config
 }
 
+/// How long one request may take before the app stops waiting and says so.
+///
+/// Applied as a layer on every client, up to the response headers. For a
+/// LIST that is the whole list, because the apiserver assembles it before it
+/// answers; for a watch, a log follow or an exec it is the first byte, so the
+/// streams this app lives on are untouched. The number is also the one the
+/// frontend says in its sentence, so it lives in `shared/read-deadlines.json`
+/// and a test on each side holds the two equal.
+pub const READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The one place a client is built, so every client carries the deadline.
+fn build_client(config: Config) -> Result<Client> {
+    let builder = kube::client::ClientBuilder::try_from(config)
+        .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+    Ok(builder
+        .with_layer(&tower::timeout::TimeoutLayer::new(READ_DEADLINE))
+        .build())
+}
+
 impl K8sClientManager {
     /// Create a new client manager
     #[must_use]
@@ -408,8 +427,7 @@ impl K8sClientManager {
         }
 
         let config = self.create_config(context).await?;
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
 
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
@@ -441,8 +459,7 @@ impl K8sClientManager {
                     "Failed to create config for context {context}: {e}"
                 ))
             })?;
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
         self.configs.insert(context.to_string(), config);
@@ -463,8 +480,7 @@ impl K8sClientManager {
             .parse()
             .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
         let config = without_client_retries(Config::new(url));
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
         self.configs.insert(context.to_string(), config);
@@ -1088,5 +1104,27 @@ users:
             }
             other => panic!("expected Kubeconfig auth error, got {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod read_deadline_tests {
+    use super::*;
+
+    /// The frontend says this number in a sentence, and neither side can see
+    /// the other's constant. `shared/read-deadlines.json` holds them equal;
+    /// this test and its twin in `src/lib/read-deadline.test.ts` enforce it.
+    #[test]
+    fn the_read_deadline_is_the_number_the_shared_file_states() {
+        const SHARED: &str = include_str!("../../../shared/read-deadlines.json");
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Deadlines {
+            list_deadline_seconds: u64,
+        }
+
+        let shared: Deadlines = serde_json::from_str(SHARED).expect("shared deadlines parse");
+        assert_eq!(READ_DEADLINE.as_secs(), shared.list_deadline_seconds);
     }
 }

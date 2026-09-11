@@ -52,6 +52,12 @@ export interface Freshness {
   paused: boolean;
   /** What it is actually re-reading at, for anything that wants to say so. */
   everyMs: number | false;
+  /**
+   * When a read with nothing yet to show began, or `null` once something is
+   * on screen. A skeleton that knows how long it has been one can say so,
+   * and say what would make the wait shorter.
+   */
+  waitingSince: number | null;
 }
 
 export type LiveQueryOptions<
@@ -108,6 +114,8 @@ interface JoinedParts<T> {
    */
   settled: number[];
   isLoading: boolean;
+  /** Some part is in flight right now. */
+  fetching: boolean;
   error: Error | null;
   refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
 }
@@ -129,6 +137,7 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
       Math.max(part.dataUpdatedAt, part.errorUpdatedAt)
     ),
     isLoading: parts.some((part) => part.isLoading),
+    fetching: parts.some((part) => part.fetchStatus === "fetching"),
     error: parts.find((part) => part.error)?.error ?? null,
     refetchers: parts.map((part) => part.refetch),
   };
@@ -187,13 +196,15 @@ export function useLiveQueries<T>(options: {
     recording: false,
   });
 
-  const { data, stamps, settled, isLoading, error, refetchers } = useQueries({
-    queries: options.queries.map((query) => ({
-      ...query,
-      refetchInterval: everyMs,
-    })),
-    combine: joinParts,
-  });
+  const { data, stamps, settled, isLoading, fetching, error, refetchers } =
+    useQueries({
+      queries: options.queries.map((query) => ({
+        ...query,
+        refetchInterval: everyMs,
+      })),
+      combine: joinParts,
+    });
+  const waitingSince = useWaitingSince(isLoading && fetching);
 
   // The join is only as fresh as its stalest part: reporting the newest would
   // put a time on screen that one of the numbers under it predates. A part
@@ -290,8 +301,29 @@ export function useLiveQueries<T>(options: {
       slowed: base !== false && everyMs !== false && everyMs > base,
       paused: base !== false && everyMs === false,
       everyMs,
+      waitingSince,
     },
   };
+}
+
+/**
+ * The moment a read with nothing to show began, held until it ends.
+ *
+ * State, because a surface says "still reading" off it and has to render
+ * when it appears; set from an effect, because `Date.now()` in render is
+ * impure and would move on every re-render for no reason a reader can see.
+ * The effect only writes on the transition, the same shape `setSteadyRuns`
+ * above takes, so nothing cascades.
+ */
+function useWaitingSince(waiting: boolean): number | null {
+  const [since, setSince] = useState<number | null>(null);
+  const was = useRef(false);
+  useEffect(() => {
+    if (was.current === waiting) return;
+    was.current = waiting;
+    setSince(waiting ? Date.now() : null);
+  }, [waiting]);
+  return since;
 }
 
 export function useLiveQuery<
@@ -325,7 +357,8 @@ export function useLiveQuery<
     refetchInterval: everyMs,
   });
 
-  const { dataUpdatedAt, data, refetch } = query;
+  const { dataUpdatedAt, data, refetch, isLoading, fetchStatus } = query;
+  const waitingSince = useWaitingSince(isLoading && fetchStatus === "fetching");
 
   // How many answers in a row came back identical.
   //
@@ -396,6 +429,7 @@ export function useLiveQuery<
     slowed: base !== false && everyMs !== false && everyMs > base,
     paused: base !== false && everyMs === false,
     everyMs,
+    waitingSince,
   };
 
   // Neither spread nor assigned. React Query hands back a proxy that records
