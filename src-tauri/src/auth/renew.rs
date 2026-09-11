@@ -60,6 +60,9 @@ pub enum Renewal {
     /// It was tried and failed for a reason that was not about a person.
     /// Kept apart from `NeedsYou`: only one of them predicts a sign-in.
     Failed,
+    /// It was tried until there was no room left before the deadline, and the
+    /// plugin kept answering with the credentials already in use.
+    RanOut,
     /// `kubectl proxy` holds the credentials and renews them itself.
     Delegated,
     /// Nothing has said yet. The default, because every other answer is a
@@ -199,10 +202,8 @@ async fn run(
             return;
         };
 
-        let attempt = renew_once(&app, &context, before).await;
-        // Asked to stop while the plugin ran: what came back belongs to a
-        // session somebody has already replaced.
-        if stop_rx.try_recv().is_ok() {
+        let attempt = renew_once(&app, &context, before, &mut stop_rx).await;
+        if stopped(&mut stop_rx) {
             return;
         }
         let renewed = match attempt {
@@ -236,6 +237,9 @@ async fn run(
                 return;
             }
             Renewed::Replaced(Some(at)) => at,
+            // Somebody moved this context while the plugin ran, and whoever
+            // did owns what happens next.
+            Renewed::Superseded => return,
             // Nothing was replaced and nobody was told; the same schedule
             // would run the plugin every half minute for the same token.
             Renewed::Unchanged => before,
@@ -243,9 +247,9 @@ async fn run(
 
         let creep = matches!(renewed, Renewed::Unchanged);
         let Some(again) = next_wait(next, Utc::now(), creep) else {
-            // Out of room before the deadline. Nothing here is going to stop
-            // the `401` now, and the reader is owed that.
-            stop(&state, &context, Renewal::NeedsYou);
+            // Out of room, and nothing here will stop the `401` now. Not
+            // `NeedsYou`: no plugin asked for anybody.
+            stop(&state, &context, Renewal::RanOut);
             return;
         };
         wait = again;
@@ -288,6 +292,16 @@ enum Renewed {
     Replaced(Option<DateTime<Utc>>),
     /// The plugin handed back the credentials already in use.
     Unchanged,
+    /// Somebody moved the context while the plugin was running, so the
+    /// result was dropped rather than installed.
+    Superseded,
+}
+
+/// Whether this renewal was asked to stop, or its record replaced. `Empty` is
+/// the only answer that means carry on — a closed channel is `schedule`
+/// dropping the sender for a newer renewal.
+fn stopped(stop_rx: &mut oneshot::Receiver<()>) -> bool {
+    !matches!(stop_rx.try_recv(), Err(oneshot::error::TryRecvError::Empty))
 }
 
 /// One silent attempt: run the plugin, and swap the client only if what came
@@ -297,8 +311,17 @@ async fn renew_once(
     app: &AppHandle,
     context: &str,
     before: DateTime<Utc>,
+    stop_rx: &mut oneshot::Receiver<()>,
 ) -> crate::error::Result<Renewed> {
     let state = app.state::<AppState>();
+    // From disk, not the copy taken at connect: an OIDC refresh spends the
+    // stored token and writes its replacement to the file, so the second
+    // renewal would offer one the provider already rotated.
+    state
+        .client_manager
+        .load_kubeconfig_resolved(crate::commands::cluster::read_kubeconfig_overrides())
+        .await
+        .map_err(|e| crate::error::Error::Config(e.to_string()))?;
     let kubeconfig = state
         .client_manager
         .kubeconfig_clone()
@@ -314,6 +337,12 @@ async fn renew_once(
     if prepared.expires_at == Some(before) {
         return Ok(Renewed::Unchanged);
     }
+    // Everything past here installs the result, and a renewal whose context
+    // was disconnected or signed into again while the plugin ran would lay a
+    // stale token over what the reader now has.
+    if stopped(stop_rx) || state.client_manager.credential_deadline(context) != Some(before) {
+        return Ok(Renewed::Superseded);
+    }
     state
         .client_manager
         .connect_with_kubeconfig(context, prepared.kubeconfig)
@@ -324,6 +353,13 @@ async fn renew_once(
     state
         .client_manager
         .set_credential_deadline(context, prepared.expires_at);
+    // One request before anybody is told: building a client proves nothing,
+    // and this event is what lifts the refusal screen.
+    state
+        .client_manager
+        .test_connection(context)
+        .await
+        .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
     // Only now: telling the holders of the old client any earlier would have
     // them rebuild onto it.
     state.emit(crate::state::AppEvent::CredentialsRenewed {
@@ -388,9 +424,10 @@ mod tests {
         assert_eq!(next_wait(now + Duration::seconds(5), now, true), None);
     }
 
-    /// Only one kind of failure predicts a sign-in. A kubeconfig that would
-    /// not read says nothing about whether a person is needed, and telling
-    /// the reader one is coming would be inventing it.
+    /// Only one kind of failure predicts a sign-in *because somebody was
+    /// asked*. A kubeconfig that would not read says nothing about whether a
+    /// person is needed, and running out of room before the deadline is a
+    /// third thing again — `RanOut`, not `NeedsYou`.
     #[test]
     fn only_a_plugin_asking_for_a_person_is_reported_as_needing_one() {
         use crate::error::{AuthError, Error};

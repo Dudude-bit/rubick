@@ -26,15 +26,18 @@ export function useWatchForRenewals(): void {
     const pending = listen<{ context: string }>(
       "credentials-renewed",
       (event) => {
-        credentialsRenewed();
-        // The same proof of a live session a connect is, and the refusal
-        // screen is a takeover only a connect used to lift: a laptop wakes,
-        // the first read takes a `401`, the renewal lands a second later.
+        // A renewal for a cluster this window is not showing replaced a
+        // client nothing here holds; restarting its streams buys nothing.
         if (
-          event.payload.context === useClusterStore.getState().currentContext
+          event.payload.context !== useClusterStore.getState().currentContext
         ) {
-          credentialsRestored();
+          return;
         }
+        credentialsRenewed();
+        // Proof of a live session — `renew_once` asks the cluster before
+        // sending this — and the refusal screen is a takeover only a connect
+        // used to lift, though a renewal can land right after a `401`.
+        credentialsRestored();
       }
     );
     return () => {

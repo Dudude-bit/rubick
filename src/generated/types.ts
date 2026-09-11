@@ -1783,6 +1783,7 @@ export type Renewal =
   | "passed"
   | "needsYou"
   | "failed"
+  | "ranOut"
   | "delegated"
   | "unknown";
 

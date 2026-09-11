@@ -72,6 +72,17 @@ describe("what will interrupt the reader next", () => {
     expect(screen.getByText("sign-in needed")).toBeInTheDocument();
   });
 
+  /** `ranOut` predicts the same interruption and so lights the same chip. */
+  it("warns when the plugin kept handing back what it already had", () => {
+    renewal = "ranOut";
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("sign-in needed")).toBeInTheDocument();
+  });
+
   it.each([
     "scheduled",
     "noDeadline",

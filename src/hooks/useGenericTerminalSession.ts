@@ -168,6 +168,13 @@ export function useGenericTerminalSession({
         }
         unlistenRef.current.push(unlistenOutput);
 
+        // Between two synchronous statements, so nothing reaches both. After
+        // the next `await`, a round trip's bytes would print twice.
+        const earlier = replayRef.current?.();
+        if (earlier && onOutputRef.current) {
+          onOutputRef.current(earlier);
+        }
+
         // Listen for close
         const unlistenClosed = await listen<{
           session_id: string;
@@ -188,13 +195,6 @@ export function useGenericTerminalSession({
           return;
         }
         unlistenRef.current.push(unlistenClosed);
-
-        // Draining earlier leaves a hole; later prints the prompt under the
-        // answer to it.
-        const earlier = replayRef.current?.();
-        if (earlier && onOutputRef.current) {
-          onOutputRef.current(earlier);
-        }
 
         // Both listeners are now installed. Tell the backend it's safe
         // to start reading from the adapter — without this signal the

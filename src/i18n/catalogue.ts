@@ -2711,6 +2711,8 @@ export const en = {
       "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
     renewalFailed:
       "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
+    renewalRanOut:
+      "Renewing them quietly was tried twice and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:
@@ -2719,6 +2721,8 @@ export const en = {
     renewalNeedsYou: "sign-in needed",
     renewalNeedsYouHint:
       "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet — the current credentials still work, and you will be asked to sign in when they expire.",
+    renewalRanOutHint:
+      "The credential plugin kept handing back the credentials already in use, so there was nothing newer to put in place before they expire. Nothing is wrong yet, and you will be asked to sign in when they do.",
     stillRefusedHint:
       "Still refused? The credential plugin this context uses may need a sign-in of its own first — for GKE that is",
     healthy: "Healthy",

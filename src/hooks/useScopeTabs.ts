@@ -46,7 +46,9 @@ export function useScopeTabs(): void {
   // from is the same list anywhere.
   useEffect(() => {
     if (contextSwitches === 0) return;
-    useScopeTabStore.getState().retargetAfterSwitch();
+    useScopeTabStore
+      .getState()
+      .retargetAfterSwitch(useClusterStore.getState().currentContext);
   }, [contextSwitches]);
 
   // Everything cached belonged to the connection the parked tab no longer

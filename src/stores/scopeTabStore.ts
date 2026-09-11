@@ -95,7 +95,7 @@ interface ScopeTabState {
   resumeActive: () => Promise<void>;
   recordHref: (href: string) => void;
   /** Let go of a route that belongs to the cluster just left. */
-  retargetAfterSwitch: () => void;
+  retargetAfterSwitch: (connected: string | null) => void;
   routeSettled: () => void;
   reconcileContexts: (names: string[]) => void;
 }
@@ -313,13 +313,17 @@ export const useScopeTabStore = create<ScopeTabState>()(
         await applyScope(next);
       },
 
-      retargetAfterSwitch: () => {
+      retargetAfterSwitch: (connected: string | null) => {
         const { tabs, activeId, pendingHref } = get();
         // An activation is already delivering a route of its own; this is
         // only for a cluster that changed under a tab standing still.
         if (pendingHref !== null) return;
         const active = tabs.find((tab) => tab.id === activeId);
         if (!active) return;
+        // A tab whose own record names this cluster has a route that belongs
+        // to it — an activation, or the retry of one that failed — and there
+        // is nothing here to let go of.
+        if (active.context === connected) return;
         const list = listBehind(active.href);
         if (list === null || list === active.href) return;
         set({
@@ -353,19 +357,23 @@ export const useScopeTabStore = create<ScopeTabState>()(
           // lost every cluster; flagging every tab on it would be a lie.
           if (names.length === 0) return state;
           const known = new Set(names);
+          let goTo: string | null = null;
           const tabs = state.tabs.map((tab) => {
             const missing = !!tab.context && !known.has(tab.context);
-            if (missing === tab.missing) return tab;
             // An object in a cluster this kubeconfig does not have is a page
-            // nothing can answer — the empty pod page on the next launch.
+            // nothing can answer. From the state, not the change, so a tab
+            // already flagged is not left holding the dead route.
             const href = missing
               ? (listBehind(tab.href) ?? tab.href)
               : tab.href;
+            if (missing === tab.missing && href === tab.href) return tab;
+            // Rewriting the record takes nobody anywhere, and `recordHref`
+            // would write the dead route straight back.
+            if (href !== tab.href && tab.id === state.activeId) goTo = href;
             return { ...tab, missing, href };
           });
-          return tabs.every((tab, i) => tab === state.tabs[i])
-            ? state
-            : { tabs };
+          if (tabs.every((tab, i) => tab === state.tabs[i])) return state;
+          return goTo === null ? { tabs } : { tabs, pendingHref: goTo };
         }),
     }),
     {

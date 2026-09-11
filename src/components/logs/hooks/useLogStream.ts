@@ -301,7 +301,12 @@ export function useLogStream({
 
     const initStreams = async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
-      if (!active || isPaused || streamed.length === 0) return;
+      if (!active || isPaused || streamed.length === 0) {
+        // A renewal landing while this is paused rebuilds nothing, so the
+        // unpause must not read as a resume and skip the backfill.
+        if (opened.current) opened.current = { ...opened.current, renewals };
+        return;
+      }
 
       /**
        * Picking up where the buffer left off, rather than starting a
@@ -321,7 +326,9 @@ export function useLogStream({
       const lastOpened = opened.current;
       // A renewal restarts these streams on the new client and changes
       // nothing the reader chose, so wiping what they are reading would be
-      // the renewal costing them the thing it was meant to keep alive.
+      // the renewal costing them the thing it was meant to keep alive. It
+      // inherits the gap every resume has: `tailLines: 0` below, so whatever
+      // was printed while the stream was being rebuilt is not backfilled.
       const renewed = lastOpened !== null && lastOpened.renewals !== renewals;
       const resuming =
         lastOpened !== null &&

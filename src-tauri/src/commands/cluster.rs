@@ -19,7 +19,7 @@ use crate::state::AppState;
 /// The list wins where there is one; `kubeconfig_path` is what a build
 /// without several files writes, and is still read so that pinning a file
 /// in such a build and then upgrading does not silently unpin it.
-fn read_kubeconfig_overrides() -> Vec<std::path::PathBuf> {
+pub(crate) fn read_kubeconfig_overrides() -> Vec<std::path::PathBuf> {
     crate::commands::settings::helpers::read_config(|c| {
         pinned_files(
             &c.kubernetes.kubeconfig_paths,

@@ -46,9 +46,16 @@ export function StatusBar() {
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
   const { podCount, problemCount, problemsTruncated } = useClusterSummary();
-  // The only one of the five worth a line that is always up: a chip that is
+  // The two worth a line that is always up — both predict the sign-in screen,
+  // and they differ in why. Everything else is quiet, and a chip that is
   // permanently lit stops being read.
-  const needsSignIn = useRenewal() === "needsYou";
+  const renewal = useRenewal();
+  const signInHint =
+    renewal === "needsYou"
+      ? "renewalNeedsYouHint"
+      : renewal === "ranOut"
+        ? "renewalRanOutHint"
+        : null;
 
   const connecting = isLoading || isAuthenticating;
 
@@ -115,7 +122,7 @@ export function StatusBar() {
               <span>·</span>
             </>
           )}
-          {needsSignIn && (
+          {signInHint && (
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -128,7 +135,7 @@ export function StatusBar() {
                   align="end"
                   className="max-w-[420px]"
                 >
-                  {t("cluster", "renewalNeedsYouHint")}
+                  {t("cluster", signInHint)}
                 </TooltipContent>
               </Tooltip>
               <span>·</span>

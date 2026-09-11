@@ -608,8 +608,10 @@ describe("a route that belongs to the cluster being left", () => {
 describe("retargetAfterSwitch", () => {
   /** Without this the tab keeps the old cluster's pod and goes nowhere. */
   it("moves the active tab to the list and asks the router for it", () => {
-    seed([tab({ id: "a", href: "/pods/default/api-7f9" })]);
-    useScopeTabStore.getState().retargetAfterSwitch();
+    seed([
+      tab({ id: "a", context: "left-behind", href: "/pods/default/api-7f9" }),
+    ]);
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
     const { tabs, pendingHref } = useScopeTabStore.getState();
     expect(tabs[0].href).toBe("/workloads/pods");
     expect(pendingHref).toBe("/workloads/pods");
@@ -621,17 +623,32 @@ describe("retargetAfterSwitch", () => {
    * did not ask for every time they switched tabs.
    */
   it("stands aside while an activation is delivering a route", () => {
-    seed([tab({ id: "a", href: "/pods/default/api-7f9" })]);
+    seed([
+      tab({ id: "a", context: "left-behind", href: "/pods/default/api-7f9" }),
+    ]);
     useScopeTabStore.setState({ pendingHref: "/nodes/worker-1" });
-    useScopeTabStore.getState().retargetAfterSwitch();
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
     expect(useScopeTabStore.getState().tabs[0].href).toBe(
       "/pods/default/api-7f9"
     );
   });
 
+  /**
+   * The retry of a failed activation reconnects the tab's own cluster without
+   * a route of its own to carry, so the counter moves — and the tab's page
+   * belonged to that cluster all along.
+   */
+  it("leaves a tab alone when the cluster it landed on is the one it names", () => {
+    seed([tab({ id: "a", context: "prod", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().retargetAfterSwitch("prod");
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].href).toBe("/pods/default/api-7f9");
+    expect(pendingHref).toBeNull();
+  });
+
   it("leaves a tab that was already on a list alone", () => {
-    seed([tab({ id: "a", href: "/workloads/pods" })]);
-    useScopeTabStore.getState().retargetAfterSwitch();
+    seed([tab({ id: "a", context: "left-behind", href: "/workloads/pods" })]);
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
     expect(useScopeTabStore.getState().pendingHref).toBeNull();
   });
 });
@@ -676,16 +693,33 @@ describe("every route this could send a tab to", () => {
       );
     }
 
-    // Every detail route the app serves, as the href a reader would be on.
-    const details = [
+    // Every detail route the app serves, as the href a reader would be on —
+    // including the ones built by mapping over a list of kinds, which is
+    // exactly where the kinds LIST_ELSEWHERE exists for are declared.
+    const plural_ = (kind: string) =>
+      toPlural(ResourceType[kind as keyof typeof ResourceType]);
+    const named = [
       ...app.matchAll(
         /path=\{`\$\{toPlural\(ResourceType\.(\w+)\)\}\/([^`]*)`\}/g
       ),
-    ].map(([, kind, tail]) => {
-      const p = toPlural(ResourceType[kind as keyof typeof ResourceType]);
-      return `/${p}/${tail.replace(/:\w+/g, "x")}`;
-    });
-    expect(details.length).toBeGreaterThan(10);
+    ].map(([, kind, tail]): [string, string] => [plural_(kind), tail]);
+    const mapped = [
+      ...app.matchAll(
+        /\[([^\]]*?ResourceType\.\w+[^\]]*?)\]\.map\(\(kind\) => \([\s\S]*?path=\{`\$\{toPlural\(kind\)\}\/([^`]*)`\}/g
+      ),
+    ].flatMap(([, list, tail]) =>
+      [...list.matchAll(/ResourceType\.(\w+)/g)].map(
+        ([, kind]): [string, string] => [plural_(kind), tail]
+      )
+    );
+    expect(mapped.map(([p]) => p)).toContain("tlsroutes");
+
+    const details = [...named, ...mapped].map(
+      ([p, tail]) => `/${p}/${tail.replace(/:\w+/g, "x")}`
+    );
+    // The count guards the extraction itself: a regex that stopped matching
+    // would otherwise leave this passing over an empty list.
+    expect(details.length).toBeGreaterThanOrEqual(25);
 
     const missing = details
       .map((href) => [href, listBehind(href)] as const)
@@ -700,20 +734,46 @@ describe("a tab whose cluster the kubeconfig no longer has", () => {
    * cluster that is not in the kubeconfig any more. Nothing can answer it, so
    * the page reads "could not read this pod" until the reader works out why.
    */
-  it("lets go of the object it was on and keeps the list", () => {
+  it("lets go of the object it was on and takes the reader there", () => {
     seed([tab({ id: "a", context: "gone", href: "/pods/default/api-7f9" })]);
     useScopeTabStore.getState().reconcileContexts(["still-here"]);
-    const [only] = useScopeTabStore.getState().tabs;
-    expect(only.missing).toBe(true);
-    expect(only.href).toBe("/workloads/pods");
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].missing).toBe(true);
+    expect(tabs[0].href).toBe("/workloads/pods");
+    // Rewriting the record leaves the router on the dead page.
+    expect(pendingHref).toBe("/workloads/pods");
+  });
+
+  /**
+   * The flag is not the trigger: a tab flagged by an older build, or one that
+   * recorded an object route while already flagged, has to be let go of too.
+   */
+  it("lets go on a later pass, not only on the one that flags it", () => {
+    seed([
+      tab({
+        id: "a",
+        context: "gone",
+        href: "/pods/default/api-7f9",
+        missing: true,
+      }),
+    ]);
+    useScopeTabStore.getState().reconcileContexts(["still-here"]);
+    expect(useScopeTabStore.getState().tabs[0].href).toBe("/workloads/pods");
   });
 
   /** A cluster that came back keeps whatever the tab is on. */
   it("leaves a tab alone when its cluster is there", () => {
-    seed([tab({ id: "a", context: "here", href: "/pods/default/api-7f9" })]);
+    seed([
+      tab({
+        id: "a",
+        context: "here",
+        href: "/pods/default/api-7f9",
+        missing: true,
+      }),
+    ]);
     useScopeTabStore.getState().reconcileContexts(["here"]);
-    expect(useScopeTabStore.getState().tabs[0].href).toBe(
-      "/pods/default/api-7f9"
-    );
+    const [only] = useScopeTabStore.getState().tabs;
+    expect(only.missing).toBe(false);
+    expect(only.href).toBe("/pods/default/api-7f9");
   });
 });
