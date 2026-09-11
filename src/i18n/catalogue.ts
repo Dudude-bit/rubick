@@ -440,6 +440,8 @@ export const en = {
     extendedResource: "extended",
     accessModes: "Access Modes",
     replicas: "Replicas",
+    retention: "Retention",
+    groups: "Groups",
     keys: "Keys",
     status: "Status",
     ready: "Ready",
@@ -1793,6 +1795,66 @@ export const en = {
   // What each extension gets the reader, in the words of the thing they get.
   // Here rather than in the vendor module because a vendor module is a plain
   // table with no hook to call: it names the key, and the row translates it.
+  monitors: {
+    pageHint:
+      "Every ServiceMonitor and PodMonitor: what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it.",
+    couldNotReadMonitors: "Could not read the ServiceMonitor objects",
+    kindUnread: "{kind} objects could not be read: {reason}",
+    instances: "Prometheus instances",
+    noInstances:
+      "No Prometheus object in the cluster: nothing picks the monitors up.",
+    instancesUnread:
+      "The Prometheus objects could not be read, so which instance picks a monitor up is unknown.",
+    readyOf: "{ready} of {wanted} ready",
+    readyUnknown: "readiness not written",
+    retention: "retention {value}",
+    scrapeTruth: "Scrape truth",
+    notConnected:
+      "No Prometheus is connected for this cluster, so whether a monitor is really scraped stays unchecked.",
+    connectPrometheus: "Connect one in Settings",
+    unanswered:
+      "The connected Prometheus did not answer for its targets: {reason}",
+    targetsRead: {
+      one: "{n} active target on the connected Prometheus",
+      other: "{n} active targets on the connected Prometheus",
+    },
+    filterMonitors: "Filter monitors",
+    filterMonitorsLabel: "Filter monitors by name or namespace",
+    none: "No ServiceMonitor or PodMonitor in this cluster.",
+    noneMatch: "No monitor matches the filter.",
+    needAttention: "{n} of {total} need attention",
+    selects: "Selects",
+    selectsServices: {
+      one: "{n} Service",
+      other: "{n} Services",
+    },
+    selectsNothing:
+      "selects no Service: the selector matches nothing in the namespaces it reaches",
+    notCounted: "pods, not counted here",
+    selectionUnread:
+      "Services could not be listed, so what this selects is unknown: {reason}",
+    pickedUpBy: "Picked up by",
+    notPickedUp:
+      "no Prometheus picks it up: no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
+    pickedUpUnknown:
+      "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
+    scraped: "Scraped",
+    scrapedUp: "{up} up",
+    targetsDown: "{down} of {total} targets down",
+    noTargets:
+      "picked up, but the connected Prometheus has no target for it: the operator has not written it yet, or wrote it for another Prometheus",
+    notChecked: "not checked",
+    endpoints: "Endpoints",
+    everyInterval: "every {interval}",
+    rowOk: "scraped",
+    rowNotChecked: "not checked",
+    rowDown: "targets down",
+    rowNotPickedUp: "not picked up",
+    rowSelectsNothing: "selects nothing",
+    rowUnknown: "unknown",
+    rowNoTargets: "no targets",
+  },
+
   vendor: {
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
@@ -1817,6 +1879,8 @@ export const en = {
     lokiGives: "logs from before the current pod existed",
     prometheusGives:
       "usage history, volume fullness and traffic on pods and workloads",
+    prometheusOperatorGives:
+      "every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
 

@@ -410,6 +410,8 @@ export const ru: Catalogue = {
     extendedResource: "расширенный",
     accessModes: "Режимы доступа",
     replicas: "Реплики",
+    retention: "Хранение",
+    groups: "Группы",
     keys: "Ключи",
     status: "Состояние",
     ready: "Готовность",
@@ -1828,6 +1830,69 @@ export const ru: Catalogue = {
     cancelled: "Вход отменён",
     cancelledFor: "Отменено: {context}.",
   },
+  monitors: {
+    pageHint:
+      "Каждый ServiceMonitor и PodMonitor: кого выбирает, какой Prometheus его подхватывает и скрейпит ли его подключённый Prometheus на самом деле.",
+    couldNotReadMonitors: "Не удалось прочитать объекты ServiceMonitor",
+    kindUnread: "Объекты {kind} не удалось прочитать: {reason}",
+    instances: "Инстансы Prometheus",
+    noInstances:
+      "В кластере нет объекта Prometheus: мониторы некому подхватывать.",
+    instancesUnread:
+      "Объекты Prometheus не удалось прочитать, поэтому неизвестно, какой инстанс подхватывает монитор.",
+    readyOf: "{ready} из {wanted} готово",
+    readyUnknown: "готовность не записана",
+    retention: "хранение {value}",
+    scrapeTruth: "Правда о скрейпе",
+    notConnected:
+      "К этому кластеру не подключён Prometheus, поэтому скрейпится ли монитор на самом деле, не проверено.",
+    connectPrometheus: "Подключить в настройках",
+    unanswered: "Подключённый Prometheus не ответил про свои targets: {reason}",
+    targetsRead: {
+      one: "{n} активный target на подключённом Prometheus",
+      few: "{n} активных target'а на подключённом Prometheus",
+      many: "{n} активных target'ов на подключённом Prometheus",
+      other: "{n} активных target'ов на подключённом Prometheus",
+    },
+    filterMonitors: "Фильтр мониторов",
+    filterMonitorsLabel: "Фильтровать мониторы по имени или namespace",
+    none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",
+    noneMatch: "Ни один монитор не подходит под фильтр.",
+    needAttention: "{n} из {total} требуют внимания",
+    selects: "Выбирает",
+    selectsServices: {
+      one: "{n} Service",
+      few: "{n} Service'а",
+      many: "{n} Service'ов",
+      other: "{n} Service'ов",
+    },
+    selectsNothing:
+      "не выбирает ни одного Service: селектор ничему не соответствует в namespace'ах, до которых дотягивается",
+    notCounted: "поды, здесь не считаются",
+    selectionUnread:
+      "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
+    pickedUpBy: "Подхватывает",
+    notPickedUp:
+      "ни один Prometheus его не подхватывает: ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
+    pickedUpUnknown:
+      "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
+    scraped: "Скрейпится",
+    scrapedUp: "{up} up",
+    targetsDown: "{down} из {total} target'ов down",
+    noTargets:
+      "подхвачен, но у подключённого Prometheus нет target'а для него: оператор ещё не записал его или записал для другого Prometheus",
+    notChecked: "не проверено",
+    endpoints: "Эндпоинты",
+    everyInterval: "каждые {interval}",
+    rowOk: "скрейпится",
+    rowNotChecked: "не проверено",
+    rowDown: "target'ы down",
+    rowNotPickedUp: "не подхвачен",
+    rowSelectsNothing: "ничего не выбирает",
+    rowUnknown: "неизвестно",
+    rowNoTargets: "нет target'ов",
+  },
+
   vendor: {
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
@@ -1852,6 +1917,8 @@ export const ru: Catalogue = {
     lokiGives: "логи за время до того, как появился текущий под",
     prometheusGives:
       "историю нагрузки, заполненность томов и трафик подов и рабочих нагрузок",
+    prometheusOperatorGives:
+      "каждый ServiceMonitor и PodMonitor: кого выбирает, какой Prometheus его подхватывает и скрейпит ли его подключённый Prometheus на самом деле",
     traefikGives:
       "каждый хост, который отдаёт этот кластер, и где каждый обрывается",
   },

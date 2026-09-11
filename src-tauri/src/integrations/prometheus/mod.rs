@@ -342,6 +342,80 @@ pub async fn prometheus_query_range(
 /// A `vector` is a `matrix` with one point per series as far as every caller
 /// here is concerned, and keeping the distinction would put a `match` on
 /// result type in three places that do not care.
+/// One target as `/api/v1/targets` lists it: which scrape pool it belongs
+/// to, whether the last scrape worked, and what Prometheus said when it did
+/// not. The pool is how a target is traced back to the `ServiceMonitor` or
+/// `PodMonitor` the operator wrote it from: `serviceMonitor/<ns>/<name>/<i>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeTarget {
+    pub scrape_pool: String,
+    pub scrape_url: String,
+    /// `up`, `down` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last scrape worked.
+    pub last_error: String,
+    pub last_scrape: Option<String>,
+    pub labels: HashMap<String, String>,
+}
+
+/// Every active target of the configured Prometheus.
+#[tauri::command]
+pub async fn prometheus_targets(state: State<'_, AppState>) -> Result<Vec<ScrapeTarget>> {
+    let entry = configured(&state)?;
+    let value = get_json(
+        &entry,
+        "/api/v1/targets",
+        &[("state", "active".to_string())],
+    )
+    .await
+    .map_err(unreachable)?;
+    parse_targets(&value)
+}
+
+fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its targets");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |target: &serde_json::Value, key: &str| {
+        target
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    Ok(body
+        .get("data")
+        .and_then(|d| d.get("activeTargets"))
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+        .map(|target| ScrapeTarget {
+            scrape_pool: text(target, "scrapePool"),
+            scrape_url: text(target, "scrapeUrl"),
+            health: text(target, "health"),
+            last_error: text(target, "lastError"),
+            last_scrape: target
+                .get("lastScrape")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            labels: target
+                .get("labels")
+                .and_then(|m| m.as_object())
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect())
+}
+
 fn parse_result(body: &serde_json::Value) -> Result<Vec<PromSeries>> {
     if body.get("status").and_then(|s| s.as_str()) != Some("success") {
         let message = body
@@ -405,6 +479,51 @@ fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.
+    #[test]
+    fn targets_keep_the_pool_the_health_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "activeTargets": [
+                {
+                    "discoveredLabels": {"__address__": "10.0.0.9:8080"},
+                    "labels": {"job": "shop/web", "namespace": "shop", "service": "web", "instance": "10.0.0.9:8080"},
+                    "scrapePool": "serviceMonitor/shop/web/0",
+                    "scrapeUrl": "http://10.0.0.9:8080/metrics",
+                    "lastError": "",
+                    "lastScrape": "2026-09-12T08:00:00.000Z",
+                    "lastScrapeDuration": 0.01,
+                    "health": "up"
+                },
+                {
+                    "labels": {"job": "shop/db"},
+                    "scrapePool": "serviceMonitor/shop/db/0",
+                    "scrapeUrl": "http://10.0.0.7:9187/metrics",
+                    "lastError": "Get \"http://10.0.0.7:9187/metrics\": dial tcp 10.0.0.7:9187: connect: connection refused",
+                    "lastScrape": "2026-09-12T08:00:01.000Z",
+                    "health": "down"
+                }
+            ], "droppedTargets": [] }
+        });
+        let targets = parse_targets(&body).unwrap();
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].scrape_pool, "serviceMonitor/shop/web/0");
+        assert_eq!(targets[0].health, "up");
+        assert_eq!(
+            targets[0].labels.get("service").map(String::as_str),
+            Some("web")
+        );
+        assert_eq!(targets[1].health, "down");
+        assert!(targets[1].last_error.contains("connection refused"));
+    }
+
+    /// A Prometheus that refuses is a refusal, not an empty pool list.
+    #[test]
+    fn a_refused_target_list_is_an_error_not_no_targets() {
+        let body = serde_json::json!({ "status": "error", "error": "forbidden" });
+        assert!(parse_targets(&body).is_err());
+    }
     use serde_json::json;
 
     /// Would break if the credential started travelling to the webview —

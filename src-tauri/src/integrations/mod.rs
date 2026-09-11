@@ -73,6 +73,13 @@ const MARKERS: &[(&str, &[&str])] = &[
     // by whoever installed it and its CRD is not.
     ("cloudnativepg", &["clusters.postgresql.cnpg.io"]),
     ("scylla", &["scyllaclusters.scylla.scylladb.com"]),
+    // The monitors are what the page is about, and the one CRD every
+    // install of the operator has; a bare CRD apply without the operator
+    // still counts, which is right: the monitors exist and nothing reads them.
+    (
+        "prometheus-operator",
+        &["servicemonitors.monitoring.coreos.com"],
+    ),
     // The three managed offerings' own controllers. What is detected is the
     // controller, never the cloud: a cluster cannot fail to be on GKE, but
     // it can perfectly well be on GKE with HTTP load balancing turned off,

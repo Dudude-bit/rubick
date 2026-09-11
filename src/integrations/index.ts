@@ -60,6 +60,7 @@ import karpenter from "./karpenter";
 import loki from "./loki";
 import minikube from "./minikube";
 import prometheus from "./prometheus";
+import prometheusOperator from "./prometheus-operator";
 import traefik from "./traefik";
 import { gatewayCrd } from "./gateway-crd";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -174,6 +175,7 @@ const VENDORS: Vendor[] = [
   istio,
   cloudnativepg,
   scylla,
+  prometheusOperator,
   prometheus,
   loki,
   k3s,
