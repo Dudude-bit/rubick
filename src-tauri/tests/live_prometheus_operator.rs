@@ -97,12 +97,13 @@ async fn the_monitors_are_there_and_the_targets_name_their_pools() {
         targets.iter().any(|t| t.scrape_pool == pool("log-demo")),
         "log-demo's pool is not among the targets"
     );
-    let nothing = targets
-        .iter()
-        .find(|t| t.scrape_pool == pool("selects-nothing"))
-        .expect("selects-nothing's pool");
+    // The real operator writes no target for a monitor that selects nothing;
+    // a stand-in Prometheus may carry one. Either way it is never up.
     assert!(
-        nothing.health != "up",
-        "an unreachable target must not read as up"
+        targets
+            .iter()
+            .filter(|t| t.scrape_pool == pool("selects-nothing"))
+            .all(|t| t.health != "up"),
+        "a monitor that selects nothing cannot have a target that is up"
     );
 }
