@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   Bug,
   FolderOpen,
+  Stethoscope,
   Info,
   Network,
   RefreshCw,
@@ -22,6 +23,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
 import { FilesTab } from "@/components/files/FilesTab";
+import { ChecksTab } from "@/components/checks/ChecksTab";
 import type { Via } from "@/generated/types";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodShell } from "@/components/terminal/PodShell";
@@ -879,6 +881,14 @@ export function PodDetail() {
                 }}
                 onStopVia={() => setFilesVia(null)}
               />
+            ) : null,
+          },
+          {
+            id: "checks",
+            label: t("checks", "tab"),
+            glyph: viewGlyph(Stethoscope),
+            content: pod ? (
+              <ChecksTab key={`checks:${pod.uid}`} pod={pod} />
             ) : null,
           },
           {
