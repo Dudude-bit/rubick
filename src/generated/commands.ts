@@ -92,6 +92,7 @@ import type {
   RegistryImageResult,
   RegistryImportEntry,
   RegistrySearchRequest,
+  Renewal,
   ReplicaSetInfo,
   ResolveProbe,
   ResourceConnections,
@@ -1489,6 +1490,10 @@ export async function connectionAttempt(
 
 export async function disconnectCluster(context: string): Promise<void> {
   return invoke<void>("disconnect_cluster", { context });
+}
+
+export async function credentialRenewal(context: string): Promise<Renewal> {
+  return invoke<Renewal>("credential_renewal", { context });
 }
 
 export async function getClusterInfo(context: string): Promise<ClusterInfo> {

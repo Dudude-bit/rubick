@@ -3,7 +3,7 @@
 use tauri::State;
 use tokio::time::{timeout, Duration};
 
-use crate::auth::prepare_kubeconfig_for_context;
+use crate::auth::{prepare_kubeconfig_for_context, AuthMode};
 use crate::client::{
     ClusterInfo, ConnectAttempt, ContextInfo, KubectlProxy, PathOutcome, ProxyOutcome,
 };
@@ -80,7 +80,11 @@ pub async fn get_current_context(state: State<'_, AppState>) -> Result<Option<St
 
 /// Connect to a cluster by context name
 #[tauri::command]
-pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Result<ClusterInfo> {
+pub async fn connect_cluster(
+    context: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ClusterInfo> {
     let generation = state.next_connect_generation();
     let cancelled_sessions = state.cancel_auth_sessions_for_context(&context);
     for session_id in cancelled_sessions {
@@ -92,6 +96,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
     }
 
     // Reset any cached client/config for this context to ensure fresh auth
+    state.renew_manager.forget(&context);
     state.client_manager.disconnect(&context);
     state.remove_session(&context);
 
@@ -111,6 +116,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
                 direct: PathOutcome::Ok,
                 proxy: ProxyOutcome::NotTried,
             });
+            arrange_renewal(&app, &state, &context);
             info
         }
         Err(direct) => {
@@ -137,6 +143,7 @@ pub async fn connect_cluster(context: String, state: State<'_, AppState>) -> Res
                 Ok((info, port)) => {
                     attempt.proxy = ProxyOutcome::Ok { port, kubectl };
                     state.client_manager.record_attempt(attempt);
+                    crate::auth::renew::delegated(&app, &context);
                     info
                 }
                 Err(failure) => {
@@ -179,9 +186,10 @@ async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> 
         .kubeconfig_clone()
         .await
         .map_err(|e| Error::Config(e.to_string()))?;
-    let prepared = prepare_kubeconfig_for_context(state, kubeconfig, context)
-        .await
-        .map_err(prepared_failure)?;
+    let prepared =
+        prepare_kubeconfig_for_context(state, kubeconfig, context, AuthMode::Interactive)
+            .await
+            .map_err(prepared_failure)?;
     state
         .client_manager
         .set_credential_deadline(context, prepared.expires_at);
@@ -191,6 +199,16 @@ async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> 
         .await
         .map_err(|e| Error::Connection(e.to_string()))?;
     probe(state, context).await
+}
+
+/// Arrange for the context to renew itself, after the connect succeeded: one
+/// scheduled against a failed connection runs the plugin for nobody.
+fn arrange_renewal(app: &tauri::AppHandle, state: &AppState, context: &str) {
+    crate::auth::renew::schedule(
+        app,
+        context,
+        state.client_manager.credential_deadline(context),
+    );
 }
 
 /// Through `kubectl proxy`: kubectl runs the plugin and holds the token.
@@ -295,6 +313,8 @@ pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result
         });
     }
 
+    // Before the disconnect, so the task stops because it was told to.
+    state.renew_manager.forget(&context);
     state.client_manager.disconnect(&context);
     state.remove_session(&context);
 
@@ -305,6 +325,20 @@ pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result
 
     tracing::info!("Disconnected from cluster: {}", context);
     Ok(())
+}
+
+/// What is renewing this context's credentials, if anything.
+///
+/// Its own command rather than a field on `ClusterInfo`, which cannot change
+/// under a live connection and so is never refetched — while this moves at
+/// the moment it matters, when a quiet renewal turns out to need a person.
+#[tauri::command]
+#[must_use]
+pub fn credential_renewal(
+    context: String,
+    state: State<'_, AppState>,
+) -> crate::auth::renew::Renewal {
+    state.renew_manager.outcome(&context)
 }
 
 /// Get cluster information

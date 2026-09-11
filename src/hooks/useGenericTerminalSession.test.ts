@@ -185,4 +185,35 @@ describe("useGenericTerminalSession deferred-start handshake", () => {
     });
     expect(result.current.error).toMatch(/listener/i);
   });
+
+  /**
+   * The auth modal is held back for a beat so a plugin answering from its own
+   * cache is never seen, and whatever the plugin printed in that beat has to
+   * land in the pane that finally opens. Draining before the listener is
+   * installed loses the bytes in between, so the order is what this asserts.
+   */
+  it("drains what came before the pane only after the live listener exists", async () => {
+    const written: string[] = [];
+    let drainedAt: number | null = null;
+
+    renderHook(() =>
+      useGenericTerminalSession({
+        sessionId: "late-pane",
+        onOutput: (data) => written.push(data),
+        replay: () => {
+          drainedAt = callCounter;
+          return "Enter PIN: ";
+        },
+      })
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    expect(written).toEqual(["Enter PIN: "]);
+    const outputCall = listenCalls.find((c) => c.event === "terminal-output");
+    expect(drainedAt).not.toBeNull();
+    expect(outputCall!.index).toBeLessThan(drainedAt!);
+  });
 });

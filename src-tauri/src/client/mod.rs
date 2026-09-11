@@ -584,6 +584,12 @@ impl K8sClientManager {
         }
     }
 
+    /// When this context's credentials stop working, if anything said.
+    #[must_use]
+    pub fn credential_deadline(&self, context: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.credential_deadlines.get(context).map(|at| *at)
+    }
+
     /// Test connection to a cluster
     pub async fn test_connection(&self, context: &str) -> Result<ClusterInfo> {
         let client = self.connect(context).await?;
@@ -625,10 +631,10 @@ pub struct ClusterInfo {
     ///
     /// `None` where the credential plugin named no deadline, or where the
     /// context does not use one at all — a client certificate does not expire
-    /// on the hour. Nothing renews what the plugin gave: the `exec` block that
-    /// could is stripped when the session is prepared, so this is the moment
-    /// every request in the window starts failing, and a surface that has it
-    /// can say so before that happens rather than after.
+    /// on the hour. The `exec` block that could renew it is stripped when the
+    /// session is prepared, so this is the moment every request in the window
+    /// would start failing — and it is what `auth::renew` schedules against,
+    /// which is why a context that names none is not covered.
     pub credentials_expire_at: Option<String>,
     /// Which way this session reaches the cluster. Through a proxy, kubectl
     /// holds the credentials and `credentials_expire_at` is nothing.

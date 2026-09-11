@@ -2702,7 +2702,19 @@ export const en = {
     credentialsRefusedAgo:
       "The cluster refused this window's credentials {since} ago. ",
     credentialsExpiredBody:
-      "Nothing here renews them on its own, so every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+      "Every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+    renewalWasScheduled:
+      "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
+    renewalNoDeadline:
+      "The credential plugin named no expiry, so there was no moment to renew them before — nothing here could act early. ",
+    renewalNeedsYouBody:
+      "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
+    renewalDelegated:
+      "kubectl holds the credentials for this session and renews them itself, so this refusal came from its side. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "sign-in needed",
+    renewalNeedsYouHint:
+      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet — the current credentials still work, and you will be asked to sign in when they expire.",
     stillRefusedHint:
       "Still refused? The credential plugin this context uses may need a sign-in of its own first — for GKE that is",
     healthy: "Healthy",

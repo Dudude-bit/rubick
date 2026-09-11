@@ -20,6 +20,7 @@ use super::cred::{
     ExecCredential, ExecCredentialRequest, ExecCredentialSpec, ExecCredentialStatus,
     ExecTerminalParams,
 };
+use super::AuthMode;
 
 /// Timeout injected into kubelogin-family exec plugins via
 /// `--authentication-timeout-sec` when the user hasn't set their own.
@@ -84,11 +85,25 @@ fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
 /// holding system resources forever.
 const AUTH_FLOW_TIMEOUT_SECS: u64 = 30 * 60;
 
+/// The same cap for a renewal nobody asked for. A plugin answering from its
+/// own cache is back in under a second; one that is not wants a person, and
+/// there is nobody here to ask.
+const SILENT_FLOW_TIMEOUT_SECS: u64 = 30;
+
+/// An event a silent renewal must not send: each draws something — a modal,
+/// a toast, a browser tab — for a reader who asked for none of it.
+fn announce(state: &AppState, mode: AuthMode, event: AppEvent) {
+    if mode.is_seen() {
+        state.emit(event);
+    }
+}
+
 pub(super) async fn run_exec_auth(
     state: &AppState,
     context: &str,
     exec: &ExecConfig,
     exec_cluster: Option<ExecAuthCluster>,
+    mode: AuthMode,
 ) -> Result<ExecCredentialStatus> {
     // Create the auth session BEFORE attempting native auth so a
     // concurrent `disconnect_cluster` (or any caller of
@@ -107,7 +122,7 @@ pub(super) async fn run_exec_auth(
         result = try_native_cloud_auth(exec, context) => result,
         _ = &mut cancel_rx => {
             state.remove_auth_session(&session_id);
-            state.emit(AppEvent::AuthFlowCancelled {
+            announce(state, mode, AppEvent::AuthFlowCancelled {
                 session_id: session_id.clone(),
                 context: context.to_string(),
                 why: None,
@@ -183,13 +198,31 @@ pub(super) async fn run_exec_auth(
             )))
         })?;
 
-    state.emit(AppEvent::AuthTerminalSessionCreated {
-        auth_session_id: session_id.clone(),
-        terminal_session_id: terminal_session_id.clone(),
-        context: context.to_string(),
-        command: format!("{} {}", params.command, params.args.join(" ")),
-    });
+    announce(
+        state,
+        mode,
+        AppEvent::AuthTerminalSessionCreated {
+            auth_session_id: session_id.clone(),
+            terminal_session_id: terminal_session_id.clone(),
+            context: context.to_string(),
+            command: format!("{} {}", params.command, params.args.join(" ")),
+        },
+    );
 
+    // The I/O loop waits for its reader to say so, and in a silent run no
+    // event went out, so no pane will ever call `terminal_subscribed`.
+    // Without this the plugin's output is read by nobody until the timeout.
+    if !mode.is_seen() {
+        state
+            .terminal_manager
+            .mark_subscribed(&terminal_session_id)?;
+    }
+
+    let ceiling = if mode.is_seen() {
+        AUTH_FLOW_TIMEOUT_SECS
+    } else {
+        SILENT_FLOW_TIMEOUT_SECS
+    };
     let mut url_emitted = false;
     let mut last_url = String::new();
     let mut interval = tokio::time::interval(Duration::from_millis(250));
@@ -209,9 +242,20 @@ pub(super) async fn run_exec_auth(
                 if !url_emitted {
                     if let Ok(url) = read_auth_url(&url_file).await {
                         if !url.is_empty() && url != last_url {
+                            // A URL is the plugin asking for a person, and a
+                            // browser opened at one who asked for nothing is
+                            // the interruption this path exists to remove.
+                            if !mode.is_seen() {
+                                state.terminal_manager.close_session(&terminal_session_id)?;
+                                cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
+                                state.remove_auth_session(&session_id);
+                                return Err(Error::Auth(AuthError::Kubeconfig(
+                                    "The credential plugin needs somebody to sign in.".to_string(),
+                                )));
+                            }
                             last_url.clone_from(&url);
                             url_emitted = true;
-                            state.emit(AppEvent::AuthUrlRequested {
+                            announce(state, mode, AppEvent::AuthUrlRequested {
                                 context: context.to_string(),
                                 url,
                                 flow: "exec".to_string(),
@@ -228,7 +272,7 @@ pub(super) async fn run_exec_auth(
                 state.terminal_manager.close_session(&terminal_session_id)?;
                 cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
                 state.remove_auth_session(&session_id);
-                state.emit(AppEvent::AuthFlowCancelled {
+                announce(state, mode, AppEvent::AuthFlowCancelled {
                     session_id,
                     context: context.to_string(),
                     why: None,
@@ -236,16 +280,20 @@ pub(super) async fn run_exec_auth(
                 return Err(Error::Auth(AuthError::Kubeconfig("Authentication cancelled".to_string())));
             }
         }
-        if started.elapsed() > Duration::from_secs(AUTH_FLOW_TIMEOUT_SECS) {
+        if started.elapsed() > Duration::from_secs(ceiling) {
             state.terminal_manager.close_session(&terminal_session_id)?;
             cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
             state.remove_auth_session(&session_id);
-            state.emit(AppEvent::AuthFlowCompleted {
-                session_id,
-                context: context.to_string(),
-                success: false,
-                why: Some(AuthOutcome::TimedOut),
-            });
+            announce(
+                state,
+                mode,
+                AppEvent::AuthFlowCompleted {
+                    session_id,
+                    context: context.to_string(),
+                    success: false,
+                    why: Some(AuthOutcome::TimedOut),
+                },
+            );
             return Err(Error::Timeout("Authentication timed out".to_string()));
         }
     }
@@ -269,12 +317,16 @@ pub(super) async fn run_exec_auth(
              waiting for you to finish signing in through the browser — make \
              sure the authentication URL opened and you completed the login."
             .to_string();
-        state.emit(AppEvent::AuthFlowCompleted {
-            session_id,
-            context: context.to_string(),
-            success: false,
-            why: Some(AuthOutcome::Said { text: msg.clone() }),
-        });
+        announce(
+            state,
+            mode,
+            AppEvent::AuthFlowCompleted {
+                session_id,
+                context: context.to_string(),
+                success: false,
+                why: Some(AuthOutcome::Said { text: msg.clone() }),
+            },
+        );
         return Err(Error::Auth(AuthError::Kubeconfig(msg)));
     }
 
@@ -318,23 +370,31 @@ pub(super) async fn run_exec_auth(
     if status.token.is_none()
         && (status.client_certificate_data.is_none() || status.client_key_data.is_none())
     {
-        state.emit(AppEvent::AuthFlowCompleted {
-            session_id,
-            context: context.to_string(),
-            success: false,
-            why: Some(AuthOutcome::NoTokenInCredential),
-        });
+        announce(
+            state,
+            mode,
+            AppEvent::AuthFlowCompleted {
+                session_id,
+                context: context.to_string(),
+                success: false,
+                why: Some(AuthOutcome::NoTokenInCredential),
+            },
+        );
         return Err(Error::Auth(AuthError::Kubeconfig(
             "Exec credentials missing token".to_string(),
         )));
     }
 
-    state.emit(AppEvent::AuthFlowCompleted {
-        session_id,
-        context: context.to_string(),
-        success: true,
-        why: None,
-    });
+    announce(
+        state,
+        mode,
+        AppEvent::AuthFlowCompleted {
+            session_id,
+            context: context.to_string(),
+            success: true,
+            why: None,
+        },
+    );
 
     Ok(status)
 }

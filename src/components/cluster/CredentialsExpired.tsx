@@ -19,8 +19,11 @@
  * credential plugin: a plugin that can refresh without a human returns
  * silently in a second, one that needs `gcloud auth login` opens the same
  * interactive flow the first connect uses. The button promises no more than
- * "try the thing that worked the first time", which is all it can do while
- * nothing renews credentials on its own.
+ * "try the thing that worked the first time".
+ *
+ * `auth::renew` means this screen is no longer the only ending, and the
+ * reader is owed which one it was. The sentence comes from a total map; a
+ * state with nothing to say says nothing rather than borrow a neighbour's.
  */
 
 import { useState } from "react";
@@ -28,11 +31,23 @@ import { KeyRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useClusterInfo } from "@/hooks/useClusterInfo";
+import { useRenewal } from "@/hooks/useCredentialRenewal";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { verbatim } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ExpiredCredentials } from "@/lib/credentials";
+import type { Renewal } from "@/generated/types";
+import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
+
+/** Total by construction: a new `Renewal` will not compile until it is here. */
+const WHY: Record<Renewal, keyof typeof en.cluster> = {
+  scheduled: "renewalWasScheduled",
+  noDeadline: "renewalNoDeadline",
+  needsYou: "renewalNeedsYouBody",
+  delegated: "renewalDelegated",
+  unknown: "renewalUnknown",
+};
 
 export function CredentialsExpired({
   expired,
@@ -44,6 +59,7 @@ export function CredentialsExpired({
   const connect = useClusterStore((state) => state.connect);
   const isAuthenticating = useClusterStore((state) => state.isAuthenticating);
   const { data: info } = useClusterInfo();
+  const renewal = useRenewal();
   const [tried, setTried] = useState(false);
 
   // When the plugin named a deadline at connect this is the real one; where it
@@ -67,6 +83,7 @@ export function CredentialsExpired({
         {deadline
           ? t("cluster", "credentialsExpiredAgo", { since })
           : t("cluster", "credentialsRefusedAgo", { since })}
+        {t("cluster", WHY[renewal])}
         {t("cluster", "credentialsExpiredBody")}
       </p>
 

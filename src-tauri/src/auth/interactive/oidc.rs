@@ -2,6 +2,7 @@
 //! emit the auth URL to the frontend, exchange the callback code for
 //! a token via `OidcAuth`.
 
+use super::AuthMode;
 use crate::auth::kubeconfig_tokens::{
     can_replace, can_write_tokens, file_defining_user, kubeconfig_files, write_tokens,
 };
@@ -145,6 +146,7 @@ pub(super) async fn run_oidc_auth(
     context: &str,
     user: &str,
     provider: &AuthProviderConfig,
+    mode: AuthMode,
 ) -> Result<AuthResult> {
     let config = &provider.config;
 
@@ -175,6 +177,15 @@ pub(super) async fn run_oidc_auth(
             .flatten();
     if let Some(result) = refreshed(config, user, &kubeconfig_files(override_path)).await {
         return Ok(result);
+    }
+
+    // Past here the only way left is a browser. The two paths above — an
+    // id-token still in date, and the refresh token spent for a new one — are
+    // exactly the two that need no person.
+    if !mode.is_seen() {
+        return Err(Error::Auth(AuthError::Oidc(
+            "The stored tokens are spent; signing in again needs somebody.".to_string(),
+        )));
     }
 
     let issuer_url = config
@@ -411,11 +422,38 @@ mod tests {
             other: std::collections::BTreeMap::default(),
         };
         let state = AppState::new().expect("state");
-        let result = run_oidc_auth(&state, "ctx", "alice", &provider)
+        let result = run_oidc_auth(&state, "ctx", "alice", &provider, AuthMode::Interactive)
             .await
             .expect("a live token needs no provider");
         assert_eq!(result.token, token);
         assert_eq!(result.refresh_token.as_deref(), Some("refresh"));
+    }
+
+    /// A background renewal has nobody to send to a browser, so it has to
+    /// stop at the last step that needs one and say that is why — not reach
+    /// for the provider and report whatever the network said instead.
+    #[tokio::test]
+    async fn a_silent_renewal_stops_where_a_person_would_be_needed() {
+        let provider = AuthProviderConfig {
+            name: "oidc".to_string(),
+            config: HashMap::from([
+                (
+                    "idp-issuer-url".to_string(),
+                    "http://127.0.0.1:1/dex".to_string(),
+                ),
+                ("client-id".to_string(), "kubernetes".to_string()),
+                ("id-token".to_string(), token_expiring_in(-60)),
+            ]),
+            other: std::collections::BTreeMap::default(),
+        };
+        let state = AppState::new().expect("state");
+        let err = run_oidc_auth(&state, "ctx", "alice", &provider, AuthMode::Silent)
+            .await
+            .expect_err("a spent token cannot be renewed without a person");
+        assert!(
+            err.to_string().contains("somebody"),
+            "the reason has to be the missing person, not the unreachable issuer: {err}"
+        );
     }
 
     /// The whole loop against a real provider, because the part that matters

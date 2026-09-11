@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
+import { useRenewals } from "@/hooks/useCredentialRenewal";
 import type {
   LogFormat,
   LogLevel,
@@ -199,6 +200,7 @@ export function useLogStream({
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
+  const renewals = useRenewals();
   const [lastBatchAt, setLastBatchAt] = useState(() => Date.now());
   const [intakeFrom, setIntakeFrom] = useState(0);
   const [unfilteredFrom, setUnfilteredFrom] = useState(0);
@@ -489,6 +491,10 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
+    // Same reason as the resource watch: the stream was opened with a client
+    // built on credentials a renewal has just replaced, and the API server
+    // will stop accepting them at the deadline the old ones named.
+    renewals,
   ]);
 
   return {

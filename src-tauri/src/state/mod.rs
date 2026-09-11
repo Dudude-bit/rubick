@@ -59,6 +59,9 @@ pub struct AppState {
     /// the same way `search_manager` owns a fan-out.
     pub drain_manager: Arc<crate::drain::DrainManager>,
 
+    /// Credential renewals waiting on a deadline, one per connected context.
+    pub renew_manager: Arc<crate::auth::renew::RenewManager>,
+
     /// Active port-forward sessions
     pub port_forward_sessions: Arc<DashMap<String, PortForwardSession>>,
 
@@ -100,6 +103,7 @@ impl AppState {
         let client_manager = Arc::new(K8sClientManager::new());
 
         let drain_manager = Arc::new(crate::drain::DrainManager::new(event_tx.clone()));
+        let renew_manager = Arc::new(crate::auth::renew::RenewManager::new());
 
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
@@ -111,6 +115,7 @@ impl AppState {
             client_manager,
             search_manager,
             drain_manager,
+            renew_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
             terminal_manager: Arc::new(TerminalManager::new(event_tx.clone())),

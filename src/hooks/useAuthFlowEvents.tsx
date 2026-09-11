@@ -76,9 +76,26 @@ interface AuthTerminalSession {
   terminalSessionId: string;
   context: string;
   command: string;
+  /** What the plugin printed while the pane was being held back. */
+  replay: () => string;
 }
 
 const AUTH_WINDOW_PREFIX = "auth-";
+
+/**
+ * How long a sign-in is given to finish before anybody is shown it.
+ *
+ * Most plugins answer from their own cache in a fraction of a second, and the
+ * modal that appeared for that fraction was issue #148's second complaint:
+ * switching clusters flashed an "Authorization" window at a reader with
+ * nothing to do with it. The wait costs nothing — the terminal is subscribed
+ * to the moment it exists, so only the pane is held back. Generous rather
+ * than tight, because a cold plugin on Windows takes most of a second.
+ */
+const HOLD_BACK_MS = 1500;
+
+/** Stop buffering a held-back session's output past this. */
+const REPLAY_MAX = 64 * 1024;
 
 export function useAuthFlowEvents() {
   const { toast, dismiss } = useToast();
@@ -107,6 +124,26 @@ export function useAuthFlowEvents() {
   useEffect(() => {
     let mounted = true;
     const unlistenFns: (() => void)[] = [];
+    // Sessions created but not yet shown, by auth session id, with whatever
+    // they have printed meanwhile. Local because the effect runs once and
+    // nothing outside it has business in a session nobody has seen.
+    const held: Record<
+      string,
+      {
+        timer: ReturnType<typeof setTimeout>;
+        terminalSessionId: string;
+        output: string;
+      }
+    > = {};
+
+    // Stop holding a session back: it was shown, or it never needed to be.
+    const releaseHold = (authSessionId: string) => {
+      const session = held[authSessionId];
+      if (!session) return null;
+      clearTimeout(session.timer);
+      delete held[authSessionId];
+      return session;
+    };
 
     const dismissToast = (sessionId: string) => {
       const toastId = toastIdsRef.current[sessionId];
@@ -305,6 +342,9 @@ export function useAuthFlowEvents() {
           if (!mounted) return;
 
           const payload = event.payload;
+          // Before the first `await`: a release deferred past the timer
+          // shows a pane for a sign-in that is already over.
+          releaseHold(payload.session_id);
           await closeWindow(payload.session_id);
 
           // Close auth terminal modal if this is the active session
@@ -338,6 +378,8 @@ export function useAuthFlowEvents() {
           if (!mounted) return;
 
           const payload = event.payload;
+          // Before the first `await`; see the completed listener above.
+          releaseHold(payload.session_id);
           await closeWindow(payload.session_id);
 
           // Close auth terminal modal if this is the active session
@@ -357,6 +399,21 @@ export function useAuthFlowEvents() {
       );
       unlistenFns.push(unlistenCancelled);
 
+      // Everything a held-back session prints, so the pane that eventually
+      // opens is not missing the prompt it is being asked to answer.
+      const unlistenHeldOutput = await listen<{
+        session_id: string;
+        data: string;
+      }>("terminal-output", (event) => {
+        for (const session of Object.values(held)) {
+          if (session.terminalSessionId !== event.payload.session_id) continue;
+          if (session.output.length < REPLAY_MAX) {
+            session.output += event.payload.data;
+          }
+        }
+      });
+      unlistenFns.push(unlistenHeldOutput);
+
       // Listener for auth terminal session created
       const unlistenTerminalCreated =
         await listen<AuthTerminalSessionCreatedPayload>(
@@ -364,17 +421,38 @@ export function useAuthFlowEvents() {
           async (event) => {
             if (!mounted) return;
 
-            console.log(
-              "Received auth-terminal-session-created event:",
-              event.payload
-            );
             const payload = event.payload;
-            setAuthTerminalSession({
-              authSessionId: payload.auth_session_id,
+            const authSessionId = payload.auth_session_id;
+
+            // Subscribed at once, shown later: the backend holds the
+            // session's output until somebody is listening, so delaying this
+            // would delay the plugin itself.
+            commands
+              .terminalSubscribed(payload.terminal_session_id)
+              .catch(() => {
+                // Already gone: the plugin answered before this ran, which
+                // is exactly the case the hold-back exists for.
+              });
+
+            held[authSessionId] = {
               terminalSessionId: payload.terminal_session_id,
-              context: payload.context,
-              command: payload.command,
-            });
+              output: "",
+              timer: setTimeout(() => {
+                const session = releaseHold(authSessionId);
+                if (!mounted || !session) return;
+                setAuthTerminalSession({
+                  authSessionId,
+                  terminalSessionId: payload.terminal_session_id,
+                  context: payload.context,
+                  command: payload.command,
+                  replay: () => {
+                    const text = session.output;
+                    session.output = "";
+                    return text;
+                  },
+                });
+              }, HOLD_BACK_MS),
+            };
           }
         );
       unlistenFns.push(unlistenTerminalCreated);
@@ -384,6 +462,9 @@ export function useAuthFlowEvents() {
 
     return () => {
       mounted = false;
+      for (const authSessionId of Object.keys(held)) {
+        releaseHold(authSessionId);
+      }
       for (const unlisten of unlistenFns) {
         unlisten();
       }
