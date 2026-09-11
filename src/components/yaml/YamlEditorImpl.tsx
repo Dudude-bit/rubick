@@ -51,6 +51,13 @@ export function YamlEditor({
     <CodeMirror
       value={value}
       height={height}
+      // `react-codemirror` mounts the editor inside a wrapper div of its own,
+      // and `height` only styles the `.cm-editor` beneath it. A percentage
+      // there resolves against that wrapper — which had no height, so it
+      // collapsed to `auto` and the editor grew to the whole document. The
+      // container clipped it, and a 400-line manifest had no scrollbar and
+      // did not answer the wheel. The wrapper takes the height it was told.
+      style={{ height }}
       // The palette is ours; see editor-theme.ts.
       theme="none"
       extensions={extensions}
