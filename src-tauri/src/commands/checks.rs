@@ -370,21 +370,34 @@ pub async fn run_pod_check(
     copy: Option<CopyWith>,
     state: State<'_, AppState>,
 ) -> Result<CheckOutcome> {
-    crate::validation::validate_dns_label(&pod)?;
-    crate::validation::validate_dns_label(&container)?;
-    validate(&check)?;
     let namespace = normalize_optional_namespace(namespace).unwrap_or_else(|| "default".into());
     let client = current_client(&state)?;
+    check_pod(client, &namespace, &pod, &container, check, copy).await
+}
+
+/// The same answer, for callers that already hold a client — the live
+/// harness in `tests/live_checks.rs` runs against this.
+pub async fn check_pod(
+    client: kube::Client,
+    namespace: &str,
+    pod: &str,
+    container: &str,
+    check: Check,
+    copy: Option<CopyWith>,
+) -> Result<CheckOutcome> {
+    crate::validation::validate_dns_label(pod)?;
+    crate::validation::validate_dns_label(container)?;
+    validate(&check)?;
     let started = Instant::now();
 
     let Some(copy) = copy else {
-        let (tried, answer) = climb(&client, &namespace, &pod, &container, &check).await?;
+        let (tried, answer) = climb(&client, namespace, pod, container, &check).await?;
         return Ok(outcome("container", started, tried, answer, None));
     };
 
-    let api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
-    let original = api.get(&pod).await?;
-    let name = copy_name(&pod);
+    let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
+    let original = api.get(pod).await?;
+    let name = copy_name(pod);
     api.create(
         &PostParams::default(),
         &copy_of(&original, &name, &copy.image),
@@ -398,7 +411,7 @@ pub async fn run_pod_check(
 
     let ran = async {
         wait_running(&api, &name).await?;
-        climb(&client, &namespace, &name, COPY_CONTAINER, &check).await
+        climb(&client, namespace, &name, COPY_CONTAINER, &check).await
     }
     .await;
     let deleted = guard.delete().await;
