@@ -3834,6 +3834,7 @@ export const en = {
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
+    diffComputing: "Comparing…",
     noChangesDetected: "No changes detected",
     addRepositoryThenSearch: "Add a repository, then search it for charts.",
     manifestsAreAt: "The manifests are at",

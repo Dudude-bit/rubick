@@ -18,7 +18,7 @@
  *   already there, in the same component every other warning is drawn with.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useDeferredValue } from "react";
 import { commands } from "@/lib/commands";
 import {
   Dialog,
@@ -166,10 +166,17 @@ export function YamlEditorDialog() {
   // the sentence is already there when the reader gets to it; the query key
   // is the detail page's, so a page that has read its connections pays
   // nothing.
-  const replicasMoved =
-    !readOnly &&
-    hasChanges &&
-    changesReplicaCount(originalContent, editedContent);
+  // Two whole-document parses per keystroke on a long manifest, and the
+  // answer is only needed by the time the confirmation opens: deferred, so
+  // typing is never behind them, and memoised on what was actually parsed.
+  const settledContent = useDeferredValue(editedContent);
+  const replicasMoved = useMemo(
+    () =>
+      !readOnly &&
+      originalContent !== settledContent &&
+      changesReplicaCount(originalContent, settledContent),
+    [readOnly, originalContent, settledContent]
+  );
   const governance = useConnections(
     resourceKey?.kind ?? "",
     resourceKey?.name,
