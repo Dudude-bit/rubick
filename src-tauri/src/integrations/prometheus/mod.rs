@@ -373,7 +373,7 @@ pub async fn prometheus_targets(state: State<'_, AppState>) -> Result<Vec<Scrape
     parse_targets(&value)
 }
 
-fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
+pub fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
     if body.get("status").and_then(|s| s.as_str()) != Some("success") {
         let message = body
             .get("error")
