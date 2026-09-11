@@ -66,16 +66,14 @@ export interface ScopedOverview {
  * cluster-wide `47 pods` under a two-namespace label would be the rail
  * stating something it cannot back.
  *
- * Those reads are *not* cheaper than the cluster-wide one, and nothing is
- * replaced by them. A namespaced overview is sixteen requests against the
- * cluster-wide fifteen, and one of the sixteen is a full cluster pod LIST —
- * the scheduler panel divides requests by every node's allocatable, so it is
- * cluster-wide by definition (`get_cluster_overview` in
- * `src-tauri/src/commands/overview.rs`). Meanwhile the namespace picker keeps
- * asking for the cluster-wide one beside them, because it exists to show the
- * namespaces the window is *not* on. So a scope of four costs about 480
- * requests a minute against 186 for a scope of one, and that arithmetic is
- * what `SCOPE_LIMIT` bounds; the store is where it is enforced.
+ * Each of those is one request, answered from the backend's watch-fed stores
+ * when they are healthy (`src-tauri/src/overview/mod.rs`): a namespaced
+ * overview is then a projection in memory plus the counts and metrics reads,
+ * and no pod list at all. When the stores cannot be trusted the backend lists
+ * as it always did, and a namespaced overview is again a full cluster pod
+ * LIST beside the scoped one, which is the cost `SCOPE_LIMIT` bounds; the
+ * store is where it is enforced. The answer says which it was in
+ * `servedFrom`.
  *
  * The saving that remains is between windows: the entries are keyed by
  * namespace, so a scope of `prod` and one of `prod, staging` make one `prod`

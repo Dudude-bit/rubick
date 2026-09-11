@@ -333,6 +333,7 @@ pub async fn set_kubeconfig_paths(
     // Drop any cached clients / current context — they were bound to
     // the previous kubeconfig and would now point at the wrong cluster.
     state.client_manager.disconnect_all();
+    state.overview_cache.forget_all();
     state.set_current_context(None);
 
     Ok(())
@@ -354,6 +355,7 @@ pub async fn clear_kubeconfig_path(state: tauri::State<'_, crate::state::AppStat
         .await
         .map_err(|e| crate::error::Error::Config(e.to_string()))?;
     state.client_manager.disconnect_all();
+    state.overview_cache.forget_all();
     state.set_current_context(None);
 
     Ok(())

@@ -87,6 +87,9 @@ pub struct AppState {
 
     /// What went over the IPC bridge while Diagnostics recorded.
     pub perf: Arc<perf::PerfCounters>,
+
+    /// The overview's inputs, watched rather than listed per round.
+    pub overview_cache: Arc<crate::overview::OverviewCache>,
 }
 
 impl AppState {
@@ -123,6 +126,7 @@ impl AppState {
             connect_generation: AtomicU64::new(0),
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
+            overview_cache: Arc::new(crate::overview::OverviewCache::default()),
         })
     }
 

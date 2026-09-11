@@ -209,6 +209,10 @@ export function mergeOverviews(parts: ClusterOverview[]): ClusterOverview {
     // One namespace failing to report metrics is the whole reading failing:
     // a chart drawn from two of three namespaces is a chart with no axis.
     metricsAvailable: parts.every((part) => part.metricsAvailable),
+    // A join is only as fresh as its least fresh part.
+    servedFrom: parts.every((part) => part.servedFrom === "watch")
+      ? "watch"
+      : "list",
     nodesKnown,
   };
 }
