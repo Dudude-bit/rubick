@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -9,6 +11,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 import {
   listBehind,
@@ -581,6 +584,11 @@ describe("a route that belongs to the cluster being left", () => {
     ],
     ["/helm/secret/default/redis", "/helm"],
     ["/workloads/pods?peek=pods/default/api-7f9", "/workloads/pods"],
+    // A peek over a detail page: closing the panel leaves the page under it,
+    // which is the old cluster's object with the thing that named it gone.
+    ["/pods/default/api-7f9?peek=configmaps/default/cfg", "/workloads/pods"],
+    ["/replicasets/default/api-7f9", "/workloads/deployments"],
+    ["/httproutes/default/web", "/network/routes"],
   ])("sends %s to %s", (href, list) => {
     expect(listBehind(href)).toBe(list);
   });
@@ -625,5 +633,63 @@ describe("retargetAfterSwitch", () => {
     seed([tab({ id: "a", href: "/workloads/pods" })]);
     useScopeTabStore.getState().retargetAfterSwitch();
     expect(useScopeTabStore.getState().pendingHref).toBeNull();
+  });
+});
+
+describe("every route this could send a tab to", () => {
+  /**
+   * The retarget is only an improvement if it lands somewhere. `/workloads/
+   * replicasets` and `/network/httproutes` are what `getResourceListUrl`
+   * answers and neither matches a route, so a tab sent there renders an empty
+   * pane — worse than the stale detail page. This reads the app's own route
+   * tables, so a kind that gains a detail route without a list one fails here
+   * rather than in somebody's window.
+   */
+  it("is a route the app actually serves", () => {
+    const read = (file: string) =>
+      readFileSync(resolve(process.cwd(), file), "utf8");
+    const plural = (source: string) =>
+      [...source.matchAll(/toPlural\(ResourceType\.(\w+)\)/g)].map((m) =>
+        toPlural(ResourceType[m[1] as keyof typeof ResourceType])
+      );
+
+    const sections = {
+      workloads: "src/pages/Workloads.tsx",
+      network: "src/pages/Network.tsx",
+      storage: "src/pages/Storage.tsx",
+      configuration: "src/pages/Configuration.tsx",
+    };
+    const served = new Set<string>(["/", "/helm", "/events"]);
+    for (const [section, file] of Object.entries(sections)) {
+      const source = read(file);
+      for (const p of plural(source)) served.add(`/${section}/${p}`);
+      for (const m of source.matchAll(/path="([a-z-]+)"/g)) {
+        served.add(`/${section}/${m[1]}`);
+      }
+    }
+
+    const app = read("src/App.tsx");
+    // Top-level list routes: a `path={toPlural(...)}` with nothing after it.
+    for (const m of app.matchAll(/path=\{toPlural\(ResourceType\.(\w+)\)\}/g)) {
+      served.add(
+        `/${toPlural(ResourceType[m[1] as keyof typeof ResourceType])}`
+      );
+    }
+
+    // Every detail route the app serves, as the href a reader would be on.
+    const details = [
+      ...app.matchAll(
+        /path=\{`\$\{toPlural\(ResourceType\.(\w+)\)\}\/([^`]*)`\}/g
+      ),
+    ].map(([, kind, tail]) => {
+      const p = toPlural(ResourceType[kind as keyof typeof ResourceType]);
+      return `/${p}/${tail.replace(/:\w+/g, "x")}`;
+    });
+    expect(details.length).toBeGreaterThan(10);
+
+    const missing = details
+      .map((href) => [href, listBehind(href)] as const)
+      .filter(([, list]) => list !== null && !served.has(list));
+    expect(missing).toEqual([]);
   });
 });

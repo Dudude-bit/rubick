@@ -227,7 +227,11 @@ export function useLogStream({
   );
 
   /** What the attached streams were opened against. See `resuming` below. */
-  const opened = useRef<{ target: string; intake: string } | null>(null);
+  const opened = useRef<{
+    target: string;
+    intake: string;
+    renewals: number;
+  } | null>(null);
   // `previous` belongs in the key: it selects a different run, so the
   // buffer must not be resumed across a flip — the lines already held
   // are from the other run and would be interleaved with it silently.
@@ -315,11 +319,15 @@ export function useLogStream({
        * tail the buffer already holds, as duplicates.
        */
       const lastOpened = opened.current;
+      // A renewal restarts these streams on the new client and changes
+      // nothing the reader chose, so wiping what they are reading would be
+      // the renewal costing them the thing it was meant to keep alive.
+      const renewed = lastOpened !== null && lastOpened.renewals !== renewals;
       const resuming =
         lastOpened !== null &&
         lastOpened.target === target &&
-        (lastOpened.intake !== intakeKey || intakeTerms.length > 0);
-      opened.current = { target, intake: intakeKey };
+        (renewed || lastOpened.intake !== intakeKey || intakeTerms.length > 0);
+      opened.current = { target, intake: intakeKey, renewals };
 
       setIsConnecting(true);
       setFailures([]);

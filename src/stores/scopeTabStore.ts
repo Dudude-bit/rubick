@@ -147,7 +147,11 @@ async function applyScope(tab: ScopeTab) {
   if (tab.context !== cluster.currentContext) {
     // connect() clears the namespace when the context changes, so the
     // tab's namespace has to be re-applied after it resolves.
-    await cluster.connect(tab.context);
+    //
+    // `keepRoute`: this tab is already delivering a route of its own, and
+    // the `pendingHref` guard alone cannot protect it — the router can
+    // settle that route before this connect resolves.
+    await cluster.connect(tab.context, { keepRoute: true });
   }
   const live = useClusterStore.getState();
   const scope = tabScope(tab);
@@ -451,11 +455,35 @@ export function tabRouteLabel(href: string): string {
  */
 export function listBehind(href: string): string | null {
   const [path, query = ""] = href.split("?");
-  // A peek names an object too; the list under it is the place to land.
-  if (new URLSearchParams(query).get("peek")) return path;
   const segments = path.split("/").filter(Boolean);
   const first = segments[0];
-  if (!first || segments.length < 2) return null;
+  const list = first && segments.length > 1 ? listOf(first) : null;
+  // Over a list, dropping the peek is the whole move; over a detail page the
+  // page has to go too, or the object stays with its panel merely closed.
+  if (new URLSearchParams(query).get("peek")) return list ?? path;
+  return list;
+}
+
+/**
+ * Where a kind's list actually lives, for the ones whose detail route the app
+ * serves and whose own list it does not: a ReplicaSet through its Deployment,
+ * the Gateway API route kinds on one page, a GatewayClass beside Gateways.
+ * `getResourceListUrl` answers `/workloads/replicasets`, which matches no
+ * route and renders an empty pane. The test beside this reads the app's own
+ * route tables and fails when the list goes stale.
+ */
+const LIST_ELSEWHERE: Record<string, string> = {
+  replicasets: "/workloads/deployments",
+  gatewayclasses: "/network/gateways",
+  httproutes: "/network/routes",
+  grpcroutes: "/network/routes",
+  tlsroutes: "/network/routes",
+  tcproutes: "/network/routes",
+  udproutes: "/network/routes",
+};
+
+function listOf(first: string): string | null {
+  if (LIST_ELSEWHERE[first]) return LIST_ELSEWHERE[first];
   if (isResourceType(first)) return getResourceListUrl(first);
   // Helm keeps its releases on the same shape without being a kind.
   return first === "helm" ? "/helm" : null;

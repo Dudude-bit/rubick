@@ -131,6 +131,12 @@ pub enum AuthError {
 
     #[error("Kubeconfig error: {0}")]
     Kubeconfig(String),
+
+    /// The credential plugin wants a person, and this attempt had none. Its
+    /// own variant rather than a sentence to match on: `auth::renew` tells a
+    /// coming sign-in from a failed read by it.
+    #[error("Needs a sign-in: {0}")]
+    NeedsPerson(String),
 }
 
 /// Plugin-specific errors

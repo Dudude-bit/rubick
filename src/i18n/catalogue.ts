@@ -2707,6 +2707,10 @@ export const en = {
       "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
     renewalNoDeadline:
       "The credential plugin named no expiry, so there was no moment to renew them before — nothing here could act early. ",
+    renewalPassed:
+      "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
+    renewalFailed:
+      "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:

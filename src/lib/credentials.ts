@@ -93,10 +93,9 @@ export function subscribeToCredentials(
 /**
  * How many times a context's credentials have been replaced under the window.
  *
- * A renewal in `auth::renew` swaps the client every long-running read was
- * built on, and a `kube::Client` carries the token it was made with — so a
- * watch started an hour ago keeps using credentials about to be refused.
- * Anything holding one reads this and starts again.
+ * A renewal swaps the client every long-running read was built on, and a
+ * `kube::Client` carries the token it was made with. Anything holding one
+ * reads this and starts again.
  */
 let renewals = 0;
 const renewalListeners = new Set<() => void>();

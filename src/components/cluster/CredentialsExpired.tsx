@@ -44,7 +44,9 @@ import { useT } from "@/i18n/useT";
 const WHY: Record<Renewal, keyof typeof en.cluster> = {
   scheduled: "renewalWasScheduled",
   noDeadline: "renewalNoDeadline",
+  passed: "renewalPassed",
   needsYou: "renewalNeedsYouBody",
+  failed: "renewalFailed",
   delegated: "renewalDelegated",
   unknown: "renewalUnknown",
 };

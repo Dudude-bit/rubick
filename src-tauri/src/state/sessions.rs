@@ -28,6 +28,10 @@ pub struct PortForwardSession {
 pub struct AuthSessionControl {
     pub context: String,
     pub flow: String,
+    /// Whether anybody is being shown this sign-in. False for a background
+    /// renewal: cancelling one still cancels it, but must not toast
+    /// "authentication cancelled" at a reader who started none.
+    pub seen: bool,
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 

@@ -72,16 +72,20 @@ describe("what will interrupt the reader next", () => {
     expect(screen.getByText("sign-in needed")).toBeInTheDocument();
   });
 
-  it.each(["scheduled", "noDeadline", "delegated", "unknown"])(
-    "says nothing while renewal is %s",
-    (state) => {
-      renewal = state;
-      render(
-        <TooltipProvider>
-          <StatusBar />
-        </TooltipProvider>
-      );
-      expect(screen.queryByText("sign-in needed")).toBeNull();
-    }
-  );
+  it.each([
+    "scheduled",
+    "noDeadline",
+    "passed",
+    "failed",
+    "delegated",
+    "unknown",
+  ])("says nothing while renewal is %s", (state) => {
+    renewal = state;
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("sign-in needed")).toBeNull();
+  });
 });

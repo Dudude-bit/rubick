@@ -88,7 +88,15 @@ interface ClusterState {
   switchNamespace: (namespace: string) => Promise<void>;
   /** Look at these namespaces, or at the whole cluster for an empty list. */
   setNamespaceScope: (namespaces: string[]) => Promise<void>;
-  connect: (context?: string) => Promise<void>;
+  /**
+   * `keepRoute` for a caller taking the reader somewhere itself — a deep
+   * link, a tab activation. Without it the move counts as a switch and the
+   * route being delivered is the one let go of.
+   */
+  connect: (
+    context?: string,
+    options?: { keepRoute?: boolean }
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -236,7 +244,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     }
   },
 
-  connect: async (context?: string) => {
+  connect: async (context?: string, options?: { keepRoute?: boolean }) => {
     const targetContext = context ?? get().currentContext;
     if (!targetContext) {
       set({
@@ -281,9 +289,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         return;
       }
       const connectedContext = info.context || targetContext;
-      // Counted on the way in, not on the attempt: a connect that failed
-      // left the reader where they were, looking at what they were.
+      // On the way in, not on the attempt: a failed connect left the reader
+      // where they were.
       const arrived =
+        !options?.keepRoute &&
         get().lastConnected !== null &&
         get().lastConnected !== connectedContext;
       set({

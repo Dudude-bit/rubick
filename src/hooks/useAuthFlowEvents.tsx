@@ -86,11 +86,10 @@ const AUTH_WINDOW_PREFIX = "auth-";
  * How long a sign-in is given to finish before anybody is shown it.
  *
  * Most plugins answer from their own cache in a fraction of a second, and the
- * modal that appeared for that fraction was issue #148's second complaint:
- * switching clusters flashed an "Authorization" window at a reader with
- * nothing to do with it. The wait costs nothing — the terminal is subscribed
- * to the moment it exists, so only the pane is held back. Generous rather
- * than tight, because a cold plugin on Windows takes most of a second.
+ * modal that appeared for that fraction was issue #148's second complaint.
+ * The wait costs nothing — the terminal is subscribed to the moment it
+ * exists, so only the pane is held back — and is generous rather than tight,
+ * because a cold plugin on Windows takes most of a second.
  */
 const HOLD_BACK_MS = 1500;
 
@@ -438,14 +437,18 @@ export function useAuthFlowEvents() {
               terminalSessionId: payload.terminal_session_id,
               output: "",
               timer: setTimeout(() => {
-                const session = releaseHold(authSessionId);
+                const session = held[authSessionId];
                 if (!mounted || !session) return;
+                // Not released here: the pane still has to mount, load the
+                // lazy xterm chunk and install its listener, and what the
+                // plugin prints in between is exactly what draining is for.
                 setAuthTerminalSession({
                   authSessionId,
                   terminalSessionId: payload.terminal_session_id,
                   context: payload.context,
                   command: payload.command,
                   replay: () => {
+                    releaseHold(authSessionId);
                     const text = session.output;
                     session.output = "";
                     return text;

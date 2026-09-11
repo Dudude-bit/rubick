@@ -113,7 +113,7 @@ pub(super) async fn run_exec_auth(
     // credentials, then `MetadataServiceAccount`) — long enough for the
     // user to switch contexts first, and `AuthTerminalSessionCreated` then
     // lands as an orphan modal over whatever cluster they landed on.
-    let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec");
+    let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec", mode.is_seen());
 
     // Race native cloud auth against the cancel signal. Dropping the
     // native_auth future at the select branch aborts gcp_auth's HTTP
@@ -246,11 +246,17 @@ pub(super) async fn run_exec_auth(
                             // browser opened at one who asked for nothing is
                             // the interruption this path exists to remove.
                             if !mode.is_seen() {
-                                state.terminal_manager.close_session(&terminal_session_id)?;
+                                // The close is best-effort: this path is
+                                // already failing, and letting its error out
+                                // here would skip the cleanup below and leave
+                                // the browser shim and the session behind.
+                                let _ = state
+                                    .terminal_manager
+                                    .close_session(&terminal_session_id);
                                 cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
                                 state.remove_auth_session(&session_id);
-                                return Err(Error::Auth(AuthError::Kubeconfig(
-                                    "The credential plugin needs somebody to sign in.".to_string(),
+                                return Err(Error::Auth(AuthError::NeedsPerson(
+                                    "the credential plugin asked for a browser".to_string(),
                                 )));
                             }
                             last_url.clone_from(&url);

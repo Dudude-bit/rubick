@@ -183,8 +183,8 @@ pub(super) async fn run_oidc_auth(
     // id-token still in date, and the refresh token spent for a new one — are
     // exactly the two that need no person.
     if !mode.is_seen() {
-        return Err(Error::Auth(AuthError::Oidc(
-            "The stored tokens are spent; signing in again needs somebody.".to_string(),
+        return Err(Error::Auth(AuthError::NeedsPerson(
+            "the stored tokens are spent".to_string(),
         )));
     }
 
@@ -214,7 +214,7 @@ pub(super) async fn run_oidc_auth(
     let redirect_uri = redirect_uri_for(redirect_port);
 
     let auth_url = auth.generate_auth_url(&redirect_uri).await?;
-    let (session_id, mut cancel_rx) = state.create_auth_session(context, "oidc");
+    let (session_id, mut cancel_rx) = state.create_auth_session(context, "oidc", mode.is_seen());
 
     state.emit(AppEvent::AuthUrlRequested {
         context: context.to_string(),
@@ -450,8 +450,10 @@ mod tests {
         let err = run_oidc_auth(&state, "ctx", "alice", &provider, AuthMode::Silent)
             .await
             .expect_err("a spent token cannot be renewed without a person");
+        // The variant, not the wording: `auth::renew` decides whether to tell
+        // the reader a sign-in is coming by matching on exactly this.
         assert!(
-            err.to_string().contains("somebody"),
+            matches!(err, Error::Auth(AuthError::NeedsPerson(_))),
             "the reason has to be the missing person, not the unreachable issuer: {err}"
         );
     }

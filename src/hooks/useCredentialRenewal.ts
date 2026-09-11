@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
 import {
   credentialsRenewed,
+  credentialsRestored,
   readRenewals,
   subscribeToRenewals,
 } from "@/lib/credentials";
@@ -23,9 +24,21 @@ import type { Renewal } from "@/generated/types";
 /** Installed once, by the shell. Everything else only reads the count. */
 export function useWatchForRenewals(): void {
   useEffect(() => {
-    const pending = listen<{ context: string }>("credentials-renewed", () => {
-      credentialsRenewed();
-    });
+    const pending = listen<{ context: string }>(
+      "credentials-renewed",
+      (event) => {
+        credentialsRenewed();
+        // The same proof of a live session a successful connect is, and
+        // the refusal screen is a full-page takeover only a connect used to
+        // lift: a laptop wakes, the first read takes a `401`, the renewal
+        // lands a second later, and the screen would stay.
+        if (
+          event.payload.context === useClusterStore.getState().currentContext
+        ) {
+          credentialsRestored();
+        }
+      }
+    );
     return () => {
       void pending.then((off) => off());
     };
