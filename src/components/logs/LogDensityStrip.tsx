@@ -126,6 +126,8 @@ interface LogDensityStripProps {
   intake: boolean;
   /** The committed range, so the strip draws what the chip says. */
   selection: { from: number; to: number } | null;
+  /** The interval the cap may not evict, marked so the map says what is held. */
+  frozen: { from: number; to: number } | null;
   /** The stretch of clock the list is showing, in ms since epoch. */
   viewportFrom: number;
   viewportTo: number;
@@ -144,6 +146,7 @@ export function LogDensityStrip({
   headDropped,
   intake,
   selection,
+  frozen,
   viewportFrom,
   viewportTo,
   onJump,
@@ -222,6 +225,11 @@ export function LogDensityStrip({
     if (count === 0 || viewportTo <= 0) return null;
     return { lo: indexOf(viewportFrom), hi: indexOf(viewportTo) };
   }, [count, viewportFrom, viewportTo, indexOf]);
+
+  const held = useMemo(() => {
+    if (!frozen || count === 0) return null;
+    return { lo: indexOf(frozen.from), hi: indexOf(frozen.to) };
+  }, [frozen, count, indexOf]);
 
   // Indices are clamped on the way out because the strip is not standing
   // still while it is being used: a batch landing mid-drag can drop slices
@@ -392,6 +400,7 @@ export function LogDensityStrip({
           band={band}
           inView={inView !== null && index >= inView.lo && index <= inView.hi}
           chosen={chosen !== null && index >= chosen.lo && index <= chosen.hi}
+          frozen={held !== null && index >= held.lo && index <= held.hi}
           dimmed={chosen !== null && (index < chosen.lo || index > chosen.hi)}
           cursor={focused && index === active}
         />
@@ -547,6 +556,7 @@ function Slice({
   band,
   inView,
   chosen,
+  frozen,
   dimmed,
   cursor,
 }: {
@@ -558,6 +568,8 @@ function Slice({
   band: boolean;
   inView: boolean;
   chosen: boolean;
+  /** Inside the interval the cap may not evict. */
+  frozen: boolean;
   dimmed: boolean;
   cursor: boolean;
 }) {
@@ -601,7 +613,9 @@ function Slice({
 
   const chrome = `flex min-w-0 flex-1 flex-col rounded-[1px] ${
     chosen ? "bg-sel" : "hover:bg-hover"
-  } ${dimmed ? "opacity-40" : ""} ${cursor ? "ring-1 ring-inset ring-fg" : ""}`;
+  } ${dimmed ? "opacity-40" : ""} ${cursor ? "ring-1 ring-inset ring-fg" : ""} ${
+    frozen ? "border-b-2 border-info" : ""
+  }`;
 
   if (band) {
     const level =

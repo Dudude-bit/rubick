@@ -58,6 +58,18 @@ export interface FieldIndex {
   values: Map<string, Map<string, number>>;
 }
 
+/**
+ * A stretch of clock the reader asked to keep. Lines inside it are never
+ * evicted and are not counted against the cap: the cap bounds what the
+ * stream may push out, and a frozen interval is what the reader chose to
+ * hold onto while it does. Bounded by what the buffer held when it was
+ * frozen, so the whole never exceeds twice the cap.
+ */
+export interface Frozen {
+  from: number;
+  to: number;
+}
+
 export interface LogBuffer {
   lines: StreamedLogLine[];
   /**
@@ -67,6 +79,9 @@ export interface LogBuffer {
    */
   dropped: number;
   fields: FieldIndex;
+  frozen: Frozen | null;
+  /** How many of `lines` fall inside `frozen`; zero when nothing is. */
+  frozenLines: number;
 }
 
 /**
@@ -77,7 +92,21 @@ export const emptyBuffer = (): LogBuffer => ({
   lines: [],
   dropped: 0,
   fields: { keys: new Map(), values: new Map() },
+  frozen: null,
+  frozenLines: 0,
 });
+
+export function isFrozen(
+  line: StreamedLogLine,
+  frozen: Frozen | null
+): boolean {
+  return (
+    frozen !== null && line.epoch >= frozen.from && line.epoch <= frozen.to
+  );
+}
+
+const sameInterval = (a: Frozen | null, b: Frozen | null) =>
+  a === b || (a !== null && b !== null && a.from === b.from && a.to === b.to);
 
 /**
  * Everything a line can be filtered by. `container` and `level` are not
@@ -216,39 +245,54 @@ export function orderByTimestamp(
 export function appendCapped(
   prev: LogBuffer,
   batch: readonly StreamedLogLine[],
-  limit: number
+  limit: number,
+  frozen: Frozen | null = prev.frozen
 ): LogBuffer {
-  if (batch.length === 0) return prev;
+  const refrozen = !sameInterval(frozen, prev.frozen);
+  const heldFrozen = refrozen
+    ? prev.lines.reduce((n, line) => n + (isFrozen(line, frozen) ? 1 : 0), 0)
+    : prev.frozenLines;
+  let batchFrozen = 0;
+  if (frozen !== null) {
+    for (const line of batch) if (isFrozen(line, frozen)) batchFrozen++;
+  }
+  const live = prev.lines.length - heldFrozen + batch.length - batchFrozen;
+  const overflow = Math.max(0, live - Math.max(0, limit));
+  if (batch.length === 0 && !refrozen && overflow === 0) return prev;
 
   const index = prev.fields;
   const fields: FieldIndex = { keys: index.keys, values: index.values };
+  const frozenLines = heldFrozen + batchFrozen;
+  const dropped = prev.dropped + overflow;
 
-  if (limit <= 0) {
+  if (frozen === null && batch.length >= limit) {
     for (const line of prev.lines) unindexLine(index, line);
-    return {
-      lines: [],
-      dropped: prev.dropped + prev.lines.length + batch.length,
-      fields,
-    };
-  }
-
-  const overflow = prev.lines.length + batch.length - limit;
-  const dropped = overflow > 0 ? prev.dropped + overflow : prev.dropped;
-
-  if (batch.length >= limit) {
-    for (const line of prev.lines) unindexLine(index, line);
-    const lines = batch.slice(batch.length - limit);
+    const lines = batch.slice(batch.length - Math.max(0, limit));
     for (const line of lines) indexLine(index, line);
-    return { lines, dropped, fields };
+    return { lines, dropped, fields, frozen, frozenLines };
   }
 
-  for (let i = 0; i < overflow; i++) unindexLine(index, prev.lines[i]);
-  const lines = overflow > 0 ? prev.lines.slice(overflow) : prev.lines.slice();
+  // Evict `overflow` lines from the head, stepping over the frozen ones:
+  // the interval keeps its place in the order, everything around it goes.
+  const lines: StreamedLogLine[] = [];
+  let evict = overflow;
+  for (const line of prev.lines) {
+    if (evict > 0 && !isFrozen(line, frozen)) {
+      unindexLine(index, line);
+      evict--;
+    } else {
+      lines.push(line);
+    }
+  }
   for (const line of batch) {
+    if (evict > 0 && !isFrozen(line, frozen)) {
+      evict--;
+      continue;
+    }
     lines.push(line);
     indexLine(index, line);
   }
-  return { lines, dropped, fields };
+  return { lines, dropped, fields, frozen, frozenLines };
 }
 
 /**

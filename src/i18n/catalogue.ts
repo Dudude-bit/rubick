@@ -924,6 +924,16 @@ export const en = {
     chipQueryTitle: "{label} — a query over the buffered lines",
     chipQueryTimeTitle:
       "{label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+    chipFrozenTitle:
+      "{label} — frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+    startFreezeLabel:
+      "Freeze {label} — keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label} — these lines can be evicted again",
+    startFreezeTitle: "Freeze this interval",
+    stopFreezeTitle: "Thaw this interval",
+    thawFrozen: "thaw",
+    frozenNote:
+      "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
     stopIntakeLabel:
       "Stop discarding lines that do not match {label} — new lines are kept from now on, the ones already discarded do not come back",
     startIntakeLabel:
@@ -4950,6 +4960,10 @@ export const en = {
     arrivingBefore: "{rate}/s arriving before it was set",
     shown: "{n} shown",
     hiddenByFilter: "{n} hidden by filter and grouping",
+    frozenLines: {
+      one: "{n} frozen line",
+      other: "{n} frozen lines",
+    },
     spanInSlices: "{span} in {step} slices",
     densitySummary:
       "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
