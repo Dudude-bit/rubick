@@ -174,11 +174,10 @@ describe("plain scalars the core schema calls constants", () => {
 
 describe("the editor's own scrollbar", () => {
   /**
-   * CodeMirror builds `.cm-scroller` itself, so no class of ours reaches it —
-   * including `scrollbar-thin`, which every other scroller in this app
-   * carries. On a platform that lays scrollbars out rather than overlaying
-   * them, the manifest pane was the only one with a chunky light-grey bar.
-   * Fails if the rules are dropped or the palette stops being a role token.
+   * CodeMirror builds `.cm-scroller` itself, so `scrollbar-thin` never
+   * reaches it and the manifest was the one pane with a platform-default bar
+   * where those are laid out rather than overlaid. Fails if the rules go or
+   * stop using role tokens.
    */
   it("is styled like every other scroller in the window", () => {
     const rules = Object.entries(SPEC).filter(([selector]) =>
