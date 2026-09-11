@@ -1,11 +1,7 @@
-import type {
-  PodMetrics,
-  NodeMetrics,
-  PodInfo,
-  NodeInfo,
-} from "@/generated/types";
+import type { PodMetrics, NodeMetrics, NodeInfo } from "@/generated/types";
+import type { PodRow } from "@/lib/pod-rows";
 
-export interface PodWithMetrics extends PodInfo {
+export interface PodWithMetrics extends PodRow {
   cpuMillicores: number | null;
   memoryBytes: number | null;
 }
@@ -20,10 +16,10 @@ export interface ResourceMetrics {
   memoryBytes: number | null;
 }
 
-const podRows = new WeakMap<PodInfo, PodWithMetrics>();
+const podRows = new WeakMap<PodRow, PodWithMetrics>();
 
 export function mergePodsWithMetrics(
-  pods: PodInfo[],
+  pods: PodRow[],
   metrics: PodMetrics[]
 ): PodWithMetrics[] {
   const metricsByKey = new Map<string, PodMetrics>();
@@ -157,9 +153,12 @@ export interface WorkloadRef {
  * A pod belongs to a workload when they share a key. Namespace is part
  * of every key, so a workload can never reach across one.
  */
+/** What decides which workload a pod belongs to; a row and the full pod both carry it. */
+export type PodIdentity = Pick<PodRow, "name" | "namespace" | "labels">;
+
 export interface PodOwnership {
   keysOf: (workload: WorkloadRef) => string[];
-  keysOfPod: (pod: PodInfo) => string[];
+  keysOfPod: (pod: PodIdentity) => string[];
 }
 
 /**
@@ -168,7 +167,10 @@ export interface PodOwnership {
  * that ask it about every pod at once. Hanging one off the other is what
  * keeps them from drifting into two definitions of "belongs to".
  */
-export type PodMatcher = ((workload: WorkloadRef, pod: PodInfo) => boolean) & {
+export type PodMatcher = ((
+  workload: WorkloadRef,
+  pod: PodIdentity
+) => boolean) & {
   readonly ownership: PodOwnership;
 };
 
@@ -182,7 +184,7 @@ const key = (namespace: string, kind: string, value: string) =>
  * Every name a pod could have been generated from: `web-5d4c-x9` could
  * belong to `web` or to `web-5d4c`, and to nothing else.
  */
-function nameKeysOfPod(pod: PodInfo): string[] {
+function nameKeysOfPod(pod: PodIdentity): string[] {
   const keys: string[] = [];
   for (let i = 0; i < pod.name.length; i++) {
     if (pod.name[i] === "-") {
@@ -193,7 +195,7 @@ function nameKeysOfPod(pod: PodInfo): string[] {
 }
 
 function matcher(ownership: PodOwnership): PodMatcher {
-  const predicate = (workload: WorkloadRef, pod: PodInfo) => {
+  const predicate = (workload: WorkloadRef, pod: PodIdentity) => {
     const keys = new Set(ownership.keysOf(workload));
     return ownership.keysOfPod(pod).some((podKey) => keys.has(podKey));
   };

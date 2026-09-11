@@ -186,6 +186,9 @@ fn main() {
             commands::crds::patch_custom_resource_json,
             // Pod commands
             commands::pods::list_pods,
+            commands::pods::list_pod_rows,
+            commands::pods::pod_rows_subscribed,
+            commands::pods::stop_pod_rows,
             commands::pods::get_pod,
             commands::pods::delete_pod,
             commands::pods::restart_pod,
@@ -291,6 +294,7 @@ fn main() {
             commands::watch::subscribe_gateway_route_watch,
             commands::watch::subscribe_pvc_watch,
             commands::watch::subscribe_pod_watch,
+            commands::watch::subscribe_pod_row_watch,
             commands::watch::subscribe_deployment_watch,
             commands::watch::subscribe_statefulset_watch,
             commands::watch::subscribe_daemonset_watch,

@@ -4,10 +4,12 @@
 //!     RUBICK_PERF_CONTEXT=k3d-rubick-perf \
 //!       cargo test --test live_perf -- --ignored --nocapture
 //!
-//! Prints the API round trip, the conversion to `PodInfo`, and the size of
-//! the JSON the IPC bridge would carry, per row and in total.
+//! Prints the API round trip, the conversion to `PodInfo` and to `PodRow`,
+//! and the size of the JSON the IPC bridge would carry for each, per row and
+//! in total, with how many messages the row list splits into.
 
-use k8s_gui_lib::resources::PodInfo;
+use k8s_gui_lib::resources::{PodInfo, PodRow};
+use k8s_gui_lib::state::perf::{chunks_within, IPC_TARGET_BYTES};
 use k8s_openapi::api::core::v1::Pod;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::{api::ListParams, Api, Client, Config};
@@ -64,5 +66,30 @@ async fn a_full_pod_list_costs_this_much_before_the_frontend() {
         "raw Pod objects      {} KiB ({} bytes/row)",
         raw / 1024,
         raw / rows.len().max(1)
+    );
+
+    let converting = Instant::now();
+    let compact: Vec<PodRow> = list.items.iter().map(PodRow::from).collect();
+    let converted = converting.elapsed();
+    let compact_json = serde_json::to_vec(&compact).expect("serialise rows").len();
+    let chunking = Instant::now();
+    let chunks = chunks_within(compact, IPC_TARGET_BYTES);
+    let chunked = chunking.elapsed();
+    let largest = chunks
+        .iter()
+        .map(|c| serde_json::to_vec(c).expect("serialise chunk").len())
+        .max()
+        .unwrap_or(0);
+    println!("to PodRow            {} ms", converted.as_millis());
+    println!(
+        "row payload          {} KiB ({} bytes/row)",
+        compact_json / 1024,
+        compact_json / rows.len().max(1)
+    );
+    println!(
+        "chunked              {} messages, largest {} KiB, {} ms to size",
+        chunks.len(),
+        largest / 1024,
+        chunked.as_millis()
     );
 }

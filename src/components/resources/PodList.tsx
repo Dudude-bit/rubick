@@ -275,7 +275,7 @@ export function PodList() {
       deleteConfig={{
         mutationFn: (item) =>
           commands.deletePod(item.name, item.namespace, false),
-        invalidateQueryKeys: [queryKeys.pods()],
+        invalidateQueryKeys: [queryKeys.podRows()],
         resourceType: ResourceType.Pod,
       }}
     />

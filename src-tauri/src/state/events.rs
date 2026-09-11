@@ -363,6 +363,23 @@ pub enum AppEvent {
         stderr: String,
         tried: Vec<String>,
     },
+    /// One chunk of a pod list, sized to the IPC target; never empty.
+    PodRowsBatch {
+        stream_id: String,
+        rows: Vec<crate::resources::PodRow>,
+    },
+    /// The list ended. `complete` is false when it was stopped, in which
+    /// case `rows` is how many arrived and not how many there are.
+    PodRowsDone {
+        stream_id: String,
+        rows: usize,
+        complete: bool,
+        elapsed_ms: u64,
+    },
+    /// The list ended without an answer; the message is the same text the
+    /// unstreamed command would have failed with, so every reader of it
+    /// still matches. Exactly one of this or `PodRowsDone`.
+    PodRowsFailed { stream_id: String, message: String },
     /// Error occurred
     Error { code: String, message: String },
 }
@@ -390,6 +407,9 @@ impl AppEvent {
             AppEvent::FilesBatch { .. } => "files-batch",
             AppEvent::FilesDone { .. } => "files-done",
             AppEvent::FilesFailed { .. } => "files-failed",
+            AppEvent::PodRowsBatch { .. } => "pod-rows-batch",
+            AppEvent::PodRowsDone { .. } => "pod-rows-done",
+            AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
             AppEvent::Error { .. } => "app-error",
         }
     }
@@ -584,6 +604,25 @@ impl AppEvent {
                 "stderr": stderr,
                 "tried": tried,
             }),
+            AppEvent::PodRowsBatch { stream_id, rows } => serde_json::json!({
+                "stream_id": stream_id,
+                "rows": rows,
+            }),
+            AppEvent::PodRowsDone {
+                stream_id,
+                rows,
+                complete,
+                elapsed_ms,
+            } => serde_json::json!({
+                "stream_id": stream_id,
+                "rows": rows,
+                "complete": complete,
+                "elapsed_ms": elapsed_ms,
+            }),
+            AppEvent::PodRowsFailed { stream_id, message } => serde_json::json!({
+                "stream_id": stream_id,
+                "message": message,
+            }),
             AppEvent::Error { code, message } => serde_json::json!({
                 "code": code,
                 "message": message,
@@ -655,6 +694,20 @@ mod tests {
                     resource: Some(serde_json::json!({ "name": "api-0" })),
                 }],
                 error: None,
+            },
+            AppEvent::PodRowsBatch {
+                stream_id: "pods-1".into(),
+                rows: vec![],
+            },
+            AppEvent::PodRowsDone {
+                stream_id: "pods-1".into(),
+                rows: 0,
+                complete: true,
+                elapsed_ms: 1,
+            },
+            AppEvent::PodRowsFailed {
+                stream_id: "pods-1".into(),
+                message: "refused".into(),
             },
         ];
 
