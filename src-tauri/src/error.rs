@@ -103,11 +103,8 @@ pub enum Error {
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
-    /// The node has forgotten a log that was really written. Distinct from
-    /// `NoPreviousRun`, which is "there was never anything to read": here the
-    /// container restarted, so the run happened, and the runtime dropped its
-    /// log first. The kubelet says so with a 200 and the sentence in the body,
-    /// so nothing upstream of this can tell it from output.
+    /// The run happened and the node dropped its log: not `NoPreviousRun`,
+    /// and the kubelet says it with a 200, so only the body tells.
     #[error("The node no longer has the log of {container}: {said}")]
     LogNotKept { container: String, said: String },
 

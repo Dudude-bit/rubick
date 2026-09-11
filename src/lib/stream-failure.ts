@@ -9,12 +9,9 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * failure over a resource that may well still be running, so the panel
  * that shows it owes the reader a way back.
  *
- * `log-not-kept` is a fourth thing, and the one a live cluster taught us:
- * the container really did restart, so the run happened, and the node's
- * runtime dropped its log before anyone asked for it. The kubelet says so
- * with a **200 and the sentence in the body**, shaped exactly like output,
- * so without this the panel draws a line no program ever printed. Retrying
- * reaches the same node, which still does not have it.
+ * `log-not-kept` is a fourth thing: the run happened and the node dropped
+ * its log, said by the kubelet with a 200 and the sentence in the body.
+ * Retrying reaches the same node, which still does not have it.
  *
  * `noPreviousRun` is neither: the run asked for does not exist because
  * the container has never restarted. Its own kind because the apiserver

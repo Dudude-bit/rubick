@@ -65,9 +65,7 @@ impl LogStreamer {
             .await
             .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?;
 
-        // The kubelet refuses in the body, with a 200. Parsed as logs it
-        // becomes a line the container never printed, and the panel, the
-        // hint chain and the hand-off all quote it as one.
+        // A 200 whose body is the kubelet refusing; parsed, it is a fake line.
         if is_runtime_dropped_log(&logs) {
             return Err(Error::LogNotKept {
                 container,

@@ -171,10 +171,8 @@ impl TerminalManager {
                             StreamFailureKind::Gone => {
                                 format!("There is no container left to attach to — {cause}.")
                             }
-                            // An exec has no previous run to ask for and no
-                            // log to have been dropped, so neither kind can
-                            // arrive here; if one ever did it would still
-                            // mean the shell did not open.
+                            // An exec has no previous run and no log to drop;
+                            // either kind here still means the shell did not open.
                             StreamFailureKind::Broken
                             | StreamFailureKind::NoPreviousRun
                             | StreamFailureKind::LogNotKept => {

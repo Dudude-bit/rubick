@@ -87,26 +87,15 @@ pub enum StreamFailureKind {
     /// answer, and the control that asked it should say so instead of
     /// reporting a failure.
     NoPreviousRun,
-    /// The run happened and its log is gone: the container restarted, so
-    /// there was something to read, and the node's runtime dropped it
-    /// before anyone asked. Neither "nothing to show" nor a transport
-    /// failure — retrying reaches the same node, which still does not
-    /// have it.
+    /// The run happened and the node dropped its log. Not a transport
+    /// failure: retrying reaches the same node, which still does not have it.
     LogNotKept,
 }
 
-/// What the kubelet answers, with **200 and `text/plain`**, when the node's
-/// runtime no longer has the log it was asked for.
-///
-/// There is no status code to read and no `Status` object: the refusal
-/// arrives in the body, shaped exactly like output. Left alone it is drawn
-/// as a line the container printed, which is this codebase's one defect
-/// class aimed at the log panel — and, through the hint chain, at a
-/// diagnosis built on a sentence no program ever wrote.
-///
-/// Matched as the whole body rather than as a substring. A program that
-/// prints this line among others keeps its logs; only a body that is
-/// nothing else is the kubelet talking.
+/// The kubelet's answer, with a 200 and `text/plain`, when the node no longer
+/// has the log: a refusal shaped exactly like output. Matched as the whole
+/// body, never as a substring, so a program printing the sentence among its
+/// own lines keeps its logs.
 #[must_use]
 pub fn is_runtime_dropped_log(body: &str) -> bool {
     let body = body.trim();

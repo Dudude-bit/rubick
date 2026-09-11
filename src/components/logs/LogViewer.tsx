@@ -126,9 +126,7 @@ function StreamFailureNotice({
   // previous run that was asked for does not exist. Reconnecting would
   // ask the same unanswerable question again.
   const absent = failure.kind === "no-previous-run";
-  // A read that failed, and one no retry fixes: the run happened, and the
-  // node dropped its log first. Neither the warn-and-move-on of "there was
-  // never anything here" nor the red offer to reconnect.
+  // A failed read no retry fixes: warn, and no reconnect offered.
   const notKept = failure.kind === "log-not-kept";
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
@@ -200,8 +198,7 @@ function StreamFailureNotice({
           {t("action", "showCurrentRun")}
         </NoticeAction>
       ) : notKept ? (
-        // The same way out as an absent run, and for a nearer reason: the
-        // run that is still readable is the one on screen now.
+        // The run that is still readable is the one on screen now.
         <NoticeAction onClick={onShowCurrentRun}>
           {t("action", "showCurrentRun")}
         </NoticeAction>
