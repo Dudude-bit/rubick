@@ -8,16 +8,11 @@ const PRIMITIVES = [
 
 describe("every dialog panel is bounded by the window", () => {
   /**
-   * A dialog is centred with `translate-y-[-50%]`, so a body the cluster
-   * decides the length of — the pods a drain refused, the Services a connect
-   * form matched — grows off **both** edges: the title and the ✕ leave the
-   * top, the buttons the bottom, and nothing scrolls, because Radix locks the
-   * page behind the panel and a `fixed` box cannot be scrolled into view by
-   * any ancestor. Three call sites had bounded themselves by hand and the
-   * rest had not, which is what makes it the primitive's job.
-   *
-   * Read as source text: the class string is the whole contract, and jsdom
-   * computes no layout.
+   * A dialog is centred, so a body the cluster decides the length of grows
+   * off **both** edges and takes the ✕ and the buttons with it — and nothing
+   * scrolls, because Radix locks the page behind the panel and a `fixed` box
+   * cannot be scrolled into view. Three call sites had bounded themselves by
+   * hand and the rest had not. Read as source text: jsdom computes no layout.
    */
   it.each(PRIMITIVES)("%s keeps its content reachable", (path) => {
     const panel = readFileSync(path, "utf8")
