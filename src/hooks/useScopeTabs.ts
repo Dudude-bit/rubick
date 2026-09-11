@@ -23,6 +23,7 @@ export function useScopeTabs(): void {
   const pendingHref = useScopeTabStore((s) => s.pendingHref);
   const activeId = useScopeTabStore((s) => s.activeId);
   const contexts = useClusterStore((s) => s.contexts);
+  const contextSwitches = useClusterStore((s) => s.contextSwitches);
 
   // Router -> store. Every navigation belongs to the tab it happened in,
   // the way a browser tab tracks the page.
@@ -40,6 +41,13 @@ export function useScopeTabs(): void {
     }
     useScopeTabStore.getState().routeSettled();
   }, [pendingHref, href, navigate]);
+
+  // A route that names an object names it in one cluster; the list it came
+  // from is the same list anywhere.
+  useEffect(() => {
+    if (contextSwitches === 0) return;
+    useScopeTabStore.getState().retargetAfterSwitch();
+  }, [contextSwitches]);
 
   // Everything cached belonged to the connection the parked tab no longer
   // has, so none of it may be shown as live. Resource query keys do not

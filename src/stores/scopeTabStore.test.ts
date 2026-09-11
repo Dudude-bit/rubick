@@ -11,6 +11,7 @@ vi.mock("@/lib/commands", () => ({
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { useClusterStore } from "./clusterStore";
 import {
+  listBehind,
   tabRouteLabel,
   tabScope,
   tabTitle,
@@ -561,5 +562,68 @@ describe("surviving a restart", () => {
     await useScopeTabStore.persist.rehydrate();
     expect(state().activeId).toBe("scope-1");
     expect(state().pendingHref).toBe("/nodes");
+  });
+});
+
+describe("a route that belongs to the cluster being left", () => {
+  /**
+   * Issue #148's `ps.`: switching clusters left the pod page open on a pod
+   * that exists in neither the new cluster nor the reader's mind. The list is
+   * what survives the move — and a list route must not be moved at all, or
+   * every switch would throw away where the reader was.
+   */
+  it.each([
+    ["/pods/default/api-7f9", "/workloads/pods"],
+    ["/nodes/worker-1", "/nodes"],
+    [
+      "/customresourcedefinitions/widgets.example.com",
+      "/customresourcedefinitions",
+    ],
+    ["/helm/secret/default/redis", "/helm"],
+    ["/workloads/pods?peek=pods/default/api-7f9", "/workloads/pods"],
+  ])("sends %s to %s", (href, list) => {
+    expect(listBehind(href)).toBe(list);
+  });
+
+  it.each([
+    "/",
+    "/workloads/pods",
+    "/nodes",
+    "/events",
+    "/settings/appearance",
+    "/customresourcedefinitions",
+  ])("leaves %s where it is", (href) => {
+    expect(listBehind(href)).toBeNull();
+  });
+});
+
+describe("retargetAfterSwitch", () => {
+  /** Without this the tab keeps the old cluster's pod and goes nowhere. */
+  it("moves the active tab to the list and asks the router for it", () => {
+    seed([tab({ id: "a", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().retargetAfterSwitch();
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].href).toBe("/workloads/pods");
+    expect(pendingHref).toBe("/workloads/pods");
+  });
+
+  /**
+   * Activating a tab changes the cluster too, and that tab's own route is
+   * already on its way — overwriting it would send the reader to a list they
+   * did not ask for every time they switched tabs.
+   */
+  it("stands aside while an activation is delivering a route", () => {
+    seed([tab({ id: "a", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.setState({ pendingHref: "/nodes/worker-1" });
+    useScopeTabStore.getState().retargetAfterSwitch();
+    expect(useScopeTabStore.getState().tabs[0].href).toBe(
+      "/pods/default/api-7f9"
+    );
+  });
+
+  it("leaves a tab that was already on a list alone", () => {
+    seed([tab({ id: "a", href: "/workloads/pods" })]);
+    useScopeTabStore.getState().retargetAfterSwitch();
+    expect(useScopeTabStore.getState().pendingHref).toBeNull();
   });
 });

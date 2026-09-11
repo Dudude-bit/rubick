@@ -31,7 +31,11 @@ import {
   sameScope,
   wireNamespace,
 } from "@/lib/namespace-scope";
-import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
+import {
+  getDisplayPlural,
+  getResourceListUrl,
+  isResourceType,
+} from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 
 /**
@@ -90,6 +94,8 @@ interface ScopeTabState {
   /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
   recordHref: (href: string) => void;
+  /** Let go of a route that belongs to the cluster just left. */
+  retargetAfterSwitch: () => void;
   routeSettled: () => void;
   reconcileContexts: (names: string[]) => void;
 }
@@ -303,6 +309,23 @@ export const useScopeTabStore = create<ScopeTabState>()(
         await applyScope(next);
       },
 
+      retargetAfterSwitch: () => {
+        const { tabs, activeId, pendingHref } = get();
+        // An activation is already delivering a route of its own; this is
+        // only for a cluster that changed under a tab standing still.
+        if (pendingHref !== null) return;
+        const active = tabs.find((tab) => tab.id === activeId);
+        if (!active) return;
+        const list = listBehind(active.href);
+        if (list === null || list === active.href) return;
+        set({
+          tabs: tabs.map((tab) =>
+            tab.id === activeId ? { ...tab, href: list } : tab
+          ),
+          pendingHref: list,
+        });
+      },
+
       recordHref: (href: string) =>
         set((state) => {
           // An activation owns the route until it lands; recording here
@@ -416,6 +439,26 @@ export function tabRouteLabel(href: string): string {
   // as much as `/nodes`. Anything else is the object the route shows.
   const last = segments.at(-1) as string;
   return isResourceType(last) ? getDisplayPlural(last).toLowerCase() : last;
+}
+
+/**
+ * The list a route belongs to, for a route that names one object.
+ *
+ * `null` where the route names no object — a list, the overview, settings —
+ * and so means the same thing in any cluster. Everything else names a pod or
+ * a release that exists in the cluster it was opened in and nowhere else, and
+ * switching left the reader holding its page, open and unreadable (#148).
+ */
+export function listBehind(href: string): string | null {
+  const [path, query = ""] = href.split("?");
+  // A peek names an object too; the list under it is the place to land.
+  if (new URLSearchParams(query).get("peek")) return path;
+  const segments = path.split("/").filter(Boolean);
+  const first = segments[0];
+  if (!first || segments.length < 2) return null;
+  if (isResourceType(first)) return getResourceListUrl(first);
+  // Helm keeps its releases on the same shape without being a kind.
+  return first === "helm" ? "/helm" : null;
 }
 
 /**
