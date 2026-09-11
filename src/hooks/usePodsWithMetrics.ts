@@ -15,11 +15,11 @@ import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
-import type { PodInfo } from "@/generated/types";
+import { listPodRows, type PodRow } from "@/lib/pod-rows";
 
 export type { PodWithMetrics } from "@/lib/metrics";
 
-const EMPTY_PODS: PodInfo[] = [];
+const EMPTY_PODS: PodRow[] = [];
 
 interface UsePodsWithMetricsOptions {
   /** Whether the query should be enabled (default: true when connected) */
@@ -49,7 +49,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   // the initial fetch arrive through `useResourceWatch` below.
   // Polling falls back on if the watcher reports a sustained failure
   // (e.g. RBAC `watch` denial); see handleWatchError below.
-  const queryKey = useMemo(() => queryKeys.pods(cacheKey), [cacheKey]);
+  const queryKey = useMemo(() => queryKeys.podRows(cacheKey), [cacheKey]);
 
   const { toast } = useToast();
   const [watchFailed, setWatchFailed] = useState(false);
@@ -75,21 +75,17 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     dataUpdatedAt,
   } = useLiveQuery({
     queryKey,
-    queryFn: listAcrossScope(scope.scope, async (namespace) => {
-      try {
-        return await commands.listPods({
-          namespace,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-        });
-      } catch (err) {
-        throw new Error(normalizeTauriError(err), { cause: err });
-      }
-    }),
+    // Rows, streamed in chunks, rather than `listPods` in one answer: the
+    // full pod is three kilobytes a row and the table reads a dozen fields.
+    // The signal stops a stream the screen has stopped waiting for.
+    queryFn: ({ signal }) =>
+      listAcrossScope(scope.scope, async (namespace) => {
+        try {
+          return await listPodRows(namespace, signal);
+        } catch (err) {
+          throw new Error(normalizeTauriError(err), { cause: err });
+        }
+      })(),
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
@@ -98,10 +94,10 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   });
 
   const subscribePods = useCallback(
-    () => commands.subscribePodWatch(watchNamespace),
+    () => commands.subscribePodRowWatch(watchNamespace),
     [watchNamespace]
   );
-  const { resyncing } = useResourceWatch<PodInfo>({
+  const { resyncing } = useResourceWatch<PodRow>({
     enabled: enabled && !scope.several,
     subscribe: subscribePods,
     queryKey,

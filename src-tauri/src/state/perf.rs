@@ -11,6 +11,30 @@ use parking_lot::Mutex;
 pub const IPC_TARGET_BYTES: usize = 262_144;
 pub const IPC_LIMIT_BYTES: usize = 1_048_576;
 
+/// `rows`, grouped so that each group serialises to at most `budget` bytes.
+/// Order is kept; a single row over the budget travels alone rather than
+/// being dropped. Every row is serialised once here to be measured, which
+/// is the price of a message that is known to fit before it is sent.
+#[must_use]
+pub fn chunks_within<T: serde::Serialize>(rows: Vec<T>, budget: usize) -> Vec<Vec<T>> {
+    let mut chunks = Vec::new();
+    let mut chunk = Vec::new();
+    let mut used = 0;
+    for row in rows {
+        let bytes = serde_json::to_vec(&row).map_or(0, |v| v.len()) + 1;
+        if !chunk.is_empty() && used + bytes > budget {
+            chunks.push(std::mem::take(&mut chunk));
+            used = 0;
+        }
+        chunk.push(row);
+        used += bytes;
+    }
+    if !chunk.is_empty() {
+        chunks.push(chunk);
+    }
+    chunks
+}
+
 #[derive(Default)]
 struct Counters {
     recording: bool,
@@ -77,6 +101,36 @@ impl PerfCounters {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(n: usize) -> String {
+        "x".repeat(n)
+    }
+
+    /// The budget is per message. A chunk over it is the 78 MiB message again, only smaller.
+    #[test]
+    fn every_chunk_fits_the_budget_and_no_row_is_lost_or_reordered() {
+        let rows: Vec<String> = (1..=40).map(|i| row(i * 5)).collect();
+        let chunks = chunks_within(rows.clone(), 300);
+        assert!(chunks.len() > 1);
+        for chunk in &chunks {
+            assert!(serde_json::to_vec(chunk).unwrap().len() <= 300);
+        }
+        let back: Vec<String> = chunks.into_iter().flatten().collect();
+        assert_eq!(back, rows);
+    }
+
+    /// One row larger than the budget is still a row. Dropping it would make a pod disappear from the list.
+    #[test]
+    fn a_row_over_budget_travels_alone() {
+        let chunks = chunks_within(vec![row(10), row(500), row(10)], 100);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[1][0].len(), 500);
+    }
+
+    #[test]
+    fn nothing_yields_no_chunks() {
+        assert!(chunks_within(Vec::<String>::new(), 100).is_empty());
+    }
 
     /// Counting while idle would make every event pay for a second serialisation.
     #[test]

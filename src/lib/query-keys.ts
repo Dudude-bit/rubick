@@ -64,6 +64,15 @@ export const queryKeys = {
 
   // Pods (special case - used by multiple components)
   pods: (namespace?: string | null): string[] => ["pods", scope(namespace)],
+  /**
+   * The pod list as the table draws it: `PodRow`s from `listPodRows`, not
+   * `PodInfo`s. Its own key because the two shapes must never share a cache
+   * entry, and because `["pods", ns, name]` is the detail's key.
+   */
+  podRows: (namespace?: string | null): string[] => [
+    "pod-rows",
+    scope(namespace),
+  ],
 
   // Namespaces
   namespaces: (): string[] => ["namespaces"],

@@ -5,10 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listPods: vi.fn(async () => []),
     listDeployments: vi.fn(async () => []),
     listServices: vi.fn(async () => []),
   },
+}));
+vi.mock("@/lib/pod-rows", () => ({
+  listPodRows: vi.fn(async () => []),
 }));
 
 import { useClusterStore } from "@/stores/clusterStore";

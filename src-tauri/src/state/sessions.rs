@@ -46,3 +46,25 @@ pub struct LogStream {
     /// no replay). `Option` so it can be taken once and dropped.
     pub subscribe_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
+
+/// A list being streamed to the frontend in chunks; see
+/// `commands::pods::list_pod_rows`. Same gate as a log stream, for the
+/// same reason.
+#[derive(Debug)]
+pub struct ListStream {
+    pub cancel_tx: tokio::sync::oneshot::Sender<()>,
+    pub subscribe_tx: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+/// Removes a map entry when dropped, so every exit path of a spawned task,
+/// the panicking one included, leaves no stale session behind.
+pub struct RemoveOnDrop<V> {
+    pub map: std::sync::Arc<dashmap::DashMap<String, V>>,
+    pub key: String,
+}
+
+impl<V> Drop for RemoveOnDrop<V> {
+    fn drop(&mut self) {
+        self.map.remove(&self.key);
+    }
+}

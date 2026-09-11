@@ -290,15 +290,10 @@ impl ContainerInfo {
     /// init containers were invisible while this only read one of them.
     #[must_use]
     pub fn from_init_container(container: &Container, pod_status: Option<&PodStatus>) -> Self {
-        let phase = if is_sidecar(container) {
-            ContainerPhase::Sidecar
-        } else {
-            ContainerPhase::Init
-        };
         Self::build(
             container,
             pod_status.and_then(|s| s.init_container_statuses.as_ref()),
-            phase,
+            init_phase(container),
         )
     }
 
@@ -309,39 +304,26 @@ impl ContainerInfo {
     ) -> Self {
         let container_status = statuses.and_then(|cs| cs.iter().find(|c| c.name == container.name));
 
-        let (ready, started, state, last_terminated, restart_count) = if let Some(cs) =
-            container_status
-        {
-            let state = if cs.state.as_ref().and_then(|s| s.running.as_ref()).is_some() {
-                ContainerState::Running
-            } else if let Some(waiting) = cs.state.as_ref().and_then(|s| s.waiting.as_ref()) {
-                ContainerState::Waiting {
-                    reason: waiting.reason.clone(),
-                }
-            } else if let Some(terminated) = cs.state.as_ref().and_then(|s| s.terminated.as_ref()) {
-                ContainerState::Terminated {
-                    termination: TerminationInfo::from(terminated),
-                }
+        let (ready, started, state, last_terminated, restart_count) =
+            if let Some(cs) = container_status {
+                let state = state_of(cs);
+
+                let last = cs
+                    .last_state
+                    .as_ref()
+                    .and_then(|s| s.terminated.as_ref())
+                    .map(TerminationInfo::from);
+
+                (
+                    cs.ready,
+                    cs.started.unwrap_or(false),
+                    state,
+                    last,
+                    cs.restart_count,
+                )
             } else {
-                ContainerState::Unknown
+                (false, false, ContainerState::Unknown, None, 0)
             };
-
-            let last = cs
-                .last_state
-                .as_ref()
-                .and_then(|s| s.terminated.as_ref())
-                .map(TerminationInfo::from);
-
-            (
-                cs.ready,
-                cs.started.unwrap_or(false),
-                state,
-                last,
-                cs.restart_count,
-            )
-        } else {
-            (false, false, ContainerState::Unknown, None, 0)
-        };
 
         let ports = container
             .ports
@@ -370,6 +352,35 @@ impl ContainerInfo {
             env: extract_env_vars(container),
             env_from: extract_env_from(container),
         }
+    }
+}
+
+/// Init or sidecar, from the one place that judgement is made.
+#[must_use]
+pub fn init_phase(container: &Container) -> ContainerPhase {
+    if is_sidecar(container) {
+        ContainerPhase::Sidecar
+    } else {
+        ContainerPhase::Init
+    }
+}
+
+/// The container's current state, in the shape the frontend switches on.
+#[must_use]
+pub fn state_of(cs: &ContainerStatus) -> ContainerState {
+    let state = cs.state.as_ref();
+    if state.and_then(|s| s.running.as_ref()).is_some() {
+        ContainerState::Running
+    } else if let Some(waiting) = state.and_then(|s| s.waiting.as_ref()) {
+        ContainerState::Waiting {
+            reason: waiting.reason.clone(),
+        }
+    } else if let Some(terminated) = state.and_then(|s| s.terminated.as_ref()) {
+        ContainerState::Terminated {
+            termination: TerminationInfo::from(terminated),
+        }
+    } else {
+        ContainerState::Unknown
     }
 }
 

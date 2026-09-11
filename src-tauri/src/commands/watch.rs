@@ -20,8 +20,8 @@
 use crate::error::{Error, Result};
 use crate::resources::{
     ConfigMapInfo, CronJobInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo, IngressInfo, JobInfo,
-    NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo, PodInfo, SecretInfo,
-    ServiceInfo, StatefulSetInfo, StorageClassInfo,
+    NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo, PodInfo, PodRow,
+    SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
@@ -127,6 +127,7 @@ subscribe_namespaced!(
     "PersistentVolumeClaim"
 );
 subscribe_namespaced!(subscribe_pod_watch, Pod, PodInfo, "Pod");
+subscribe_namespaced!(subscribe_pod_row_watch, Pod, PodRow, "Pod");
 subscribe_namespaced!(
     subscribe_deployment_watch,
     Deployment,

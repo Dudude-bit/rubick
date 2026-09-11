@@ -19,8 +19,10 @@ editor states its numbers against these, before and after.
 
 The IPC numbers live in `shared/ipc-budget.json`, with a test on each side
 of the boundary holding its constant equal to the file, the same way
-`MAX_PROBLEMS` does. Nothing enforces them at runtime yet; the recorder
-paints an answer over the target in the warning tone so a PR cannot miss it.
+`MAX_PROBLEMS` does. The pod list is the one answer chunked to the target on
+its way out (`list_pod_rows` streams `PodRow`s through `chunks_within`);
+every other answer is unenforced at runtime, and the recorder paints one over
+the target in the warning tone so a PR cannot miss it.
 
 ## The rig
 

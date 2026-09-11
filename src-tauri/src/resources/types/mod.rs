@@ -10,6 +10,7 @@ pub mod metadata;
 pub mod node;
 pub mod pod;
 pub mod pod_display;
+pub mod pod_row;
 pub mod service;
 
 pub use common::{
@@ -27,4 +28,5 @@ pub use pod::{
     VolumeObjectRef,
 };
 pub use pod_display::{condition_is_true, restarts};
+pub use pod_row::{PodRow, PodRowStatus, RowContainer};
 pub use service::{ServiceInfo, ServicePortInfo};

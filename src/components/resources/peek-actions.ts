@@ -481,6 +481,7 @@ export function peekMutationKeys(kind: string): string[][] {
     // Every mutation the panel offers ends in pods changing, and the pod list
     // is the one most likely to be the view behind it.
     ["pods"],
+    ["pod-rows"],
     ["peek"],
     ["peek-pods"],
     ["peek-jobs"],
