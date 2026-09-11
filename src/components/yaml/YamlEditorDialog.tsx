@@ -19,7 +19,10 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
 import { commands } from "@/lib/commands";
+import type { DryRunDocument } from "@/generated/types";
 import {
   Dialog,
   DialogContent,
@@ -178,6 +181,31 @@ export function YamlEditorDialog() {
   );
 
   const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
+
+  // What the server would store against what it holds now. Asked only once
+  // the confirmation is open, of the buffer as it is at that moment; the
+  // editor's own diff stands in while the answer is on its way, and says so.
+  const dryRun = useQuery({
+    queryKey: [
+      "dry-run",
+      resourceKey?.kind ?? "",
+      resourceKey?.namespace ?? "",
+      resourceKey?.name ?? "",
+      editedContent,
+    ],
+    queryFn: () =>
+      commands.dryRunManifest(
+        editedContent,
+        resourceKey?.namespace || currentNamespace || null
+      ),
+    enabled: showApplyConfirm && hasChanges,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+  const refused =
+    dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
+    null;
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
@@ -446,7 +474,18 @@ export function YamlEditorDialog() {
               owner, which the lead sentence carries anyway. */}
           <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
 
-          {hasChanges && (
+          {hasChanges && dryRun.data ? (
+            <div className="min-w-0 py-4" data-testid="dry-run">
+              <p className="mb-2 text-xs text-fg-mut">
+                {t("action", "dryRunFromServer")}
+              </p>
+              <div className="flex flex-col gap-3">
+                {dryRun.data.documents.map((doc) => (
+                  <DryRunSection key={doc.id} doc={doc} />
+                ))}
+              </div>
+            </div>
+          ) : hasChanges ? (
             // The diff is arbitrarily wide and this dialog is a grid, whose
             // items default to `min-width: auto` — without this the longest
             // line of the manifest sets the column width and everything above
@@ -462,8 +501,19 @@ export function YamlEditorDialog() {
                   height="200px"
                 />
               </ScrollArea>
+              <p
+                className="mt-2 text-[11px] text-fg-fnt"
+                role="status"
+                data-testid="dry-run-standing"
+              >
+                {dryRun.isError
+                  ? t("action", "dryRunFailed", {
+                      error: errorToShow(dryRun.error),
+                    })
+                  : t("action", "dryRunAsking")}
+              </p>
             </div>
-          )}
+          ) : null}
 
           {gate.input}
 
@@ -477,7 +527,10 @@ export function YamlEditorDialog() {
             >
               {t("action", "cancel")}
             </Button>
-            <Button onClick={handleApply} disabled={gate.blocked}>
+            <Button
+              onClick={handleApply}
+              disabled={gate.blocked || refused !== null}
+            >
               <Play className="mr-2 h-4 w-4" />
               {/* The intercept decides its own word where it has one — a
                   disowned label confirms with a plain "Apply", because there
@@ -492,5 +545,60 @@ export function YamlEditorDialog() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * One document of the dry run: what the server said it would do, and the
+ * object it would store against the one it holds.
+ *
+ * "Would be created" and "could not read what is there" both arrive with no
+ * current object, and each gets its own sentence; a refusal shows the
+ * server's own words and nothing to diff, because there is nothing to diff.
+ */
+function DryRunSection({ doc }: { doc: DryRunDocument }) {
+  const t = useT();
+  const outcome = doc.outcome;
+  const tone =
+    outcome.says === "refused"
+      ? "text-err"
+      : outcome.says === "liveUnread" || outcome.says === "unanswered"
+        ? "text-warn"
+        : outcome.says === "unchanged"
+          ? "text-fg-fnt"
+          : "text-fg";
+  return (
+    <section className="min-w-0" data-testid="dry-run-document">
+      <p className={`text-xs ${tone}`}>
+        <span className="font-mono">{doc.id}</span>{" "}
+        {outcome.says === "created"
+          ? t("action", "dryRunCreated")
+          : outcome.says === "configured"
+            ? t("action", "dryRunConfigured")
+            : outcome.says === "unchanged"
+              ? t("action", "dryRunUnchanged")
+              : outcome.says === "liveUnread"
+                ? t("action", "dryRunLiveUnread")
+                : outcome.says === "unanswered"
+                  ? t("action", "dryRunUnanswered")
+                  : t("action", "dryRunRefused")}
+      </p>
+      {outcome.says === "refused" ||
+      outcome.says === "liveUnread" ||
+      outcome.says === "unanswered" ? (
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {outcome.said}
+        </p>
+      ) : null}
+      {doc.would !== null && outcome.says !== "unchanged" ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live ?? ""}
+            modified={doc.would}
+            height="200px"
+          />
+        </ScrollArea>
+      ) : null}
+    </section>
   );
 }

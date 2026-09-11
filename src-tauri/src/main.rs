@@ -431,6 +431,7 @@ fn main() {
             // Manifest commands
             commands::manifest::validate_manifest,
             commands::manifest::apply_manifest,
+            commands::manifest::dry_run_manifest,
             commands::manifest::get_manifest,
             // Logging commands
             commands::logging::log_frontend_events_batch,

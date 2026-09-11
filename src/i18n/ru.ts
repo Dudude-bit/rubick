@@ -650,6 +650,19 @@ export const ru: Catalogue = {
     applyChangesQuestion: "Применить изменения?",
     applyManifestConfirm:
       "Манифест будет применён к вашему кластеру Kubernetes. Убедитесь, что вы проверили изменения.",
+    dryRunFromServer:
+      "Что кластер сохранит, против того, что хранит сейчас. Спрошено у сервера без применения.",
+    dryRunAsking: "Спрашиваю кластер, что изменится…",
+    dryRunFailed:
+      "Кластер не ответил на dry run ({error}); это собственный diff редактора.",
+    dryRunCreated: "будет создан",
+    dryRunConfigured: "изменится",
+    dryRunUnchanged: "не изменится",
+    dryRunLiveUnread:
+      "принят, но текущий объект прочитать не удалось, поэтому неизвестно, изменится ли что-то",
+    dryRunUnanswered:
+      "остался без ответа кластера, поэтому это собственный diff редактора, и apply не заблокирован",
+    dryRunRefused: "отклонён, и настоящий apply будет отклонён так же",
     changesToBeApplied: "Изменения, которые будут применены:",
     filterApplications: "Фильтровать Application",
     filterByNameProjectRepoObject:

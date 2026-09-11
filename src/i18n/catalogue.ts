@@ -679,6 +679,19 @@ export const en = {
     applyChangesQuestion: "Apply Changes?",
     applyManifestConfirm:
       "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",
+    dryRunFromServer:
+      "What the cluster would store, against what it holds now. Asked of the server without applying.",
+    dryRunAsking: "Asking the cluster what would change…",
+    dryRunFailed:
+      "The cluster did not answer the dry run ({error}); this is the editor's own diff.",
+    dryRunCreated: "would be created",
+    dryRunConfigured: "would change",
+    dryRunUnchanged: "would not change",
+    dryRunLiveUnread:
+      "is accepted, but the current object could not be read, so whether anything changes is unknown",
+    dryRunUnanswered:
+      "got no answer from the cluster, so this is the editor's own diff and the apply is not blocked",
+    dryRunRefused: "is refused, and a real apply would be refused the same way",
     changesToBeApplied: "Changes to be applied:",
     filterApplications: "Filter applications",
     filterByNameProjectRepoObject: "Filter by name, project, repo or object",

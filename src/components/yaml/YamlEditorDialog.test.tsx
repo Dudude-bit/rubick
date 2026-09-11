@@ -26,12 +26,14 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
 const applyManifest = vi.fn();
+const dryRunManifest = vi.fn();
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     detectInClusterExtensions: () => detectInClusterExtensions(),
     listCustomResources: (...args: unknown[]) => listCustomResources(...args),
     applyManifest: (...args: unknown[]) => applyManifest(...args),
+    dryRunManifest: (...args: unknown[]) => dryRunManifest(...args),
     getResourceConnections: async () => ({ object: null, edges: [] }),
     getYamlHistory: async () => [],
     addYamlHistoryEntry: async () => {},
@@ -133,6 +135,16 @@ beforeEach(() => {
     stdout: "deployment.apps/api configured",
     stderr: "",
     exit_code: 0,
+  });
+  dryRunManifest.mockResolvedValue({
+    documents: [
+      {
+        id: "deployment/shop api",
+        outcome: { says: "configured" },
+        live: "spec:\n  replicas: 2\n",
+        would: "spec:\n  replicas: 4\n",
+      },
+    ],
   });
   detectInClusterExtensions.mockResolvedValue([
     { id: "argocd", installed: true, version: null },
@@ -240,5 +252,97 @@ describe("applying on critical infrastructure", () => {
 
     await user.click(confirm);
     await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("what the cluster says it would do", () => {
+  /**
+   * The editor's diff is the buffer against the file it was given. The
+   * server's is the object it would store against the one it holds, with
+   * defaults and admission in it, and it is the one that answers "what will
+   * this actually do".
+   */
+  it("shows the server's answer once it has one, per document", async () => {
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByTestId("dry-run")).toBeInTheDocument();
+    expect(screen.getByText("deployment/shop api")).toBeInTheDocument();
+    expect(screen.getByText(/would change/)).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1)
+    ).toBeEnabled();
+  });
+
+  /** A refusal is the server's answer already; a real apply would be refused the same way. */
+  it("does not offer to apply what the server has refused", async () => {
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: {
+            says: "refused",
+            said: 'admission webhook "policy" denied the request: replicas above 3 need an approval label',
+          },
+          live: "spec:\n  replicas: 2\n",
+          would: null,
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByText(/is refused/)).toBeInTheDocument();
+    expect(screen.getByText(/need an approval label/)).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1)
+    ).toBeDisabled();
+  });
+
+  /**
+   * A dry run the cluster did not answer is not a reason to lose the
+   * confirmation: the editor's own diff stands in, and says that it is
+   * standing in.
+   */
+  it("falls back to the editor's diff, and says so, when the dry run fails", async () => {
+    dryRunManifest.mockRejectedValue(
+      new Error("dryRun is not supported by this webhook")
+    );
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(
+      await screen.findByText(/did not answer the dry run/)
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("diff")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1)
+    ).toBeEnabled();
+  });
+});
+
+describe("a dry run nobody answered", () => {
+  /** A proxy's 502 is not the server saying no; blocking on it would block an apply the server never saw. */
+  it("says the question went unanswered and leaves the apply enabled", async () => {
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: { says: "unanswered", said: "502 Bad Gateway" },
+          live: null,
+          would: null,
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(
+      await screen.findByText(/got no answer from the cluster/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /^Apply$/ }).at(-1)
+    ).toBeEnabled();
   });
 });
