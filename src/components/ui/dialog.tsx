@@ -41,13 +41,8 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // The same guard vertically. The panel is centred with
-        // `translate-y-[-50%]`, so without a ceiling it grows off *both*
-        // edges of the window once its body is a list the cluster decides
-        // the length of — the pods a drain refused, the Services a connect
-        // form matched — taking the title and the ✕ off the top and the
-        // buttons off the bottom, with nothing to scroll. Three call sites
-        // had each bounded themselves; the rest had not.
+        // The same guard vertically: centred, an unbounded body grows off
+        // *both* edges and takes the ✕ and the buttons with it.
         //
         // `minmax(0,1fr)` rather than the implicit `auto` track: an auto
         // track is floored at its items' min-content, so one unbreakable

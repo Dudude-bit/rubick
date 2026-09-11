@@ -74,11 +74,7 @@ export const SPEC = {
     fontFamily:
       "'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace",
     lineHeight: "1.5",
-    // CodeMirror builds this element itself, so none of the app's classes
-    // reach it — including `scrollbar-thin`, which every other scroller
-    // here carries. On a platform that draws scrollbars in the layout
-    // rather than over it, the manifest was the one pane with a chunky
-    // light-grey bar down its side.
+    // CodeMirror builds this element, so `scrollbar-thin` never reaches it.
     scrollbarWidth: "thin",
     scrollbarColor: "hsl(var(--sel)) transparent",
   },

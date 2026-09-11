@@ -1,20 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-/**
- * `react-codemirror` mounts the editor inside a wrapper `div` of its own, and
- * the `height` prop only styles the `.cm-editor` beneath it. A percentage
- * there resolves against that wrapper — so with the wrapper left at `auto`
- * the editor grew to the whole document instead of to its box, the container
- * clipped it, and a long manifest had no scrollbar and did not answer the
- * mouse wheel (issue #163, reported on 4.11.0).
- *
- * Two of the three surfaces hit it: the detail page's YAML tab and the peek
- * panel's, both of which pass no `className`. The edit dialog happened to
- * pass `className="h-full"` and so escaped — which is why this belongs in the
- * component and not at each call site.
- */
-
 const captured: { props?: Record<string, unknown> } = {};
 vi.mock("@uiw/react-codemirror", () => ({
   default: (props: Record<string, unknown>) => {
@@ -30,6 +16,15 @@ vi.mock("@/stores/themeStore", () => ({
 const { YamlEditor } = await import("./YamlEditorImpl");
 
 describe("YamlEditor", () => {
+  /**
+   * `react-codemirror` mounts the editor inside a wrapper `div` of its own,
+   * and `height` only styles the `.cm-editor` beneath it. A percentage there
+   * resolves against that wrapper — left at `auto`, the editor grew to the
+   * whole document, the container clipped it, and a long manifest had no
+   * scrollbar and ignored the wheel (issue #163). Two of the three surfaces
+   * hit it; the edit dialog escaped only because it passes `h-full`, which
+   * is why this belongs in the component.
+   */
   it("gives its own wrapper the height it was handed, not just the editor", () => {
     render(<YamlEditor value="a: 1" readOnly height="100%" />);
     // `style` is not a prop react-codemirror reads; it lands on the wrapper

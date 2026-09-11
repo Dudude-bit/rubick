@@ -29,10 +29,8 @@ export function YamlResultDisplay({ result }: YamlResultDisplayProps) {
         )}
         {result.success ? t("settings", "success") : t("action", "error")}
       </p>
-      {/* Bounded, with its own scroller. `kubectl apply` on a big manifest
-       *  answers with a line per object, and unbounded this block pushed
-       *  the dialog's own buttons past the bottom of the window while
-       *  squeezing the editor above it to nothing. */}
+      {/* Bounded: a line per object squeezed the editor and pushed the
+       *  dialog's buttons past the window. */}
       {result.stdout && (
         <pre className="mt-1.5 max-h-40 overflow-y-auto scrollbar-thin whitespace-pre-wrap font-mono text-[11px] text-fg-mid">
           {result.stdout}
