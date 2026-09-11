@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.12.0] - 2026-09-11
+
+### Added
+
+- **Files tab on a pod.** Read a container's filesystem without a shell: one
+  exec per directory, rows tagged with the mount they come from, a preview and
+  a download. Every way the read can end is a different sentence, and none of
+  them is an empty list — a directory the container may not open says so, a
+  name nobody could decode is counted, and a listing cut short says it was.
+- **Operators.** An integration can declare itself an operator and is drawn
+  under its own caption. Two arrive with it:
+  - **CloudNativePG** — every Cluster in the operator's own words: phase,
+    primary and the instance it is moving to, fencing, hibernation, WAL
+    archiving, and backups read from the Backup objects. Restart, reload,
+    backup, fence, hibernate and wake, each behind a dialog that says what the
+    operator will then do.
+  - **Scylla** — racks and members with the three conditions as written, the
+    upgrade in progress, and whether ScyllaDB Manager is installed to run the
+    repairs the spec declares. Rolling restart, scale a rack, upgrade.
+- **Node page.** One resources table, the pods on the node, and cordon and
+  drain from the page itself.
+- **A week of history.** Request and limit lines on the usage charts, and a
+  Utilisation view of every node.
+- **Tell me when.** A rollout, pod, job, drain or port-forward can say when it
+  has an answer, including when the answer is that it gave up.
+
+### Fixed
+
+- A long YAML manifest scrolls again: the editor grew to the height of the
+  document instead of its pane, so there was no scrollbar and the wheel did
+  nothing (#163).
+- Dialogs, menus and the Routes map can no longer grow past the window and
+  take their own controls with them.
+- A message or a printer column a row truncates can be read in full.
+
 ## [4.11.0] - 2026-09-09
 
 ### Added — a cluster you mark critical asks for its own name before any change
