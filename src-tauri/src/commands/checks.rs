@@ -14,8 +14,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use k8s_openapi::api::core::v1::{Container, Pod, PodSpec};
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::api::core::v1::{Container, Pod, PodReadinessGate, PodSpec};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::api::{Api, DeleteParams, PostParams};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -279,9 +279,25 @@ fn copy_name(pod: &str) -> String {
     format!("{}{suffix}", base.trim_end_matches('-'))
 }
 
+/// A readiness condition nothing ever sets, so the copy is never Ready.
+const NEVER_READY: &str = "k8s-gui/check-copy";
+
 /// The pod as the network sees it: same namespace, labels, DNS policy and
-/// service account, none of its containers, none of its volumes, none of
-/// its owners, and one container that does nothing but wait to be asked.
+/// service account, none of its containers, none of its volumes, and one
+/// container that does nothing but wait to be asked.
+///
+/// The labels are what make a `NetworkPolicy` apply to the copy the way it
+/// applies to the pod, and they are also what a `ReplicaSet`'s selector
+/// matches. A live run showed what that means: the original's `ReplicaSet`
+/// adopted the label-alike orphan and deleted it as surplus within a second,
+/// before the first `get`. So the copy is owned, with `controller: true`, by
+/// the pod it copies: a pod with a controller is never adopted, and if the
+/// original goes the garbage collector takes the copy with it.
+///
+/// The same labels are what a `Service` selects, and a pod with no readiness
+/// probe is Ready the moment it runs, which would put a container that
+/// listens on nothing behind real traffic. A readiness gate nothing ever
+/// satisfies keeps it out of every `EndpointSlice` for as long as it lives.
 fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
     let spec = original.spec.clone().unwrap_or_default();
     let mut labels = original.metadata.labels.clone().unwrap_or_default();
@@ -290,14 +306,26 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
         "k8s-gui/check-source".to_string(),
         original.metadata.name.clone().unwrap_or_default(),
     );
+    let owner = original.metadata.uid.clone().map(|uid| OwnerReference {
+        api_version: "v1".to_string(),
+        kind: "Pod".to_string(),
+        name: original.metadata.name.clone().unwrap_or_default(),
+        uid,
+        controller: Some(true),
+        block_owner_deletion: Some(false),
+    });
     Pod {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
             namespace: original.metadata.namespace.clone(),
             labels: Some(labels),
+            owner_references: owner.map(|o| vec![o]),
             ..Default::default()
         },
         spec: Some(PodSpec {
+            readiness_gates: Some(vec![PodReadinessGate {
+                condition_type: NEVER_READY.to_string(),
+            }]),
             containers: vec![Container {
                 name: COPY_CONTAINER.to_string(),
                 image: Some(image.to_string()),
@@ -475,13 +503,21 @@ mod tests {
     }
 
     /// The copy is the pod as the network sees it and nothing more: no
-    /// volumes, no owners, none of the original containers, and a lifetime
-    /// so that a copy nothing ever came back for still leaves.
+    /// volumes, none of the original containers, and a lifetime so that a
+    /// copy nothing ever came back for still leaves.
+    ///
+    /// Two things a live run added. The copy is owned by the pod it copies,
+    /// because a label-alike orphan was adopted by the original's `ReplicaSet`
+    /// and deleted as surplus within a second. And it carries a readiness
+    /// gate nothing satisfies, because the same labels are what a `Service`
+    /// selects, and a Ready copy that listens on nothing would be an
+    /// endpoint. Deleting either line brings one of those back.
     #[test]
     fn the_copy_keeps_the_network_identity_and_drops_everything_else() {
         let mut original = Pod::default();
         original.metadata.name = Some("payments-7b6d9c5f4-x8k2p".into());
         original.metadata.namespace = Some("shop".into());
+        original.metadata.uid = Some("uid-1".into());
         original.metadata.labels = Some(
             [("app".to_string(), "payments".to_string())]
                 .into_iter()
@@ -511,7 +547,23 @@ mod tests {
         assert_eq!(spec.containers.len(), 1);
         assert_eq!(spec.containers[0].name, COPY_CONTAINER);
         assert!(spec.volumes.is_none());
-        assert!(copy.metadata.owner_references.is_none());
+        let owner = &copy
+            .metadata
+            .owner_references
+            .expect("owned by the pod it copies")[0];
+        assert_eq!((owner.kind.as_str(), owner.uid.as_str()), ("Pod", "uid-1"));
+        assert_eq!(
+            owner.controller,
+            Some(true),
+            "a controller, so nothing adopts it"
+        );
+        assert_eq!(
+            spec.readiness_gates
+                .as_ref()
+                .map(|g| g[0].condition_type.as_str()),
+            Some(NEVER_READY),
+            "never Ready, so never an endpoint"
+        );
         assert_eq!(spec.restart_policy.as_deref(), Some("Never"));
         assert_eq!(spec.active_deadline_seconds, Some(COPY_LIFETIME_SECS));
     }
