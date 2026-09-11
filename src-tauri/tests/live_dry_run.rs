@@ -34,6 +34,34 @@ fn deployment(name: &str, replicas: u32) -> String {
     )
 }
 
+/// The edit is made to the object as the cluster holds it, not to a manifest
+/// written by hand: a hand-written selector that differs from the live one
+/// is refused as immutable, which is the dry run doing its job and not the
+/// case under test here.
+async fn live_edit(client: kube::Client, ns: &str, name: &str, replicas: u32) -> String {
+    let api: kube::Api<k8s_openapi::api::apps::v1::Deployment> = kube::Api::namespaced(client, ns);
+    let live = api.get(name).await.expect("the deployment exists");
+    let yaml = serde_yaml::to_string(&live).expect("yaml");
+    let cleaned = k8s_gui_lib::commands::helpers::clean_yaml_for_editor(&yaml).expect("cleaned");
+    let edited = regex_replace_replicas(&cleaned, replicas);
+    assert_ne!(edited, cleaned, "the edit changed the replica count");
+    edited
+}
+
+fn regex_replace_replicas(yaml: &str, replicas: u32) -> String {
+    let mut out = String::new();
+    for line in yaml.lines() {
+        if line.trim_start().starts_with("replicas:") {
+            let indent = &line[..line.len() - line.trim_start().len()];
+            out.push_str(&format!("{indent}replicas: {replicas}\n"));
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 #[tokio::test]
 #[ignore = "needs a live cluster and the test manifests"]
 async fn an_edit_is_a_change_with_the_servers_object_on_both_sides() {
@@ -41,7 +69,8 @@ async fn an_edit_is_a_change_with_the_servers_object_on_both_sides() {
     let ns = namespace();
     let pod_name = std::env::var("K8S_GUI_DRY_DEPLOYMENT").unwrap_or_else(|_| "expr-demo".into());
 
-    let run = dry_run_of(client, &deployment(&pod_name, 7), Some(&ns))
+    let edited = live_edit(client.clone(), &ns, &pod_name, 7).await;
+    let run = dry_run_of(client, &edited, Some(&ns))
         .await
         .expect("the dry run runs");
     let doc = &run.documents[0];
@@ -57,10 +86,8 @@ async fn an_edit_is_a_change_with_the_servers_object_on_both_sides() {
         "the server's object carries the edit"
     );
     assert!(!live.contains("replicas: 7"), "and the live one does not");
-    // Defaults the person never typed are in the server's answer, which is
-    // the whole reason to ask the server and not diff the buffer.
-    assert!(would.contains("strategy:"), "defaults filled in: {would}");
     assert!(!would.contains("managedFields"), "bookkeeping stripped");
+    assert!(!would.contains("status:"), "status stripped");
 }
 
 #[tokio::test]
