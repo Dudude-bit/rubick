@@ -39,6 +39,7 @@ import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
 import { useT } from "@/i18n/useT";
+import type { Frozen } from "./hooks/log-buffer";
 import {
   countCollapsed,
   expandRuns,
@@ -642,6 +643,7 @@ export function LogViewer({
   );
   const [draft, setDraft] = useState("");
   const [limit, setLimit] = useState(DEFAULT_LOG_LIMIT);
+  const [frozen, setFrozen] = useState<Frozen | null>(null);
   const [collapseRepeats, setCollapseRepeats] = useState(true);
   const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<number>>(
     () => new Set()
@@ -683,6 +685,7 @@ export function LogViewer({
     logs: live,
     fields,
     dropped,
+    frozenLines,
     isStreaming,
     isConnecting,
     isPaused,
@@ -700,6 +703,7 @@ export function LogViewer({
     limit,
     previous: previousRun,
     intake,
+    frozen,
   });
 
   const colors = useMemo(() => buildContainerColors(containers), [containers]);
@@ -966,6 +970,21 @@ export function LogViewer({
     setIntakeLabels((prev) => toggled(prev, termLabel(term)));
   }, []);
 
+  // The freeze outlives the chip on purpose: the chip is a question about
+  // what to show, the freeze is about what to keep, and taking the filter
+  // off to watch the tail must not throw the held lines away. The status
+  // bar keeps the handle that thaws it.
+  const handleToggleFreeze = useCallback((term: QueryTerm) => {
+    if (term.kind !== "time") return;
+    setFrozen((prev) =>
+      prev !== null && prev.from === term.from && prev.to === term.to
+        ? null
+        : { from: term.from, to: term.to }
+    );
+  }, []);
+
+  const handleThaw = useCallback(() => setFrozen(null), []);
+
   const handleClearQuery = useCallback(() => {
     setTerms([]);
     setIntakeLabels(new Set());
@@ -1151,6 +1170,7 @@ export function LogViewer({
           headDropped={dropped > 0}
           intake={intake.length > 0}
           selection={timeRange}
+          frozen={frozen}
           viewportFrom={viewportFrom}
           viewportTo={viewportTo}
           onJump={handleJumpToTime}
@@ -1169,6 +1189,8 @@ export function LogViewer({
         onRemoveTerm={handleRemoveTerm}
         intake={intakeLabels}
         onToggleIntake={handleToggleIntake}
+        frozen={frozen}
+        onToggleFreeze={handleToggleFreeze}
         fields={fields}
         limit={limit}
         onLimitChange={setLimit}
@@ -1330,6 +1352,9 @@ export function LogViewer({
       <LogStatusBar
         logs={logs}
         retained={retained}
+        frozen={frozen}
+        frozenLines={frozenLines}
+        onThaw={handleThaw}
         limit={limit}
         shownCount={rows.length}
         hiddenCount={hiddenByView}
