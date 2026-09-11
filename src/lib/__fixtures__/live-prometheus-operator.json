@@ -1,0 +1,1795 @@
+{
+  "recordedAt": "2026-09-11T23:09:00Z",
+  "cluster": "killercoda v1.36.1, kube-prometheus-stack (operator v0.85, Prometheus v3.14.0), helm install kps --skip-crds, serviceMonitorSelectorNilUsesHelmValues=false",
+  "monitors": [
+    {
+      "name": "log-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "087209c0-e753-4733-aaac-96cef205274a",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "interval": "15s",
+            "path": "/metrics",
+            "port": "http"
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "log-demo"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T22:50:44Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "nobody-picks-up",
+      "namespace": "k8s-gui-test",
+      "uid": "707866bb-d20a-4b9b-af30-593f61ac1514",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "port": "http"
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "log-demo"
+          }
+        }
+      },
+      "status": null,
+      "labels": {},
+      "annotations": {},
+      "createdAt": "2026-09-11T22:50:44Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "selects-nothing",
+      "namespace": "k8s-gui-test",
+      "uid": "91e6163e-fe55-41a6-84f3-05f84b40939e",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "port": "http"
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "no-such-app"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T22:50:44Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-apiserver",
+      "namespace": "monitoring",
+      "uid": "5a6d25a7-8bbf-431b-8e51-652147b8378e",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "metricRelabelings": [
+              {
+                "action": "drop",
+                "regex": "(etcd_request|apiserver_request_slo|apiserver_request_sli|apiserver_request)_duration_seconds_bucket;(0\\.15|0\\.2|0\\.3|0\\.35|0\\.4|0\\.45|0\\.6|0\\.7|0\\.8|0\\.9|1\\.25|1\\.5|1\\.75|2|3|3\\.5|4|4\\.5|6|7|8|9|15|20|40|45|50)(\\.0)?",
+                "sourceLabels": [
+                  "__name__",
+                  "le"
+                ]
+              }
+            ],
+            "port": "https",
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": false,
+              "serverName": "kubernetes"
+            }
+          }
+        ],
+        "jobLabel": "component",
+        "namespaceSelector": {
+          "matchNames": [
+            "default"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "component": "apiserver",
+            "provider": "kubernetes"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-apiserver",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-coredns",
+      "namespace": "monitoring",
+      "uid": "5b707ad7-5796-442d-98a4-964bf248c106",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "port": "http-metrics"
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-coredns",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-coredns",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-controller-manager",
+      "namespace": "monitoring",
+      "uid": "d2e9f40c-711f-4022-afa2-6a1ba7d2f836",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "port": "http-metrics",
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": true
+            }
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-kube-controller-manager",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-kube-controller-manager",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-etcd",
+      "namespace": "monitoring",
+      "uid": "62bab3b3-572a-4d87-bc97-8bf8bcf587ca",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "port": "http-metrics"
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-kube-etcd",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-kube-etcd",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-proxy",
+      "namespace": "monitoring",
+      "uid": "69778264-55f8-437e-a234-b0da91e0c9ff",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "port": "http-metrics"
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-kube-proxy",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-kube-proxy",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-scheduler",
+      "namespace": "monitoring",
+      "uid": "c686ac36-2682-471f-adeb-54904c47e397",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "port": "http-metrics",
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": true
+            }
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-kube-scheduler",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-kube-scheduler",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kubelet",
+      "namespace": "monitoring",
+      "uid": "aa2aff8f-8d54-40fe-b9f4-5349d8817d1c",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "attachMetadata": {
+          "node": false
+        },
+        "endpoints": [
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "honorLabels": true,
+            "honorTimestamps": true,
+            "metricRelabelings": [
+              {
+                "action": "drop",
+                "regex": "(csi_operations|storage_operation_duration)_seconds_bucket;(0.25|2.5|15|25|120|600)(\\.0)?",
+                "sourceLabels": [
+                  "__name__",
+                  "le"
+                ]
+              }
+            ],
+            "port": "https-metrics",
+            "relabelings": [
+              {
+                "action": "replace",
+                "sourceLabels": [
+                  "__metrics_path__"
+                ],
+                "targetLabel": "metrics_path"
+              }
+            ],
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": true
+            }
+          },
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "honorLabels": true,
+            "honorTimestamps": true,
+            "interval": "10s",
+            "metricRelabelings": [
+              {
+                "action": "drop",
+                "regex": "container_cpu_(cfs_throttled_seconds_total|load_average_10s|system_seconds_total|user_seconds_total)",
+                "sourceLabels": [
+                  "__name__"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_fs_(io_current|io_time_seconds_total|io_time_weighted_seconds_total|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)",
+                "sourceLabels": [
+                  "__name__"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_memory_(mapped_file|swap)",
+                "sourceLabels": [
+                  "__name__"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_(file_descriptors|tasks_state|threads_max)",
+                "sourceLabels": [
+                  "__name__"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_memory_failures_total;hierarchy",
+                "sourceLabels": [
+                  "__name__",
+                  "scope"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_network_.*;(cali|cilium|cni|lxc|nodelocaldns|tunl).*",
+                "sourceLabels": [
+                  "__name__",
+                  "interface"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": "container_spec.*",
+                "sourceLabels": [
+                  "__name__"
+                ]
+              },
+              {
+                "action": "drop",
+                "regex": ".+;",
+                "sourceLabels": [
+                  "id",
+                  "pod"
+                ]
+              }
+            ],
+            "path": "/metrics/cadvisor",
+            "port": "https-metrics",
+            "relabelings": [
+              {
+                "action": "replace",
+                "sourceLabels": [
+                  "__metrics_path__"
+                ],
+                "targetLabel": "metrics_path"
+              }
+            ],
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": true
+            },
+            "trackTimestampsStaleness": true
+          },
+          {
+            "authorization": {
+              "credentials": {
+                "key": "token",
+                "name": "kps-kube-prometheus-stack-prometheus-token"
+              },
+              "type": "Bearer"
+            },
+            "honorLabels": true,
+            "honorTimestamps": true,
+            "path": "/metrics/probes",
+            "port": "https-metrics",
+            "relabelings": [
+              {
+                "action": "replace",
+                "sourceLabels": [
+                  "__metrics_path__"
+                ],
+                "targetLabel": "metrics_path"
+              }
+            ],
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "configMap": {
+                  "key": "ca.crt",
+                  "name": "kube-root-ca.crt"
+                }
+              },
+              "insecureSkipVerify": true
+            }
+          }
+        ],
+        "jobLabel": "k8s-app",
+        "namespaceSelector": {
+          "matchNames": [
+            "kube-system"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app.kubernetes.io/name": "kubelet",
+            "k8s-app": "kubelet"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-kubelet",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-operator",
+      "namespace": "monitoring",
+      "uid": "be81cb30-04c4-4260-88ae-9dfea7901661",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "honorLabels": true,
+            "port": "https",
+            "scheme": "https",
+            "tlsConfig": {
+              "ca": {
+                "secret": {
+                  "key": "ca",
+                  "name": "kps-kube-prometheus-stack-admission",
+                  "optional": false
+                }
+              },
+              "serverName": "kps-kube-prometheus-stack-operator"
+            }
+          }
+        ],
+        "namespaceSelector": {
+          "matchNames": [
+            "monitoring"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-operator",
+            "release": "kps"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-operator",
+        "app.kubernetes.io/component": "prometheus-operator",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "kube-prometheus-stack-prometheus-operator",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-prometheus-stack-prometheus",
+      "namespace": "monitoring",
+      "uid": "9bfa2548-a6fd-4fa4-8761-f0dd64c5e1c4",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "path": "/metrics",
+            "port": "http-web"
+          },
+          {
+            "path": "/metrics",
+            "port": "reloader-web"
+          }
+        ],
+        "namespaceSelector": {
+          "matchNames": [
+            "monitoring"
+          ]
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-prometheus-stack-prometheus",
+            "release": "kps",
+            "self-monitor": "true"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app": "kube-prometheus-stack-prometheus",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-kube-state-metrics",
+      "namespace": "monitoring",
+      "uid": "15044b63-9afb-4fe0-906e-2a00dba1046d",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "honorLabels": true,
+            "port": "http"
+          }
+        ],
+        "jobLabel": "app.kubernetes.io/name",
+        "selector": {
+          "matchLabels": {
+            "app.kubernetes.io/instance": "kps",
+            "app.kubernetes.io/name": "kube-state-metrics"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app.kubernetes.io/component": "metrics",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "kube-state-metrics",
+        "app.kubernetes.io/part-of": "kube-state-metrics",
+        "app.kubernetes.io/version": "2.20.0",
+        "helm.sh/chart": "kube-state-metrics-8.4.2",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "kps-prometheus-node-exporter",
+      "namespace": "monitoring",
+      "uid": "6e844695-f894-46ab-8ef4-dbd3e9d3c796",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "attachMetadata": {
+          "node": false
+        },
+        "endpoints": [
+          {
+            "port": "http-metrics",
+            "scheme": "http"
+          }
+        ],
+        "jobLabel": "jobLabel",
+        "selector": {
+          "matchLabels": {
+            "app.kubernetes.io/instance": "kps",
+            "app.kubernetes.io/name": "prometheus-node-exporter"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "app.kubernetes.io/component": "metrics",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "prometheus-node-exporter",
+        "app.kubernetes.io/part-of": "prometheus-node-exporter",
+        "app.kubernetes.io/version": "1.12.1",
+        "helm.sh/chart": "prometheus-node-exporter-4.56.3",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "prometheus",
+      "namespace": "monitoring",
+      "uid": "1bc7edd2-5dc4-49bc-8a42-9b5169dfce52",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "ServiceMonitor",
+      "spec": {
+        "endpoints": [
+          {
+            "interval": "10s",
+            "port": "web"
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "prometheus"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T22:55:18Z",
+      "ownerReferences": [],
+      "generation": 1
+    },
+    {
+      "name": "pods-in-shop",
+      "namespace": "k8s-gui-test",
+      "uid": "baeb2e82-d26c-4cff-8fa6-97fc4f5a70d4",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "PodMonitor",
+      "spec": {
+        "podMetricsEndpoints": [
+          {
+            "port": "http"
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "log-demo"
+          }
+        }
+      },
+      "status": null,
+      "labels": {
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T22:50:44Z",
+      "ownerReferences": [],
+      "generation": 1
+    }
+  ],
+  "prometheuses": [
+    {
+      "name": "kps-kube-prometheus-stack-prometheus",
+      "namespace": "monitoring",
+      "uid": "261f7186-aaa9-4a18-96ec-171f967854ab",
+      "apiVersion": "monitoring.coreos.com/v1",
+      "kind": "Prometheus",
+      "spec": {
+        "affinity": {
+          "podAntiAffinity": {
+            "preferredDuringSchedulingIgnoredDuringExecution": [
+              {
+                "podAffinityTerm": {
+                  "labelSelector": {
+                    "matchExpressions": [
+                      {
+                        "key": "app.kubernetes.io/name",
+                        "operator": "In",
+                        "values": [
+                          "prometheus"
+                        ]
+                      },
+                      {
+                        "key": "app.kubernetes.io/instance",
+                        "operator": "In",
+                        "values": [
+                          "kps-kube-prometheus-stack-prometheus"
+                        ]
+                      }
+                    ]
+                  },
+                  "topologyKey": "kubernetes.io/hostname"
+                },
+                "weight": 100
+              }
+            ]
+          }
+        },
+        "automountServiceAccountToken": true,
+        "enableAdminAPI": false,
+        "enableOTLPReceiver": false,
+        "evaluationInterval": "30s",
+        "externalUrl": "http://kps-kube-prometheus-stack-prometheus.monitoring:9090",
+        "hostNetwork": false,
+        "image": "quay.io/prometheus/prometheus:v3.14.0-distroless",
+        "imagePullPolicy": "IfNotPresent",
+        "listenLocal": false,
+        "logFormat": "logfmt",
+        "logLevel": "info",
+        "paused": false,
+        "podMonitorNamespaceSelector": {},
+        "podMonitorSelector": {
+          "matchLabels": {
+            "release": "kps"
+          }
+        },
+        "portName": "http-web",
+        "probeNamespaceSelector": {},
+        "probeSelector": {
+          "matchLabels": {
+            "release": "kps"
+          }
+        },
+        "replicas": 1,
+        "retention": "2h",
+        "routePrefix": "/",
+        "ruleNamespaceSelector": {},
+        "ruleSelector": {
+          "matchLabels": {
+            "release": "kps"
+          }
+        },
+        "scrapeConfigNamespaceSelector": {},
+        "scrapeConfigSelector": {
+          "matchLabels": {
+            "release": "kps"
+          }
+        },
+        "scrapeInterval": "30s",
+        "securityContext": {
+          "fsGroup": 2000,
+          "runAsGroup": 2000,
+          "runAsNonRoot": true,
+          "runAsUser": 1000,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "serviceAccountName": "kps-kube-prometheus-stack-prometheus",
+        "serviceMonitorNamespaceSelector": {},
+        "serviceMonitorSelector": {},
+        "shards": 1,
+        "tsdb": {
+          "outOfOrderTimeWindow": "0s"
+        },
+        "version": "v3.14.0-distroless",
+        "walCompression": true
+      },
+      "status": {
+        "availableReplicas": 1,
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-09-11T23:08:23Z",
+            "message": "",
+            "observedGeneration": 1,
+            "reason": "",
+            "status": "True",
+            "type": "Available"
+          },
+          {
+            "lastTransitionTime": "2026-09-11T23:08:07Z",
+            "message": "",
+            "observedGeneration": 1,
+            "reason": "",
+            "status": "True",
+            "type": "Reconciled"
+          }
+        ],
+        "paused": false,
+        "replicas": 1,
+        "selector": "app.kubernetes.io/instance=kps-kube-prometheus-stack-prometheus,app.kubernetes.io/managed-by=prometheus-operator,app.kubernetes.io/name=prometheus,operator.prometheus.io/name=kps-kube-prometheus-stack-prometheus,prometheus=kps-kube-prometheus-stack-prometheus",
+        "shardStatuses": [
+          {
+            "availableReplicas": 1,
+            "replicas": 1,
+            "shardID": "0",
+            "unavailableReplicas": 0,
+            "updatedReplicas": 1
+          }
+        ],
+        "shards": 1,
+        "unavailableReplicas": 0,
+        "updatedReplicas": 1
+      },
+      "labels": {
+        "app": "kube-prometheus-stack-prometheus",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      },
+      "annotations": {},
+      "createdAt": "2026-09-11T23:07:57Z",
+      "ownerReferences": [],
+      "generation": 1
+    }
+  ],
+  "services": [
+    {
+      "name": "kubernetes",
+      "namespace": "default",
+      "uid": "92782656-02b4-4eea-949c-0182a5243104",
+      "labels": {
+        "component": "apiserver",
+        "provider": "kubernetes"
+      }
+    },
+    {
+      "name": "cloud-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "ce07d5e6-71cf-4510-854a-2e064ab0a1b8",
+      "labels": {}
+    },
+    {
+      "name": "cloud-ghost",
+      "namespace": "k8s-gui-test",
+      "uid": "d8ad2ba1-e7fb-4d1e-ae72-8d9f13f501e8",
+      "labels": {}
+    },
+    {
+      "name": "draining-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "421b49a3-c3b8-4ac4-96f1-6d54fa0d7e2d",
+      "labels": {}
+    },
+    {
+      "name": "expr-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "e89274bc-3b5f-4e35-91f3-3599256d646b",
+      "labels": {}
+    },
+    {
+      "name": "external-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "6f6efc6b-e6a4-4abf-8b09-cbfb612e289b",
+      "labels": {}
+    },
+    {
+      "name": "headless-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "e880987e-5e37-4d4d-b9a2-cb7d41c2d6bb",
+      "labels": {}
+    },
+    {
+      "name": "log-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "dfa9e72f-acf4-4ece-8efe-6b33d84cc963",
+      "labels": {
+        "app": "log-demo"
+      }
+    },
+    {
+      "name": "manual-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "fa4160e2-070e-41d2-915d-09745775e962",
+      "labels": {}
+    },
+    {
+      "name": "mixed-port-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "f1690210-d987-439f-bcec-64ddfc67d63b",
+      "labels": {}
+    },
+    {
+      "name": "named-port-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "4cea7506-7a80-4d2e-92e1-b833ce6be1d7",
+      "labels": {}
+    },
+    {
+      "name": "pebble",
+      "namespace": "k8s-gui-test",
+      "uid": "dfd12abb-7988-4366-9410-9ce18bb61f3c",
+      "labels": {}
+    },
+    {
+      "name": "stateful-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "5c47242b-2b82-48dd-bad5-2c175918c37d",
+      "labels": {}
+    },
+    {
+      "name": "tls-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "ff44663a-83ec-445b-81e4-efdda709df85",
+      "labels": {}
+    },
+    {
+      "name": "topology-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "861e3830-1df9-4529-a1dd-f165a640d63b",
+      "labels": {}
+    },
+    {
+      "name": "unready-demo",
+      "namespace": "k8s-gui-test",
+      "uid": "fecf23c5-0735-46c9-948e-50bd32649672",
+      "labels": {}
+    },
+    {
+      "name": "cilium-envoy",
+      "namespace": "kube-system",
+      "uid": "c26a8a4b-a95a-4443-bbb2-f8289e24890a",
+      "labels": {
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "cilium-envoy",
+        "app.kubernetes.io/part-of": "cilium",
+        "io.cilium/app": "proxy",
+        "k8s-app": "cilium-envoy"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-coredns",
+      "namespace": "kube-system",
+      "uid": "8875f3a8-2da4-43da-8756-57e52d96a110",
+      "labels": {
+        "app": "kube-prometheus-stack-coredns",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "jobLabel": "coredns",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-controller-manager",
+      "namespace": "kube-system",
+      "uid": "edbf0b65-8287-4c23-8ffc-36c66498053e",
+      "labels": {
+        "app": "kube-prometheus-stack-kube-controller-manager",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "jobLabel": "kube-controller-manager",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-etcd",
+      "namespace": "kube-system",
+      "uid": "1f92d783-76de-417e-af8f-49c7eb355408",
+      "labels": {
+        "app": "kube-prometheus-stack-kube-etcd",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "jobLabel": "kube-etcd",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-proxy",
+      "namespace": "kube-system",
+      "uid": "13519549-e275-4297-9c0b-52930dd09852",
+      "labels": {
+        "app": "kube-prometheus-stack-kube-proxy",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "jobLabel": "kube-proxy",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kube-scheduler",
+      "namespace": "kube-system",
+      "uid": "04630338-4689-411f-93e9-ada0947a1388",
+      "labels": {
+        "app": "kube-prometheus-stack-kube-scheduler",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "jobLabel": "kube-scheduler",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-kubelet",
+      "namespace": "kube-system",
+      "uid": "0de1069e-a0d7-440e-807b-f91017f47d6d",
+      "labels": {
+        "app.kubernetes.io/managed-by": "prometheus-operator",
+        "app.kubernetes.io/name": "kubelet",
+        "k8s-app": "kubelet"
+      }
+    },
+    {
+      "name": "kube-dns",
+      "namespace": "kube-system",
+      "uid": "61736c72-295a-4784-8651-f5dc1d7da6eb",
+      "labels": {
+        "k8s-app": "kube-dns",
+        "kubernetes.io/cluster-service": "true",
+        "kubernetes.io/name": "CoreDNS"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-operator",
+      "namespace": "monitoring",
+      "uid": "850268dd-cdb0-487e-b033-8f4341d887ae",
+      "labels": {
+        "app": "kube-prometheus-stack-operator",
+        "app.kubernetes.io/component": "prometheus-operator",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "kube-prometheus-stack-prometheus-operator",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-kube-prometheus-stack-prometheus",
+      "namespace": "monitoring",
+      "uid": "59a827e6-11ac-4513-aa8d-1e70f40b24df",
+      "labels": {
+        "app": "kube-prometheus-stack-prometheus",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "kube-prometheus-stack",
+        "app.kubernetes.io/version": "90.1.1",
+        "chart": "kube-prometheus-stack-90.1.1",
+        "heritage": "Helm",
+        "release": "kps",
+        "self-monitor": "true"
+      }
+    },
+    {
+      "name": "kps-kube-state-metrics",
+      "namespace": "monitoring",
+      "uid": "9ee72cf1-6e54-4001-9633-54aeef12e8e1",
+      "labels": {
+        "app.kubernetes.io/component": "metrics",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "kube-state-metrics",
+        "app.kubernetes.io/part-of": "kube-state-metrics",
+        "app.kubernetes.io/version": "2.20.0",
+        "helm.sh/chart": "kube-state-metrics-8.4.2",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "kps-prometheus-node-exporter",
+      "namespace": "monitoring",
+      "uid": "2627e08a-0f81-4815-9306-4024ea442f89",
+      "labels": {
+        "app.kubernetes.io/component": "metrics",
+        "app.kubernetes.io/instance": "kps",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "prometheus-node-exporter",
+        "app.kubernetes.io/part-of": "prometheus-node-exporter",
+        "app.kubernetes.io/version": "1.12.1",
+        "helm.sh/chart": "prometheus-node-exporter-4.56.3",
+        "jobLabel": "node-exporter",
+        "release": "kps"
+      }
+    },
+    {
+      "name": "prometheus",
+      "namespace": "monitoring",
+      "uid": "2f719fd4-2bdd-4ea5-85ce-08d4c15826ed",
+      "labels": {
+        "app": "prometheus"
+      }
+    },
+    {
+      "name": "prometheus-operated",
+      "namespace": "monitoring",
+      "uid": "f1c0d877-7cc8-4db0-9d30-5324bc8dfdc1",
+      "labels": {
+        "app.kubernetes.io/managed-by": "prometheus-operator",
+        "managed-by": "prometheus-operator",
+        "operated-prometheus": "true"
+      }
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "argo-analytics",
+      "uid": "1721c156-dd07-4797-9f6f-b34eab2ffa24",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "argo-analytics"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "cilium-secrets",
+      "uid": "aed0ee9c-0311-4fda-aa64-d4b0b01e1362",
+      "status": "Active",
+      "labels": {
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/part-of": "cilium",
+        "kubernetes.io/metadata.name": "cilium-secrets"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "default",
+      "uid": "7ab6cb67-e38d-4808-9220-571dc5e201ec",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "default"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "flux-apps",
+      "uid": "935e5598-9839-4cab-998e-5d8fd4cff901",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "flux-apps"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "flux-ingress",
+      "uid": "3fb16252-433d-478d-a34d-fdcfef04f3e9",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "flux-ingress"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "flux-monitoring",
+      "uid": "bcb74334-876a-4896-9ee0-569dcaf3e85d",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "flux-monitoring"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "flux-tenant-b",
+      "uid": "1195f431-47be-46cd-b4c5-2931384dfaf8",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "flux-tenant-b"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "k8s-gui-test",
+      "uid": "19ec1d43-c31d-4acd-adf1-31d12470be2e",
+      "status": "Active",
+      "labels": {
+        "app.kubernetes.io/part-of": "k8s-gui-test",
+        "kubernetes.io/metadata.name": "k8s-gui-test"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "kube-node-lease",
+      "uid": "156a609a-5b77-4cbf-99af-176aa5809403",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "kube-node-lease"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "kube-public",
+      "uid": "b82ee832-c90f-4667-9945-b68318c992b0",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "kube-public"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "kube-system",
+      "uid": "0d6db4ce-9cb2-45dd-8e86-bb0596fb3d10",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "kube-system"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "local-path-storage",
+      "uid": "eff52f7a-cf4d-45a0-bd2d-70c352d119e6",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "local-path-storage"
+      },
+      "createdAt": null
+    },
+    {
+      "name": "monitoring",
+      "uid": "d0693360-2444-492f-8553-4d6b3affccd0",
+      "status": "Active",
+      "labels": {
+        "kubernetes.io/metadata.name": "monitoring",
+        "name": "monitoring"
+      },
+      "createdAt": null
+    }
+  ],
+  "targets": [
+    {
+      "scrapePool": "serviceMonitor/k8s-gui-test/log-demo/0",
+      "scrapeUrl": "http://192.168.0.218:80/metrics",
+      "health": "down",
+      "lastError": "server returned HTTP status 404 Not Found",
+      "lastScrape": "2026-09-11T23:08:54.806186934Z",
+      "labels": {
+        "container": "web",
+        "endpoint": "http",
+        "instance": "192.168.0.218:80",
+        "job": "log-demo",
+        "namespace": "k8s-gui-test",
+        "pod": "log-demo-7f4665bfb7-7bs8w",
+        "service": "log-demo"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/k8s-gui-test/log-demo/0",
+      "scrapeUrl": "http://192.168.1.196:80/metrics",
+      "health": "down",
+      "lastError": "server returned HTTP status 404 Not Found",
+      "lastScrape": "2026-09-11T23:08:52.318941155Z",
+      "labels": {
+        "container": "web",
+        "endpoint": "http",
+        "instance": "192.168.1.196:80",
+        "job": "log-demo",
+        "namespace": "k8s-gui-test",
+        "pod": "log-demo-7f4665bfb7-zhvxd",
+        "service": "log-demo"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/k8s-gui-test/nobody-picks-up/0",
+      "scrapeUrl": "http://192.168.0.218:80/metrics",
+      "health": "down",
+      "lastError": "server returned HTTP status 404 Not Found",
+      "lastScrape": "2026-09-11T23:08:57.884615662Z",
+      "labels": {
+        "container": "web",
+        "endpoint": "http",
+        "instance": "192.168.0.218:80",
+        "job": "log-demo",
+        "namespace": "k8s-gui-test",
+        "pod": "log-demo-7f4665bfb7-7bs8w",
+        "service": "log-demo"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/k8s-gui-test/nobody-picks-up/0",
+      "scrapeUrl": "http://192.168.1.196:80/metrics",
+      "health": "down",
+      "lastError": "server returned HTTP status 404 Not Found",
+      "lastScrape": "2026-09-11T23:08:48.688232431Z",
+      "labels": {
+        "container": "web",
+        "endpoint": "http",
+        "instance": "192.168.1.196:80",
+        "job": "log-demo",
+        "namespace": "k8s-gui-test",
+        "pod": "log-demo-7f4665bfb7-zhvxd",
+        "service": "log-demo"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-apiserver/0",
+      "scrapeUrl": "https://172.30.1.2:6443/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:50.246346738Z",
+      "labels": {
+        "endpoint": "https",
+        "instance": "172.30.1.2:6443",
+        "job": "apiserver",
+        "namespace": "default",
+        "service": "kubernetes"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-coredns/0",
+      "scrapeUrl": "http://192.168.0.141:9153/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:31.174327083Z",
+      "labels": {
+        "container": "coredns",
+        "endpoint": "http-metrics",
+        "instance": "192.168.0.141:9153",
+        "job": "coredns",
+        "namespace": "kube-system",
+        "pod": "coredns-dbf6bb8dd-9z2vq",
+        "service": "kps-kube-prometheus-stack-coredns"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-coredns/0",
+      "scrapeUrl": "http://192.168.0.81:9153/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:57.888178942Z",
+      "labels": {
+        "container": "coredns",
+        "endpoint": "http-metrics",
+        "instance": "192.168.0.81:9153",
+        "job": "coredns",
+        "namespace": "kube-system",
+        "pod": "coredns-dbf6bb8dd-n9zqs",
+        "service": "kps-kube-prometheus-stack-coredns"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kube-controller-manager/0",
+      "scrapeUrl": "https://172.30.1.2:10257/metrics",
+      "health": "down",
+      "lastError": "Get \"https://172.30.1.2:10257/metrics\": dial tcp 172.30.1.2:10257: connect: connection refused",
+      "lastScrape": "2026-09-11T23:08:29.236416993Z",
+      "labels": {
+        "container": "kube-controller-manager",
+        "endpoint": "http-metrics",
+        "instance": "172.30.1.2:10257",
+        "job": "kube-controller-manager",
+        "namespace": "kube-system",
+        "pod": "kube-controller-manager-controlplane",
+        "service": "kps-kube-prometheus-stack-kube-controller-manager"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kube-etcd/0",
+      "scrapeUrl": "http://172.30.1.2:2381/metrics",
+      "health": "down",
+      "lastError": "Get \"http://172.30.1.2:2381/metrics\": dial tcp 172.30.1.2:2381: connect: connection refused",
+      "lastScrape": "2026-09-11T23:08:38.817059298Z",
+      "labels": {
+        "container": "etcd",
+        "endpoint": "http-metrics",
+        "instance": "172.30.1.2:2381",
+        "job": "kube-etcd",
+        "namespace": "kube-system",
+        "pod": "etcd-controlplane",
+        "service": "kps-kube-prometheus-stack-kube-etcd"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kube-scheduler/0",
+      "scrapeUrl": "https://172.30.1.2:10259/metrics",
+      "health": "down",
+      "lastError": "Get \"https://172.30.1.2:10259/metrics\": dial tcp 172.30.1.2:10259: connect: connection refused",
+      "lastScrape": "2026-09-11T23:08:46.998937282Z",
+      "labels": {
+        "container": "kube-scheduler",
+        "endpoint": "http-metrics",
+        "instance": "172.30.1.2:10259",
+        "job": "kube-scheduler",
+        "namespace": "kube-system",
+        "pod": "kube-scheduler-controlplane",
+        "service": "kps-kube-prometheus-stack-kube-scheduler"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/0",
+      "scrapeUrl": "https://172.30.1.2:10250/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:42.474625812Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.1.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics",
+        "namespace": "kube-system",
+        "node": "controlplane",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/0",
+      "scrapeUrl": "https://172.30.2.2:10250/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:29.515761113Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.2.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics",
+        "namespace": "kube-system",
+        "node": "node01",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/1",
+      "scrapeUrl": "https://172.30.1.2:10250/metrics/cadvisor",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:54.465209119Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.1.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics/cadvisor",
+        "namespace": "kube-system",
+        "node": "controlplane",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/1",
+      "scrapeUrl": "https://172.30.2.2:10250/metrics/cadvisor",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:51.827643839Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.2.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics/cadvisor",
+        "namespace": "kube-system",
+        "node": "node01",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/2",
+      "scrapeUrl": "https://172.30.1.2:10250/metrics/probes",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:37.765128964Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.1.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics/probes",
+        "namespace": "kube-system",
+        "node": "controlplane",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-kubelet/2",
+      "scrapeUrl": "https://172.30.2.2:10250/metrics/probes",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:42.542581571Z",
+      "labels": {
+        "endpoint": "https-metrics",
+        "instance": "172.30.2.2:10250",
+        "job": "kubelet",
+        "metrics_path": "/metrics/probes",
+        "namespace": "kube-system",
+        "node": "node01",
+        "service": "kps-kube-prometheus-stack-kubelet"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-operator/0",
+      "scrapeUrl": "https://192.168.1.59:10250/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:42.614205137Z",
+      "labels": {
+        "container": "kube-prometheus-stack",
+        "endpoint": "https",
+        "instance": "192.168.1.59:10250",
+        "job": "kps-kube-prometheus-stack-operator",
+        "namespace": "monitoring",
+        "pod": "kps-kube-prometheus-stack-operator-78dbf4bd68-vnplh",
+        "service": "kps-kube-prometheus-stack-operator"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-prometheus/0",
+      "scrapeUrl": "http://192.168.0.179:9090/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:53.449773503Z",
+      "labels": {
+        "container": "prometheus",
+        "endpoint": "http-web",
+        "instance": "192.168.0.179:9090",
+        "job": "kps-kube-prometheus-stack-prometheus",
+        "namespace": "monitoring",
+        "pod": "prometheus-kps-kube-prometheus-stack-prometheus-0",
+        "service": "kps-kube-prometheus-stack-prometheus"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-prometheus-stack-prometheus/1",
+      "scrapeUrl": "http://192.168.0.179:8080/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:44.643698836Z",
+      "labels": {
+        "container": "config-reloader",
+        "endpoint": "reloader-web",
+        "instance": "192.168.0.179:8080",
+        "job": "kps-kube-prometheus-stack-prometheus",
+        "namespace": "monitoring",
+        "pod": "prometheus-kps-kube-prometheus-stack-prometheus-0",
+        "service": "kps-kube-prometheus-stack-prometheus"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-kube-state-metrics/0",
+      "scrapeUrl": "http://192.168.1.160:8080/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:44.190583035Z",
+      "labels": {
+        "container": "kube-state-metrics",
+        "endpoint": "http",
+        "instance": "192.168.1.160:8080",
+        "job": "kube-state-metrics",
+        "namespace": "monitoring",
+        "pod": "kps-kube-state-metrics-7bdf5c877d-gdrqz",
+        "service": "kps-kube-state-metrics"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-prometheus-node-exporter/0",
+      "scrapeUrl": "http://172.30.1.2:9100/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:51.564691993Z",
+      "labels": {
+        "container": "node-exporter",
+        "endpoint": "http-metrics",
+        "instance": "172.30.1.2:9100",
+        "job": "node-exporter",
+        "namespace": "monitoring",
+        "pod": "kps-prometheus-node-exporter-4b7fc",
+        "service": "kps-prometheus-node-exporter"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/kps-prometheus-node-exporter/0",
+      "scrapeUrl": "http://172.30.2.2:9100/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:54.742892643Z",
+      "labels": {
+        "container": "node-exporter",
+        "endpoint": "http-metrics",
+        "instance": "172.30.2.2:9100",
+        "job": "node-exporter",
+        "namespace": "monitoring",
+        "pod": "kps-prometheus-node-exporter-8xcg6",
+        "service": "kps-prometheus-node-exporter"
+      }
+    },
+    {
+      "scrapePool": "serviceMonitor/monitoring/prometheus/0",
+      "scrapeUrl": "http://192.168.0.53:9090/metrics",
+      "health": "up",
+      "lastError": "",
+      "lastScrape": "2026-09-11T23:08:53.495563075Z",
+      "labels": {
+        "container": "prometheus",
+        "endpoint": "web",
+        "instance": "192.168.0.53:9090",
+        "job": "prometheus",
+        "namespace": "monitoring",
+        "pod": "prometheus-84db969876-bjf8l",
+        "service": "prometheus"
+      }
+    }
+  ]
+}
