@@ -296,7 +296,7 @@ function MonitorLine({ row, last }: { row: MonitorRow; last: boolean }) {
     >
       <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
         <Cell
-          title={t("monitors", "selects")}
+          under={t("monitors", "selects")}
           bad={selected.kind === "services" && selected.names.length === 0}
           warn={selected.kind === "unread"}
         >
@@ -309,7 +309,7 @@ function MonitorLine({ row, last }: { row: MonitorRow; last: boolean }) {
               : t("monitors", "rowUnknown")}
         </Cell>
         <Cell
-          title={t("monitors", "pickedUpBy")}
+          under={t("monitors", "pickedUpBy")}
           bad={pickedUp.known && pickedUp.by.length === 0}
           warn={!pickedUp.known}
         >
@@ -320,7 +320,7 @@ function MonitorLine({ row, last }: { row: MonitorRow; last: boolean }) {
               : t("monitors", "rowUnknown")}
         </Cell>
         <Cell
-          title={t("monitors", "scraped")}
+          under={t("monitors", "scraped")}
           bad={scrape.state === "read" && scrape.down > 0}
           warn={scrape.state !== "read"}
         >
@@ -333,7 +333,7 @@ function MonitorLine({ row, last }: { row: MonitorRow; last: boolean }) {
               : t("monitors", "scrapedUp", { up: scrape.up })
             : t("monitors", "notChecked")}
         </Cell>
-        <Cell title={t("monitors", "endpoints")}>
+        <Cell under={t("monitors", "endpoints")}>
           {monitor.endpoints.length === 0
             ? "-"
             : monitor.endpoints
