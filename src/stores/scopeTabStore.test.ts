@@ -693,3 +693,27 @@ describe("every route this could send a tab to", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("a tab whose cluster the kubeconfig no longer has", () => {
+  /**
+   * The state this launches into: a pod page restored from last time, in a
+   * cluster that is not in the kubeconfig any more. Nothing can answer it, so
+   * the page reads "could not read this pod" until the reader works out why.
+   */
+  it("lets go of the object it was on and keeps the list", () => {
+    seed([tab({ id: "a", context: "gone", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().reconcileContexts(["still-here"]);
+    const [only] = useScopeTabStore.getState().tabs;
+    expect(only.missing).toBe(true);
+    expect(only.href).toBe("/workloads/pods");
+  });
+
+  /** A cluster that came back keeps whatever the tab is on. */
+  it("leaves a tab alone when its cluster is there", () => {
+    seed([tab({ id: "a", context: "here", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().reconcileContexts(["here"]);
+    expect(useScopeTabStore.getState().tabs[0].href).toBe(
+      "/pods/default/api-7f9"
+    );
+  });
+});

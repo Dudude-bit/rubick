@@ -3,8 +3,7 @@
  * moment they are replaced.
  *
  * `useRenewals` is the counter every long-running read watches so it can
- * start again on the new client. `useRenewal` is what a surface shows a
- * person: five answers, one of which is "nobody has said".
+ * start again on the new client. `useRenewal` is what a surface shows.
  */
 
 import { useEffect, useSyncExternalStore } from "react";
@@ -28,10 +27,9 @@ export function useWatchForRenewals(): void {
       "credentials-renewed",
       (event) => {
         credentialsRenewed();
-        // The same proof of a live session a successful connect is, and
-        // the refusal screen is a full-page takeover only a connect used to
-        // lift: a laptop wakes, the first read takes a `401`, the renewal
-        // lands a second later, and the screen would stay.
+        // The same proof of a live session a connect is, and the refusal
+        // screen is a takeover only a connect used to lift: a laptop wakes,
+        // the first read takes a `401`, the renewal lands a second later.
         if (
           event.payload.context === useClusterStore.getState().currentContext
         ) {

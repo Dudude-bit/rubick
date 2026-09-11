@@ -355,7 +355,13 @@ export const useScopeTabStore = create<ScopeTabState>()(
           const known = new Set(names);
           const tabs = state.tabs.map((tab) => {
             const missing = !!tab.context && !known.has(tab.context);
-            return missing === tab.missing ? tab : { ...tab, missing };
+            if (missing === tab.missing) return tab;
+            // An object in a cluster this kubeconfig does not have is a page
+            // nothing can answer — the empty pod page on the next launch.
+            const href = missing
+              ? (listBehind(tab.href) ?? tab.href)
+              : tab.href;
+            return { ...tab, missing, href };
           });
           return tabs.every((tab, i) => tab === state.tabs[i])
             ? state

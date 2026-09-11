@@ -35,9 +35,9 @@ const FLOOR: std::time::Duration = std::time::Duration::from_secs(30);
 /// say so anyway.
 const GIVE_UP_AFTER: u32 = 2;
 
-/// The last moment worth asking at, once the plugin has answered the ordinary
-/// margin with the token it already had. Some only mint a new one inside
-/// their own skew window, so the way to one is to ask later, not more often.
+/// The last moment worth asking at, once the plugin has answered the margin
+/// with the token it already had. Some only mint a new one inside their own
+/// skew window: the way to one is to ask later, not more often.
 const CREEP: Duration = Duration::seconds(20);
 
 /// What became of the attempt to renew a context's credentials on its own.
