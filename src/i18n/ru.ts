@@ -3003,6 +3003,13 @@ export const ru: Catalogue = {
   settings: {
     installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
+    whatsNew: "Что нового",
+    whatsNewHint:
+      "Заметки к этой версии, те, что открываются один раз после обновления.",
+    searchWhatsNewWords: "release notes changelog что нового заметки к выпуску",
+    showWhatsNew: "Показать",
+    whatsNewIn: "Что нового в {version}",
+    whatsNewSince: "Всё с версии {version}",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",

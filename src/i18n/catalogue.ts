@@ -2795,6 +2795,13 @@ export const en = {
   settings: {
     installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
