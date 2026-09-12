@@ -9,6 +9,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * failure over a resource that may well still be running, so the panel
  * that shows it owes the reader a way back.
  *
+ * `log-not-kept` is a fourth thing: the run happened and the node dropped
+ * its log, said by the kubelet with a 200 and the sentence in the body.
+ * Retrying reaches the same node, which still does not have it.
+ *
  * `noPreviousRun` is neither: the run asked for does not exist because
  * the container has never restarted. Its own kind because the apiserver
  * phrases it as a 400 ending in "not found", which would otherwise read
@@ -17,7 +21,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * can tell in advance: `container.lastTerminated` is set for exactly the
  * containers that have a previous run to read.
  */
-export type StreamFailureKind = "gone" | "broken" | "no-previous-run";
+export type StreamFailureKind =
+  "gone" | "broken" | "no-previous-run" | "log-not-kept";
 
 export interface StreamFailure {
   kind: StreamFailureKind;

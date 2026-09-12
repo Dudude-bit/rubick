@@ -70,7 +70,7 @@ export function ReplicaSetDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useLiveQuery({
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["replicaset-pods", namespace, name],
     queryFn: () => commands.getReplicasetPods(name!, namespace || null),
     enabled: !!namespace && !!name,
@@ -256,6 +256,7 @@ export function ReplicaSetDetail() {
               key={`${namespace}/${name}`}
               namespace={namespace || ""}
               pods={pods.map(lanePodOf)}
+              podsError={podsError}
               laneRule="pod"
               workload={name ? { owner: name, ownerKind: "ReplicaSet" } : null}
             />

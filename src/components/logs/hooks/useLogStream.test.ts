@@ -604,11 +604,92 @@ describe("useLogStream on a workload whose pods are replaced", () => {
   });
 
   /**
+   * The open is rejected, and `sync` runs on every change of the pod set —
+   * a scale, a rollout, a pod leaving. Blindly re-adding the source meant
+   * a silent retry per tick and another identical banner each time, so a
+   * two-pod pane read "1 of 2 pods streaming, 4 refused".
+   */
+  it("does not retry a refused stream because another pod joined, and says it once", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      if (config.podName === "api-bad") throw new Error("ImagePullBackOff");
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const good = { pod: "api-good", namespace: "n", container: "app" };
+    const bad = { pod: "api-bad", namespace: "n", container: "app" };
+    const extra = { pod: "api-extra", namespace: "n", container: "app" };
+    const { result, rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [good, bad] } }
+    );
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    rerender({ sources: [good, bad, extra] });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    rerender({ sources: [good, bad] });
+    await waitFor(() =>
+      expect(commands.stopLogStream).toHaveBeenCalledWith(
+        "stream-api-extra-app"
+      )
+    );
+
+    expect(result.current.failures).toHaveLength(1);
+    expect(
+      streamConfigs.filter((config) => config.podName === "api-bad")
+    ).toHaveLength(1);
+  });
+
+  /**
+   * The apiserver refuses a log for a container that has not started, and
+   * nothing else about the source changes when it does. Left alone the
+   * refusal is permanent, sitting beside a pod list showing it Running.
+   */
+  it("asks again once a container that was still starting has started", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      if (streamConfigs.length === 1) throw new Error("is waiting to start");
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const waiting = {
+      pod: "api-new",
+      namespace: "n",
+      container: "app",
+      started: false,
+    };
+    const { result, rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:api",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [waiting] } }
+    );
+    await waitFor(() => expect(result.current.failures).toHaveLength(1));
+
+    rerender({ sources: [{ ...waiting, started: true }] });
+    await waitFor(() => expect(result.current.failures).toHaveLength(0));
+    expect(streamConfigs).toHaveLength(2);
+  });
+
+  /**
    * Would put the loss back: a rollout that restarted the session would
    * drop the old pod's last words, which are the lines somebody reading
-   * a rollout came for, and open the new pod without its tail.
+   * a rollout came for.
+   *
+   * The joining pod opens with no tail. The buffer is append-only and
+   * everything in it is newer than that pod's history, so a backfill
+   * committed now would sit after the live tail and drag a following
+   * reader down into minutes of older lines.
    */
-  it("keeps the old pod's lines, stops its stream and streams the new pod with its own tail", async () => {
+  it("keeps the old pod's lines, stops its stream and streams the new pod from here", async () => {
     vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
       streamConfigs.push(config);
       return `stream-${config.podName}-${config.container}`;
@@ -644,7 +725,9 @@ describe("useLogStream on a workload whose pods are replaced", () => {
     await waitFor(() => expect(subscribedCalls).toHaveLength(2));
     expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-old-app");
     expect(streamConfigs[1].podName).toBe("api-new");
-    expect(streamConfigs[1].tailLines).toBe(
+    expect(streamConfigs[1].tailLines).toBe(0);
+    // The first set still opens with the buffer's share of the cap.
+    expect(streamConfigs[0].tailLines).toBe(
       backfillPerContainer(DEFAULT_LOG_LIMIT, 1)
     );
 

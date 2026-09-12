@@ -62,14 +62,20 @@ export function normalizeMessage(message: string): string {
 interface Groupable {
   message: string;
   level: LogLevel | null;
+  pod: string;
   container: string;
   fields: Record<string, string> | null;
 }
 
 /**
- * The full identity a run is allowed to collapse across. The container
- * and the level are in the key rather than checked alongside it, so a
- * run can never straddle either: a sidecar's line and the app's line
+ * The full identity a run is allowed to collapse across. The pod, the
+ * container and the level are in the key rather than checked alongside it,
+ * so a run can never straddle any of them. The pod matters on a workload
+ * pane: five replicas writing the same sentence within one reorder window
+ * would otherwise collapse into one row drawn in the first pod's lane —
+ * one pod that cannot reach the database instead of five.
+ *
+ * A sidecar's line and the app's line
  * are different lines however alike they read, and a message that
  * changes level has changed what it is saying.
  *
@@ -81,5 +87,5 @@ export function groupKeyFor(line: Groupable): string {
   const fieldKeys = line.fields
     ? Object.keys(line.fields).sort().join(",")
     : "";
-  return `${line.container}\u0000${line.level ?? ""}\u0000${fieldKeys}\u0000${normalizeMessage(line.message)}`;
+  return `${line.pod}\u0000${line.container}\u0000${line.level ?? ""}\u0000${fieldKeys}\u0000${normalizeMessage(line.message)}`;
 }

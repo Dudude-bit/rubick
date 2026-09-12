@@ -15,6 +15,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useCapabilityState } from "@/integrations";
 import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
 import {
   describeTermination,
   lastTermination,
@@ -32,6 +33,8 @@ import {
 import {
   containerEntries,
   laneColors,
+  laneNameCounts,
+  laneOrderWith,
   laneLabel,
   laneName,
   sourcesOf,
@@ -109,6 +112,7 @@ function StreamFailureNotice({
   podName,
   container: info,
   intake,
+  previousRun,
   onRetry,
   onShowCurrentRun,
 }: {
@@ -118,6 +122,8 @@ function StreamFailureNotice({
   container?: ContainerInfo;
   /** Intake is set, so reconnecting will not fetch back the gap. */
   intake: boolean;
+  /** The pane is reading the earlier run, so a current one is a way out. */
+  previousRun: boolean;
   onRetry: () => void;
   /** The way out of an earlier run that does not exist. */
   onShowCurrentRun: () => void;
@@ -137,6 +143,12 @@ function StreamFailureNotice({
   // previous run that was asked for does not exist. Reconnecting would
   // ask the same unanswerable question again.
   const absent = failure.kind === "no-previous-run";
+  // A failed read no retry fixes: warn, and no reconnect offered.
+  const notKept = failure.kind === "log-not-kept";
+  // The runtime drops a running container's log too. Only the run that was
+  // asked for is known to be gone, so the way out exists only when the read
+  // that failed was the earlier one.
+  const offerCurrent = notKept && previousRun;
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
   // the container is no longer running, and the exit code, the reason
@@ -152,15 +164,19 @@ function StreamFailureNotice({
     >
       <div className="min-w-0">
         <p
-          className={`text-xs ${gone || absent || unstarted ? "text-warn" : "text-err"}`}
+          className={`text-xs ${
+            gone || absent || unstarted || notKept ? "text-warn" : "text-err"
+          }`}
         >
-          {absent
-            ? t("empty", "noPreviousRunOf", { container })
-            : unstarted
-              ? t("empty", "containerNotStarted", { container })
-              : gone
-                ? t("empty", "streamEndedGone", { pod: podName, container })
-                : t("empty", "streamLost", { pod: podName, container })}
+          {notKept
+            ? t("empty", "logNotKept", { container })
+            : absent
+              ? t("empty", "noPreviousRunOf", { container })
+              : unstarted
+                ? t("empty", "containerNotStarted", { container })
+                : gone
+                  ? t("empty", "streamEndedGone", { pod: podName, container })
+                  : t("empty", "streamLost", { pod: podName, container })}
         </p>
         {unstarted && info.state.type === "waiting" && info.state.reason && (
           <p className="mt-0.5 text-[11px] text-fg-mut">
@@ -190,7 +206,7 @@ function StreamFailureNotice({
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
-        {intake && !gone && !absent && (
+        {intake && !gone && !absent && !notKept && (
           <p className="mt-0.5 text-[11px] text-fg-fnt">
             {t("empty", "intakeStillSet")}
           </p>
@@ -202,6 +218,16 @@ function StreamFailureNotice({
         <NoticeAction onClick={onShowCurrentRun}>
           {t("action", "showCurrentRun")}
         </NoticeAction>
+      ) : offerCurrent ? (
+        // Only the earlier run is known to be gone; the current one is a
+        // read that has not been tried.
+        <NoticeAction onClick={onShowCurrentRun}>
+          {t("action", "showCurrentRun")}
+        </NoticeAction>
+      ) : notKept ? (
+        <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+          {t("empty", "nothingToReconnectTo")}
+        </span>
       ) : gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
           {t("empty", "nothingToReconnectTo")}
@@ -590,6 +616,12 @@ interface LogViewerProps {
    * their lanes gone and streams the new ones. Nothing is hidden on open.
    */
   pods?: LanePod[];
+  /**
+   * The pod list could not be read. An empty `pods` then means nothing was
+   * looked at, not that the workload has none — the same distinction
+   * `PodListCard` draws one tab away from the same query.
+   */
+  podsError?: unknown;
   /** What a lane stands for under this kind, said in the legend. */
   laneRule?: LaneRule;
   /**
@@ -617,6 +649,7 @@ export function LogViewer({
   namespace,
   containers: containersProp,
   pods,
+  podsError,
   laneRule = "pod",
   soloContainer,
   workload,
@@ -746,6 +779,7 @@ export function LogViewer({
     clearLogs,
     togglePause,
     retry,
+    retrySource,
   } = useLogStream({
     podName: lanes ? undefined : podName,
     namespace,
@@ -763,23 +797,56 @@ export function LogViewer({
    * rather than remembered, so a lane exists exactly as long as a line of
    * it does.
    */
+  const historyCapability = useCapabilityState("logs.history");
+  const history = useLogHistory(
+    historyCapability.state === "ready" ? historyCapability.use : null
+  );
+
   const laneKeys = useMemo(() => {
     if (!lanes) return containers;
     const keys = pods.map((pod) => pod.name);
     for (const key of fields.values.get("pod")?.keys() ?? []) {
       if (!keys.includes(key)) keys.push(key);
     }
+    // A history read is the reason a workload scope exists: its pods from
+    // an hour ago are gone from every list the API server will answer.
+    // They are not in the live buffer's index either — those lines are
+    // merged in beside it — so without this they arrive with no chip, no
+    // colour and no way to hide them.
+    for (const line of history.lines) {
+      if (!keys.includes(line.pod)) keys.push(line.pod);
+    }
     return keys;
-  }, [lanes, containers, pods, fields]);
+  }, [lanes, containers, pods, fields, history.lines]);
   const gone = useMemo(() => {
     if (!lanes) return new Set<string>();
     const present = new Set(pods.map((pod) => pod.name));
     return new Set(laneKeys.filter((key) => !present.has(key)));
   }, [lanes, pods, laneKeys]);
+  // The order lanes were first seen in, appended to and never reordered.
+  // A hue taken from the position in the *live* list moved every lane after
+  // a pod that dropped out of it, so the lines already in the buffer
+  // repainted themselves mid-rollout and the replacement inherited the
+  // colour the reader was following.
+  const [laneOrder, setLaneOrder] = useState<string[]>([]);
+  const [orderedFrom, setOrderedFrom] = useState(laneKeys);
+  if (laneKeys !== orderedFrom) {
+    // React's own "adjust state when a prop changes": the order has to be
+    // right in this render, not one render later, or a new lane flashes in
+    // the colour of the lane it is about to sit beside.
+    setOrderedFrom(laneKeys);
+    setLaneOrder((prev) => laneOrderWith(prev, laneKeys));
+  }
   const colors = useMemo(
     () =>
-      lanes ? laneColors(laneKeys, gone) : buildContainerColors(containers),
-    [lanes, laneKeys, gone, containers]
+      lanes
+        ? laneColors(laneKeys, gone, laneOrder)
+        : buildContainerColors(containers),
+    [lanes, laneKeys, gone, laneOrder, containers]
+  );
+  const laneNames = useMemo(
+    () => laneNameCounts(pods ?? [], laneRule),
+    [pods, laneRule]
   );
   const podByName = useMemo(
     () => new Map((pods ?? []).map((pod) => [pod.name, pod])),
@@ -792,19 +859,16 @@ export function LogViewer({
             podByName.get(log.pod) ?? null,
             log.pod,
             laneRule,
-            labelMode
+            labelMode,
+            laneNames
           )
         : null,
-    [lanes, podByName, laneRule, labelMode]
+    [lanes, podByName, laneRule, labelMode, laneNames]
   );
 
   // A pod's own lines outlive the pod only if somebody shipped them
   // somewhere. Asked for by facet, so this pane never learns which store
   // answered — it prints the name it is handed and branches on nothing.
-  const historyCapability = useCapabilityState("logs.history");
-  const history = useLogHistory(
-    historyCapability.state === "ready" ? historyCapability.use : null
-  );
   const [historyRange, setHistoryRange] = useState<UsageRange | null>(null);
 
   /**
@@ -1128,8 +1192,12 @@ export function LogViewer({
       : (shownContainers.length > 0 ? shownContainers : containers).map(
           (container) => ({ pod: podName, namespace, container })
         );
-    try {
-      for (const target of targets) {
+    // Per target, not around the loop: one pod whose log the node dropped
+    // used to take every pod after it down with it, and the reader was told
+    // the API could not be read — over a fact the backend had just named.
+    const refused: string[] = [];
+    for (const target of targets) {
+      try {
         const allLogs = await commands.getPodLogs(
           target.pod,
           target.namespace,
@@ -1150,12 +1218,17 @@ export function LogViewer({
         anchor.click();
         document.body.removeChild(anchor);
         URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Failed to download logs:", err);
+        refused.push(
+          `${target.pod}/${target.container}: ${normalizeTauriError(err)}`
+        );
       }
-    } catch (err) {
-      console.error("Failed to download logs:", err);
+    }
+    if (refused.length > 0) {
       toast({
         title: t("action", "downloadFailed"),
-        description: t("action", "downloadFailedDetail"),
+        description: refused.join("\n"),
         variant: "destructive",
       });
     }
@@ -1248,8 +1321,13 @@ export function LogViewer({
    */
   const stranded = useMemo(() => {
     if (lanes) return null;
+    // A log the node dropped is the strongest case of all: it is not on the
+    // apiserver at any address, and a history vendor is the only thing left
+    // that can still produce it.
     const gone = bannered
-      .filter((failure) => failure.kind === "gone")
+      .filter(
+        (failure) => failure.kind === "gone" || failure.kind === "log-not-kept"
+      )
       .map((failure) => failure.container);
     if (gone.length > 0) return `${podName}/${gone.join(", ")}`;
     const unstarted = containerInfos.filter(
@@ -1276,25 +1354,73 @@ export function LogViewer({
                     podByName.get(key) ?? null,
                     key,
                     laneRule,
-                    "short"
+                    "short",
+                    laneNames
                   ) ?? key)
-                : laneName(podByName.get(key) ?? null, key, laneRule),
+                : laneName(
+                    podByName.get(key) ?? null,
+                    key,
+                    laneRule,
+                    laneNames
+                  ),
             gone: gone.has(key),
           }))
         : containerEntries(containerInfos),
-    [lanes, laneKeys, labelMode, podByName, laneRule, gone, containerInfos]
+    [
+      lanes,
+      laneKeys,
+      labelMode,
+      podByName,
+      laneRule,
+      laneNames,
+      gone,
+      containerInfos,
+    ]
   );
+  /**
+   * What is actually attached, counted over pods.
+   *
+   * `gone` is not a refusal. The streamer emits it whenever a followed
+   * stream reaches EOF, which is the ordinary end of every init container
+   * and of every pod of a finished Job — so counting any failure as
+   * not-streaming made a Deployment with one migration init container read
+   * "0 of 3 pods streaming" while all three were writing into the pane.
+   *
+   * `refused` counts pods, not streams, because the sentence beside it
+   * counts pods; and a paused pane is not an unread one, so the whole
+   * sentence steps aside while the reader has stopped it.
+   */
   const coverage = useMemo(() => {
     if (!lanes) return null;
-    const refused = failures.filter(
-      (failure) => failure.kind === "broken" && !gone.has(failure.pod)
-    ).length;
+    const terminated = new Set(
+      pods.flatMap((pod) =>
+        pod.containers
+          .filter((container) => container.state.type === "terminated")
+          .map((container) => `${pod.name}/${container.name}`)
+      )
+    );
+    const unread = (failure: ContainerFailure) => {
+      if (failure.kind === "no-previous-run") return false;
+      // Read to the end, not refused: the container finished.
+      if (
+        failure.kind === "gone" &&
+        terminated.has(`${failure.pod}/${failure.container}`)
+      ) {
+        return false;
+      }
+      return true;
+    };
+    const unreadable = failures.filter(unread);
+    // Counted over pods, because the clause beside it counts pods and the
+    // noun is elided. `broken` is the could-not-look state, so the
+    // sentence says that rather than claiming a refusal.
+    const refused = new Set(
+      unreadable
+        .filter((failure) => !gone.has(failure.pod))
+        .map((failure) => failure.pod)
+    ).size;
     const streaming = pods.filter(
-      (pod) =>
-        !failures.some(
-          (failure) =>
-            failure.pod === pod.name && failure.kind !== "no-previous-run"
-        )
+      (pod) => !unreadable.some((failure) => failure.pod === pod.name)
     ).length;
     return { total: pods.length, streaming, refused, gone: gone.size };
   }, [lanes, pods, failures, gone]);
@@ -1368,6 +1494,7 @@ export function LogViewer({
         trailing={
           coverage ? (
             <LaneCoverage
+              paused={isPaused}
               coverage={coverage}
               rule={laneRule}
               mode={labelMode}
@@ -1421,11 +1548,25 @@ export function LogViewer({
           key={`${failure.pod}/${failure.container}`}
           failure={failure}
           podName={lanes ? failure.pod : podName}
-          container={containerInfos.find(
-            (info) => info.name === failure.container
-          )}
+          container={
+            // The first container of that name across every pod is another
+            // pod's status: its exit code, its restart count, its reason.
+            // On a workload pane the failure names which pod it is about.
+            lanes
+              ? podByName
+                  .get(failure.pod)
+                  ?.containers.find((info) => info.name === failure.container)
+              : containerInfos.find((info) => info.name === failure.container)
+          }
           intake={intake.length > 0}
-          onRetry={retry}
+          previousRun={previousRun}
+          onRetry={
+            // One lane at a time where there are lanes: the session-wide
+            // retry clears the buffer, which on a workload pane is every
+            // other pod's lines — including the pods that have left, whose
+            // streams are gone and cannot be read back.
+            lanes ? () => retrySource(failure.pod, failure.container) : retry
+          }
           onShowCurrentRun={handleShowCurrentRun}
         />
       ))}
@@ -1487,7 +1628,7 @@ export function LogViewer({
         onLevelClick={handleLevelClick}
       >
         <EmptyState
-          failed={failures.length > 0}
+          failed={bannered.length > 0}
           connecting={isConnecting}
           streaming={isStreaming}
           retained={retained}
@@ -1495,6 +1636,8 @@ export function LogViewer({
           intake={intake.length > 0}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
+          podsUnread={podsError}
+          lanes={lanes}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
         />
@@ -1526,11 +1669,14 @@ export function LogViewer({
  */
 function LaneCoverage({
   coverage,
+  paused,
   rule,
   mode,
   onModeChange,
 }: {
   coverage: { total: number; streaming: number; refused: number; gone: number };
+  /** Nothing is attached because the reader stopped it, which is not a gap. */
+  paused: boolean;
   rule: LaneRule;
   mode: LaneLabelMode;
   onModeChange: (mode: LaneLabelMode) => void;
@@ -1554,12 +1700,14 @@ function LaneCoverage({
     >
       <span>
         {[
-          t("count", "podsStreaming", {
-            streaming: coverage.streaming,
-            n: coverage.total,
-          }),
+          paused
+            ? t("count", "podsPaused", { n: coverage.total })
+            : t("count", "podsStreaming", {
+                streaming: coverage.streaming,
+                n: coverage.total,
+              }),
           coverage.refused > 0
-            ? t("count", "streamsRefused", { n: coverage.refused })
+            ? t("count", "podsUnreadable", { n: coverage.refused })
             : null,
           coverage.gone > 0
             ? t("count", "podsGoneKept", { n: coverage.gone })
@@ -1605,6 +1753,8 @@ function EmptyState({
   intake,
   allHidden,
   noPods = false,
+  podsUnread,
+  lanes = false,
   onClearQuery,
   onShowAll,
 }: {
@@ -1618,15 +1768,29 @@ function EmptyState({
   allHidden: boolean;
   /** A workload pane with nothing to read from yet. */
   noPods?: boolean;
+  /** The pod list failed to read, so `noPods` says nothing about the cluster. */
+  podsUnread?: unknown;
+  /** A workload pane: what is hidden is a pod, not a container. */
+  lanes?: boolean;
   onClearQuery: () => void;
   onShowAll: () => void;
 }) {
   const t = useT();
 
+  if (podsUnread)
+    return (
+      <Note>
+        {t("empty", "podsUnread", { reason: normalizeTauriError(podsUnread) })}
+      </Note>
+    );
+
   if (noPods) return <Note>{t("empty", "noPodsToStream")}</Note>;
 
   // The failure notice above already said what happened; a second verdict
-  // under it would only compete with it.
+  // under it would only compete with it. `failed` is whether a notice is
+  // being drawn, not whether anything failed: a workload pane draws no
+  // notice for a lane that ended, and would otherwise leave a scroll area
+  // with no words in it at all.
   if (failed && retained === 0) return null;
 
   // Lines, not a spinner: the shape the output will take says "this is a
@@ -1636,7 +1800,9 @@ function EmptyState({
   if (allHidden) {
     return (
       <Note>
-        {t("empty", "everyContainerHidden")}
+        {lanes
+          ? t("empty", "everyLaneHidden")
+          : t("empty", "everyContainerHidden")}
         <span className="text-fg-fnt">
           {" "}
           {t("count", "linesBufferedBehindLegend", {
@@ -1644,7 +1810,11 @@ function EmptyState({
             count: formatCount(retained),
           })}
         </span>
-        <Action onClick={onShowAll}>{t("action", "showAllContainers")}</Action>
+        <Action onClick={onShowAll}>
+          {lanes
+            ? t("action", "showAllLanes")
+            : t("action", "showAllContainers")}
+        </Action>
       </Note>
     );
   }

@@ -496,8 +496,10 @@ export const ru: Catalogue = {
     laneLabelColour: "Цвет дорожки",
     laneLabelShort: "Короткий префикс",
     laneLabelFull: "Полное имя",
+    filterOn: "Фильтр по {key}={value}",
+    showAllLanes: "Показать все поды",
     laneLabelHint:
-      "Как строка называет свой под: только цветом дорожки, последними символами имени пода или полным именем.",
+      "Как строка называет свою дорожку: только цветом, последними символами имени или полным именем.",
     laneRulePod: "дорожка = под",
     laneRuleOrdinal: "дорожка = порядковый номер",
     laneRuleNode: "дорожка = нода",
@@ -3531,6 +3533,8 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    podsUnread:
+      "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
     everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
@@ -4729,6 +4733,8 @@ export const ru: Catalogue = {
     addResourcesFirst: "Сначала добавьте ресурсы или вставьте манифест.",
     dragResourcesHere: "Перетащите ресурсы сюда или нажмите на один в палитре.",
     selectResourceToEdit: "Выберите ресурс, чтобы изменить его настройки.",
+    logNotKept:
+      "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
     noPreviousRunOf:
       "Предыдущего запуска {container} нет — он не перезапускался.",
     containerNotStarted:
@@ -4763,6 +4769,11 @@ export const ru: Catalogue = {
     itFinished: "Он завершился",
     soLogIsComplete: ", поэтому этот лог полон и больше не вырастет.",
     noEarlierRunOf: "Более раннего запуска нет у",
+    chipLogNotKept: "лога нет",
+    chipNoEarlierRun: "раньше не запускался",
+    chipEnded: "закончился",
+    chipNotStarted: "не стартовал",
+    chipLost: "потерян",
     noneHasRestarted:
       "— ни один из них не перезапускался, значит до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",
@@ -5147,11 +5158,17 @@ export const ru: Catalogue = {
       many: "{streaming} из {n} подов стримится",
       other: "{streaming} из {n} пода стримится",
     },
-    streamsRefused: {
-      one: "{n} отказан",
-      few: "{n} отказано",
-      many: "{n} отказано",
-      other: "{n} отказано",
+    podsPaused: {
+      one: "{n} под, на паузе",
+      few: "{n} пода, на паузе",
+      many: "{n} подов, на паузе",
+      other: "{n} пода, на паузе",
+    },
+    podsUnreadable: {
+      one: "{n} под не прочитан",
+      few: "{n} пода не прочитаны",
+      many: "{n} подов не прочитано",
+      other: "{n} пода не прочитано",
     },
     podsGoneKept: {
       one: "{n} ушёл, строки сохранены",
