@@ -18,6 +18,7 @@ import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 vi.mock("./data-table-rows", async (importOriginal) => {
@@ -982,5 +983,25 @@ describe("a table given the page's height", () => {
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
     expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
+  });
+});
+
+describe("the namespace column", () => {
+  const withNamespace: ColumnDef<Item>[] = [
+    ...columns,
+    { accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  /** Issue #178: with one namespace chosen the column repeated the scope bar on every row. */
+  it("is hidden while one namespace is chosen, and back for all or several", () => {
+    useClusterStore.setState({ namespaceScope: ["ns"] });
+    const { unmount } = wrap(
+      <DataTable<Item> columns={withNamespace} data={DATA} />
+    );
+    expect(screen.queryByText("Namespace")).toBeNull();
+    unmount();
+    useClusterStore.setState({ namespaceScope: [] });
+    wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
+    expect(screen.getByText("Namespace")).toBeInTheDocument();
   });
 });

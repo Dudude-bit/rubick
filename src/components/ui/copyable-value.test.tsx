@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { CopyableValue } from "./copyable-value";
+import { CopyButton, CopyableValue } from "./copyable-value";
 
 /**
  * `userEvent.setup()` installs its own clipboard stub, so ours has to go in
@@ -79,5 +79,27 @@ describe("CopyableValue", () => {
   it("shows the value itself, not a placeholder", () => {
     render(<CopyableValue value="10.43.107.238" />);
     expect(screen.getByText("10.43.107.238")).toBeInTheDocument();
+  });
+});
+
+describe("CopyButton", () => {
+  /** The mark beside a name that is itself a link: it copies, and neither the row nor a double click sees it. */
+  it("copies the name and keeps the row and a double click out of it", async () => {
+    const rowClick = vi.fn();
+    const rowDouble = vi.fn();
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    stubClipboard(writeText);
+    render(
+      <div onClick={rowClick} onDoubleClick={rowDouble}>
+        <CopyButton value="web-7f4" label="Copy name: web-7f4" />
+      </div>
+    );
+    await user.dblClick(
+      screen.getByRole("button", { name: "Copy name: web-7f4" })
+    );
+    expect(writeText).toHaveBeenCalledWith("web-7f4");
+    expect(rowClick).not.toHaveBeenCalled();
+    expect(rowDouble).not.toHaveBeenCalled();
   });
 });

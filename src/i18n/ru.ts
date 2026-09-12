@@ -817,6 +817,7 @@ export const ru: Catalogue = {
     nameCopied: "Скопировано: {name}",
     copyContextName: "Копировать имя контекста",
     openInNewTab: "Открыть в новой вкладке",
+    copyLink: "Копировать ссылку",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",

@@ -17,6 +17,7 @@ import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "./ResourceRef";
+import { CopyName } from "./CopyName";
 
 interface WithCreatedAt {
   createdAt?: string | null;
@@ -54,12 +55,15 @@ export function createNameColumn<
     accessorKey: "name",
     header: () => <T section="columns" k="name" />,
     cell: ({ row }) => (
-      <ResourceRef
-        kind={kind}
-        name={row.original.name}
-        namespace={row.original.namespace}
-        showKind={false}
-      />
+      <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">
+        <ResourceRef
+          kind={kind}
+          name={row.original.name}
+          namespace={row.original.namespace}
+          showKind={false}
+        />
+        <CopyName name={row.original.name} />
+      </span>
     ),
   };
 }

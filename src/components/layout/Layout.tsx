@@ -15,6 +15,7 @@ import { useScopeTabs } from "@/hooks/useScopeTabs";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
 import { useCopyLink } from "@/hooks/useCopyLink";
 import { DeepLinkBanner } from "./DeepLinkBanner";
+import { ObjectMenu } from "@/components/resources/ObjectMenu";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
 import { useCritical } from "@/hooks/useCritical";
@@ -95,6 +96,7 @@ export function Layout() {
                 ) : (
                   <>
                     <DeepLinkBanner />
+                    <ObjectMenu />
                     <Outlet />
                   </>
                 )}

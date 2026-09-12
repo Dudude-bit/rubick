@@ -206,3 +206,58 @@ export function AddressCell({
   const t = useT();
   return <CopyableAddress value={value} label={t("columns", labelKey)} />;
 }
+
+/**
+ * The mark alone, for a value that is already drawn by something else in
+ * the row: the name beside it is a link, and a link inside a button is
+ * neither. Shown on hover of the enclosing `group/name`.
+ */
+export function CopyButton({
+  value,
+  label,
+  className,
+}: {
+  value: string;
+  label: string;
+  className?: string;
+}) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    event.preventDefault();
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), CONFIRM_MS);
+    } catch {
+      setCopied(false);
+    }
+  };
+  const Mark = copied ? Check : Copy;
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      onDoubleClick={(event) => event.stopPropagation()}
+      title={copied ? t("action", "copied") : label}
+      aria-label={label}
+      className={cn(
+        "inline-flex size-4 flex-none items-center justify-center rounded-sm transition-opacity",
+        "focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+        copied
+          ? "text-ok opacity-100"
+          : "text-fg-fnt opacity-0 hover:text-fg-mut group-hover/name:opacity-100",
+        className
+      )}
+    >
+      <Mark className="size-2.5" aria-hidden="true" />
+      <span className="sr-only" role="status">
+        {copied ? t("action", "copied") : ""}
+      </span>
+    </button>
+  );
+}

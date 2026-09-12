@@ -840,6 +840,7 @@ export const en = {
     nameCopied: "{name} copied",
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",

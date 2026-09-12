@@ -30,6 +30,7 @@ import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   Search,
   SearchX,
@@ -298,13 +299,19 @@ function DataTableInner<TData extends RowData>({
     return seen.size >= (grouping.minGroups ?? 1);
   }, [data, grouping]);
 
+  // One namespace chosen is the same word on every row, and the scope bar
+  // above already says it; several are grouped, and the caption says it.
+  const oneNamespace = useClusterStore(
+    (state) => state.namespaceScope.length === 1
+  );
   const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
     const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
+    if (oneNamespace) state.namespace = false;
     return state;
-  }, [groupingActive, grouping]);
+  }, [groupingActive, grouping, oneNamespace]);
 
   // Latched rather than derived: between the two marks the answer is
   // "whatever it already was", which is a fact about the last render and not
