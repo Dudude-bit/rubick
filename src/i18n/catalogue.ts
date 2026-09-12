@@ -190,6 +190,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    files: "Files",
     members: "Members",
     racks: "Racks",
     instances: "Instances",
@@ -444,7 +445,6 @@ export const en = {
     ready: "Ready",
     restarts: "Restarts",
     node: "Node",
-    files: "Files",
     cpuOfAllocatable: "CPU, % of allocatable",
     memoryOfAllocatable: "Memory, % of allocatable",
     utilisation: "Utilisation",
@@ -1307,12 +1307,12 @@ export const en = {
     save: "Save",
     delete: "Delete",
     retry: "Retry",
+    download: "Download",
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
     openInBrowser: "Open in Browser",
     back: "Back",
-    download: "Download",
     gwFilterPlaceholder: "name, host, gateway…",
     filterRoutes: "Filter routes",
     filterByKind: "Filter by kind",
@@ -1425,25 +1425,62 @@ export const en = {
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
-    filterNames: "filter {n} names…",
+    filterNames: {
+      one: "filter {n} name…",
+      other: "filter {n} names…",
+    },
     notRunning:
       "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
     listingOf: "Files in {path}",
     mode: "Mode",
     size: "Size",
     modified: "Modified",
+    stoppedBeforeAnything:
+      "You stopped this listing before anything arrived, so what is in here is unknown.",
+    cappedAt: {
+      one: "· stopped at {n} row, so this is not the whole directory",
+      other: "· stopped at {n} rows, so this is not the whole directory",
+    },
+    unreadableLines: {
+      one: "· {n} line could not be read, so a row is missing",
+      other: "· {n} lines could not be read, so rows are missing",
+    },
+    cannotSwitchViaDebug:
+      "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    nothingReadable: {
+      one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
+      other:
+        "The tool printed {n} lines and none of them could be read, so what is in here is unknown.",
+    },
     keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
-    readingSoFar: "reading · {n} entries so far · {seconds} s",
-    readVia: "read via {how} · {n} entries · {seconds} s",
-    stoppedAfter:
-      "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    readingSoFar: {
+      one: "reading · {n} entry so far · {seconds} s",
+      other: "reading · {n} entries so far · {seconds} s",
+    },
+    readingSoFarUntimed: {
+      one: "reading · {n} entry so far",
+      other: "reading · {n} entries so far",
+    },
+    readVia: {
+      one: "read via {how} · {n} entry · {seconds} s",
+      other: "read via {how} · {n} entries · {seconds} s",
+    },
+    stoppedUntimed: {
+      one: "stopped · {n} entry arrived, not the whole directory",
+      other: "stopped · {n} entries arrived, not the whole directory",
+    },
+    stoppedAfter: {
+      one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
+      other:
+        "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    },
     gnuFind: "find (GNU)",
     busyboxStat: "sh + stat (busybox)",
     fromMount: "from {name}",
     noToolsTitle: "The image has nothing to list files with",
     noToolsBody:
-      "{tried} were each executed directly in container {container} and none exists (exit 127). The image is {image}; the files are there, the tools to read them are not.",
+      "{tried} were each executed directly in container {container} and none exists. The image is {image}; the files are there, the tools to read them are not.",
     openViaDebug: "Open through a debug container",
     readMountsInstead: "Read the pod's mounts instead",
     debugExplained:
@@ -1451,24 +1488,38 @@ export const en = {
     refused: "The cluster refused to exec into this pod",
     notRunningNow:
       "Container {container} is not running, so there is nothing to exec into",
-    listFailed: "The listing tool ran and failed (exit {code})",
+    listFailed: "The listing did not finish: {code}",
+    unopenable:
+      "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
+
     mountsOnlyIntro:
       "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
     noMounts: "Nothing is mounted into this container.",
     binary: "binary",
     text: "text",
     lineCount: { one: "{n} line", other: "{n} lines" },
+    lineCountAtLeast: {
+      one: "{n} line read of more",
+      other: "{n} lines read of more",
+    },
     mountedFrom: "mounted from {kind} {name}",
+    mountedFromSeveral: {
+      one: "mounted from volume {name}, which projects {n} source",
+      other:
+        "mounted from volume {name}, which projects {n} sources — the pod does not say which one this file came from",
+    },
     pathCopied: "Path copied",
     copyPath: "Copy path",
-    tooBigToDownload: "Downloads over 100 MiB are refused in this version",
+    tooBigToDownload: "Downloads over {cap} are refused in this version",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
       "No preview for a binary file. Download it to look at it elsewhere.",
     nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
     previewTruncated:
-      "The preview stops at 1 MiB; the file goes on. Download it for the rest.",
+      "The preview stops at {cap}; the file goes on. Download it for the rest.",
+    previewRepaired:
+      "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
     downloaded: "Downloaded {name}",
     downloadFailed: "Could not download {name}",
     noCatInImage: "No cat in this image to copy the file with.",
@@ -1492,6 +1543,8 @@ export const en = {
     controllerFact: "Controller",
     controllerNotFound:
       "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
+    controllerUnknown:
+      "the Deployments could not be read, so whether the operator's controller is running is unknown — not that it is absent",
     inNamespace: "in {namespace}",
     versionUnknown: "unknown: no controller image to read it from",
     fromImage: "from the Deployment image",
@@ -1505,7 +1558,16 @@ export const en = {
     phaseUnknown: "phase not written",
     primaryFact: "Primary",
     readyFact: "Ready",
-    readyOfDeclared: "{ready} of {declared} instances",
+    readyOfDeclared: {
+      one: "{ready} of {n} instance",
+      other: "{ready} of {n} instances",
+    },
+    // Scylla counts members, not instances. One string for both vendors made
+    // a ScyllaCluster report "instances", which is not the operator's word.
+    readyMembersOfDeclared: {
+      one: "{ready} of {n} member",
+      other: "{ready} of {n} members",
+    },
     readyConditionFalse: "condition Ready False",
     archivingFact: "WAL archiving",
     archivingNotDeclared: "not declared",
@@ -1530,7 +1592,23 @@ export const en = {
     findingArchivingFailing: "WAL archiving has been failing for {ago}",
     findingFailedInstances: "Instances the operator lists as failed: {names}",
     findingSwitchover: "Switchover in progress: {from} → {to}",
+    findingFailover: "Failing over from {from}",
+    failoverExplained:
+      "This is not a switchover: the primary went away and the operator is promoting a replica without being asked. Writes are refused until it finishes.",
+    findingPhaseUnwritten:
+      "The operator has written no status for this Cluster",
+    phaseUnwrittenExplained:
+      "Nothing here has been reconciled — the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
     findingFenced: "Fenced by hand: {names}",
+    backupNotCreated:
+      "the cluster did not create the Backup, and said nothing about why",
+    fencedAllOne:
+      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed — one cannot be taken out of it without unfencing the rest",
+    fencingUnknown:
+      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown — and fencing is written back as a whole list, so acting would overwrite it",
+    fencedUnknownWord: "fencing unreadable",
+    findingFencedUnknown:
+      "The annotation naming the fenced instances could not be read, so whether any instance is stopped is unknown.",
     fencedExplained:
       "Postgres is stopped in a fenced instance while its pod stays; the annotation cnpg.io/fencedInstances holds it. Unfence when the reason is gone.",
     findingHibernated: "Hibernated",
@@ -1578,6 +1656,8 @@ export const en = {
     nodeConfigsTab: "Node configs",
     noScyllaClusters:
       "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
+    deploymentsUnreadable:
+      "the Deployments could not be read, so whether the operator is running is unknown — not that it is absent",
     scyllaOperatorNotFound:
       "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
     managerPresent: "repairs and backups can run",
@@ -1586,6 +1666,8 @@ export const en = {
     canPatchScyllaClusters: "patch scyllaclusters",
     noStatusYet: "no status yet",
     upgradingWord: "upgrading",
+    conditionsNotWritten: "conditions not written",
+    conditionsUnsure: "operator unsure",
     rolledOut: "rolled out",
     conditionsFact: "Conditions",
     membersFact: "Members",
@@ -1607,10 +1689,20 @@ export const en = {
     findingUnavailable: "Not Available",
     findingProgressing: "Progressing",
     findingUpgrading: "Rolling upgrade in progress",
+    findingUpgradingFromTo: "Rolling upgrade in progress: {from} → {to}",
+    upgradeAtRack: "Currently on rack {rack}, node {node}.",
     findingStale: "Racks the operator has not looked at since the spec changed",
     findingMembersMissing: "Members not ready",
     findingTasksWithoutManager:
       "Repairs or backups are declared, but there is no ScyllaDB Manager to run them",
+    findingConditionsUnwritten:
+      "The operator has written no conditions for this cluster",
+    findingConditionsUnknown:
+      "The operator wrote Unknown for a condition, so it does not know either",
+    membersNotWritten: {
+      one: "{n} declared, ready not written",
+      other: "{n} declared, ready not written",
+    },
     findingNoStatus: "The operator has written nothing on this object yet",
     actionRollingRestart: "Rolling restart",
     actionRollingRestartExplained:
@@ -1631,6 +1723,8 @@ export const en = {
     nodeConfigsUnknown: "The NodeConfig objects could not be read",
     noNodeConfigs:
       "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
+    nodeStatusesNotWritten:
+      "the operator has written no node statuses, so how many nodes it tuned is unknown",
     nodesSetUp: "{tuned} of {nodes} nodes set up",
   },
   tell: {
@@ -1651,7 +1745,10 @@ export const en = {
       "Ask on a rollout, a pod, a job, a drain or a port forward, and the answer comes as a notification.",
     dismiss: "Dismiss",
     openWatching: "Open Watching",
-    severalAnswered: "{count} things you asked about",
+    severalAnswered: {
+      one: "{n} thing you asked about",
+      other: "{n} things you asked about",
+    },
     full: "Already watching {max} things on this cluster",
     fullBody:
       "Twelve is the most one cluster gets. Pick one to stop watching, or keep all of them and skip this one.",
@@ -1664,7 +1761,9 @@ export const en = {
     saysSucceeded: "{name} succeeded",
     saysFailed: "{name} failed",
     saysDrained: "{name} is drained",
-    saysDrainFailed: "{name} drain did not finish",
+    saysDrainStopped: "{name} drain stopped",
+    saysDrainCancelled: "{name} drain cancelled",
+    saysDrainFailed: "{name} drain broke",
     saysRenewed: "{name} certificate renewed",
     saysIssuanceFailed: "{name} certificate issuance failed",
     saysForwardDied: "Forward to {name} died",
@@ -2648,7 +2747,27 @@ export const en = {
     credentialsRefusedAgo:
       "The cluster refused this window's credentials {since} ago. ",
     credentialsExpiredBody:
-      "Nothing here renews them on its own, so every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+      "Every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+    renewalWasScheduled:
+      "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
+    renewalNoDeadline:
+      "The credential plugin named no expiry, so there was no moment to renew them before — nothing here could act early. ",
+    renewalPassed:
+      "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
+    renewalFailed:
+      "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
+    renewalRanOut:
+      "Renewing them quietly was tried twice and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalNeedsYouBody:
+      "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
+    renewalDelegated:
+      "kubectl holds the credentials for this session and renews them itself, so this refusal came from its side. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "sign-in needed",
+    renewalNeedsYouHint:
+      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet — the current credentials still work, and you will be asked to sign in when they expire.",
+    renewalRanOutHint:
+      "The credential plugin kept handing back the credentials already in use, so there was nothing newer to put in place before they expire. Nothing is wrong yet, and you will be asked to sign in when they do.",
     stillRefusedHint:
       "Still refused? The credential plugin this context uses may need a sign-in of its own first — for GKE that is",
     healthy: "Healthy",
@@ -3709,6 +3828,14 @@ export const en = {
     trendsSortNote: "least headroom first",
     trendsNotIncidents:
       "One range query for every node, the peak of each bucket kept, so a spike survives the summary. A high number is a full node, not an incident; nothing here is painted red for being busy. Requests are the Resources table's story, one click in.",
+    notLookedShort: "could not look",
+    noAllocatableShort: "allocatable unreadable",
+    nodesDidNotList:
+      "Could not read the node list, so there is nothing to put a reading against: {reason}",
+    nodeNotLooked:
+      "Could not read the window, so whether this node reported is unknown.",
+    nodeNoAllocatable:
+      "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
       "no samples in the window: newest series is {age}, the window asks for {range}",
@@ -3717,6 +3844,8 @@ export const en = {
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
     declaredNowOnly:
       "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
+    declaredUnknown:
+      "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
       "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:

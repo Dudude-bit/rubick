@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.13.0] - 2026-09-12
+
+### Added
+
+- **Credentials renew themselves.** A credential plugin names the moment its
+  token stops working, and until now nothing acted on it: the token went
+  stale, the next request came back `401`, and the whole window was replaced
+  by a Sign in screen — every few hours, on a plugin that can refresh without
+  a human in under a second. Rubick now runs the same plugin a couple of
+  minutes before that moment, while the old credentials still work, and swaps
+  the session only once the new one exists and the cluster has answered with
+  it. Nothing appears while it happens, and the open lists and logs carry on.
+  - A plugin that needs a person is left alone: the Sign in screen arrives
+    exactly as before, so this only ever removes an interruption.
+  - A plugin that hands back the credentials it already had is asked again
+    _later_ rather than more often — nothing is replaced and no screen is
+    rebuilt for a token that did not change.
+  - What is keeping a session alive is not guessed at. A context whose plugin
+    named no expiry is reported as such rather than assumed covered, and the
+    status bar says "sign-in needed" _before_ the refusal when renewing
+    quietly turned out to need a person.
+
+### Fixed
+
+- **The "Authorization" window no longer flashes on every cluster switch.**
+  Most credential plugins answer from their own cache in a fraction of a
+  second; the terminal pane is now held back long enough that nobody sees one
+  that does. A plugin that really does want something still shows it, with
+  whatever it printed while the pane was held back.
+- **A page for one cluster's object does not survive the move to another.**
+  Switching clusters — or opening a kubeconfig that no longer has the one a
+  tab was on — left the detail page open on an object that exists in neither
+  the new cluster nor the reader's mind. The tab now lands on the list it came
+  from.
+- **CloudNativePG and Scylla lock for a reader who cannot read CRDs.** The
+  lock that arrived in 4.11.0 was something a new integration had to opt into,
+  so the two added in 4.12.0 — and, quietly, three cloud controllers — never
+  did. A vendor page backed by custom resources now has to state what to ask
+  the cluster's authorizer about before it can be built at all.
+
+## [4.12.0] - 2026-09-11
+
+### Added
+
+- **Files tab on a pod.** Read a container's filesystem without a shell: one
+  exec per directory, rows tagged with the mount they come from, a preview and
+  a download. Every way the read can end is a different sentence, and none of
+  them is an empty list — a directory the container may not open says so, a
+  name nobody could decode is counted, and a listing cut short says it was.
+- **Operators.** An integration can declare itself an operator and is drawn
+  under its own caption. Two arrive with it:
+  - **CloudNativePG** — every Cluster in the operator's own words: phase,
+    primary and the instance it is moving to, fencing, hibernation, WAL
+    archiving, and backups read from the Backup objects. Restart, reload,
+    backup, fence, hibernate and wake, each behind a dialog that says what the
+    operator will then do.
+  - **Scylla** — racks and members with the three conditions as written, the
+    upgrade in progress, and whether ScyllaDB Manager is installed to run the
+    repairs the spec declares. Rolling restart, scale a rack, upgrade.
+- **Node page.** One resources table, the pods on the node, and cordon and
+  drain from the page itself.
+- **A week of history.** Request and limit lines on the usage charts, and a
+  Utilisation view of every node.
+- **Tell me when.** A rollout, pod, job, drain or port-forward can say when it
+  has an answer, including when the answer is that it gave up.
+
+### Fixed
+
+- A long YAML manifest scrolls again: the editor grew to the height of the
+  document instead of its pane, so there was no scrollbar and the wheel did
+  nothing (#163).
+- Dialogs, menus and the Routes map can no longer grow past the window and
+  take their own controls with them.
+- A message or a printer column a row truncates can be read in full.
+
 ## [4.11.0] - 2026-09-09
 
 ### Added — a cluster you mark critical asks for its own name before any change

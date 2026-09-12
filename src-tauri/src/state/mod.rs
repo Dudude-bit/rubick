@@ -59,6 +59,9 @@ pub struct AppState {
     /// the same way `search_manager` owns a fan-out.
     pub drain_manager: Arc<crate::drain::DrainManager>,
 
+    /// Credential renewals waiting on a deadline, one per connected context.
+    pub renew_manager: Arc<crate::auth::renew::RenewManager>,
+
     /// Active port-forward sessions
     pub port_forward_sessions: Arc<DashMap<String, PortForwardSession>>,
 
@@ -100,6 +103,7 @@ impl AppState {
         let client_manager = Arc::new(K8sClientManager::new());
 
         let drain_manager = Arc::new(crate::drain::DrainManager::new(event_tx.clone()));
+        let renew_manager = Arc::new(crate::auth::renew::RenewManager::new());
 
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
@@ -111,6 +115,7 @@ impl AppState {
             client_manager,
             search_manager,
             drain_manager,
+            renew_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
             terminal_manager: Arc::new(TerminalManager::new(event_tx.clone())),
@@ -151,12 +156,14 @@ impl AppState {
         &self,
         context: &str,
         flow: &str,
+        seen: bool,
     ) -> (String, tokio::sync::oneshot::Receiver<()>) {
         let session_id = Uuid::new_v4().to_string();
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
         let session = AuthSessionControl {
             context: context.to_string(),
             flow: flow.to_string(),
+            seen,
             cancel_tx,
         };
         self.auth_sessions.insert(session_id.clone(), session);
@@ -170,7 +177,9 @@ impl AppState {
             .map(|(_, session)| session)
     }
 
-    /// Cancel all auth sessions for a context
+    /// Cancel every auth session for a context, and name the ones somebody
+    /// was being shown. Only the seen ones come back: the caller's next move
+    /// is to say a sign-in was cancelled, and a renewal is not one.
     pub fn cancel_auth_sessions_for_context(&self, context: &str) -> Vec<String> {
         let session_ids: Vec<String> = self
             .auth_sessions
@@ -183,12 +192,16 @@ impl AppState {
                 }
             })
             .collect();
+        let mut seen = Vec::new();
         for session_id in &session_ids {
             if let Some((_, session)) = self.auth_sessions.remove(session_id) {
                 let _ = session.cancel_tx.send(());
+                if session.seen {
+                    seen.push(session_id.clone());
+                }
             }
         }
-        session_ids
+        seen
     }
 
     /// Get current context

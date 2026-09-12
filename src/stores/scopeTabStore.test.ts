@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -9,8 +11,10 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 import {
+  listBehind,
   tabRouteLabel,
   tabScope,
   tabTitle,
@@ -561,5 +565,215 @@ describe("surviving a restart", () => {
     await useScopeTabStore.persist.rehydrate();
     expect(state().activeId).toBe("scope-1");
     expect(state().pendingHref).toBe("/nodes");
+  });
+});
+
+describe("a route that belongs to the cluster being left", () => {
+  /**
+   * Issue #148's `ps.`: switching clusters left the pod page open on a pod
+   * that exists in neither the new cluster nor the reader's mind. The list is
+   * what survives the move — and a list route must not be moved at all, or
+   * every switch would throw away where the reader was.
+   */
+  it.each([
+    ["/pods/default/api-7f9", "/workloads/pods"],
+    ["/nodes/worker-1", "/nodes"],
+    [
+      "/customresourcedefinitions/widgets.example.com",
+      "/customresourcedefinitions",
+    ],
+    ["/helm/secret/default/redis", "/helm"],
+    ["/workloads/pods?peek=pods/default/api-7f9", "/workloads/pods"],
+    // A peek over a detail page: closing the panel leaves the page under it,
+    // which is the old cluster's object with the thing that named it gone.
+    ["/pods/default/api-7f9?peek=configmaps/default/cfg", "/workloads/pods"],
+    ["/replicasets/default/api-7f9", "/workloads/deployments"],
+    ["/httproutes/default/web", "/network/routes"],
+  ])("sends %s to %s", (href, list) => {
+    expect(listBehind(href)).toBe(list);
+  });
+
+  it.each([
+    "/",
+    "/workloads/pods",
+    "/nodes",
+    "/events",
+    "/settings/appearance",
+    "/customresourcedefinitions",
+  ])("leaves %s where it is", (href) => {
+    expect(listBehind(href)).toBeNull();
+  });
+});
+
+describe("retargetAfterSwitch", () => {
+  /** Without this the tab keeps the old cluster's pod and goes nowhere. */
+  it("moves the active tab to the list and asks the router for it", () => {
+    seed([
+      tab({ id: "a", context: "left-behind", href: "/pods/default/api-7f9" }),
+    ]);
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].href).toBe("/workloads/pods");
+    expect(pendingHref).toBe("/workloads/pods");
+  });
+
+  /**
+   * Activating a tab changes the cluster too, and that tab's own route is
+   * already on its way — overwriting it would send the reader to a list they
+   * did not ask for every time they switched tabs.
+   */
+  it("stands aside while an activation is delivering a route", () => {
+    seed([
+      tab({ id: "a", context: "left-behind", href: "/pods/default/api-7f9" }),
+    ]);
+    useScopeTabStore.setState({ pendingHref: "/nodes/worker-1" });
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
+    expect(useScopeTabStore.getState().tabs[0].href).toBe(
+      "/pods/default/api-7f9"
+    );
+  });
+
+  /**
+   * The retry of a failed activation reconnects the tab's own cluster without
+   * a route of its own to carry, so the counter moves — and the tab's page
+   * belonged to that cluster all along.
+   */
+  it("leaves a tab alone when the cluster it landed on is the one it names", () => {
+    seed([tab({ id: "a", context: "prod", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().retargetAfterSwitch("prod");
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].href).toBe("/pods/default/api-7f9");
+    expect(pendingHref).toBeNull();
+  });
+
+  it("leaves a tab that was already on a list alone", () => {
+    seed([tab({ id: "a", context: "left-behind", href: "/workloads/pods" })]);
+    useScopeTabStore.getState().retargetAfterSwitch("arrived-at");
+    expect(useScopeTabStore.getState().pendingHref).toBeNull();
+  });
+});
+
+describe("every route this could send a tab to", () => {
+  /**
+   * The retarget is only an improvement if it lands somewhere. `/workloads/
+   * replicasets` and `/network/httproutes` are what `getResourceListUrl`
+   * answers and neither matches a route, so a tab sent there renders an empty
+   * pane — worse than the stale detail page. This reads the app's own route
+   * tables, so a kind that gains a detail route without a list one fails here
+   * rather than in somebody's window.
+   */
+  it("is a route the app actually serves", () => {
+    const read = (file: string) =>
+      readFileSync(resolve(process.cwd(), file), "utf8");
+    const plural = (source: string) =>
+      [...source.matchAll(/toPlural\(ResourceType\.(\w+)\)/g)].map((m) =>
+        toPlural(ResourceType[m[1] as keyof typeof ResourceType])
+      );
+
+    const sections = {
+      workloads: "src/pages/Workloads.tsx",
+      network: "src/pages/Network.tsx",
+      storage: "src/pages/Storage.tsx",
+      configuration: "src/pages/Configuration.tsx",
+    };
+    const served = new Set<string>(["/", "/helm", "/events"]);
+    for (const [section, file] of Object.entries(sections)) {
+      const source = read(file);
+      for (const p of plural(source)) served.add(`/${section}/${p}`);
+      for (const m of source.matchAll(/path="([a-z-]+)"/g)) {
+        served.add(`/${section}/${m[1]}`);
+      }
+    }
+
+    const app = read("src/App.tsx");
+    // Top-level list routes: a `path={toPlural(...)}` with nothing after it.
+    for (const m of app.matchAll(/path=\{toPlural\(ResourceType\.(\w+)\)\}/g)) {
+      served.add(
+        `/${toPlural(ResourceType[m[1] as keyof typeof ResourceType])}`
+      );
+    }
+
+    // Every detail route the app serves, as the href a reader would be on —
+    // including the ones built by mapping over a list of kinds, which is
+    // exactly where the kinds LIST_ELSEWHERE exists for are declared.
+    const plural_ = (kind: string) =>
+      toPlural(ResourceType[kind as keyof typeof ResourceType]);
+    const named = [
+      ...app.matchAll(
+        /path=\{`\$\{toPlural\(ResourceType\.(\w+)\)\}\/([^`]*)`\}/g
+      ),
+    ].map(([, kind, tail]): [string, string] => [plural_(kind), tail]);
+    const mapped = [
+      ...app.matchAll(
+        /\[([^\]]*?ResourceType\.\w+[^\]]*?)\]\.map\(\(kind\) => \([\s\S]*?path=\{`\$\{toPlural\(kind\)\}\/([^`]*)`\}/g
+      ),
+    ].flatMap(([, list, tail]) =>
+      [...list.matchAll(/ResourceType\.(\w+)/g)].map(
+        ([, kind]): [string, string] => [plural_(kind), tail]
+      )
+    );
+    expect(mapped.map(([p]) => p)).toContain("tlsroutes");
+
+    const details = [...named, ...mapped].map(
+      ([p, tail]) => `/${p}/${tail.replace(/:\w+/g, "x")}`
+    );
+    // The count guards the extraction itself: a regex that stopped matching
+    // would otherwise leave this passing over an empty list.
+    expect(details.length).toBeGreaterThanOrEqual(25);
+
+    const missing = details
+      .map((href) => [href, listBehind(href)] as const)
+      .filter(([, list]) => list !== null && !served.has(list));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("a tab whose cluster the kubeconfig no longer has", () => {
+  /**
+   * The state this launches into: a pod page restored from last time, in a
+   * cluster that is not in the kubeconfig any more. Nothing can answer it, so
+   * the page reads "could not read this pod" until the reader works out why.
+   */
+  it("lets go of the object it was on and takes the reader there", () => {
+    seed([tab({ id: "a", context: "gone", href: "/pods/default/api-7f9" })]);
+    useScopeTabStore.getState().reconcileContexts(["still-here"]);
+    const { tabs, pendingHref } = useScopeTabStore.getState();
+    expect(tabs[0].missing).toBe(true);
+    expect(tabs[0].href).toBe("/workloads/pods");
+    // Rewriting the record leaves the router on the dead page.
+    expect(pendingHref).toBe("/workloads/pods");
+  });
+
+  /**
+   * The flag is not the trigger: a tab flagged by an older build, or one that
+   * recorded an object route while already flagged, has to be let go of too.
+   */
+  it("lets go on a later pass, not only on the one that flags it", () => {
+    seed([
+      tab({
+        id: "a",
+        context: "gone",
+        href: "/pods/default/api-7f9",
+        missing: true,
+      }),
+    ]);
+    useScopeTabStore.getState().reconcileContexts(["still-here"]);
+    expect(useScopeTabStore.getState().tabs[0].href).toBe("/workloads/pods");
+  });
+
+  /** A cluster that came back keeps whatever the tab is on. */
+  it("leaves a tab alone when its cluster is there", () => {
+    seed([
+      tab({
+        id: "a",
+        context: "here",
+        href: "/pods/default/api-7f9",
+        missing: true,
+      }),
+    ]);
+    useScopeTabStore.getState().reconcileContexts(["here"]);
+    const [only] = useScopeTabStore.getState().tabs;
+    expect(only.missing).toBe(false);
+    expect(only.href).toBe("/pods/default/api-7f9");
   });
 });

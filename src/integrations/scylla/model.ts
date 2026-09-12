@@ -11,7 +11,8 @@ export interface Rack {
   name: string;
   /** Declared in spec. */
   members: number;
-  ready: number;
+  /** `null` where the operator has not written this rack's status. */
+  ready: number | null;
   /** Members on `spec.version`; `null` where the operator has not written it. */
   updated: number | null;
   /** The version the rack runs, as the operator wrote it. */
@@ -48,9 +49,14 @@ export interface ScyllaFinding {
     | "stale"
     | "membersMissing"
     | "tasksWithoutManager"
-    | "noStatus";
+    | "noStatus"
+    | "conditionsUnwritten"
+    | "conditionsUnknown";
   severity: "err" | "warn";
+  /** The controller's own words, or null. Never a sentence built here. */
   detail: string | null;
+  /** For `upgrading`: the parts, so the words can be the reader's. */
+  upgrade?: Upgrade;
 }
 
 export interface ScyllaCluster {
@@ -134,7 +140,10 @@ export function readScyllaCluster(
     return {
       name,
       members: num(rack.members) ?? 0,
-      ready: num(st.readyMembers) ?? 0,
+      // `null`, not 0: a rack the operator has not written a status for has
+      // an unknown number of ready members, and "0 ready of 3" in warn is a
+      // claim about a read nobody got.
+      ready: num(st.readyMembers),
       updated: num(st.updatedMembers),
       version: text(st.version),
       stale: st.stale === true,
@@ -165,6 +174,29 @@ export function readScyllaCluster(
   if (silent) {
     findings.push({ kind: "noStatus", severity: "warn", detail: null });
   }
+  // A status with racks in it but no conditions — an older operator, or one
+  // caught mid-reconcile — passed every arm below, which each need a
+  // positive signal, and came out with no findings at all: drawn green and
+  // labelled "rolled out". So did conditions the operator wrote as
+  // `Unknown`, which is its way of saying it does not know either.
+  const wrote = [available, progressing, degraded].filter(Boolean);
+  if (!silent && wrote.length === 0) {
+    findings.push({
+      kind: "conditionsUnwritten",
+      severity: "warn",
+      detail: null,
+    });
+  } else if (wrote.some((c) => c?.status === "Unknown")) {
+    findings.push({
+      kind: "conditionsUnknown",
+      severity: "warn",
+      detail:
+        wrote
+          .filter((c) => c?.status === "Unknown")
+          .map((c) => c!.type)
+          .join(", ") || null,
+    });
+  }
   if (degraded?.status === "True") {
     findings.push({
       kind: "degraded",
@@ -180,17 +212,14 @@ export function readScyllaCluster(
     });
   }
   if (upgrade && upgrade.fromVersion && upgrade.toVersion) {
+    // The parts, not a sentence. `verbatim` is contracted to carry the
+    // controller's own words, and "rack x on y" is neither the controller's
+    // nor translatable — it was English prose built in the model.
     findings.push({
       kind: "upgrading",
       severity: "warn",
-      detail: [
-        `${upgrade.fromVersion} → ${upgrade.toVersion}`,
-        upgrade.currentRack ? `rack ${upgrade.currentRack}` : null,
-        upgrade.currentNode ? `on ${upgrade.currentNode}` : null,
-        upgrade.state,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      detail: null,
+      upgrade,
     });
   } else if (progressing?.status === "True") {
     findings.push({
@@ -207,7 +236,9 @@ export function readScyllaCluster(
       detail: stale.join(", "),
     });
   }
-  const missing = racks.filter((r) => r.ready < r.members);
+  // Only a rack the operator reported on can be short of members; one it has
+  // not written about is unknown, and `conditionsUnwritten` above says so.
+  const missing = racks.filter((r) => r.ready !== null && r.ready < r.members);
   if (!silent && missing.length > 0 && degraded?.status !== "True") {
     findings.push({
       kind: "membersMissing",
@@ -280,28 +311,63 @@ export function byTrouble(clusters: ScyllaCluster[]): ScyllaCluster[] {
 /** A NodeConfig, reduced to whether every node it places on is set up. */
 export interface NodeSetup {
   name: string;
-  nodes: number;
-  tuned: number;
-  /** Conditions the operator wrote as False, with their messages. */
+  /** `null` where the operator has written no node statuses at all. */
+  nodes: number | null;
+  tuned: number | null;
+  /** Conditions that say something is wrong, with the operator's messages. */
   problems: Array<{ type: string; message: string | null }>;
+  /** Conditions the operator wrote as `Unknown`: it does not know either. */
+  unsure: string[];
 }
+
+/**
+ * Which way a condition points.
+ *
+ * `False` is the healthy value for half of these — `Degraded: False` and
+ * `Progressing: False` are what a settled NodeConfig writes — so treating
+ * every `False` as a problem reported a working cluster's own conditions
+ * back to the reader as faults. A type this table does not name is assumed
+ * positive, which is the Kubernetes convention and the safe direction: it
+ * shows something rather than hiding it.
+ */
+const BAD_WHEN_TRUE = new Set(["Degraded"]);
+/** `Progressing: True` is work in flight, not a fault; neither value is one. */
+const NEITHER_IS_A_FAULT = new Set(["Progressing"]);
 
 export function readNodeConfig(resource: CustomResourceInfo): NodeSetup {
   const statuses = getValueByPath(resource, "status.nodeStatuses");
   const list = Array.isArray(statuses) ? statuses : [];
   const conditions = getValueByPath(resource, "status.conditions");
-  const problems = (Array.isArray(conditions) ? conditions : [])
-    .filter((c) => (c as Record<string, unknown>)?.status === "False")
-    .map((c) => {
-      const cond = c as Record<string, unknown>;
-      return { type: String(cond.type ?? ""), message: text(cond.message) };
-    });
+  const written = Array.isArray(conditions) ? conditions : [];
+  const problems = written
+    .map((c) => c as Record<string, unknown>)
+    .filter((cond) => {
+      const type = String(cond.type ?? "");
+      if (NEITHER_IS_A_FAULT.has(type)) return false;
+      return BAD_WHEN_TRUE.has(type)
+        ? cond.status === "True"
+        : cond.status === "False";
+    })
+    .map((cond) => ({
+      type: String(cond.type ?? ""),
+      message: text(cond.message),
+    }));
+  // `Unknown` is the operator saying it does not know. Dropped silently, it
+  // left a NodeConfig looking as settled as one that had really answered.
+  const unsure = written
+    .map((c) => c as Record<string, unknown>)
+    .filter((cond) => cond.status === "Unknown")
+    .map((cond) => String(cond.type ?? ""));
   return {
     name: resource.name,
-    nodes: list.length,
-    tuned: list.filter(
-      (n) => (n as Record<string, unknown>)?.tunedNode === true
-    ).length,
+    // `null`, not 0: a NodeConfig the operator has not reconciled has an
+    // unknown number of nodes, and "0 of 0 nodes set up" is an answer.
+    nodes: Array.isArray(statuses) ? list.length : null,
+    tuned: Array.isArray(statuses)
+      ? list.filter((n) => (n as Record<string, unknown>)?.tunedNode === true)
+          .length
+      : null,
     problems,
+    unsure,
   };
 }

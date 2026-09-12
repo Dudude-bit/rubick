@@ -31,7 +31,11 @@ import {
   sameScope,
   wireNamespace,
 } from "@/lib/namespace-scope";
-import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
+import {
+  getDisplayPlural,
+  getResourceListUrl,
+  isResourceType,
+} from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 
 /**
@@ -90,6 +94,8 @@ interface ScopeTabState {
   /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
   recordHref: (href: string) => void;
+  /** Let go of a route that belongs to the cluster just left. */
+  retargetAfterSwitch: (connected: string | null) => void;
   routeSettled: () => void;
   reconcileContexts: (names: string[]) => void;
 }
@@ -141,7 +147,11 @@ async function applyScope(tab: ScopeTab) {
   if (tab.context !== cluster.currentContext) {
     // connect() clears the namespace when the context changes, so the
     // tab's namespace has to be re-applied after it resolves.
-    await cluster.connect(tab.context);
+    //
+    // `keepRoute`: this tab is already delivering a route of its own, and
+    // the `pendingHref` guard alone cannot protect it — the router can
+    // settle that route before this connect resolves.
+    await cluster.connect(tab.context, { keepRoute: true });
   }
   const live = useClusterStore.getState();
   const scope = tabScope(tab);
@@ -303,6 +313,27 @@ export const useScopeTabStore = create<ScopeTabState>()(
         await applyScope(next);
       },
 
+      retargetAfterSwitch: (connected: string | null) => {
+        const { tabs, activeId, pendingHref } = get();
+        // An activation is already delivering a route of its own; this is
+        // only for a cluster that changed under a tab standing still.
+        if (pendingHref !== null) return;
+        const active = tabs.find((tab) => tab.id === activeId);
+        if (!active) return;
+        // A tab whose own record names this cluster has a route that belongs
+        // to it — an activation, or the retry of one that failed — and there
+        // is nothing here to let go of.
+        if (active.context === connected) return;
+        const list = listBehind(active.href);
+        if (list === null || list === active.href) return;
+        set({
+          tabs: tabs.map((tab) =>
+            tab.id === activeId ? { ...tab, href: list } : tab
+          ),
+          pendingHref: list,
+        });
+      },
+
       recordHref: (href: string) =>
         set((state) => {
           // An activation owns the route until it lands; recording here
@@ -326,13 +357,23 @@ export const useScopeTabStore = create<ScopeTabState>()(
           // lost every cluster; flagging every tab on it would be a lie.
           if (names.length === 0) return state;
           const known = new Set(names);
+          let goTo: string | null = null;
           const tabs = state.tabs.map((tab) => {
             const missing = !!tab.context && !known.has(tab.context);
-            return missing === tab.missing ? tab : { ...tab, missing };
+            // An object in a cluster this kubeconfig does not have is a page
+            // nothing can answer. From the state, not the change, so a tab
+            // already flagged is not left holding the dead route.
+            const href = missing
+              ? (listBehind(tab.href) ?? tab.href)
+              : tab.href;
+            if (missing === tab.missing && href === tab.href) return tab;
+            // Rewriting the record takes nobody anywhere, and `recordHref`
+            // would write the dead route straight back.
+            if (href !== tab.href && tab.id === state.activeId) goTo = href;
+            return { ...tab, missing, href };
           });
-          return tabs.every((tab, i) => tab === state.tabs[i])
-            ? state
-            : { tabs };
+          if (tabs.every((tab, i) => tab === state.tabs[i])) return state;
+          return goTo === null ? { tabs } : { tabs, pendingHref: goTo };
         }),
     }),
     {
@@ -416,6 +457,50 @@ export function tabRouteLabel(href: string): string {
   // as much as `/nodes`. Anything else is the object the route shows.
   const last = segments.at(-1) as string;
   return isResourceType(last) ? getDisplayPlural(last).toLowerCase() : last;
+}
+
+/**
+ * The list a route belongs to, for a route that names one object.
+ *
+ * `null` where the route names no object — a list, the overview, settings —
+ * and so means the same thing in any cluster. Everything else names a pod or
+ * a release that exists in the cluster it was opened in and nowhere else, and
+ * switching left the reader holding its page, open and unreadable (#148).
+ */
+export function listBehind(href: string): string | null {
+  const [path, query = ""] = href.split("?");
+  const segments = path.split("/").filter(Boolean);
+  const first = segments[0];
+  const list = first && segments.length > 1 ? listOf(first) : null;
+  // Over a list, dropping the peek is the whole move; over a detail page the
+  // page has to go too, or the object stays with its panel merely closed.
+  if (new URLSearchParams(query).get("peek")) return list ?? path;
+  return list;
+}
+
+/**
+ * Where a kind's list actually lives, for the ones whose detail route the app
+ * serves and whose own list it does not: a ReplicaSet through its Deployment,
+ * the Gateway API route kinds on one page, a GatewayClass beside Gateways.
+ * `getResourceListUrl` answers `/workloads/replicasets`, which matches no
+ * route and renders an empty pane. The test beside this reads the app's own
+ * route tables and fails when the list goes stale.
+ */
+const LIST_ELSEWHERE: Record<string, string> = {
+  replicasets: "/workloads/deployments",
+  gatewayclasses: "/network/gateways",
+  httproutes: "/network/routes",
+  grpcroutes: "/network/routes",
+  tlsroutes: "/network/routes",
+  tcproutes: "/network/routes",
+  udproutes: "/network/routes",
+};
+
+function listOf(first: string): string | null {
+  if (LIST_ELSEWHERE[first]) return LIST_ELSEWHERE[first];
+  if (isResourceType(first)) return getResourceListUrl(first);
+  // Helm keeps its releases on the same shape without being a kind.
+  return first === "helm" ? "/helm" : null;
 }
 
 /**

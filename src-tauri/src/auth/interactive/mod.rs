@@ -17,13 +17,31 @@ use secrecy::SecretString;
 
 use cred::ExecCredentialStatus;
 
+/// Whether this sign-in may put anything on the reader's screen.
+///
+/// `Interactive` is somebody waiting for a cluster, where a browser tab and a
+/// thirty-minute ceiling are fair. `Silent` is the background renewal, where
+/// nothing was asked for and the window is likely showing another cluster: a
+/// plugin needing a person fails there, and `Renewal::NeedsYou` says so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMode {
+    Interactive,
+    Silent,
+}
+
+impl AuthMode {
+    /// Whether an event of this flow's may be sent to the frontend.
+    pub(crate) fn is_seen(self) -> bool {
+        self == Self::Interactive
+    }
+}
+
 /// A prepared kubeconfig, and the one fact about it that expires.
 ///
-/// Nothing renews the credential — `apply_exec_credentials` strips the `exec`
-/// block that could — so the plugin's expiry timestamp is the only thing in
-/// the process that knows the session has a deadline. It is carried out so a
-/// surface can say *when*, rather than only that something is wrong once every
-/// request has started failing.
+/// `apply_exec_credentials` strips the `exec` block that could renew it, so
+/// the plugin's expiry timestamp is the only thing in the process that knows
+/// the session has a deadline. It is carried out so a surface can say *when*,
+/// and so `auth::renew` has a moment to run the plugin again before.
 pub struct PreparedContext {
     pub kubeconfig: Kubeconfig,
     /// `None` where the plugin named no deadline, which many do not.
@@ -40,6 +58,7 @@ pub async fn prepare_kubeconfig_for_context(
     state: &AppState,
     mut kubeconfig: Kubeconfig,
     context_name: &str,
+    mode: AuthMode,
 ) -> Result<PreparedContext> {
     let (user_name, cluster_name) = resolve_context(&kubeconfig, context_name)?;
 
@@ -64,7 +83,8 @@ pub async fn prepare_kubeconfig_for_context(
     let auth_info = find_auth_info_mut(&mut kubeconfig, &user_name)?;
 
     if let Some(exec_config) = exec_config {
-        let status = exec::run_exec_auth(state, context_name, &exec_config, exec_cluster).await?;
+        let status =
+            exec::run_exec_auth(state, context_name, &exec_config, exec_cluster, mode).await?;
         let expires_at = apply_exec_credentials(auth_info, status)?;
         auth_info.exec = None;
         auth_info.auth_provider = None;
@@ -77,7 +97,7 @@ pub async fn prepare_kubeconfig_for_context(
     if let Some(provider) = auth_info.auth_provider.clone() {
         if provider.name == "oidc" {
             let oidc_result =
-                oidc::run_oidc_auth(state, context_name, &user_name, &provider).await?;
+                oidc::run_oidc_auth(state, context_name, &user_name, &provider, mode).await?;
             let expires_at = apply_oidc_result(auth_info, oidc_result)?;
             return Ok(PreparedContext {
                 kubeconfig,

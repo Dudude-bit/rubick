@@ -326,6 +326,45 @@ describe("the resources table", () => {
     // One "unknown" per resource for requested, and one for limited on all but pods.
     expect(screen.getAllByText("unknown").length).toBe(5 + 4);
   });
+
+  /** The other side of unknown: a non-refusal read error carries the cluster's words, not a partial sum. Fails if the nodeBudgetFailed branch is dropped. */
+  it("says requested and limited are unknown with the error when the read failed", async () => {
+    budgetMock.mockImplementation(async () =>
+      buildBudget({
+        known: false,
+        pods: null,
+        error: "etcdserver: request timed out",
+        resources: buildBudget().resources.map((r) => ({
+          ...r,
+          requested: null,
+          limited: null,
+        })),
+      })
+    );
+    renderPage();
+    expect(
+      await screen.findByText(/etcdserver: request timed out/)
+    ).toBeInTheDocument();
+  });
+
+  /** A read that failed outright is a note with a retry, not a table of blanks that reads as "no resources". Fails if the error branch collapses to an empty table. */
+  it("replaces the table with a could-not-read note and a retry when the budget query rejects", async () => {
+    budgetMock.mockImplementation(async () => {
+      throw new Error("boom");
+    });
+    renderPage();
+    expect(
+      await screen.findByText("Could not read what is reserved on this node.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  /** While the budget is still being read, an empty table would read as "this node reports no resources". Fails if the pending branch is dropped. */
+  it("says it is reading rather than drawing an empty table while the budget loads", async () => {
+    budgetMock.mockImplementation(() => new Promise<never>(() => {}));
+    renderPage();
+    expect(await screen.findByText("Reading…")).toBeInTheDocument();
+  });
 });
 
 describe("the header actions", () => {

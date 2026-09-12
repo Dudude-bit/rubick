@@ -11,22 +11,36 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
-import type { UsageRange } from "@/integrations";
+import type { DeclaredPoint, UsageRange } from "@/integrations";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { nodeTrends, type NodeTrend, type TrendLane } from "@/lib/node-trends";
+import {
+  nodeTrends,
+  type NodeTrend,
+  type TrendBlind,
+  type TrendLane,
+} from "@/lib/node-trends";
 import { nodePlacement } from "@/lib/node-pool";
 import { ResourceType } from "@/lib/resource-registry";
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
 import type { NodeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
 const TREND_RANGES = USAGE_RANGES.filter((range) => range !== "15m");
 
 interface NodeUtilisationProps {
   nodes: readonly NodeInfo[];
+  /**
+   * Whether `nodes` is an answer. The table view surfaces a refused node list
+   * through ResourceList; this view replaces ResourceList, so without this the
+   * failure had no reader and rendered as "this cluster has no nodes".
+   */
+  nodesKnown?: boolean;
+  /** Why the node list could not be read, where that is known. */
+  nodesReason?: string | null;
   range: UsageRange;
   onRange: (range: UsageRange) => void;
 }
@@ -40,6 +54,8 @@ interface NodeUtilisationProps {
  */
 export function NodeUtilisation({
   nodes,
+  nodesKnown = true,
+  nodesReason = null,
   range,
   onRange,
 }: NodeUtilisationProps) {
@@ -59,10 +75,27 @@ export function NodeUtilisation({
   // The moment the answer landed is the clock every "ago" is read against:
   // a wall clock read in render would move on every re-render.
   const now = query.dataUpdatedAt;
+  // An answer, not merely an absence of one: in flight, refused, or a
+  // supplier that is not ready all mean we could not look, and the rows must
+  // not turn that into "Prometheus has no series for this node".
+  const windowKnown = ready && !query.isPending && query.error === null;
   const trends = useMemo(
-    () => nodeTrends(query.data ?? null, nodes, now),
-    [query.data, nodes, now]
+    () => nodeTrends(query.data ?? null, nodes, now, windowKnown),
+    [query.data, nodes, now, windowKnown]
   );
+
+  // Before anything about Prometheus: with no node list there is nothing to
+  // put a lane against, and an empty table here reads as "this cluster has
+  // no nodes" — which is the node list's failure wearing the cluster's face.
+  if (!nodesKnown) {
+    return (
+      <p className="px-1 py-6 text-xs text-warn" role="status">
+        {nodesReason
+          ? t("empty", "nodesDidNotList", { reason: nodesReason })
+          : t("action", "reading")}
+      </p>
+    );
+  }
 
   if (power.state === "absent") {
     return (
@@ -182,16 +215,24 @@ function Row({
           </span>
         )}
       </TableCell>
-      <Lane lane={trend.cpu} />
-      <Lane lane={trend.memory} />
+      <Lane lane={trend.cpu} blind={trend.blind} />
+      <Lane lane={trend.memory} blind={trend.blind} />
       <TableCell className="text-[11px] text-fg-fnt">
         {silent
-          ? trend.newestAgoMs === null
-            ? t("empty", "nodeNoSeries")
-            : t("empty", "nodeNoSamplesYet", {
-                age: agoOf(now - trend.newestAgoMs, now),
-                range,
-              })
+          ? trend.blind === "notLooked"
+            ? t("empty", "nodeNotLooked")
+            : trend.blind === "noAllocatable"
+              ? t("empty", "nodeNoAllocatable")
+              : trend.newestAgoMs !== null
+                ? t("empty", "nodeNoSamplesYet", {
+                    age: agoOf(now - trend.newestAgoMs, now),
+                    range,
+                  })
+                : // Only where the staleness probe itself answered: a failed
+                  // probe leaves every node looking never-seen.
+                  trend.newestKnown
+                  ? t("empty", "nodeNoSeries")
+                  : t("empty", "nodeNotLooked")
           : trend.cordoned
             ? t("readings", "cordonedWord")
             : "–"}
@@ -200,12 +241,24 @@ function Row({
   );
 }
 
-function Lane({ lane }: { lane: TrendLane | null }) {
+const BLIND_SHORT: Record<TrendBlind, keyof typeof en.empty> = {
+  notLooked: "notLookedShort",
+  noSeries: "noSeriesShort",
+  noAllocatable: "noAllocatableShort",
+};
+
+function Lane({
+  lane,
+  blind,
+}: {
+  lane: TrendLane | null;
+  blind: TrendBlind | null;
+}) {
   const t = useT();
   if (lane === null) {
     return (
       <TableCell className="text-[11px] text-fg-fnt">
-        {t("empty", "noSeriesShort")}
+        {t("empty", BLIND_SHORT[blind ?? "noSeries"])}
       </TableCell>
     );
   }
@@ -227,18 +280,34 @@ function Lane({ lane }: { lane: TrendLane | null }) {
 const W = 120;
 const H = 22;
 
-/** A line and nothing else: the numbers beside it carry the reading. */
-function Sparkline({ points }: { points: readonly { v: number | null }[] }) {
-  const n = points.length;
-  const path = points
-    .map((point, i) => {
-      if (point.v === null) return null;
-      const x = n === 1 ? W / 2 : (i / (n - 1)) * W;
-      const y = H - Math.min(100, Math.max(0, point.v)) * (H / 100);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .filter((p): p is string => p !== null)
-    .join(" ");
+/**
+ * A line and nothing else: the numbers beside it carry the reading.
+ *
+ * Placed by time rather than by array index, and broken at every gap. By
+ * index, an hour of samples inside a day-wide window was stretched across
+ * the whole cell as though it covered it; joined through gaps, an outage was
+ * drawn as a straight segment across the time nobody measured. A run of one
+ * observed bucket is a dot — a one-point polyline draws nothing, which left
+ * only the baseline and read as zero.
+ */
+function Sparkline({ points }: { points: readonly DeclaredPoint[] }) {
+  const times = points.map((point) => point.t);
+  const first = Math.min(...times);
+  const span = Math.max(...times) - first;
+  const xOf = (t: number) => (span === 0 ? W / 2 : ((t - first) / span) * W);
+  const yOf = (v: number) => H - Math.min(100, Math.max(0, v)) * (H / 100);
+
+  const runs: Array<Array<{ x: number; y: number }>> = [];
+  let run: Array<{ x: number; y: number }> = [];
+  for (const point of points) {
+    if (point.v === null) {
+      if (run.length > 0) runs.push(run);
+      run = [];
+      continue;
+    }
+    run.push({ x: xOf(point.t), y: yOf(point.v) });
+  }
+  if (run.length > 0) runs.push(run);
   return (
     <svg
       width={W}
@@ -255,14 +324,29 @@ function Sparkline({ points }: { points: readonly { v: number | null }[] }) {
         stroke="hsl(var(--hair))"
         strokeWidth={1}
       />
-      <polyline
-        points={path}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.25}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      {runs.map((segment, index) =>
+        segment.length === 1 ? (
+          <circle
+            key={index}
+            cx={segment[0].x.toFixed(1)}
+            cy={segment[0].y.toFixed(1)}
+            r={1.25}
+            fill="currentColor"
+          />
+        ) : (
+          <polyline
+            key={index}
+            points={segment
+              .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+              .join(" ")}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.25}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )
+      )}
     </svg>
   );
 }

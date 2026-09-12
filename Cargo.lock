@@ -2863,7 +2863,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui"
-version = "4.11.0"
+version = "4.13.0"
 dependencies = [
  "async-trait",
  "azure_core",
@@ -2876,6 +2876,7 @@ dependencies = [
  "futures",
  "gcp_auth",
  "http",
+ "json-patch 4.2.0",
  "k8s-gui-common",
  "k8s-openapi",
  "kube",
@@ -2916,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui-common"
-version = "4.11.0"
+version = "4.13.0"
 dependencies = [
  "tracing-subscriber",
 ]
