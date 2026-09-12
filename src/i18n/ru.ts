@@ -1534,6 +1534,9 @@ export const ru: Catalogue = {
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
     tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    bigDownloadTitle: "Скачать {name} ({size})?",
+    bigDownloadBody:
+      "Файл идёт через exec-канал, а он медленный: такой размер это минуты, и после 30 секунд тишины скачивание прекращается. В ваш файл ничего не пишется, пока не придёт всё целиком.",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:

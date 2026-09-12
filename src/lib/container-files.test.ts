@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import type { PodVolumeInfo } from "@/generated/types";
 import {
+  DOWNLOAD_CONFIRM_BYTES,
   DOWNLOAD_MAX_BYTES,
   MAX_ENTRIES,
   PREVIEW_MAX_BYTES,
@@ -207,10 +208,12 @@ describe("the caps both halves apply", () => {
       readFileSync(resolve(process.cwd(), "shared/file-limits.json"), "utf8")
     ) as {
       downloadMaxBytes: number;
+      downloadConfirmBytes: number;
       previewMaxBytes: number;
       maxEntries: number;
     };
     expect(DOWNLOAD_MAX_BYTES).toBe(shared.downloadMaxBytes);
+    expect(DOWNLOAD_CONFIRM_BYTES).toBe(shared.downloadConfirmBytes);
     expect(PREVIEW_MAX_BYTES).toBe(shared.previewMaxBytes);
     expect(MAX_ENTRIES).toBe(shared.maxEntries);
   });

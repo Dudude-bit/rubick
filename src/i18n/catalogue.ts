@@ -1504,6 +1504,9 @@ export const en = {
     pathCopied: "Path copied",
     copyPath: "Copy path",
     tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:

@@ -173,6 +173,8 @@ export function matches(entry: FileEntry, filter: string): boolean {
  * into the catalogue copy — which is exactly the drift the shared-constant
  * rule exists to stop.
  */
-export const DOWNLOAD_MAX_BYTES = 104_857_600;
+export const DOWNLOAD_MAX_BYTES = 2_147_483_648;
+/** Past this a download is asked about first: minutes over exec, not a click. */
+export const DOWNLOAD_CONFIRM_BYTES = 104_857_600;
 export const PREVIEW_MAX_BYTES = 524_288;
 export const MAX_ENTRIES = 20_000;

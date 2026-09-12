@@ -29,8 +29,9 @@ pub use parse::{FileEntry, FileKind};
 pub const PREVIEW_MAX_BYTES: usize = 512 * 1024;
 /// The cap a download is cut off at — counted as the bytes arrive, into a
 /// scratch file beside the destination, so nothing over it is ever renamed
-/// onto the reader's own file.
-pub const DOWNLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
+/// onto the reader's own file. Wide, because the exec channel is the only
+/// slow part and the frontend asks before starting anything that large.
+pub const DOWNLOAD_MAX_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// Rows per event on the way to the frontend.
 pub const BATCH_ROWS: usize = 500;
 /// The most rows one listing hands over. Nothing capped this: `list_dir`
