@@ -511,7 +511,7 @@ const EXTENSIONS: ReadonlyArray<Vendor & { extension: Extension }> =
  * server for their CRDs" would state a method that was never used.
  */
 export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
-  (vendor) => vendor.connect === undefined
+  (vendor) => vendor.connect === undefined || vendor.crd !== undefined
 ).map((vendor) => vendor.name);
 
 /**
@@ -544,21 +544,19 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
       ? (connections.get(vendor.id) ?? { state: "reading" as const })
       : null;
     const entry = data?.find((candidate) => candidate.id === vendor.id);
+    // A vendor the scan never mentioned is not installed. A vendor it
+    // mentioned without an answer is a different thing.
+    const found = entry ? entry.installed : false;
+    // A vendor with both ways in is here by either: an answering address,
+    // or its kinds in the cluster.
+    const connected = connection?.state === "connected";
     return {
       vendor,
       connection,
-      installed: connection
-        ? connection.state === "connected"
-        : // A vendor the scan never mentioned is not installed. A vendor it
-          // mentioned without an answer is a different thing.
-          entry
-          ? entry.installed
-          : false,
-      version: connection
-        ? connection.state === "connected"
-          ? connection.probe.ok
-            ? connection.probe.version
-            : null
+      installed: connection ? connected || found === true : found,
+      version: connected
+        ? connection.probe.ok
+          ? connection.probe.version
           : null
         : (entry?.version ?? null),
     };
@@ -851,14 +849,16 @@ export function useIntegrationPages(): {
 
   const here = EXTENSIONS.filter((vendor) => {
     const connection = connections.get(vendor.id);
-    // A configured vendor is present because its address answered, never
-    // because a CRD scan found it — it installs none.
-    //
-    // Unless this machine reaches it through a forward, which dies with the
+    // A configured vendor is present because its address answered, or
+    // because this machine reaches it through a forward, which dies with the
     // app: the address is saved, the tunnel is not, and dropping the row
-    // would say the integration was never configured.
-    if (connection) {
-      return connection.state === "connected" || forwarded.has(vendor.id);
+    // would say the integration was never configured. A vendor that also
+    // installs kinds is here by those too.
+    if (
+      connection &&
+      (connection.state === "connected" || forwarded.has(vendor.id))
+    ) {
+      return true;
     }
     return data?.some((entry) => entry.id === vendor.id && entry.installed);
   });

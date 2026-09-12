@@ -36,14 +36,16 @@ export function FilterBox({
   onChange,
   placeholder,
   label,
+  className,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   label: string;
+  className?: string;
 }) {
   return (
-    <div className="relative w-[260px]">
+    <div className={cn("relative w-[260px]", className)}>
       <Search
         className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-fg-fnt"
         aria-hidden

@@ -6,6 +6,7 @@ import { explain, unreachable } from "../reachability";
 import { normalizeTauriError } from "@/lib/error-utils";
 import {
   defineVendor,
+  pageCount,
   USAGE_RANGES,
   type ConnectionDraft,
   type ProbeResult,
@@ -17,26 +18,35 @@ import {
   usageHistory,
   volumeFullness,
 } from "./client";
+import { crd } from "./monitors/crd";
+import {
+  MONITORS_KEY,
+  MONITORS_STALE,
+  monitorCount,
+  readPicture,
+  worstTone,
+} from "./monitors/data";
 import { RANGE_SPECS } from "./queries";
 
 /**
- * Prometheus.
+ * Prometheus, with two ways in.
  *
- * Tier three: **configured, never detected.** There is no reliable way to
- * find one — it may be kube-prometheus-stack in `monitoring`, a bare
- * Deployment somewhere, Thanos, Mimir, or a SaaS endpoint outside the
- * cluster entirely. Sniffing for a namespace called `monitoring` or a
- * Service called `prometheus` would be the same guessing this app refuses
- * everywhere else, and would be wrong often enough to be worse than asking.
- * So it is a URL the reader gives us, per cluster, in Settings.
+ * **An address** (tier three): there is no reliable way to find the
+ * Prometheus that answers PromQL for this cluster — it may be
+ * kube-prometheus-stack in `monitoring`, a bare Deployment somewhere,
+ * Thanos, Mimir, or a SaaS endpoint outside the cluster entirely. Sniffing
+ * for a namespace called `monitoring` or a Service called `prometheus`
+ * would be the same guessing this app refuses everywhere else. So it is a
+ * URL the reader gives us, per cluster, in Settings.
  *
- * No page, and that is the rule from `registry.ts` rather than an omission:
- * a vendor earns a page when it owns a topology no core object can host.
- * Every fact Prometheus has belongs on the pod, the workload or the node it
- * is about, and a Prometheus screen would be somewhere to go and find the
- * same numbers with less context around them.
+ * **The operator's kinds** (tier two): ServiceMonitor, PodMonitor and
+ * Prometheus objects are detected like any other CRD, and read on the
+ * Monitors tab in `./monitors`. The two halves answer different questions
+ * about one thing, which is why they are one row: the objects say what was
+ * configured to be scraped, the address says what is really being scraped.
+ * A cluster can have either, both, or neither.
  *
- * What it gives, and what each one owes when it is gone:
+ * What the address gives, and what each one owes when it is gone:
  *
  * - `usage.history` — the ranges come alive. Absent, the chart draws the
  *   window the app watched itself, exactly as it does today.
@@ -173,14 +183,20 @@ export default defineVendor({
       ];
     },
   },
-  // A page, and it took a while to earn one. Prometheus supplies powers
-  // rather than objects, and a page repeating its numbers would be a worse
-  // copy of the chart the reader already has. What it owns is a question
-  // about the connection: a probe proves the address speaks PromQL, and
-  // cannot tell you the Prometheus you reached is scraping *this* cluster.
   page: {
+    count: pageCount({
+      queryKey: MONITORS_KEY,
+      queryFn: readPicture,
+      select: monitorCount,
+      tone: worstTone,
+      staleTime: MONITORS_STALE,
+    }),
     load: () => import("./page"),
+    // The Connection tab stands without the operator's kinds, so a token
+    // refused the monitors still has a page to open.
+    gate: null,
   },
+  crd,
   provides: {
     "usage.history": usageHistory,
     "usage.nodes": nodeUsage,
