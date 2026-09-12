@@ -11,11 +11,17 @@ vi.mock("@/hooks/useClusterSummary", () => ({
   }),
 }));
 
+let renewal = "scheduled";
+vi.mock("@/hooks/useCredentialRenewal", () => ({
+  useRenewal: () => renewal,
+}));
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBar } from "./StatusBar";
 
 beforeEach(() => {
+  renewal = "scheduled";
   useClusterStore.setState({
     currentContext: "prod",
     isConnected: true,
@@ -48,5 +54,49 @@ describe("which way the session goes", () => {
     );
     expect(screen.queryByText("through kubectl proxy")).toBeNull();
     expect(screen.getByText("3 pods")).toBeInTheDocument();
+  });
+});
+
+describe("what will interrupt the reader next", () => {
+  /**
+   * The one renewal state worth a permanent chip: it predicts the sign-in
+   * screen. The quiet states must not light it, or the line stops being read.
+   */
+  it("warns only when renewing quietly turned out to need a person", () => {
+    renewal = "needsYou";
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("sign-in needed")).toBeInTheDocument();
+  });
+
+  /** `ranOut` predicts the same interruption and so lights the same chip. */
+  it("warns when the plugin kept handing back what it already had", () => {
+    renewal = "ranOut";
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("sign-in needed")).toBeInTheDocument();
+  });
+
+  it.each([
+    "scheduled",
+    "noDeadline",
+    "passed",
+    "failed",
+    "delegated",
+    "unknown",
+  ])("says nothing while renewal is %s", (state) => {
+    renewal = state;
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("sign-in needed")).toBeNull();
   });
 });

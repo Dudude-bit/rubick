@@ -61,7 +61,8 @@ export const SYNTAX_HUES = [SCALAR_HUE, CONSTANT_HUE];
 
 const syntax = (hue: number) => `hsl(${hue} var(--syn-s) var(--syn-l))`;
 
-const SPEC = {
+/** Exported so the rules below can be asserted rather than eyeballed. */
+export const SPEC = {
   "&": {
     // The whole point: the manifest sits on the page, not on a card.
     backgroundColor: "transparent",
@@ -73,6 +74,18 @@ const SPEC = {
     fontFamily:
       "'JetBrains Mono Variable', 'JetBrains Mono', Consolas, monospace",
     lineHeight: "1.5",
+    // CodeMirror builds this element, so `scrollbar-thin` never reaches it.
+    scrollbarWidth: "thin",
+    scrollbarColor: "hsl(var(--sel)) transparent",
+  },
+  ".cm-scroller::-webkit-scrollbar": { width: "8px", height: "8px" },
+  ".cm-scroller::-webkit-scrollbar-track": { background: "transparent" },
+  ".cm-scroller::-webkit-scrollbar-thumb": {
+    background: "hsl(var(--sel))",
+    borderRadius: "4px",
+  },
+  ".cm-scroller::-webkit-scrollbar-thumb:hover": {
+    background: "hsl(var(--fg-fnt))",
   },
   ".cm-content": { padding: "6px 0", caretColor: "hsl(var(--fg))" },
   ".cm-gutters": {

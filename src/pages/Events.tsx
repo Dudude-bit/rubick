@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { AlertCircle, Search } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
@@ -20,6 +20,7 @@ import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { StoryCard } from "@/components/events/StoryCard";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
 import {
   sortStories,
@@ -189,9 +190,22 @@ export function Events() {
   // than the window. Filtering first spends the pool on the rows asked for.
   const matching = useMemo(() => filterEvents(pool, query), [pool, query]);
 
+  // The type selector narrows the read itself and the search narrows what is
+  // left, so a fold over either cannot tell "nothing went wrong" from "the
+  // warnings were filtered out before I saw them".
+  const narrowed = eventType !== "all" || query.trim() !== "";
+  // The oldest moment the read actually covers. A pool cut at the limit holds
+  // only the latest N, so anything older than its last row was never read —
+  // and an empty slice of the strip there means nobody looked.
+  const readFrom = useMemo(() => {
+    if (limit === null || pool.length < limit) return null;
+    const oldest = pool.at(-1)?.lastTimestamp;
+    const parsed = oldest ? Date.parse(oldest) : Number.NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [limit, pool]);
   const storyOptions = useMemo(
-    () => ({ now, windowMs: WINDOW_MS[window] }),
-    [now, window]
+    () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom }),
+    [now, window, narrowed, readFrom]
   );
   const stories = useMemo(
     () =>
@@ -203,6 +217,12 @@ export function Events() {
 
   const isLoading = several ? parts.isLoading : single.isLoading;
   const freshness = several ? parts.freshness : single.freshness;
+  // The read can fail, and until now nothing here asked. An empty feed then
+  // drew the quiet-scope sentence — which for the stories tab went as far as
+  // "the read succeeded and returned no events", a claim about a request that
+  // came back 403. In a fan-out one refused namespace is enough: the rest may
+  // have answered, but what is on screen is no longer the scope's whole story.
+  const failed = several ? parts.error : single.error;
 
   if (!isConnected) {
     return (
@@ -221,8 +241,13 @@ export function Events() {
   const capped = limit !== null && matching.length >= limit;
   const events = capped ? matching.slice(0, limit) : matching;
   const filtering = query.trim() !== "";
-  const warningCount = events.filter((e) => e.type === "Warning").length;
-  const normalCount = events.length - warningCount;
+  // In stories view the cards cover the window; counting the whole pool
+  // beside them puts two numbers about two different spans on one line, and
+  // the reader has no way to tell which is which.
+  const counted =
+    view === "stories" ? stories.flatMap((story) => story.events) : events;
+  const warningCount = counted.filter((e) => e.type === "Warning").length;
+  const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
 
   return (
@@ -371,6 +396,24 @@ export function Events() {
         <SectionBody>
           {showSkeleton ? (
             <EventsSkeleton />
+          ) : failed ? (
+            // Before either tab's empty state. Both of them are sentences
+            // about what the cluster holds, and neither is answerable from a
+            // read that did not come back — the API server's own words are.
+            <div className="flex items-start gap-2 px-1.5 py-1">
+              <AlertCircle
+                className="mt-0.5 size-3.5 flex-none text-err"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-xs text-fg-mut">
+                  {t("empty", "eventsRefused", { scope: scope.inWords })}
+                </p>
+                <p className="select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+                  {normalizeTauriError(failed)}
+                </p>
+              </div>
+            </div>
           ) : view === "stories" ? (
             stories.length === 0 ? (
               <p className="px-1.5 py-1 text-xs text-fg-fnt">
@@ -379,10 +422,20 @@ export function Events() {
                       scope: scope.inWords,
                       query: query.trim(),
                     })
-                  : t("empty", "noStoriesInWindow", {
-                      scope: scope.inWords,
-                      range: window,
-                    })}
+                  : windowFull
+                    ? // The pool stopped at the limit, so "nothing happened"
+                      // is about the latest N events and not about the
+                      // window — the story being looked for may be one page
+                      // older. The list tab has said this since it shipped.
+                      t("empty", "noStoriesInWindowCapped", {
+                        scope: scope.inWords,
+                        range: spanWords(WINDOW_MS[window], t),
+                        n: eventLimit,
+                      })
+                    : t("empty", "noStoriesInWindow", {
+                        scope: scope.inWords,
+                        range: spanWords(WINDOW_MS[window], t),
+                      })}
               </p>
             ) : (
               <div className="flex flex-col gap-2 p-1.5">

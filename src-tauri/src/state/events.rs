@@ -306,6 +306,12 @@ pub enum AppEvent {
         context: String,
         why: Option<AuthOutcome>,
     },
+    /// A context's credentials were replaced without anybody being asked.
+    ///
+    /// Sent so the window can rebuild what holds the old ones: a watch keeps
+    /// the `kube::Client` it started with, so a renewal that only swapped the
+    /// manager's copy would renew the session and kill the screens anyway.
+    CredentialsRenewed { context: String },
     /// Auth terminal session created (for interactive exec auth)
     AuthTerminalSessionCreated {
         auth_session_id: String,
@@ -347,6 +353,10 @@ pub enum AppEvent {
         stream_id: String,
         with: crate::files::ListedWith,
         entries: usize,
+        /// The listing was cut short; `entries` is what was seen, not a total.
+        partial: bool,
+        /// Lines the parser could not read, so the count is not the whole.
+        unreadable: usize,
         elapsed_ms: u64,
     },
     /// The listing ended without an answer, and why: `noTools`, `refused`,
@@ -380,6 +390,7 @@ impl AppEvent {
             AppEvent::AuthUrlRequested { .. } => "auth-url-requested",
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
+            AppEvent::CredentialsRenewed { .. } => "credentials-renewed",
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
             AppEvent::DrainProgress { .. } => "drain-progress",
             AppEvent::DrainFinished { .. } => "drain-finished",
@@ -511,6 +522,9 @@ impl AppEvent {
                 "context": context,
                 "why": why,
             }),
+            AppEvent::CredentialsRenewed { context } => serde_json::json!({
+                "context": context,
+            }),
             AppEvent::AuthTerminalSessionCreated {
                 auth_session_id,
                 terminal_session_id,
@@ -554,11 +568,15 @@ impl AppEvent {
                 stream_id,
                 with,
                 entries,
+                partial,
+                unreadable,
                 elapsed_ms,
             } => serde_json::json!({
                 "stream_id": stream_id,
                 "with": with,
                 "entries": entries,
+                "partial": partial,
+                "unreadable": unreadable,
                 "elapsed_ms": elapsed_ms,
             }),
             AppEvent::FilesFailed {

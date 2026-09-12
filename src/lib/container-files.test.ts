@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import type { PodVolumeInfo } from "@/generated/types";
 import {
+  DOWNLOAD_MAX_BYTES,
+  MAX_ENTRIES,
+  PREVIEW_MAX_BYTES,
   type FileEntry,
   crumbs,
   joinPath,
@@ -67,12 +72,47 @@ describe("mountFor", () => {
       kind: "ConfigMap",
       name: "demo-config",
       at: "/etc/app",
+      sources: [{ kind: "ConfigMap", name: "demo-config" }],
     });
     expect(mountFor("/etc/app/password", "app", volumes)).toEqual({
       kind: "Secret",
       name: "demo-secret",
       at: "/etc/app/password",
+      sources: [{ kind: "Secret", name: "demo-secret" }],
     });
+  });
+
+  /**
+   * A `projected` volume puts several sources in one directory, and the pod
+   * does not record which of them any given file came from. Naming
+   * `refs[0]` labelled a token from the serviceaccount as coming from the
+   * ConfigMap next to it — and the Connections tab, which the tab's own
+   * footer points the reader at for the same fact, lists all three.
+   */
+  it("does not pick one source out of a volume that projects several", () => {
+    const projected: PodVolumeInfo[] = [
+      {
+        name: "bundle",
+        source: "Projected",
+        refs: [
+          { kind: "ConfigMap", name: "ca-bundle" },
+          { kind: "Secret", name: "client-cert" },
+        ],
+        mounts: [
+          {
+            container: "app",
+            path: "/var/run/bundle",
+            readOnly: true,
+            subPath: null,
+          },
+        ],
+      },
+    ];
+    const tag = mountFor("/var/run/bundle/tls.crt", "app", projected);
+    expect(tag?.sources).toHaveLength(2);
+    expect(tag?.name).toBe("bundle");
+    expect(tag?.kind).toBe("Projected");
+    expect(tag?.name).not.toBe("ca-bundle");
   });
 
   it("does not borrow another container's mounts", () => {
@@ -122,5 +162,26 @@ describe("modeText", () => {
     expect(modeText(entry({ mode: "777", kind: "symlink" }))).toBe(
       "lrwxrwxrwx"
     );
+  });
+});
+
+describe("the caps both halves apply", () => {
+  /**
+   * A comment saying "mirrored" is not a check. The download cap was spelled
+   * three times — a literal in the tab, `DOWNLOAD_MAX_BYTES` in Rust and a
+   * number inside the catalogue sentence — with nothing holding them equal.
+   * Fails if this side drifts from `shared/file-limits.json`.
+   */
+  it("matches shared/file-limits.json", () => {
+    const shared = JSON.parse(
+      readFileSync(resolve(process.cwd(), "shared/file-limits.json"), "utf8")
+    ) as {
+      downloadMaxBytes: number;
+      previewMaxBytes: number;
+      maxEntries: number;
+    };
+    expect(DOWNLOAD_MAX_BYTES).toBe(shared.downloadMaxBytes);
+    expect(PREVIEW_MAX_BYTES).toBe(shared.previewMaxBytes);
+    expect(MAX_ENTRIES).toBe(shared.maxEntries);
   });
 });

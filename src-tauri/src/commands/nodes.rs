@@ -37,12 +37,24 @@ pub async fn node_resource_budget(name: String, state: State<'_, AppState>) -> R
     let node = ctx.cluster_api::<Node>().get(&name).await?;
     let params = ListParams::default().fields(&format!("spec.nodeName={name}"));
 
+    // A read error that is not a refusal leaves the sums unknown, with the
+    // reason in the budget's `error`. An expired session is the exception: it
+    // must propagate as `Err`, or the frontend's re-login never fires — it
+    // only watches rejected commands for the CREDENTIALS_EXPIRED prefix.
+    let unknown = |err: Error| -> Result<NodeBudget> {
+        if matches!(err, Error::CredentialsExpired(_)) {
+            Err(err)
+        } else {
+            Ok(budget(&node, None, Vec::new(), Some(err.to_string())))
+        }
+    };
+
     match ctx.cluster_api::<Pod>().list(&params).await {
         Ok(list) => return Ok(budget(&node, Some(&list.items), Vec::new(), None)),
         Err(e) => {
             let err = Error::from(e);
             if !err.is_refusal() {
-                return Ok(budget(&node, None, Vec::new(), Some(err.to_string())));
+                return unknown(err);
             }
         }
     }
@@ -53,14 +65,7 @@ pub async fn node_resource_budget(name: String, state: State<'_, AppState>) -> R
         .await
     {
         Ok(list) => list.items,
-        Err(e) => {
-            return Ok(budget(
-                &node,
-                None,
-                Vec::new(),
-                Some(Error::from(e).to_string()),
-            ));
-        }
+        Err(e) => return unknown(Error::from(e)),
     };
     let mut pods = Vec::new();
     let mut refused = Vec::new();
@@ -76,7 +81,7 @@ pub async fn node_resource_budget(name: String, state: State<'_, AppState>) -> R
                 if err.is_refusal() {
                     refused.push(ns);
                 } else {
-                    return Ok(budget(&node, None, Vec::new(), Some(err.to_string())));
+                    return unknown(err);
                 }
             }
         }

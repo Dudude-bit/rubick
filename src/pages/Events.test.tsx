@@ -322,8 +322,28 @@ describe("stories", () => {
   it("says the window is quiet rather than drawing nothing", async () => {
     mount("stories");
     expect(
-      await screen.findByText(/Nothing happened in .* in the last 1h/)
+      await screen.findByText(/Nothing happened in .* in the last 1 hour/)
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The quiet sentence is byte-identical to what a swallowed refusal used to
+   * draw — and the sentence went as far as "the read succeeded", about a
+   * request that came back 403. An assertion on the empty feed proves nothing
+   * unless the refused feed says something else.
+   */
+  it("says a refused read was refused, not that the scope is quiet", async () => {
+    listEvents.mockRejectedValue(
+      new Error(
+        'events is forbidden: User "alice" cannot list resource "events"'
+      )
+    );
+    mount("stories");
+    expect(
+      await screen.findByText(/Could not read the events/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
+    expect(document.body.textContent).toContain("forbidden");
   });
 
   it("keeps the flat list one tab away", async () => {
