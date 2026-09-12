@@ -493,6 +493,18 @@ export const ru: Catalogue = {
     programmed: "Запрограммирован",
   },
   action: {
+    laneLabelColour: "Цвет дорожки",
+    laneLabelShort: "Короткий префикс",
+    laneLabelFull: "Полное имя",
+    filterOn: "Фильтр по {key}={value}",
+    showAllLanes: "Показать все поды",
+    laneLabelHint:
+      "Как строка называет свою дорожку: только цветом, последними символами имени или полным именем.",
+    laneRulePod: "дорожка = под",
+    laneRuleOrdinal: "дорожка = порядковый номер",
+    laneRuleNode: "дорожка = нода",
+    laneRuleRun: "дорожка = запуск",
+    legendGone: "· ушёл",
     eventsStories: "Истории",
     eventsAll: "Все события",
     warningsFirst: "Сначала предупреждения",
@@ -3521,6 +3533,10 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    podsUnread:
+      "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
+    noPodsToStream: "Пока нет подов, которые можно читать.",
+    everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
       "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
     noStoriesInWindowCapped:
@@ -5136,6 +5152,30 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    podsStreaming: {
+      one: "{streaming} из {n} пода стримится",
+      few: "{streaming} из {n} подов стримится",
+      many: "{streaming} из {n} подов стримится",
+      other: "{streaming} из {n} пода стримится",
+    },
+    podsPaused: {
+      one: "{n} под, на паузе",
+      few: "{n} пода, на паузе",
+      many: "{n} подов, на паузе",
+      other: "{n} пода, на паузе",
+    },
+    podsUnreadable: {
+      one: "{n} под не прочитан",
+      few: "{n} пода не прочитаны",
+      many: "{n} подов не прочитано",
+      other: "{n} пода не прочитано",
+    },
+    podsGoneKept: {
+      one: "{n} ушёл, строки сохранены",
+      few: "{n} ушли, строки сохранены",
+      many: "{n} ушли, строки сохранены",
+      other: "{n} ушли, строки сохранены",
+    },
     stories: {
       one: "{n} история",
       few: "{n} истории",

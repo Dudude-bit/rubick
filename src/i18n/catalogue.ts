@@ -525,6 +525,18 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    laneLabelColour: "Colour lane",
+    laneLabelShort: "Short prefix",
+    laneLabelFull: "Full name",
+    showAllLanes: "Show every pod",
+    laneLabelHint:
+      "How each line names its lane: by the colour alone, by the last characters of the name, or by the whole name.",
+    filterOn: "Filter on {key}={value}",
+    laneRulePod: "lane = pod",
+    laneRuleOrdinal: "lane = ordinal",
+    laneRuleNode: "lane = node",
+    laneRuleRun: "lane = run",
+    legendGone: "· gone",
     eventsStories: "Stories",
     eventsAll: "All events",
     warningsFirst: "Warnings first",
@@ -3270,6 +3282,10 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    podsUnread:
+      "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
+    noPodsToStream: "No pods to read from yet.",
+    everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
     noStoriesInWindowCapped:
@@ -4822,6 +4838,22 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    podsStreaming: {
+      one: "{streaming} of {n} pod streaming",
+      other: "{streaming} of {n} pods streaming",
+    },
+    podsPaused: {
+      one: "{n} pod, paused",
+      other: "{n} pods, paused",
+    },
+    podsUnreadable: {
+      one: "{n} pod could not be read",
+      other: "{n} pods could not be read",
+    },
+    podsGoneKept: {
+      one: "{n} gone, lines kept",
+      other: "{n} gone, lines kept",
+    },
     stories: { one: "{n} story", other: "{n} stories" },
     eventsSeen: { one: "{n} event", other: "{n} events" },
     namespacesHidden: {

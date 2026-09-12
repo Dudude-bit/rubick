@@ -983,3 +983,201 @@ describe("reading a container whose run is over", () => {
     );
   });
 });
+
+describe("a workload pane", () => {
+  beforeEach(() => {
+    for (const key of Object.keys(listeners)) delete listeners[key];
+    vi.clearAllMocks();
+  });
+
+  const pod = (name: string, containers = [container("app")]) => ({
+    name,
+    namespace: "default",
+    containers,
+    node: "node-a",
+    run: null,
+  });
+  const line = (message: string) => ({
+    message,
+    timestamp: null,
+    level: null,
+    format: null,
+    fields: null,
+    raw: message,
+  });
+  const pane = (pods: ReturnType<typeof pod>[], podsError?: unknown) => (
+    <Providers>
+      <LogViewer
+        namespace="default"
+        pods={pods}
+        podsError={podsError}
+        laneRule="pod"
+        workload={{ owner: "api", ownerKind: "Deployment" }}
+      />
+    </Providers>
+  );
+
+  /**
+   * The lane is the pod: one chip each, the coverage counted, and a pod
+   * the rollout replaced kept as a grey lane with its lines still there.
+   */
+  it("draws one lane per pod, counts its coverage, and keeps a replaced pod's lines", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const { rerender } = render(pane([pod("api-a"), pod("api-b")]));
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(2)
+    );
+    const legend = screen.getByTestId("log-legend");
+    expect(within(legend).getByText("api-a")).toBeInTheDocument();
+    expect(within(legend).getByText("api-b")).toBeInTheDocument();
+    expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+      "2 of 2 pods streaming"
+    );
+    expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+      "lane = pod"
+    );
+
+    act(() => {
+      listeners["log-batch"]!({
+        payload: { stream_id: "stream-api-a", lines: [line("hello from a")] },
+      });
+    });
+    // The list is virtualised and jsdom gives it no height, so the line
+    // is read off the legend's count rather than off a row.
+    const chip = () =>
+      within(legend)
+        .getAllByRole("button")
+        .find((button) => button.textContent?.startsWith("api-a"))!;
+    await waitFor(() => expect(chip().textContent).toContain("1"));
+
+    rerender(pane([pod("api-b"), pod("api-c")]));
+    await waitFor(() =>
+      expect(commands.stopLogStream).toHaveBeenCalledWith("stream-api-a")
+    );
+    expect(chip().textContent).toContain("1");
+    expect(chip().textContent).toContain("gone");
+    expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+      "1 gone, lines kept"
+    );
+    expect(within(legend).getByText("api-c")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Short prefix" }));
+    expect(
+      within(legend)
+        .getAllByRole("button")
+        .some((button) => /^a1/.test(button.textContent ?? ""))
+    ).toBe(true);
+  });
+
+  /**
+   * A stream that would not open is a pod nothing was read from, and the
+   * sentence says that rather than "refused": nothing inspected the reason,
+   * and `broken` is the could-not-look state. Counted over pods, because
+   * the clause beside it counts pods and the noun is elided.
+   */
+  it("counts a pod nothing could be read from, in the unit the sentence uses", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => {
+        if (config.podName === "api-b") throw new Error("i/o timeout");
+        return `stream-${config.podName}`;
+      }
+    );
+    render(
+      pane([pod("api-a"), pod("api-b", [container("app"), container("side")])])
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+        "1 pod could not be read"
+      )
+    );
+    expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+      "1 of 2 pods streaming"
+    );
+    // Two of its streams failed, one pod did.
+    expect(screen.getByTestId("log-lane-coverage").textContent).not.toContain(
+      "2 pods could not be read"
+    );
+  });
+
+  it("says there is nothing to read from while the workload has no pods", async () => {
+    render(pane([]));
+    expect(
+      await screen.findByText("No pods to read from yet.")
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The same empty array arrives from a workload with no pods and from a
+   * read the cluster refused. Said the same way, the pane makes a claim
+   * about a cluster it did not look at — and the Pods tab beside it, on the
+   * same query, draws the refusal.
+   */
+  /**
+   * A followed stream ends the moment its container does, so every init
+   * container reports `gone` a second after the pane opens — and so does
+   * every container of a finished Job. Counted as unread, a Deployment
+   * with one migration init container read "0 of 1 pods streaming" while
+   * its app container was writing into the pane.
+   */
+  it("does not call a finished init container's end a pod that is not streaming", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string; container: string | null }) =>
+        `stream-${config.podName}-${config.container}`
+    );
+    render(
+      pane([
+        pod("api-a", [
+          container("migrate", {
+            phase: "init",
+            state: {
+              type: "terminated",
+              termination: {
+                exitCode: 0,
+                signal: null,
+                reason: "Completed",
+                message: null,
+                startedAt: null,
+                finishedAt: null,
+              },
+            },
+          }),
+          container("app"),
+        ]),
+      ])
+    );
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(2)
+    );
+
+    act(() => {
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-api-a-migrate",
+          kind: "gone",
+          message: "container migrate is no longer running.",
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+        "1 of 1 pod streaming"
+      )
+    );
+    expect(screen.getByTestId("log-lane-coverage").textContent).not.toContain(
+      "refused"
+    );
+  });
+
+  it("does not call a pod list it could not read an empty one", async () => {
+    render(pane([], new Error("pods is forbidden: User cannot list pods")));
+    expect(
+      await screen.findByText(/pods could not be read/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No pods to read from yet.")
+    ).not.toBeInTheDocument();
+  });
+});
