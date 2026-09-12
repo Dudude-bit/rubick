@@ -1837,26 +1837,28 @@ export const en = {
   readings: {
     storyRollout:
       "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
-    storyJob:
-      "Ran within {span}: {created} jobs created, {completed} completed.",
+    storyJob: "Ran within {span}: {created}, {completed} completed.",
     storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
     storyCrash:
-      "Cannot stay up: the kubelet is backing off from restarting the container, {n} times within {span}.",
-    storyPull: "Cannot pull the image, {n} times within {span}: {detail}",
+      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}.",
+    storyPull: "Cannot pull the image, {times} within {span}: {detail}",
     storySchedulingSame:
-      "Cannot be scheduled, the same answer {n} times within {span}: {detail}",
+      "Cannot be scheduled, the same answer {times} within {span}: {detail}",
     storySchedulingVaried:
       "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
-    storyProbe: "Probes failed {n} times within {span}: {detail}",
-    storyPressure: "Under pressure, {n} times within {span}: {detail}",
-    storyVolumeTrouble: "Volume trouble, {n} times within {span}: {detail}",
-    storyJobTrouble: "Job trouble, {n} times within {span}: {detail}",
-    storyScaling: "Autoscaler trouble, {n} times within {span}: {detail}",
-    storyNode: "Node trouble, {n} times within {span}: {detail}",
-    storyRolloutTrouble: "Rollout trouble, {n} times within {span}: {detail}",
+    storyProbe: "Probes failed {times} within {span}: {detail}",
+    storyPressure: "Under pressure, {times} within {span}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {times} within {span}: {detail}",
+    storyJobTrouble: "Job trouble, {times} within {span}: {detail}",
+    storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
+    storyNode: "Node trouble, {times} within {span}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
     storyTrouble: "{reason} ×{n} within {span}: {detail}",
     storyStillHappening: "still happening",
     storySettled: "settled",
+    storyStateUnknown: "cannot say",
+    timesSeen: { one: "once", other: "{n} times" },
+    jobsCreated: { one: "1 job created", other: "{n} jobs created" },
     storyDone: "done",
     podsOf: "pods of {name}",
     groupedByName:
@@ -3206,7 +3208,10 @@ export const en = {
   },
   empty: {
     noStoriesInWindow:
-      "Nothing happened in {scope} in the last {range}. The read succeeded and returned no events.",
+      "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
+    noStoriesInWindowCapped:
+      "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    eventsRefused: "Could not read the events in {scope}:",
     noStoriesMatch: "No story in {scope} matches “{query}”.",
     noEventsMatchInWindow:
       "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",

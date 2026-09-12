@@ -53,7 +53,16 @@ export interface ReasonCount {
   count: number;
 }
 
-export type StoryState = "stillHappening" | "settled" | "done";
+/**
+ * Whether the trouble is over, and the case where that is not answerable.
+ *
+ * `unknown` is not a fourth kind of trouble, it is the absence of an answer:
+ * the events this was folded from were narrowed before they arrived, or the
+ * latest warning carries no time. Either way "done" would be a claim nobody
+ * made — and the loudest one, because it is the green card the reader stops
+ * looking at.
+ */
+export type StoryState = "stillHappening" | "settled" | "done" | "unknown";
 
 export interface Story {
   key: string;
@@ -416,7 +425,10 @@ function sentenceOf(
           key: "storyJob",
           values: {
             spanMs,
-            created: countReason(events, "SuccessfulCreate"),
+            created: {
+              key: "jobsCreated" as const,
+              values: { n: countReason(events, "SuccessfulCreate") },
+            },
             completed: countReason(events, "Completed", "SawCompletedJob"),
           },
         };
@@ -429,7 +441,14 @@ function sentenceOf(
   }
   const n = warnings.reduce((sum, e) => sum + occurrencesOf(e), 0);
   const detail = detailOf(informative(warnings));
-  const troubled = { n, spanMs, detail };
+  // The count is its own sentence, because no language can hand another a
+  // substring of its own plural: Russian needs three forms where English
+  // needs two, and `{n} times` in the outer string gets neither.
+  const troubled = {
+    times: { key: "timesSeen" as const, values: { n } },
+    spanMs,
+    detail,
+  };
   switch (activity) {
     case "crash":
       return { key: "storyCrash", values: troubled };
@@ -469,13 +488,17 @@ function sentenceOf(
 export interface StoryOptions {
   now: number;
   windowMs: number;
+  /**
+   * Whether these events are everything the window holds, or what survived a
+   * filter. A fold over a narrowed feed cannot say a story is over: the
+   * warnings that would say otherwise may simply not have been passed in.
+   */
+  narrowed: boolean;
 }
 
 /** The events in the window, folded into stories. Order is not meaningful; see {@link sortStories}. */
-export function storiesOf(
-  events: EventInfo[],
-  { now, windowMs }: StoryOptions
-): Story[] {
+export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
+  const { now, windowMs } = options;
   const since = now - windowMs;
   const inWindow = events.filter((event) => {
     const last = at(event.lastTimestamp);
@@ -526,15 +549,26 @@ export function storiesOf(
     const ofActivity = warningEvents.filter(
       (e) => activityOf(e, group.subject.kind) === activity
     );
+    // `null`, not `now`: an event the cluster gave no time to is one this
+    // cannot place, and reading it as "this instant" makes the quietest
+    // answer the loudest. The window filter above keeps such an event for
+    // exactly that reason — because the time is unknown.
     const latestWarningAt = latestWarning
-      ? (at(latestWarning.lastTimestamp) ?? now)
-      : -Infinity;
+      ? at(latestWarning.lastTimestamp)
+      : null;
     const state: StoryState =
       warnings === 0
-        ? "done"
-        : latestWarningAt >= now - RECENT_MS
-          ? "stillHappening"
-          : "settled";
+        ? // Nothing went wrong *in what was read*. Where a filter narrowed
+          // that, the difference between "nothing went wrong" and "the
+          // warnings were not in the set" is the whole answer.
+          options.narrowed
+          ? "unknown"
+          : "done"
+        : latestWarningAt === null
+          ? "unknown"
+          : latestWarningAt >= now - RECENT_MS
+            ? "stillHappening"
+            : "settled";
     const members = [
       ...new Set(
         sorted.map((e) => `${e.involvedObject.kind}/${e.involvedObject.name}`)
@@ -566,10 +600,13 @@ export function storiesOf(
 
 export type StoryOrder = "warningsFirst" | "newest";
 
+// Above `done`: a story nobody could place may be the one still burning, and
+// the list is read from the top.
 const STATE_RANK: Record<StoryState, number> = {
   stillHappening: 0,
   settled: 1,
-  done: 2,
+  unknown: 2,
+  done: 3,
 };
 
 export function sortStories(stories: Story[], order: StoryOrder): Story[] {

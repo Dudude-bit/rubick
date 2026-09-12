@@ -24,24 +24,30 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   stillHappening: "storyStillHappening",
   settled: "storySettled",
   done: "storyDone",
+  unknown: "storyStateUnknown",
 };
 
+// `unknown` is drawn neutral, never green: the reassuring colour is the one
+// the reader stops looking at, and nothing here established it.
 const STATE_TONE: Record<StoryState, string> = {
   stillHappening: "bg-err/15 text-err",
   settled: "bg-warn/15 text-warn",
   done: "bg-ok/15 text-ok",
+  unknown: "bg-fg-fnt/15 text-fg-mut",
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
   stillHappening: "border-err/50",
   settled: "border-warn/50",
   done: "border-hair",
+  unknown: "border-hair",
 };
 
 const STATE_LINE: Record<StoryState, string> = {
   stillHappening: "text-err",
   settled: "text-warn",
   done: "text-fg",
+  unknown: "text-fg-mut",
 };
 
 /** How many of a story's pods the timeline asks about; the rest is said in words. */

@@ -1873,26 +1873,38 @@ export const ru: Catalogue = {
   readings: {
     storyRollout:
       "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
-    storyJob:
-      "Отработало за {span}: создано {created} job, завершено {completed}.",
+    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
-      "Не держится: kubelet откладывает перезапуск контейнера, {n} раз за {span}.",
-    storyPull: "Не скачать образ, {n} раз за {span}: {detail}",
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}.",
+    storyPull: "Не скачать образ, {times} за {span}: {detail}",
     storySchedulingSame:
-      "Не планируется, один и тот же ответ {n} раз за {span}: {detail}",
+      "Не планируется, один и тот же ответ {times} за {span}: {detail}",
     storySchedulingVaried:
       "Не планируется, {k} разных ответов за {span}, последний: {detail}",
-    storyProbe: "Пробы упали {n} раз за {span}: {detail}",
-    storyPressure: "Под давлением, {n} раз за {span}: {detail}",
-    storyVolumeTrouble: "Проблема с томом, {n} раз за {span}: {detail}",
-    storyJobTrouble: "Проблема с job, {n} раз за {span}: {detail}",
-    storyScaling: "Проблема автоскейлера, {n} раз за {span}: {detail}",
-    storyNode: "Проблема ноды, {n} раз за {span}: {detail}",
-    storyRolloutTrouble: "Проблема раскатки, {n} раз за {span}: {detail}",
+    storyProbe: "Пробы упали {times} за {span}: {detail}",
+    storyPressure: "Под давлением, {times} за {span}: {detail}",
+    storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
+    storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
+    storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
+    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
     storyTrouble: "{reason} ×{n} за {span}: {detail}",
     storyStillHappening: "продолжается",
     storySettled: "утихло",
+    storyStateUnknown: "не сказать",
+    timesSeen: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    jobsCreated: {
+      one: "создан {n} job",
+      few: "создано {n} job",
+      many: "создано {n} job",
+      other: "создано {n} job",
+    },
     storyDone: "закончено",
     podsOf: "поды {name}",
     groupedByName:
@@ -3442,7 +3454,10 @@ export const ru: Catalogue = {
   },
   empty: {
     noStoriesInWindow:
-      "В {scope} за последние {range} ничего не происходило. Чтение прошло и вернуло ноль событий.",
+      "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
+    noStoriesInWindowCapped:
+      "Ни одной истории в {scope} за последние {range} — из последних {n} прочитанных событий. Всё, что старше, в этот ответ не попало.",
+    eventsRefused: "Не удалось прочитать события в {scope}:",
     noStoriesMatch: "Ни одна история в {scope} не подходит под «{query}».",
     noEventsMatchInWindow:
       "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
