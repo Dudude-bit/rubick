@@ -105,6 +105,11 @@ pub enum Error {
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
+    /// The run happened and the node dropped its log: not `NoPreviousRun`,
+    /// and the kubelet says it with a 200, so only the body tells.
+    #[error("The node no longer has the log of {container}: {said}")]
+    LogNotKept { container: String, said: String },
+
     /// Timeout errors
     #[error("Operation timed out: {0}")]
     Timeout(String),

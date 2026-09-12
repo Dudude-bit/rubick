@@ -12,8 +12,8 @@ pub mod perf;
 mod sessions;
 
 pub use events::{
-    is_missing_previous_run, readable_cause, AppEvent, AuthOutcome, LogLineEvent,
-    StreamFailureKind, WatchChange, WatchOp,
+    is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, AuthOutcome,
+    LogLineEvent, StreamFailureKind, WatchChange, WatchOp,
 };
 pub use sessions::{AuthSessionControl, LogStream, PortForwardSession, Session};
 

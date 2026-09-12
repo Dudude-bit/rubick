@@ -123,17 +123,20 @@ export function LogLegend({
                   }
                   title={failure.message}
                 >
-                  {failure.kind === "no-previous-run"
-                    ? "· no earlier run"
-                    : failure.kind === "gone"
-                      ? "· ended"
-                      : // A stream that could never attach was not lost.
-                        // The apiserver refuses one for a container that
-                        // has not started, and that is a fact about the
-                        // pod rather than about the connection.
-                        state.type === "waiting"
-                        ? "· not started"
-                        : "· lost"}
+                  {"\u00b7 "}
+                  {failure.kind === "log-not-kept"
+                    ? t("empty", "chipLogNotKept")
+                    : failure.kind === "no-previous-run"
+                      ? t("empty", "chipNoEarlierRun")
+                      : failure.kind === "gone"
+                        ? t("empty", "chipEnded")
+                        : // A stream that could never attach was not lost.
+                          // The apiserver refuses one for a container that
+                          // has not started, and that is a fact about the
+                          // pod rather than about the connection.
+                          state.type === "waiting"
+                          ? t("empty", "chipNotStarted")
+                          : t("empty", "chipLost")}
                 </span>
               )}
             </button>

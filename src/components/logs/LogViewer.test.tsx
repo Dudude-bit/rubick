@@ -249,6 +249,30 @@ describe("LogViewer when a live stream dies", () => {
     );
   });
 
+  /**
+   * The node dropped the log: a read that failed, not output and not an
+   * absence. Reconnecting reaches the same node, which still does not have
+   * it, so no retry is offered — and nothing may claim the container
+   * restarted, which is a fact this read never looked at.
+   */
+  it("says the node no longer has a log, and offers no reconnect for it", async () => {
+    await renderStreaming();
+
+    fireFailure(
+      "log-not-kept",
+      "The node running default/log-demo-7f9 no longer has that log of app — unable to retrieve container logs for containerd://3bb6fd00."
+    );
+
+    const notice = await screen.findByTestId("log-stream-failure");
+    expect(notice).toHaveTextContent("The node no longer has that log of app");
+    expect(notice).toHaveTextContent("the runtime dropped it");
+    expect(notice).not.toHaveTextContent("restarted");
+    expect(
+      within(notice).queryByRole("button", { name: /reconnect/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("log-legend")).toHaveTextContent("log not kept");
+  });
+
   it("marks the dead container in the legend, not just above the list", async () => {
     await renderStreaming();
 

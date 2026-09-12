@@ -15,6 +15,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useCapabilityState } from "@/integrations";
 import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
+import { normalizeTauriError } from "@/lib/error-utils";
 import {
   describeTermination,
   lastTermination,
@@ -98,6 +99,7 @@ function StreamFailureNotice({
   podName,
   container: info,
   intake,
+  previousRun,
   onRetry,
   onShowCurrentRun,
 }: {
@@ -107,6 +109,8 @@ function StreamFailureNotice({
   container?: ContainerInfo;
   /** Intake is set, so reconnecting will not fetch back the gap. */
   intake: boolean;
+  /** The pane is reading the earlier run, so a current one is a way out. */
+  previousRun: boolean;
   onRetry: () => void;
   /** The way out of an earlier run that does not exist. */
   onShowCurrentRun: () => void;
@@ -126,6 +130,12 @@ function StreamFailureNotice({
   // previous run that was asked for does not exist. Reconnecting would
   // ask the same unanswerable question again.
   const absent = failure.kind === "no-previous-run";
+  // A failed read no retry fixes: warn, and no reconnect offered.
+  const notKept = failure.kind === "log-not-kept";
+  // The runtime drops a running container's log too. Only the run that was
+  // asked for is known to be gone, so the way out exists only when the read
+  // that failed was the earlier one.
+  const offerCurrent = notKept && previousRun;
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
   // the container is no longer running, and the exit code, the reason
@@ -141,15 +151,19 @@ function StreamFailureNotice({
     >
       <div className="min-w-0">
         <p
-          className={`text-xs ${gone || absent || unstarted ? "text-warn" : "text-err"}`}
+          className={`text-xs ${
+            gone || absent || unstarted || notKept ? "text-warn" : "text-err"
+          }`}
         >
-          {absent
-            ? t("empty", "noPreviousRunOf", { container })
-            : unstarted
-              ? t("empty", "containerNotStarted", { container })
-              : gone
-                ? t("empty", "streamEndedGone", { pod: podName, container })
-                : t("empty", "streamLost", { pod: podName, container })}
+          {notKept
+            ? t("empty", "logNotKept", { container })
+            : absent
+              ? t("empty", "noPreviousRunOf", { container })
+              : unstarted
+                ? t("empty", "containerNotStarted", { container })
+                : gone
+                  ? t("empty", "streamEndedGone", { pod: podName, container })
+                  : t("empty", "streamLost", { pod: podName, container })}
         </p>
         {unstarted && info.state.type === "waiting" && info.state.reason && (
           <p className="mt-0.5 text-[11px] text-fg-mut">
@@ -179,7 +193,7 @@ function StreamFailureNotice({
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
             that. Reconnecting closes neither. */}
-        {intake && !gone && !absent && (
+        {intake && !gone && !absent && !notKept && (
           <p className="mt-0.5 text-[11px] text-fg-fnt">
             {t("empty", "intakeStillSet")}
           </p>
@@ -191,6 +205,16 @@ function StreamFailureNotice({
         <NoticeAction onClick={onShowCurrentRun}>
           {t("action", "showCurrentRun")}
         </NoticeAction>
+      ) : offerCurrent ? (
+        // Only the earlier run is known to be gone; the current one is a
+        // read that has not been tried.
+        <NoticeAction onClick={onShowCurrentRun}>
+          {t("action", "showCurrentRun")}
+        </NoticeAction>
+      ) : notKept ? (
+        <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
+          {t("empty", "nothingToReconnectTo")}
+        </span>
       ) : gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
           {t("empty", "nothingToReconnectTo")}
@@ -1020,8 +1044,13 @@ export function LogViewer({
     // `get_pod_logs` reads one container and interleaving several
     // one-shot reads would invent an ordering the API never gave.
     const targets = shownContainers.length > 0 ? shownContainers : containers;
-    try {
-      for (const container of targets) {
+    // Per container, not around the loop: one container whose log the node
+    // dropped used to take every container after it down with it, and the
+    // reader was told the API could not be read — over a fact the backend
+    // had just named exactly.
+    const refused: string[] = [];
+    for (const container of targets) {
+      try {
         const allLogs = await commands.getPodLogs(
           podName,
           namespace,
@@ -1042,12 +1071,15 @@ export function LogViewer({
         anchor.click();
         document.body.removeChild(anchor);
         URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Failed to download logs:", err);
+        refused.push(`${container}: ${normalizeTauriError(err)}`);
       }
-    } catch (err) {
-      console.error("Failed to download logs:", err);
+    }
+    if (refused.length > 0) {
       toast({
         title: t("action", "downloadFailed"),
-        description: t("action", "downloadFailedDetail"),
+        description: refused.join("\n"),
         variant: "destructive",
       });
     }
@@ -1120,8 +1152,13 @@ export function LogViewer({
    * is. Everywhere else this is `null` and no offer is drawn.
    */
   const stranded = useMemo(() => {
+    // A log the node dropped is the strongest case of all: it is not on the
+    // apiserver at any address, and a history vendor is the only thing left
+    // that can still produce it.
     const gone = bannered
-      .filter((failure) => failure.kind === "gone")
+      .filter(
+        (failure) => failure.kind === "gone" || failure.kind === "log-not-kept"
+      )
       .map((failure) => failure.container);
     if (gone.length > 0) return `${podName}/${gone.join(", ")}`;
     const unstarted = containerInfos.filter(
@@ -1252,6 +1289,7 @@ export function LogViewer({
             (info) => info.name === failure.container
           )}
           intake={intake.length > 0}
+          previousRun={previousRun}
           onRetry={retry}
           onShowCurrentRun={handleShowCurrentRun}
         />

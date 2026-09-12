@@ -4405,6 +4405,8 @@ export const en = {
     addResourcesFirst: "Add resources or paste a manifest first.",
     dragResourcesHere: "Drag resources here, or click one in the palette.",
     selectResourceToEdit: "Select a resource to edit its configuration.",
+    logNotKept:
+      "The node no longer has that log of {container} — the runtime dropped it. Nothing here can fetch it back: the same node would answer again.",
     noPreviousRunOf: "No previous run of {container} — it has not restarted.",
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
@@ -4439,6 +4441,11 @@ export const en = {
     itFinished: "It finished",
     soLogIsComplete: ", so this log is complete and will not grow.",
     noEarlierRunOf: "No earlier run of",
+    chipLogNotKept: "log not kept",
+    chipNoEarlierRun: "no earlier run",
+    chipEnded: "ended",
+    chipNotStarted: "not started",
+    chipLost: "lost",
     noneHasRestarted:
       "— none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
