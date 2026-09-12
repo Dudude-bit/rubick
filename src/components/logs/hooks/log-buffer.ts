@@ -91,6 +91,7 @@ function eachField(
   visit: (key: string, value: string) => void
 ): void {
   visit("container", line.container);
+  visit("pod", line.pod);
   visit("level", line.level ?? "unknown");
   if (!line.fields) return;
   for (const key of Object.keys(line.fields)) {
@@ -144,8 +145,14 @@ export interface FieldSuggestion {
   wide: boolean;
 }
 
-/** The two that are not parsed fields, and are what people filter by first. */
-const PINNED_KEYS = ["level", "container"];
+/** The ones that are not parsed fields, and are what people filter by first. */
+const PINNED_KEYS = ["level", "container", "pod"];
+
+/** A pane reading one pod has nothing to offer under `pod`. */
+function offered(index: FieldIndex, key: string): boolean {
+  if (!index.keys.has(key)) return false;
+  return key !== "pod" || index.values.get(key)?.size !== 1;
+}
 
 /**
  * The index as a list: the two always-there keys, then whatever parsed,
@@ -160,7 +167,7 @@ export function fieldSuggestions(index: FieldIndex): FieldSuggestion[] {
       (a, b) => index.keys.get(b)! - index.keys.get(a)! || a.localeCompare(b)
     );
 
-  return [...PINNED_KEYS.filter((key) => index.keys.has(key)), ...parsed].map(
+  return [...PINNED_KEYS.filter((key) => offered(index, key)), ...parsed].map(
     (key) => {
       const values = index.values.get(key);
       return {

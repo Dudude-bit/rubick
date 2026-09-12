@@ -5,70 +5,75 @@ import type { ContainerFailure } from "./hooks/useLogStream";
 import { formatCount } from "./types";
 import { useT } from "@/i18n/useT";
 
-/** Its name, when it ran, and whether it ever did. */
 export type LegendContainer = Pick<ContainerInfo, "name" | "phase" | "state">;
 
+/**
+ * One chip of the legend: a container of one pod, or a pod of a workload.
+ * A container brings its phase and state, which decide the divider and
+ * the wording of a failure; a pod brings only whether it is still there.
+ */
+export interface LegendEntry {
+  key: string;
+  label: string;
+  phase?: ContainerInfo["phase"];
+  state?: ContainerInfo["state"];
+  gone?: boolean;
+}
+
 interface LogLegendProps {
-  /** Every container the pod declares, init first and in run order. */
-  containers: LegendContainer[];
+  entries: LegendEntry[];
   colors: Map<string, string>;
-  /** Lines retained per container, whether or not it is currently shown. */
+  /** Lines received per entry, by key. */
   counts: Map<string, number>;
   hidden: ReadonlySet<string>;
   failures: ContainerFailure[];
-  onToggle: (container: string) => void;
-  /** Everything else off, or — on the container already alone — back on. */
-  onSolo: (container: string) => void;
+  /** Which entry a failure belongs to: the container, or the pod. */
+  failureKey: (failure: ContainerFailure) => string;
+  onToggle: (key: string) => void;
+  /** Everything else off, or everything back on when it is already alone. */
+  onSolo: (key: string) => void;
   onShowAll: () => void;
+  /** Drawn after the chips: a coverage sentence, a label-mode control. */
+  trailing?: React.ReactNode;
 }
 
-/**
- * The legend, which is also the filter.
- *
- * Every container is named with its rule colour and its line count — a
- * multi-container pod can be asked what the sidecar was doing when the app
- * failed. Clicking one takes it out of the view without stopping its
- * stream, so the count keeps telling the truth while it is hidden.
- *
- * A container whose stream died says so here. Without that a dead sidecar
- * and a quiet one look identical: both stop at a number.
- *
- * Click toggles; double-click or alt-click solos, and the same gesture
- * again brings the rest back. `1`…`9` do it from the keyboard, by the
- * positions this row is drawn in.
- */
 export function LogLegend({
-  containers,
+  entries,
   colors,
   counts,
   hidden,
   failures,
+  failureKey,
   onToggle,
   onSolo,
   onShowAll,
+  trailing,
 }: LogLegendProps) {
   const t = useT();
-  if (containers.length === 0) return null;
+  if (entries.length === 0) return null;
 
-  const shown = containers.filter((c) => !hidden.has(c.name));
-  const soloed = shown.length === 1 ? shown[0].name : null;
+  const shown = entries.filter((entry) => !hidden.has(entry.key));
+  const soloed = shown.length === 1 ? shown[0].key : null;
 
   return (
     <div
       className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
       data-testid="log-legend"
     >
-      {containers.map(({ name, phase, state }, index) => {
-        const off = hidden.has(name);
-        const solo = soloed === name;
-        const failure = failures.find((f) => f.container === name);
-        const count = counts.get(name) ?? 0;
+      {entries.map(({ key, label, phase, state, gone }, index) => {
+        const off = hidden.has(key);
+        const solo = soloed === key;
+        const failure = failures.find((f) => failureKey(f) === key);
+        const count = counts.get(key) ?? 0;
         // A hairline where the phase changes: an init container and an
         // app container are not two entries in one list, they are two
         // parts of the pod's life.
-        const divides = index > 0 && containers[index - 1].phase !== phase;
+        const divides =
+          index > 0 &&
+          phase !== undefined &&
+          entries[index - 1].phase !== phase;
         return (
-          <span key={name} className="flex items-center">
+          <span key={key} className="flex items-center">
             {divides && (
               <span
                 aria-hidden="true"
@@ -82,42 +87,42 @@ export function LogLegend({
               aria-keyshortcuts={index < 9 ? `${index + 1}` : undefined}
               title={`${
                 off
-                  ? t("action", "legendShow", { name })
-                  : t("action", "legendHide", { name })
-              } ${t("action", "legendSoloHint", { name })}${
+                  ? t("action", "legendShow", { name: label })
+                  : t("action", "legendHide", { name: label })
+              } ${t("action", "legendSoloHint", { name: label })}${
                 index < 9
                   ? t("action", "legendOrPress", { key: index + 1 })
                   : ""
               }.`}
-              onClick={(event) =>
-                event.altKey ? onSolo(name) : onToggle(name)
-              }
-              onDoubleClick={() => onSolo(name)}
+              onClick={(event) => (event.altKey ? onSolo(key) : onToggle(key))}
+              onDoubleClick={() => onSolo(key)}
               className={`inline-flex items-center gap-1.5 rounded py-0.5 pl-1 pr-1.5 hover:bg-hover ${
                 solo ? "bg-sel text-fg" : off ? "text-fg-fnt" : "text-fg-mut"
-              }`}
+              } ${gone ? "line-through decoration-hair" : ""}`}
             >
               <span
                 aria-hidden="true"
                 className={`h-3 w-[3px] rounded-sm ${off ? "opacity-25" : ""}`}
-                style={{ background: colors.get(name) }}
+                style={{ background: colors.get(key) }}
               />
-              {name}
-              {PHASE_LABEL[phase] && (
+              {label}
+              {phase && PHASE_LABEL[phase] && (
                 <span className="text-[9px] uppercase tracking-[0.04em] text-fg-fnt">
                   {PHASE_LABEL[phase]}
                 </span>
               )}
               {/* What has arrived, not what the container wrote — a
-               *  container with nothing to say is visible as 0 rather
-               *  than by clicking it and finding out. */}
+                  stream still backfilling counts up. */}
               <span className="font-mono text-[10px] text-fg-fnt">
                 {formatCount(count)}
               </span>
+              {gone && !failure && (
+                <span className="text-fg-fnt">{t("action", "legendGone")}</span>
+              )}
               {failure && (
                 <span
                   className={
-                    failure.kind === "broken" && state.type !== "waiting"
+                    failure.kind === "broken" && state?.type !== "waiting"
                       ? "text-err"
                       : "text-warn"
                   }
@@ -128,10 +133,7 @@ export function LogLegend({
                     : failure.kind === "gone"
                       ? "· ended"
                       : // A stream that could never attach was not lost.
-                        // The apiserver refuses one for a container that
-                        // has not started, and that is a fact about the
-                        // pod rather than about the connection.
-                        state.type === "waiting"
+                        state?.type === "waiting"
                         ? "· not started"
                         : "· lost"}
                 </span>
@@ -141,8 +143,7 @@ export function LogLegend({
         );
       })}
       {/* Dimming a chip is a quiet way to say "withheld", and on a row of
-       *  five it is easy to read as decoration. The count says it in
-       *  words, in the row the hiding happened in. */}
+          nine chips a dim one is easy to miss; the count is loud. */}
       {hidden.size > 0 && (
         <button
           type="button"
@@ -152,6 +153,7 @@ export function LogLegend({
           {t("count", "hiddenShowAll", { n: hidden.size })}
         </button>
       )}
+      {trailing}
     </div>
   );
 }

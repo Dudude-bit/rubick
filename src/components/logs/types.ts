@@ -301,7 +301,11 @@ function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
   // `container` is not a parsed field but it is the one every reader asks
   // about by name, and the legend and the row detail both offer it as one.
   const actual =
-    term.key === "container" ? log.container : log.fields?.[term.key];
+    term.key === "container"
+      ? log.container
+      : term.key === "pod"
+        ? log.pod
+        : log.fields?.[term.key];
   return term.op === "="
     ? actual === term.value
     : actual !== undefined && actual !== term.value;

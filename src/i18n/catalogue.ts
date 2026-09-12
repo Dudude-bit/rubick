@@ -525,6 +525,16 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    laneLabelColour: "Colour lane",
+    laneLabelShort: "Short prefix",
+    laneLabelFull: "Full name",
+    laneLabelHint:
+      "How each line names its pod: by the lane colour alone, by the last characters of the pod name, or by the whole name.",
+    laneRulePod: "lane = pod",
+    laneRuleOrdinal: "lane = ordinal",
+    laneRuleNode: "lane = node",
+    laneRuleRun: "lane = run",
+    legendGone: "· gone",
     eventsStories: "Stories",
     eventsAll: "All events",
     warningsFirst: "Warnings first",
@@ -3270,6 +3280,8 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noPodsToStream: "No pods to read from yet.",
+    everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
     noStoriesInWindowCapped:
@@ -4815,6 +4827,15 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    podsStreaming: {
+      one: "{streaming} of {n} pod streaming",
+      other: "{streaming} of {n} pods streaming",
+    },
+    streamsRefused: { one: "{n} refused", other: "{n} refused" },
+    podsGoneKept: {
+      one: "{n} gone, lines kept",
+      other: "{n} gone, lines kept",
+    },
     stories: { one: "{n} story", other: "{n} stories" },
     eventsSeen: { one: "{n} event", other: "{n} events" },
     namespacesHidden: {

@@ -493,6 +493,16 @@ export const ru: Catalogue = {
     programmed: "Запрограммирован",
   },
   action: {
+    laneLabelColour: "Цвет дорожки",
+    laneLabelShort: "Короткий префикс",
+    laneLabelFull: "Полное имя",
+    laneLabelHint:
+      "Как строка называет свой под: только цветом дорожки, последними символами имени пода или полным именем.",
+    laneRulePod: "дорожка = под",
+    laneRuleOrdinal: "дорожка = порядковый номер",
+    laneRuleNode: "дорожка = нода",
+    laneRuleRun: "дорожка = запуск",
+    legendGone: "· ушёл",
     eventsStories: "Истории",
     eventsAll: "Все события",
     warningsFirst: "Сначала предупреждения",
@@ -3521,6 +3531,8 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noPodsToStream: "Пока нет подов, которые можно читать.",
+    everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
       "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
     noStoriesInWindowCapped:
@@ -5129,6 +5141,24 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    podsStreaming: {
+      one: "{streaming} из {n} пода стримится",
+      few: "{streaming} из {n} подов стримится",
+      many: "{streaming} из {n} подов стримится",
+      other: "{streaming} из {n} пода стримится",
+    },
+    streamsRefused: {
+      one: "{n} отказан",
+      few: "{n} отказано",
+      many: "{n} отказано",
+      other: "{n} отказано",
+    },
+    podsGoneKept: {
+      one: "{n} ушёл, строки сохранены",
+      few: "{n} ушли, строки сохранены",
+      many: "{n} ушли, строки сохранены",
+      other: "{n} ушли, строки сохранены",
+    },
     stories: {
       one: "{n} история",
       few: "{n} истории",
