@@ -1840,7 +1840,9 @@ export const en = {
     storyJob: "Ran within {span}: {created}, {completed} completed.",
     storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
     storyCrash:
-      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}.",
+      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}: {detail}",
+    storyStartFailed:
+      "The container could not be started, {times} within {span}: {detail}",
     storyPull: "Cannot pull the image, {times} within {span}: {detail}",
     storySchedulingSame:
       "Cannot be scheduled, the same answer {times} within {span}: {detail}",
@@ -1857,6 +1859,11 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    podStatusNotAsked: {
+      one: "1 more pod's exits are not on this clock — it was not asked.",
+      other:
+        "{n} more pods' exits are not on this clock — they were not asked.",
+    },
     timesSeen: { one: "once", other: "{n} times" },
     jobsCreated: { one: "1 job created", other: "{n} jobs created" },
     storyDone: "done",

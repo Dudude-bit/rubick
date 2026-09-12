@@ -1876,7 +1876,9 @@ export const ru: Catalogue = {
     storyJob: "Отработало за {span}: {created}, завершено {completed}.",
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
-      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}.",
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
+    storyStartFailed:
+      "Контейнер не удалось запустить, {times} за {span}: {detail}",
     storyPull: "Не скачать образ, {times} за {span}: {detail}",
     storySchedulingSame:
       "Не планируется, один и тот же ответ {times} за {span}: {detail}",
@@ -1893,6 +1895,12 @@ export const ru: Catalogue = {
     storyStillHappening: "продолжается",
     storySettled: "утихло",
     storyStateUnknown: "не сказать",
+    podStatusNotAsked: {
+      one: "Выходы ещё {n} пода не на этой шкале — его не спрашивали.",
+      few: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      many: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      other: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+    },
     timesSeen: {
       one: "{n} раз",
       few: "{n} раза",

@@ -20,6 +20,7 @@ import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { StoryCard } from "@/components/events/StoryCard";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
 import {
   sortStories,
@@ -193,9 +194,18 @@ export function Events() {
   // left, so a fold over either cannot tell "nothing went wrong" from "the
   // warnings were filtered out before I saw them".
   const narrowed = eventType !== "all" || query.trim() !== "";
+  // The oldest moment the read actually covers. A pool cut at the limit holds
+  // only the latest N, so anything older than its last row was never read —
+  // and an empty slice of the strip there means nobody looked.
+  const readFrom = useMemo(() => {
+    if (limit === null || pool.length < limit) return null;
+    const oldest = pool.at(-1)?.lastTimestamp;
+    const parsed = oldest ? Date.parse(oldest) : Number.NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [limit, pool]);
   const storyOptions = useMemo(
-    () => ({ now, windowMs: WINDOW_MS[window], narrowed }),
-    [now, window, narrowed]
+    () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom }),
+    [now, window, narrowed, readFrom]
   );
   const stories = useMemo(
     () =>
@@ -231,8 +241,13 @@ export function Events() {
   const capped = limit !== null && matching.length >= limit;
   const events = capped ? matching.slice(0, limit) : matching;
   const filtering = query.trim() !== "";
-  const warningCount = events.filter((e) => e.type === "Warning").length;
-  const normalCount = events.length - warningCount;
+  // In stories view the cards cover the window; counting the whole pool
+  // beside them puts two numbers about two different spans on one line, and
+  // the reader has no way to tell which is which.
+  const counted =
+    view === "stories" ? stories.flatMap((story) => story.events) : events;
+  const warningCount = counted.filter((e) => e.type === "Warning").length;
+  const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
 
   return (
@@ -414,12 +429,12 @@ export function Events() {
                       // older. The list tab has said this since it shipped.
                       t("empty", "noStoriesInWindowCapped", {
                         scope: scope.inWords,
-                        range: window,
+                        range: spanWords(WINDOW_MS[window], t),
                         n: eventLimit,
                       })
                     : t("empty", "noStoriesInWindow", {
                         scope: scope.inWords,
-                        range: window,
+                        range: spanWords(WINDOW_MS[window], t),
                       })}
               </p>
             ) : (
