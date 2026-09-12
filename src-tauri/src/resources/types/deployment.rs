@@ -118,9 +118,20 @@ impl TemplateContainers {
     }
 }
 
-/// Every image the template runs, app containers then init containers.
+/// One container's image, carrying the name it belongs to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerImage {
+    pub name: String,
+    /// `None` on a container whose image the template leaves to a default.
+    pub image: Option<String>,
+}
+
+/// Every image the template runs, app containers then init containers, each
+/// named. Named because a diff that pairs images by position reports a
+/// removed container as an image change on every container after it.
 #[must_use]
-pub fn template_images(template: Option<&PodTemplateSpec>) -> Vec<String> {
+pub fn template_container_images(template: Option<&PodTemplateSpec>) -> Vec<ContainerImage> {
     let spec = template.and_then(|t| t.spec.as_ref());
     let app = spec.map(|s| s.containers.as_slice()).unwrap_or_default();
     let init = spec
@@ -128,7 +139,10 @@ pub fn template_images(template: Option<&PodTemplateSpec>) -> Vec<String> {
         .unwrap_or_default();
     app.iter()
         .chain(init.iter())
-        .filter_map(|c| c.image.clone())
+        .map(|c| ContainerImage {
+            name: c.name.clone(),
+            image: c.image.clone(),
+        })
         .collect()
 }
 

@@ -193,6 +193,22 @@ describe("a rollout being watched", () => {
     expect(notifyMock).not.toHaveBeenCalled();
     hook.unmount();
   });
+
+  /** The cluster can refuse the subscribe outright — a 403, or an API it cannot reach. That stream never opens, and a "could not look" is reported the way a dropped one is, not left reading "watching". Fails if the catch swallows it. */
+  it("marks a watch lost when the subscribe is refused and never opens", async () => {
+    vi.mocked(commands.subscribeObjectWatch).mockRejectedValueOnce(
+      new Error("watch: forbidden")
+    );
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = renderHook(() => useTellMeWhen());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await waitFor(() =>
+      expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost")
+    );
+    hook.unmount();
+  });
 });
 
 describe("questions the cluster does not answer through a watch", () => {
@@ -226,10 +242,100 @@ describe("questions the cluster does not answer through a watch", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(notifyMock).toHaveBeenCalledWith({
-      title: "node-7 drain did not finish",
+      title: "node-7 drain broke",
       body: "pod shop/payments-0 would not be evicted",
     });
     expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  /**
+   * Stopped and cancelled are not failures — the node would not empty, or the
+   * reader stopped it. Folding them into `drainFailed` painted an expected
+   * ending red; each keeps its own verdict. Fails if DRAIN_SAYS collapses them.
+   */
+  it.each([
+    ["stopped", "node-7 drain stopped"] as const,
+    ["cancelled", "node-7 drain cancelled"] as const,
+  ])(
+    "says a %s drain in its own words, not as a failure",
+    async (outcome, title) => {
+      useTellMeWhenStore.setState({
+        watches: [
+          {
+            ...rollout(),
+            id: "w-drain",
+            kind: "Node",
+            namespace: null,
+            name: "node-7",
+            ask: "drain",
+          },
+        ],
+      });
+      const hook = renderHook(() => useTellMeWhen());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() =>
+        emit("drain-finished", {
+          drain_id: "d1",
+          node: "node-7",
+          outcome,
+          report: {},
+          message: null,
+        })
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(notifyMock).toHaveBeenCalledWith({ title, body: "" });
+      hook.unmount();
+    }
+  );
+
+  /**
+   * The drain runs on the backend regardless of which cluster is on screen,
+   * and its finished event carries no context. Filtering the watch by the
+   * shown context dropped the answer after a switch. Fails if that filter
+   * comes back.
+   */
+  it("settles a drain watched on another context after the reader switched away", async () => {
+    // The reader has already switched to "staging"; the drain runs on the
+    // "prod" watch. A filter by the shown context would drop it.
+    useClusterStore.setState({ currentContext: "staging" });
+    useTellMeWhenStore.setState({
+      watches: [
+        {
+          ...rollout(),
+          id: "w-drain",
+          context: "prod",
+          kind: "Node",
+          namespace: null,
+          name: "node-7",
+          ask: "drain",
+        },
+      ],
+    });
+    const hook = renderHook(() => useTellMeWhen());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    act(() =>
+      emit("drain-finished", {
+        drain_id: "d1",
+        node: "node-7",
+        outcome: "drained",
+        report: {},
+        message: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "node-7 is drained",
+      body: "",
+    });
     hook.unmount();
   });
 

@@ -305,6 +305,7 @@ export function StatefulSetDetail() {
                 key={`${namespace}/${name}`}
                 namespace={namespace || ""}
                 pods={pods.map(lanePodOf)}
+                podsError={podsError}
                 laneRule="ordinal"
                 workload={
                   name ? { owner: name, ownerKind: "StatefulSet" } : null

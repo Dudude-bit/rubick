@@ -42,10 +42,15 @@ const clusterColumns: CrdColumn[] = [
   {
     id: "members",
     header: "members",
-    accessor: (resource) =>
-      `${getValueByPath(resource, "status.readyMembers") ?? 0}/${
-        getValueByPath(resource, "status.members") ?? 0
-      }`,
+    // The same rule as the page: `?? 0` turned a cluster the operator has
+    // not written a status for into "0/0", which reads as a cluster that
+    // exists and has nothing running.
+    accessor: (resource) => {
+      const ready = getValueByPath(resource, "status.readyMembers");
+      const total = getValueByPath(resource, "status.members");
+      if (ready === undefined && total === undefined) return "–";
+      return `${ready ?? "?"}/${total ?? "?"}`;
+    },
     cell: text,
   },
   {

@@ -10,6 +10,11 @@ interface UseGenericTerminalSessionProps {
   sessionId: string | null;
   onOutput?: (data: string) => void;
   onClose?: (status?: string | null) => void;
+  /**
+   * Whatever the session printed before this pane existed. Drained once,
+   * after the live listener, so nothing falls into the gap between the two.
+   */
+  replay?: () => string;
 }
 
 /**
@@ -20,6 +25,7 @@ export function useGenericTerminalSession({
   sessionId,
   onOutput,
   onClose,
+  replay,
 }: UseGenericTerminalSessionProps) {
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +43,7 @@ export function useGenericTerminalSession({
   // Use refs for callbacks to avoid re-running effect when they change
   const onOutputRef = useRef(onOutput);
   const onCloseRef = useRef(onClose);
+  const replayRef = useRef(replay);
 
   // Keep refs up to date
   const t = useT();
@@ -48,7 +55,8 @@ export function useGenericTerminalSession({
     tRef.current = t;
     onOutputRef.current = onOutput;
     onCloseRef.current = onClose;
-  }, [onOutput, onClose, t]);
+    replayRef.current = replay;
+  }, [onOutput, onClose, replay, t]);
 
   // `send` and `resize` are called from xterm's own handlers rather than from
   // a render, so they read the status from a ref — which was declared and then
@@ -159,6 +167,13 @@ export function useGenericTerminalSession({
           return;
         }
         unlistenRef.current.push(unlistenOutput);
+
+        // Between two synchronous statements, so nothing reaches both. After
+        // the next `await`, a round trip's bytes would print twice.
+        const earlier = replayRef.current?.();
+        if (earlier && onOutputRef.current) {
+          onOutputRef.current(earlier);
+        }
 
         // Listen for close
         const unlistenClosed = await listen<{

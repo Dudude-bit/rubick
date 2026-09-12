@@ -58,6 +58,8 @@ export type Says =
   | "succeeded"
   | "failed"
   | "drained"
+  | "drainStopped"
+  | "drainCancelled"
   | "drainFailed"
   | "renewed"
   | "issuanceFailed"
@@ -70,6 +72,32 @@ export interface Verdict {
   /** The cluster's own words where it had any, kept whole. */
   detail: string | null;
 }
+
+/**
+ * The tone each verdict is shown in, total over `Says` so a new answer cannot
+ * fall through to a default. Success is `bg-ok`, a real failure `bg-err`; an
+ * ending that is neither — a drain the reader stopped, an object that merely
+ * went away, a lost stream — is neutral or a caution, never red. This is the
+ * honesty classification the third-state rule turns on; the tokens match
+ * `status-role.ts`.
+ */
+export const SAYS_TONE: Record<Says, string> = {
+  rolledOut: "bg-ok",
+  rolloutFailed: "bg-err",
+  ready: "bg-ok",
+  crashedAgain: "bg-err",
+  succeeded: "bg-ok",
+  failed: "bg-err",
+  drained: "bg-ok",
+  drainStopped: "bg-warn",
+  drainCancelled: "bg-fg-fnt",
+  drainFailed: "bg-err",
+  renewed: "bg-ok",
+  issuanceFailed: "bg-err",
+  forwardDied: "bg-err",
+  gone: "bg-fg-fnt",
+  lostSight: "bg-warn",
+};
 
 /**
  * What the last look established, so the next one can tell movement from

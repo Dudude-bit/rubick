@@ -18,9 +18,11 @@ function line(
     level?: LogLevel | null;
     epoch?: number;
     fields?: Record<string, string> | null;
+    pod?: string;
   } = {}
 ): StreamedLogLine {
   const base = {
+    pod: over.pod ?? "p",
     container: over.container ?? "app",
     level: over.level === undefined ? ("info" as LogLevel) : over.level,
     fields: over.fields ?? null,
@@ -34,7 +36,6 @@ function line(
     timestamp: null,
     format: "plain",
     raw: message,
-    pod: "p",
     namespace: "n",
   };
 }

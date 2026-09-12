@@ -2,11 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CustomResourceInfo,
+  DaemonSetInfo,
   DeploymentInfo,
   JobInfo,
   PodInfo,
+  StatefulSetInfo,
 } from "@/generated/types";
-import { Coalescer, judge, type Verdict, type Watch } from "./tell-me-when";
+import {
+  Coalescer,
+  judge,
+  SAYS_TONE,
+  type Says,
+  type Verdict,
+  type Watch,
+} from "./tell-me-when";
 
 function watchOn(kind: Watch["kind"], ask: Watch["ask"]): Watch {
   return {
@@ -125,6 +134,47 @@ describe("a pod", () => {
       ])
     ).toEqual([{ says: "crashedAgain", detail: "CrashLoopBackOff" }]);
   });
+
+  /** A crash phase is an answer even when the restart count has not moved yet — the phase is the second half of the OR. Fails if the CRASHED.has clause is dropped. */
+  it("says crashed on a crash phase alone, before the restart count moves", () => {
+    expect(
+      walk(watchOn("Pod", "podReady"), [
+        pod(true, 2, "Running"),
+        pod(true, 2, "OOMKilled"),
+      ])
+    ).toEqual([{ says: "crashedAgain", detail: "OOMKilled" }]);
+  });
+});
+
+function statefulSet(
+  ready: number,
+  current: number,
+  desired = 3
+): StatefulSetInfo {
+  return { replicas: { desired, ready, current } } as StatefulSetInfo;
+}
+
+function daemonSet(ready: number, current: number, desired = 3): DaemonSetInfo {
+  return { desired, current, ready } as DaemonSetInfo;
+}
+
+describe("a statefulset or daemonset", () => {
+  /** rolloutOf settles these two on their own replica fields, separate code from the Deployment arm. Fails if the StatefulSet arm stops settling. */
+  it("says rolled out once a statefulset reaches its desired replicas", () => {
+    expect(
+      walk(watchOn("StatefulSet", "rollout"), [
+        statefulSet(1, 1),
+        statefulSet(3, 3),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: null }]);
+  });
+
+  /** Fails if the DaemonSet arm stops settling. */
+  it("says rolled out once a daemonset reaches its desired count", () => {
+    expect(
+      walk(watchOn("DaemonSet", "rollout"), [daemonSet(1, 1), daemonSet(3, 3)])
+    ).toEqual([{ says: "rolledOut", detail: null }]);
+  });
 });
 
 describe("a job", () => {
@@ -163,6 +213,32 @@ describe("a certificate", () => {
       ])
     ).toEqual([{ says: "renewed", detail: "2026-12-30T00:00:00Z" }]);
   });
+
+  /** Issuance failing is its own verdict, distinct from renewed, carrying the controller's words. Fails if that branch is dropped. */
+  it("says issuance failed when Issuing goes False with a message and the expiry has not moved", () => {
+    const failing = {
+      annotations: { "cert-manager.io/certificate-revision": "3" },
+      status: {
+        notAfter: "2026-10-01T00:00:00Z",
+        conditions: [
+          { type: "Ready", status: "False" },
+          {
+            type: "Issuing",
+            status: "False",
+            message: "order errored: 429 rate limited",
+          },
+        ],
+      },
+    } as unknown as CustomResourceInfo;
+    expect(
+      walk(watchOn("Certificate", "renewed"), [
+        certificate("2026-10-01T00:00:00Z", 3),
+        failing,
+      ])
+    ).toEqual([
+      { says: "issuanceFailed", detail: "order errored: 429 rate limited" },
+    ]);
+  });
 });
 
 describe("coalescing", () => {
@@ -185,5 +261,36 @@ describe("coalescing", () => {
     c.push("d");
     vi.advanceTimersByTime(10_000);
     expect(flush).toHaveBeenLastCalledWith(["d"]);
+  });
+});
+
+describe("the tone a verdict is shown in", () => {
+  const failures: Says[] = [
+    "rolloutFailed",
+    "crashedAgain",
+    "failed",
+    "drainFailed",
+    "issuanceFailed",
+    "forwardDied",
+  ];
+  const notFailures: Says[] = [
+    "rolledOut",
+    "ready",
+    "succeeded",
+    "drained",
+    "drainStopped",
+    "drainCancelled",
+    "renewed",
+    "gone",
+    "lostSight",
+  ];
+
+  /** The third-state rule on the dot: an ending that is not a failure must never wear the failure tone. Fails if a non-failure verdict is mapped to bg-err again (the fallback that painted `gone` red). */
+  it.each(notFailures)("does not paint %s with the failure tone", (says) => {
+    expect(SAYS_TONE[says]).not.toBe("bg-err");
+  });
+
+  it.each(failures)("paints %s with the failure tone", (says) => {
+    expect(SAYS_TONE[says]).toBe("bg-err");
   });
 });

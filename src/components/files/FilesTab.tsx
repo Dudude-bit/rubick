@@ -20,9 +20,11 @@ import {
 
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { useNow } from "@/hooks/useNow";
+import { useNow, useNowTenths } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
 import {
+  DOWNLOAD_MAX_BYTES,
+  PREVIEW_MAX_BYTES,
   crumbs,
   joinPath,
   matches,
@@ -36,19 +38,30 @@ import {
 import { normalizeTauriError } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { cn, formatSince } from "@/lib/utils";
 import type { PodInfo, Via } from "@/generated/types";
+import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
 
 const ROW_PX = 26;
 
+/**
+ * The key of the ".." row. A NUL, because that and `/` are the only bytes a
+ * filename cannot hold — a plain `"up"` collided with a directory that had a
+ * file called `up` in it, and React drew one of the two rows.
+ */
+const UP_ROW_KEY = "\u0000up";
+
+/** One array, so an idle tab's memo is not invalidated by a fresh `[]`. */
+const NO_ENTRIES: FileEntry[] = [];
+
 export interface FilesTabProps {
   pod: PodInfo;
   /** Reading through a debug container the page started for this tab. */
   via: Via | null;
-  onDebug: () => void;
+  onDebug: (container: string) => void;
   onStopVia: () => void;
 }
 
@@ -61,7 +74,13 @@ export interface FilesTabProps {
  */
 export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   const t = useT();
-  const containers = pod.containers;
+  // offeredContainers, not pod.containers: every other pod surface counts
+  // the init containers too, and a sidecar that only exists as an
+  // initContainer was simply missing from the strip here — but *run* order
+  // then put the mesh proxy first, and the tab opened on it rather than on
+  // the container the reader came to look at. The Shell tab asks the same
+  // question and gets the same order.
+  const containers = offeredContainers(pod);
   const [containerName, setContainerName] = useState(
     () =>
       containers.find((c) => c.state.type === "running")?.name ??
@@ -87,8 +106,16 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
 
   // The life a listing was taken from. A restart makes the current life a
   // different container; the old rows stay, with a banner, until asked.
-  const currentLife = `${pod.uid}:${container?.restartCount ?? 0}`;
+  const currentLife = `${pod.uid}:${containerName}:${container?.restartCount ?? 0}`;
   const [life, setLife] = useState(currentLife);
+  // Keying `life` by container name was half the fix. The other half is
+  // that a `life` belonging to a *different* container is not a restart of
+  // this one — it is a stale value from before the reader used the strip,
+  // and comparing it fired "app has restarted since this listing" about a
+  // container that had not restarted at all. Held rather than warned about.
+  const sameContainer = life.startsWith(`${pod.uid}:${containerName}:`);
+  const readingLife = sameContainer ? life : currentLife;
+  const restartedSinceRead = sameContainer && life !== currentLife;
   const running = via !== null || container?.state.type === "running";
 
   const target = useMemo(
@@ -100,21 +127,45 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
             container: container.name,
             path,
             via,
-            life,
+            life: readingLife,
           }
         : null,
-    [container, running, mountsOnly, pod.name, pod.namespace, path, via, life]
+    [
+      container,
+      running,
+      mountsOnly,
+      pod.name,
+      pod.namespace,
+      path,
+      via,
+      readingLife,
+    ]
   );
   const { state, stop, reload } = useContainerFiles(target);
 
-  const rows = useMemo(() => {
-    const entries = state.phase === "idle" ? [] : state.entries;
-    return sortEntries(
-      entries.filter((e) => matches(e, filter)),
-      sort.key,
-      sort.descending
-    );
-  }, [state, filter, sort]);
+  // Two stages, and in this order. Sorting the filtered list meant every
+  // keystroke re-sorted up to MAX_ENTRIES rows, and every 100 ms batch
+  // re-filtered them; and the memo watched the whole `state`, so a phase
+  // change with the same rows did the work again. Filtering preserves order,
+  // so a keystroke is now a walk and no sort at all.
+  const entries = state.phase === "idle" ? NO_ENTRIES : state.entries;
+  const sorted = useMemo(
+    () => sortEntries(entries, sort.key, sort.descending),
+    [entries, sort]
+  );
+  const rows = useMemo(
+    () => (filter ? sorted.filter((e) => matches(e, filter)) : sorted),
+    [sorted, filter]
+  );
+
+  // The preview execs into the container, and every selection is one exec.
+  // Holding ArrowDown down a directory opened one session per keypress, all
+  // but the last of them for a row nobody looked at.
+  const previewed = useDebounced(selected, 200);
+  const previewEntry =
+    previewed === null
+      ? null
+      : (rows.find((r) => r.name === previewed) ?? null);
 
   const open = useCallback(
     (entry: FileEntry) => {
@@ -135,10 +186,22 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
   }, [path]);
 
   const { toast } = useToast();
-  const now = useNow();
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
   const download = useCallback(async () => {
     if (!selectedEntry || !container) return;
+    // The button is disabled past the cap; ⌘S reached the same command with
+    // nothing in its way, and the reader got a refusal from the backend
+    // instead of the sentence the button's tooltip had been showing.
+    if (selectedEntry.size > DOWNLOAD_MAX_BYTES) {
+      toast({
+        title: t("files", "downloadFailed", { name: selectedEntry.name }),
+        description: t("files", "tooBigToDownload", {
+          cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+        }),
+        variant: "destructive",
+      });
+      return;
+    }
     const destination = await save({ defaultPath: selectedEntry.name });
     if (!destination) return;
     try {
@@ -150,12 +213,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
         via,
         destination
       );
-      if (result.state === "preview") {
-        toast({
-          title: t("files", "downloaded", { name: selectedEntry.name }),
-          description: destination,
-        });
-      } else {
+      if (result.state === "noTools" || result.state === "failed") {
         toast({
           title: t("files", "downloadFailed", { name: selectedEntry.name }),
           description:
@@ -163,6 +221,14 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               ? t("files", "noCatInImage")
               : result.message,
           variant: "destructive",
+        });
+      } else {
+        toast({
+          title: t("files", "downloaded", { name: selectedEntry.name }),
+          description:
+            result.state === "written"
+              ? `${destination} · ${formatBytes(result.bytes, 1)}`
+              : destination,
         });
       }
     } catch (error) {
@@ -217,6 +283,16 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               type="button"
               role="tab"
               aria-selected={c.name === containerName}
+              // While a debug container is the way in, the bytes come from
+              // its /proc/1/root — one specific container. Switching used to
+              // change only the label, so the rows of one container were
+              // shown under another's name.
+              disabled={via !== null && c.name !== containerName}
+              title={
+                via !== null && c.name !== containerName
+                  ? t("files", "cannotSwitchViaDebug")
+                  : undefined
+              }
               onClick={() => {
                 setContainerName(c.name);
                 setSelected(null);
@@ -226,7 +302,9 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
                 "rounded px-1.5 py-0.5 font-mono",
                 c.name === containerName
                   ? "bg-sel text-fg"
-                  : "text-fg-mut hover:bg-hover hover:text-fg"
+                  : via !== null
+                    ? "cursor-not-allowed text-fg-fnt"
+                    : "text-fg-mut hover:bg-hover hover:text-fg"
               )}
             >
               {c.name}
@@ -236,7 +314,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
             </button>
           ))}
         </span>
-        <Status state={state} onStop={stop} now={now} />
+        <Status state={state} onStop={stop} />
       </div>
 
       {via && (
@@ -255,7 +333,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           </button>
         </Notice>
       )}
-      {life !== currentLife && state.phase !== "idle" && (
+      {restartedSinceRead && state.phase !== "idle" && (
         <Notice tone="warn">
           {t("files", "restartedSince", {
             container: container.name,
@@ -318,6 +396,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           state={state}
           container={container.name}
           image={container.image}
+          path={path}
           onDebug={onDebug}
           onMounts={() => setMountsOnly(true)}
           onRetry={reload}
@@ -355,7 +434,19 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               />
             </div>
             {state.phase === "done" && state.entries.length === 0 ? (
-              <Sentence>{t("files", "emptyDirectory", { path })}</Sentence>
+              // "This directory is empty" is a claim about a read that
+              // finished and saw everything. A read the reader cut short,
+              // and a read whose every line the parser refused, are two
+              // other answers — and neither is "there is nothing here".
+              state.stopped ? (
+                <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
+              ) : state.unreadable ? (
+                <Sentence>
+                  {t("files", "nothingReadable", { n: state.unreadable })}
+                </Sentence>
+              ) : (
+                <Sentence>{t("files", "emptyDirectory", { path })}</Sentence>
+              )
             ) : (
               <Rows
                 rows={rows}
@@ -373,12 +464,13 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               {t("files", "keys", { download: formatShortcut("mod+s") })}
             </p>
           </div>
-          {selectedEntry && selectedEntry.kind !== "dir" && (
+          {previewEntry && previewEntry.kind !== "dir" && (
             <Preview
               pod={pod}
               container={container.name}
-              path={joinPath(path, selectedEntry.name)}
-              entry={selectedEntry}
+              path={joinPath(path, previewEntry.name)}
+              entry={previewEntry}
+              life={readingLife}
               via={via}
               onDownload={download}
             />
@@ -387,6 +479,20 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
       )}
     </div>
   );
+}
+
+/**
+ * `value`, once it has stopped changing for `ms`. Its own timer rather than
+ * a shared clock: it is following a person's finger on the arrow keys, and
+ * the point is the pause between presses.
+ */
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return settled;
 }
 
 function Sentence({ children }: { children: React.ReactNode }) {
@@ -413,46 +519,88 @@ function Notice({
   );
 }
 
+function Reading({
+  entries,
+  startedAt,
+  onStop,
+}: {
+  entries: number;
+  startedAt: number;
+  onStop: () => void;
+}) {
+  const t = useT();
+  // Ten times a second, but only while somebody is looking: Radix
+  // force-mounts a detail tab once it has been opened, so a Files tab
+  // switched away from mid-read kept the whole subtree re-rendering at
+  // nobody for as long as the page stayed open.
+  const now = useNowTenths(useSurfaceVisible());
+  // A listing whose start nobody recorded is timed by nobody: the sentence
+  // without the seconds, rather than a confident "0.0 s".
+  const seconds =
+    startedAt === 0 ? null : (Math.max(0, now - startedAt) / 1000).toFixed(1);
+  return (
+    <span className="flex items-center gap-2 text-fg-fnt">
+      {seconds === null
+        ? t("files", "readingSoFarUntimed", { n: entries })
+        : t("files", "readingSoFar", { n: entries, seconds })}
+      <button
+        type="button"
+        onClick={onStop}
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-fg-mut hover:bg-hover hover:text-fg"
+      >
+        <Square className="h-3 w-3" />
+        {t("action", "stop")}
+      </button>
+    </span>
+  );
+}
+
 function Status({
   state,
   onStop,
-  now,
 }: {
   state: ListingState;
   onStop: () => void;
-  now: number;
 }) {
   const t = useT();
   if (state.phase === "idle") return null;
   if (state.phase === "reading") {
     return (
-      <span className="flex items-center gap-2 text-fg-fnt">
-        {t("files", "readingSoFar", {
-          n: state.entries.length,
-          seconds:
-            state.startedAt === 0
-              ? "0.0"
-              : (Math.max(0, now - state.startedAt) / 1000).toFixed(1),
-        })}
-        <button
-          type="button"
-          onClick={onStop}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-fg-mut hover:bg-hover hover:text-fg"
-        >
-          <Square className="h-3 w-3" />
-          {t("action", "stop")}
-        </button>
-      </span>
+      <Reading
+        entries={state.entries.length}
+        startedAt={state.startedAt}
+        onStop={onStop}
+      />
     );
   }
   if (state.phase === "done") {
     return (
       <span className="text-fg-fnt">
-        {t("files", state.stopped ? "stoppedAfter" : "readVia", {
-          how: t("files", state.with === "gnuFind" ? "gnuFind" : "busyboxStat"),
-          n: state.entries.length,
-          seconds: (state.elapsedMs / 1000).toFixed(1),
-        })}
+        {/* Which rung answered and how long it took are two more things the
+         *  reader can be told or not told. Cut short before the backend
+         *  said, the sentence is the one without them. */}
+        {state.with === null || state.elapsedMs === null
+          ? t("files", "stoppedUntimed", { n: state.entries.length })
+          : t("files", state.stopped ? "stoppedAfter" : "readVia", {
+              how: t(
+                "files",
+                state.with === "gnuFind" ? "gnuFind" : "busyboxStat"
+              ),
+              n: state.entries.length,
+              seconds: (state.elapsedMs / 1000).toFixed(1),
+            })}
+        {/* The count is what was seen, and says so when that is not the
+         *  whole: cut off at the row cap, or with lines nobody could read. */}
+        {state.partial && !state.stopped && (
+          <span className="ml-1 text-warn">
+            {t("files", "cappedAt", { n: state.entries.length })}
+          </span>
+        )}
+        {state.unreadable !== null && state.unreadable > 0 && (
+          <span className="ml-1 text-warn">
+            {t("files", "unreadableLines", { n: state.unreadable })}
+          </span>
+        )}
       </span>
     );
   }
@@ -527,10 +675,16 @@ function Rows({
   });
   const now = useNow();
 
+  // Scroll to the selection when the *selection* moves. With `rows` in the
+  // deps this re-fired on every streamed batch, so a reader scrolling
+  // through a directory that was still arriving was yanked back to their
+  // selected row ten times a second. `rows` is read, not watched.
+  const latestRows = useRef(rows);
+  latestRows.current = rows;
   useEffect(() => {
-    const index = rows.findIndex((r) => r.name === selected);
+    const index = latestRows.current.findIndex((r) => r.name === selected);
     if (index >= 0) virtualizer.scrollToIndex(index + (canGoUp ? 1 : 0));
-  }, [selected, rows, canGoUp, virtualizer]);
+  }, [selected, canGoUp, virtualizer]);
 
   return (
     <div
@@ -550,7 +704,7 @@ function Rows({
           if (canGoUp && item.index === 0) {
             return (
               <button
-                key="up"
+                key={UP_ROW_KEY}
                 type="button"
                 style={style}
                 onDoubleClick={onUp}
@@ -598,7 +752,11 @@ function Rows({
                 {tag && (
                   <span
                     className="ml-1 truncate rounded border border-hair px-1 text-[10px] text-fg-mut"
-                    title={`${tag.kind} ${tag.name} · ${tag.at}`}
+                    // Every source, because with more than one the badge
+                    // deliberately names none of them.
+                    title={`${tag.sources
+                      .map((r) => `${r.kind} ${r.name}`)
+                      .join(" · ")} ${tag.at}`.trim()}
                   >
                     {t("files", "fromMount", { name: tag.name })}
                   </span>
@@ -608,8 +766,15 @@ function Rows({
               <span className="text-right tabular-nums text-fg-mut">
                 {entry.kind === "dir" ? "" : formatBytes(entry.size, 1)}
               </span>
-              <span className="text-right tabular-nums text-fg-fnt">
-                {entry.modified ? agoOf(entry.modified * 1000, now) : ""}
+              <span
+                className="text-right tabular-nums text-fg-fnt"
+                title={
+                  entry.modified
+                    ? new Date(entry.modified * 1000).toLocaleString()
+                    : undefined
+                }
+              >
+                {entry.modified ? formatSince(entry.modified * 1000, now) : ""}
               </span>
             </div>
           );
@@ -623,6 +788,7 @@ function Failure({
   state,
   container,
   image,
+  path,
   onDebug,
   onMounts,
   onRetry,
@@ -630,7 +796,8 @@ function Failure({
   state: Extract<ListingState, { phase: "failed" }>;
   container: string;
   image: string;
-  onDebug: () => void;
+  path: string;
+  onDebug: (container: string) => void;
   onMounts: () => void;
   onRetry: () => void;
 }) {
@@ -648,7 +815,11 @@ function Failure({
           })}
         </p>
         <p className="mt-3 flex gap-4">
-          <button type="button" onClick={onDebug} className={link}>
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
             {t("files", "openViaDebug")}
           </button>
           <button type="button" onClick={onMounts} className={link}>
@@ -657,6 +828,30 @@ function Failure({
         </p>
         <p className="mt-2 text-[11px] text-fg-fnt">
           {t("files", "debugExplained")}
+        </p>
+      </div>
+    );
+  }
+  // The path itself could not be opened. Retrying reads the same
+  // permissions again; a debug container is the way in, so it is offered
+  // here the way it is for an image with no tools.
+  if (state.reason === "unopenable") {
+    return (
+      <div className="px-3 py-6 text-xs">
+        <p className="font-medium text-err">
+          {t("files", "unopenable", { path })}
+        </p>
+        <p className="mt-3 flex gap-4">
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
+            {t("files", "openViaDebug")}
+          </button>
+          <button type="button" onClick={onRetry} className={link}>
+            {t("action", "retry")}
+          </button>
         </p>
       </div>
     );
@@ -732,6 +927,7 @@ function Preview({
   container,
   path,
   entry,
+  life,
   via,
   onDownload,
 }: {
@@ -739,6 +935,8 @@ function Preview({
   container: string;
   path: string;
   entry: FileEntry;
+  /** The listing's `uid:container:restarts`, keyed on for the same reason. */
+  life: string;
   via: Via | null;
   onDownload: () => void;
 }) {
@@ -747,7 +945,10 @@ function Preview({
   const query = useQuery({
     queryKey: [
       "container-file",
-      pod.uid,
+      // The life, like the listing: a restart replaces the filesystem
+      // outside the mounts, so a cached preview is of a container that no
+      // longer exists.
+      life,
       container,
       path,
       via?.container ?? "",
@@ -759,11 +960,16 @@ function Preview({
   });
   const tag = mountFor(path, container, pod.volumes);
   const read = query.data;
-  const lines =
-    read?.state === "preview" && read.preview.text
-      ? read.preview.text.split("\n").length
-      : null;
-  const tooBig = entry.size > 100 * 1024 * 1024;
+  // Split once per answer, not once per render: the preview is up to
+  // PREVIEW_MAX_BYTES of text and this sat in the component body.
+  const lines = useMemo(
+    () =>
+      read?.state === "preview" && read.preview.text
+        ? read.preview.text.split("\n").length
+        : null,
+    [read]
+  );
+  const tooBig = entry.size > DOWNLOAD_MAX_BYTES;
 
   return (
     <div className="flex w-[46%] min-w-0 flex-col border-l border-hair">
@@ -773,9 +979,24 @@ function Preview({
           {formatBytes(entry.size, 1)}
           {read?.state === "preview" &&
             ` · ${read.preview.binary ? t("files", "binary") : t("files", "text")}`}
-          {lines !== null && ` · ${t("files", "lineCount", { n: lines })}`}
+          {/* Beside the file's whole size, a bare count reads as the file's
+           *  line count — and the preview stopped at the cap, so it is the
+           *  count of what was read and a floor on the rest. */}
+          {lines !== null &&
+            ` · ${
+              read?.state === "preview" && read.preview.truncated
+                ? t("files", "lineCountAtLeast", { n: lines })
+                : t("files", "lineCount", { n: lines })
+            }`}
           {tag &&
-            ` · ${t("files", "mountedFrom", { kind: tag.kind, name: tag.name })}`}
+            ` · ${
+              tag.sources.length > 1
+                ? t("files", "mountedFromSeveral", {
+                    name: tag.name,
+                    n: tag.sources.length,
+                  })
+                : t("files", "mountedFrom", { kind: tag.kind, name: tag.name })
+            }`}
         </p>
         <p className="mt-1 flex gap-3">
           <button
@@ -790,7 +1011,13 @@ function Preview({
             onClick={onDownload}
             disabled={tooBig}
             className="flex items-center gap-1 text-info hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            title={tooBig ? t("files", "tooBigToDownload") : undefined}
+            title={
+              tooBig
+                ? t("files", "tooBigToDownload", {
+                    cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+                  })
+                : undefined
+            }
           >
             <Download className="h-3 w-3" />
             {t("action", "download")}
@@ -820,12 +1047,20 @@ function Preview({
           </div>
         ) : read?.state === "preview" ? (
           <>
+            {/* The bytes were not UTF-8 and what is below is our repair of
+             *  them. Drawn above the text, because a reader who scrolls to
+             *  the bottom for it has already read a file we changed. */}
+            {read.preview.lossy && (
+              <p className="mb-2 text-warn">{t("files", "previewRepaired")}</p>
+            )}
             <pre className="whitespace-pre-wrap break-all text-fg-mid">
               {read.preview.text}
             </pre>
             {read.preview.truncated && (
               <p className="mt-2 text-fg-fnt">
-                {t("files", "previewTruncated")}
+                {t("files", "previewTruncated", {
+                  cap: formatBytes(PREVIEW_MAX_BYTES, 0),
+                })}
               </p>
             )}
           </>

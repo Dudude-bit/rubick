@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    template_images, ConditionInfo, DeploymentContainerInfo, DeploymentContainerResources,
-    OptionTimeExt, TemplateContainers,
+    template_container_images, ConditionInfo, ContainerImage, DeploymentContainerInfo,
+    DeploymentContainerResources, OptionTimeExt, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -31,7 +31,7 @@ pub struct StatefulSetInfo {
     pub namespace: String,
     pub replicas: StatefulSetReplicaInfo,
     /// What the template runs, so a watch on the list can see a rollout.
-    pub images: Vec<String>,
+    pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
     pub generation: Option<i64>,
     pub observed_generation: Option<i64>,
@@ -52,7 +52,7 @@ impl From<&StatefulSet> for StatefulSetInfo {
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 current: status.and_then(|s| s.current_replicas).unwrap_or(0),
             },
-            images: template_images(spec.map(|s| &s.template)),
+            container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.annotations.clone())

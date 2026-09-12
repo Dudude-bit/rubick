@@ -351,8 +351,13 @@ function formatColumnValue(
       if (typeof value === "string" && isKnownStatus(value)) {
         return <StatusBadge status={value} />;
       }
+      // A printer column is whatever the CRD author chose to show; some are
+      // long, and the cell is the only place it appears.
       return (
-        <span className="max-w-[200px] truncate text-fg-mid">
+        <span
+          className="max-w-[200px] truncate text-fg-mid"
+          title={String(value)}
+        >
           {String(value)}
         </span>
       );

@@ -100,3 +100,58 @@ describe("nodeTrends", () => {
     expect(trends.map((t) => t.node.name)).toEqual(["a", "b"]);
   });
 });
+
+describe("why a row has no lane", () => {
+  /**
+   * "Still reading" and "refused" are not "Prometheus has no series for this
+   * node" — that is a claim about somebody's Prometheus made out of our own
+   * failure to ask. Fails if `windowKnown` stops reaching the rows.
+   */
+  it("says it could not look while the window is unknown", () => {
+    const trends = nodeTrends(null, [node("worker-1")], T0, false);
+    expect(trends[0].blind).toBe("notLooked");
+    expect(trends[0].cpu).toBeNull();
+    expect(trends[0].newestKnown).toBe(false);
+  });
+
+  /** A window that was read and holds nothing is the one case that may say so. */
+  it("says no series only when the window was actually read", () => {
+    const trends = nodeTrends(
+      { nodes: {}, newestAt: {}, resolution: "30s" },
+      [node("worker-1")],
+      T0
+    );
+    expect(trends[0].blind).toBe("noSeries");
+  });
+
+  /**
+   * Samples in hand but no share to draw is a fact about the cluster, not
+   * about Prometheus. Fails if the two nulls are conflated again.
+   */
+  it("blames the unreadable allocatable, not Prometheus, when samples exist", () => {
+    const broken = node("worker-1");
+    broken.allocatable = { ...broken.allocatable, cpu: "wat", memory: "wat" };
+    const trends = nodeTrends(
+      {
+        nodes: {
+          "worker-1": { cpuMillicores: [{ t: T0, v: 500 }], memoryBytes: [] },
+        },
+        newestAt: {},
+        resolution: "30s",
+      },
+      [broken],
+      T0
+    );
+    expect(trends[0].blind).toBe("noAllocatable");
+  });
+
+  /** A failed staleness probe must not leave every node looking never-seen. */
+  it("carries the staleness probe's own failure", () => {
+    const trends = nodeTrends(
+      { nodes: {}, newestAt: {}, newestKnown: false, resolution: "30s" },
+      [node("worker-1")],
+      T0
+    );
+    expect(trends[0].newestKnown).toBe(false);
+  });
+});

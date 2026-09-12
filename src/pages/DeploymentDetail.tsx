@@ -455,6 +455,7 @@ export function DeploymentDetail() {
               key={`${namespace}/${name}`}
               namespace={namespace || ""}
               pods={pods.map(lanePodOf)}
+              podsError={podsError}
               laneRule="pod"
               workload={name ? { owner: name, ownerKind: "Deployment" } : null}
             />

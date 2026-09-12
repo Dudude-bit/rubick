@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
+import { useRenewal } from "@/hooks/useCredentialRenewal";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -45,6 +46,16 @@ export function StatusBar() {
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
   const { podCount, problemCount, problemsTruncated } = useClusterSummary();
+  // The two worth a line that is always up — both predict the sign-in screen,
+  // and they differ in why. Everything else is quiet, and a chip that is
+  // permanently lit stops being read.
+  const renewal = useRenewal();
+  const signInHint =
+    renewal === "needsYou"
+      ? "renewalNeedsYouHint"
+      : renewal === "ranOut"
+        ? "renewalRanOutHint"
+        : null;
 
   const connecting = isLoading || isAuthenticating;
 
@@ -106,6 +117,25 @@ export function StatusBar() {
                   className="max-w-[420px]"
                 >
                   {t("cluster", "throughProxyHint")}
+                </TooltipContent>
+              </Tooltip>
+              <span>·</span>
+            </>
+          )}
+          {signInHint && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-default text-warn">
+                    {t("cluster", "renewalNeedsYou")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  align="end"
+                  className="max-w-[420px]"
+                >
+                  {t("cluster", signInHint)}
                 </TooltipContent>
               </Tooltip>
               <span>·</span>

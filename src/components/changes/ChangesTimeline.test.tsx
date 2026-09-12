@@ -98,7 +98,8 @@ describe("ChangesTimeline", () => {
       {
         kind: "revision",
         at: T0,
-        changes: null,
+        against: { state: "oldest" },
+        readopted: false,
         revision: {
           id: "r1",
           number: 1,
@@ -109,6 +110,7 @@ describe("ChangesTimeline", () => {
           containers: [],
           initContainers: [],
           templateAnnotations: {},
+          templateKnown: true,
         },
       },
     ]);

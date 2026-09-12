@@ -44,9 +44,15 @@ export function actionsFor(cluster: PgCluster, allowed: Allowed): PgAction[] {
     allowed.patchClusters === false ? "refusedPatch" : null;
   const noCreate: OperatorsKey | null =
     allowed.createBackups === false ? "refusedCreateBackup" : null;
-  const busy: OperatorsKey | null = cluster.switchingOver
-    ? "notDuringSwitchover"
-    : null;
+  // A failover is the same reason to hold as a switchover, and a stronger
+  // one: the operator is mid-promotion and nobody asked it to be.
+  const busy: OperatorsKey | null =
+    cluster.switchingOver || cluster.failingOver ? "notDuringSwitchover" : null;
+  // Fencing is written back as a whole list, so acting on a list we did not
+  // read would overwrite it — and unfence every instance it really named.
+  const blind: OperatorsKey | null = cluster.fencedKnown
+    ? null
+    : "fencingUnknown";
 
   if (cluster.hibernated) {
     return [
@@ -85,12 +91,19 @@ export function actionsFor(cluster: PgCluster, allowed: Allowed): PgAction[] {
   ];
   for (const instance of cluster.instances) {
     list.push(
-      instance.fenced
+      // `null` is "we could not read whether this one is fenced". Offering
+      // Unfence would be a guess; the control offered is Fence, and it says
+      // why it cannot run.
+      instance.fenced === true
         ? {
             id: "unfence",
             label: "actionUnfence",
             explains: "actionUnfenceExplained",
-            reason: noPatch,
+            // Under a `*` there is no list to take one name out of; taking
+            // the names we know and writing them back would unfence every
+            // instance CNPG has not named yet.
+            reason:
+              noPatch ?? blind ?? (cluster.fencedAll ? "fencedAllOne" : null),
             danger: false,
             instance: instance.name,
           }
@@ -98,7 +111,7 @@ export function actionsFor(cluster: PgCluster, allowed: Allowed): PgAction[] {
             id: "fence",
             label: "actionFence",
             explains: "actionFenceExplained",
-            reason: noPatch ?? busy,
+            reason: noPatch ?? busy ?? blind,
             danger: true,
             instance: instance.name,
           }
@@ -128,6 +141,21 @@ function annotate(
   );
 }
 
+/**
+ * The last guard before a write, for the one list this page rewrites whole.
+ * `actionsFor` already refuses these two, so reaching here means a caller
+ * went round it — and a fence written from a list we did not read unfences
+ * whatever it really held.
+ */
+const WOULD_OVERWRITE =
+  "the fenced-instances annotation was not read, so it must not be rewritten";
+
+/** Matched by the caller, which turns it into a catalogue sentence. */
+export const BACKUP_REFUSED = "cnpg:backup-not-created";
+
+const WOULD_NARROW =
+  "the whole cluster is fenced with `*`; one instance cannot be taken out of it";
+
 /** Perform one action. The patch is a merge patch on the annotation CNPG watches. */
 export async function perform(
   action: PgAction,
@@ -145,12 +173,15 @@ export async function perform(
     case "wake":
       return annotate(cluster, { [HIBERNATION]: "off" });
     case "fence": {
+      if (!cluster.fencedKnown) throw new Error(WOULD_OVERWRITE);
       const names = [
         ...new Set([...cluster.fenced, action.instance ?? ""]),
       ].filter(Boolean);
       return annotate(cluster, { [FENCED]: JSON.stringify(names) });
     }
     case "unfence": {
+      if (!cluster.fencedKnown) throw new Error(WOULD_OVERWRITE);
+      if (cluster.fencedAll) throw new Error(WOULD_NARROW);
       const names = cluster.fenced.filter((n) => n !== action.instance);
       // An empty list is a lie CNPG rejects; the annotation goes away instead.
       return annotate(cluster, {
@@ -171,7 +202,10 @@ export async function perform(
       ].join("\n");
       const result = await commands.applyManifest(manifest, cluster.namespace);
       if (!result.success) {
-        throw new Error(result.stderr || "Backup was not created");
+        // The cluster's own words when it has any; otherwise the caller
+        // says it in the reader's language — a literal here is invisible to
+        // every scanner in this project.
+        throw new Error(result.stderr || BACKUP_REFUSED);
       }
       return;
     }

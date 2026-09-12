@@ -58,7 +58,10 @@ export async function historyOf(
         at: ready?.lastTransitionTime ?? null,
         revision: applied,
         from: (getValueByPath(kustomization, "spec.path") as string) ?? null,
-        status: ready?.status === "True" ? "applied" : (ready?.reason ?? null),
+        // The owner's own word or nothing. "applied" was this app's word in
+        // a field that carries the cluster's, and it reached the screen
+        // untranslated beside a translated sentence.
+        status: ready?.status === "True" ? null : (ready?.reason ?? null),
         owner,
       },
     ];
