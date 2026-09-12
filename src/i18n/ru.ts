@@ -4658,7 +4658,7 @@ export const ru: Catalogue = {
     dragResourcesHere: "Перетащите ресурсы сюда или нажмите на один в палитре.",
     selectResourceToEdit: "Выберите ресурс, чтобы изменить его настройки.",
     logNotKept:
-      "На ноде больше нет этого лога {container}. Контейнер перезапускался, то есть запуск был, но рантайм выбросил лог раньше, чем его прочитали.",
+      "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
     noPreviousRunOf:
       "Предыдущего запуска {container} нет — он не перезапускался.",
     containerNotStarted:
@@ -4693,6 +4693,11 @@ export const ru: Catalogue = {
     itFinished: "Он завершился",
     soLogIsComplete: ", поэтому этот лог полон и больше не вырастет.",
     noEarlierRunOf: "Более раннего запуска нет у",
+    chipLogNotKept: "лога нет",
+    chipNoEarlierRun: "раньше не запускался",
+    chipEnded: "закончился",
+    chipNotStarted: "не стартовал",
+    chipLost: "потерян",
     noneHasRestarted:
       "— ни один из них не перезапускался, значит до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",

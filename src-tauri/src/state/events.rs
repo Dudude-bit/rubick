@@ -99,7 +99,19 @@ pub enum StreamFailureKind {
 #[must_use]
 pub fn is_runtime_dropped_log(body: &str) -> bool {
     let body = body.trim();
-    !body.contains('\n') && body.starts_with("unable to retrieve container logs for ")
+    !body.contains('\n') && body.starts_with(DROPPED_LOG)
+}
+
+const DROPPED_LOG: &str = "unable to retrieve container logs for ";
+
+/// The same refusal inside an error rather than a body: some versions answer
+/// the log request with a 400 carrying that sentence, and by the time it
+/// reaches `classify` it is wrapped in the apiserver's and this app's own
+/// words. Read as a substring on purpose — error text is not container
+/// output, which is why `is_runtime_dropped_log` must never be.
+#[must_use]
+pub fn mentions_dropped_log(text: &str) -> bool {
+    text.contains(DROPPED_LOG)
 }
 
 /// The apiserver's phrasing when `--previous` is asked of a container
@@ -139,6 +151,12 @@ impl StreamFailureKind {
         let text = error.to_string();
         if is_missing_previous_run(&text) {
             return Self::NoPreviousRun;
+        }
+        // Before the generic rule below: this sentence ends in nothing
+        // recognisable, so it would fall through to `Broken` and be offered a
+        // reconnect that reaches the same node, which still does not have it.
+        if mentions_dropped_log(&text) {
+            return Self::LogNotKept;
         }
         let text = text.to_lowercase();
         if text.contains("not found") || text.contains("notfound") {
@@ -971,6 +989,7 @@ mod tests {
             (StreamFailureKind::Gone, "gone"),
             (StreamFailureKind::Broken, "broken"),
             (StreamFailureKind::NoPreviousRun, "no-previous-run"),
+            (StreamFailureKind::LogNotKept, "log-not-kept"),
         ];
         for (kind, expected) in kinds {
             assert_eq!(serde_json::to_value(kind).unwrap(), expected);
@@ -1030,8 +1049,30 @@ mod runtime_dropped_log_tests {
     #[test]
     fn a_container_that_prints_the_sentence_itself_keeps_its_logs() {
         assert!(!is_runtime_dropped_log(&format!("starting\n{SAID}\ndone")));
+        // The case the whole-body clause exists for: an entrypoint wrapper
+        // that echoes a captured error as its first line, and keeps going.
+        assert!(!is_runtime_dropped_log(&format!(
+            "{SAID}\nrows copied: 412"
+        )));
         assert!(!is_runtime_dropped_log("applying 015_backfill.sql"));
         assert!(!is_runtime_dropped_log(""));
+    }
+
+    /// Some versions answer the log request with a 400 carrying the same
+    /// sentence. By the time it reaches `classify` it is wrapped in the
+    /// apiserver's words and this app's own, so the whole-body rule cannot
+    /// see it — and it fell through to `Broken`, with a reconnect that
+    /// reaches the same node and fails the same way for ever.
+    #[test]
+    fn the_same_refusal_inside_an_error_is_not_a_broken_connection() {
+        let wrapped = crate::error::Error::LogStream(format!(
+            "Failed to start log stream: ApiError: BadRequest: {SAID}"
+        ));
+        assert!(mentions_dropped_log(&wrapped.to_string()));
+        assert_eq!(
+            StreamFailureKind::classify(&wrapped),
+            StreamFailureKind::LogNotKept
+        );
     }
 
     /// The neighbouring case, which the apiserver phrases completely
