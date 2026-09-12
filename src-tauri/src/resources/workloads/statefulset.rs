@@ -86,6 +86,8 @@ pub struct StatefulSetDetailInfo {
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
 }
 
@@ -125,6 +127,8 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             annotations: ss.annotations().clone(),
             conditions,
             owner_references: extract_owner_references(ss.metadata.owner_references.as_ref()),
+            generation: ss.metadata.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: ss.creation_timestamp().to_rfc3339_opt(),
         }
     }

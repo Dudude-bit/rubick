@@ -65,7 +65,8 @@ export type Says =
   | "issuanceFailed"
   | "forwardDied"
   | "gone"
-  | "lostSight";
+  | "lostSight"
+  | "timedOut";
 
 export interface Verdict {
   says: Says;
@@ -97,6 +98,9 @@ export const SAYS_TONE: Record<Says, string> = {
   forwardDied: "bg-err",
   gone: "bg-fg-fnt",
   lostSight: "bg-warn",
+  // Out of time is not a failure: the action may have worked and the app
+  // stopped being able to say. Red would call it broken.
+  timedOut: "bg-warn",
 };
 
 /**
@@ -110,7 +114,28 @@ export interface Baseline {
   restarts?: number;
   notAfter?: string | null;
   revision?: number;
+  /** The spec generation at the first look, for a watch that follows an action. */
+  generation?: number | null;
+  /** The object was seen mid-rollout at least once. */
+  unsettledSeen?: boolean;
+  /** The last look, in words, for a verdict that has to say what it saw. */
+  seen?: string | null;
 }
+
+/**
+ * The action a watch follows. "Did it work" is only ever answered after the
+ * object confirmed the action reached it: a generation past the one before
+ * the click, or the replica count the click asked for.
+ */
+export interface After {
+  action: "restart" | "scale" | "apply" | "image";
+  replicas: number | null;
+  /** `metadata.generation` as the page saw it before the action; `null` when it did not know. */
+  generationBefore: number | null;
+}
+
+/** How long an action is given before "no answer" is the answer. */
+export const OUTCOME_DEADLINE_MS = 2 * 60 * 1000;
 
 export type WatchStatus =
   | { state: "watching" }
@@ -132,6 +157,9 @@ export interface Watch {
   sessionId?: string;
   /** Certificate only: where the CRD is served. */
   crd?: { group: string; version: string; plural: string };
+  after?: After | null;
+  /** When "no answer" becomes the answer; `null` for a watch with the day-long default. */
+  deadline?: number | null;
 }
 
 export function isOpen(watch: Watch): boolean {
@@ -180,7 +208,9 @@ export function judge(
   }
   switch (watch.ask) {
     case "rollout":
-      return judgeRollout(watch.kind, resource, was);
+      return watch.after
+        ? judgeOutcome(watch.kind, resource, was, watch.after)
+        : judgeRollout(watch.kind, resource, was);
     case "podReady":
       return judgePod(resource as PodInfo, was);
     case "jobOutcome":
@@ -196,6 +226,12 @@ export function judge(
 interface Rollout {
   settled: boolean;
   failed: string | null;
+  desired: number;
+  ready: number;
+  generation: number | null;
+  observedGeneration: number | null;
+  /** The Deployment's revision counter, where the object carries one. */
+  revision: string | null;
 }
 
 function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
@@ -215,20 +251,94 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
         (progressing === undefined ||
           progressing.reason === "NewReplicaSetAvailable"),
       failed,
+      desired: r.desired,
+      ready: r.ready,
+      generation: d.generation ?? null,
+      observedGeneration: d.observedGeneration ?? null,
+      revision: d.annotations?.["deployment.kubernetes.io/revision"] ?? null,
     };
   }
   if (kind === "StatefulSet") {
-    const r = (resource as StatefulSetInfo).replicas;
+    const s = resource as StatefulSetInfo;
+    const r = s.replicas;
     return {
       settled: r.ready === r.desired && r.current === r.desired,
       failed: null,
+      desired: r.desired,
+      ready: r.ready,
+      generation: s.generation ?? null,
+      observedGeneration: s.observedGeneration ?? null,
+      revision: null,
     };
   }
   const d = resource as DaemonSetInfo;
   return {
     settled: d.current === d.desired && d.ready === d.desired,
     failed: null,
+    desired: d.desired,
+    ready: d.ready,
+    generation: d.generation ?? null,
+    observedGeneration: d.observedGeneration ?? null,
+    revision: null,
   };
+}
+
+/** "3 of 3 ready, revision 8": what the last look said, for a verdict to carry. */
+function seenWords(now: Rollout): string {
+  const ready = `${now.ready} of ${now.desired} ready`;
+  return now.revision ? `${ready}, revision ${now.revision}` : ready;
+}
+
+/**
+ * Whether the object has acknowledged the action at all. Nothing is said
+ * about the outcome before this is true, however settled the object looks:
+ * a Deployment that was fine before the click looks fine for a second after
+ * it too.
+ */
+function acknowledged(now: Rollout, was: Baseline, after: After): boolean {
+  if (after.action === "scale") return now.desired === after.replicas;
+  if (after.generationBefore !== null && now.generation !== null) {
+    return now.generation > after.generationBefore;
+  }
+  const first = was.generation ?? null;
+  if (first !== null && now.generation !== null && now.generation > first) {
+    return true;
+  }
+  return was.unsettledSeen === true;
+}
+
+function judgeOutcome(
+  kind: WatchKind,
+  resource: unknown,
+  was: Baseline,
+  after: After
+): Judgement {
+  const now = rolloutOf(kind, resource);
+  const baseline: Baseline = {
+    ...was,
+    armed: true,
+    generation: was.generation === undefined ? now.generation : was.generation,
+    unsettledSeen: (was.unsettledSeen ?? false) || !now.settled,
+    seen: seenWords(now),
+  };
+  if (!acknowledged(now, baseline, after)) return { verdict: null, baseline };
+  if (now.failed !== null) {
+    return {
+      verdict: { says: "rolloutFailed", detail: now.failed },
+      baseline,
+    };
+  }
+  const caughtUp =
+    now.generation === null ||
+    now.observedGeneration === null ||
+    now.observedGeneration >= now.generation;
+  if (now.settled && caughtUp) {
+    return {
+      verdict: { says: "rolledOut", detail: seenWords(now) },
+      baseline,
+    };
+  }
+  return { verdict: null, baseline };
 }
 
 function judgeRollout(

@@ -65,6 +65,7 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
   forwardDied: "saysForwardDied",
   gone: "saysGone",
   lostSight: "saysLostSight",
+  timedOut: "saysTimedOut",
 };
 
 /**
@@ -99,7 +100,8 @@ export function notice(
   };
 }
 
-const EXPIRE_EVERY_MS = 60_000;
+/** Deadlines are two minutes; a check every ten seconds keeps the answer within a breath of it. */
+const TIMEOUT_EVERY_MS = 10_000;
 
 /** The stream behind one open watch, and the timer that says it went quiet. */
 interface Stream {
@@ -383,10 +385,17 @@ export function useTellMeWhen() {
   }, []);
 
   useEffect(() => {
-    const tick = setInterval(
-      () => useTellMeWhenStore.getState().expire(Date.now()),
-      EXPIRE_EVERY_MS
-    );
+    const tick = setInterval(() => {
+      const now = Date.now();
+      const store = useTellMeWhenStore.getState();
+      store.expire(now);
+      for (const watch of store.timeOut(now)) {
+        coalescer.current?.push({
+          watch,
+          verdict: { says: "timedOut", detail: watch.baseline?.seen ?? null },
+        });
+      }
+    }, TIMEOUT_EVERY_MS);
     return () => clearInterval(tick);
   }, []);
 }

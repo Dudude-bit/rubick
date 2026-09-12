@@ -116,3 +116,36 @@ describe("what is read back off this machine", () => {
     expect(back[1].baseline).toEqual({ armed: true, restarts: 2 });
   });
 });
+
+describe("a deadline", () => {
+  /** A silence past the deadline is an answer of its own, with what was last seen. */
+  it("closes a watch past its deadline as timed out, carrying the last look", () => {
+    useTellMeWhenStore.setState({ watches: [] });
+    const store = useTellMeWhenStore.getState();
+    store.add({
+      id: "d1",
+      context: "prod",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "payments",
+      ask: "rollout",
+      startedAt: 0,
+      status: { state: "watching" },
+      baseline: { armed: true, seen: "2 of 3 ready" },
+      after: { action: "restart", replicas: null, generationBefore: 4 },
+      deadline: 120_000,
+    });
+    expect(store.timeOut(100_000)).toEqual([]);
+    const due = useTellMeWhenStore.getState().timeOut(120_000);
+    expect(due.map((w) => w.id)).toEqual(["d1"]);
+    const closed = useTellMeWhenStore
+      .getState()
+      .watches.find((w) => w.id === "d1")!;
+    expect(closed.status).toEqual({
+      state: "done",
+      verdict: { says: "timedOut", detail: "2 of 3 ready" },
+      at: 120_000,
+    });
+    expect(useTellMeWhenStore.getState().timeOut(130_000)).toEqual([]);
+  });
+});

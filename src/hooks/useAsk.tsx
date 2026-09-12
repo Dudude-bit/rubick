@@ -6,6 +6,8 @@ import {
   ASK_OF,
   isOpen,
   MAX_WATCHES_PER_CLUSTER,
+  OUTCOME_DEADLINE_MS,
+  type After,
   type Watch,
   type WatchKind,
 } from "@/lib/tell-me-when";
@@ -29,7 +31,7 @@ export interface AskTarget {
  * mounted by the caller beside its other dialogs.
  */
 export function useAsk(): {
-  ask: (target: AskTarget) => void;
+  ask: (target: AskTarget, after?: After) => void;
   stop: (target: AskTarget) => void;
   watching: (target: AskTarget) => boolean;
   dialog: ReactNode;
@@ -54,8 +56,14 @@ export function useAsk(): {
         isOpen(w)
     );
 
-  const ask = (target: AskTarget) => {
+  const ask = (target: AskTarget, after?: After) => {
     if (!context) return;
+    // An action already being followed is followed afresh: the new click is
+    // the one whose outcome the reader wants, and the old baseline is stale.
+    if (after) {
+      const stale = find(target);
+      if (stale) remove(stale.id);
+    }
     const watch: Watch = {
       id: crypto.randomUUID(),
       context,
@@ -68,6 +76,8 @@ export function useAsk(): {
       baseline: null,
       sessionId: target.sessionId,
       crd: target.crd,
+      after: after ?? null,
+      deadline: after ? Date.now() + OUTCOME_DEADLINE_MS : null,
     };
     if (add(watch) === "full") {
       setPending(watch);
