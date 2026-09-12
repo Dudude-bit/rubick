@@ -21,6 +21,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -124,6 +125,13 @@ export function JobDetail() {
         content: (
           <>
             <WorkloadOverview
+              alerts={
+                <AlertsAbout
+                  kind={ResourceType.Job}
+                  name={name ?? ""}
+                  namespace={namespace ?? null}
+                />
+              }
               count={
                 <CountBlock
                   title={t("action", "run")}

@@ -630,6 +630,29 @@ export interface Capabilities {
     namespace: string | null;
     name: string;
   }) => Promise<RelatedObject[] | null>;
+  /**
+   * The alerts firing or pending about one object right now, from whatever
+   * evaluates alerting rules for this cluster. Absent means no such thing
+   * is connected, and the page draws nothing where the list would be: an
+   * empty list is a real answer here, and a missing evaluator is not.
+   */
+  "alerts.about": (input: {
+    kind: string;
+    name: string;
+    namespace: string | null;
+  }) => Promise<AlertAbout[]>;
+}
+
+/** One alert naming an object, and the label it named it by. */
+export interface AlertAbout {
+  rule: string;
+  /** `firing` or `pending`, as the evaluator writes it. */
+  state: string;
+  activeAt: string | null;
+  severity: string | null;
+  summary: string | null;
+  /** A guess at a pod's owner is visible as one: the label shows what matched. */
+  via: { label: string; value: string };
 }
 
 export type CapabilityKey = keyof Capabilities;

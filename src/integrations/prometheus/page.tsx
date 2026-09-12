@@ -1,4 +1,4 @@
-import { Activity, Plug } from "lucide-react";
+import { Activity, Bell, Plug } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -6,6 +6,7 @@ import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
 import { useT } from "@/i18n/useT";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import Connection from "./connection";
+import Alerts from "./alerts/Alerts";
 import Monitors from "./monitors/Monitors";
 import { rowsOfPicture, usePicture } from "./monitors/data";
 
@@ -37,6 +38,25 @@ export default function PrometheusPage() {
       ? "warn"
       : null;
 
+  const firing =
+    picture.data?.alertRules.state === "read"
+      ? picture.data.alertRules.rules.reduce(
+          (n, rule) =>
+            n + rule.alerts.filter((a) => a.state === "firing").length,
+          0
+        )
+      : null;
+  const alertsMark: DetailTab["mark"] =
+    firing !== null && firing > 0
+      ? {
+          shows: "severity",
+          tone: "err",
+          says: t("alerts", "rowFiring", { n: firing }),
+        }
+      : picture.data?.rules.state === "read"
+        ? { shows: "count", of: picture.data.rules.items.length }
+        : null;
+
   const tabs: DetailTab[] = [
     ...(picture.data === undefined || operatorHere
       ? [
@@ -58,6 +78,17 @@ export default function PrometheusPage() {
                   ? { shows: "count" as const, of: rows.length }
                   : null,
             content: <Monitors />,
+          },
+        ]
+      : []),
+    ...(picture.data !== undefined && picture.data.rules.state !== "absent"
+      ? [
+          {
+            id: "alerts",
+            label: t("alerts", "tabAlerts"),
+            glyph: viewGlyph(Bell),
+            mark: alertsMark,
+            content: <Alerts />,
           },
         ]
       : []),
