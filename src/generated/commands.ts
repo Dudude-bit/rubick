@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AccessAnswer,
   AccessQuery,
+  AlertRule,
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -244,6 +245,10 @@ export async function prometheusQueryRange(
 
 export async function prometheusTargets(): Promise<ScrapeTarget[]> {
   return invoke<ScrapeTarget[]>("prometheus_targets");
+}
+
+export async function prometheusRules(): Promise<AlertRule[]> {
+  return invoke<AlertRule[]>("prometheus_rules");
 }
 
 export async function getTlsCertificates(

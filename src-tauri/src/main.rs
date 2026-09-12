@@ -264,6 +264,7 @@ fn main() {
             integrations::prometheus::prometheus_query,
             integrations::prometheus::prometheus_query_range,
             integrations::prometheus::prometheus_targets,
+            integrations::prometheus::prometheus_rules,
             integrations::loki::get_loki_connection,
             integrations::loki::save_loki_connection,
             integrations::loki::forget_loki_connection,

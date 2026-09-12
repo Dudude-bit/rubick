@@ -8,9 +8,11 @@ import type {
   ServiceInfo,
 } from "@/generated/types";
 
+import type { RulesRead } from "../alerts/model";
 import {
   POD_MONITORS_CRD,
   PROMETHEUSES_CRD,
+  RULES_CRD,
   SERVICE_MONITORS_CRD,
   readMonitor,
   readPrometheus,
@@ -50,6 +52,21 @@ async function readKind(
   }
 }
 
+async function readRules(): Promise<RulesRead> {
+  let configured: boolean;
+  try {
+    configured = (await commands.getPrometheusConnection()) !== null;
+  } catch (error) {
+    return { state: "unanswered", reason: normalizeTauriError(error) };
+  }
+  if (!configured) return { state: "notConnected" };
+  try {
+    return { state: "read", rules: await commands.prometheusRules() };
+  } catch (error) {
+    return { state: "unanswered", reason: normalizeTauriError(error) };
+  }
+}
+
 async function readTargets(): Promise<TargetsRead> {
   let configured: boolean;
   try {
@@ -75,9 +92,11 @@ export interface Picture {
   serviceMonitors: Kind<CustomResourceInfo>;
   podMonitors: Kind<CustomResourceInfo>;
   prometheuses: Kind<CustomResourceInfo>;
+  rules: Kind<CustomResourceInfo>;
   services: Read<ServiceInfo>;
   namespaces: Read<NamespaceInfo>;
   targets: TargetsRead;
+  alertRules: RulesRead;
 }
 
 export async function readPicture(): Promise<Picture> {
@@ -89,13 +108,16 @@ export async function readPicture(): Promise<Picture> {
     serviceMonitors,
     podMonitors,
     prometheuses,
+    rules,
     services,
     namespaces,
     targets,
+    alertRules,
   ] = await Promise.all([
     readKind(SERVICE_MONITORS_CRD, installed),
     readKind(POD_MONITORS_CRD, installed),
     readKind(PROMETHEUSES_CRD, installed),
+    readKind(RULES_CRD, installed),
     read(() =>
       commands.listServices({
         namespace: null,
@@ -107,14 +129,17 @@ export async function readPicture(): Promise<Picture> {
     ),
     read(() => commands.listNamespaces()),
     readTargets(),
+    readRules(),
   ]);
   return {
     serviceMonitors,
     podMonitors,
     prometheuses,
+    rules,
     services,
     namespaces,
     targets,
+    alertRules,
   };
 }
 

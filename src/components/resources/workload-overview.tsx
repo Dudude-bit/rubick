@@ -63,6 +63,8 @@ export interface WorkloadOverviewProps {
    * facts here and has no separate declaration block.
    */
   count?: ReactNode;
+  /** What is firing about it, first, because it is why the reader came. */
+  alerts?: ReactNode;
   /** What it uses. */
   usage?: ReactNode;
   /** How it is reached. */
@@ -80,6 +82,7 @@ export interface WorkloadOverviewProps {
  */
 export function WorkloadOverview({
   count,
+  alerts,
   usage,
   traffic,
   declared,
@@ -87,6 +90,7 @@ export function WorkloadOverview({
 }: WorkloadOverviewProps) {
   return (
     <div className="contents">
+      {alerts}
       {count}
       {usage}
       {traffic}

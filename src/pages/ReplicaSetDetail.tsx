@@ -25,6 +25,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -171,6 +172,13 @@ export function ReplicaSetDetail() {
       content: (
         <>
           <WorkloadOverview
+            alerts={
+              <AlertsAbout
+                kind={ResourceType.ReplicaSet}
+                name={name ?? ""}
+                namespace={namespace ?? null}
+              />
+            }
             count={
               <CountBlock
                 title={t("columns", "replicas")}

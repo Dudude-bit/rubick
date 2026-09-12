@@ -18,6 +18,7 @@ import {
   usageHistory,
   volumeFullness,
 } from "./client";
+import { alertsAboutObject } from "./alerts/client";
 import { crd } from "./monitors/crd";
 import {
   MONITORS_KEY,
@@ -198,6 +199,7 @@ export default defineVendor({
   },
   crd,
   provides: {
+    "alerts.about": alertsAboutObject,
     "usage.history": usageHistory,
     "usage.nodes": nodeUsage,
     "volume.fullness": volumeFullness,
