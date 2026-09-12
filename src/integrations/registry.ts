@@ -937,13 +937,21 @@ export interface VendorPage {
   load: () => Promise<{ default: ComponentType }>;
   /**
    * The one list this page cannot do without — the custom resource whose 403
-   * makes the screen useless. When the authorizer refuses the reader this
-   * list, the sidebar row is drawn disabled with a reason rather than linking
-   * to a page that only errors. The id is the CRD's `<plural>.<group>`; an
-   * array is alternative spellings of one kind across a group rename, refused
-   * only when every spelling is.
+   * makes the screen useless. The sidebar row is then drawn disabled with a
+   * reason rather than linking to a page that only errors. The id is the
+   * CRD's `<plural>.<group>`; an array is alternative spellings of one kind
+   * across a group rename, refused only when every spelling is. `null` is a
+   * page that shows something without them, and {@link defineVendor} refuses
+   * silence — which is what a vendor added after the lock says by default,
+   * and how #138 kept coming back.
    */
-  gate?: { crd: string | readonly string[]; namespaced: boolean };
+  gate?: Gate | null;
+}
+
+/** What to ask the cluster's authorizer before offering a vendor's page. */
+export interface Gate {
+  crd: string | readonly string[];
+  namespaced: boolean;
 }
 
 /**
@@ -1065,6 +1073,13 @@ export interface Vendor {
  * Declare a vendor. Only a type-check today, and that is the point: the
  * registry is a list, not a framework.
  */
-export function defineVendor(vendor: Vendor): Vendor {
+/** A page backed by custom resources states its {@link VendorPage.gate}. */
+export function defineVendor<const V extends Vendor>(
+  vendor: V & GateStated<V>
+): Vendor {
   return vendor;
 }
+
+type GateStated<V> = V extends { crd: CrdView; page: VendorPage }
+  ? { page: { gate: Gate | null } }
+  : unknown;
