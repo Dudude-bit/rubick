@@ -490,6 +490,9 @@ export interface DeploymentInfo {
   podResources: DeploymentContainerResources;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
@@ -1102,6 +1105,17 @@ export interface ManifestResult {
   exit_code: number;
 }
 
+export interface ControllerRevisionInfo {
+  name: string;
+  revision: number;
+  current: boolean;
+  changeCause: string | null;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  templateAnnotations: Record<string, string>;
+  createdAt: string | null;
+}
+
 export interface ResourceConnections {
   subject: ObjectRef;
   edges: ConnectionEdge[];
@@ -1363,6 +1377,10 @@ export interface DaemonSetInfo {
   desired: number;
   current: number;
   ready: number;
+  images: string[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
@@ -1395,6 +1413,10 @@ export interface StatefulSetInfo {
   name: string;
   namespace: string;
   replicas: StatefulSetReplicaInfo;
+  images: string[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
