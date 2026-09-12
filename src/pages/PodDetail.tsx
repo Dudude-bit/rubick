@@ -743,7 +743,15 @@ export function PodDetail() {
                         ? normalizeTauriError(podEvents.error)
                         : null
                     }
-                    onOpenTab={setActiveTab}
+                    // The log tab opened on the current run with no
+                    // container selected, so the row that says "read the
+                    // last lines of X before the exit" landed on whatever
+                    // the pane happened to be showing.
+                    onOpenTab={(tab, container) =>
+                      tab === "logs" && container
+                        ? openLogs(container)
+                        : setActiveTab(tab)
+                    }
                   />
                 )}
 

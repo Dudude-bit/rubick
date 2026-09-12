@@ -1491,16 +1491,31 @@ export const en = {
       "«Probably» is the app's word for a chain it read end to end but did not test: nothing here sent a packet.",
     googleIt: "Search it",
     copyForAgent: "Copy for agent",
-    copiedForAgent: "Copied: {n} characters, secrets never.",
+    copiedForAgent:
+      "Copied {n} characters. Read it before you paste it: the log lines are whatever the container printed.",
+    searchNoEngine:
+      "No search engine: the custom URL in Settings is not an address.",
     searchOpens: "opens {site}; change the engine in Settings",
     guessCrashLoop:
-      "Most likely: {container} exits on its own right after starting, {n} restarts so far. The reason is probably in its last lines before the exit.",
+      "Most likely: {container} exits on its own right after starting, {restarts} so far. The reason is probably in its last lines before the exit.",
     guessCrashRefusedSidecar:
       "Most likely: nothing answers on {host}:{port} inside this pod. That address belongs to sidecar {sidecar}, which is {state}; the app itself is probably fine and waits on it.",
     guessCrashRefusedServiceEmpty:
       "Most likely: {host}:{port} refused the connection. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
     guessCrashRefusedServiceReady:
       "Most likely: {host}:{port} refused the connection. That address is Service {service}, with {ready} of {total} endpoints ready, so the refusal probably comes from the process behind it rather than from the cluster.",
+    guessCrashTimeoutServiceEmpty:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
+    guessCrashTimeoutServiceReady:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably being dropped on the way — a NetworkPolicy is the usual reason, and this app did not read any.",
+    guessCrashServiceUncounted:
+      "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read — so whether anything is ready there is probably the first thing to look at, and this app cannot say.",
+    guessCrashInClusterUnread:
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster. The Services of this namespace could not be read, so what answers to it is probably worth checking by hand — this app cannot say.",
+    guessCrashLoopback:
+      "Most likely: {host}:{port} refused the connection, and that address is this pod itself — usually a sidecar that is not up, or one that never listens on that port. No container in this pod declares it.",
+    guessCrashUnreachableOutside:
+      "Most likely: {host}:{port} could not be reached, and the line does not say whether anything answered — usually a route or a name that resolves to nowhere from this cluster. The app sees the road, not the far end.",
     guessCrashInClusterUnknown:
       "Most likely: the app cannot reach {host}:{port}, an address inside the cluster that no Service in this namespace answers to. Probably a wrong address or a Service in another namespace.",
     guessCrashTimeoutOutside:
@@ -1508,23 +1523,39 @@ export const en = {
     guessCrashRefusedOutside:
       "Most likely: {host}:{port} answered and said no. Something outside the cluster refused the connection, usually the service itself or a proxy in front of it; a firewall would have timed out.",
     guessOom:
-      "Most likely: {container} is killed for using more memory than its limit{limit}. It probably needs a higher limit, or it has a leak.",
+      "Most likely: {container} is killed for using more memory than its limit. It probably needs a higher limit, or it has a leak.",
+    guessOomWithLimit:
+      "Most likely: {container} is killed for using more memory than its limit. This pod's limits add up to {limit}; it probably needs a higher one, or it has a leak.",
     guessImagePull:
       "Most likely: the image {image} cannot be pulled, usually a wrong tag, a private registry without a pull secret, or a registry that is rate-limiting.",
     guessFailedMount:
-      "Most likely: a volume{volume} cannot be mounted, {n} attempts so far, usually a Secret or ConfigMap that does not exist yet or a PersistentVolumeClaim that is not bound.",
+      "Most likely: a volume{volume} cannot be mounted, {attempts} so far, usually a Secret or ConfigMap that does not exist yet or a PersistentVolumeClaim that is not bound.",
     guessPendingSame:
-      "Most likely: no node fits it. The scheduler gave the same answer {n} times, so probably nothing about the nodes has changed since it first asked.",
+      "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
     guessPendingVaried:
-      "Most likely: no node fits it, and the scheduler's answer has changed over {n} attempts, so the nodes are probably changing under it.",
+      "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    guessUnknownUnread:
+      "The pod's events could not be read, so what is probably wrong cannot be said from here — the container states below are all this app could look at.",
+    guessProbeUnnamed:
+      "Most likely: a probe fails and the kubelet acts on it, {times} so far — the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
     guessProbe:
-      "Most likely: the {probe} probe fails and the kubelet acts on it, {n} times so far. The app probably starts slower than the probe allows, or listens on another port or path.",
+      "Most likely: the {probe} probe fails and the kubelet acts on it, {times} so far. The app probably starts slower than the probe allows, or listens on another port or path.",
     factLastLineSaid: "The last line before the exit said: {line}",
-    factExited: "{container} exited with code {code}, {n} restarts so far.",
-    factRestarts: "{container} restarted {n} times.",
+    factExited: "{container} exited with code {code}, {restarts} so far.",
+    factRestarts: "{container} restarted {times}.",
+    countRestarts: { one: "{n} restart", other: "{n} restarts" },
+    countAttempts: { one: "{n} attempt", other: "{n} attempts" },
+    countTimes: { one: "{n} time", other: "{n} times" },
     factKubeletSaid: "The kubelet said: {message}",
     factSchedulerSaid: "The scheduler said: {message}",
     checkLastLines: "Read the last lines of {container} before the exit",
+    checkLastLinesUnnamed:
+      "Read the last lines before the exit — the event does not say which container",
+    stateWaiting: "waiting",
+    stateWaitingReason: "{reason}",
+    stateExited: "exited {code}",
+    stateRunning: "running",
+    stateRunningNotReady: "running, not ready",
     checkSidecarLines: "Read the last lines of {sidecar}",
     checkService:
       "Check Service {service}: its endpoints and what stands behind them",
@@ -1534,6 +1565,8 @@ export const en = {
     checkNode: "See node {node}: memory pressure and what else runs there",
     checkImageRef:
       "Check the image reference {image}: tag, registry, pull secret",
+    checkMountedSecret:
+      "Secret {name}: one the pod mounts — the pull secret is a different field, which this app does not read",
     checkPullSecret: "Secret {name}: a pull secret the pod mounts",
     checkVolumeRef: "{kind} {name}: does it exist, is it bound",
     checkRequests: "Compare the requests with what the nodes have free",
@@ -1544,6 +1577,8 @@ export const en = {
     notReadEndpoints: "the endpoints of Service {service} ({reason})",
     notReadLogs: "the last lines of {container} ({reason})",
     notReadEvents: "the events of this pod ({reason})",
+    notReadOtherNamespace:
+      "the Services of {namespace}, where that address lives — this app only listed this pod's own namespace",
     notReadPolicies: "NetworkPolicies: this app has no reader for them yet",
   },
   files: {
@@ -3175,7 +3210,7 @@ export const en = {
     sectionHandoffHint: "Where a search goes, and what a hand-off includes.",
     searchEngine: "Search engine",
     searchEngineHint:
-      "The query is the reason plus the exact message, and utm_source=rubick.tech so the site can tell where people come from.",
+      "The query is the reason and what the app recognised in the failure — never a raw log line — and utm_source=rubick.tech so the site can tell where people come from.",
     searchEngineCustom: "Custom, any URL with {q}",
     searchCustomUrl: "Custom search URL",
     stripNames: "Strip names from the search query",
@@ -3183,7 +3218,7 @@ export const en = {
       "Pod, namespace, image and host names are replaced with … before the query leaves the app. Turn off if your names are not sensitive.",
     handoffLogLines: "«Copy for agent» includes log lines",
     handoffLogLinesHint:
-      "Up to 40 lines before the last exit. Secret values are never included, whatever this says.",
+      "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too — passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
     showMostLikely: "Show the «Most likely» panel",
     showMostLikelyHint:
       "Only on pods with a problem the app can read a chain for. Off hides the panel, not the facts.",
