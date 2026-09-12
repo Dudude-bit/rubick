@@ -524,6 +524,13 @@ export const en = {
     programmed: "Programmed",
   },
   action: {
+    eventsStories: "Stories",
+    eventsAll: "All events",
+    warningsFirst: "Warnings first",
+    newestFirst: "Newest",
+    showTimeline: "Timeline",
+    hideTimeline: "Hide timeline",
+    storyWindow: "Window",
     showInaccessibleNamespaces: "Show them",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
@@ -1828,6 +1835,53 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyJob: "Ran within {span}: {created}, {completed} completed.",
+    storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
+    storyCrash:
+      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}: {detail}",
+    storyStartFailed:
+      "The container could not be started, {times} within {span}: {detail}",
+    storyPull: "Cannot pull the image, {times} within {span}: {detail}",
+    storySchedulingSame:
+      "Cannot be scheduled, the same answer {times} within {span}: {detail}",
+    storySchedulingVaried:
+      "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
+    storyProbe: "Probes failed {times} within {span}: {detail}",
+    storyPressure: "Under pressure, {times} within {span}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {times} within {span}: {detail}",
+    storyJobTrouble: "Job trouble, {times} within {span}: {detail}",
+    storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
+    storyNode: "Node trouble, {times} within {span}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
+    storyTrouble: "{reason} ×{n} within {span}: {detail}",
+    storyStillHappening: "still happening",
+    storySettled: "settled",
+    storyStateUnknown: "cannot say",
+    podStatusNotAsked: {
+      one: "1 more pod's exits are not on this clock — it was not asked.",
+      other:
+        "{n} more pods' exits are not on this clock — they were not asked.",
+    },
+    timesSeen: { one: "once", other: "{n} times" },
+    jobsCreated: { one: "1 job created", other: "{n} jobs created" },
+    storyDone: "done",
+    podsOf: "pods of {name}",
+    groupedByName:
+      "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
+    fromPodStatus: "from the pod status, not an event",
+    lastSeen: "last {ago}",
+    podStatusUnread: {
+      one: "The status of {n} pod could not be read; its exits are not on this clock.",
+      other:
+        "The status of {n} pods could not be read; their exits are not on this clock.",
+    },
+    containerExited: "{container} exited with code {code}",
+    lastSeenStrip: "When each event was last seen across the window.",
+    storiesExplained:
+      "A story is one object's events in this window, ranked with warnings first and summed up from counts and times. Nothing is inferred beyond the events themselves.",
+    membersFolded: { one: "{n} object", other: "{n} objects" },
     twoWord: "Two",
     threeWord: "Three",
     warnUndoThis: "{count} things will undo this.",
@@ -3160,6 +3214,12 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    noStoriesInWindow:
+      "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
+    noStoriesInWindowCapped:
+      "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    eventsRefused: "Could not read the events in {scope}:",
+    noStoriesMatch: "No story in {scope} matches “{query}”.",
     noEventsMatchInWindow:
       "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
     kindMayBeGone:
@@ -4699,6 +4759,8 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    stories: { one: "{n} story", other: "{n} stories" },
+    eventsSeen: { one: "{n} event", other: "{n} events" },
     namespacesHidden: {
       one: "{n} namespace hidden — no access",
       other: "{n} namespaces hidden — no access",

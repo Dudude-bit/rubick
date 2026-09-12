@@ -492,6 +492,13 @@ export const ru: Catalogue = {
     programmed: "Запрограммирован",
   },
   action: {
+    eventsStories: "Истории",
+    eventsAll: "Все события",
+    warningsFirst: "Сначала предупреждения",
+    newestFirst: "Сначала новые",
+    showTimeline: "Таймлайн",
+    hideTimeline: "Скрыть таймлайн",
+    storyWindow: "Окно",
     showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
@@ -1864,6 +1871,71 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
+    storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
+    storyCrash:
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
+    storyStartFailed:
+      "Контейнер не удалось запустить, {times} за {span}: {detail}",
+    storyPull: "Не скачать образ, {times} за {span}: {detail}",
+    storySchedulingSame:
+      "Не планируется, один и тот же ответ {times} за {span}: {detail}",
+    storySchedulingVaried:
+      "Не планируется, {k} разных ответов за {span}, последний: {detail}",
+    storyProbe: "Пробы упали {times} за {span}: {detail}",
+    storyPressure: "Под давлением, {times} за {span}: {detail}",
+    storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
+    storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
+    storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
+    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
+    storyTrouble: "{reason} ×{n} за {span}: {detail}",
+    storyStillHappening: "продолжается",
+    storySettled: "утихло",
+    storyStateUnknown: "не сказать",
+    podStatusNotAsked: {
+      one: "Выходы ещё {n} пода не на этой шкале — его не спрашивали.",
+      few: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      many: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      other: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+    },
+    timesSeen: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    jobsCreated: {
+      one: "создан {n} job",
+      few: "создано {n} job",
+      many: "создано {n} job",
+      other: "создано {n} job",
+    },
+    storyDone: "закончено",
+    podsOf: "поды {name}",
+    groupedByName:
+      "Сгруппированы по сгенерированному суффиксу имён подов. Ни одно событие контроллера в этом окне не говорит, чьи они.",
+    fromPodStatus: "из статуса пода, не событие",
+    lastSeen: "последнее {ago}",
+    podStatusUnread: {
+      one: "Статус {n} пода не прочитан; его завершения на этой шкале нет.",
+      few: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      many: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      other: "Статус {n} пода не прочитан; их завершений на этой шкале нет.",
+    },
+    containerExited: "{container} завершился с кодом {code}",
+    lastSeenStrip:
+      "Когда каждое событие видели в последний раз, по всему окну.",
+    storiesExplained:
+      "История это события одного объекта в этом окне: предупреждения первыми, предложение собрано из счётчиков и времён. Сверх самих событий ничего не додумывается.",
+    membersFolded: {
+      one: "{n} объект",
+      few: "{n} объекта",
+      many: "{n} объектов",
+      other: "{n} объекта",
+    },
     twoWord: "Две",
     threeWord: "Три",
     warnUndoThis: "{count} вещи отменят это.",
@@ -3389,6 +3461,12 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noStoriesInWindow:
+      "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
+    noStoriesInWindowCapped:
+      "Ни одной истории в {scope} за последние {range} — из последних {n} прочитанных событий. Всё, что старше, в этот ответ не попало.",
+    eventsRefused: "Не удалось прочитать события в {scope}:",
+    noStoriesMatch: "Ни одна история в {scope} не подходит под «{query}».",
     noEventsMatchInWindow:
       "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
     kindMayBeGone:
@@ -4991,6 +5069,18 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    stories: {
+      one: "{n} история",
+      few: "{n} истории",
+      many: "{n} историй",
+      other: "{n} истории",
+    },
+    eventsSeen: {
+      one: "{n} событие",
+      few: "{n} события",
+      many: "{n} событий",
+      other: "{n} события",
+    },
     namespacesHidden: {
       one: "{n} пространство скрыто — нет доступа",
       few: "{n} пространства скрыто — нет доступа",
