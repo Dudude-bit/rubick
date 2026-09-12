@@ -157,6 +157,7 @@ fn main() {
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
             commands::cluster::connection_attempt,
+            commands::cluster::credential_renewal,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
             commands::access::check_access,
@@ -183,6 +184,7 @@ fn main() {
             commands::crds::get_custom_resource_yaml,
             commands::crds::delete_custom_resource,
             commands::crds::patch_custom_resource,
+            commands::crds::patch_custom_resource_json,
             // Pod commands
             commands::pods::list_pods,
             commands::pods::get_pod,

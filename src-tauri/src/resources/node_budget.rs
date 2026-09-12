@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use k8s_openapi::api::core::v1::{Node, Pod};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::quantities::{parse_cpu, parse_memory};
+use crate::utils::quantities::{parse_cpu_checked, parse_memory_checked};
 
 /// How a resource's numbers are read and formatted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,11 +69,14 @@ fn unit_of(name: &str) -> BudgetUnit {
     }
 }
 
-fn parse(name: &str, quantity: &str) -> f64 {
+/// `None` when the quantity will not parse: an unreadable value is unknown,
+/// never a confident zero. A present-but-unparseable capacity is `Some(None)`
+/// to the caller — a resource the node has, in an amount we could not read.
+fn parse(name: &str, quantity: &str) -> Option<f64> {
     match unit_of(name) {
-        BudgetUnit::Cpu => parse_cpu(quantity),
+        BudgetUnit::Cpu => parse_cpu_checked(quantity),
         // A device count is an integer, but a vendor may still write `1k`.
-        BudgetUnit::Memory | BudgetUnit::Count => parse_memory(quantity) as f64,
+        BudgetUnit::Memory | BudgetUnit::Count => parse_memory_checked(quantity).map(|b| b as f64),
     }
 }
 
@@ -90,20 +93,30 @@ type Sums = BTreeMap<String, f64>;
 fn add_all(
     into: &mut Sums,
     from: Option<&BTreeMap<String, k8s_openapi::apimachinery::pkg::api::resource::Quantity>>,
+    ok: &mut bool,
 ) {
     let Some(map) = from else { return };
     for (key, q) in map {
-        *into.entry(key.clone()).or_insert(0.0) += parse(key, &q.0);
+        match parse(key, &q.0) {
+            Some(value) => *into.entry(key.clone()).or_insert(0.0) += value,
+            // A summed value we could not read makes the total a lie; the
+            // caller turns `!ok` into an unknown column, not a smaller number.
+            None => *ok = false,
+        }
     }
 }
 
 fn max_all(
     into: &mut Sums,
     from: Option<&BTreeMap<String, k8s_openapi::apimachinery::pkg::api::resource::Quantity>>,
+    ok: &mut bool,
 ) {
     let Some(map) = from else { return };
     for (key, q) in map {
-        let value = parse(key, &q.0);
+        let Some(value) = parse(key, &q.0) else {
+            *ok = false;
+            continue;
+        };
         let slot = into.entry(key.clone()).or_insert(0.0);
         if value > *slot {
             *slot = value;
@@ -112,19 +125,28 @@ fn max_all(
 }
 
 /// The scheduler's reservation for one pod, per resource: requests and limits.
-fn pod_reservation(pod: &Pod) -> (Sums, Sums) {
+fn pod_reservation(pod: &Pod) -> (Sums, Sums, bool) {
     let Some(spec) = pod.spec.as_ref() else {
-        return (Sums::new(), Sums::new());
+        return (Sums::new(), Sums::new(), true);
     };
     let mut requests = Sums::new();
     let mut limits = Sums::new();
     let mut init_requests = Sums::new();
     let mut init_limits = Sums::new();
+    let mut ok = true;
 
     for container in &spec.containers {
         let resources = container.resources.as_ref();
-        add_all(&mut requests, resources.and_then(|r| r.requests.as_ref()));
-        add_all(&mut limits, resources.and_then(|r| r.limits.as_ref()));
+        add_all(
+            &mut requests,
+            resources.and_then(|r| r.requests.as_ref()),
+            &mut ok,
+        );
+        add_all(
+            &mut limits,
+            resources.and_then(|r| r.limits.as_ref()),
+            &mut ok,
+        );
     }
     for init in spec.init_containers.as_deref().unwrap_or_default() {
         let resources = init.resources.as_ref();
@@ -132,14 +154,27 @@ fn pod_reservation(pod: &Pod) -> (Sums, Sums) {
         // and counts with the app containers; a plain init container only
         // has to fit before them, so the largest one is what is reserved.
         if init.restart_policy.as_deref() == Some("Always") {
-            add_all(&mut requests, resources.and_then(|r| r.requests.as_ref()));
-            add_all(&mut limits, resources.and_then(|r| r.limits.as_ref()));
+            add_all(
+                &mut requests,
+                resources.and_then(|r| r.requests.as_ref()),
+                &mut ok,
+            );
+            add_all(
+                &mut limits,
+                resources.and_then(|r| r.limits.as_ref()),
+                &mut ok,
+            );
         } else {
             max_all(
                 &mut init_requests,
                 resources.and_then(|r| r.requests.as_ref()),
+                &mut ok,
             );
-            max_all(&mut init_limits, resources.and_then(|r| r.limits.as_ref()));
+            max_all(
+                &mut init_limits,
+                resources.and_then(|r| r.limits.as_ref()),
+                &mut ok,
+            );
         }
     }
     for (key, value) in init_requests {
@@ -158,15 +193,25 @@ fn pod_reservation(pod: &Pod) -> (Sums, Sums) {
     // that resource; the overview and the pod page apply the same rule.
     if let Some(pod_level) = spec.resources.as_ref() {
         for (key, q) in pod_level.requests.iter().flatten() {
-            requests.insert(key.clone(), parse(key, &q.0));
+            match parse(key, &q.0) {
+                Some(v) => {
+                    requests.insert(key.clone(), v);
+                }
+                None => ok = false,
+            }
         }
         for (key, q) in pod_level.limits.iter().flatten() {
-            limits.insert(key.clone(), parse(key, &q.0));
+            match parse(key, &q.0) {
+                Some(v) => {
+                    limits.insert(key.clone(), v);
+                }
+                None => ok = false,
+            }
         }
     }
-    add_all(&mut requests, spec.overhead.as_ref());
-    add_all(&mut limits, spec.overhead.as_ref());
-    (requests, limits)
+    add_all(&mut requests, spec.overhead.as_ref(), &mut ok);
+    add_all(&mut limits, spec.overhead.as_ref(), &mut ok);
+    (requests, limits, ok)
 }
 
 /// The table, from the node and the pods on it. `pods` is `None` when they
@@ -188,8 +233,10 @@ pub fn budget(
         Some(list) => {
             let mut requested = Sums::new();
             let mut limited = Sums::new();
+            let mut ok = true;
             for pod in list {
-                let (r, l) = pod_reservation(pod);
+                let (r, l, pod_ok) = pod_reservation(pod);
+                ok &= pod_ok;
                 for (k, v) in r {
                     *requested.entry(k).or_insert(0.0) += v;
                 }
@@ -197,8 +244,15 @@ pub fn budget(
                     *limited.entry(k).or_insert(0.0) += v;
                 }
             }
-            requested.insert("pods".into(), list.len() as f64);
-            (Some(requested), Some(limited))
+            // A reservation we could not read makes every sum a smaller number
+            // than the truth, so the whole column is unknown — the same answer
+            // a refused namespace gives.
+            if ok {
+                requested.insert("pods".into(), list.len() as f64);
+                (Some(requested), Some(limited))
+            } else {
+                (None, None)
+            }
         }
         None => (None, None),
     };
@@ -218,7 +272,7 @@ pub fn budget(
         .into_iter()
         .map(|name| {
             let read = |m: Option<&BTreeMap<String, _>>| {
-                m.and_then(|m| m.get(&name)).map(
+                m.and_then(|m| m.get(&name)).and_then(
                     |q: &k8s_openapi::apimachinery::pkg::api::resource::Quantity| {
                         parse(&name, &q.0)
                     },
@@ -246,7 +300,10 @@ pub fn budget(
 
     NodeBudget {
         pods: counted.as_ref().map(Vec::len),
-        known: counted.is_some(),
+        // The sums are numbers only when every counted pod's reservation
+        // parsed; an unreadable one makes them unknown even though the pods
+        // themselves were all listed.
+        known: requested.is_some(),
         refused,
         error,
         resources,
@@ -392,5 +449,42 @@ mod tests {
         });
         let b = budget(&node(), Some(&[p]), Vec::new(), None);
         assert_eq!(row(&b, "cpu").requested, Some(300.0));
+    }
+
+    /// A reservation whose quantity will not parse makes the sums smaller than
+    /// the truth. The whole column is then unknown — the same answer a refused
+    /// namespace gives — not a confident undercount, though the pod is still
+    /// counted. Deleting the parse-failure branch collapses this to Some(0).
+    #[test]
+    fn an_unreadable_reservation_makes_the_sums_unknown_not_smaller() {
+        let pods = vec![pod(
+            "Running",
+            vec![container(&[("cpu", "wat")], &[])],
+            vec![],
+        )];
+        let b = budget(&node(), Some(&pods), Vec::new(), None);
+        assert!(!b.known);
+        assert_eq!(b.pods, Some(1), "the pod was still counted");
+        for r in &b.resources {
+            assert_eq!(r.requested, None, "{}", r.name);
+            assert_eq!(r.limited, None, "{}", r.name);
+        }
+    }
+
+    /// A capacity value the parser cannot read is unknown, not a node that has
+    /// zero of that resource. `Some(0.0)` here would be the third-state
+    /// collapse; the honest answer is `None`.
+    #[test]
+    fn an_unreadable_capacity_reads_as_unknown_not_zero() {
+        let mut n = node();
+        n.status.as_mut().unwrap().capacity = Some(q(&[
+            ("cpu", "4"),
+            ("memory", "16Gi"),
+            ("pods", "110"),
+            ("hugepages-2Mi", "wat"),
+        ]));
+        let b = budget(&n, Some(&[]), Vec::new(), None);
+        assert_eq!(row(&b, "hugepages-2Mi").capacity, None);
+        assert_eq!(row(&b, "cpu").capacity, Some(4000.0));
     }
 }

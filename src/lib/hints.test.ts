@@ -7,6 +7,7 @@ import {
   addressIn,
   agentReport,
   hintFor,
+  namespaceOf,
   searchQuery,
   searchUrl,
   troubleOf,
@@ -146,6 +147,8 @@ const crashing = () =>
 
 const NONE: Chain = {
   address: null,
+  servicesKnown: true,
+  endpointsKnown: true,
   service: null,
   sidecar: null,
   notRead: [],
@@ -297,6 +300,8 @@ describe("hintFor", () => {
         "dial tcp 10.43.39.231:5432: connect: connection refused",
       ]),
       service: { name: "shop-db-rw", namespace: "shop", ready: 0, total: 3 },
+      servicesKnown: true,
+      endpointsKnown: true,
       sidecar: null,
       notRead: [],
     };
@@ -326,6 +331,8 @@ describe("hintFor", () => {
         "dial tcp 127.0.0.1:5432: connect: connection refused",
       ]),
       service: null,
+      servicesKnown: true,
+      endpointsKnown: true,
       sidecar,
       notRead: [],
     };
@@ -336,7 +343,9 @@ describe("hintFor", () => {
         host: "127.0.0.1",
         port: 5432,
         sidecar: "cloud-sql-proxy",
-        state: "running, not ready",
+        // Its own sentence: "running, not ready" composed in English and
+        // dropped into a Russian one is the app writing half a language.
+        state: { key: "stateRunningNotReady" },
       },
     });
   });
@@ -345,6 +354,8 @@ describe("hintFor", () => {
     const chain: Chain = {
       address: addressIn(["cluster0.ab12c.mongodb.net:27017 i/o timeout"]),
       service: null,
+      servicesKnown: true,
+      endpointsKnown: true,
       sidecar: null,
       notRead: ["NetworkPolicies: this app has no reader for them yet"],
     };
@@ -357,8 +368,31 @@ describe("hintFor", () => {
     expect(hint.headline.key).toBe("guessCrashLoop");
     expect(hint.lines[0]).toEqual({
       key: "factExited",
-      values: { container: "app", code: 1, n: 14 },
+      values: {
+        container: "app",
+        code: 1,
+        // Its own sentence: no language can hand another a substring of
+        // its own plural, so the count is chosen before the line holding it.
+        restarts: { key: "countRestarts", values: { n: 14 } },
+      },
     });
+  });
+
+  /**
+   * English said "1 restarts" and Russian got one form for every number.
+   * The counted noun is a plural object now, and the sentence holds the
+   * rendered form rather than the number.
+   */
+  it("counts restarts in a form each language actually has", () => {
+    const restarts = en.hints.countRestarts as { one: string; other: string };
+    expect(restarts.one).toContain("restart");
+    expect(restarts.one).not.toContain("restarts");
+    expect(Object.keys(ru.hints.countRestarts as object).sort()).toEqual([
+      "few",
+      "many",
+      "one",
+      "other",
+    ]);
   });
 });
 
@@ -388,6 +422,250 @@ describe("the words", () => {
   });
 });
 
+describe("what the failure line actually names", () => {
+  /**
+   * `main.py:42` matches the host:port shape exactly, and the last match
+   * on the line won — so a stack-trace frame became the address the whole
+   * chain was read from, and the panel classified a source file.
+   */
+  it("does not read a stack-trace frame as an address", () => {
+    const address = addressIn([
+      'File "/app/handlers/main.py:42", in connect: connection refused to db:5432',
+    ]);
+    expect(address?.host).toBe("db");
+    expect(addressIn(["connection refused at worker.go:118"])).toBeNull();
+  });
+
+  /**
+   * `no route to host` says the connection failed and says neither how.
+   * Reported as a refusal it claimed something answered and said no, and
+   * then told the reader a firewall would have timed out instead.
+   */
+  it("does not call an unreachable host a refusal", () => {
+    const address = addressIn([
+      "dial tcp 203.0.113.10:443: connect: no route to host",
+    ]);
+    expect(address?.refused).toBe(false);
+    expect(address?.timedOut).toBe(false);
+    expect(address?.unclassified).toBe(true);
+    expect(
+      hintFor(troubleOf(crashing(), [])!, crashing(), {
+        ...NONE,
+        address,
+      }).headline.key
+    ).toBe("guessCrashUnreachableOutside");
+  });
+
+  /**
+   * `shop-db-rw.billing.svc.cluster.local` was matched on the bare name
+   * against the pod's own namespace, so a same-named Service next door was
+   * reported — with its endpoint count — as what stands behind an address
+   * in a namespace nothing listed.
+   */
+  it("reads the namespace out of a cluster-DNS name, and never out of an IP", () => {
+    expect(namespaceOf("shop-db-rw.billing.svc.cluster.local", "shop")).toEqual(
+      {
+        name: "shop-db-rw",
+        namespace: "billing",
+        qualified: true,
+      }
+    );
+    expect(namespaceOf("shop-db-rw.svc.cluster.local", "shop").namespace).toBe(
+      "shop"
+    );
+    expect(namespaceOf("shop-db-rw", "shop")).toEqual({
+      name: "shop-db-rw",
+      namespace: "shop",
+      qualified: false,
+    });
+    // `10.43.39.231` read as name=10, namespace=43 matched nothing at all.
+    expect(namespaceOf("10.43.39.231", "shop")).toEqual({
+      name: "10.43.39.231",
+      namespace: "shop",
+      qualified: false,
+    });
+  });
+
+  /**
+   * `db.shop` is the cross-namespace form every Kubernetes reader writes.
+   * Two labels and no `.svc` was called outside the cluster, which gated
+   * off the Service lookup and added a NetworkPolicy line about a hop that
+   * never leaves it.
+   */
+  it("knows the cross-namespace form when it knows the namespace", () => {
+    const line = ["dial tcp db.shop:5432: connect: connection refused"];
+    expect(addressIn(line)?.where).toBe("outside");
+    expect(addressIn(line, ["shop"])?.where).toBe("inCluster");
+  });
+});
+
+describe("trouble that is over, and trouble in the wrong order", () => {
+  /**
+   * A container killed for memory under `restartPolicy: Always` spends
+   * nearly all its time in CrashLoopBackOff, so the OOM arm sitting after
+   * the crash-loop arm was unreachable for exactly the pods it was written
+   * for — while the Containers tab on the same page said OOMKilled.
+   */
+  it("names the OOM kill behind a crash loop, the way the Containers tab does", () => {
+    const pod = crashing();
+    const oomed = {
+      ...pod,
+      containers: pod.containers.map((c) => ({
+        ...c,
+        lastTerminated: {
+          exitCode: 137,
+          signal: 9,
+          reason: "OOMKilled",
+          message: null,
+          startedAt: null,
+          finishedAt: new Date().toISOString(),
+        },
+      })),
+    };
+    expect(troubleOf(oomed, [])?.reason).toBe("oomKilled");
+  });
+
+  /**
+   * One OOM kill days ago, ready ever since. Left alone it put a permanent
+   * "is killed for using more memory" panel on a healthy pod.
+   */
+  it("says nothing about a kill the pod has been ready since", () => {
+    const pod = crashing();
+    const settled = {
+      ...pod,
+      status: { ...pod.status, ready: true, phase: "Running" },
+      containers: pod.containers.map((c) => ({
+        ...c,
+        state: { type: "running" as const },
+        restartCount: 1,
+        lastTerminated: {
+          exitCode: 137,
+          signal: 9,
+          reason: "OOMKilled",
+          message: null,
+          startedAt: null,
+          finishedAt: new Date(Date.now() - 4 * 60 * 60_000).toISOString(),
+        },
+      })),
+    };
+    expect(troubleOf(settled, [])).toBeNull();
+  });
+
+  /**
+   * An hour-old FailedMount on a pod that has been Running since. Every
+   * other arm gates on the pod's state; this one consulted only the event,
+   * and drew a trouble panel in the present tense over a healthy pod.
+   */
+  it("says nothing about a mount that failed before the pod came up", () => {
+    const pod = crashing();
+    const running = {
+      ...pod,
+      status: { ...pod.status, ready: true, phase: "Running" },
+      containers: pod.containers.map((c) => ({
+        ...c,
+        state: { type: "running" as const },
+        lastTerminated: null,
+        restartCount: 0,
+      })),
+    };
+    expect(
+      troubleOf(running, [
+        event("FailedMount", "MountVolume.SetUp failed for volume creds", 3),
+      ])
+    ).toBeNull();
+  });
+});
+
+describe("the Service leg, when the app could not read it", () => {
+  const refusedAddress = () =>
+    addressIn(["dial tcp 10.43.39.231:5432: connect: connection refused"]);
+
+  /**
+   * "No Service in this namespace answers to it" is a claim about the
+   * cluster. A 403 on the Services of that namespace is a fact about this
+   * app, and it produced the same sentence — sending a reader to hunt for
+   * a wrong address in a cluster where the address was fine.
+   */
+  it("does not call a Services list it could not read a cluster with no such Service", () => {
+    const unread = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: refusedAddress(),
+      servicesKnown: false,
+    });
+    const empty = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: refusedAddress(),
+      servicesKnown: true,
+    });
+    expect(unread.headline.key).toBe("guessCrashInClusterUnread");
+    expect(empty.headline.key).toBe("guessCrashInClusterUnknown");
+  });
+
+  /**
+   * The Service was found and its endpoints were not. Reported as zero
+   * ready, the panel says the pod itself is probably fine over a count
+   * nobody took.
+   */
+  it("does not report an uncounted Service as one with nothing behind it", () => {
+    const hint = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: refusedAddress(),
+      endpointsKnown: false,
+      service: {
+        name: "shop-db-rw",
+        namespace: "shop",
+        ready: null,
+        total: null,
+      },
+    });
+    expect(hint.headline.key).toBe("guessCrashServiceUncounted");
+  });
+
+  /**
+   * A timeout and a refusal send a reader to different places: one is a
+   * process saying no, the other is packets never arriving. Both Service
+   * sentences said "refused the connection" whatever the line said.
+   */
+  it("says what the line said, not always that the connection was refused", () => {
+    const timedOut = addressIn(["dial tcp 10.43.39.231:5432: i/o timeout"]);
+    const service = {
+      name: "shop-db-rw",
+      namespace: "shop",
+      ready: 3,
+      total: 3,
+    };
+    expect(
+      hintFor(troubleOf(crashing(), [])!, crashing(), {
+        ...NONE,
+        address: timedOut,
+        service,
+      }).headline.key
+    ).toBe("guessCrashTimeoutServiceReady");
+    expect(
+      hintFor(troubleOf(crashing(), [])!, crashing(), {
+        ...NONE,
+        address: refusedAddress(),
+        service,
+      }).headline.key
+    ).toBe("guessCrashRefusedServiceReady");
+  });
+
+  /**
+   * `whereIs` calls 127.0.0.1 "sidecar", and with no container claiming
+   * the port the arm fell through to the outside branches: a pod dialling
+   * its own loopback was told something outside the cluster refused it.
+   */
+  it("never calls this pod's own loopback something outside the cluster", () => {
+    const hint = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: addressIn([
+        "dial tcp 127.0.0.1:15000: connect: connection refused",
+      ]),
+    });
+    expect(hint.headline.key).toBe("guessCrashLoopback");
+  });
+});
+
 describe("searchQuery", () => {
   it("strips the pod, namespace, image, node and host names before the query leaves", () => {
     const address = addressIn([
@@ -404,9 +682,72 @@ describe("searchQuery", () => {
     expect(query).not.toContain("10.43.39.231");
     expect(query).toContain("CrashLoopBackOff");
     expect(query).toContain("connection refused");
+    // Not even with the switch off: the query carries what the app
+    // recognised, never the line the container wrote.
     expect(
       searchQuery(troubleOf(crashing(), [])!, crashing(), address, false)
-    ).toContain("10.43.39.231");
+    ).not.toContain("10.43.39.231");
+  });
+
+  /**
+   * The credential is in the same line as the address: a DSN, a JDBC URL,
+   * a token a client echoed. Sending the raw line to a search engine put
+   * the production database password into a Google query, with the switch
+   * that claims to be the cautious one turned on.
+   */
+  it("sends what the app recognised in the failure, never the line itself", () => {
+    const address = addressIn([
+      'org.postgresql.util.PSQLException: Connection refused: url="jdbc:postgresql://db.shop.svc.cluster.local:5432/app?user=svc&password=Hunter2-prod" dial tcp 10.43.39.231:5432: connect: connection refused',
+    ]);
+    for (const strip of [true, false]) {
+      const query = searchQuery(
+        troubleOf(crashing(), [])!,
+        crashing(),
+        address,
+        strip
+      );
+      expect(query).not.toContain("Hunter2-prod");
+      expect(query).not.toContain("password=");
+      expect(query).not.toContain("PSQLException");
+      expect(query).toContain("connection refused");
+    }
+  });
+
+  /**
+   * Replacing the shorter name first left the longer one unmatched: with
+   * namespace `shop` gone from `db.shop.svc.cluster.local`, neither the
+   * host rule nor the `.svc` rule could see what was left.
+   */
+  it("takes the longest name out first, so a shorter one cannot shield it", () => {
+    // `shop` replaced before `db.shop.svc.cluster.local` left `db.….svc…`,
+    // which neither the host rule nor the `.svc` rule could then match.
+    const query = searchQuery(
+      {
+        reason: "failedMount",
+        volume: "creds",
+        message:
+          "MountVolume.SetUp failed for volume creds: secret not found at db.shop.svc.cluster.local",
+        count: 1,
+      },
+      crashing(),
+      null,
+      true
+    );
+    expect(query).not.toContain("svc.cluster.local");
+    expect(query).not.toContain("shop");
+  });
+
+  /** A cut through a surrogate pair made `encodeURIComponent` throw, and
+   * the button then did nothing at all. */
+  it("cuts the query by code point, so the address can always be built", () => {
+    const long = "🙂".repeat(400);
+    const query = searchQuery(
+      { reason: "failedMount", volume: null, message: long, count: 1 },
+      crashing(),
+      null,
+      false
+    );
+    expect(() => searchUrl("google", "", query)).not.toThrow();
   });
 
   it("builds the engine's address with the utm source on every engine", () => {
@@ -424,9 +765,10 @@ describe("searchQuery", () => {
 
 describe("agentReport", () => {
   /**
-   * Nothing here accepts a Secret's value, so none can be pasted into a
-   * chat by accident. The test hands over an object that carries values
-   * anyway and reads the report for them.
+   * No Secret is read, so a mount is a name and a key count. The log lines
+   * are a different matter — they are whatever the container printed, and
+   * a framework that echoes its resolved configuration prints a password.
+   * The report said "secrets never" over both.
    */
   it("never carries a Secret value, and always says what was not read", () => {
     const leaky = {
@@ -444,6 +786,8 @@ describe("agentReport", () => {
       trouble: troubleOf(crashing(), [])!,
       logLines: [
         "ERROR db: dial tcp 10.43.39.231:5432: connect: connection refused",
+        "INFO  spring.datasource.url=jdbc:postgresql://db:5432/app?password=Hunter2-prod",
+        "INFO  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
       ],
       logContainer: "app",
       logPrevious: true,
@@ -452,6 +796,8 @@ describe("agentReport", () => {
         address: addressIn([
           "dial tcp 10.43.39.231:5432: connect: connection refused",
         ]),
+        servicesKnown: true,
+        endpointsKnown: true,
         service: { name: "shop-db-rw", namespace: "shop", ready: 0, total: 3 },
         sidecar: null,
         notRead: ["NetworkPolicy in shop (403)"],
@@ -460,6 +806,11 @@ describe("agentReport", () => {
       guess: "database unreachable",
     });
     expect(report).not.toContain("hunter2");
+    // What the container printed, not what the app read.
+    expect(report).not.toContain("Hunter2-prod");
+    expect(report).not.toContain("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
+    // And the line is still there, so the reader has not lost the trail.
+    expect(report).toContain("spring.datasource.url=");
     expect(report).toContain(
       "Secret payments-db-credentials mounted at /etc/creds (2 keys, values not included)"
     );

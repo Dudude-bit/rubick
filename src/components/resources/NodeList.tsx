@@ -17,6 +17,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo, useState } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
@@ -202,9 +203,20 @@ export function NodeList() {
     onRecovered: useCallback(() => setWatchFailed(false), []),
   });
 
+  // In the URL, so a deep link can open the view and a reload keeps it.
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "utilisation" ? "utilisation" : "table";
+  const range = (
+    ["1h", "6h", "24h", "7d"].includes(params.get("range") ?? "")
+      ? params.get("range")
+      : "6h"
+  ) as UsageRange;
+
+  // Not while the Utilisation view is up: nothing there reads a live
+  // metrics-server figure, and this polls every two seconds.
   const { nodeMetrics, nodeStatus } = useMetrics({
     includePods: false,
-    enabled: isConnected,
+    enabled: isConnected && view === "table",
   });
 
   const nodeMetricsByName = useMemo(() => {
@@ -217,14 +229,6 @@ export function NodeList() {
 
   const actions = useNodeActions();
 
-  // In the URL, so a deep link can open the view and a reload keeps it.
-  const [params, setParams] = useSearchParams();
-  const view = params.get("view") === "utilisation" ? "utilisation" : "table";
-  const range = (
-    ["1h", "6h", "24h", "7d"].includes(params.get("range") ?? "")
-      ? params.get("range")
-      : "6h"
-  ) as UsageRange;
   const setView = (next: "table" | "utilisation") =>
     setParams((current) => {
       const out = new URLSearchParams(current);
@@ -318,6 +322,12 @@ export function NodeList() {
         </div>
         <NodeUtilisation
           nodes={nodesForTrends.data ?? []}
+          nodesKnown={nodesForTrends.data !== undefined}
+          nodesReason={
+            nodesForTrends.error
+              ? normalizeTauriError(nodesForTrends.error)
+              : null
+          }
           range={range}
           onRange={setRange}
         />

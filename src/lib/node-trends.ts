@@ -10,15 +10,32 @@ export interface TrendLane {
   avg: number;
 }
 
+/**
+ * Why a row has no lane. Three answers, not one:
+ *
+ * - `notLooked` — the window itself is unknown: still in flight, refused, or
+ *   the supplier is unreachable. Saying "no series" here is a claim about
+ *   somebody's Prometheus made out of our own failure to ask.
+ * - `noSeries` — the window was read and holds nothing for this node.
+ * - `noAllocatable` — there are samples, but the node's allocatable could not
+ *   be read, so a share of it cannot be computed. A fact about the cluster,
+ *   not about Prometheus.
+ */
+export type TrendBlind = "notLooked" | "noSeries" | "noAllocatable";
+
 export interface NodeTrend {
   node: NodeInfo;
-  /** `null` when Prometheus has no series for this node in the window. */
+  /** `null` when there is no lane to draw; {@link NodeTrend.blind} says why. */
   cpu: TrendLane | null;
   memory: TrendLane | null;
   /** 100 minus the busier peak; `null` without a series. */
   headroom: number | null;
   /** How long ago the node last reported anything, when it ever did. */
   newestAgoMs: number | null;
+  /** Whether the staleness probe answered at all; `false` is "could not ask". */
+  newestKnown: boolean;
+  /** Why there is no lane, or `null` where there is one. */
+  blind: TrendBlind | null;
   cordoned: boolean;
 }
 
@@ -54,7 +71,13 @@ function lane(
 export function nodeTrends(
   window: NodeUsageWindow | null,
   nodes: readonly NodeInfo[],
-  now: number
+  now: number,
+  /**
+   * Whether `window` is an answer. `false` — still reading, refused, or the
+   * supplier is unreachable — makes every row say "could not look" instead of
+   * asserting Prometheus has nothing for the node.
+   */
+  windowKnown = true
 ): NodeTrend[] {
   const byShort = new Map<string, NodeUsageWindow["nodes"][string]>();
   const newestByShort = new Map<string, number>();
@@ -81,6 +104,19 @@ export function nodeTrends(
     const peaks = [cpu?.peak, memory?.peak].filter(
       (p): p is number => p !== undefined
     );
+    // Samples in hand but no share to draw means the node's own allocatable
+    // could not be read — a fact about the cluster, not about Prometheus.
+    const sampled =
+      series !== undefined &&
+      (series.cpuMillicores.some((p) => p.v !== null) ||
+        series.memoryBytes.some((p) => p.v !== null));
+    const blind: TrendBlind | null = !windowKnown
+      ? "notLooked"
+      : cpu !== null || memory !== null
+        ? null
+        : sampled
+          ? "noAllocatable"
+          : "noSeries";
     const newest = newestByShort.get(key);
     return {
       node,
@@ -88,6 +124,8 @@ export function nodeTrends(
       memory,
       headroom: peaks.length === 0 ? null : 100 - Math.max(...peaks),
       newestAgoMs: newest === undefined ? null : Math.max(0, now - newest),
+      newestKnown: windowKnown && window?.newestKnown !== false,
+      blind,
       cordoned: node.unschedulable,
     };
   });

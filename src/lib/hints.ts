@@ -16,12 +16,24 @@ import type {
   TerminationInfo,
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
+import { formatMemory } from "@/lib/k8s-quantity";
 
 export type HintKey = keyof typeof en.hints;
 
 export interface HintSaying {
   key: HintKey;
-  values?: Record<string, string | number>;
+  /**
+   * A value may itself be a {@link HintSaying}: no language can hand
+   * another a substring of its own plural. `{n} restarts` in the outer
+   * string gets English wrong at one and Russian wrong at every number,
+   * so the count is its own sentence and is chosen first.
+   */
+  values?: Record<string, string | number | HintSaying>;
+}
+
+/** A count as its own sentence, for a number inside another one. */
+export function counted(key: HintKey, n: number): HintSaying {
+  return { key, values: { n } };
 }
 
 export type Trouble =
@@ -102,6 +114,25 @@ function probeOf(
  */
 export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
   const all = [...pod.initContainers, ...pod.containers];
+  // Before the crash loop, not after it. A container killed for memory
+  // under `restartPolicy: Always` spends nearly all its time in
+  // CrashLoopBackOff, so this arm was unreachable for exactly the pods it
+  // was written for — and the Containers tab on the same page said
+  // OOMKilled while this panel said "cannot stay up".
+  const oom = all.find(
+    (c) =>
+      c.lastTerminated?.reason === "OOMKilled" &&
+      (c.restartCount > 0 || c.state.type !== "running") &&
+      !stale(c.lastTerminated.finishedAt, pod)
+  );
+  if (oom) {
+    return {
+      reason: "oomKilled",
+      container: oom.name,
+      limit: limitOf(pod),
+      restarts: oom.restartCount,
+    };
+  }
   const crashing = all.find(
     (c) => c.state.type === "waiting" && c.state.reason === "CrashLoopBackOff"
   );
@@ -111,19 +142,6 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
       container: crashing.name,
       exit: crashing.lastTerminated,
       restarts: crashing.restartCount,
-    };
-  }
-  const oom = all.find(
-    (c) =>
-      c.lastTerminated?.reason === "OOMKilled" &&
-      (c.restartCount > 0 || c.state.type !== "running")
-  );
-  if (oom) {
-    return {
-      reason: "oomKilled",
-      container: oom.name,
-      limit: pod.memoryLimits,
-      restarts: oom.restartCount,
     };
   }
   const pulling = all.find(
@@ -141,8 +159,14 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
       message: failed?.message ?? null,
     };
   }
+  // Only while something is still waiting on it. An hour-old FailedMount
+  // on a pod that has been Running since put a permanent trouble panel,
+  // in the present tense, on the Overview of a healthy pod.
+  const waiting = all.some((c) => c.state.type === "waiting");
   const mount =
-    latest(events, "FailedMount") ?? latest(events, "FailedAttachVolume");
+    waiting || pod.status.phase !== "Running"
+      ? (latest(events, "FailedMount") ?? latest(events, "FailedAttachVolume"))
+      : null;
   if (mount) {
     return {
       reason: "failedMount",
@@ -176,6 +200,36 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
   return null;
 }
 
+/**
+ * A termination too old to be what is wrong now: the pod has been up since.
+ * Without it a single OOM kill days ago left a permanent "is killed for
+ * using more memory" panel on a healthy pod.
+ */
+function stale(finishedAt: string | null, pod: PodInfo): boolean {
+  if (!finishedAt) return false;
+  const ended = Date.parse(finishedAt);
+  if (Number.isNaN(ended)) return false;
+  return pod.status.ready && Date.now() - ended > STALE_TROUBLE_MS;
+}
+
+/** Older than this and still ready: whatever it was, it is over. */
+const STALE_TROUBLE_MS = 30 * 60_000;
+
+/**
+ * The pod's memory limit in words.
+ *
+ * `pod.memoryLimits` is a plain byte count, and every container's limit
+ * added up — so the panel printed "1073741824" and called it this
+ * container's limit. `ContainerInfo` carries no resources, so the number
+ * stays the pod's; the sentence says whose it is.
+ */
+function limitOf(pod: PodInfo): string | null {
+  const raw = pod.memoryLimits;
+  if (!raw) return null;
+  const bytes = Number(raw);
+  return Number.isFinite(bytes) && bytes > 0 ? formatMemory(bytes) : raw;
+}
+
 export interface Address {
   host: string;
   port: number | null;
@@ -184,18 +238,46 @@ export interface Address {
   where: "sidecar" | "inCluster" | "outside";
   refused: boolean;
   timedOut: boolean;
+  /**
+   * The line said the connection failed and said neither how: `no route to
+   * host`, `network is unreachable`. Reported as a refusal it claimed
+   * something answered and said no — and the sentence then told the reader
+   * a firewall would have timed out instead.
+   */
+  unclassified: boolean;
 }
 
 /** `host:port`, where the host is a name or a dotted address and the port is not a clock. */
 const ADDRESS = /([a-z0-9][a-z0-9.-]*[a-z0-9]|[a-z0-9]):(\d{2,5})(?![:.]\d)/gi;
+
+/**
+ * Suffixes a peer never has. `main.py:42` and `handler.go:118` match the
+ * address shape exactly, and taking the last match on the line made a
+ * stack-trace frame the address the whole chain was read from.
+ */
+const NOT_A_HOST =
+  /\.(py|go|js|ts|jsx|tsx|rs|java|rb|c|cc|cpp|h|hpp|php|cs|kt|scala|sh|yaml|yml|json|xml|sql|log|txt)$/i;
 const FAILURE =
   /refused|ECONNREFUSED|timeout|timed out|ETIMEDOUT|unreachable|no route to host|EHOSTUNREACH/i;
 
 function isHost(candidate: string): boolean {
+  if (NOT_A_HOST.test(candidate)) return false;
   return candidate.includes(".") || /[a-z]/i.test(candidate);
 }
 
-function whereIs(host: string): Address["where"] {
+/**
+ * Where the address is, from the name alone.
+ *
+ * `namespaces` is what the app has seen of this cluster: `db.shop` is the
+ * cross-namespace form every Kubernetes reader writes, and with two labels
+ * and no `.svc` it was called outside the cluster — which then gated off
+ * the Service lookup and added a NetworkPolicy line about a hop that never
+ * leaves the cluster.
+ */
+function whereIs(
+  host: string,
+  namespaces: readonly string[] = []
+): Address["where"] {
   const lower = host.toLowerCase();
   if (lower === "127.0.0.1" || lower === "localhost" || lower === "::1")
     return "sidecar";
@@ -203,11 +285,43 @@ function whereIs(host: string): Address["where"] {
     return "inCluster";
   if (/\.svc(\.cluster\.local)?$/.test(lower) || !lower.includes("."))
     return "inCluster";
+  const labels = lower.split(".");
+  if (labels.length === 2 && namespaces.includes(labels[1])) return "inCluster";
   return "outside";
 }
 
-/** The last address a failed connection named, in the lines given. */
-export function addressIn(lines: readonly string[]): Address | null {
+/**
+ * A cluster-DNS host split into the Service name and the namespace it is in.
+ *
+ * `shop-db-rw.billing.svc.cluster.local` was matched on the bare name
+ * against the pod's own namespace, so a same-named Service next door was
+ * reported — with its endpoint count — as what stands behind an address in
+ * a namespace nothing listed. An IP literal has neither part, and
+ * `10.43.39.231` read as `name=10, namespace=43` matched nothing at all.
+ */
+export function namespaceOf(
+  host: string,
+  own: string
+): { name: string; namespace: string; qualified: boolean } {
+  const lower = host.toLowerCase();
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(lower))
+    return { name: lower, namespace: own, qualified: false };
+  const labels = lower.split(".");
+  if (labels.length < 2 || labels[1] === "svc")
+    return { name: labels[0], namespace: own, qualified: labels.length > 1 };
+  return { name: labels[0], namespace: labels[1], qualified: true };
+}
+
+/**
+ * The last address a failed connection named, in the lines given.
+ *
+ * `namespaces` narrows nothing; it only lets a two-label host be recognised
+ * as the cross-namespace form rather than as something outside the cluster.
+ */
+export function addressIn(
+  lines: readonly string[],
+  namespaces: readonly string[] = []
+): Address | null {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const line = lines[index];
     if (!FAILURE.test(line)) continue;
@@ -215,13 +329,16 @@ export function addressIn(lines: readonly string[]): Address | null {
       .filter((found) => isHost(found[1]))
       .at(-1);
     if (!match) continue;
+    const refused = /refused|ECONNREFUSED/i.test(line);
+    const timedOut = /timeout|timed out|ETIMEDOUT/i.test(line);
     return {
       host: match[1],
       port: Number(match[2]),
       line: line.trim(),
-      where: whereIs(match[1]),
-      refused: /refused|ECONNREFUSED/i.test(line),
-      timedOut: /timeout|timed out|ETIMEDOUT/i.test(line),
+      where: whereIs(match[1], namespaces),
+      refused,
+      timedOut,
+      unclassified: !refused && !timedOut,
     };
   }
   return null;
@@ -230,12 +347,24 @@ export function addressIn(lines: readonly string[]): Address | null {
 /** What the app read behind the address, where it could. */
 export interface Chain {
   address: Address | null;
+  /**
+   * Whether the Services of this namespace were read at all.
+   *
+   * Defaults to false, so a caller that forgets gets the honest answer:
+   * `service: null` then means "could not look", not "no Service answers
+   * to that address" — two sentences that send a reader to different
+   * places, and the second one was printed for both.
+   */
+  servicesKnown: boolean;
+  /** Whether the endpoints behind the Service answered. */
+  endpointsKnown: boolean;
   /** The Service the address resolved to, and what stands behind it. */
   service: {
     name: string;
     namespace: string;
-    ready: number;
-    total: number;
+    /** `null` when the Service was found and its endpoints were not read. */
+    ready: number | null;
+    total: number | null;
   } | null;
   /** The container in this pod the address belongs to. */
   sidecar: ContainerInfo | null;
@@ -247,7 +376,8 @@ export interface Check {
   says: HintSaying;
   /** Where to look: a place in the app, or nothing when the check is words. */
   to:
-    | { kind: "tab"; tab: string }
+    /** A tab, and for the log tab the container the check is about. */
+    | { kind: "tab"; tab: string; container?: string }
     | {
         kind: "object";
         objectKind: string;
@@ -263,12 +393,24 @@ export interface Hint {
   checks: Check[];
 }
 
-function stateWord(container: ContainerInfo): string {
+/**
+ * A container's state as a sentence the reader's language chooses, not an
+ * English fragment dropped into a Russian one. The cluster's own word —
+ * `CrashLoopBackOff`, `ContainerCreating` — is passed through untranslated,
+ * which is the rule; "exited 137" was not.
+ */
+function stateWord(container: ContainerInfo): HintSaying {
   const state = container.state;
-  if (state.type === "waiting") return state.reason ?? "waiting";
+  if (state.type === "waiting")
+    return state.reason
+      ? { key: "stateWaitingReason", values: { reason: state.reason } }
+      : { key: "stateWaiting" };
   if (state.type === "terminated")
-    return `exited ${state.termination.exitCode}`;
-  return container.ready ? "running" : "running, not ready";
+    return {
+      key: "stateExited",
+      values: { code: state.termination.exitCode },
+    };
+  return { key: container.ready ? "stateRunning" : "stateRunningNotReady" };
 }
 
 /** The sentence and the checks for one trouble, from the chain the app read. */
@@ -289,7 +431,10 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
       const address = chain.address;
       let headline: HintSaying = {
         key: "guessCrashLoop",
-        values: { container: trouble.container, n: trouble.restarts },
+        values: {
+          container: trouble.container,
+          restarts: counted("countRestarts", trouble.restarts),
+        },
       };
       if (address) {
         const at = { host: address.host, port: address.port ?? "" };
@@ -307,34 +452,57 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
               key: "checkSidecarLines",
               values: { sidecar: chain.sidecar.name },
             },
-            to: { kind: "tab", tab: "logs" },
+            to: {
+              kind: "tab",
+              tab: "logs",
+              container: chain.sidecar.name,
+            },
           });
+        } else if (address.where === "sidecar") {
+          // Nothing in this pod claims the port. Falling through to the
+          // outside arms announced that something outside the cluster
+          // refused a connection to 127.0.0.1.
+          headline = { key: "guessCrashLoopback", values: at };
         } else if (address.where === "inCluster" && chain.service) {
+          const verb = address.timedOut ? "Timeout" : "Refused";
           headline =
-            chain.service.ready === 0
+            chain.service.ready === null
               ? {
-                  key: "guessCrashRefusedServiceEmpty",
+                  key: "guessCrashServiceUncounted",
                   values: { ...at, service: chain.service.name },
                 }
-              : {
-                  key: "guessCrashRefusedServiceReady",
-                  values: {
-                    ...at,
-                    service: chain.service.name,
-                    ready: chain.service.ready,
-                    total: chain.service.total,
-                  },
-                };
+              : chain.service.ready === 0
+                ? {
+                    key: `guessCrash${verb}ServiceEmpty` as const,
+                    values: { ...at, service: chain.service.name },
+                  }
+                : {
+                    key: `guessCrash${verb}ServiceReady` as const,
+                    values: {
+                      ...at,
+                      service: chain.service.name,
+                      ready: chain.service.ready,
+                      total: chain.service.total ?? 0,
+                    },
+                  };
           objectCheck(
             { key: "checkService", values: { service: chain.service.name } },
             "Service",
             chain.service.name,
             chain.service.namespace
           );
+        } else if (address.where === "inCluster" && !chain.servicesKnown) {
+          // The read failed. "No Service answers to it" is a claim about
+          // the cluster; this is a claim about what the app could see.
+          headline = { key: "guessCrashInClusterUnread", values: at };
         } else if (address.where === "inCluster") {
           headline = { key: "guessCrashInClusterUnknown", values: at };
         } else if (address.timedOut) {
           headline = { key: "guessCrashTimeoutOutside", values: at };
+        } else if (address.unclassified) {
+          // `no route to host` is neither. Called a refusal it claimed
+          // something answered and said no.
+          headline = { key: "guessCrashUnreachableOutside", values: at };
         } else {
           headline = { key: "guessCrashRefusedOutside", values: at };
         }
@@ -346,7 +514,7 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           values: {
             container: trouble.container,
             code: exit.exitCode,
-            n: trouble.restarts,
+            restarts: counted("countRestarts", trouble.restarts),
           },
         });
       }
@@ -355,7 +523,7 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           key: "checkLastLines",
           values: { container: trouble.container },
         },
-        to: { kind: "tab", tab: "logs" },
+        to: { kind: "tab", tab: "logs", container: trouble.container },
       });
       for (const volume of pod.volumes) {
         for (const ref of volume.refs) {
@@ -377,7 +545,10 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
     case "oomKilled":
       lines.push({
         key: "factRestarts",
-        values: { container: trouble.container, n: trouble.restarts },
+        values: {
+          container: trouble.container,
+          times: counted("countTimes", trouble.restarts),
+        },
       });
       checks.push({
         says: { key: "checkLimits" },
@@ -392,13 +563,15 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
         );
       }
       return {
-        headline: {
-          key: "guessOom",
-          values: {
-            container: trouble.container,
-            limit: trouble.limit ? ` (${trouble.limit})` : "",
-          },
-        },
+        headline: trouble.limit
+          ? {
+              // Said as the pod's total, because that is what it is:
+              // `ContainerInfo` carries no resources, so this container's
+              // own limit is not knowable here.
+              key: "guessOomWithLimit",
+              values: { container: trouble.container, limit: trouble.limit },
+            }
+          : { key: "guessOom", values: { container: trouble.container } },
         lines,
         checks,
       };
@@ -412,11 +585,15 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
         says: { key: "checkImageRef", values: { image: trouble.image } },
         to: { kind: "tab", tab: "containers" },
       });
+      // Not "a pull secret": a mounted Secret is a Secret the pod reads,
+      // and `imagePullSecrets` is a different field this app does not carry
+      // on `PodInfo`. Calling every mounted Secret a pull secret sent the
+      // reader to edit the wrong object.
       for (const volume of pod.volumes) {
         for (const ref of volume.refs) {
           if (ref.kind === "Secret")
             objectCheck(
-              { key: "checkPullSecret", values: { name: ref.name } },
+              { key: "checkMountedSecret", values: { name: ref.name } },
               "Secret",
               ref.name,
               pod.namespace
@@ -453,7 +630,7 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           key: "guessFailedMount",
           values: {
             volume: trouble.volume ? ` ${trouble.volume}` : "",
-            n: trouble.count,
+            attempts: counted("countAttempts", trouble.count),
           },
         },
         lines,
@@ -476,12 +653,14 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
       return {
         headline: {
           key: trouble.sameEachTime ? "guessPendingSame" : "guessPendingVaried",
-          values: { n: trouble.count },
+          values: trouble.sameEachTime
+            ? { times: counted("countTimes", trouble.count) }
+            : { attempts: counted("countAttempts", trouble.count) },
         },
         lines,
         checks,
       };
-    case "probeFailed":
+    case "probeFailed": {
       if (trouble.message)
         lines.push({
           key: "factKubeletSaid",
@@ -491,22 +670,70 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
         says: { key: "checkProbe" },
         to: { kind: "tab", tab: "containers" },
       });
+      // An Unhealthy event carries no container, and `EventInfo` has no
+      // fieldPath to read one from. A pod with one container answers it;
+      // anything else is a name the app does not have, and the literal
+      // "app" was a container many pods do not even run.
+      const only = pod.containers.length === 1 ? pod.containers[0].name : null;
+      const named = trouble.container ?? only;
       checks.push({
-        says: {
-          key: "checkLastLines",
-          values: { container: trouble.container ?? "app" },
+        says: named
+          ? { key: "checkLastLines", values: { container: named } }
+          : { key: "checkLastLinesUnnamed" },
+        to: {
+          kind: "tab",
+          tab: "logs",
+          ...(named ? { container: named } : {}),
         },
-        to: { kind: "tab", tab: "logs" },
       });
       return {
         headline: {
-          key: "guessProbe",
-          values: { probe: trouble.probe ?? "readiness", n: trouble.count },
+          // The kubelet writes "Readiness probe failed" and the like; where
+          // it did not, the app does not know which probe it was.
+          key: trouble.probe ? "guessProbe" : "guessProbeUnnamed",
+          values: {
+            ...(trouble.probe ? { probe: trouble.probe } : {}),
+            times: counted("countTimes", trouble.count),
+          },
         },
         lines,
         checks,
       };
+    }
   }
+}
+
+/**
+ * What a line may not carry off this machine.
+ *
+ * The credential is almost always in the same line as the address: a DSN, a
+ * JDBC URL, a bearer token a client echoed. Nothing here can be complete —
+ * a log line is arbitrary text — so this removes the shapes a secret takes
+ * rather than pretending to recognise secrets, and the copy beside it says
+ * so instead of promising.
+ */
+const SECRET_SHAPES: Array<[RegExp, string]> = [
+  // scheme://user:pass@host
+  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1…:…@"],
+  // password=…, token: …, api_key=…, secret=…, in query strings or logfmt
+  [
+    /\b(pass(?:word|wd)?|pwd|token|secret|api[-_]?key|access[-_]?key|auth)\b(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&,;)"']+)/gi,
+    "$1$2…",
+  ],
+  // Authorization: Bearer …, and a bare JWT
+  [/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 …"],
+  [/\beyJ[A-Za-z0-9._-]{16,}/g, "…"],
+];
+
+/**
+ * A line with the shapes a secret takes taken out. Applied to everything
+ * this app hands to somebody else — the search engine and the clipboard.
+ */
+export function redact(line: string): string {
+  let out = line;
+  for (const [pattern, replacement] of SECRET_SHAPES)
+    out = out.replace(pattern, replacement);
+  return out;
 }
 
 export type SearchEngine = "google" | "duckduckgo" | "custom";
@@ -523,7 +750,17 @@ export function searchQuery(
     case "crashLoop":
       parts.push("CrashLoopBackOff");
       if (trouble.exit) parts.push(`exit code ${trouble.exit.exitCode}`);
-      if (address) parts.push(address.line);
+      // Not the raw line: what the app recognised in it. The line is
+      // arbitrary text from the container, and the query goes to a search
+      // engine — a DSN with a password in it would go with it.
+      if (address)
+        parts.push(
+          address.refused
+            ? "connection refused"
+            : address.timedOut
+              ? "i/o timeout"
+              : "connection failed"
+        );
       break;
     case "oomKilled":
       parts.push("OOMKilled container restart");
@@ -544,8 +781,22 @@ export function searchQuery(
       );
       break;
   }
-  let query = parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  // Whatever the switch says, the shapes a secret takes never go out.
+  let query = redact(parts.filter(Boolean).join(" "))
+    .replace(/\s+/g, " ")
+    .trim();
   if (strip) {
+    // Shapes before names: a name replaced first breaks the shape around
+    // it. `shop` taken out of `db.shop.svc.cluster.local` left
+    // `db.….svc.cluster.local`, which the cluster-DNS rule could no longer
+    // match, so the rest of the address went out anyway.
+    query = query
+      .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "…")
+      // IPv6, which the rule above cannot see at all.
+      .replace(/\b(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}\b/gi, "…")
+      .replace(/[a-z0-9-]+(\.[a-z0-9-]+)*\.svc(\.cluster\.local)?\b/gi, "…");
+    // Longest first: `shop` replaced before `shop-db` leaves `…-db`, and
+    // the longer name then matches nothing and survives.
     const names = [
       pod.name,
       pod.namespace,
@@ -553,14 +804,15 @@ export function searchQuery(
       ...pod.initContainers.map((c) => c.image),
       pod.nodeName ?? "",
       address?.host ?? "",
-    ].filter((name) => name.length > 2);
+    ]
+      .filter((name) => name.length > 2)
+      .sort((a, b) => b.length - a.length);
     for (const name of names) query = query.split(name).join("…");
-    query = query
-      .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, "…")
-      .replace(/\b[a-z0-9-]+\.[a-z0-9.-]+\.svc(\.cluster\.local)?\b/gi, "…")
-      .replace(/"[^"]*…[^"]*"/g, "…");
+    query = query.replace(/"[^"]*…[^"]*"/g, "…");
   }
-  return query.slice(0, 300);
+  // Sliced by code point, so a cut never leaves half a surrogate pair for
+  // `encodeURIComponent` to throw on.
+  return [...query].slice(0, 300).join("");
 }
 
 export const UTM = "utm_source=rubick.tech";
@@ -624,8 +876,14 @@ function foldEvents(events: EventInfo[]): string {
 
 /**
  * Plain text for a chat or an agent: what the app read, what it did not,
- * and its guess labelled as one. Secret values cannot get in because
- * nothing here accepts them; a mount is a name and a key count.
+ * and its guess labelled as one.
+ *
+ * A mount is a name and a key count — no Secret's data is ever read. The
+ * log lines are a different matter: they are whatever the container
+ * printed, and a framework echoing its resolved configuration prints a
+ * password. {@link redact} takes out the shapes a secret takes, and the
+ * copy beside the button says the lines are the container's own words
+ * rather than promising they are clean.
  */
 export function agentReport(input: AgentReportInput): string {
   const { pod } = input;
@@ -667,7 +925,7 @@ export function agentReport(input: AgentReportInput): string {
     out.push(
       `Last ${input.logLines.length} log lines (container ${input.logContainer ?? "?"}${input.logPrevious ? ", previous run" : ""}):`
     );
-    for (const line of input.logLines) out.push(`  ${line}`);
+    for (const line of input.logLines) out.push(`  ${redact(line)}`);
   }
   if (input.events.length > 0) {
     out.push("");

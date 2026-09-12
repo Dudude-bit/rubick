@@ -17,13 +17,11 @@ import {
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { formatAge } from "@/lib/utils";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
+import { cn, formatAge, formatSince } from "@/lib/utils";
 import type { CustomResourceInfo } from "@/generated/types";
 import { crdObjectPath, crdObjectsPath, getValueByPath } from "../kit";
 import { Cell, Finding, TroubleRow } from "../page-kit";
-import { actionsFor, perform, type PgAction } from "./actions";
+import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
 import {
   BACKUPS_CRD,
   CLUSTERS_CRD,
@@ -46,18 +44,41 @@ import {
 import { useNow } from "@/hooks/useNow";
 import { useT, type T } from "@/i18n/useT";
 
+/**
+ * The words for a failed action. Two of them are this module's own sentinels
+ * — thrown where a write would have overwritten something we had not read —
+ * and they become catalogue sentences here rather than reaching the toast in
+ * English, which no scanner in this project would have seen.
+ */
+function sentenceFor(error: unknown, t: ReturnType<typeof useT>): string {
+  const said = error instanceof Error ? error.message : "";
+  if (said === BACKUP_REFUSED) return t("operators", "backupNotCreated");
+  if (said.startsWith("the fenced-instances annotation was not read"))
+    return t("operators", "fencingUnknown");
+  if (said.startsWith("the whole cluster is fenced"))
+    return t("operators", "fencedAllOne");
+  return normalizeTauriError(error);
+}
+
 export default function CloudNativePgPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "clusters";
   const clustersQuery = useClusters();
   const companions = useCompanions();
-  const operator = useOperator();
 
   const clusters = useMemo(
     () => byTrouble((clustersQuery.data ?? []).map(readCluster)),
     [clustersQuery.data]
   );
+  // The verbs are asked where the Clusters actually are: a reader granted
+  // `patch clusters` in one namespace answers "no" to the cluster-wide
+  // question, and every button on their own cluster went dead.
+  const namespaces = useMemo(
+    () => [...new Set(clusters.map((c) => c.namespace))].sort(),
+    [clusters]
+  );
+  const operator = useOperator(namespaces);
 
   if (clustersQuery.error) {
     return (
@@ -110,7 +131,9 @@ export default function CloudNativePgPage() {
       id: "operator",
       label: t("operators", "operatorTab"),
       glyph: viewGlyph(Box),
-      content: <OperatorTab operator={operator.data} />,
+      content: (
+        <OperatorTab operator={operator.data} pending={operator.isPending} />
+      ),
     },
   ];
 
@@ -200,6 +223,16 @@ function OperatorStrip({
             {operator.controller.name} {operator.controller.ready}/
             {operator.controller.desired}
           </Link>
+        ) : operator && !operator.controllerKnown ? (
+          // The Deployment list was refused or failed. "No Deployment
+          // carries the operator's label" is a claim about a read nobody
+          // got, and a reader with namespace-scoped RBAC gets it every time.
+          <span
+            className="text-warn"
+            title={operator.controllerReason ?? undefined}
+          >
+            {t("operators", "controllerUnknown")}
+          </span>
         ) : (
           <span className="text-warn">
             {t("operators", "controllerNotFound")}
@@ -218,7 +251,9 @@ function OperatorStrip({
           <span className="font-mono">{operator.version}</span>
         ) : (
           <span className="text-fg-fnt">
-            {t("operators", "versionUnknown")}
+            {operator && !operator.controllerKnown
+              ? t("operators", "controllerUnknown")
+              : t("operators", "versionUnknown")}
           </span>
         )}
         {operator?.version && (
@@ -241,7 +276,7 @@ function OperatorStrip({
             </span>
             <span className="ml-2 text-fg-fnt">
               {t("operators", "checkedAgo", {
-                ago: agoOf(operator.checkedAt, now),
+                ago: formatSince(operator.checkedAt, now),
               })}
             </span>
           </>
@@ -339,8 +374,16 @@ function ClusterRow({
     ? schedulesOf(cluster, companions.scheduled)
     : null;
   const actions = actionsFor(cluster, {
-    patchClusters: operator?.canPatchClusters ?? null,
-    createBackups: operator?.canCreateBackups ?? null,
+    // The answer for this cluster's own namespace, falling back to the
+    // cluster-wide one only when there is no per-namespace answer.
+    patchClusters:
+      operator?.patchIn.get(cluster.namespace) ??
+      operator?.canPatchClusters ??
+      null,
+    createBackups:
+      operator?.createIn.get(cluster.namespace) ??
+      operator?.canCreateBackups ??
+      null,
   });
 
   const run = async (action: PgAction) => {
@@ -353,9 +396,9 @@ function ClusterRow({
           cluster: cluster.name,
         }),
       });
-      await queryClient.invalidateQueries({
-        queryKey: [undefined, "cloudnativepg"],
-      });
+      // One predicate, which matches whatever the context key happens to
+      // be. The `[undefined, "cloudnativepg"]` key above it matched nothing:
+      // every key in this vendor starts with the real context.
       await queryClient.invalidateQueries({
         predicate: (query) => query.queryKey.includes("cloudnativepg"),
       });
@@ -365,7 +408,7 @@ function ClusterRow({
           action: t("operators", action.label),
           cluster: cluster.name,
         }),
-        description: normalizeTauriError(error),
+        description: sentenceFor(error, t),
         variant: "destructive",
       });
     } finally {
@@ -421,9 +464,11 @@ function ClusterRow({
               )}
             </Fact>
             <Fact label={t("operators", "readyFact")}>
+              {/* `n` is what the plural resolver reads, and the noun it
+               *  governs is the declared count, not the ready one. */}
               {t("operators", "readyOfDeclared", {
                 ready: cluster.ready,
-                declared: cluster.declared,
+                n: cluster.declared,
               })}
               {cluster.readyCondition.status === "False" && (
                 <span className="ml-2 text-err">
@@ -445,7 +490,7 @@ function ClusterRow({
                   ContinuousArchiving {cluster.archiving.status}
                   {cluster.archiving.reason && ` · ${cluster.archiving.reason}`}
                   {cluster.archiving.since &&
-                    ` · ${agoOf(new Date(cluster.archiving.since).getTime(), now)}`}
+                    ` · ${formatSince(new Date(cluster.archiving.since).getTime(), now)}`}
                 </span>
               )}
             </Fact>
@@ -470,7 +515,7 @@ function ClusterRow({
                 <Cell
                   key={instance.name}
                   bad={instance.health === "failed"}
-                  warn={instance.fenced}
+                  warn={instance.fenced !== false}
                   under={[
                     instance.role === "primary"
                       ? "primary"
@@ -478,7 +523,11 @@ function ClusterRow({
                         ? "replica"
                         : null,
                     instance.health === "unknown" ? null : instance.health,
-                    instance.fenced ? t("operators", "fencedWord") : null,
+                    instance.fenced === true
+                      ? t("operators", "fencedWord")
+                      : instance.fenced === null
+                        ? t("operators", "fencedUnknownWord")
+                        : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -601,7 +650,7 @@ function FindingLine({
           tone="err"
           title={t("operators", "findingArchivingFailing", {
             ago: finding.since
-              ? agoOf(new Date(finding.since).getTime(), now)
+              ? formatSince(new Date(finding.since).getTime(), now)
               : "?",
           })}
           verbatim={finding.message}
@@ -638,6 +687,12 @@ function FindingLine({
           {t("operators", "fencedExplained")}
         </Finding>
       );
+    case "fencedUnknown":
+      return (
+        <Finding tone="warn" title={t("operators", "findingFencedUnknown")}>
+          {t("operators", "fencingUnknown")}
+        </Finding>
+      );
     case "hibernated":
       return (
         <Finding tone="warn" title={t("operators", "findingHibernated")}>
@@ -648,7 +703,35 @@ function FindingLine({
       return (
         <Finding tone="warn" title={finding.phase} verbatim={finding.reason} />
       );
+    case "failover":
+      return (
+        <Finding
+          tone="err"
+          title={t("operators", "findingFailover", {
+            from: cluster.primary ?? "?",
+          })}
+          verbatim={finding.reason}
+        >
+          {t("operators", "failoverExplained")}
+        </Finding>
+      );
+    case "phaseUnwritten":
+      return (
+        <Finding tone="warn" title={t("operators", "findingPhaseUnwritten")}>
+          {t("operators", "phaseUnwrittenExplained")}
+        </Finding>
+      );
+    default:
+      // The switch is the whole map from finding to words. A kind with no
+      // arm used to render nothing at all, silently — this makes the
+      // compiler refuse a new one until it has been given words.
+      return exhausted(finding);
   }
+}
+
+/** A `never` the compiler checks; unreachable, so it says nothing on screen. */
+function exhausted(_: never): null {
+  return null;
 }
 
 function BackupsLine({
@@ -678,7 +761,10 @@ function BackupsLine({
         ? t("operators", "backupsNone")
         : backups.lastCompletedAt
           ? t("operators", "backupsLastCompleted", {
-              ago: agoOf(new Date(backups.lastCompletedAt).getTime(), now),
+              ago: formatSince(
+                new Date(backups.lastCompletedAt).getTime(),
+                now
+              ),
               n: backups.total,
             })
           : t("operators", "backupsNoneCompleted", { n: backups.total })}
@@ -815,12 +901,21 @@ function PoolersTab({ companions }: { companions: Companions | undefined }) {
   );
 }
 
-function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
+function OperatorTab({
+  operator,
+  pending,
+}: {
+  operator: OperatorInfo | undefined;
+  /** The read has not answered yet, which is not the same as answering no. */
+  pending: boolean;
+}) {
   const t = useT();
   return (
     <div className="flex max-w-[64ch] flex-col gap-3 text-xs text-fg-mut">
       <p>{t("operators", "cnpgOperatorExplained")}</p>
-      {operator?.controller ? (
+      {pending ? (
+        <p className="text-fg-fnt">{t("action", "readingInline")}</p>
+      ) : operator?.controller ? (
         <p>
           <Link
             to={`${getResourceDetailUrl(
@@ -832,6 +927,10 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
           >
             {t("operators", "operatorLogs")}
           </Link>
+        </p>
+      ) : operator && !operator.controllerKnown ? (
+        <p className="text-warn" title={operator.controllerReason ?? undefined}>
+          {t("operators", "controllerUnknown")}
         </p>
       ) : (
         <p className="text-warn">{t("operators", "controllerNotFound")}</p>

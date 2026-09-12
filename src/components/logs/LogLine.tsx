@@ -71,6 +71,7 @@ function Fields({
   fields: [string, string][];
   onFieldClick?: (key: string, value: string) => void;
 }) {
+  const t = useT();
   if (fields.length === 0) return null;
   return (
     <span className="text-fg-fnt">
@@ -79,7 +80,7 @@ function Fields({
           {" "}
           <button
             type="button"
-            title={`Filter on ${key}=${value}`}
+            title={t("action", "filterOn", { key, value })}
             className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
             onClick={(event) => {
               event.stopPropagation();
@@ -176,7 +177,10 @@ export const LogLineComponent = memo(function LogLineComponent({
           {viewMode === "table" && (
             <button
               type="button"
-              title={`Filter on level=${level}`}
+              title={t("action", "filterOn", {
+                key: "level",
+                value: LEVEL_WORDS[level],
+              })}
               className={`mr-2 text-[10px] font-semibold uppercase tracking-wide hover:underline ${LEVEL_COLORS[level]}`}
               onClick={() => onLevelClick?.(level)}
             >
@@ -246,7 +250,10 @@ function LineDetail({
           />
           <button
             type="button"
-            title={`Filter on container=${log.container}`}
+            title={t("action", "filterOn", {
+              key: "container",
+              value: log.container,
+            })}
             className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
             onClick={() => onFieldClick?.("container", log.container)}
           >
@@ -255,7 +262,7 @@ function LineDetail({
         </span>
         <button
           type="button"
-          title={`Filter on pod=${log.pod}`}
+          title={t("action", "filterOn", { key: "pod", value: log.pod })}
           className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
           onClick={() => onFieldClick?.("pod", log.pod)}
         >
@@ -263,7 +270,10 @@ function LineDetail({
         </button>
         <button
           type="button"
-          title={`Filter on level=${level}`}
+          title={t("action", "filterOn", {
+            key: "level",
+            value: LEVEL_WORDS[level],
+          })}
           className={`hover:underline ${LEVEL_COLORS[level]}`}
           onClick={() => onLevelClick?.(level)}
         >
@@ -283,7 +293,7 @@ function LineDetail({
               <dt>
                 <button
                   type="button"
-                  title={`Filter on ${key}=${value}`}
+                  title={t("action", "filterOn", { key, value })}
                   className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
                   onClick={() => onFieldClick?.(key, value)}
                 >
@@ -318,10 +328,11 @@ function LaneLabel({
   pod: string;
   onFieldClick?: (key: string, value: string) => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
-      title={`Filter on pod=${pod}`}
+      title={t("action", "filterOn", { key: "pod", value: pod })}
       className="mr-2 text-[10px] font-semibold hover:underline"
       style={{ color: color ?? "hsl(var(--fg-fnt))" }}
       onClick={() => onFieldClick?.("pod", pod)}

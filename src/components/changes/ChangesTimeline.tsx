@@ -1,7 +1,15 @@
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import type { ChangeItem, FieldChange, JournalEntry } from "@/lib/changes";
+import type {
+  ChangeItem,
+  Comparison,
+  FieldChange,
+  JournalEntry,
+} from "@/lib/changes";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+
+/** A busy cluster's week runs to thousands of rows; the tail is said in words. */
+const MAX_ROWS = 300;
 
 const clock = (ms: number) =>
   new Date(ms).toLocaleString([], {
@@ -30,9 +38,10 @@ export function ChangesTimeline({
       </p>
     );
   }
+  const drawn = items.slice(0, MAX_ROWS);
   return (
     <ol className="flex flex-col gap-1 text-xs">
-      {items.map((item, index) => {
+      {drawn.map((item, index) => {
         const after = since != null && item.at !== null && item.at >= since;
         return (
           <li
@@ -54,6 +63,11 @@ export function ChangesTimeline({
           </li>
         );
       })}
+      {items.length > drawn.length ? (
+        <li className="px-1.5 py-1 text-[11px] text-fg-fnt">
+          {t("changes", "moreRows", { n: items.length - drawn.length })}
+        </li>
+      ) : null}
     </ol>
   );
 }
@@ -74,7 +88,7 @@ function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
         </div>
       );
     case "revision": {
-      const { revision, changes } = item;
+      const { revision, against } = item;
       return (
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -100,23 +114,15 @@ function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
               {revision.changeCause}
             </p>
           ) : null}
-          {changes === null ? (
-            <p className="text-[11px] text-fg-fnt">
-              {t("changes", "revisionOldest")}
+          {item.readopted ? (
+            <p className="text-[11px] text-warn">{t("changes", "readopted")}</p>
+          ) : null}
+          {against.state === "compared" && against.missing > 0 ? (
+            <p className="text-[11px] text-warn">
+              {t("changes", "revisionsMissing", { n: against.missing })}
             </p>
-          ) : changes.length === 0 ? (
-            <p className="text-[11px] text-fg-fnt">
-              {t("changes", "unchangedTemplate")}
-            </p>
-          ) : (
-            <ul className="mt-0.5 flex flex-col gap-px">
-              {changes.map((change, index) => (
-                <li key={index} className="font-mono text-[11px]">
-                  <Field change={change} />
-                </li>
-              ))}
-            </ul>
-          )}
+          ) : null}
+          <Against against={against} />
         </div>
       );
     }
@@ -175,10 +181,44 @@ function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
           <span className={cn("font-mono text-[11px]", showObject && "ml-2")}>
             <Journal item={entry} />
           </span>
+          {entry.atRelist ? (
+            <p className="text-[11px] text-warn">
+              {t("changes", "journalSeenAtRelist")}
+            </p>
+          ) : null}
         </div>
       );
     }
   }
+}
+
+function Against({ against }: { against: Comparison }) {
+  const t = useT();
+  if (against.state === "oldest")
+    return (
+      <p className="text-[11px] text-fg-fnt">
+        {t("changes", "revisionOldest")}
+      </p>
+    );
+  if (against.state === "unread")
+    return (
+      <p className="text-[11px] text-warn">{t("changes", "templateUnread")}</p>
+    );
+  if (against.changes.length === 0)
+    return (
+      <p className="text-[11px] text-fg-fnt">
+        {t("changes", "unchangedTemplate")}
+      </p>
+    );
+  return (
+    <ul className="mt-0.5 flex flex-col gap-px">
+      {against.changes.map((change, index) => (
+        <li key={index} className="font-mono text-[11px]">
+          <Field change={change} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Field({ change }: { change: FieldChange }) {
@@ -218,7 +258,15 @@ function Journal({ item }: { item: JournalEntry }) {
     case "generation":
       return <>{t("changes", "journalGeneration", { from, to })}</>;
     case "image":
-      return <>{t("changes", "journalImage", { from, to })}</>;
+      return (
+        <>
+          {t("changes", "journalImage", {
+            container: item.key ?? "",
+            from,
+            to,
+          })}
+        </>
+      );
     case "replicas":
       return <>{t("changes", "journalReplicas", { from, to })}</>;
     case "annotation":

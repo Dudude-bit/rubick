@@ -9,10 +9,12 @@
  */
 
 import type {
+  ContainerImage,
   ControllerRevisionInfo,
   DaemonSetInfo,
   DeploymentContainerInfo,
   DeploymentInfo,
+  EnvVarInfo,
   HelmRevision,
   ReplicaSetInfo,
   StatefulSetInfo,
@@ -35,6 +37,9 @@ export interface Revision {
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
   templateAnnotations: Record<string, string>;
+  /** Whether the template below was read at all. False leaves every field
+   * above empty because nothing was read, not because nothing was there. */
+  templateKnown: boolean;
 }
 
 export function revisionOfReplicaSet(rs: ReplicaSetInfo): Revision {
@@ -48,7 +53,8 @@ export function revisionOfReplicaSet(rs: ReplicaSetInfo): Revision {
     changeCause: rs.annotations[CHANGE_CAUSE] ?? null,
     containers: rs.containers,
     initContainers: rs.initContainers,
-    templateAnnotations: {},
+    templateAnnotations: rs.templateAnnotations,
+    templateKnown: true,
   };
 }
 
@@ -63,6 +69,7 @@ export function revisionOfController(cr: ControllerRevisionInfo): Revision {
     containers: cr.containers,
     initContainers: cr.initContainers,
     templateAnnotations: cr.templateAnnotations,
+    templateKnown: cr.templateRead,
   };
 }
 
@@ -74,12 +81,32 @@ export interface FieldChange {
   to: string | null;
 }
 
-function envWord(entry: DeploymentContainerInfo["env"][number]): string {
+/**
+ * What an env var is set from, in one word.
+ *
+ * Each source type identifies itself by a different field: a `fieldRef` by
+ * `fieldPath`, a `resourceFieldRef` by container and resource, the two map
+ * refs by name and key. Reading only name and key spelled every downward-API
+ * variable "fieldRef:null" — the same word for `spec.nodeName` and
+ * `status.podIP`, so a change between them was no change at all.
+ */
+function envWord(entry: EnvVarInfo): string {
   if (entry.value !== null && entry.value !== undefined) return entry.value;
   const source = entry.valueFrom;
-  return source
-    ? `${source.sourceType}:${source.name}${source.key ? `/${source.key}` : ""}`
-    : "";
+  if (!source) return "";
+  const where =
+    source.fieldPath ??
+    (source.resource !== null
+      ? [source.name, source.resource].filter(Boolean).join("/")
+      : [source.name, source.key].filter(Boolean).join("/"));
+  return where ? `${source.sourceType}:${where}` : source.sourceType;
+}
+
+function envFromWord(
+  entry: DeploymentContainerInfo["envFrom"][number]
+): string {
+  const ref = entry.configMapRef ?? entry.secretRef ?? "";
+  return `${entry.prefix ?? ""}${ref}`;
 }
 
 function resourceMap(container: DeploymentContainerInfo): Map<string, string> {
@@ -118,6 +145,20 @@ export function configHashes(
   );
 }
 
+/**
+ * The template fields two revisions are compared on. Everything outside this
+ * list — `command`, probes, volumes, `nodeSelector`, the service account — is
+ * not read, which is why no copy anywhere says the templates are the same.
+ */
+export const COMPARED_FIELDS = [
+  "image",
+  "env",
+  "envFrom",
+  "ports",
+  "resources",
+  "annotations",
+] as const;
+
 /** What differs between two revisions, container by container, in the template's own field names. */
 export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
   const out: FieldChange[] = [];
@@ -139,6 +180,16 @@ export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
     }
     if (a.image !== b.image)
       out.push({ container: name, field: "image", from: a.image, to: b.image });
+    const ports = (c: DeploymentContainerInfo) => c.ports.join(",");
+    if (ports(a) !== ports(b))
+      out.push({
+        container: name,
+        field: "ports",
+        from: ports(a) || null,
+        to: ports(b) || null,
+      });
+    const envFrom = (c: DeploymentContainerInfo) =>
+      new Map(c.envFrom.map((e, index) => [String(index), envFromWord(e)]));
     out.push(
       ...diffMaps(
         name,
@@ -146,6 +197,7 @@ export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
         new Map(a.env.map((e) => [e.name, envWord(e)])),
         new Map(b.env.map((e) => [e.name, envWord(e)]))
       ),
+      ...diffMaps(name, "envFrom.", envFrom(a), envFrom(b)),
       ...diffMaps(name, "", resourceMap(a), resourceMap(b))
     );
   }
@@ -171,28 +223,44 @@ export interface JournalEntry {
   name: string;
   at: number;
   field: JournalField;
-  /** The image index or annotation key the change is about. */
+  /** The container name or annotation key the change is about. */
   key: string | null;
   from: string | null;
   to: string | null;
+  /**
+   * Found by comparing against the baseline from before a break, not watched
+   * happening. `at` is when it was noticed; it changed somewhere in the gap
+   * before that.
+   */
+  atRelist?: boolean;
 }
 
 /** The fields the journal watches, read off one list row. */
 export interface Snapshot {
   generation: number | null;
-  images: string[];
+  /** Container name to image, so a removed container is not read as a
+   * changed image on every container after it. */
+  images: Map<string, string>;
   replicas: number | null;
   hashes: Map<string, string>;
 }
 
 type WatchedRow = DeploymentInfo | StatefulSetInfo | DaemonSetInfo;
 
+function namedImages(list: ContainerImage[]): Map<string, string> {
+  return new Map(
+    list.flatMap((c) => (c.image === null ? [] : [[c.name, c.image] as const]))
+  );
+}
+
 export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   if (kind === "Deployment") {
     const d = row as DeploymentInfo;
     return {
       generation: d.generation,
-      images: [...d.containers, ...d.initContainers].map((c) => c.image),
+      images: new Map(
+        [...d.containers, ...d.initContainers].map((c) => [c.name, c.image])
+      ),
       replicas: d.replicas.desired,
       hashes: configHashes(d.templateAnnotations),
     };
@@ -201,7 +269,7 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
     const s = row as StatefulSetInfo;
     return {
       generation: s.generation,
-      images: s.images,
+      images: namedImages(s.containerImages),
       replicas: s.replicas.desired,
       hashes: configHashes(s.templateAnnotations),
     };
@@ -209,7 +277,7 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   const ds = row as DaemonSetInfo;
   return {
     generation: ds.generation,
-    images: ds.images,
+    images: namedImages(ds.containerImages),
     replicas: null,
     hashes: configHashes(ds.templateAnnotations),
   };
@@ -229,11 +297,10 @@ export function diffSnapshots(
       to: next.generation === null ? null : String(next.generation),
     });
   }
-  const width = Math.max(prev.images.length, next.images.length);
-  for (let index = 0; index < width; index += 1) {
-    const from = prev.images[index] ?? null;
-    const to = next.images[index] ?? null;
-    if (from !== to) out.push({ field: "image", key: String(index), from, to });
+  for (const name of new Set([...prev.images.keys(), ...next.images.keys()])) {
+    const from = prev.images.get(name) ?? null;
+    const to = next.images.get(name) ?? null;
+    if (from !== to) out.push({ field: "image", key: name, from, to });
   }
   if (prev.replicas !== next.replicas) {
     out.push({
@@ -264,10 +331,22 @@ export interface Gap {
   to: number;
 }
 
-/** The parts of [from, to] no span covers. The whole window, when nothing was ever watched. */
+/**
+ * The parts of [from, to] no span covers. The whole window, when nothing was
+ * ever watched.
+ *
+ * A span with no `to` is the one this process is still heartbeating —
+ * rehydration closes every other one at its `seenAt` — so it covers up to the
+ * end of the window. Ending it at `seenAt` instead drew a "Not observed" box
+ * for the seconds since the last heartbeat, on a cluster being watched
+ * perfectly.
+ */
 export function gapsOf(spans: ObservedSpan[], from: number, to: number): Gap[] {
   const covered = spans
-    .map((span) => ({ from: span.from, to: span.to ?? span.seenAt }))
+    .map((span) => ({
+      from: span.from,
+      to: span.to ?? Math.max(span.seenAt, to),
+    }))
     .filter((span) => span.to > from && span.from < to)
     .sort((a, b) => a.from - b.from);
   const gaps: Gap[] = [];
@@ -280,13 +359,32 @@ export function gapsOf(spans: ObservedSpan[], from: number, to: number): Gap[] {
   return gaps;
 }
 
+/** What a revision could be said about, against the revision before it. */
+export type Comparison =
+  /** Nothing older is on the cluster to compare with. */
+  | { state: "oldest" }
+  /** One of the two templates did not parse: not a revision that ran nothing. */
+  | { state: "unread" }
+  | {
+      state: "compared";
+      changes: FieldChange[];
+      /** Revisions between the two the cluster no longer holds. */
+      missing: number;
+    };
+
 export type ChangeItem =
   | {
       kind: "revision";
       at: number | null;
       revision: Revision;
-      /** Against the revision before it; `null` for the oldest one known. */
-      changes: FieldChange[] | null;
+      against: Comparison;
+      /**
+       * Its backing object is older than the revision before it, which is
+       * what a rollback leaves: the controller re-adopts the existing object
+       * and only bumps its revision. `at` is when that object was created,
+       * not when it became current, and nothing records the latter.
+       */
+      readopted: boolean;
     }
   | { kind: "delivery"; at: number | null; revision: DeliveryRevision }
   | { kind: "helm"; at: number | null; revision: HelmRevision }
@@ -308,6 +406,16 @@ export interface TimelineInput {
   window: { from: number; to: number };
 }
 
+function comparisonOf(older: Revision | null, newer: Revision): Comparison {
+  if (!older) return { state: "oldest" };
+  if (!older.templateKnown || !newer.templateKnown) return { state: "unread" };
+  const missing =
+    older.number !== null && newer.number !== null
+      ? Math.max(0, newer.number - older.number - 1)
+      : 0;
+  return { state: "compared", changes: diffRevisions(older, newer), missing };
+}
+
 /** Everything on one clock, newest first, with the unwatched stretches in it. */
 export function timelineOf(input: TimelineInput): ChangeItem[] {
   const byNumber = [...input.revisions].sort(
@@ -315,12 +423,18 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
       (a.number ?? -Infinity) - (b.number ?? -Infinity) ||
       (ms(a.at) ?? 0) - (ms(b.at) ?? 0)
   );
-  const items: ChangeItem[] = byNumber.map((revision, index) => ({
-    kind: "revision",
-    at: ms(revision.at),
-    revision,
-    changes: index === 0 ? null : diffRevisions(byNumber[index - 1], revision),
-  }));
+  const items: ChangeItem[] = byNumber.map((revision, index) => {
+    const older = index === 0 ? null : byNumber[index - 1];
+    const at = ms(revision.at);
+    const olderAt = older ? ms(older.at) : null;
+    return {
+      kind: "revision",
+      at,
+      revision,
+      against: comparisonOf(older, revision),
+      readopted: at !== null && olderAt !== null && at < olderAt,
+    };
+  });
   for (const revision of input.deliveries)
     items.push({ kind: "delivery", at: ms(revision.at), revision });
   for (const revision of input.helm)

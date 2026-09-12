@@ -27,7 +27,8 @@ export interface Instance {
   role: "primary" | "replica" | "unknown";
   /** CNPG's `instancesStatus` bucket; "failed" is the operator's word. */
   health: "healthy" | "replicating" | "failed" | "unknown";
-  fenced: boolean;
+  /** `null` when the annotation is there and could not be read. */
+  fenced: boolean | null;
 }
 
 export interface PgCluster {
@@ -41,10 +42,20 @@ export interface PgCluster {
   /** Differs from `primary` during a switchover; CNPG's own two fields. */
   targetPrimary: string | null;
   switchingOver: boolean;
+  /** CNPG's "Failing over": unplanned, and not the same event. */
+  failingOver: boolean;
   instances: Instance[];
   declared: number;
   ready: number;
   fenced: string[];
+  /**
+   * Whether `fenced` is an answer. `false` says the annotation is there and
+   * could not be read — and fencing is written back as a whole list, so
+   * acting on a `fenced` we did not read would overwrite it.
+   */
+  fencedKnown: boolean;
+  /** CNPG's `*`: every instance, named or not, so the list cannot be edited. */
+  fencedAll: boolean;
   hibernated: boolean;
   image: string | null;
   postgresVersion: string | null;
@@ -69,10 +80,17 @@ export type PgFinding =
     }
   | { kind: "failedInstances"; severity: "err"; names: string[] }
   | { kind: "fenced"; severity: "warn"; names: string[] }
+  | { kind: "fencedUnknown"; severity: "warn" }
+  | { kind: "failover"; severity: "err"; reason: string | null }
+  | { kind: "phaseUnwritten"; severity: "warn" }
   | { kind: "hibernated"; severity: "warn" }
   | { kind: "phase"; severity: "warn"; phase: string; reason: string | null };
 
 const HEALTHY_PHASE = "Cluster in healthy state";
+/** CNPG's own phase strings, and the sentinel it parks in `targetPrimary`. */
+const SWITCHOVER_PHASE = "Switchover in progress";
+const FAILOVER_PHASE = "Failing over";
+const PENDING_FAILOVER = "pending";
 const HIBERNATED_PHASE = "Cluster is hibernated";
 
 function strings(value: unknown): string[] {
@@ -85,22 +103,42 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
-function fencedOf(annotations: Record<string, string>): string[] | "*" {
+/**
+ * Which instances the annotation names, `"*"` for all of them, or `null`
+ * when the annotation is there and we cannot read it.
+ *
+ * The three answers matter more here than anywhere else on this page,
+ * because fencing is written back as a whole list: an unreadable annotation
+ * read as `[]` said "nothing is fenced", and then fencing one instance
+ * wrote `["that-one"]` over whatever the operator was really holding —
+ * unfencing the rest of a live database cluster without anyone asking.
+ */
+function fencedOf(annotations: Record<string, string>): string[] | "*" | null {
   const raw = annotations[FENCED];
   if (!raw) return [];
+  if (raw.trim() === "*") return "*";
   try {
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.includes("*")) return "*";
+    if (!Array.isArray(parsed)) return null;
     return strings(parsed);
   } catch {
-    return raw === "*" ? "*" : [];
+    return null;
   }
 }
 
 /** `ghcr.io/cloudnative-pg/postgresql:17.5` → `17.5`. */
 export function postgresVersionOf(image: string | null): string | null {
   if (!image) return null;
-  const tag = image.split("@")[0].split(":").pop() ?? "";
+  // The tag is what follows the LAST colon *after* the last slash. A
+  // registry may carry a port — `registry.internal:5000/cnpg/postgresql` —
+  // and splitting the whole reference on ":" then reported 5000 as the
+  // version of PostgreSQL.
+  const ref = image.split("@")[0];
+  const lastSlash = ref.lastIndexOf("/");
+  const namePart = ref.slice(lastSlash + 1);
+  const colon = namePart.lastIndexOf(":");
+  const tag = colon === -1 ? "" : namePart.slice(colon + 1);
   const m = /^(\d+(?:\.\d+)?)/.exec(tag);
   return m ? m[1] : null;
 }
@@ -129,7 +167,7 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
         : failed.includes(name)
           ? "failed"
           : "unknown",
-    fenced: fenced === "*" || fenced.includes(name),
+    fenced: fenced === null ? null : fenced === "*" || fenced.includes(name),
   }));
 
   const archivingCondition = conditionOf(resource, "ContinuousArchiving");
@@ -141,10 +179,26 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
     resource.annotations[HIBERNATION] === "on" ||
     phase === HIBERNATED_PHASE ||
     conditionOf(resource, HIBERNATION)?.status === "True";
-  const switchingOver =
-    primary !== null && targetPrimary !== null && primary !== targetPrimary;
+  // CNPG's own words decide which of the two this is, not the disagreement
+  // between the fields. Its first act in an unplanned failover is to write
+  // `targetPrimary: "pending"` — a sentinel, not an instance — so reading a
+  // failover off `primary !== targetPrimary` both mislabelled writes-are-down
+  // as a graceful switchover and drew "pending" as the name of a Pod.
+  const switchingOver = phase === SWITCHOVER_PHASE;
+  const failingOver = phase === FAILOVER_PHASE;
+  // Not yet chosen, and not a name to print.
+  const targetChosen =
+    targetPrimary !== PENDING_FAILOVER ? targetPrimary : null;
+  const moving = switchingOver || failingOver;
 
   const findings: PgFinding[] = [];
+  // Nothing in the status at all: the operator has not reconciled this
+  // object, or could not. Every arm below needs a positive signal, so
+  // without this the row came out with no findings and was painted the
+  // same green as a healthy cluster.
+  if (phase === null) {
+    findings.push({ kind: "phaseUnwritten", severity: "warn" });
+  }
   if (readyCondition?.status === "False") {
     findings.push({
       kind: "notReady",
@@ -170,13 +224,30 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
       reason: text(status.phaseReason),
     });
   }
-  const fencedNames = fenced === "*" ? all : fenced;
-  if (fencedNames.length > 0) {
+  if (failingOver) {
+    // An unplanned promotion: the old primary is gone and writes are down.
+    // Not the same event as a switchover, and not the same severity.
+    findings.push({
+      kind: "failover",
+      severity: "err",
+      reason: text(status.phaseReason),
+    });
+  }
+  const fencedKnown = fenced !== null;
+  // CNPG's `*` means every instance, including ones its status has not
+  // named yet. Expanding it to the names we happen to know and writing
+  // that back would quietly unfence the rest, so the wildcard is carried
+  // as a wildcard.
+  const fencedAll = fenced === "*";
+  const fencedNames = fencedAll ? all : (fenced ?? []);
+  if (!fencedKnown) {
+    findings.push({ kind: "fencedUnknown", severity: "warn" });
+  } else if (fencedNames.length > 0) {
     findings.push({ kind: "fenced", severity: "warn", names: fencedNames });
   }
   if (hibernated) {
     findings.push({ kind: "hibernated", severity: "warn" });
-  } else if (phase !== null && phase !== HEALTHY_PHASE && !switchingOver) {
+  } else if (phase !== null && phase !== HEALTHY_PHASE && !moving) {
     findings.push({
       kind: "phase",
       severity: "warn",
@@ -194,13 +265,16 @@ export function readCluster(resource: CustomResourceInfo): PgCluster {
     phase,
     phaseReason: text(status.phaseReason),
     primary,
-    targetPrimary,
+    targetPrimary: targetChosen,
     switchingOver,
+    failingOver,
     instances,
     declared: typeof spec.instances === "number" ? spec.instances : 0,
     ready:
       typeof status.readyInstances === "number" ? status.readyInstances : 0,
     fenced: fencedNames,
+    fencedKnown,
+    fencedAll,
     hibernated,
     image,
     postgresVersion: postgresVersionOf(image),

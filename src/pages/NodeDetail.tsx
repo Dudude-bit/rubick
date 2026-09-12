@@ -28,7 +28,11 @@ import {
 import { UsageBlock } from "@/components/resources/usage-block";
 import { NodeResources } from "@/components/resources/NodeResources";
 import { PodListCard } from "@/components/resources/PodListCard";
-import { kindGlyph, podsMark } from "@/components/resources/detail-tab";
+import {
+  countMark,
+  kindGlyph,
+  podsMark,
+} from "@/components/resources/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "@/hooks/useNodeActions";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -312,7 +316,16 @@ export function NodeDetail() {
       id: "pods",
       label: "Pods",
       glyph: kindGlyph(ResourceType.Pod),
-      mark: podsMark(podsOnThisNode.data ?? []),
+      // The pod list is fetched only while this tab is open, so before then
+      // its `data` is undefined — `?? []` would badge a confident "0" on a
+      // node full of pods and disagree with the Overview's own count. Fall
+      // back to that same count (from connections, always loaded), and show
+      // nothing rather than a false zero when neither source has looked yet.
+      mark: podsOnThisNode.data
+        ? podsMark(podsOnThisNode.data)
+        : podCount !== undefined
+          ? countMark(podCount)
+          : undefined,
       content: (
         <PodListCard
           pods={podsOnThisNode.data ?? []}

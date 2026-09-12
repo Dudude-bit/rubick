@@ -13,10 +13,11 @@ mod gcp_gke;
 mod interactive;
 mod kubeconfig_tokens;
 mod oidc;
+pub mod renew;
 
 pub use azure_aks::{is_aks_exec_command, parse_aks_exec_args, AksClusterInfo, AzureAksAuth};
 pub use gcp_gke::{is_gke_exec_command, GcpGkeAuth};
-pub use interactive::prepare_kubeconfig_for_context;
+pub use interactive::{prepare_kubeconfig_for_context, AuthMode};
 pub use oidc::OidcAuth;
 
 use serde::{Deserialize, Serialize};

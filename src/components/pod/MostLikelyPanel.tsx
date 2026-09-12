@@ -12,6 +12,7 @@ import {
   addressIn,
   agentReport,
   hintFor,
+  namespaceOf,
   searchQuery,
   searchUrl,
   troubleOf,
@@ -30,8 +31,30 @@ import type { EventInfo, PodInfo } from "@/generated/types";
 const LOG_LINES = 40;
 const STALE = 15_000;
 
-const words = (saying: HintSaying, t: T) =>
-  t("hints", saying.key, saying.values ?? {});
+/**
+ * A hint in words. An inner {@link HintSaying} is chosen first: a count is
+ * its own sentence, because no language can hand another a substring of
+ * its own plural.
+ */
+/** The host of a custom search URL, or `null` when it is not one. */
+function usableEngine(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.host
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const words = (saying: HintSaying, t: T): string => {
+  const values: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(saying.values ?? {}))
+    values[name] =
+      typeof value === "object" && value !== null ? words(value, t) : value;
+  return t("hints", saying.key, values);
+};
 
 /**
  * Everything the sentence is built from: the pod's events, the last lines
@@ -79,7 +102,14 @@ function useChain(pod: PodInfo, trouble: Trouble | null, wantLogs: boolean) {
     retry: false,
   });
 
-  const address = useMemo(() => addressIn(logs.data ?? []), [logs.data]);
+  // The pod's own namespace is enough for `db.shop`: the cross-namespace
+  // form every Kubernetes reader writes, which was called outside the
+  // cluster and gated off the Service lookup.
+  const namespaces = useMemo(() => [pod.namespace], [pod.namespace]);
+  const address = useMemo(
+    () => addressIn(logs.data ?? [], namespaces),
+    [logs.data, namespaces]
+  );
   const inCluster = address?.where === "inCluster" ? address : null;
 
   const services = useQuery({
@@ -96,19 +126,41 @@ function useChain(pod: PodInfo, trouble: Trouble | null, wantLogs: boolean) {
     staleTime: STALE,
     retry: false,
   });
+  /**
+   * The Service the address names, matched with its namespace.
+   *
+   * `shop-db-rw.billing.svc.cluster.local` was matched on the bare name
+   * against this namespace's Services, so a same-named Service next door
+   * was reported — with its endpoint count — as the thing behind an
+   * address in another namespace.
+   */
   const service = useMemo(() => {
     if (!inCluster || !services.data) return null;
     const host = inCluster.host.toLowerCase();
-    const bare = host.split(".")[0];
+    const labels = namespaceOf(host, pod.namespace);
+    // Not this namespace: the app did not list that one, so it has not
+    // looked rather than found nothing.
+    if (labels.namespace !== pod.namespace) return null;
+    const bare = labels.name;
     return (
       services.data.find(
         (svc) =>
           svc.clusterIp === inCluster.host ||
           svc.name.toLowerCase() === host ||
-          (host.includes(".svc") && svc.name.toLowerCase() === bare)
+          (labels.qualified && svc.name.toLowerCase() === bare)
       ) ?? null
     );
-  }, [inCluster, services.data]);
+  }, [inCluster, services.data, pod.namespace]);
+
+  /** The address is in another namespace, which this app did not list. */
+  const elsewhere = useMemo(() => {
+    if (!inCluster) return null;
+    const { namespace } = namespaceOf(
+      inCluster.host.toLowerCase(),
+      pod.namespace
+    );
+    return namespace === pod.namespace ? null : namespace;
+  }, [inCluster, pod.namespace]);
 
   const endpoints = useQuery({
     queryKey: [context, "hints", "endpoints", pod.namespace, service?.name],
@@ -143,6 +195,10 @@ function useChain(pod: PodInfo, trouble: Trouble | null, wantLogs: boolean) {
       );
     if (address?.where === "outside")
       notRead.push(t("hints", "notReadPolicies"));
+    if (elsewhere)
+      notRead.push(
+        t("hints", "notReadOtherNamespace", { namespace: elsewhere })
+      );
     const ready =
       endpoints.data?.subsets.reduce((sum, s) => sum + s.addresses.length, 0) ??
       null;
@@ -151,26 +207,36 @@ function useChain(pod: PodInfo, trouble: Trouble | null, wantLogs: boolean) {
         (sum, s) => sum + s.notReadyAddresses.length,
         0
       ) ?? null;
+    // The container that declares the port, not the next one in the list.
+    // Declaration order named an unrelated container as the thing that is
+    // not listening, and the pod's own `ports` answered the question.
     const sidecar =
-      address?.where === "sidecar"
-        ? (pod.containers.find(
-            (c) =>
-              c.name !== logContainer &&
-              c.name !==
-                (trouble && "container" in trouble ? trouble.container : "")
+      address?.where === "sidecar" && address.port !== null
+        ? ([...pod.containers, ...pod.initContainers].find((c) =>
+            c.ports.some((port) => port.containerPort === address.port)
           ) ?? null)
         : null;
     return {
       address,
-      service:
-        service && ready !== null && notReady !== null
-          ? {
-              name: service.name,
-              namespace: pod.namespace,
-              ready,
-              total: ready + notReady,
-            }
-          : null,
+      // A read that failed is not an answer. Without these, a 403 on the
+      // Services of this namespace produced the same sentence as a cluster
+      // where nothing answers to that address.
+      // A Service in another namespace was never asked about, so nothing
+      // here may say whether one answers to that address.
+      servicesKnown:
+        inCluster === null || (services.data !== undefined && !elsewhere),
+      endpointsKnown: service === null || endpoints.data !== undefined,
+      service: service
+        ? {
+            name: service.name,
+            namespace: pod.namespace,
+            // Found, but the endpoints behind it were not read: the count
+            // is unknown rather than zero.
+            ready: ready,
+            total:
+              ready !== null && notReady !== null ? ready + notReady : null,
+          }
+        : null,
       sidecar,
       notRead,
     };
@@ -179,11 +245,13 @@ function useChain(pod: PodInfo, trouble: Trouble | null, wantLogs: boolean) {
     service,
     endpoints.data,
     endpoints.error,
+    elsewhere,
+    inCluster,
+    services.data,
     services.error,
     logs.error,
     logContainer,
     pod,
-    trouble,
     t,
   ]);
 
@@ -199,7 +267,8 @@ export function MostLikelyPanel({
   pod: PodInfo;
   events: EventInfo[];
   eventsError: string | null;
-  onOpenTab: (tab: string) => void;
+  /** The log tab is opened on a container, the way the Containers tab does. */
+  onOpenTab: (tab: string, container?: string) => void;
 }) {
   const t = useT();
   const copy = useCopyToClipboard();
@@ -217,19 +286,30 @@ export function MostLikelyPanel({
     staleTime: Infinity,
   });
 
-  if (!settings.showPanel || !trouble) return null;
-  const hint = hintFor(trouble, pod, chain);
+  // A refused events read is not a pod with nothing wrong: three of the six
+  // troubles are read from events, so the panel used to vanish rather than
+  // say it could not look. Shown with the not-read line and no guess.
+  if (!settings.showPanel) return null;
+  if (!trouble && !eventsError) return null;
+  const hint = trouble ? hintFor(trouble, pod, chain) : null;
+  // A custom engine that is not an absolute URL is not an engine: the
+  // search then built `?q=…` out of nothing, `openExternal` refused it and
+  // silently put the query on the clipboard, and the line under the button
+  // read "opens ; change the engine in Settings".
+  const custom = usableEngine(settings.customUrl);
+  const searchable = settings.engine !== "custom" || custom !== null;
   const site =
     settings.engine === "google"
       ? "google.com"
       : settings.engine === "duckduckgo"
         ? "duckduckgo.com"
-        : settings.customUrl;
+        : (custom ?? "");
   const notRead = [...chain.notRead];
   if (eventsError)
     notRead.push(t("hints", "notReadEvents", { reason: eventsError }));
 
   const handleSearch = () => {
+    if (!searchable || !trouble) return;
     const query = searchQuery(trouble, pod, chain.address, settings.stripNames);
     void openExternal(
       searchUrl(settings.engine, settings.customUrl, query),
@@ -260,7 +340,7 @@ export function MostLikelyPanel({
       events,
       chain: { ...chain, notRead },
       mounts,
-      guess: words(hint.headline, t),
+      guess: hint ? words(hint.headline, t) : null,
     });
     copy(text, t("hints", "copiedForAgent", { n: text.length }));
   };
@@ -273,17 +353,17 @@ export function MostLikelyPanel({
     >
       <h3 className="flex items-center gap-1.5 font-medium text-fg">
         <Zap className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
-        {words(hint.headline, t)}
+        {hint ? words(hint.headline, t) : t("hints", "guessUnknownUnread")}
       </h3>
-      {hint.lines.map((line, index) => (
+      {(hint?.lines ?? []).map((line, index) => (
         <p key={index} className="mt-1 text-fg-mut">
           {words(line, t)}
         </p>
       ))}
       <p className="mt-1 text-[11px] text-fg-fnt">{t("hints", "notTested")}</p>
-      {hint.checks.length > 0 ? (
+      {(hint?.checks.length ?? 0) > 0 ? (
         <ul className="mt-1.5 flex flex-col gap-0.5">
-          {hint.checks.map((check, index) => (
+          {hint!.checks.map((check, index) => (
             <li key={index} className="flex items-baseline gap-1.5">
               <span className="text-fg-fnt" aria-hidden="true">
                 ·
@@ -299,7 +379,12 @@ export function MostLikelyPanel({
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={handleSearch}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSearch}
+          disabled={!searchable}
+        >
           <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           {t("hints", "googleIt")}
         </Button>
@@ -308,7 +393,9 @@ export function MostLikelyPanel({
           {t("hints", "copyForAgent")}
         </Button>
         <span className="text-[11px] text-fg-fnt">
-          {t("hints", "searchOpens", { site })}
+          {searchable
+            ? t("hints", "searchOpens", { site })
+            : t("hints", "searchNoEngine")}
         </span>
       </div>
     </section>
@@ -320,18 +407,19 @@ function CheckRow({
   onOpenTab,
 }: {
   check: Check;
-  onOpenTab: (tab: string) => void;
+  onOpenTab: (tab: string, container?: string) => void;
 }) {
   const t = useT();
   const text = words(check.says, t);
   if (check.to === null) return <span className="text-fg-mut">{text}</span>;
   if (check.to.kind === "tab") {
     const tab = check.to.tab;
+    const container = check.to.container;
     return (
       <button
         type="button"
         className="text-left text-info hover:underline"
-        onClick={() => onOpenTab(tab)}
+        onClick={() => onOpenTab(tab, container)}
       >
         {text}
       </button>

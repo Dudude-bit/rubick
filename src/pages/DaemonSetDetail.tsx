@@ -295,6 +295,7 @@ export function DaemonSetDetail() {
                 key={`${namespace}/${name}`}
                 namespace={namespace || ""}
                 pods={pods.map(lanePodOf)}
+                podsError={podsError}
                 laneRule="node"
                 workload={name ? { owner: name, ownerKind: "DaemonSet" } : null}
               />

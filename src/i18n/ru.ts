@@ -161,6 +161,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    files: "Файлы",
     members: "Члены",
     racks: "Стойки",
     instances: "Инстансы",
@@ -415,7 +416,6 @@ export const ru: Catalogue = {
     ready: "Готовность",
     restarts: "Перезапуски",
     node: "Узел",
-    files: "Файлы",
     cpuOfAllocatable: "CPU, % от allocatable",
     memoryOfAllocatable: "Память, % от allocatable",
     utilisation: "Загрузка",
@@ -496,8 +496,10 @@ export const ru: Catalogue = {
     laneLabelColour: "Цвет дорожки",
     laneLabelShort: "Короткий префикс",
     laneLabelFull: "Полное имя",
+    filterOn: "Фильтр по {key}={value}",
+    showAllLanes: "Показать все поды",
     laneLabelHint:
-      "Как строка называет свой под: только цветом дорожки, последними символами имени пода или полным именем.",
+      "Как строка называет свою дорожку: только цветом, последними символами имени или полным именем.",
     laneRulePod: "дорожка = под",
     laneRuleOrdinal: "дорожка = порядковый номер",
     laneRuleNode: "дорожка = нода",
@@ -1302,12 +1304,12 @@ export const ru: Catalogue = {
     save: "Сохранить",
     delete: "Удалить",
     retry: "Повторить",
+    download: "Скачать",
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
     openInBrowser: "Открыть в браузере",
     back: "Назад",
-    download: "Скачать",
     gwFilterPlaceholder: "имя, хост, шлюз…",
     filterRoutes: "Фильтр маршрутов",
     filterByKind: "Фильтр по типу",
@@ -1444,7 +1446,18 @@ export const ru: Catalogue = {
     revisionNumber: "ревизия {n}",
     revisionCurrent: "текущая",
     revisionOldest: "самая старая из известных; сравнивать не с чем",
-    unchangedTemplate: "тот же шаблон, что в предыдущей ревизии",
+    unchangedTemplate:
+      "в сравниваемом ничего не изменилось: image, env, envFrom, ports, resources, аннотации с контрольной суммой",
+    templateUnread:
+      "шаблон этой ревизии или предыдущей не прочитан; что изменилось — неизвестно",
+    revisionsMissing: {
+      one: "{n} ревизии между ними на кластере больше нет",
+      few: "{n} ревизий между ними на кластере больше нет",
+      many: "{n} ревизий между ними на кластере больше нет",
+      other: "{n} ревизий между ними на кластере больше нет",
+    },
+    readopted:
+      "снова взята откатом: на шкале момент, когда объект создан, а не когда стал текущим",
     changeCause: "kubernetes.io/change-cause",
     fieldContainer: "контейнер",
     added: "добавлен",
@@ -1455,7 +1468,7 @@ export const ru: Catalogue = {
     journalCreated: "{kind} появился",
     journalDeleted: "{kind} исчез",
     journalGeneration: "generation spec {from} → {to}",
-    journalImage: "образ {from} → {to}",
+    journalImage: "{container}: образ {from} → {to}",
     journalReplicas: "реплики {from} → {to}",
     journalAnnotation: "{key} {from} → {to}",
     journalSeenAtRelist:
@@ -1470,6 +1483,15 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     window24h: "24ч",
     window7d: "7д",
+    deliveriesUnread: "Кто это доставляет — не прочитано: {reason}",
+    claimedOwner:
+      "{owner} не перечисляет этот объект; на объекте только метка с его именем",
+    moreRows: {
+      one: "ещё {n} строка не нарисована",
+      few: "ещё {n} строки не нарисованы",
+      many: "ещё {n} строк не нарисовано",
+      other: "ещё {n} строк не нарисовано",
+    },
   },
   hints: {
     mostLikely: "Скорее всего",
@@ -1477,16 +1499,30 @@ export const ru: Catalogue = {
       "«Скорее всего» это слова приложения о цепочке, которую оно прочитало до конца, но не проверило: ни один пакет отсюда не отправлялся.",
     googleIt: "Найти в поиске",
     copyForAgent: "Скопировать для агента",
-    copiedForAgent: "Скопировано: {n} символов, секретов нет.",
+    copiedForAgent:
+      "Скопировано {n} символов. Прочитайте перед тем, как вставлять: строки лога — это то, что напечатал контейнер.",
+    searchNoEngine: "Поисковика нет: свой URL в настройках — не адрес.",
     searchOpens: "откроется {site}; движок меняется в настройках",
     guessCrashLoop:
-      "Скорее всего: {container} сам завершается сразу после старта, уже {n} перезапусков. Причина, скорее всего, в его последних строках перед выходом.",
+      "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
     guessCrashRefusedSidecar:
       "Скорее всего: на {host}:{port} внутри этого пода никто не отвечает. Этот адрес у сайдкара {sidecar}, который сейчас {state}; само приложение, скорее всего, в порядке и ждёт его.",
     guessCrashRefusedServiceEmpty:
       "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
     guessCrashRefusedServiceReady:
       "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что отказ, скорее всего, идёт от процесса за ним, а не от кластера.",
+    guessCrashTimeoutServiceEmpty:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
+    guessCrashTimeoutServiceReady:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что пакеты, скорее всего, теряются по дороге — обычно это NetworkPolicy, а их приложение не читало.",
+    guessCrashServiceUncounted:
+      "Скорее всего: приложение не может достучаться до {host}:{port}. Этот адрес у Service {service}, а что стоит за ним — прочитать не удалось: с этого, скорее всего, и стоит начать, но сказать отсюда нечего.",
+    guessCrashInClusterUnread:
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера. Services этого namespace прочитать не удалось, так что кто на него отвечает, скорее всего, стоит посмотреть руками — отсюда не видно.",
+    guessCrashLoopback:
+      "Скорее всего: {host}:{port} отказал в соединении, и этот адрес — сам этот под: обычно это не поднявшийся сайдкар или тот, который на этом порту не слушает. Ни один контейнер этого пода его не объявляет.",
+    guessCrashUnreachableOutside:
+      "Скорее всего: до {host}:{port} не достучаться, и строка не говорит, ответил ли кто-нибудь — обычно это маршрут или имя, которое из этого кластера ведёт в никуда. Приложение видит дорогу, не то, что в её конце.",
     guessCrashInClusterUnknown:
       "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера, на который не отвечает ни один Service в этом namespace. Скорее всего, адрес неверный или Service в другом namespace.",
     guessCrashTimeoutOutside:
@@ -1494,22 +1530,53 @@ export const ru: Catalogue = {
     guessCrashRefusedOutside:
       "Скорее всего: {host}:{port} ответил и отказал. Что-то снаружи кластера отклонило соединение, обычно сам сервис или прокси перед ним; файрвол дал бы таймаут.",
     guessOom:
-      "Скорее всего: {container} убивают за память сверх лимита{limit}. Скорее всего, ему нужен лимит выше, или в нём утечка.",
+      "Скорее всего: {container} убивают за память сверх лимита. Скорее всего, ему нужен лимит выше, или в нём утечка.",
+    guessOomWithLimit:
+      "Скорее всего: {container} убивают за память сверх лимита. Лимиты этого пода в сумме — {limit}; скорее всего, ему нужен выше, или в нём утечка.",
     guessImagePull:
       "Скорее всего: образ {image} не скачивается, обычно неверный тег, приватный registry без pull secret или registry с лимитом запросов.",
     guessFailedMount:
-      "Скорее всего: том{volume} не монтируется, уже {n} попыток, обычно Secret или ConfigMap, которых ещё нет, или несвязанный PersistentVolumeClaim.",
+      "Скорее всего: том{volume} не монтируется, уже {attempts}, обычно Secret или ConfigMap, которых ещё нет, или несвязанный PersistentVolumeClaim.",
     guessPendingSame:
-      "Скорее всего: ни одна нода не подходит. Планировщик дал один и тот же ответ {n} раз, так что, скорее всего, с нодами ничего не менялось с первого вопроса.",
+      "Скорее всего: ни одна нода не подходит. Планировщик дал один и тот же ответ {times}, так что, скорее всего, с нодами ничего не менялось с первого вопроса.",
     guessPendingVaried:
-      "Скорее всего: ни одна нода не подходит, и ответ планировщика менялся за {n} попыток, так что ноды, скорее всего, меняются у него под руками.",
+      "Скорее всего: ни одна нода не подходит, и ответ планировщика менялся за {attempts}, так что ноды, скорее всего, меняются у него под руками.",
+    guessUnknownUnread:
+      "События пода прочитать не удалось, так что сказать, что скорее всего не так, отсюда нельзя — состояния контейнеров ниже это всё, на что приложение смогло посмотреть.",
+    guessProbeUnnamed:
+      "Скорее всего: проба падает, и kubelet на это реагирует, уже {times} — событие не говорит, какая именно. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
     guessProbe:
-      "Скорее всего: проба {probe} падает, и kubelet на это реагирует, уже {n} раз. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
+      "Скорее всего: проба {probe} падает, и kubelet на это реагирует, уже {times}. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
     factLastLineSaid: "Последняя строка перед выходом: {line}",
-    factExited: "{container} завершился с кодом {code}, уже {n} перезапусков.",
-    factRestarts: "{container} перезапускался {n} раз.",
+    factExited: "{container} завершился с кодом {code}, уже {restarts}.",
+    factRestarts: "{container} перезапускался {times}.",
+    countRestarts: {
+      one: "{n} перезапуск",
+      few: "{n} перезапуска",
+      many: "{n} перезапусков",
+      other: "{n} перезапуска",
+    },
+    countAttempts: {
+      one: "{n} попытка",
+      few: "{n} попытки",
+      many: "{n} попыток",
+      other: "{n} попытки",
+    },
+    countTimes: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
     factKubeletSaid: "Kubelet сказал: {message}",
     factSchedulerSaid: "Планировщик сказал: {message}",
+    checkLastLinesUnnamed:
+      "Посмотрите последние строки перед выходом — событие не говорит, какого контейнера",
+    stateWaiting: "ждёт",
+    stateWaitingReason: "{reason}",
+    stateExited: "вышел с кодом {code}",
+    stateRunning: "работает",
+    stateRunningNotReady: "работает, не готов",
     checkLastLines: "Прочитать последние строки {container} перед выходом",
     checkSidecarLines: "Прочитать последние строки {sidecar}",
     checkService: "Проверить Service {service}: эндпоинты и что за ними",
@@ -1519,6 +1586,8 @@ export const ru: Catalogue = {
     checkNode: "Посмотреть ноду {node}: давление памяти и что ещё там работает",
     checkImageRef:
       "Проверить ссылку на образ {image}: тег, registry, pull secret",
+    checkMountedSecret:
+      "Secret {name}: его под монтирует — pull-секрет это другое поле, которое приложение не читает",
     checkPullSecret: "Secret {name}: pull secret, который монтирует под",
     checkVolumeRef: "{kind} {name}: существует ли, связан ли",
     checkRequests: "Сравнить requests с тем, сколько свободно на нодах",
@@ -1529,6 +1598,8 @@ export const ru: Catalogue = {
     notReadEndpoints: "эндпоинты Service {service} ({reason})",
     notReadLogs: "последние строки {container} ({reason})",
     notReadEvents: "события этого пода ({reason})",
+    notReadOtherNamespace:
+      "Services в {namespace}, где живёт этот адрес — приложение перечислило только namespace самого пода",
     notReadPolicies: "NetworkPolicy: у приложения пока нет для них читателя",
   },
   files: {
@@ -1539,32 +1610,90 @@ export const ru: Catalogue = {
     restartedSince:
       "Контейнер {container} перезапускался после этого листинга (перезапуск {restarts}). Всё, что было записано вне монтирований, ушло вместе с ним.",
     readNewContainer: "Прочитать новый контейнер",
-    filterNames: "фильтр по {n} именам…",
+    filterNames: {
+      one: "фильтр по {n} имени…",
+      few: "фильтр по {n} именам…",
+      many: "фильтр по {n} именам…",
+      other: "фильтр по {n} именам…",
+    },
     notRunning:
       "Контейнер {container} в состоянии {state}: exec делать некуда. Его монтирования по-прежнему в поде, а debug-контейнер может прочитать файлы остановленного контейнера.",
     listingOf: "Файлы в {path}",
     mode: "Режим",
     size: "Размер",
     modified: "Изменён",
+    stoppedBeforeAnything:
+      "Вы остановили чтение до того, как что-то пришло, поэтому что здесь лежит — неизвестно.",
+    cappedAt: {
+      one: "· остановлено на {n} строке, это не весь каталог",
+      few: "· остановлено на {n} строках, это не весь каталог",
+      many: "· остановлено на {n} строках, это не весь каталог",
+      other: "· остановлено на {n} строках, это не весь каталог",
+    },
+    unreadableLines: {
+      one: "· {n} строку прочитать не удалось, строки не хватает",
+      few: "· {n} строки прочитать не удалось, строк не хватает",
+      many: "· {n} строк прочитать не удалось, строк не хватает",
+      other: "· {n} строк прочитать не удалось, строк не хватает",
+    },
+    cannotSwitchViaDebug:
+      "Пока чтение идёт через debug-контейнер, строки приходят из того контейнера, на который он нацелен — остановите, чтобы выбрать другой.",
     emptyDirectory: "{path} пуст: инструмент отработал и ничего там не нашёл.",
-    keys: "↑↓ перемещение · ↵ открыть · ⌫ вверх · {download} скачать · метки берутся из монтирований пода, те же факты показывает вкладка Connections",
-    readingSoFar: "читаю · пока {n} записей · {seconds} с",
-    readVia: "прочитано через {how} · {n} записей · {seconds} с",
-    stoppedAfter:
-      "остановлено · за {seconds} с пришло {n} записей, это не весь каталог",
+    nothingReadable: {
+      one: "Инструмент напечатал {n} строку, и её не удалось разобрать — что здесь лежит, неизвестно.",
+      few: "Инструмент напечатал {n} строки, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+      many: "Инструмент напечатал {n} строк, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+      other:
+        "Инструмент напечатал {n} строк, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+    },
+    keys: "↑↓ перемещение · ↵ открыть · ⌫ вверх · {download} скачать · метки берутся из монтирований пода, те же факты показывает вкладка «Связи»",
+    readingSoFar: {
+      one: "читаю · пока {n} запись · {seconds} с",
+      few: "читаю · пока {n} записи · {seconds} с",
+      many: "читаю · пока {n} записей · {seconds} с",
+      other: "читаю · пока {n} записей · {seconds} с",
+    },
+    readingSoFarUntimed: {
+      one: "читаю · пока {n} запись",
+      few: "читаю · пока {n} записи",
+      many: "читаю · пока {n} записей",
+      other: "читаю · пока {n} записей",
+    },
+    readVia: {
+      one: "прочитано через {how} · {n} запись · {seconds} с",
+      few: "прочитано через {how} · {n} записи · {seconds} с",
+      many: "прочитано через {how} · {n} записей · {seconds} с",
+      other: "прочитано через {how} · {n} записей · {seconds} с",
+    },
+    stoppedUntimed: {
+      one: "остановлено · пришла {n} запись, это не весь каталог",
+      few: "остановлено · пришло {n} записи, это не весь каталог",
+      many: "остановлено · пришло {n} записей, это не весь каталог",
+      other: "остановлено · пришло {n} записей, это не весь каталог",
+    },
+    stoppedAfter: {
+      one: "остановлено · за {seconds} с пришла {n} запись, это не весь каталог",
+      few: "остановлено · за {seconds} с пришло {n} записи, это не весь каталог",
+      many: "остановлено · за {seconds} с пришло {n} записей, это не весь каталог",
+      other:
+        "остановлено · за {seconds} с пришло {n} записей, это не весь каталог",
+    },
     gnuFind: "find (GNU)",
     busyboxStat: "sh + stat (busybox)",
     fromMount: "из {name}",
     noToolsTitle: "В образе нечем перечислить файлы",
     noToolsBody:
-      "{tried} были выполнены напрямую в контейнере {container}, и ни одного нет (exit 127). Образ {image}: файлы на месте, а инструментов их прочитать нет.",
+      "{tried} были выполнены напрямую в контейнере {container}, и ни одного нет. Образ {image}: файлы на месте, а инструментов их прочитать нет.",
     openViaDebug: "Открыть через debug-контейнер",
     readMountsInstead: "Показать монтирования пода вместо этого",
     debugExplained:
       "Debug-контейнер добавляет в под эфемерный контейнер с общим пространством процессов и читает файлы по /proc/1/root. Это изменение пода, оно остаётся до замены пода, и листинг об этом скажет.",
     refused: "Кластер отказал в exec в этот под",
     notRunningNow: "Контейнер {container} не запущен, exec делать некуда",
-    listFailed: "Инструмент листинга отработал с ошибкой (exit {code})",
+    listFailed: "Чтение каталога не завершилось: {code}",
+    unopenable:
+      "{path} не удалось открыть: это не каталог, либо этому контейнеру не разрешено его читать. У debug-контейнера обычно есть права.",
+
     mountsOnlyIntro:
       "Что под объявляет смонтированным в {container}. Это spec, а не чтение файловой системы.",
     noMounts: "В этот контейнер ничего не смонтировано.",
@@ -1576,17 +1705,32 @@ export const ru: Catalogue = {
       many: "{n} строк",
       other: "{n} строки",
     },
+    lineCountAtLeast: {
+      one: "прочитана {n} строка, дальше есть ещё",
+      few: "прочитано {n} строки, дальше есть ещё",
+      many: "прочитано {n} строк, дальше есть ещё",
+      other: "прочитано {n} строк, дальше есть ещё",
+    },
     mountedFrom: "смонтирован из {kind} {name}",
+    mountedFromSeveral: {
+      one: "смонтирован из тома {name}, в него проецируется {n} источник",
+      few: "смонтирован из тома {name}, в него проецируются {n} источника — под не говорит, из какого именно этот файл",
+      many: "смонтирован из тома {name}, в него проецируется {n} источников — под не говорит, из какого именно этот файл",
+      other:
+        "смонтирован из тома {name}, в него проецируется {n} источников — под не говорит, из какого именно этот файл",
+    },
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
-    tooBigToDownload: "Скачивание больше 100 MiB в этой версии отклоняется",
+    tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:
       "Для бинарного файла превью нет. Скачайте его и посмотрите в другом месте.",
     nonTextShare: "В первых 4 KiB {percent}% не текстовых байтов.",
     previewTruncated:
-      "Превью обрывается на 1 MiB; файл продолжается. Скачайте его целиком.",
+      "Превью обрывается на {cap}; файл продолжается. Скачайте его целиком.",
+    previewRepaired:
+      "Эти байты не являются корректным UTF-8. Ниже — починенный текст: каждый нечитаемый байт заменён на \uFFFD. Это не файл; чтобы увидеть байты, скачайте его.",
     downloaded: "Скачан {name}",
     downloadFailed: "Не удалось скачать {name}",
     noCatInImage: "В образе нет cat, чтобы скопировать файл.",
@@ -1612,6 +1756,8 @@ export const ru: Catalogue = {
     controllerFact: "Контроллер",
     controllerNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
+    controllerUnknown:
+      "Deployment'ы прочитать не удалось, поэтому работает ли контроллер оператора — неизвестно; это не значит, что его нет",
     inNamespace: "в {namespace}",
     versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
     fromImage: "из образа Deployment",
@@ -1625,7 +1771,18 @@ export const ru: Catalogue = {
     phaseUnknown: "фаза не записана",
     primaryFact: "Primary",
     readyFact: "Готовы",
-    readyOfDeclared: "{ready} из {declared} инстансов",
+    readyOfDeclared: {
+      one: "{ready} из {n} инстанса",
+      few: "{ready} из {n} инстансов",
+      many: "{ready} из {n} инстансов",
+      other: "{ready} из {n} инстансов",
+    },
+    readyMembersOfDeclared: {
+      one: "{ready} из {n} участника",
+      few: "{ready} из {n} участников",
+      many: "{ready} из {n} участников",
+      other: "{ready} из {n} участников",
+    },
     readyConditionFalse: "условие Ready False",
     archivingFact: "Архивация WAL",
     archivingNotDeclared: "не объявлена",
@@ -1654,7 +1811,21 @@ export const ru: Catalogue = {
     findingArchivingFailing: "Архивация WAL не удаётся уже {ago}",
     findingFailedInstances: "Инстансы, которые оператор числит failed: {names}",
     findingSwitchover: "Идёт switchover: {from} → {to}",
+    findingFailover: "Аварийное переключение с {from}",
+    failoverExplained:
+      "Это не плановое переключение: первичный инстанс пропал, и оператор повышает реплику, никого не спрашивая. Запись отклоняется, пока это не закончится.",
+    findingPhaseUnwritten: "Оператор не записал статус для этого Cluster",
+    phaseUnwrittenExplained:
+      "Здесь ничего не отреконсилено — объект может быть новым, а контроллер может не работать. Это не здоровый кластер, это кластер, о котором никто не отчитался.",
     findingFenced: "Изолированы вручную: {names}",
+    backupNotCreated: "кластер не создал Backup и не сказал почему",
+    fencedAllOne:
+      "весь кластер заграждён через `*` — это все инстансы, включая те, которых CNPG ещё не перечислил; вынуть один, не сняв заграждение с остальных, нельзя",
+    fencingUnknown:
+      "в аннотации cnpg.io/fencedInstances записано то, что эта версия прочитать не может, поэтому какие инстансы заграждены — неизвестно; список пишется целиком, так что действие затёрло бы его",
+    fencedUnknownWord: "заграждение не прочитано",
+    findingFencedUnknown:
+      "Аннотацию со списком заграждённых инстансов прочитать не удалось, поэтому остановлен ли хоть один — неизвестно.",
     fencedExplained:
       "В изолированном (fenced) инстансе Postgres остановлен, а под остаётся; это держит аннотация cnpg.io/fencedInstances. Снимите изоляцию, когда причина ушла.",
     findingHibernated: "В спячке",
@@ -1702,6 +1873,8 @@ export const ru: Catalogue = {
     nodeConfigsTab: "Конфиги узлов",
     noScyllaClusters:
       "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
+    deploymentsUnreadable:
+      "Deployment'ы прочитать не удалось, поэтому работает ли оператор — неизвестно; это не значит, что его нет",
     scyllaOperatorNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=scylla-operator; CRD есть, а оператора может и не быть, и каждый ScyllaCluster останется без статуса",
     managerPresent: "ремонты и бэкапы могут выполняться",
@@ -1710,6 +1883,8 @@ export const ru: Catalogue = {
     canPatchScyllaClusters: "patch scyllaclusters",
     noStatusYet: "статуса ещё нет",
     upgradingWord: "апгрейд",
+    conditionsNotWritten: "условия не записаны",
+    conditionsUnsure: "оператор не уверен",
     rolledOut: "раскатан",
     conditionsFact: "Условия",
     membersFact: "Члены",
@@ -1732,10 +1907,22 @@ export const ru: Catalogue = {
     findingUnavailable: "Не Available",
     findingProgressing: "Progressing",
     findingUpgrading: "Идёт rolling upgrade",
+    findingUpgradingFromTo: "Идёт rolling-обновление: {from} → {to}",
+    upgradeAtRack: "Сейчас на стойке {rack}, узел {node}.",
     findingStale: "Стойки, на которые оператор не смотрел после изменения spec",
     findingMembersMissing: "Члены не готовы",
     findingTasksWithoutManager:
       "Объявлены ремонты или бэкапы, но выполнять их некому: нет ScyllaDB Manager",
+    findingConditionsUnwritten:
+      "Оператор не записал условия для этого кластера",
+    findingConditionsUnknown:
+      "Оператор записал Unknown в условие — значит, он и сам не знает",
+    membersNotWritten: {
+      one: "объявлен {n}, сколько готово — не записано",
+      few: "объявлено {n}, сколько готово — не записано",
+      many: "объявлено {n}, сколько готово — не записано",
+      other: "объявлено {n}, сколько готово — не записано",
+    },
     findingNoStatus: "Оператор ещё ничего не записал на этот объект",
     actionRollingRestart: "Rolling restart",
     actionRollingRestartExplained:
@@ -1756,6 +1943,8 @@ export const ru: Catalogue = {
     nodeConfigsUnknown: "Объекты NodeConfig прочитать не удалось",
     noNodeConfigs:
       "Объектов NodeConfig нет. Локальные диски тогда такие, какими пришли узлы; оператор ничего не готовит.",
+    nodeStatusesNotWritten:
+      "оператор не записал статусы узлов, поэтому сколько узлов он настроил — неизвестно",
     nodesSetUp: "{tuned} из {nodes} узлов подготовлено",
   },
   tell: {
@@ -1776,7 +1965,12 @@ export const ru: Catalogue = {
       "Спросите про раскатку, под, задание, drain или проброс, и ответ придёт уведомлением.",
     dismiss: "Убрать",
     openWatching: "Открыть наблюдение",
-    severalAnswered: "{count} ответа на ваши вопросы",
+    severalAnswered: {
+      one: "{n} ответ на ваши вопросы",
+      few: "{n} ответа на ваши вопросы",
+      many: "{n} ответов на ваши вопросы",
+      other: "{n} ответа на ваши вопросы",
+    },
     full: "На этом кластере уже {max} наблюдений",
     fullBody:
       "Двенадцать на кластер, больше нельзя. Выберите, какое снять, или оставьте все и пропустите это.",
@@ -1789,7 +1983,9 @@ export const ru: Catalogue = {
     saysSucceeded: "{name} завершился успешно",
     saysFailed: "{name} завершился с ошибкой",
     saysDrained: "{name} опустел",
-    saysDrainFailed: "{name}: drain не завершился",
+    saysDrainStopped: "{name}: drain остановлен",
+    saysDrainCancelled: "{name}: drain отменён",
+    saysDrainFailed: "{name}: drain сломался",
     saysRenewed: "{name}: сертификат обновлён",
     saysIssuanceFailed: "{name}: выпуск сертификата не удался",
     saysForwardDied: "Проброс к {name} оборвался",
@@ -1864,26 +2060,46 @@ export const ru: Catalogue = {
   readings: {
     storyRollout:
       "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
-    storyJob:
-      "Отработало за {span}: создано {created} job, завершено {completed}.",
+    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
-      "Не держится: kubelet откладывает перезапуск контейнера, {n} раз за {span}.",
-    storyPull: "Не скачать образ, {n} раз за {span}: {detail}",
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
+    storyStartFailed:
+      "Контейнер не удалось запустить, {times} за {span}: {detail}",
+    storyPull: "Не скачать образ, {times} за {span}: {detail}",
     storySchedulingSame:
-      "Не планируется, один и тот же ответ {n} раз за {span}: {detail}",
+      "Не планируется, один и тот же ответ {times} за {span}: {detail}",
     storySchedulingVaried:
       "Не планируется, {k} разных ответов за {span}, последний: {detail}",
-    storyProbe: "Пробы упали {n} раз за {span}: {detail}",
-    storyPressure: "Под давлением, {n} раз за {span}: {detail}",
-    storyVolumeTrouble: "Проблема с томом, {n} раз за {span}: {detail}",
-    storyJobTrouble: "Проблема с job, {n} раз за {span}: {detail}",
-    storyScaling: "Проблема автоскейлера, {n} раз за {span}: {detail}",
-    storyNode: "Проблема ноды, {n} раз за {span}: {detail}",
-    storyRolloutTrouble: "Проблема раскатки, {n} раз за {span}: {detail}",
+    storyProbe: "Пробы упали {times} за {span}: {detail}",
+    storyPressure: "Под давлением, {times} за {span}: {detail}",
+    storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
+    storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
+    storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
+    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
     storyTrouble: "{reason} ×{n} за {span}: {detail}",
     storyStillHappening: "продолжается",
     storySettled: "утихло",
+    storyStateUnknown: "не сказать",
+    podStatusNotAsked: {
+      one: "Выходы ещё {n} пода не на этой шкале — его не спрашивали.",
+      few: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      many: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      other: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+    },
+    timesSeen: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    jobsCreated: {
+      one: "создан {n} job",
+      few: "создано {n} job",
+      many: "создано {n} job",
+      other: "создано {n} job",
+    },
     storyDone: "закончено",
     podsOf: "поды {name}",
     groupedByName:
@@ -2944,7 +3160,27 @@ export const ru: Catalogue = {
     credentialsRefusedAgo:
       "Кластер отклонил учётные данные этого окна {since} назад. ",
     credentialsExpiredBody:
-      "Здесь ничто не обновляет их само, поэтому в тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+      "В тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+    renewalWasScheduled:
+      "Окно собиралось обновить их тихо до истечения, и кластер всё равно их отклонил. ",
+    renewalNoDeadline:
+      "Плагин учётных данных не назвал срока, поэтому не было момента, до которого их можно было обновить — заранее сделать было нечего. ",
+    renewalPassed:
+      "К моменту, когда окно посмотрело, срок уже прошёл — обновлять заранее было уже не перед чем. ",
+    renewalFailed:
+      "Тихое обновление пробовали, и оно не вернулось — это сбой чтения, а не что-то про вас. ",
+    renewalRanOut:
+      "Тихое обновление пробовали дважды, и оба раза плагин отдавал те же учётные данные — подставить было нечего. ",
+    renewalNeedsYouBody:
+      "Окно пробовало обновить их тихо; плагину понадобился человек — это и есть этот экран. ",
+    renewalDelegated:
+      "Учётные данные этой сессии держит и обновляет kubectl, так что отказ пришёл с его стороны. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "нужен вход",
+    renewalNeedsYouHint:
+      "Фоновое обновление этой сессии потребовало человека и остановилось. Пока всё работает — текущие учётные данные ещё принимают, а войти попросят, когда они истекут.",
+    renewalRanOutHint:
+      "Плагин учётных данных каждый раз отдавал те же данные, что уже используются, — подставить до истечения было нечего. Пока всё работает, а войти попросят, когда они истекут.",
     stillRefusedHint:
       "Всё ещё отказ? Возможно, плагину учётных данных этого контекста нужен свой вход — для GKE это",
     healthy: "В порядке",
@@ -3228,7 +3464,7 @@ export const ru: Catalogue = {
     sectionHandoffHint: "Куда уходит поиск и что попадает в передачу.",
     searchEngine: "Поисковик",
     searchEngineHint:
-      "Запрос это причина плюс точное сообщение и utm_source=rubick.tech, чтобы сайт видел, откуда приходят люди.",
+      "Запрос — это причина и то, что приложение распознало в отказе, никогда не сырая строка лога, плюс utm_source=rubick.tech, чтобы сайт видел, откуда приходят люди.",
     searchEngineCustom: "Свой, любой URL с {q}",
     searchCustomUrl: "Свой URL поиска",
     stripNames: "Вырезать имена из поискового запроса",
@@ -3236,7 +3472,7 @@ export const ru: Catalogue = {
       "Имена подов, namespace, образов и хостов заменяются на … до того, как запрос покинет приложение. Выключите, если ваши имена не чувствительны.",
     handoffLogLines: "«Скопировать для агента» включает строки лога",
     handoffLogLinesHint:
-      "До 40 строк перед последним выходом. Значения секретов не включаются никогда, что бы тут ни стояло.",
+      "До 40 строк перед последним выходом, как их написал контейнер. Секреты приложение не читает, но если их напечатал сам контейнер — они будут и здесь: пароли, токены и строки подключения вырезаются там, где их видно, и полной эта чистка быть не может.",
     showMostLikely: "Показывать панель «Скорее всего»",
     showMostLikelyHint:
       "Только на подах с проблемой, по которой приложение может прочитать цепочку. Выключение прячет панель, не факты.",
@@ -3430,10 +3666,15 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    podsUnread:
+      "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
     everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
-      "В {scope} за последние {range} ничего не происходило. Чтение прошло и вернуло ноль событий.",
+      "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
+    noStoriesInWindowCapped:
+      "Ни одной истории в {scope} за последние {range} — из последних {n} прочитанных событий. Всё, что старше, в этот ответ не попало.",
+    eventsRefused: "Не удалось прочитать события в {scope}:",
     noStoriesMatch: "Ни одна история в {scope} не подходит под «{query}».",
     noEventsMatchInWindow:
       "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
@@ -4107,6 +4348,14 @@ export const ru: Catalogue = {
     trendsSortNote: "сначала с наименьшим запасом",
     trendsNotIncidents:
       "Один range-запрос на все узлы, в каждом ведре сохранён пик, так что всплеск переживает сводку. Большое число это полный узел, а не инцидент; здесь ничего не красится красным за занятость. Requests это история таблицы Resources, в одном клике.",
+    notLookedShort: "не посмотрели",
+    noAllocatableShort: "allocatable не прочитан",
+    nodesDidNotList:
+      "Не удалось прочитать список узлов, поэтому не к чему привязать замеры: {reason}",
+    nodeNotLooked:
+      "Окно прочитать не удалось, поэтому неизвестно, отчитывался ли этот узел.",
+    nodeNoAllocatable:
+      "Замеры есть, но allocatable этого узла прочитать не удалось, поэтому долю от него не нарисовать.",
     nodeNoSeries: "в Prometheus нет серий по этому узлу",
     nodeNoSamplesYet:
       "в окне нет замеров: новейшая серия {age}, окно просит {range}",
@@ -4115,6 +4364,8 @@ export const ru: Catalogue = {
       "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
     declaredNowOnly:
       "kube-state-metrics в этом Prometheus нет, поэтому что было объявлено раньше в окне, неизвестно; request и limit это сегодняшние цифры, нарисованы плоско.",
+    declaredUnknown:
+      "Не удалось прочитать, хранит ли kube-state-metrics объявленное, поэтому окно неизвестно в любом случае; request и limit это сегодняшние цифры, нарисованы плоско.",
     declaredSizeNotFullness:
       "Заявленный размер, а не заполненность. metrics-server отдаёт только CPU и память — сколько тома занято, сообщает kubelet, а его может прочитать Prometheus, но не это приложение.",
     declaredSizeForUnreported:
@@ -4615,6 +4866,8 @@ export const ru: Catalogue = {
     addResourcesFirst: "Сначала добавьте ресурсы или вставьте манифест.",
     dragResourcesHere: "Перетащите ресурсы сюда или нажмите на один в палитре.",
     selectResourceToEdit: "Выберите ресурс, чтобы изменить его настройки.",
+    logNotKept:
+      "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
     noPreviousRunOf:
       "Предыдущего запуска {container} нет — он не перезапускался.",
     containerNotStarted:
@@ -4649,6 +4902,11 @@ export const ru: Catalogue = {
     itFinished: "Он завершился",
     soLogIsComplete: ", поэтому этот лог полон и больше не вырастет.",
     noEarlierRunOf: "Более раннего запуска нет у",
+    chipLogNotKept: "лога нет",
+    chipNoEarlierRun: "раньше не запускался",
+    chipEnded: "закончился",
+    chipNotStarted: "не стартовал",
+    chipLost: "потерян",
     noneHasRestarted:
       "— ни один из них не перезапускался, значит до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",
@@ -5034,11 +5292,17 @@ export const ru: Catalogue = {
       many: "{streaming} из {n} подов стримится",
       other: "{streaming} из {n} пода стримится",
     },
-    streamsRefused: {
-      one: "{n} отказан",
-      few: "{n} отказано",
-      many: "{n} отказано",
-      other: "{n} отказано",
+    podsPaused: {
+      one: "{n} под, на паузе",
+      few: "{n} пода, на паузе",
+      many: "{n} подов, на паузе",
+      other: "{n} пода, на паузе",
+    },
+    podsUnreadable: {
+      one: "{n} под не прочитан",
+      few: "{n} пода не прочитаны",
+      many: "{n} подов не прочитано",
+      other: "{n} пода не прочитано",
     },
     podsGoneKept: {
       one: "{n} ушёл, строки сохранены",

@@ -3,7 +3,13 @@ import { Bell, Square, X } from "lucide-react";
 
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
-import { isOpen, type After, type Ask, type Watch } from "@/lib/tell-me-when";
+import {
+  isOpen,
+  SAYS_TONE,
+  type After,
+  type Ask,
+  type Watch,
+} from "@/lib/tell-me-when";
 import { SAYS_KEY } from "@/hooks/useTellMeWhen";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
@@ -102,18 +108,9 @@ function Row({
       ? "bg-ok"
       : status.state === "lost"
         ? "bg-warn"
-        : status.state === "done" &&
-            (status.verdict.says === "rolledOut" ||
-              status.verdict.says === "ready" ||
-              status.verdict.says === "succeeded" ||
-              status.verdict.says === "drained" ||
-              status.verdict.says === "renewed")
-          ? "bg-ok"
-          : status.state === "done" && status.verdict.says === "timedOut"
-            ? "bg-warn"
-            : status.state === "done"
-              ? "bg-err"
-              : "bg-fg-fnt";
+        : status.state === "done"
+          ? SAYS_TONE[status.verdict.says]
+          : "bg-fg-fnt";
 
   const line = (() => {
     switch (status.state) {

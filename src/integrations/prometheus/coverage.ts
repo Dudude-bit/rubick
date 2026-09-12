@@ -34,8 +34,10 @@ type Reading = keyof (typeof en)["readings"];
 import { commands } from "@/lib/commands";
 import type { PromSeries } from "@/generated/types";
 
-/** The label a node's name lands in, per exporter, most specific first. */
-const NODE_LABELS = ["node", "instance", "nodename"] as const;
+// The label a node's name lands in, per exporter, most specific first. The
+// one list the queries group by: a spelling this reader lacked meant every
+// series carrying it was keyed to nothing and silently dropped.
+import { NODE_LABELS } from "./queries";
 
 /**
  * The families each capability is built on, named so a gap can be attributed,

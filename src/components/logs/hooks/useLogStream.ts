@@ -48,6 +48,12 @@ export interface LogSource {
   pod: string;
   namespace: string;
   container: string;
+  /**
+   * The container has started, so a log can exist. `undefined` means the
+   * caller does not track it — a single-pod pane, which opens on containers
+   * it has already read the status of.
+   */
+  started?: boolean;
 }
 
 export const sourceKey = (source: LogSource) =>
@@ -124,6 +130,9 @@ interface UseLogStreamOptions {
   intake?: QueryTerm[];
 }
 
+/** Not a character any pod, namespace or container name may carry. */
+const SOURCE_SEP = "\u0000";
+
 interface UseLogStreamResult {
   logs: StreamedLogLine[];
   /** `logs.length`, named so a status bar does not have to explain itself. */
@@ -168,6 +177,8 @@ interface UseLogStreamResult {
   clearLogs: () => void;
   togglePause: () => void;
   retry: () => void;
+  /** Reconnect one lane, keeping every other lane's lines. */
+  retrySource: (pod: string, container: string) => void;
 }
 
 const NO_INTAKE: QueryTerm[] = [];
@@ -224,6 +235,13 @@ interface Session {
   live: Set<string>;
   /** Last timestamp seen per stream, so an untimestamped line sorts where it arrived. */
   lastEpoch: Map<string, number>;
+  /**
+   * Sources whose open was rejected. Kept out of `opened` so nothing thinks
+   * they are attached, and out of `added` so an unrelated pod joining the
+   * list does not silently retry them and stack another identical failure.
+   * `retry` is what empties it.
+   */
+  refused: Set<string>;
   unlistens: Array<() => void>;
 }
 
@@ -254,21 +272,40 @@ export function useLogStream({
   // move on a real change and on nothing else.
   const sourcesKey = (
     givenSources ??
-    (containers ?? []).map((container) => ({
+    (containers ?? []).map<LogSource>((container) => ({
       pod: podName ?? "",
       namespace,
       container,
     }))
   )
-    .map(sourceKey)
-    .join(" ");
+    // The started flag is in the change key and not in `sourceKey`: it is
+    // not part of a stream's identity, it is the reason to try again.
+    .map(
+      (source) =>
+        `${sourceKey(source)}${
+          source.started === undefined ? "" : source.started ? "+" : "!"
+        }`
+    )
+    .join(SOURCE_SEP);
   const sources = useMemo<LogSource[]>(
     () =>
       sourcesKey === ""
         ? []
-        : sourcesKey.split(" ").map((key) => {
-            const [ns, pod, ...rest] = key.split("/");
-            return { namespace: ns, pod, container: rest.join("/") };
+        : sourcesKey.split(SOURCE_SEP).map((key) => {
+            const mark = key.endsWith("+")
+              ? true
+              : key.endsWith("!")
+                ? false
+                : undefined;
+            const [ns, pod, ...rest] = (
+              mark === undefined ? key : key.slice(0, -1)
+            ).split("/");
+            return {
+              namespace: ns,
+              pod,
+              container: rest.join("/"),
+              started: mark,
+            };
           }),
     [sourcesKey]
   );
@@ -337,16 +374,48 @@ export function useLogStream({
           )
         );
       }
-      const added = wanted.filter((src) => !s.opened.has(sourceKey(src)));
+      for (const key of [...s.refused]) {
+        if (!wantedKeys.has(key)) s.refused.delete(key);
+      }
+      // A container that was still starting when the pane opened is worth
+      // asking again now that it is not. Nothing else about the source has
+      // changed, so only this releases it.
+      for (const source of wanted) {
+        if (source.started === true) s.refused.delete(sourceKey(source));
+      }
+      setFailures((prev) =>
+        prev.filter(
+          (failure) =>
+            !wanted.some(
+              (source) =>
+                source.started === true &&
+                source.pod === failure.pod &&
+                source.container === failure.container &&
+                failure.kind === "broken"
+            )
+        )
+      );
+      const added = wanted.filter((src) => {
+        const key = sourceKey(src);
+        return !s.opened.has(key) && !s.refused.has(key);
+      });
       if (added.length === 0) {
         setIsStreaming(s.live.size > 0);
+        // Nothing is being waited for. Left true, a workload with no pods
+        // yet sits on the skeleton and a disabled toolbar for ever.
+        setIsConnecting(false);
         return;
       }
       setIsConnecting(true);
       // The first set opens with the buffer's share of the cap, or with
-      // nothing when the buffer is being resumed; a pod that joins later
-      // always brings its tail, because nothing in the buffer is its.
-      const tail = backfillPerContainer(limit, wanted.length);
+      // nothing when the buffer is being resumed.
+      //
+      // A pod that joins later gets no tail at all. Nothing in the buffer is
+      // its, but everything in the buffer is newer than its history, and the
+      // buffer is append-only: a backfill committed now would put minutes of
+      // old lines after the live tail and drag a following reader down into
+      // them. It streams from here, like the pod it replaced did.
+      const tail = initial ? backfillPerContainer(limit, wanted.length) : 0;
       const started = await Promise.all(
         added.map(async (source) => {
           const key = sourceKey(source);
@@ -372,6 +441,13 @@ export function useLogStream({
             s.opened.set(key, streamId);
             s.sourceOf.set(streamId, source);
             s.live.add(streamId);
+            // It answered: whatever it said last time is no longer true.
+            setFailures((prev) =>
+              prev.filter(
+                (f) =>
+                  !(f.pod === source.pod && f.container === source.container)
+              )
+            );
             // Listeners are installed — release the backend gate.
             // See `commands::logs::stream_pod_logs`.
             await commands.logStreamSubscribed(streamId);
@@ -380,19 +456,27 @@ export function useLogStream({
             console.error(`Failed to stream logs of ${source.container}:`, err);
             if (!s.active) return false;
             s.opened.delete(key);
+            s.refused.add(key);
             const message = normalizeTauriError(err);
-            setFailures((prev) => [
-              ...prev,
-              {
-                container: source.container,
-                pod: source.pod,
-                kind:
-                  message.includes("not found") || message.includes("NotFound")
-                    ? "gone"
-                    : "broken",
-                message,
-              },
-            ]);
+            setFailures((prev) =>
+              prev.some(
+                (f) => f.pod === source.pod && f.container === source.container
+              )
+                ? prev
+                : [
+                    ...prev,
+                    {
+                      container: source.container,
+                      pod: source.pod,
+                      kind:
+                        message.includes("not found") ||
+                        message.includes("NotFound")
+                          ? "gone"
+                          : "broken",
+                      message,
+                    },
+                  ]
+            );
             return false;
           }
         })
@@ -404,6 +488,33 @@ export function useLogStream({
     [limit, previous, intakeTerms, namespace]
   );
 
+  /**
+   * Reconnect one lane without restarting the session.
+   *
+   * The whole-session retry clears the buffer, which on a single-pod pane is
+   * the point and on a workload pane throws away nine other pods' lines —
+   * including the lines of pods that have left, which nothing can read back.
+   */
+  const retrySource = useCallback(
+    (pod: string, container: string) => {
+      const s = session.current;
+      if (!s || !s.listening) {
+        setFailures([]);
+        setIsPaused(false);
+        setRetryTrigger((prev) => prev + 1);
+        return;
+      }
+      const key = sourceKey({ pod, namespace, container });
+      s.refused.delete(key);
+      s.opened.delete(key);
+      setFailures((prev) =>
+        prev.filter((f) => !(f.pod === pod && f.container === container))
+      );
+      void sync(s, sourcesRef.current, false);
+    },
+    [namespace, sync]
+  );
+
   useEffect(() => {
     const s: Session = {
       active: true,
@@ -413,6 +524,7 @@ export function useLogStream({
       opened: new Map(),
       live: new Set(),
       lastEpoch: new Map(),
+      refused: new Set(),
       unlistens: [],
     };
     session.current = s;
@@ -606,6 +718,9 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
+    // Deliberately not `renewals`: `stream_logs` opens one body and reads it
+    // to the end, so the client it was built from is never used again. A
+    // watch is restarted because `watcher` re-lists with the old token.
     sync,
   ]);
 
@@ -634,5 +749,6 @@ export function useLogStream({
     clearLogs,
     togglePause,
     retry,
+    retrySource,
   };
 }

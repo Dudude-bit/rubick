@@ -217,24 +217,23 @@ export function CronJobDetail() {
   // is a fetch that answers a question already answered.
   const inFlight = (cronJob?.active ?? 0) > 0;
 
-  const { data: pods = [] } = useLiveQuery({
+  // The refusal is carried rather than swallowed: an empty list from a 403
+  // reads as "this CronJob has run nothing", which is the one thing the pane
+  // may not say on a read that did not happen.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
-      try {
-        const all = await commands.listPods({
-          namespace,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-        });
-        return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
-      } catch {
-        return [];
-      }
+      const all = await commands.listPods({
+        namespace,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      });
+      return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
     },
     enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,
@@ -385,6 +384,7 @@ export function CronJobDetail() {
                 key={`${namespace}/${name}`}
                 namespace={namespace || ""}
                 pods={pods.map(lanePodOf)}
+                podsError={podsError}
                 laneRule="run"
                 workload={name ? { owner: name, ownerKind: "CronJob" } : null}
               />
@@ -401,7 +401,7 @@ export function CronJobDetail() {
         namespace: cronJob?.namespace || namespace,
       }),
     ],
-    [cronJob, jobs, pods, yaml, copyYaml, namespace, name, t]
+    [cronJob, jobs, pods, podsError, yaml, copyYaml, namespace, name, t]
   );
 
   if (!cronJob && !isLoading && !error) {
