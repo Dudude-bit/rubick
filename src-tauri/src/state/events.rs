@@ -306,6 +306,12 @@ pub enum AppEvent {
         context: String,
         why: Option<AuthOutcome>,
     },
+    /// A context's credentials were replaced without anybody being asked.
+    ///
+    /// Sent so the window can rebuild what holds the old ones: a watch keeps
+    /// the `kube::Client` it started with, so a renewal that only swapped the
+    /// manager's copy would renew the session and kill the screens anyway.
+    CredentialsRenewed { context: String },
     /// Auth terminal session created (for interactive exec auth)
     AuthTerminalSessionCreated {
         auth_session_id: String,
@@ -384,6 +390,7 @@ impl AppEvent {
             AppEvent::AuthUrlRequested { .. } => "auth-url-requested",
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
             AppEvent::AuthFlowCancelled { .. } => "auth-flow-cancelled",
+            AppEvent::CredentialsRenewed { .. } => "credentials-renewed",
             AppEvent::AuthTerminalSessionCreated { .. } => "auth-terminal-session-created",
             AppEvent::DrainProgress { .. } => "drain-progress",
             AppEvent::DrainFinished { .. } => "drain-finished",
@@ -514,6 +521,9 @@ impl AppEvent {
                 "session_id": session_id,
                 "context": context,
                 "why": why,
+            }),
+            AppEvent::CredentialsRenewed { context } => serde_json::json!({
+                "context": context,
             }),
             AppEvent::AuthTerminalSessionCreated {
                 auth_session_id,

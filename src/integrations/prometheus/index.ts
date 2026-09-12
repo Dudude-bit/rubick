@@ -192,6 +192,9 @@ export default defineVendor({
       staleTime: MONITORS_STALE,
     }),
     load: () => import("./page"),
+    // The Connection tab stands without the operator's kinds, so a token
+    // refused the monitors still has a page to open.
+    gate: null,
   },
   crd,
   provides: {

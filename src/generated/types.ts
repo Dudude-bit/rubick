@@ -1933,6 +1933,16 @@ export type FileRead =
   | { state: "noTools" }
   | { state: "failed"; exit_code: number | null; message: string };
 
+export type Renewal =
+  | "scheduled"
+  | "noDeadline"
+  | "passed"
+  | "needsYou"
+  | "failed"
+  | "ranOut"
+  | "delegated"
+  | "unknown";
+
 export type ProxyOutcome =
   | { state: "notTried" }
   | { state: "noKubectl" }
