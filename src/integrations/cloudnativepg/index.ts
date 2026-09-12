@@ -2,7 +2,7 @@ import { Database } from "lucide-react";
 
 import { defineVendor, pageCount } from "../registry";
 import { crd } from "./crd";
-import { CLUSTERS_KEY, CNPG_STALE, fetchClusters } from "./data";
+import { CLUSTERS_CRD, CLUSTERS_KEY, CNPG_STALE, fetchClusters } from "./data";
 import { facts } from "./facts";
 import { readCluster } from "./model";
 
@@ -29,6 +29,8 @@ export default defineVendor({
       staleTime: CNPG_STALE,
     }),
     load: () => import("./page"),
+    // The page is the Clusters list and what hangs off it.
+    gate: { crd: CLUSTERS_CRD, namespaced: true },
   },
   crd,
 });

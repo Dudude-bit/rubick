@@ -1,7 +1,7 @@
 {
   "name": "k8s-gui-ui",
   "private": true,
-  "version": "4.11.0",
+  "version": "4.14.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -91,6 +91,6 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",
     "vite": "^8.2.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   }
 }

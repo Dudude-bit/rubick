@@ -53,7 +53,16 @@ export interface ReasonCount {
   count: number;
 }
 
-export type StoryState = "stillHappening" | "settled" | "done";
+/**
+ * Whether the trouble is over, and the case where that is not answerable.
+ *
+ * `unknown` is not a fourth kind of trouble, it is the absence of an answer:
+ * the events this was folded from were narrowed before they arrived, or the
+ * latest warning carries no time. Either way "done" would be a claim nobody
+ * made — and the loudest one, because it is the green card the reader stops
+ * looking at.
+ */
+export type StoryState = "stillHappening" | "settled" | "done" | "unknown";
 
 export interface Story {
   key: string;
@@ -101,7 +110,15 @@ export function familyOf(name: string): string {
 }
 
 function baseOfHash(name: string): string {
-  return HASH_SUFFIX.exec(name)?.[1] ?? name;
+  const base = HASH_SUFFIX.exec(name)?.[1];
+  if (base === undefined) return name;
+  // A ReplicaSet's template hash is a base-32 render and carries letters; a
+  // CronJob's `-29845672-` is the run's minute and never does. The suffix
+  // alphabet holds seven of the ten digits, so stripping an all-digit segment
+  // severs a Job's pods from their Job whenever the clock happens to avoid
+  // 0, 1 and 3 — the same CronJob folding two ways on different minutes.
+  const stripped = name.slice(base.length + 1);
+  return /^\d+$/.test(stripped) ? name : base;
 }
 
 const FOLDED_KINDS = new Set([
@@ -179,8 +196,12 @@ function place(event: EventInfo, evidence: Map<string, Owner>): Placement {
     kind = owner.kind;
     name = owner.name;
   }
-  if (kind === "Pod" || kind === "ReplicaSet") {
-    const family = kind === "Pod" ? familyOf(name) : baseOfHash(name);
+  // Only a Pod is folded by its name. A ReplicaSet reached on its own — no
+  // Deployment event in the window named it — is the object that spoke, and
+  // stripping its template hash retitled the card "pods of web" for a story
+  // holding one ReplicaSet and no pods at all.
+  if (kind === "Pod") {
+    const family = familyOf(name);
     if (family !== name) {
       return {
         key: `${namespace ?? ""}/${family}`,
@@ -416,7 +437,10 @@ function sentenceOf(
           key: "storyJob",
           values: {
             spanMs,
-            created: countReason(events, "SuccessfulCreate"),
+            created: {
+              key: "jobsCreated" as const,
+              values: { n: countReason(events, "SuccessfulCreate") },
+            },
             completed: countReason(events, "Completed", "SawCompletedJob"),
           },
         };
@@ -429,10 +453,25 @@ function sentenceOf(
   }
   const n = warnings.reduce((sum, e) => sum + occurrencesOf(e), 0);
   const detail = detailOf(informative(warnings));
-  const troubled = { n, spanMs, detail };
+  // The count is its own sentence, because no language can hand another a
+  // substring of its own plural: Russian needs three forms where English
+  // needs two, and `{n} times` in the outer string gets neither.
+  const troubled = {
+    times: { key: "timesSeen" as const, values: { n } },
+    spanMs,
+    detail,
+  };
   switch (activity) {
     case "crash":
-      return { key: "storyCrash", values: troubled };
+      // Only a `BackOff` is the kubelet backing off. Every other Pod
+      // `Failed` without "image" in it lands here too — a missing secret, a
+      // binary that is not in the image, a containerd task that would not
+      // start — and saying the kubelet is restarting a container that was
+      // never created invents the mechanism and drops what the kubelet
+      // actually wrote.
+      return warnings.some((e) => e.reason === "BackOff")
+        ? { key: "storyCrash", values: troubled }
+        : { key: "storyStartFailed", values: troubled };
     case "pull":
       return { key: "storyPull", values: troubled };
     case "scheduling": {
@@ -469,13 +508,39 @@ function sentenceOf(
 export interface StoryOptions {
   now: number;
   windowMs: number;
+  /**
+   * The earliest moment the read actually covers, or `null` when it covers
+   * the whole window. A pool cut at the limit holds only the latest N events,
+   * so anything older than its oldest row was never read.
+   */
+  readFrom?: number | null;
+  /**
+   * Whether these events are everything the window holds, or what survived a
+   * filter. A fold over a narrowed feed cannot say a story is over: the
+   * warnings that would say otherwise may simply not have been passed in.
+   */
+  narrowed: boolean;
+}
+
+/** How long the events the sentence counts actually cover, never past the window. */
+function spanOf(events: EventInfo[], since: number): number {
+  let first: number | null = null;
+  let last: number | null = null;
+  for (const event of events) {
+    // Both ends: a repeat is one row carrying its own interval, and taking
+    // only `lastTimestamp` reports twelve pulls over an hour as one moment.
+    const seen = at(event.lastTimestamp);
+    const began = at(event.firstTimestamp) ?? seen;
+    if (began !== null && (first === null || began < first)) first = began;
+    if (seen !== null && (last === null || seen > last)) last = seen;
+  }
+  if (first === null || last === null) return 0;
+  return Math.max(0, last - Math.max(first, since));
 }
 
 /** The events in the window, folded into stories. Order is not meaningful; see {@link sortStories}. */
-export function storiesOf(
-  events: EventInfo[],
-  { now, windowMs }: StoryOptions
-): Story[] {
+export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
+  const { now, windowMs } = options;
   const since = now - windowMs;
   const inWindow = events.filter((event) => {
     const last = at(event.lastTimestamp);
@@ -526,15 +591,26 @@ export function storiesOf(
     const ofActivity = warningEvents.filter(
       (e) => activityOf(e, group.subject.kind) === activity
     );
+    // `null`, not `now`: an event the cluster gave no time to is one this
+    // cannot place, and reading it as "this instant" makes the quietest
+    // answer the loudest. The window filter above keeps such an event for
+    // exactly that reason — because the time is unknown.
     const latestWarningAt = latestWarning
-      ? (at(latestWarning.lastTimestamp) ?? now)
-      : -Infinity;
+      ? at(latestWarning.lastTimestamp)
+      : null;
     const state: StoryState =
       warnings === 0
-        ? "done"
-        : latestWarningAt >= now - RECENT_MS
-          ? "stillHappening"
-          : "settled";
+        ? // Nothing went wrong *in what was read*. Where a filter narrowed
+          // that, the difference between "nothing went wrong" and "the
+          // warnings were not in the set" is the whole answer.
+          options.narrowed
+          ? "unknown"
+          : "done"
+        : latestWarningAt === null
+          ? "unknown"
+          : latestWarningAt >= now - RECENT_MS
+            ? "stillHappening"
+            : "settled";
     const members = [
       ...new Set(
         sorted.map((e) => `${e.involvedObject.kind}/${e.involvedObject.name}`)
@@ -552,12 +628,17 @@ export function storiesOf(
       firstAt,
       lastAt,
       state,
+      // The span the sentence quotes belongs to the events it counts, not to
+      // the whole group: "12 times within 1 hour" for a pull that began four
+      // minutes ago, because a scheduling failure an hour earlier is in the
+      // same story. Clamped to the window too, so no card quotes a span
+      // longer than the range the reader picked.
       says: sentenceOf(
         activity,
         sorted,
         ofActivity,
         reasons,
-        firstAt !== null && lastAt !== null ? lastAt - firstAt : 0
+        spanOf(ofActivity.length > 0 ? ofActivity : sorted, since)
       ),
     });
   }
@@ -566,10 +647,13 @@ export function storiesOf(
 
 export type StoryOrder = "warningsFirst" | "newest";
 
+// Above `done`: a story nobody could place may be the one still burning, and
+// the list is read from the top.
 const STATE_RANK: Record<StoryState, number> = {
   stillHappening: 0,
   settled: 1,
-  done: 2,
+  unknown: 2,
+  done: 3,
 };
 
 export function sortStories(stories: Story[], order: StoryOrder): Story[] {
@@ -589,21 +673,34 @@ export function sortStories(stories: Story[], order: StoryOrder): Story[] {
 export interface DensityBucket {
   count: number;
   worst: "warn" | null;
+  /**
+   * Whether the read covers this slice at all. A pool that stopped at the
+   * limit never reached the older end of the window, and an empty bucket
+   * there means "nobody looked" — which the strip drew exactly like "nothing
+   * happened", the quietest thing it can say.
+   */
+  read: boolean;
 }
 
 /** When each event was last seen, over the window, in `buckets` equal slices. */
 export function densityOf(
   story: Story,
-  { now, windowMs }: StoryOptions,
+  { now, windowMs, readFrom = null }: StoryOptions,
   buckets = 24
 ): DensityBucket[] {
-  const out: DensityBucket[] = Array.from({ length: buckets }, () => ({
+  const since = now - windowMs;
+  const out: DensityBucket[] = Array.from({ length: buckets }, (_, index) => ({
     count: 0,
     worst: null,
+    read:
+      readFrom === null ||
+      since + ((index + 1) / buckets) * windowMs > readFrom,
   }));
-  const since = now - windowMs;
   for (const event of story.events) {
     const last = at(event.lastTimestamp);
+    // Counted nowhere: an event the cluster gave no time to has no slice to
+    // sit in. The card says how many of those there are rather than letting
+    // the strip imply they did not happen.
     if (last === null) continue;
     const index = Math.min(
       buckets - 1,
@@ -626,6 +723,15 @@ export interface TimelineEntry {
   about: { kind: string; name: string };
   /** A pod's own status placed on the same clock. */
   fromStatus: boolean;
+  /**
+   * The exit a status row stands for, as data rather than as a sentence.
+   *
+   * `reason` is the cluster's word and is quoted; the container and the code
+   * are numbers this app has to word itself, and it can only do that where
+   * the reader's language is in scope. Composed here, "exit 137" was English
+   * in the slot the cluster's own vocabulary is drawn in.
+   */
+  exit: { container: string; code: number } | null;
 }
 
 export function timelineOf(story: Story): TimelineEntry[] {
@@ -645,6 +751,7 @@ export function timelineOf(story: Story): TimelineEntry[] {
           name: event.involvedObject.name,
         },
         fromStatus: false,
+        exit: null,
       };
     })
     .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
@@ -667,11 +774,14 @@ export function withStatusMarks(
     at: mark.at,
     until: null,
     warning: mark.exitCode !== 0,
-    reason: mark.reason ?? `exit ${mark.exitCode}`,
+    // Only where the cluster gave one. Otherwise the row is worded from
+    // `exit` at render, in the reader's language.
+    reason: mark.reason ?? "",
     message: "",
     count: 1,
     about: { kind: "Pod", name: mark.pod },
     fromStatus: true,
+    exit: { container: mark.container, code: mark.exitCode },
   }));
   return [...entries, ...extra].sort(
     (a, b) => (a.at ?? Infinity) - (b.at ?? Infinity)

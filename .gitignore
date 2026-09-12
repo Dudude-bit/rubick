@@ -1,5 +1,8 @@
 # Rust
 /target/
+# A local `target-dir` override, so several worktrees share one build
+# directory. It holds an absolute path from one machine.
+/.cargo/
 
 # Node
 node_modules/

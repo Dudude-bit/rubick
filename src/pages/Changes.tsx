@@ -80,7 +80,7 @@ export function Changes() {
                   window === candidate ? "bg-sel text-fg" : "text-fg-mut"
                 )}
               >
-                {candidate}
+                {t("changes", candidate === "24h" ? "window24h" : "window7d")}
               </button>
             ))}
           </div>

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { EventInfo } from "@/generated/types";
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import corpus from "./__fixtures__/live-events.json";
 import {
   activityOf,
@@ -54,7 +57,7 @@ describe("the recorded hour", () => {
   const now =
     Math.max(...events.map((e) => Date.parse(e.lastTimestamp ?? ""))) + 1000;
   const stories = sortStories(
-    storiesOf(events, { now, windowMs: HOUR }),
+    storiesOf(events, { now, windowMs: HOUR, narrowed: false }),
     "warningsFirst"
   );
 
@@ -108,8 +111,9 @@ describe("the recorded hour", () => {
 
   /**
    * These pods could not be scheduled, then could not be pulled. The story
-   * is about the later trouble, counts only that trouble, and quotes the
-   * kubelet's full sentence rather than its bare "Error: ErrImagePull".
+   * is about the later trouble, counts only that trouble, quotes the span of
+   * *that* trouble rather than the group's, and gives the kubelet's full
+   * sentence rather than its bare "Error: ErrImagePull".
    */
   it("tells the latest trouble with that trouble's own count and words", () => {
     const pulls = one(stories, "log-demo");
@@ -118,8 +122,13 @@ describe("the recorded hour", () => {
     expect(pulls.says).toEqual({
       key: "storyPull",
       values: {
-        n: 12,
-        spanMs: 5971358,
+        // The count is its own sentence: Russian needs three forms where
+        // English needs two, so the outer string cannot carry `{n} times`.
+        times: { key: "timesSeen", values: { n: 12 } },
+        // The pulls all failed at 07:29:42. The 99 minutes this used to
+        // quote belonged to the scheduling failures in the same story —
+        // a span borrowed from trouble the sentence is not counting.
+        spanMs: 0,
         detail: 'Failed to pull image "busybox:1.36": pull QPS exceeded',
       },
     });
@@ -133,7 +142,10 @@ describe("the recorded hour", () => {
     expect(hpa.subject.kind).toBe("HorizontalPodAutoscaler");
     expect(hpa.state).toBe("stillHappening");
     expect(hpa.says.key).toBe("storyScaling");
-    expect(hpa.says.values?.n).toBe(570);
+    expect(hpa.says.values?.times).toEqual({
+      key: "timesSeen",
+      values: { n: 570 },
+    });
     const node = one(stories, "k3d-k8s-gui-dev-server-0");
     expect(node.state).toBe("settled");
     expect(node.activity).toBe("pressure");
@@ -142,7 +154,11 @@ describe("the recorded hour", () => {
   it("reads a finished job as one created and one completed", () => {
     expect(one(stories, "cron-demo-29812785").says).toEqual({
       key: "storyJob",
-      values: { spanMs: 3000, created: 1, completed: 1 },
+      values: {
+        spanMs: 3000,
+        created: { key: "jobsCreated", values: { n: 1 } },
+        completed: 1,
+      },
     });
   });
 
@@ -180,7 +196,7 @@ describe("placing events", () => {
         }),
         event({ kind: "Pod", name: "payments-7b6d9c5f4-x8k2p" }),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(stories).toHaveLength(1);
     expect(stories[0].subject).toEqual({
@@ -208,7 +224,7 @@ describe("placing events", () => {
         }),
         event({ kind: "Pod", name: "payments-7b6d9c5f4-x8k2p" }),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(stories).toHaveLength(1);
     expect(stories[0].subject.byName).toBe(false);
@@ -219,6 +235,7 @@ describe("placing events", () => {
     const stories = storiesOf([event({ kind: "Pod", name: "web-0" })], {
       now: NOW,
       windowMs: HOUR,
+      narrowed: false,
     });
     expect(stories[0].subject).toEqual({
       kind: "Pod",
@@ -234,7 +251,7 @@ describe("placing events", () => {
         event({ kind: "Node", name: "worker", reason: "NodeReady" }),
         event({ kind: "Pod", name: "worker-abcde" }),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(stories).toHaveLength(2);
   });
@@ -253,7 +270,7 @@ describe("the window", () => {
           firstTimestamp: null,
         }),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(stories.map((s) => s.subject.name).sort()).toEqual([
       "fresh",
@@ -282,7 +299,7 @@ describe("state", () => {
         warning("quiet", ago(RECENT_MS + 1000)),
         event({ kind: "Pod", name: "calm" }),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(one(stories, "live").state).toBe("stillHappening");
     expect(one(stories, "quiet").state).toBe("settled");
@@ -296,7 +313,7 @@ describe("state", () => {
         warning("quiet", ago(RECENT_MS + 1000)),
         warning("live", ago(1000)),
       ],
-      { now: NOW, windowMs: HOUR }
+      { now: NOW, windowMs: HOUR, narrowed: false }
     );
     expect(
       sortStories(stories, "warningsFirst").map((s) => s.subject.name)
@@ -355,7 +372,7 @@ describe("the timeline", () => {
         lastTimestamp: ago(31 * 60_000),
       }),
     ],
-    { now: NOW, windowMs: HOUR }
+    { now: NOW, windowMs: HOUR, narrowed: false }
   )[0];
 
   it("lays folded repeats out by first seen with their count and span", () => {
@@ -384,9 +401,184 @@ describe("the timeline", () => {
   });
 
   it("marks density by when each event was last seen, warnings on top", () => {
-    const buckets = densityOf(story, { now: NOW, windowMs: HOUR }, 6);
+    const buckets = densityOf(
+      story,
+      { now: NOW, windowMs: HOUR, narrowed: false },
+      6
+    );
     expect(buckets.map((b) => b.count)).toEqual([0, 0, 1, 0, 0, 1]);
     expect(buckets[5].worst).toBe("warn");
     expect(buckets[2].worst).toBeNull();
+  });
+});
+
+describe("counts a reader's language can say", () => {
+  /**
+   * `{n} times` in the sentence itself renders "1 times" in English and
+   * "2 раз" in Russian, and no scanner finds it: the whole string is there,
+   * it is only the count inside it that is wrong. The count is its own
+   * catalogue plural, resolved before the sentence holds it.
+   */
+  it("says a single occurrence without the plural noun", () => {
+    const once = storiesOf(
+      [
+        event({
+          reason: "FailedScheduling",
+          type: "Warning",
+          message: "0/3 nodes are available: insufficient cpu",
+          count: 1,
+          kind: "Pod",
+          name: "web-0",
+          lastTimestamp: new Date(NOW - 1000).toISOString(),
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    const en: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const said = sayWords(once[0].says, en);
+    expect(said).toContain("once");
+    expect(said).not.toContain("1 times");
+  });
+
+  /** Russian's second form: 2, 3 and 4 take "раза", not "раз". */
+  it("takes the Russian case for two, three and four", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    for (const n of [2, 3, 4]) {
+      expect(sayWords({ key: "timesSeen", values: { n } }, ru)).toBe(
+        `${n} раза`
+      );
+    }
+    expect(sayWords({ key: "timesSeen", values: { n: 1 } }, ru)).toBe("1 раз");
+    expect(sayWords({ key: "timesSeen", values: { n: 11 } }, ru)).toBe(
+      "11 раз"
+    );
+  });
+});
+
+describe("which names are siblings", () => {
+  /**
+   * The suffix alphabet holds seven of the ten digits, so a CronJob's minute
+   * segment falls inside it whenever the clock avoids 0, 1 and 3 — and the
+   * same CronJob then folds two ways depending on the minute it ran.
+   */
+  it("keeps a run's pods on their run, whatever the clock said", () => {
+    // 29845672 is all-digit and entirely inside the suffix alphabet.
+    expect(familyOf("cron-demo-29845672-mlvsb")).toBe("cron-demo-29845672");
+    // 29812785 carries a 1 and a 3, which are not.
+    expect(familyOf("cron-demo-29812785-mlvsb")).toBe("cron-demo-29812785");
+  });
+
+  /** A Deployment's pods still fold through the ReplicaSet's template hash. */
+  it("still folds a deployment's pods together", () => {
+    expect(familyOf("web-7b6d9c5f4-x8k2p")).toBe("web");
+    expect(familyOf("web-7b6d9c5f4-zzzzz")).toBe("web");
+  });
+
+  /** A StatefulSet's ordinal is not a generated suffix. */
+  it("leaves a name that carries no generated suffix alone", () => {
+    expect(familyOf("web-0")).toBe("web-0");
+    expect(familyOf("web-11")).toBe("web-11");
+  });
+});
+
+describe("what the kubelet said, not what the app assumed", () => {
+  /**
+   * A Pod `Failed` without "image" in it is a crash for ranking, but only a
+   * `BackOff` is the kubelet backing off from a restart. A missing secret
+   * never reached a container at all, and the kubelet's own sentence is the
+   * only thing on the card that says which it was.
+   */
+  it("does not claim a restart backoff for a container that never started", () => {
+    const [story] = storiesOf(
+      [
+        event({
+          reason: "Failed",
+          type: "Warning",
+          message: 'Error: secret "db-creds" not found',
+          count: 5,
+          kind: "Pod",
+          name: "api-7b6d9c5f4-x8k2p",
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(story.activity).toBe("crash");
+    expect(story.says.key).toBe("storyStartFailed");
+    expect(story.says.values?.detail).toBe(
+      'Error: secret "db-creds" not found'
+    );
+  });
+
+  it("keeps the backoff wording where the kubelet really said BackOff", () => {
+    const [story] = storiesOf(
+      [
+        event({
+          reason: "BackOff",
+          type: "Warning",
+          message: "Back-off restarting failed container",
+          count: 9,
+          kind: "Pod",
+          name: "api-7b6d9c5f4-x8k2p",
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(story.says.key).toBe("storyCrash");
+    expect(story.says.values?.detail).toBe(
+      "Back-off restarting failed container"
+    );
+  });
+});
+
+describe("the density strip", () => {
+  /**
+   * A pool cut at the limit never reached the older end of the window. Those
+   * slices were drawn as the flat hairline a quiet slice gets, so "nobody
+   * looked" and "nothing happened" were the same picture.
+   */
+  it("tells a slice nobody read from a slice where nothing happened", () => {
+    const story = one(
+      storiesOf(
+        [
+          event({
+            reason: "BackOff",
+            type: "Warning",
+            kind: "Pod",
+            name: "web-7b6d9c5f4-x8k2p",
+            lastTimestamp: new Date(NOW - 60_000).toISOString(),
+          }),
+        ],
+        { now: NOW, windowMs: HOUR, narrowed: false }
+      ),
+      "web"
+    );
+    const whole = densityOf(story, {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(whole.every((bucket) => bucket.read)).toBe(true);
+
+    // The read only reached the last ten minutes of the hour.
+    const cut = densityOf(
+      story,
+      {
+        now: NOW,
+        windowMs: HOUR,
+        narrowed: false,
+        readFrom: NOW - 10 * 60_000,
+      },
+      6
+    );
+    expect(cut.map((bucket) => bucket.read)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
   });
 });

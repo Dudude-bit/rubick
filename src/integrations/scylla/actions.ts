@@ -57,10 +57,56 @@ export function actionsFor(
   return list;
 }
 
+/**
+ * The JSON Patch (RFC 6902) that scales one rack.
+ *
+ * A merge patch cannot edit one element of a list — it replaces the list —
+ * so rebuilding `spec.datacenter.racks` from what this page models deleted
+ * every field the model does not carry, from **every** rack. Reproduced
+ * against a real apiserver: scaling one rack from 3 to 5 left
+ * `[{name, members}]`, and a live ScyllaDB rack also carries `storage`
+ * (the volume claim for the data), `resources`, `placement`, `volumes`,
+ * `volumeMounts` and both config sections.
+ *
+ * The `test` op is the other half. It names the rack this index is expected
+ * to hold; if the list has changed since the page read it, the apiserver
+ * rejects the whole patch rather than resizing somebody else's rack.
+ */
+export function opsFor(
+  action: ScyllaAction,
+  cluster: ScyllaCluster,
+  value: string
+): Array<Record<string, unknown>> {
+  const input = action.input;
+  if (action.id !== "scale" || input?.kind !== "members") {
+    throw new Error(SCALE_IS_A_JSON_PATCH);
+  }
+  const members = Number(value);
+  if (!Number.isInteger(members) || members < 0) {
+    throw new Error(`members must be a whole number, not ${value}`);
+  }
+  const at = cluster.racks.findIndex((rack) => rack.name === input.rack);
+  if (at < 0) throw new Error(`no rack named ${input.rack}`);
+  return [
+    {
+      op: "test",
+      path: `/spec/datacenter/racks/${at}/name`,
+      value: input.rack,
+    },
+    {
+      op: "replace",
+      path: `/spec/datacenter/racks/${at}/members`,
+      value: members,
+    },
+  ];
+}
+
+const SCALE_IS_A_JSON_PATCH =
+  "scaling a rack is a JSON Patch, not a merge patch";
+
 /** The merge patch each action sends; exported so a test can read it without a cluster. */
 export function patchFor(
   action: ScyllaAction,
-  cluster: ScyllaCluster,
   value: string,
   now: Date = new Date()
 ): Record<string, unknown> {
@@ -69,29 +115,15 @@ export function patchFor(
       return {
         spec: { forceRedeploymentReason: `rubick ${now.toISOString()}` },
       };
-    case "scale": {
-      const input = action.input;
-      if (input?.kind !== "members") throw new Error("scale needs a rack");
-      const members = Number(value);
-      if (!Number.isInteger(members) || members < 0) {
-        throw new Error(`members must be a whole number, not ${value}`);
-      }
-      // Racks are a list, so a merge patch sends the whole list with one
-      // number changed; anything less would drop the other racks.
-      return {
-        spec: {
-          datacenter: {
-            racks: cluster.racks.map((rack) => ({
-              name: rack.name,
-              members: rack.name === input.rack ? members : rack.members,
-            })),
-          },
-        },
-      };
-    }
+    case "scale":
+      // Scaling does not go through a merge patch at all — see `opsFor`.
+      throw new Error(SCALE_IS_A_JSON_PATCH);
     case "upgrade": {
       const version = value.trim();
-      if (!/^\d+\.\d+/.test(version)) {
+      // Anchored at both ends: an unanchored prefix let
+      // `2025.2.1; rm -rf` and `2025.2.1-latest-please` through, and the
+      // value goes straight into `spec.version` for the operator to pull.
+      if (!/^\d+(\.\d+){1,3}$/.test(version)) {
         throw new Error(`a ScyllaDB version looks like 2025.2.1, not ${value}`);
       }
       return { spec: { version } };
@@ -104,10 +136,19 @@ export async function perform(
   cluster: ScyllaCluster,
   value: string
 ): Promise<void> {
+  if (action.id === "scale") {
+    await commands.patchCustomResourceJson(
+      CLUSTERS_CRD,
+      cluster.name,
+      cluster.namespace,
+      opsFor(action, cluster, value)
+    );
+    return;
+  }
   await commands.patchCustomResource(
     CLUSTERS_CRD,
     cluster.name,
     cluster.namespace,
-    patchFor(action, cluster, value)
+    patchFor(action, value)
   );
 }

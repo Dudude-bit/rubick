@@ -606,6 +606,9 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
+    // Deliberately not `renewals`: `stream_logs` opens one body and reads it
+    // to the end, so the client it was built from is never used again. A
+    // watch is restarted because `watcher` re-lists with the old token.
     sync,
   ]);
 

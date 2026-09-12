@@ -220,3 +220,77 @@ describe("restoring the last cluster on launch", () => {
     expect(vi.mocked(commands.connectCluster)).not.toHaveBeenCalledWith("prod");
   });
 });
+
+describe("landing on a different cluster", () => {
+  /**
+   * The counter is what tells a surface holding a route from the old cluster
+   * to let go, so it has to move on exactly the connects that make a route
+   * meaningless — and on no others, or every reconnect would throw the
+   * reader off the page they were reading.
+   */
+  it("counts a move to another cluster and not a reconnect to the same one", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+
+    await state().connect("dev");
+    expect(state().contextSwitches).toBe(0);
+
+    await state().connect("dev");
+    expect(state().contextSwitches).toBe(0);
+
+    await state().connect("prod");
+    expect(state().contextSwitches).toBe(1);
+  });
+
+  /** Disconnecting does not make the next cluster the first one. */
+  it("still counts the move when the window was disconnected in between", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+
+    await state().connect("dev");
+    await state().disconnect();
+    await state().connect("prod");
+
+    expect(state().contextSwitches).toBe(1);
+  });
+
+  /**
+   * A deep link names the cluster and the object together, and arrives by
+   * connecting and then navigating. Counting that as a switch would have the
+   * tab let go of the very route the link is opening.
+   */
+  it("does not count a connect that is bringing its own route", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+    await state().connect("dev");
+    await state().connect("prod", { keepRoute: true });
+
+    expect(state().contextSwitches).toBe(0);
+  });
+
+  /** A connect that failed left the reader where they were. */
+  it("does not count a connect that never landed", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+    await state().connect("dev");
+
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error("no route to host")
+    );
+    await state().connect("prod");
+
+    expect(state().contextSwitches).toBe(0);
+  });
+});
