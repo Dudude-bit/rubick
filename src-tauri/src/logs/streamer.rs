@@ -105,6 +105,9 @@ impl LogStreamer {
         // all move it — which is how the viewer places them too.
         let mut epoch_ms = Utc::now().timestamp_millis();
 
+        // The one and only use of the client: after this it is a body being
+        // read, and the API server does not re-check an admitted request's
+        // token — which is why `useLogStream` does not restart on a renewal.
         let stream = match api.log_stream(&config.pod, &params).await {
             Ok(stream) => stream,
             Err(e) => {

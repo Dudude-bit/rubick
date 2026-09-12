@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
-import { useRenewals } from "@/hooks/useCredentialRenewal";
 import type {
   LogFormat,
   LogLevel,
@@ -200,7 +199,6 @@ export function useLogStream({
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
-  const renewals = useRenewals();
   const [lastBatchAt, setLastBatchAt] = useState(() => Date.now());
   const [intakeFrom, setIntakeFrom] = useState(0);
   const [unfilteredFrom, setUnfilteredFrom] = useState(0);
@@ -227,11 +225,7 @@ export function useLogStream({
   );
 
   /** What the attached streams were opened against. See `resuming` below. */
-  const opened = useRef<{
-    target: string;
-    intake: string;
-    renewals: number;
-  } | null>(null);
+  const opened = useRef<{ target: string; intake: string } | null>(null);
   // `previous` belongs in the key: it selects a different run, so the
   // buffer must not be resumed across a flip — the lines already held
   // are from the other run and would be interleaved with it silently.
@@ -301,12 +295,7 @@ export function useLogStream({
 
     const initStreams = async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
-      if (!active || isPaused || streamed.length === 0) {
-        // A renewal landing while this is paused rebuilds nothing, so the
-        // unpause must not read as a resume and skip the backfill.
-        if (opened.current) opened.current = { ...opened.current, renewals };
-        return;
-      }
+      if (!active || isPaused || streamed.length === 0) return;
 
       /**
        * Picking up where the buffer left off, rather than starting a
@@ -324,17 +313,11 @@ export function useLogStream({
        * tail the buffer already holds, as duplicates.
        */
       const lastOpened = opened.current;
-      // A renewal restarts these streams on the new client and changes
-      // nothing the reader chose, so wiping what they are reading would be
-      // the renewal costing them the thing it was meant to keep alive. It
-      // inherits the gap every resume has: `tailLines: 0` below, so whatever
-      // was printed while the stream was being rebuilt is not backfilled.
-      const renewed = lastOpened !== null && lastOpened.renewals !== renewals;
       const resuming =
         lastOpened !== null &&
         lastOpened.target === target &&
-        (renewed || lastOpened.intake !== intakeKey || intakeTerms.length > 0);
-      opened.current = { target, intake: intakeKey, renewals };
+        (lastOpened.intake !== intakeKey || intakeTerms.length > 0);
+      opened.current = { target, intake: intakeKey };
 
       setIsConnecting(true);
       setFailures([]);
@@ -506,10 +489,9 @@ export function useLogStream({
     intakeTerms,
     previous,
     target,
-    // Same reason as the resource watch: the stream was opened with a client
-    // built on credentials a renewal has just replaced, and the API server
-    // will stop accepting them at the deadline the old ones named.
-    renewals,
+    // Deliberately not `renewals`: `stream_logs` opens one body and reads it
+    // to the end, so the client it was built from is never used again. A
+    // watch is restarted because `watcher` re-lists with the old token.
   ]);
 
   return {
