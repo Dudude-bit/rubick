@@ -29,6 +29,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
+import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
 import {
   Search,
   SearchX,
@@ -257,6 +258,7 @@ function DataTableInner<TData extends RowData>({
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
+  const { open: openPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -501,9 +503,16 @@ function DataTableInner<TData extends RowData>({
 
     const href = getRowHref?.(row);
     if (href) {
-      // A list is where you are already browsing, so plain click goes there
-      // rather than peeking: the peek exists to check a name mentioned
-      // elsewhere without losing the page, and here the page is the list.
+      // A plain click on a row whose object has a peek opens the peek, the
+      // same as the click on the name inside it: one gesture, one answer,
+      // wherever on the row it lands. The page itself is a double click, or
+      // Enter, away. Modified clicks open tabs exactly as before.
+      const peek = "key" in event ? null : peekTargetOfHref(href);
+      if (peek && readLinkIntent(event) === "activate") {
+        event.preventDefault();
+        openPeek(peek);
+        return;
+      }
       linkGesture(event, href, () => navigate(href));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
       // No destination, so nothing to open a tab on; only a plain click acts.
@@ -518,6 +527,15 @@ function DataTableInner<TData extends RowData>({
       ? (event: React.MouseEvent | React.KeyboardEvent) =>
           handleRowGesture(row.original, event)
       : undefined;
+    const href = getRowHref?.(row.original);
+    const openPage =
+      href && peekTargetOfHref(href)
+        ? (event: React.MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button") || target.closest("a")) return;
+            navigate(href);
+          }
+        : undefined;
 
     return (
       <TableRow
@@ -541,6 +559,7 @@ function DataTableInner<TData extends RowData>({
           "relative group"
         )}
         onClick={act}
+        onDoubleClick={openPage}
         onAuxClick={act}
         onKeyDown={
           rowProps &&

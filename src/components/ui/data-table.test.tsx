@@ -55,8 +55,8 @@ const columns: ColumnDef<Item>[] = [
 ];
 
 function LocationProbe() {
-  const { pathname } = useLocation();
-  return <span data-testid="location">{pathname}</span>;
+  const { pathname, search } = useLocation();
+  return <span data-testid="location">{`${pathname}${search}`}</span>;
 }
 
 const wrap = (ui: ReactNode) =>
@@ -191,14 +191,32 @@ describe("DataTable rows", () => {
       />
     );
 
-  // A list is the page you are already browsing, so opening a row from it is
-  // a drill-down, not a look-without-leaving. If this starts peeking, Back
-  // stops being the way home from a list.
-  it("navigates on a plain click anywhere in the row", () => {
+  /**
+   * Issue #178: the name in a row peeked and the whitespace beside it went
+   * to the page, and nobody could tell which they would get. Now both peek,
+   * and the page is a double click. Would break if the row went back to
+   * navigating on a plain click, or if the double click stopped opening it.
+   */
+  it("peeks on a plain click anywhere in the row, and opens the page on a double click", () => {
     renderTable();
     fireEvent.click(whitespace());
-    expect(location()).toBe("/pods/ns/a-1");
+    expect(location()).toBe("/pods?peek=pods%2Fns%2Fa-1");
     expect(tabs()).toHaveLength(1);
+    fireEvent.doubleClick(whitespace());
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  // A row whose route has no peek behind it is a plain link, as it always was.
+  it("navigates on a plain click where the route is not an object", () => {
+    wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={(row) => `/helm/${row.namespace}/${row.name}`}
+      />
+    );
+    fireEvent.click(whitespace());
+    expect(location()).toBe("/helm/ns/a-1");
   });
 
   // This is the regression the whole change exists for: the row used to call

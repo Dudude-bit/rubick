@@ -470,6 +470,18 @@ describe("PeekPanel", () => {
     expect(location()).toBe("/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v");
   });
 
+  /** Issue #178: leaving Logs for the page landed on Overview. Would break if the tab stopped travelling. */
+  it("takes the open tab along to the full page", async () => {
+    wrap(POD_PEEK);
+    await openTab("Logs");
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open full page/ })
+    );
+    expect(location()).toBe(
+      "/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v?tab=logs"
+    );
+  });
+
   // Radix owns Escape; a second listener here would close it twice.
   it("closes on Escape by dropping the parameter", async () => {
     wrap(POD_PEEK);

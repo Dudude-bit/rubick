@@ -29,6 +29,46 @@ const PARAM = "peek";
  */
 const isCrdName = (segment: string) => segment.includes(".");
 
+/** The parameter's value as a target, or `null` for a value in neither shape. */
+export function parsePeekValue(raw: string): PeekTarget | null {
+  if (!raw) return null;
+  const parts = raw.split("/");
+
+  if (isCrdName(parts[0])) {
+    const [crd, kind, ...rest] = parts;
+    // A kind is UpperCamelCase — required of every CRD by the API server.
+    // Without this check a link truncated to `<crd>/<ns>/<name>` would open
+    // a panel headed with the namespace, which reads as a real object.
+    if (!kind || !/^[A-Z]/.test(kind)) return null;
+    if (rest.length < 1 || rest.length > 2) return null;
+    const [namespace, name] = rest.length === 2 ? rest : [null, rest[0]];
+    if (!name) return null;
+    return { kind, name, namespace, crd };
+  }
+
+  if (parts.length < 2 || parts.length > 3) return null;
+  const kind = toKind(parts[0]);
+  if (!kind) return null;
+  const [, first, second] = parts;
+  const [namespace, name] =
+    parts.length === 3 ? [first, second] : [null, first];
+  if (!name) return null;
+  return { kind, name, namespace };
+}
+
+/**
+ * The object behind a core route, `/pods/default/nginx`, in the shape the
+ * parameter takes: the same segments without the slash. A route in any
+ * other shape has no peek and is opened the way it always was.
+ */
+export function peekTargetOfHref(href: string): PeekTarget | null {
+  const path = href.split("?")[0];
+  if (!path.startsWith("/")) return null;
+  const parts = path.slice(1).split("/");
+  if (parts.length < 2 || parts.length > 3 || isCrdName(parts[0])) return null;
+  return parsePeekValue(parts.join("/"));
+}
+
 /**
  * The peek lives in the query string so browser back closes it and a peek is
  * linkable — the alternative, component state, makes back navigate away from
@@ -49,31 +89,10 @@ export function usePeek() {
   const [params, setParams] = useSearchParams();
   const raw = params.get(PARAM);
 
-  const target = useMemo<PeekTarget | null>(() => {
-    if (!raw) return null;
-    const parts = raw.split("/");
-
-    if (isCrdName(parts[0])) {
-      const [crd, kind, ...rest] = parts;
-      // A kind is UpperCamelCase — required of every CRD by the API server.
-      // Without this check a link truncated to `<crd>/<ns>/<name>` would open
-      // a panel headed with the namespace, which reads as a real object.
-      if (!kind || !/^[A-Z]/.test(kind)) return null;
-      if (rest.length < 1 || rest.length > 2) return null;
-      const [namespace, name] = rest.length === 2 ? rest : [null, rest[0]];
-      if (!name) return null;
-      return { kind, name, namespace, crd };
-    }
-
-    if (parts.length < 2 || parts.length > 3) return null;
-    const kind = toKind(parts[0]);
-    if (!kind) return null;
-    const [, first, second] = parts;
-    const [namespace, name] =
-      parts.length === 3 ? [first, second] : [null, first];
-    if (!name) return null;
-    return { kind, name, namespace };
-  }, [raw]);
+  const target = useMemo<PeekTarget | null>(
+    () => (raw ? parsePeekValue(raw) : null),
+    [raw]
+  );
 
   const open = useCallback(
     (next: PeekTarget) => {
@@ -89,6 +108,7 @@ export function usePeek() {
         if (!kind) return;
         value = [toPlural(kind), ...where].join("/");
       }
+      if (value === raw) return;
       setParams(
         (current) => {
           const updated = new URLSearchParams(current);
@@ -98,7 +118,7 @@ export function usePeek() {
         { replace: false }
       );
     },
-    [setParams]
+    [setParams, raw]
   );
 
   const close = useCallback(() => {
