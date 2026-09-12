@@ -44,13 +44,23 @@ export interface TerminalProps {
   metadata?: TerminalMetadata;
   /** Close handler */
   onClose?: () => void;
+  /**
+   * Whatever the session printed before this pane was mounted, for a pane
+   * that opens after its session started. See `useGenericTerminalSession`.
+   */
+  replay?: () => string;
 }
 
 /**
  * Generic terminal component that works with any session type.
  * Completely decoupled from Kubernetes - just renders a terminal for a given session ID.
  */
-export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
+export function Terminal({
+  sessionId,
+  metadata,
+  onClose,
+  replay,
+}: TerminalProps) {
   const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -80,6 +90,7 @@ export function Terminal({ sessionId, metadata, onClose }: TerminalProps) {
       sessionId,
       onOutput,
       onClose: onSessionClose,
+      replay,
     }
   );
 

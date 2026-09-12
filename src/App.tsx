@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Layout } from "@/components/layout/Layout";
 import { ErrorProvider } from "@/contexts/error-context";
 import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
+import { useWatchForRenewals } from "@/hooks/useCredentialRenewal";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
 import { useTellMeWhen } from "@/hooks/useTellMeWhen";
@@ -185,6 +186,7 @@ export default function App() {
   // Global event hooks (ErrorProvider now handles error toasts)
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
+  useWatchForRenewals();
   useTellMeWhen();
   usePortForwardAutoStart();
   useAutoUpdater();
@@ -413,6 +415,7 @@ export default function App() {
             terminalSessionId={authTerminalSession.terminalSessionId}
             context={authTerminalSession.context}
             command={authTerminalSession.command}
+            replay={authTerminalSession.replay}
           />
         )}
       </ErrorBoundary>

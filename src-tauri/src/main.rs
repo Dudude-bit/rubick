@@ -157,6 +157,7 @@ fn main() {
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
             commands::cluster::connection_attempt,
+            commands::cluster::credential_renewal,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
             commands::access::check_access,

@@ -1777,6 +1777,16 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type Renewal =
+  | "scheduled"
+  | "noDeadline"
+  | "passed"
+  | "needsYou"
+  | "failed"
+  | "ranOut"
+  | "delegated"
+  | "unknown";
+
 export type ProxyOutcome =
   | { state: "notTried" }
   | { state: "noKubectl" }
