@@ -80,6 +80,23 @@ export function mountFor(
   return best?.tag ?? null;
 }
 
+/**
+ * Where the browser opens for a container: its first mount, because that
+ * is what the reader came to look at. A mount with a `subPath` is often a
+ * single file (a ConfigMap key over `/etc/app/app.conf`), and a file cannot
+ * be listed; the mount's parent can, and shows the file as a row.
+ */
+export function startPath(
+  volumes: readonly PodVolumeInfo[],
+  container: string
+): string {
+  const mount = volumes
+    .flatMap((volume) => volume.mounts)
+    .find((m) => m.container === container);
+  if (!mount) return "/";
+  return mount.subPath ? parentOf(mount.path) : mount.path;
+}
+
 export function joinPath(dir: string, name: string): string {
   return dir === "/" ? `/${name}` : `${dir}/${name}`;
 }

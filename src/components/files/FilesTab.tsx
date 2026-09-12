@@ -30,6 +30,7 @@ import {
   matches,
   modeText,
   mountFor,
+  startPath,
   parentOf,
   sortEntries,
   type FileEntry,
@@ -88,14 +89,9 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
       ""
   );
   const container = containers.find((c) => c.name === containerName) ?? null;
-  const firstMount = useMemo(
-    () =>
-      pod.volumes
-        .flatMap((v) => v.mounts)
-        .find((m) => m.container === containerName)?.path ?? null,
-    [pod.volumes, containerName]
+  const [path, setPath] = useState<string>(() =>
+    startPath(pod.volumes, containerName)
   );
-  const [path, setPath] = useState<string>(() => firstMount ?? "/");
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({
     key: "name",
     descending: false,

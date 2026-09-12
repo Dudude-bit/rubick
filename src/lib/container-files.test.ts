@@ -14,6 +14,7 @@ import {
   mountFor,
   parentOf,
   sortEntries,
+  startPath,
 } from "./container-files";
 
 const volumes: PodVolumeInfo[] = [
@@ -122,6 +123,35 @@ describe("mountFor", () => {
 
   it("does not match a sibling that merely shares a prefix", () => {
     expect(mountFor("/etc/application", "app", volumes)).toBeNull();
+  });
+});
+
+describe("startPath", () => {
+  const volumes = (subPath: string | null): PodVolumeInfo[] => [
+    {
+      name: "config",
+      source: "configMap",
+      refs: [{ kind: "ConfigMap", name: "app-config" }],
+      mounts: [
+        {
+          container: "app",
+          path: "/etc/app/app.conf",
+          readOnly: true,
+          subPath,
+        },
+      ],
+    },
+  ];
+
+  /**
+   * Issue #178: a ConfigMap key mounted over one file made the tab open on
+   * the file and say it could not be opened. Would break if the tab went
+   * back to opening on the mount path whatever the mount is.
+   */
+  it("opens a single-file mount at its parent, a directory mount at itself", () => {
+    expect(startPath(volumes("app.conf"), "app")).toBe("/etc/app");
+    expect(startPath(volumes(null), "app")).toBe("/etc/app/app.conf");
+    expect(startPath(volumes("app.conf"), "sidecar")).toBe("/");
   });
 });
 
