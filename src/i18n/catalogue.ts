@@ -36,6 +36,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    changes: "Changes",
     selectsLabels: "selects {selector}",
     allNamespacesLower: "all namespaces",
     dataTable: "Data table",
@@ -1416,6 +1417,61 @@ export const en = {
     watchCount: { one: "{n} watch", other: "{n} watches" },
     watching: "Watching",
     active: "{n} active",
+  },
+  changes: {
+    title: "Changes",
+    last24h: "Last 24 hours",
+    explained:
+      "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
+    clusterExplained:
+      "What this app saw change in the cluster's workloads while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
+    notObserved: "Not observed {from} to {to}",
+    notObservedStill: "Not observed since {from}",
+    revisionNumber: "revision {n}",
+    revisionCurrent: "current",
+    revisionOldest: "oldest known; nothing earlier to compare with",
+    unchangedTemplate:
+      "nothing changed in what is compared: image, env, envFrom, ports, resources, checksum annotations",
+    templateUnread:
+      "this revision's template, or the one before it, could not be read; what changed is not known",
+    revisionsMissing: {
+      one: "{n} revision in between is no longer on the cluster",
+      other: "{n} revisions in between are no longer on the cluster",
+    },
+    readopted:
+      "re-adopted by a rollback: the clock is when this object was created, not when it became current",
+    changeCause: "kubernetes.io/change-cause",
+    fieldContainer: "container",
+    added: "added",
+    removed: "removed",
+    delivered: "{owner} applied {revision}",
+    deliveredFrom: "from {from}",
+    helmRevision: "Helm revision {n}: {chart}",
+    journalCreated: "{kind} appeared",
+    journalDeleted: "{kind} gone",
+    journalGeneration: "spec generation {from} → {to}",
+    journalImage: "{container} image {from} → {to}",
+    journalReplicas: "replicas {from} → {to}",
+    journalAnnotation: "{key} {from} → {to}",
+    journalSeenAtRelist:
+      "Seen at a relist after a break: it changed sometime in the gap before this.",
+    sinceMarker: "since the link was made",
+    sinceNothing: "Nothing on this clock since {when}.",
+    revisionsUnread: "The revisions could not be read: {reason}",
+    historyUnread: "{owner}'s history could not be read: {reason}",
+    helmUnread: "Helm's history for {release} could not be read: {reason}",
+    nothingInWindow: "Nothing on this clock in the window.",
+    notWatchingNow: "Not watching this cluster's workloads right now.",
+    watchingNow: "Watching since {since}",
+    window24h: "24h",
+    window7d: "7d",
+    deliveriesUnread: "What delivers this could not be read: {reason}",
+    claimedOwner:
+      "{owner} does not list this object; it only carries the label naming it",
+    moreRows: {
+      one: "{n} more row not drawn",
+      other: "{n} more rows not drawn",
+    },
   },
   files: {
     noContainers: "This pod declares no containers.",
