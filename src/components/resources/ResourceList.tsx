@@ -372,6 +372,7 @@ export function ResourceList<
           fill={!embedded}
           isLoading={showSkeleton}
           searchKey={searchKey}
+          searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
           quickActions={resolvedQuickActions}

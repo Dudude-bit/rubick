@@ -1005,3 +1005,28 @@ describe("the namespace column", () => {
     expect(screen.getByText("Namespace")).toBeInTheDocument();
   });
 });
+
+describe("the search box", () => {
+  /**
+   * Issue #178: the search was component state, so leaving the tab and
+   * coming back remounted the table with an empty box. It lives in the
+   * query string now, which is what a tab records. Would break if the box
+   * stopped reading the parameter, or stopped writing it.
+   */
+  it("reads its value from the query string and writes it back", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    await waitFor(() => expect(screen.queryByText("a-1")).toBeNull());
+    fireEvent.change(search(), { target: { value: "a-1" } });
+    expect(location()).toBe("/pods?q=a-1");
+    fireEvent.change(search(), { target: { value: "" } });
+    expect(location()).toBe("/pods");
+  });
+});

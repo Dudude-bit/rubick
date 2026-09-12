@@ -116,6 +116,25 @@ describe("the command palette's hits", () => {
     expect(useClusterStore.getState().currentNamespace).toBe("");
   });
 
+  /**
+   * Issue #178: opening a hit in a background tab closed the palette, so a
+   * reader wanting three pods open typed the search three times. Would
+   * break if the background arm went back to closing.
+   */
+  it("stays open after opening a hit in a background tab", async () => {
+    search.hits = [
+      hit({ kind: "Pod", name: "api-web", namespace: "shop" }),
+      hit({ kind: "Pod", name: "api-worker", namespace: "shop" }),
+    ];
+    await open("api");
+    fireEvent.click(await screen.findByText(/api-web/), { ctrlKey: true });
+    expect(useScopeTabStore.getState().tabs).toHaveLength(2);
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/api-worker/), { ctrlKey: true });
+    expect(useScopeTabStore.getState().tabs).toHaveLength(3);
+    expect(useScopeTabStore.getState().activeId).toBe("palette");
+  });
+
   it("does not offer a kind the router has no page for at all", async () => {
     search.hits = [
       hit({ kind: "Event", name: "burst-demo.17f", namespace: "k8s-gui-test" }),

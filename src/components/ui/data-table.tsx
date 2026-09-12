@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   flexRender,
   useTable,
@@ -57,6 +57,12 @@ interface DataTableProps<TData extends RowData> {
   data: TData[];
   isLoading?: boolean;
   searchKey?: string;
+  /**
+   * The query-string key the search lives under. A tab records its route
+   * with the query string, so a search kept here survives leaving the tab
+   * and coming back; one kept in state did not.
+   */
+  searchParam?: string;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -244,6 +250,7 @@ function DataTableInner<TData extends RowData>({
   data,
   isLoading = false,
   searchKey,
+  searchParam,
   searchPlaceholder,
   enableVirtualScroll,
   fill = false,
@@ -267,7 +274,23 @@ function DataTableInner<TData extends RowData>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const [searchValue, setSearchValue] = React.useState("");
+  const [params, setParams] = useSearchParams();
+  const [searchValue, setSearchValue] = React.useState(() =>
+    searchParam ? (params.get(searchParam) ?? "") : ""
+  );
+  const changeSearch = (value: string) => {
+    setSearchValue(value);
+    if (!searchParam) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(searchParam, value);
+        else next.delete(searchParam);
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const deferredSearch = React.useDeferredValue(searchValue);
 
   // Compact rows stay strictly single-line — a pod name like
@@ -673,7 +696,7 @@ function DataTableInner<TData extends RowData>({
               aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) => changeSearch(event.target.value)}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
@@ -819,7 +842,7 @@ function DataTableInner<TData extends RowData>({
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => setSearchValue("")}
+                          onClick={() => changeSearch("")}
                         >
                           {t("action", "clearSearch")}
                         </Button>
