@@ -1430,7 +1430,16 @@ export const en = {
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",
-    unchangedTemplate: "same template as the revision before",
+    unchangedTemplate:
+      "nothing changed in what is compared: image, env, envFrom, ports, resources, checksum annotations",
+    templateUnread:
+      "this revision's template, or the one before it, could not be read; what changed is not known",
+    revisionsMissing: {
+      one: "{n} revision in between is no longer on the cluster",
+      other: "{n} revisions in between are no longer on the cluster",
+    },
+    readopted:
+      "re-adopted by a rollback: the clock is when this object was created, not when it became current",
     changeCause: "kubernetes.io/change-cause",
     fieldContainer: "container",
     added: "added",
@@ -1441,7 +1450,7 @@ export const en = {
     journalCreated: "{kind} appeared",
     journalDeleted: "{kind} gone",
     journalGeneration: "spec generation {from} → {to}",
-    journalImage: "image {from} → {to}",
+    journalImage: "{container} image {from} → {to}",
     journalReplicas: "replicas {from} → {to}",
     journalAnnotation: "{key} {from} → {to}",
     journalSeenAtRelist:
@@ -1456,6 +1465,13 @@ export const en = {
     watchingNow: "Watching since {since}",
     window24h: "24h",
     window7d: "7d",
+    deliveriesUnread: "What delivers this could not be read: {reason}",
+    claimedOwner:
+      "{owner} does not list this object; it only carries the label naming it",
+    moreRows: {
+      one: "{n} more row not drawn",
+      other: "{n} more rows not drawn",
+    },
   },
   files: {
     noContainers: "This pod declares no containers.",

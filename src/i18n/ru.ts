@@ -1434,7 +1434,18 @@ export const ru: Catalogue = {
     revisionNumber: "ревизия {n}",
     revisionCurrent: "текущая",
     revisionOldest: "самая старая из известных; сравнивать не с чем",
-    unchangedTemplate: "тот же шаблон, что в предыдущей ревизии",
+    unchangedTemplate:
+      "в сравниваемом ничего не изменилось: image, env, envFrom, ports, resources, аннотации с контрольной суммой",
+    templateUnread:
+      "шаблон этой ревизии или предыдущей не прочитан; что изменилось — неизвестно",
+    revisionsMissing: {
+      one: "{n} ревизии между ними на кластере больше нет",
+      few: "{n} ревизий между ними на кластере больше нет",
+      many: "{n} ревизий между ними на кластере больше нет",
+      other: "{n} ревизий между ними на кластере больше нет",
+    },
+    readopted:
+      "снова взята откатом: на шкале момент, когда объект создан, а не когда стал текущим",
     changeCause: "kubernetes.io/change-cause",
     fieldContainer: "контейнер",
     added: "добавлен",
@@ -1445,7 +1456,7 @@ export const ru: Catalogue = {
     journalCreated: "{kind} появился",
     journalDeleted: "{kind} исчез",
     journalGeneration: "generation spec {from} → {to}",
-    journalImage: "образ {from} → {to}",
+    journalImage: "{container}: образ {from} → {to}",
     journalReplicas: "реплики {from} → {to}",
     journalAnnotation: "{key} {from} → {to}",
     journalSeenAtRelist:
@@ -1460,6 +1471,15 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     window24h: "24ч",
     window7d: "7д",
+    deliveriesUnread: "Кто это доставляет — не прочитано: {reason}",
+    claimedOwner:
+      "{owner} не перечисляет этот объект; на объекте только метка с его именем",
+    moreRows: {
+      one: "ещё {n} строка не нарисована",
+      few: "ещё {n} строки не нарисованы",
+      many: "ещё {n} строк не нарисовано",
+      other: "ещё {n} строк не нарисовано",
+    },
   },
   files: {
     noContainers: "У этого пода не объявлено контейнеров.",

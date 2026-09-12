@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    template_images, ConditionInfo, DeploymentContainerInfo, DeploymentContainerResources,
-    OptionTimeExt, TemplateContainers,
+    template_container_images, ConditionInfo, ContainerImage, DeploymentContainerInfo,
+    DeploymentContainerResources, OptionTimeExt, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -24,7 +24,7 @@ pub struct DaemonSetInfo {
     pub current: i32,
     pub ready: i32,
     /// What the template runs, so a watch on the list can see a rollout.
-    pub images: Vec<String>,
+    pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
     pub generation: Option<i64>,
     pub observed_generation: Option<i64>,
@@ -43,7 +43,7 @@ impl From<&DaemonSet> for DaemonSetInfo {
             desired: status.map_or(0, |s| s.desired_number_scheduled),
             current: status.map_or(0, |s| s.current_number_scheduled),
             ready: status.map_or(0, |s| s.number_ready),
-            images: template_images(spec.map(|s| &s.template)),
+            container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
                 .and_then(|m| m.annotations.clone())

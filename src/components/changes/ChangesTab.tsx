@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
@@ -15,6 +14,7 @@ import {
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveries } from "@/hooks/useDelivery";
+import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import {
   useCapabilities,
@@ -26,7 +26,6 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
 const WINDOW_MS = 7 * 24 * 60 * 60_000;
-const STALE = 30_000;
 
 export interface ChangesSubject {
   kind: "Deployment" | "StatefulSet" | "DaemonSet";
@@ -36,10 +35,24 @@ export interface ChangesSubject {
   annotations: Record<string, string>;
 }
 
+/**
+ * The owners whose history is this object's history.
+ *
+ * A `claimed` delivery is the object carrying a label the owner does not
+ * answer for — drawing that owner's commits here would say this object was
+ * delivered by something that does not list it. The owner is still worth
+ * naming, so it comes back marked rather than dropped.
+ */
+interface Claim {
+  owner: DeliveryOwner;
+  /** The owner lists this object back. */
+  listed: boolean;
+}
+
 function ownersOf(
   deliveries: ReturnType<typeof useDeliveries>,
   subject: ChangesSubject
-): DeliveryOwner[] {
+): Claim[] {
   const query = deliveryOfKind(subject.kind, subject);
   if (!query) return [];
   const seen = new Set<string>();
@@ -51,13 +64,13 @@ function ownersOf(
       name: subject.name,
     })
     .flatMap((delivery) => {
-      const owner =
-        delivery.state === "delivered" ? delivery.source.owner : delivery.owner;
+      const listed = delivery.state === "delivered";
+      const owner = listed ? delivery.source.owner : delivery.owner;
       if (!owner) return [];
       const key = `${owner.kind}/${owner.namespace}/${owner.name}`;
       if (seen.has(key)) return [];
       seen.add(key);
-      return [owner];
+      return [{ owner, listed }];
     });
 }
 
@@ -69,7 +82,10 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   const now = useNow();
   const context = useClusterStore((s) => s.currentContext);
 
-  const revisions = useQuery({
+  const revisions = useLiveQuery({
+    // A rollout is a deploy, not the cluster's own work: the same rate the
+    // Helm history and the delivery owners are read at.
+    refresh: "steady",
     queryKey: [
       context,
       "changes",
@@ -97,7 +113,6 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         throw normalizeTauriError(error);
       }
     },
-    staleTime: STALE,
   });
 
   const deliveryQuery = useMemo(
@@ -105,10 +120,12 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     [subject]
   );
   const deliveries = useDeliveries(deliveryQuery ? [deliveryQuery] : []);
-  const owners = ownersOf(deliveries, subject);
+  const claims = ownersOf(deliveries, subject);
+  const listed = claims.filter((claim) => claim.listed);
   const historians = useCapabilities("delivery.history");
-  const histories = useQueries({
-    queries: owners.map((owner) => ({
+  const histories = useLiveQueries<DeliveryRevision[]>({
+    refresh: "steady",
+    queries: listed.map(({ owner }) => ({
       queryKey: [
         context,
         "changes",
@@ -121,17 +138,18 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         const answers = await Promise.all(historians.map((ask) => ask(owner)));
         return answers.flatMap((answer) => answer ?? []);
       },
-      staleTime: STALE,
       enabled: historians.length > 0,
     })),
   });
 
   const release = helmReleaseOf(subject.annotations, subject.namespace);
-  const helm = useQuery({
-    queryKey: [context, "changes", "helm", release?.namespace, release?.name],
+  // The key the Helm page's rollback invalidates. A second key for the same
+  // fact is a copy that invalidation cannot reach.
+  const helm = useLiveQuery({
+    refresh: "steady",
+    queryKey: ["helm-history", release?.name, release?.namespace],
     queryFn: () => commands.getHelmHistory(release!.name, release!.namespace),
     enabled: release !== null,
-    staleTime: STALE,
   });
 
   const journal = useChangeJournalStore((s) => s.entries);
@@ -141,7 +159,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     () =>
       timelineOf({
         revisions: revisions.data ?? [],
-        deliveries: histories.flatMap((h) => h.data ?? []),
+        deliveries: histories.data.flatMap((h) => h ?? []),
         helm: helm.data ?? [],
         journal: journal.filter(
           (entry) =>
@@ -155,7 +173,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
       }),
     [
       revisions.data,
-      histories,
+      histories.data,
       helm.data,
       journal,
       spans,
@@ -172,15 +190,25 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         reason: normalizeTauriError(revisions.error),
       })
     );
-  histories.forEach((h, index) => {
-    if (h.error)
-      unread.push(
-        t("changes", "historyUnread", {
-          owner: `${owners[index].kind} ${owners[index].name}`,
-          reason: normalizeTauriError(h.error),
-        })
-      );
-  });
+  if (deliveries.error)
+    unread.push(
+      t("changes", "deliveriesUnread", {
+        reason: normalizeTauriError(deliveries.error),
+      })
+    );
+  if (histories.error)
+    unread.push(
+      t("changes", "historyUnread", {
+        owner: listed
+          .map(({ owner }) => `${owner.kind} ${owner.name}`)
+          .join(", "),
+        reason: normalizeTauriError(histories.error),
+      })
+    );
+  for (const { owner } of claims.filter((claim) => !claim.listed))
+    unread.push(
+      t("changes", "claimedOwner", { owner: `${owner.kind} ${owner.name}` })
+    );
   if (helm.error && release)
     unread.push(
       t("changes", "helmUnread", {
