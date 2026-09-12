@@ -124,10 +124,10 @@ function Items({ items }: { items: ChangeItem[] }) {
   );
 }
 
-/** `**bold**` and `` `code` ``, which is all the notes use. */
+/** `**bold**`, `` `code` `` and `_emphasis_`, which is all the notes use. */
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const pattern = /\*\*([^*]+)\*\*|`([^`]+)`/g;
+  const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|(?<![\w])_([^_]+)_(?![\w])/g;
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
@@ -138,12 +138,13 @@ function inline(text: string): ReactNode[] {
           {match[1]}
         </strong>
       );
-    else
+    else if (match[2] !== undefined)
       out.push(
         <code key={match.index} className="font-mono text-[11px] text-fg">
           {match[2]}
         </code>
       );
+    else out.push(<em key={match.index}>{match[3]}</em>);
     last = match.index + match[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

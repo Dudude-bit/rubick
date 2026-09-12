@@ -17,7 +17,7 @@ vi.mock("../../../CHANGELOG.md?raw", () => ({
 
 ### Added
 
-- **Credentials renew themselves.** Quietly.
+- **Credentials renew themselves.** Quietly, and _later_ rather than more often.
 
 ## [4.12.0] - 2026-09-11
 
@@ -57,6 +57,7 @@ describe("WhatsNew", () => {
     expect(
       screen.getByText(/Credentials renew themselves/)
     ).toBeInTheDocument();
+    expect(screen.getByText("later").tagName).toBe("EM");
     expect(screen.queryByText(/Files tab on a pod/)).toBeNull();
     await userEvent.click(
       screen.getAllByRole("button", { name: "Close" }).at(-1)!
