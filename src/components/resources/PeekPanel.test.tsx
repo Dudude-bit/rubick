@@ -191,6 +191,7 @@ function buildApplication(): CustomResourceDetailInfo {
     annotations: {},
     createdAt: "2026-08-01T09:00:00Z",
     ownerReferences: [],
+    generation: null,
     finalizers: [],
     resourceVersion: "41",
   };

@@ -137,6 +137,7 @@ export const ru: Catalogue = {
     routes: "Маршруты",
     map: "Карта",
     controller: "Контроллер",
+    operators: "Операторы",
     metadata: "Метаданные",
     allIntegrations: "Все интеграции",
     infrastructureBuilder: "Конструктор инфраструктуры",
@@ -159,6 +160,14 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    files: "Файлы",
+    members: "Члены",
+    racks: "Стойки",
+    instances: "Инстансы",
+    cluster: "Кластер",
+    mode: "Режим",
+    primaryInstance: "Primary",
+    backupMethod: "Метод",
     connections: "Связи",
     providerId: "ID провайдера",
     resourceVersion: "Версия ресурса",
@@ -483,6 +492,13 @@ export const ru: Catalogue = {
     programmed: "Запрограммирован",
   },
   action: {
+    eventsStories: "Истории",
+    eventsAll: "Все события",
+    warningsFirst: "Сначала предупреждения",
+    newestFirst: "Сначала новые",
+    showTimeline: "Таймлайн",
+    hideTimeline: "Скрыть таймлайн",
+    storyWindow: "Окно",
     showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
@@ -1275,6 +1291,7 @@ export const ru: Catalogue = {
     save: "Сохранить",
     delete: "Удалить",
     retry: "Повторить",
+    download: "Скачать",
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
@@ -1404,6 +1421,351 @@ export const ru: Catalogue = {
     },
     active: "активных: {n}",
   },
+  files: {
+    noContainers: "У этого пода не объявлено контейнеров.",
+    viaDebug:
+      "Просмотр через debug-контейнер {debug}, по пути {root} контейнера {container}. Режим и владелец такие, какими их видит debug-контейнер; файл, который процесс приложения прочитать не может, здесь всё же может быть виден. Debug-контейнер остаётся в поде.",
+    stopVia: "Снова читать контейнер напрямую",
+    restartedSince:
+      "Контейнер {container} перезапускался после этого листинга (перезапуск {restarts}). Всё, что было записано вне монтирований, ушло вместе с ним.",
+    readNewContainer: "Прочитать новый контейнер",
+    filterNames: {
+      one: "фильтр по {n} имени…",
+      few: "фильтр по {n} именам…",
+      many: "фильтр по {n} именам…",
+      other: "фильтр по {n} именам…",
+    },
+    notRunning:
+      "Контейнер {container} в состоянии {state}: exec делать некуда. Его монтирования по-прежнему в поде, а debug-контейнер может прочитать файлы остановленного контейнера.",
+    listingOf: "Файлы в {path}",
+    mode: "Режим",
+    size: "Размер",
+    modified: "Изменён",
+    stoppedBeforeAnything:
+      "Вы остановили чтение до того, как что-то пришло, поэтому что здесь лежит — неизвестно.",
+    cappedAt: {
+      one: "· остановлено на {n} строке, это не весь каталог",
+      few: "· остановлено на {n} строках, это не весь каталог",
+      many: "· остановлено на {n} строках, это не весь каталог",
+      other: "· остановлено на {n} строках, это не весь каталог",
+    },
+    unreadableLines: {
+      one: "· {n} строку прочитать не удалось, строки не хватает",
+      few: "· {n} строки прочитать не удалось, строк не хватает",
+      many: "· {n} строк прочитать не удалось, строк не хватает",
+      other: "· {n} строк прочитать не удалось, строк не хватает",
+    },
+    cannotSwitchViaDebug:
+      "Пока чтение идёт через debug-контейнер, строки приходят из того контейнера, на который он нацелен — остановите, чтобы выбрать другой.",
+    emptyDirectory: "{path} пуст: инструмент отработал и ничего там не нашёл.",
+    nothingReadable: {
+      one: "Инструмент напечатал {n} строку, и её не удалось разобрать — что здесь лежит, неизвестно.",
+      few: "Инструмент напечатал {n} строки, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+      many: "Инструмент напечатал {n} строк, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+      other:
+        "Инструмент напечатал {n} строк, и ни одну не удалось разобрать — что здесь лежит, неизвестно.",
+    },
+    keys: "↑↓ перемещение · ↵ открыть · ⌫ вверх · {download} скачать · метки берутся из монтирований пода, те же факты показывает вкладка «Связи»",
+    readingSoFar: {
+      one: "читаю · пока {n} запись · {seconds} с",
+      few: "читаю · пока {n} записи · {seconds} с",
+      many: "читаю · пока {n} записей · {seconds} с",
+      other: "читаю · пока {n} записей · {seconds} с",
+    },
+    readingSoFarUntimed: {
+      one: "читаю · пока {n} запись",
+      few: "читаю · пока {n} записи",
+      many: "читаю · пока {n} записей",
+      other: "читаю · пока {n} записей",
+    },
+    readVia: {
+      one: "прочитано через {how} · {n} запись · {seconds} с",
+      few: "прочитано через {how} · {n} записи · {seconds} с",
+      many: "прочитано через {how} · {n} записей · {seconds} с",
+      other: "прочитано через {how} · {n} записей · {seconds} с",
+    },
+    stoppedUntimed: {
+      one: "остановлено · пришла {n} запись, это не весь каталог",
+      few: "остановлено · пришло {n} записи, это не весь каталог",
+      many: "остановлено · пришло {n} записей, это не весь каталог",
+      other: "остановлено · пришло {n} записей, это не весь каталог",
+    },
+    stoppedAfter: {
+      one: "остановлено · за {seconds} с пришла {n} запись, это не весь каталог",
+      few: "остановлено · за {seconds} с пришло {n} записи, это не весь каталог",
+      many: "остановлено · за {seconds} с пришло {n} записей, это не весь каталог",
+      other:
+        "остановлено · за {seconds} с пришло {n} записей, это не весь каталог",
+    },
+    gnuFind: "find (GNU)",
+    busyboxStat: "sh + stat (busybox)",
+    fromMount: "из {name}",
+    noToolsTitle: "В образе нечем перечислить файлы",
+    noToolsBody:
+      "{tried} были выполнены напрямую в контейнере {container}, и ни одного нет. Образ {image}: файлы на месте, а инструментов их прочитать нет.",
+    openViaDebug: "Открыть через debug-контейнер",
+    readMountsInstead: "Показать монтирования пода вместо этого",
+    debugExplained:
+      "Debug-контейнер добавляет в под эфемерный контейнер с общим пространством процессов и читает файлы по /proc/1/root. Это изменение пода, оно остаётся до замены пода, и листинг об этом скажет.",
+    refused: "Кластер отказал в exec в этот под",
+    notRunningNow: "Контейнер {container} не запущен, exec делать некуда",
+    listFailed: "Чтение каталога не завершилось: {code}",
+    unopenable:
+      "{path} не удалось открыть: это не каталог, либо этому контейнеру не разрешено его читать. У debug-контейнера обычно есть права.",
+
+    mountsOnlyIntro:
+      "Что под объявляет смонтированным в {container}. Это spec, а не чтение файловой системы.",
+    noMounts: "В этот контейнер ничего не смонтировано.",
+    binary: "бинарный",
+    text: "текст",
+    lineCount: {
+      one: "{n} строка",
+      few: "{n} строки",
+      many: "{n} строк",
+      other: "{n} строки",
+    },
+    lineCountAtLeast: {
+      one: "прочитана {n} строка, дальше есть ещё",
+      few: "прочитано {n} строки, дальше есть ещё",
+      many: "прочитано {n} строк, дальше есть ещё",
+      other: "прочитано {n} строк, дальше есть ещё",
+    },
+    mountedFrom: "смонтирован из {kind} {name}",
+    mountedFromSeveral: {
+      one: "смонтирован из тома {name}, в него проецируется {n} источник",
+      few: "смонтирован из тома {name}, в него проецируются {n} источника — под не говорит, из какого именно этот файл",
+      many: "смонтирован из тома {name}, в него проецируется {n} источников — под не говорит, из какого именно этот файл",
+      other:
+        "смонтирован из тома {name}, в него проецируется {n} источников — под не говорит, из какого именно этот файл",
+    },
+    pathCopied: "Путь скопирован",
+    copyPath: "Копировать путь",
+    tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    noHeadInImage: "В образе нет head, чтобы прочитать файл.",
+    readFailed: "Не удалось прочитать файл (exit {code}):",
+    noPreviewBinary:
+      "Для бинарного файла превью нет. Скачайте его и посмотрите в другом месте.",
+    nonTextShare: "В первых 4 KiB {percent}% не текстовых байтов.",
+    previewTruncated:
+      "Превью обрывается на {cap}; файл продолжается. Скачайте его целиком.",
+    previewRepaired:
+      "Эти байты не являются корректным UTF-8. Ниже — починенный текст: каждый нечитаемый байт заменён на \uFFFD. Это не файл; чтобы увидеть байты, скачайте его.",
+    downloaded: "Скачан {name}",
+    downloadFailed: "Не удалось скачать {name}",
+    noCatInImage: "В образе нет cat, чтобы скопировать файл.",
+  },
+  operators: {
+    cnpgPageDescription:
+      "Сначала сам оператор, потом каждый Cluster словами CloudNativePG, первым тот, которому вы нужны. Бэкапы берутся из объектов Backup, потому что поля статуса устарели и с плагинами пусты.",
+    cnpgOperatorExplained:
+      "CloudNativePG запускает один Deployment, cnpg-controller-manager, который согласует каждый Cluster в каждом namespace. Его версия читается с этого образа; его CRD это то, что нашло определение.",
+    couldNotReadClusters: "Не удалось прочитать объекты Cluster",
+    clustersTab: "Кластеры",
+    backupsTab: "Бэкапы",
+    poolersTab: "Пулеры",
+    operatorTab: "Оператор",
+    clustersNeedAttention: {
+      one: "{n} кластер требует внимания",
+      few: "{n} кластера требуют внимания",
+      many: "{n} кластеров требуют внимания",
+      other: "{n} кластера требуют внимания",
+    },
+    noClusters:
+      "Объектов Cluster нет ни в одном namespace. Оператор здесь; базу у него ещё никто не попросил.",
+    controllerFact: "Контроллер",
+    controllerNotFound:
+      "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
+    controllerUnknown:
+      "Deployment'ы прочитать не удалось, поэтому работает ли контроллер оператора — неизвестно; это не значит, что его нет",
+    inNamespace: "в {namespace}",
+    versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
+    fromImage: "из образа Deployment",
+    canActFact: "Можно действовать",
+    canPatchClusters: "patch clusters",
+    canCreateBackups: "create backups",
+    allowed: "да",
+    refused: "отказано",
+    couldNotTell: "не удалось узнать",
+    checkedAgo: "проверено для вас, {ago}",
+    phaseUnknown: "фаза не записана",
+    primaryFact: "Primary",
+    readyFact: "Готовы",
+    readyOfDeclared: {
+      one: "{ready} из {n} инстанса",
+      few: "{ready} из {n} инстансов",
+      many: "{ready} из {n} инстансов",
+      other: "{ready} из {n} инстансов",
+    },
+    readyMembersOfDeclared: {
+      one: "{ready} из {n} участника",
+      few: "{ready} из {n} участников",
+      many: "{ready} из {n} участников",
+      other: "{ready} из {n} участников",
+    },
+    readyConditionFalse: "условие Ready False",
+    archivingFact: "Архивация WAL",
+    archivingNotDeclared: "не объявлена",
+    backupsFact: "Бэкапы",
+    backupsUnknown:
+      "неизвестно: объекты Backup прочитать не удалось, поэтому о них ничего не сказано",
+    backupsNone: "нет: объектов Backup для этого кластера нет",
+    backupsLastCompleted: {
+      one: "последний завершён {ago} · {n} объект Backup",
+      few: "последний завершён {ago} · {n} объекта Backup",
+      many: "последний завершён {ago} · {n} объектов Backup",
+      other: "последний завершён {ago} · {n} объекта Backup",
+    },
+    backupsNoneCompleted: {
+      one: "{n} объект Backup, ни один не завершён",
+      few: "{n} объекта Backup, ни один не завершён",
+      many: "{n} объектов Backup, ни один не завершён",
+      other: "{n} объекта Backup, ни один не завершён",
+    },
+    schedulesUnknown: "расписания прочитать не удалось",
+    suspendedWord: "приостановлено",
+    specSeenFact: "Spec виден оператору",
+    specSeenUnknownCnpg: "нельзя сказать: CNPG не пишет observedGeneration",
+    fencedWord: "fenced",
+    findingNotReady: "Кластер говорит, что он не Ready",
+    findingArchivingFailing: "Архивация WAL не удаётся уже {ago}",
+    findingFailedInstances: "Инстансы, которые оператор числит failed: {names}",
+    findingSwitchover: "Идёт switchover: {from} → {to}",
+    findingFailover: "Аварийное переключение с {from}",
+    failoverExplained:
+      "Это не плановое переключение: первичный инстанс пропал, и оператор повышает реплику, никого не спрашивая. Запись отклоняется, пока это не закончится.",
+    findingPhaseUnwritten: "Оператор не записал статус для этого Cluster",
+    phaseUnwrittenExplained:
+      "Здесь ничего не отреконсилено — объект может быть новым, а контроллер может не работать. Это не здоровый кластер, это кластер, о котором никто не отчитался.",
+    findingFenced: "Изолированы вручную: {names}",
+    backupNotCreated: "кластер не создал Backup и не сказал почему",
+    fencedAllOne:
+      "весь кластер заграждён через `*` — это все инстансы, включая те, которых CNPG ещё не перечислил; вынуть один, не сняв заграждение с остальных, нельзя",
+    fencingUnknown:
+      "в аннотации cnpg.io/fencedInstances записано то, что эта версия прочитать не может, поэтому какие инстансы заграждены — неизвестно; список пишется целиком, так что действие затёрло бы его",
+    fencedUnknownWord: "заграждение не прочитано",
+    findingFencedUnknown:
+      "Аннотацию со списком заграждённых инстансов прочитать не удалось, поэтому остановлен ли хоть один — неизвестно.",
+    fencedExplained:
+      "В изолированном (fenced) инстансе Postgres остановлен, а под остаётся; это держит аннотация cnpg.io/fencedInstances. Снимите изоляцию, когда причина ушла.",
+    findingHibernated: "В спячке",
+    hibernatedExplained:
+      "Поды удалены, PVC primary сохранён; аннотация cnpg.io/hibernation включена. «Разбудить» возвращает поды из этого PVC.",
+    actionRestart: "Перезапустить",
+    actionRestartExplained:
+      "Поочерёдно, сначала реплики, primary последним, через отметку kubectl.kubernetes.io/restartedAt на Cluster. Каждый инстанс перезапускается после того, как вернулся предыдущий.",
+    actionReload: "Перечитать конфигурацию",
+    actionReloadExplained:
+      "Перечитывает postgresql.conf и pg_hba без перезапуска, через отметку cnpg.io/reloadedAt на Cluster.",
+    actionBackup: "Бэкап сейчас",
+    actionBackupExplained:
+      "Создаёт объект Backup для этого кластера; метод тот, что объявлен в настройке бэкапов кластера. Оператор выполняет его и пишет результат на этом объекте.",
+    actionFence: "Изолировать",
+    actionFenceExplained:
+      "Останавливает Postgres в этом инстансе, оставляя под, добавив его в cnpg.io/fencedInstances. Изоляция primary забирает с собой путь записи кластера.",
+    actionUnfence: "Снять изоляцию",
+    actionUnfenceExplained:
+      "Убирает этот инстанс из cnpg.io/fencedInstances; Postgres в нём запускается снова.",
+    actionHibernate: "Усыпить",
+    actionHibernateExplained:
+      "Удаляет все поды и сохраняет PVC primary, установив cnpg.io/hibernation в on. Пока кластер не разбудят, на нём ничего не отвечает.",
+    actionWake: "Разбудить",
+    actionWakeExplained:
+      "Ставит cnpg.io/hibernation в off; оператор пересоздаёт поды из сохранённого PVC.",
+    refusedPatch:
+      "кластер отказывает вам в patch на clusters.postgresql.cnpg.io",
+    refusedCreateBackup:
+      "кластер отказывает вам в create на backups.postgresql.cnpg.io",
+    notDuringSwitchover: "не во время switchover",
+    confirmTitle: "{action} {target}?",
+    actionDone: "{action}: выполнено на {cluster}",
+    actionFailed: "{action} на {cluster} не прошло",
+    noBackupObjects: "Объектов Backup нет ни в одном namespace.",
+    allBackupObjects: "Все объекты Backup списком",
+    poolersUnknown: "Объекты Pooler прочитать не удалось",
+    noPoolers: "Объектов Pooler нет ни в одном namespace.",
+    operatorLogs: "Логи контроллера",
+    scyllaPageDescription:
+      "Сначала оператор: контроллер, ScyllaDB Manager, NodeConfig, которые готовят локальные диски. Потом каждый ScyllaCluster как стойки и члены с тремя условиями Scylla, идущий апгрейд и задачи Manager, которые он объявляет.",
+    scyllaOperatorExplained:
+      "Оператор Scylla запускает один Deployment, scylla-operator, и согласует каждый ScyllaCluster. Ремонты и бэкапы выполняет ScyllaDB Manager, отдельный Deployment; без него они объявлены и никогда не выполняются.",
+    couldNotReadScyllaClusters: "Не удалось прочитать объекты ScyllaCluster",
+    nodeConfigsTab: "Конфиги узлов",
+    noScyllaClusters:
+      "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
+    deploymentsUnreadable:
+      "Deployment'ы прочитать не удалось, поэтому работает ли оператор — неизвестно; это не значит, что его нет",
+    scyllaOperatorNotFound:
+      "ни один Deployment не несёт app.kubernetes.io/name=scylla-operator; CRD есть, а оператора может и не быть, и каждый ScyllaCluster останется без статуса",
+    managerPresent: "ремонты и бэкапы могут выполняться",
+    managerAbsent:
+      "не установлен: spec.repairs и spec.backups игнорируются, а status.managerId остаётся пустым",
+    canPatchScyllaClusters: "patch scyllaclusters",
+    noStatusYet: "статуса ещё нет",
+    upgradingWord: "апгрейд",
+    conditionsNotWritten: "условия не записаны",
+    conditionsUnsure: "оператор не уверен",
+    rolledOut: "раскатан",
+    conditionsFact: "Условия",
+    membersFact: "Члены",
+    notWritten: "оператором не записано",
+    specSeenUnknownScylla:
+      "нельзя сказать: в этом чтении нет observedGeneration",
+    specSeenYes: "да · observedGeneration {n} = generation {n}",
+    specSeenBehind:
+      "отстаёт: observedGeneration {observed}, generation {generation}",
+    repairFact: "Ремонт",
+    backupFact: "Бэкап",
+    noneDeclared: "не объявлено",
+    notDeclared: "не объявлено",
+    taskInManager:
+      "выполняется в ScyllaDB Manager; результаты там, а не на этом объекте",
+    taskNoManager: "объявлено, но выполнять некому: нет Manager",
+    rackUpdated: "{updated} из {members} на {version}",
+    staleWord: "устарело: не согласовано после изменения spec",
+    findingDegraded: "Degraded, словами оператора",
+    findingUnavailable: "Не Available",
+    findingProgressing: "Progressing",
+    findingUpgrading: "Идёт rolling upgrade",
+    findingUpgradingFromTo: "Идёт rolling-обновление: {from} → {to}",
+    upgradeAtRack: "Сейчас на стойке {rack}, узел {node}.",
+    findingStale: "Стойки, на которые оператор не смотрел после изменения spec",
+    findingMembersMissing: "Члены не готовы",
+    findingTasksWithoutManager:
+      "Объявлены ремонты или бэкапы, но выполнять их некому: нет ScyllaDB Manager",
+    findingConditionsUnwritten:
+      "Оператор не записал условия для этого кластера",
+    findingConditionsUnknown:
+      "Оператор записал Unknown в условие — значит, он и сам не знает",
+    membersNotWritten: {
+      one: "объявлен {n}, сколько готово — не записано",
+      few: "объявлено {n}, сколько готово — не записано",
+      many: "объявлено {n}, сколько готово — не записано",
+      other: "объявлено {n}, сколько готово — не записано",
+    },
+    findingNoStatus: "Оператор ещё ничего не записал на этот объект",
+    actionRollingRestart: "Rolling restart",
+    actionRollingRestartExplained:
+      "Ставит новое значение в spec.forceRedeploymentReason. Оператор перезапускает члены по одному, сначала старшие ординалы, стойка за стойкой, каждый ждёт готовности предыдущего.",
+    rollingRestartConfirm:
+      "Ставит spec.forceRedeploymentReason на {cluster}. Оператор затем перезапускает {members} членов по одному, сначала старшие ординалы, стойка за стойкой; каждый ждёт готовности предыдущего. Когда член уже остановлен, отменить это нельзя.",
+    actionScaleRack: "Масштабировать",
+    actionScaleRackExplained:
+      "Ставит racks[].members для этой стойки. Уменьшение выводит из строя сначала старшие ординалы, что переливает их данные и длится столько, сколько данных.",
+    actionUpgrade: "Апгрейд",
+    actionUpgradeExplained:
+      "Ставит spec.version. Оператор обновляет стойку за стойкой, член за членом, сначала снимая снапшоты system и данных; ход пишется в status.upgrade.",
+    membersInput: "Членов в {rack}",
+    versionInput: "Версия ScyllaDB, например 2025.2.1",
+    refusedPatchScylla:
+      "кластер отказывает вам в patch на scyllaclusters.scylla.scylladb.com",
+    notDuringUpgrade: "не во время апгрейда",
+    nodeConfigsUnknown: "Объекты NodeConfig прочитать не удалось",
+    noNodeConfigs:
+      "Объектов NodeConfig нет. Локальные диски тогда такие, какими пришли узлы; оператор ничего не готовит.",
+    nodeStatusesNotWritten:
+      "оператор не записал статусы узлов, поэтому сколько узлов он настроил — неизвестно",
+    nodesSetUp: "{tuned} из {nodes} узлов подготовлено",
+  },
   tell: {
     askRollout: "Скажи мне, когда раскатка закончится",
     askPod: "Скажи мне, когда он будет готов или упадёт",
@@ -1476,6 +1838,10 @@ export const ru: Catalogue = {
   vendor: {
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
+    scyllaGives:
+      "каждый кластер ScyllaDB как стойки и члены с тремя условиями Scylla, ход апгрейда и задачи Manager, и настоящие ручки оператора",
+    cloudnativepgGives:
+      "каждый кластер Postgres словами CloudNativePG: фаза, primary, инстансы, архивация WAL и бэкапы из объектов Backup, и настоящие ручки оператора",
     awsGives:
       "настоящую target group ALB за Service и то, что контроллер не смог применить",
     azureGives:
@@ -1505,6 +1871,71 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
+    storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
+    storyCrash:
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
+    storyStartFailed:
+      "Контейнер не удалось запустить, {times} за {span}: {detail}",
+    storyPull: "Не скачать образ, {times} за {span}: {detail}",
+    storySchedulingSame:
+      "Не планируется, один и тот же ответ {times} за {span}: {detail}",
+    storySchedulingVaried:
+      "Не планируется, {k} разных ответов за {span}, последний: {detail}",
+    storyProbe: "Пробы упали {times} за {span}: {detail}",
+    storyPressure: "Под давлением, {times} за {span}: {detail}",
+    storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
+    storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
+    storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
+    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
+    storyTrouble: "{reason} ×{n} за {span}: {detail}",
+    storyStillHappening: "продолжается",
+    storySettled: "утихло",
+    storyStateUnknown: "не сказать",
+    podStatusNotAsked: {
+      one: "Выходы ещё {n} пода не на этой шкале — его не спрашивали.",
+      few: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      many: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      other: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+    },
+    timesSeen: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    jobsCreated: {
+      one: "создан {n} job",
+      few: "создано {n} job",
+      many: "создано {n} job",
+      other: "создано {n} job",
+    },
+    storyDone: "закончено",
+    podsOf: "поды {name}",
+    groupedByName:
+      "Сгруппированы по сгенерированному суффиксу имён подов. Ни одно событие контроллера в этом окне не говорит, чьи они.",
+    fromPodStatus: "из статуса пода, не событие",
+    lastSeen: "последнее {ago}",
+    podStatusUnread: {
+      one: "Статус {n} пода не прочитан; его завершения на этой шкале нет.",
+      few: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      many: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      other: "Статус {n} пода не прочитан; их завершений на этой шкале нет.",
+    },
+    containerExited: "{container} завершился с кодом {code}",
+    lastSeenStrip:
+      "Когда каждое событие видели в последний раз, по всему окну.",
+    storiesExplained:
+      "История это события одного объекта в этом окне: предупреждения первыми, предложение собрано из счётчиков и времён. Сверх самих событий ничего не додумывается.",
+    membersFolded: {
+      one: "{n} объект",
+      few: "{n} объекта",
+      many: "{n} объектов",
+      other: "{n} объекта",
+    },
     twoWord: "Две",
     threeWord: "Три",
     warnUndoThis: "{count} вещи отменят это.",
@@ -1975,7 +2406,25 @@ export const ru: Catalogue = {
       many: "{n} минут",
       other: "{n} минуты",
     },
+    factUpgrading: {
+      one: "{n} кластер обновляется",
+      few: "{n} кластера обновляются",
+      many: "{n} кластеров обновляются",
+      other: "{n} кластера обновляются",
+    },
     factShowThem: "Показать",
+    factClustersInTrouble: {
+      one: "{n} кластер в беде",
+      few: "{n} кластера в беде",
+      many: "{n} кластеров в беде",
+      other: "{n} кластера в беде",
+    },
+    factArchivingFailing: {
+      one: "архивация WAL не удаётся на {n} кластере",
+      few: "архивация WAL не удаётся на {n} кластерах",
+      many: "архивация WAL не удаётся на {n} кластерах",
+      other: "архивация WAL не удаётся на {n} кластерах",
+    },
     factShowIt: "Показать",
     factNoIngressClass: "не заявляет ни одного IngressClass",
     factNotReady: "не готов",
@@ -2439,6 +2888,8 @@ export const ru: Catalogue = {
       "Что есть у этого кластера из того, чем приложение умеет пользоваться. Большая часть определяется по наличию CRD; всё, у чего есть собственный адрес, настраивается здесь, отдельно для каждого кластера.",
     configuredGroup: "Настроены — адрес для каждого кластера",
     detectedGroup: "Найдены в этом кластере",
+    operatorsGroup:
+      "Операторы — контроллер в кластере, который ведёт для вас базу данных",
     refusalNotNow: "Пока отказано",
     refusalNothingWouldReplaceIt: "Некому пересоздать",
     refusalHoldsLocalData: "Держит локальные данные",
@@ -2522,7 +2973,27 @@ export const ru: Catalogue = {
     credentialsRefusedAgo:
       "Кластер отклонил учётные данные этого окна {since} назад. ",
     credentialsExpiredBody:
-      "Здесь ничто не обновляет их само, поэтому в тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+      "В тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+    renewalWasScheduled:
+      "Окно собиралось обновить их тихо до истечения, и кластер всё равно их отклонил. ",
+    renewalNoDeadline:
+      "Плагин учётных данных не назвал срока, поэтому не было момента, до которого их можно было обновить — заранее сделать было нечего. ",
+    renewalPassed:
+      "К моменту, когда окно посмотрело, срок уже прошёл — обновлять заранее было уже не перед чем. ",
+    renewalFailed:
+      "Тихое обновление пробовали, и оно не вернулось — это сбой чтения, а не что-то про вас. ",
+    renewalRanOut:
+      "Тихое обновление пробовали дважды, и оба раза плагин отдавал те же учётные данные — подставить было нечего. ",
+    renewalNeedsYouBody:
+      "Окно пробовало обновить их тихо; плагину понадобился человек — это и есть этот экран. ",
+    renewalDelegated:
+      "Учётные данные этой сессии держит и обновляет kubectl, так что отказ пришёл с его стороны. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "нужен вход",
+    renewalNeedsYouHint:
+      "Фоновое обновление этой сессии потребовало человека и остановилось. Пока всё работает — текущие учётные данные ещё принимают, а войти попросят, когда они истекут.",
+    renewalRanOutHint:
+      "Плагин учётных данных каждый раз отдавал те же данные, что уже используются, — подставить до истечения было нечего. Пока всё работает, а войти попросят, когда они истекут.",
     stillRefusedHint:
       "Всё ещё отказ? Возможно, плагину учётных данных этого контекста нужен свой вход — для GKE это",
     healthy: "В порядке",
@@ -2990,6 +3461,12 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    noStoriesInWindow:
+      "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
+    noStoriesInWindowCapped:
+      "Ни одной истории в {scope} за последние {range} — из последних {n} прочитанных событий. Всё, что старше, в этот ответ не попало.",
+    eventsRefused: "Не удалось прочитать события в {scope}:",
+    noStoriesMatch: "Ни одна история в {scope} не подходит под «{query}».",
     noEventsMatchInWindow:
       "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
     kindMayBeGone:
@@ -4594,6 +5071,18 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    stories: {
+      one: "{n} история",
+      few: "{n} истории",
+      many: "{n} историй",
+      other: "{n} истории",
+    },
+    eventsSeen: {
+      one: "{n} событие",
+      few: "{n} события",
+      many: "{n} событий",
+      other: "{n} события",
+    },
     namespacesHidden: {
       one: "{n} пространство скрыто — нет доступа",
       few: "{n} пространства скрыто — нет доступа",

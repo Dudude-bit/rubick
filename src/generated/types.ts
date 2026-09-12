@@ -776,6 +776,20 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface FilePreview {
+  bytesRead: number;
+  truncated: boolean;
+  binary: boolean;
+  nonTextShare: number;
+  lossy: boolean;
+  text: string | null;
+}
+
+export interface Via {
+  container: string;
+  root: string;
+}
+
 export interface TcpProbe {
   ms: number | null;
   error: string | null;
@@ -1474,6 +1488,7 @@ export interface CustomResourceDetailInfo {
   ownerReferences: OwnerReferenceInfo[];
   finalizers: string[];
   resourceVersion: string | null;
+  generation: number | null;
 }
 
 export interface OwnerReferenceInfo {
@@ -1496,6 +1511,7 @@ export interface CustomResourceInfo {
   annotations: Record<string, string>;
   createdAt: string | null;
   ownerReferences: OwnerReferenceInfo[];
+  generation: number | null;
 }
 
 export interface ClusterPreferences {
@@ -1616,6 +1632,19 @@ export interface ListQuery {
   group: string;
   resource: string;
   namespaced: boolean;
+}
+
+export interface AccessAnswer {
+  verb: string;
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface AccessQuery {
+  group: string;
+  resource: string;
+  verb: string;
+  namespace: string | null;
 }
 
 export interface TlsCertificate {
@@ -1748,6 +1777,16 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type Renewal =
+  | "scheduled"
+  | "noDeadline"
+  | "passed"
+  | "needsYou"
+  | "failed"
+  | "ranOut"
+  | "delegated"
+  | "unknown";
+
 export type ProxyOutcome =
   | { state: "notTried" }
   | { state: "noKubectl" }
@@ -1857,6 +1896,12 @@ export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
+
+export type FileRead =
+  | { state: "preview"; preview: FilePreview }
+  | { state: "written"; bytes: number }
+  | { state: "noTools" }
+  | { state: "failed"; exit_code: number | null; message: string };
 
 export type TcpProbeReason = "refused" | "timedOut";
 

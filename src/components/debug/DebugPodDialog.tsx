@@ -41,6 +41,13 @@ export interface DebugPodDialogProps {
   podName: string;
   namespace: string;
   containers: string[];
+  /**
+   * Which container the caller is actually interested in. The Files tab
+   * reads `/proc/1/root` of whatever this debug container targets, so a
+   * default of `containers[0]` meant it could read a different container
+   * than the one the reader had selected — and label it with theirs.
+   */
+  preferredTarget?: string;
   /** Kubernetes version (e.g., "v1.28.0") for feature detection */
   kubernetesVersion?: string;
   onDebugStart: (result: DebugResult) => void;
@@ -52,6 +59,7 @@ export function DebugPodDialog({
   podName,
   namespace,
   containers,
+  preferredTarget,
   kubernetesVersion,
   onDebugStart,
 }: DebugPodDialogProps) {
@@ -69,9 +77,17 @@ export function DebugPodDialog({
   );
   const [selectedImage, setSelectedImage] = useState("busybox:latest");
   const [customImage, setCustomImage] = useState("");
-  const [targetContainer, setTargetContainer] = useState<string>(
-    containers[0] || ""
-  );
+  // Only what the person chose is stored; the default is derived on every
+  // render. Frozen in `useState` it was decided once, at mount — and this
+  // dialog is mounted with the pod, before its container list has arrived,
+  // so the field came up blank and stayed blank whichever way it was opened.
+  const [picked, setPicked] = useState<string | null>(null);
+  const targetContainer =
+    picked && containers.includes(picked)
+      ? picked
+      : preferredTarget && containers.includes(preferredTarget)
+        ? preferredTarget
+        : (containers[0] ?? "");
   const [shareProcesses, setShareProcesses] = useState(true);
 
   const image = selectedImage === "custom" ? customImage : selectedImage;
@@ -168,6 +184,9 @@ export function DebugPodDialog({
       // Don't close during polling - user must explicitly cancel
       return;
     }
+    // A choice belongs to the dialog that was open; the next one may be
+    // opened for a different container.
+    if (!newOpen) setPicked(null);
     onOpenChange(newOpen);
   };
 
@@ -387,7 +406,7 @@ export function DebugPodDialog({
           <div className="space-y-2">
             <Label htmlFor="debug-image">{t("action", "debugImage")}</Label>
             <Select value={selectedImage} onValueChange={setSelectedImage}>
-              <SelectTrigger>
+              <SelectTrigger id="debug-image">
                 <SelectValue placeholder={t("action", "selectDebugImage")} />
               </SelectTrigger>
               <SelectContent>
@@ -413,11 +432,8 @@ export function DebugPodDialog({
               <Label htmlFor="target-container">
                 {t("action", "targetContainer")}
               </Label>
-              <Select
-                value={targetContainer}
-                onValueChange={setTargetContainer}
-              >
-                <SelectTrigger>
+              <Select value={targetContainer} onValueChange={setPicked}>
+                <SelectTrigger id="target-container">
                   <SelectValue
                     placeholder={t("action", "selectTargetContainer")}
                   />

@@ -31,6 +31,7 @@ const object = (
   annotations: {},
   createdAt: null,
   ownerReferences: [],
+  generation: null,
 });
 
 describe("what an Azure identity is", () => {

@@ -53,6 +53,8 @@ export const aksAddons = defineVendor({
       staleTime: ROUTING_STALE,
     }),
     load: () => import("./page"),
+    // The page draws Ingresses; its CR reads carry their own unread marks.
+    gate: null,
   },
   crd,
 });

@@ -12,6 +12,7 @@
 // `subscribe_namespaced!` says so in as many words.
 #![allow(clippy::unused_async)]
 
+pub mod files;
 pub mod filters;
 pub mod helpers;
 

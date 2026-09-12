@@ -49,6 +49,7 @@ function certificate(
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 
@@ -71,6 +72,7 @@ function cloudResource(
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 
