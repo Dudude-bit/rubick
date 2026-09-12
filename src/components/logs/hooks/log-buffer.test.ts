@@ -112,6 +112,70 @@ const fielded = (
   fields: Record<string, string>
 ) => ({ ...line(id), container, fields }) as StreamedLogLine;
 
+describe("a frozen interval", () => {
+  const frozen = { from: 5, to: 9 };
+
+  /** The point of freezing: the stream goes on and the held lines stay put. */
+  it("keeps the frozen lines through eviction and evicts around them", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    expect(buffer.frozenLines).toBe(5);
+    buffer = appendCapped(buffer, lines(20, 30), 20, frozen);
+    const ids = buffer.lines.map((line) => line.id);
+    expect(ids.slice(0, 5)).toEqual([5, 6, 7, 8, 9]);
+    expect(ids).toHaveLength(25);
+    expect(ids.slice(5)).toEqual(lines(30, 20).map((line) => line.id));
+    expect(buffer.dropped).toBe(25);
+    expect(buffer.frozenLines).toBe(5);
+  });
+
+  /** The cap is a budget for the live lines; the frozen ones sit outside it, never above it. */
+  it("holds at most the cap of live lines beside the frozen ones", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    for (let n = 20; n < 200; n += 7) {
+      buffer = appendCapped(buffer, lines(n, 7), 20, frozen);
+      expect(buffer.lines.length - buffer.frozenLines).toBeLessThanOrEqual(20);
+      expect(
+        buffer.lines.filter((line) => line.epoch >= 5 && line.epoch <= 9)
+      ).toHaveLength(5);
+    }
+  });
+
+  /** A line arriving inside the interval is inside it, however late it came. */
+  it("counts a late line inside the interval as frozen", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 10), 10, frozen);
+    buffer = appendCapped(buffer, [line(100, 7)], 10, frozen);
+    expect(buffer.frozenLines).toBe(6);
+    expect(buffer.lines.length).toBe(11);
+  });
+
+  /** Thawing hands the lines back to the cap, which takes them on the spot. */
+  it("evicts down to the cap the moment the interval is thawed", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, lines(20, 20), 20, frozen);
+    expect(buffer.lines).toHaveLength(25);
+    buffer = appendCapped(buffer, [], 20, null);
+    expect(buffer.lines).toHaveLength(20);
+    expect(buffer.frozenLines).toBe(0);
+    expect(buffer.lines[0].id).toBe(20);
+    expect(buffer.dropped).toBe(20);
+  });
+
+  /** Moving the interval recounts what is held, so the status bar's number is never the old interval's. */
+  it("recounts when the interval moves", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, [], 20, { from: 0, to: 2 });
+    expect(buffer.frozenLines).toBe(3);
+    expect(buffer.frozen).toEqual({ from: 0, to: 2 });
+  });
+
+  /** The index describes what is retained, frozen lines included, and not what the cap alone would keep. */
+  it("keeps frozen lines in the field index", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, lines(20, 40), 20, frozen);
+    expect(buffer.fields.keys.get("container")).toBe(25);
+  });
+});
+
 describe("the field index", () => {
   it("offers level and container first, then the loudest parsed keys", () => {
     const buffer = appendCapped(
