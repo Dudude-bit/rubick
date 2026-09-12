@@ -171,12 +171,14 @@ function PeekContent({
   // A custom resource has a page of its own too — the CRD's instance route —
   // so it gets the same Open full page and the same Enter shortcut.
   const routable = !!target.crd || isRoutableKind(target.kind, namespace);
-  const openFullPage = () =>
-    navigate(
-      target.crd
-        ? getCustomResourceUrl(target.crd, target.name, namespace)
-        : getResourceDetailUrl(target.kind, target.name, namespace)
-    );
+  // The tab the reader is on comes along: leaving Logs for the page and
+  // landing on Overview is a second click nobody asked for.
+  const openFullPage = () => {
+    const path = target.crd
+      ? getCustomResourceUrl(target.crd, target.name, namespace)
+      : getResourceDetailUrl(target.kind, target.name, namespace);
+    navigate(activeTab === "overview" ? path : `${path}?tab=${activeTab}`);
+  };
 
   // Enter is the panel's shortcut, not the focused control's — once the
   // reader has tabbed onto a button, that button owns the key.

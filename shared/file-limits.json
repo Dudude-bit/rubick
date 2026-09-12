@@ -1,5 +1,6 @@
 {
-  "downloadMaxBytes": 104857600,
+  "downloadMaxBytes": 2147483648,
+  "downloadConfirmBytes": 104857600,
   "previewMaxBytes": 524288,
   "maxEntries": 20000
 }

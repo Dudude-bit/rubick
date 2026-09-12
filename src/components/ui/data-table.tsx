@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   flexRender,
   useTable,
@@ -29,6 +29,8 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
+import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   Search,
   SearchX,
@@ -55,6 +57,12 @@ interface DataTableProps<TData extends RowData> {
   data: TData[];
   isLoading?: boolean;
   searchKey?: string;
+  /**
+   * The query-string key the search lives under. A tab records its route
+   * with the query string, so a search kept here survives leaving the tab
+   * and coming back; one kept in state did not.
+   */
+  searchParam?: string;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -242,6 +250,7 @@ function DataTableInner<TData extends RowData>({
   data,
   isLoading = false,
   searchKey,
+  searchParam,
   searchPlaceholder,
   enableVirtualScroll,
   fill = false,
@@ -257,6 +266,7 @@ function DataTableInner<TData extends RowData>({
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
+  const { open: openPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -264,7 +274,23 @@ function DataTableInner<TData extends RowData>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const [searchValue, setSearchValue] = React.useState("");
+  const [params, setParams] = useSearchParams();
+  const [searchValue, setSearchValue] = React.useState(() =>
+    searchParam ? (params.get(searchParam) ?? "") : ""
+  );
+  const changeSearch = (value: string) => {
+    setSearchValue(value);
+    if (!searchParam) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(searchParam, value);
+        else next.delete(searchParam);
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const deferredSearch = React.useDeferredValue(searchValue);
 
   // Compact rows stay strictly single-line — a pod name like
@@ -296,13 +322,19 @@ function DataTableInner<TData extends RowData>({
     return seen.size >= (grouping.minGroups ?? 1);
   }, [data, grouping]);
 
+  // One namespace chosen is the same word on every row, and the scope bar
+  // above already says it; several are grouped, and the caption says it.
+  const oneNamespace = useClusterStore(
+    (state) => state.namespaceScope.length === 1
+  );
   const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
     const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
+    if (oneNamespace) state.namespace = false;
     return state;
-  }, [groupingActive, grouping]);
+  }, [groupingActive, grouping, oneNamespace]);
 
   // Latched rather than derived: between the two marks the answer is
   // "whatever it already was", which is a fact about the last render and not
@@ -501,9 +533,16 @@ function DataTableInner<TData extends RowData>({
 
     const href = getRowHref?.(row);
     if (href) {
-      // A list is where you are already browsing, so plain click goes there
-      // rather than peeking: the peek exists to check a name mentioned
-      // elsewhere without losing the page, and here the page is the list.
+      // A plain click on a row whose object has a peek opens the peek, the
+      // same as the click on the name inside it: one gesture, one answer,
+      // wherever on the row it lands. The page itself is a double click, or
+      // Enter, away. Modified clicks open tabs exactly as before.
+      const peek = "key" in event ? null : peekTargetOfHref(href);
+      if (peek && readLinkIntent(event) === "activate") {
+        event.preventDefault();
+        openPeek(peek);
+        return;
+      }
       linkGesture(event, href, () => navigate(href));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
       // No destination, so nothing to open a tab on; only a plain click acts.
@@ -518,6 +557,15 @@ function DataTableInner<TData extends RowData>({
       ? (event: React.MouseEvent | React.KeyboardEvent) =>
           handleRowGesture(row.original, event)
       : undefined;
+    const href = getRowHref?.(row.original);
+    const openPage =
+      href && peekTargetOfHref(href)
+        ? (event: React.MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button") || target.closest("a")) return;
+            navigate(href);
+          }
+        : undefined;
 
     return (
       <TableRow
@@ -541,6 +589,7 @@ function DataTableInner<TData extends RowData>({
           "relative group"
         )}
         onClick={act}
+        onDoubleClick={openPage}
         onAuxClick={act}
         onKeyDown={
           rowProps &&
@@ -647,7 +696,7 @@ function DataTableInner<TData extends RowData>({
               aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) => changeSearch(event.target.value)}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
@@ -793,7 +842,7 @@ function DataTableInner<TData extends RowData>({
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => setSearchValue("")}
+                          onClick={() => changeSearch("")}
                         >
                           {t("action", "clearSearch")}
                         </Button>

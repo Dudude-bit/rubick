@@ -18,11 +18,13 @@ import {
   Square,
 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow, useNowTenths } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
 import {
+  DOWNLOAD_CONFIRM_BYTES,
   DOWNLOAD_MAX_BYTES,
   PREVIEW_MAX_BYTES,
   crumbs,
@@ -30,6 +32,7 @@ import {
   matches,
   modeText,
   mountFor,
+  startPath,
   parentOf,
   sortEntries,
   type FileEntry,
@@ -88,14 +91,9 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
       ""
   );
   const container = containers.find((c) => c.name === containerName) ?? null;
-  const firstMount = useMemo(
-    () =>
-      pod.volumes
-        .flatMap((v) => v.mounts)
-        .find((m) => m.container === containerName)?.path ?? null,
-    [pod.volumes, containerName]
+  const [path, setPath] = useState<string>(() =>
+    startPath(pod.volumes, containerName)
   );
-  const [path, setPath] = useState<string>(() => firstMount ?? "/");
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({
     key: "name",
     descending: false,
@@ -187,58 +185,66 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
 
   const { toast } = useToast();
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
-  const download = useCallback(async () => {
-    if (!selectedEntry || !container) return;
-    // The button is disabled past the cap; ⌘S reached the same command with
-    // nothing in its way, and the reader got a refusal from the backend
-    // instead of the sentence the button's tooltip had been showing.
-    if (selectedEntry.size > DOWNLOAD_MAX_BYTES) {
-      toast({
-        title: t("files", "downloadFailed", { name: selectedEntry.name }),
-        description: t("files", "tooBigToDownload", {
-          cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
-        }),
-        variant: "destructive",
-      });
-      return;
-    }
-    const destination = await save({ defaultPath: selectedEntry.name });
-    if (!destination) return;
-    try {
-      const result = await commands.downloadContainerFile(
-        pod.name,
-        pod.namespace,
-        container.name,
-        joinPath(path, selectedEntry.name),
-        via,
-        destination
-      );
-      if (result.state === "noTools" || result.state === "failed") {
+  const [bigDownload, setBigDownload] = useState(false);
+  const download = useCallback(
+    async (confirmed = false) => {
+      if (!selectedEntry || !container) return;
+      // The button is disabled past the cap; ⌘S reached the same command with
+      // nothing in its way, and the reader got a refusal from the backend
+      // instead of the sentence the button's tooltip had been showing.
+      if (selectedEntry.size > DOWNLOAD_MAX_BYTES) {
         toast({
           title: t("files", "downloadFailed", { name: selectedEntry.name }),
-          description:
-            result.state === "noTools"
-              ? t("files", "noCatInImage")
-              : result.message,
+          description: t("files", "tooBigToDownload", {
+            cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+          }),
           variant: "destructive",
         });
-      } else {
+        return;
+      }
+      if (selectedEntry.size > DOWNLOAD_CONFIRM_BYTES && !confirmed) {
+        setBigDownload(true);
+        return;
+      }
+      const destination = await save({ defaultPath: selectedEntry.name });
+      if (!destination) return;
+      try {
+        const result = await commands.downloadContainerFile(
+          pod.name,
+          pod.namespace,
+          container.name,
+          joinPath(path, selectedEntry.name),
+          via,
+          destination
+        );
+        if (result.state === "noTools" || result.state === "failed") {
+          toast({
+            title: t("files", "downloadFailed", { name: selectedEntry.name }),
+            description:
+              result.state === "noTools"
+                ? t("files", "noCatInImage")
+                : result.message,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: t("files", "downloaded", { name: selectedEntry.name }),
+            description:
+              result.state === "written"
+                ? `${destination} · ${formatBytes(result.bytes, 1)}`
+                : destination,
+          });
+        }
+      } catch (error) {
         toast({
-          title: t("files", "downloaded", { name: selectedEntry.name }),
-          description:
-            result.state === "written"
-              ? `${destination} · ${formatBytes(result.bytes, 1)}`
-              : destination,
+          title: t("files", "downloadFailed", { name: selectedEntry.name }),
+          description: normalizeTauriError(error),
+          variant: "destructive",
         });
       }
-    } catch (error) {
-      toast({
-        title: t("files", "downloadFailed", { name: selectedEntry.name }),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
-    }
-  }, [selectedEntry, container, pod.name, pod.namespace, path, via, toast, t]);
+    },
+    [selectedEntry, container, pod.name, pod.namespace, path, via, toast, t]
+  );
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = rows.findIndex((r) => r.name === selected);
@@ -271,6 +277,17 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <ConfirmDialog
+        open={bigDownload}
+        onOpenChange={setBigDownload}
+        title={t("files", "bigDownloadTitle", {
+          name: selectedEntry?.name ?? "",
+          size: formatBytes(selectedEntry?.size ?? 0, 1),
+        })}
+        description={t("files", "bigDownloadBody")}
+        confirmLabel={t("action", "download")}
+        onConfirm={() => void download(true)}
+      />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hair px-3 py-2 text-[11px]">
         <span
           className="flex items-center gap-0.5"
@@ -472,7 +489,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               entry={previewEntry}
               life={readingLife}
               via={via}
-              onDownload={download}
+              onDownload={() => void download()}
             />
           )}
         </div>

@@ -18,6 +18,7 @@ import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 vi.mock("./data-table-rows", async (importOriginal) => {
@@ -55,8 +56,8 @@ const columns: ColumnDef<Item>[] = [
 ];
 
 function LocationProbe() {
-  const { pathname } = useLocation();
-  return <span data-testid="location">{pathname}</span>;
+  const { pathname, search } = useLocation();
+  return <span data-testid="location">{`${pathname}${search}`}</span>;
 }
 
 const wrap = (ui: ReactNode) =>
@@ -191,14 +192,32 @@ describe("DataTable rows", () => {
       />
     );
 
-  // A list is the page you are already browsing, so opening a row from it is
-  // a drill-down, not a look-without-leaving. If this starts peeking, Back
-  // stops being the way home from a list.
-  it("navigates on a plain click anywhere in the row", () => {
+  /**
+   * Issue #178: the name in a row peeked and the whitespace beside it went
+   * to the page, and nobody could tell which they would get. Now both peek,
+   * and the page is a double click. Would break if the row went back to
+   * navigating on a plain click, or if the double click stopped opening it.
+   */
+  it("peeks on a plain click anywhere in the row, and opens the page on a double click", () => {
     renderTable();
     fireEvent.click(whitespace());
-    expect(location()).toBe("/pods/ns/a-1");
+    expect(location()).toBe("/pods?peek=pods%2Fns%2Fa-1");
     expect(tabs()).toHaveLength(1);
+    fireEvent.doubleClick(whitespace());
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  // A row whose route has no peek behind it is a plain link, as it always was.
+  it("navigates on a plain click where the route is not an object", () => {
+    wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={(row) => `/helm/${row.namespace}/${row.name}`}
+      />
+    );
+    fireEvent.click(whitespace());
+    expect(location()).toBe("/helm/ns/a-1");
   });
 
   // This is the regression the whole change exists for: the row used to call
@@ -964,5 +983,50 @@ describe("a table given the page's height", () => {
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
     expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
+  });
+});
+
+describe("the namespace column", () => {
+  const withNamespace: ColumnDef<Item>[] = [
+    ...columns,
+    { accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  /** Issue #178: with one namespace chosen the column repeated the scope bar on every row. */
+  it("is hidden while one namespace is chosen, and back for all or several", () => {
+    useClusterStore.setState({ namespaceScope: ["ns"] });
+    const { unmount } = wrap(
+      <DataTable<Item> columns={withNamespace} data={DATA} />
+    );
+    expect(screen.queryByText("Namespace")).toBeNull();
+    unmount();
+    useClusterStore.setState({ namespaceScope: [] });
+    wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
+    expect(screen.getByText("Namespace")).toBeInTheDocument();
+  });
+});
+
+describe("the search box", () => {
+  /**
+   * Issue #178: the search was component state, so leaving the tab and
+   * coming back remounted the table with an empty box. It lives in the
+   * query string now, which is what a tab records. Would break if the box
+   * stopped reading the parameter, or stopped writing it.
+   */
+  it("reads its value from the query string and writes it back", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    await waitFor(() => expect(screen.queryByText("a-1")).toBeNull());
+    fireEvent.change(search(), { target: { value: "a-1" } });
+    expect(location()).toBe("/pods?q=a-1");
+    fireEvent.change(search(), { target: { value: "" } });
+    expect(location()).toBe("/pods");
   });
 });

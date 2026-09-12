@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
 import { ResourceName } from "@/components/resources/ResourceName";
+import { CopyName } from "@/components/resources/CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import {
   getResourceListUrl,
@@ -209,7 +210,7 @@ export function ResourceDetailHeader({
   // you are on is a promise the app cannot keep. The breadcrumb above already
   // names the kind, so only the glyph carries it.
   const title = (
-    <h1 className="flex min-w-0 items-baseline gap-1.5 font-semibold tracking-tight text-fg">
+    <h1 className="group/name flex min-w-0 items-center gap-1.5 font-semibold tracking-tight text-fg">
       <ResourceName
         kind={kind}
         name={name}
@@ -217,6 +218,7 @@ export function ResourceDetailHeader({
         size="title"
         iconClassName="h-3 w-3"
       />
+      <CopyName name={name} />
     </h1>
   );
 
