@@ -1,6 +1,6 @@
-import type { CrdColumn } from "../kit";
-import { conditionStatus, getValueByPath, matchByGroup } from "../kit";
-import type { CrdView } from "../registry";
+import type { CrdColumn } from "../../kit";
+import { conditionStatus, getValueByPath, matchByGroup } from "../../kit";
+import type { CrdView } from "../../registry";
 import { GROUP } from "./model";
 
 function selectorText(value: unknown): string {

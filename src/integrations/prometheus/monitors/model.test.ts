@@ -5,8 +5,12 @@ import type {
   NamespaceInfo,
   ServiceInfo,
 } from "@/generated/types";
-import type { Read } from "./data";
+import type { PromSeries } from "@/generated/types";
 import {
+  downSince,
+  groupOf,
+  hintFor,
+  lanesOf,
   monitorReaches,
   pickedUpBy,
   poolPrefix,
@@ -16,7 +20,12 @@ import {
   scrapeOf,
   selectedServices,
   selectorMatches,
+  sharedPrefix,
+  upQuery,
+  type Kind,
   type Monitor,
+  type PrometheusInstance,
+  type Read,
   type TargetsRead,
 } from "./model";
 
@@ -51,6 +60,10 @@ const service = (
 
 const ok = <T>(items: T[]): Read<T> => ({ ok: true, items });
 const refused = <T>(): Read<T> => ({ ok: false, reason: "forbidden" });
+const kind = (items: PrometheusInstance[]): Kind<PrometheusInstance> => ({
+  state: "read",
+  items,
+});
 
 const monitor = (
   name: string,
@@ -192,9 +205,12 @@ describe("pickedUpBy", () => {
   it("reads a missing object selector as none and an empty one as all", () => {
     const none = prom("k8s", "shop", {});
     const all = prom("k8s", "shop", { serviceMonitorSelector: {} });
-    expect(pickedUpBy(web, [none], ok([]))).toEqual({ known: true, by: [] });
-    expect(pickedUpBy(web, [all], ok([]))).toEqual({
-      known: true,
+    expect(pickedUpBy(web, kind([none]), ok([]))).toEqual({
+      state: "judged",
+      by: [],
+    });
+    expect(pickedUpBy(web, kind([all]), ok([]))).toEqual({
+      state: "judged",
       by: ["k8s"],
     });
   });
@@ -208,8 +224,10 @@ describe("pickedUpBy", () => {
       serviceMonitorSelector: { matchLabels: { release: "kps" } },
       serviceMonitorNamespaceSelector: {},
     });
-    expect(pickedUpBy(web, [own], ok([])).by).toEqual([]);
-    expect(pickedUpBy(web, [every], ok([])).by).toEqual(["k8s"]);
+    expect(pickedUpBy(web, kind([own]), ok([]))).toMatchObject({ by: [] });
+    expect(pickedUpBy(web, kind([every]), ok([]))).toMatchObject({
+      by: ["k8s"],
+    });
   });
 
   /** Namespace labels decide, so unread namespaces make the answer unknown rather than "not picked up". */
@@ -227,12 +245,12 @@ describe("pickedUpBy", () => {
         createdAt: null,
       },
     ]);
-    expect(pickedUpBy(web, [labelled], namespaces)).toEqual({
-      known: true,
+    expect(pickedUpBy(web, kind([labelled]), namespaces)).toEqual({
+      state: "judged",
       by: ["k8s"],
     });
-    expect(pickedUpBy(web, [labelled], refused())).toEqual({
-      known: false,
+    expect(pickedUpBy(web, kind([labelled]), refused())).toEqual({
+      state: "unknown",
       by: [],
       reason: "forbidden",
     });
@@ -282,7 +300,7 @@ describe("scrapeOf", () => {
   /** The pool name is the tie; `web` must not absorb `webhook`, nor a PodMonitor of the same name. */
   it("counts only the pools written for this monitor, with the newest scrape and the first error", () => {
     expect(poolPrefix(web)).toBe("serviceMonitor/shop/web/");
-    expect(scrapeOf(web, targets)).toEqual({
+    expect(scrapeOf(web, targets)).toMatchObject({
       state: "read",
       up: 1,
       down: 1,
@@ -339,7 +357,7 @@ describe("rowsOf", () => {
     const orphan = monitor("orphan", "pay", { selector: {} });
     const rows = rowsOf(
       [fine, empty, orphan],
-      [prom],
+      kind([prom]),
       services,
       ok([]),
       targets
@@ -365,7 +383,7 @@ describe("rowsOf", () => {
     const fine = monitor("web", "shop", {
       selector: { matchLabels: { app: "web" } },
     });
-    const [row] = rowsOf([fine], [prom], services, ok([]), {
+    const [row] = rowsOf([fine], kind([prom]), services, ok([]), {
       state: "notConnected",
     });
     expect(row.scrape).toEqual({ state: "notConnected" });
@@ -376,7 +394,7 @@ describe("rowsOf", () => {
     const fine = monitor("web", "shop", {
       selector: { matchLabels: { app: "web" } },
     });
-    const [row] = rowsOf([fine], [prom], services, ok([]), {
+    const [row] = rowsOf([fine], kind([prom]), services, ok([]), {
       state: "read",
       targets: [
         {
@@ -399,5 +417,251 @@ describe("rowsOf", () => {
       },
     ]);
     expect(row.worst).toBe("err");
+  });
+});
+
+describe("a partial install", () => {
+  const prom = readPrometheus(
+    cr("Prometheus", "k8s", "shop", { serviceMonitorSelector: {} })
+  );
+  const services = ok([service("web", "shop", { app: "web" })]);
+  const fine = monitor("web", "shop", {
+    selector: { matchLabels: { app: "web" } },
+  });
+
+  /**
+   * The lie this exists to stop: a refused or missing Prometheus list
+   * collapsing into an empty one, and every monitor turning red with "no
+   * Prometheus picks it up". Would break if `rowsOf` took a bare array
+   * again, or if the two non-read states fell through to "judged".
+   */
+  it("does not call a monitor unpicked when the Prometheus objects could not be read", () => {
+    const [row] = rowsOf(
+      [fine],
+      { state: "unread", reason: "forbidden" },
+      services,
+      ok([]),
+      { state: "notConnected" }
+    );
+    expect(row.pickedUp).toEqual({
+      state: "unknown",
+      by: [],
+      reason: "forbidden",
+    });
+    expect(row.findings.map((f) => f.kind)).toEqual(["pickedUpUnknown"]);
+    expect(row.worst).toBe("warn");
+  });
+
+  it("does not judge pick-up at all when the Prometheus CRD is not installed", () => {
+    const [row] = rowsOf([fine], { state: "absent" }, services, ok([]), {
+      state: "notConnected",
+    });
+    expect(row.pickedUp).toEqual({ state: "noKind" });
+    expect(row.findings).toEqual([]);
+    expect(row.worst).toBeNull();
+  });
+
+  /** The same monitor with the kind present and nobody matching is a real finding. */
+  it("still calls a monitor unpicked when the objects were read and none matches", () => {
+    const [row] = rowsOf([fine], kind([]), services, ok([]), {
+      state: "notConnected",
+    });
+    expect(row.pickedUp).toEqual({ state: "judged", by: [] });
+    expect(row.findings.map((f) => f.kind)).toEqual(["notPickedUp"]);
+  });
+
+  /** Nothing can pick it up and nothing scrapes it: waiting, not fine. */
+  it("still says a monitor with no pool is waiting when pick-up could not be judged", () => {
+    const [row] = rowsOf([fine], { state: "absent" }, services, ok([]), {
+      state: "read",
+      targets: [],
+    });
+    expect(row.findings.map((f) => f.kind)).toEqual(["noTargets"]);
+    expect(groupOf(row)).toBe("waiting");
+  });
+
+  /** Would break if the first finding pushed, rather than the worst, named the row. */
+  it("puts the worst finding first whatever order the questions were asked in", () => {
+    const [row] = rowsOf(
+      [fine],
+      { state: "unread", reason: "forbidden" },
+      services,
+      ok([]),
+      {
+        state: "read",
+        targets: [
+          {
+            scrapePool: "serviceMonitor/shop/web/0",
+            scrapeUrl: "http://a",
+            health: "down",
+            lastError: "context deadline exceeded",
+            lastScrape: null,
+            labels: {},
+          },
+        ],
+      }
+    );
+    expect(row.findings.map((f) => f.kind)).toEqual([
+      "targetsDown",
+      "pickedUpUnknown",
+    ]);
+  });
+
+  it("keeps a picked-up monitor without a pool as waiting", () => {
+    const [row] = rowsOf([fine], kind([prom]), services, ok([]), {
+      state: "read",
+      targets: [],
+    });
+    expect(row.findings.map((f) => f.kind)).toEqual(["noTargets"]);
+    expect(groupOf(row)).toBe("waiting");
+  });
+});
+
+describe("the ladder", () => {
+  it("folds the prefix a chart put on most of its monitors, and only then", () => {
+    expect(
+      sharedPrefix([
+        "kps-kube-prometheus-stack-apiserver",
+        "kps-kube-prometheus-stack-coredns",
+        "kps-kube-prometheus-stack-kubelet",
+        "kps-kube-state-metrics",
+        "prometheus",
+      ])
+    ).toBe("kps-kube-prometheus-stack-");
+    expect(sharedPrefix(["a-b", "a-c", "a-d"])).toBeNull();
+    expect(sharedPrefix(["web", "api"])).toBeNull();
+  });
+});
+
+describe("the heartbeat", () => {
+  const target = (job: string, instance: string) => ({
+    scrapePool: "serviceMonitor/shop/web/0",
+    scrapeUrl: `http://${instance}/metrics`,
+    health: "up",
+    lastError: "",
+    lastScrape: null,
+    labels: { job, instance },
+  });
+
+  /** The pool is not a label on the series, so `up` is asked by the labels Prometheus put on the targets. */
+  it("asks for up by job and instance, escaped, and asks nothing for no target", () => {
+    expect(
+      upQuery([target("web", "10.0.0.1:80"), target("web", "10.0.0.2:80")])
+    ).toBe('up{job=~"web",instance=~"10\\.0\\.0\\.1:80|10\\.0\\.0\\.2:80"}');
+    expect(upQuery([])).toBeNull();
+  });
+
+  it("lays samples into minute cells per instance and leaves a gap where none landed", () => {
+    const from = 1_000_000;
+    const series: PromSeries[] = [
+      {
+        labels: { instance: "b" },
+        points: [
+          { t: from, v: 1 },
+          { t: from + 60_000, v: 0 },
+          { t: from + 180_000, v: 1 },
+        ],
+      },
+      { labels: { instance: "a" }, points: [{ t: from + 120_000, v: 0 }] },
+    ];
+    const lanes = lanesOf(series, from, from + 240_000, 60_000);
+    expect(lanes.map((lane) => lane.instance)).toEqual(["a", "b"]);
+    expect(lanes[0].job).toBe("");
+    expect(lanes[1].cells).toEqual(["up", "down", "none", "up"]);
+    expect(lanes[0].cells).toEqual(["none", "none", "down", "none"]);
+  });
+
+  it("dates a current outage from the first down cell after the last up", () => {
+    const from = 1_000_000;
+    const lanes = lanesOf(
+      [
+        {
+          labels: { instance: "a" },
+          points: [
+            { t: from, v: 1 },
+            { t: from + 60_000, v: 0 },
+            { t: from + 120_000, v: 0 },
+          ],
+        },
+      ],
+      from,
+      from + 180_000,
+      60_000
+    );
+    expect(downSince(lanes, from, 60_000)).toBe(from + 60_000);
+    const healthy = lanesOf(
+      [{ labels: { instance: "a" }, points: [{ t: from + 120_000, v: 1 }] }],
+      from,
+      from + 180_000,
+      60_000
+    );
+    expect(downSince(healthy, from, 60_000)).toBeNull();
+  });
+});
+
+describe("the likely cause", () => {
+  const services = ok([service("web", "shop", { app: "web" })]);
+  const prom = readPrometheus(
+    cr("Prometheus", "k8s", "shop", { serviceMonitorSelector: {} })
+  );
+  const down = (lastError: string) => {
+    const web = monitor("web", "shop", {
+      selector: { matchLabels: { app: "web" } },
+      endpoints: [{ port: "http-metrics", path: "/metrics" }],
+    });
+    const [row] = rowsOf([web], kind([prom]), services, ok([]), {
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "https://172.30.1.2:10257/metrics",
+          health: "down",
+          lastError,
+          lastScrape: null,
+          labels: {},
+        },
+      ],
+    });
+    return row;
+  };
+
+  it("names the kubeadm loopback bind from Prometheus's dial error", () => {
+    expect(
+      hintFor(
+        down(
+          'Get "https://172.30.1.2:10257/metrics": dial tcp 172.30.1.2:10257: connect: connection refused'
+        )
+      )
+    ).toEqual({
+      key: "loopback",
+      port: "10257",
+      component: "kube-controller-manager",
+    });
+  });
+
+  it("reads a 404 as the path, a 403 as credentials, and says nothing for words it does not know", () => {
+    expect(hintFor(down("server returned HTTP status 404 Not Found"))).toEqual({
+      key: "notFound",
+      path: "/metrics",
+      port: "http-metrics",
+    });
+    expect(hintFor(down("server returned HTTP status 403 Forbidden"))).toEqual({
+      key: "unauthorized",
+    });
+    expect(hintFor(down("something new"))).toBeNull();
+  });
+
+  it("points a selector that matches nothing at the labels", () => {
+    const empty = monitor("nothing", "shop", {
+      selector: { matchLabels: { app: "gone" } },
+    });
+    const [row] = rowsOf([empty], kind([prom]), services, ok([]), {
+      state: "notConnected",
+    });
+    expect(hintFor(row)).toEqual({
+      key: "selectsNothing",
+      selector: "app=gone",
+      namespace: "shop",
+    });
   });
 });

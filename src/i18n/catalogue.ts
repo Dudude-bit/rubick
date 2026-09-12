@@ -1796,63 +1796,175 @@ export const en = {
   // Here rather than in the vendor module because a vendor module is a plain
   // table with no hook to call: it names the key, and the row translates it.
   monitors: {
+    tabMonitors: "Monitors",
+    tabConnection: "Connection",
+    notConnectedShort: "not connected",
     pageHint:
       "Every ServiceMonitor and PodMonitor: what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it.",
-    couldNotReadMonitors: "Could not read the ServiceMonitor objects",
+    couldNotReadMonitors: "Could not read the monitors",
+    kindAbsent: "No {kind} can exist here: its CRD is not installed.",
     kindUnread: "{kind} objects could not be read: {reason}",
-    instances: "Prometheus instances",
+    prometheusKindAbsent:
+      "The operator's Prometheus CRD is not installed, so nothing here can pick a monitor up. Pick-up is not judged.",
     noInstances:
-      "No Prometheus object in the cluster: nothing picks the monitors up.",
+      "No Prometheus object in the cluster: nothing picks the monitors up. Was the operator uninstalled with its CRDs left behind?",
     instancesUnread:
       "The Prometheus objects could not be read, so which instance picks a monitor up is unknown.",
     readyOf: "{ready} of {wanted} ready",
     readyUnknown: "readiness not written",
     retention: "retention {value}",
-    scrapeTruth: "Scrape truth",
     notConnected:
-      "No Prometheus is connected for this cluster, so whether a monitor is really scraped stays unchecked.",
+      "No Prometheus is connected for this cluster. Selection and pick-up are read from the objects; whether anything is really scraped stays unchecked.",
     connectPrometheus: "Connect one in Settings",
     unanswered:
-      "The connected Prometheus did not answer for its targets: {reason}",
+      "The connected Prometheus did not answer for its targets: {reason}. Scraping is unknown, not empty.",
     targetsRead: {
-      one: "{n} active target on the connected Prometheus",
-      other: "{n} active targets on the connected Prometheus",
+      one: "Scrape truth from the connected Prometheus · {n} target",
+      other: "Scrape truth from the connected Prometheus · {n} targets",
     },
-    filterMonitors: "Filter monitors",
+    ofTotal: "of {total}",
+    needAttention: "{n} of {total} need attention",
+    allScraped: {
+      one: "{n} monitor, scraped",
+      other: "{n} monitors, all scraped",
+    },
+    filterMonitors: "Filter by name or namespace",
     filterMonitorsLabel: "Filter monitors by name or namespace",
     none: "No ServiceMonitor or PodMonitor in this cluster.",
     noneMatch: "No monitor matches the filter.",
-    needAttention: "{n} of {total} need attention",
+    chipAll: "all",
+    chipBroken: "broken",
+    chipWaiting: "waiting",
+    chipScraped: "scraped",
+    chipUnchecked: "unchecked",
+    groupBroken: "Broken",
+    groupWaiting: "Waiting",
+    groupScraped: "Scraped",
+    groupUnchecked: "Not checked",
+    keysMove: "↑↓ move",
+    keysOpen: "↵ open object",
+    rowSelectsNothing: "selects nothing",
+    rowNotPickedUp: "not picked up",
+    rowDownOf: "{down} of {total} down",
+    rowNoTargets: "no target yet",
+    rowUnknown: "unknown",
+    rowNotChecked: "not checked",
+    rowUp: "{n} up",
+    scrapedAgo: "{ago} ago",
+    openObject: "Open",
+    targetsInPrometheus: "Targets in Prometheus",
+    verdictSelectsNothing: "Selects no Service, so there is nothing to scrape.",
+    verdictSelectsNothingBody: "{selector} matches nothing in {namespace}.",
+    verdictSelectionUnread: "What it selects could not be counted.",
+    verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
+    verdictNoInstances:
+      "No Prometheus object in the cluster, so nothing picks it up.",
+    verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
+    verdictDown: "{down} of {total} targets down.",
+    verdictDownSince: "{down} of {total} targets down since {since}.",
+    prometheusSays: "Prometheus says",
+    verdictNoTargets: "Picked up, but Prometheus has no target for it yet.",
+    verdictUp: {
+      one: "{n} target up, scraped {ago} ago.",
+      other: "{n} targets up, scraped {ago} ago.",
+    },
+    nothingToDo: "Nothing to do here.",
+    verdictNotChecked:
+      "Selected and picked up. Whether it is scraped is not checked.",
+    verdictNoKind:
+      "Selected. Nothing can pick it up here: the operator's Prometheus CRD is not installed.",
+    lastHour: "Last hour",
+    perCell: "1 min per cell",
+    heartbeatUnread: "History could not be read: {reason}",
+    downCount: "{n} down",
+    upCount: "{n} up",
+    sinceTime: "since {time}",
+    moreLanes: "+{n} more",
     selects: "Selects",
     selectsServices: {
       one: "{n} Service",
       other: "{n} Services",
     },
-    selectsNothing:
-      "selects no Service: the selector matches nothing in the namespaces it reaches",
+    noServicesIn: "0 Services in {namespace}",
     notCounted: "pods, not counted here",
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
-    pickedUpBy: "Picked up by",
-    notPickedUp:
-      "no Prometheus picks it up: no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
-    pickedUpUnknown:
-      "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
-    scraped: "Scraped",
-    scrapedUp: "{up} up",
-    targetsDown: "{down} of {total} targets down",
-    noTargets:
-      "picked up, but the connected Prometheus has no target for it: the operator has not written it yet, or wrote it for another Prometheus",
-    notChecked: "not checked",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
-    rowOk: "scraped",
-    rowNotChecked: "not checked",
-    rowDown: "targets down",
-    rowNotPickedUp: "not picked up",
-    rowSelectsNothing: "selects nothing",
-    rowUnknown: "unknown",
-    rowNoTargets: "no targets",
+    chipLabel: "label",
+    chipPort: "port",
+    chipPath: "path",
+    chipEvery: "every",
+    pickedUpBy: "Picked up by",
+    pickedUpCount: {
+      one: "{n} Prometheus",
+      other: "{n} Prometheus",
+    },
+    notPickedUp:
+      "no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
+    pickedUpUnknown:
+      "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
+    notJudged: "not judged",
+    picksUp: "picks up",
+    picksUpAll: "every monitor in every namespace",
+    picksUpOwn: "every monitor in its own namespace",
+    picksUpMatching: "monitors matching {selector}",
+    inNamespacesMatching: "in namespaces matching {selector}",
+    targets: "Targets",
+    health: "Health",
+    scrapeUrl: "Scrape URL",
+    lastScrape: "Last scrape",
+    lastError: "Last error",
+    noTargetYet: "none yet",
+    noTargets:
+      "The operator has written no target for it: no endpoint behind the named port, or written for another Prometheus than the one connected.",
+    moreTargets: "+{n} more targets",
+    notChecked: "not checked",
+    mostLikely: "Most likely",
+    hintLoopbackWhy:
+      "kubeadm binds {component} to 127.0.0.1, so nothing outside the node reaches :{port}.",
+    hintLoopbackHow:
+      "Set {flag} in the static pod manifest under /etc/kubernetes/manifests, or turn this monitor off in the chart.",
+    hintRefusedWhy: "Nothing listens on :{port} at that address.",
+    hintRefusedHow:
+      "Check which port the process really serves metrics on, and that the Service port name on the monitor points at it.",
+    hintNotFoundWhy:
+      "The Service answers, the path does not: nothing serves {path} on port {port}.",
+    hintNotFoundHow:
+      "Check what the app exposes: another port, another path, or no metrics at all. A monitor on a Service that was never meant to be scraped is noise in every alert list.",
+    hintUnauthorizedWhy:
+      "The endpoint wants credentials the scrape does not send.",
+    hintUnauthorizedHow:
+      "Give the endpoint a bearerTokenFile or basicAuth on the monitor, or open the metrics path to the Prometheus service account.",
+    hintTlsWhy:
+      "The TLS handshake failed: the certificate is not one Prometheus trusts.",
+    hintTlsHow:
+      "Point tlsConfig.ca at the right CA, or set insecureSkipVerify on the endpoint when the certificate is self-signed on purpose.",
+    hintTimeoutWhy: "The target did not answer within the scrape timeout.",
+    hintTimeoutHow:
+      "A NetworkPolicy between Prometheus and the pod, or an endpoint that takes longer than scrapeTimeout to render its metrics.",
+    hintDnsWhy: "The scrape address does not resolve.",
+    hintDnsHow:
+      "The Service or pod behind the monitor is gone, or the endpoint names a host Prometheus cannot look up.",
+    hintSelectsNothingWhy: "No Service in {namespace} carries {selector}.",
+    hintSelectsNothingHow:
+      "Compare the selector with the labels on the Service the monitor was written for. The label the app sets is usually the one the Helm chart chose, not the one you remember.",
+    hintPodPortWhy: "Pods match, but none has a container port named {port}.",
+    hintPodPortHow:
+      "Name the port in the pod spec, or point the PodMonitor at the port the container actually declares.",
+    hintNoEndpointsWhy:
+      "The Service exists, but no endpoint sits behind port {port}.",
+    hintNoEndpointsHow:
+      "The pods behind the Service are not ready, or the Service port name on the monitor does not match a port the Service declares.",
+    copyForAgent: "Copy for agent",
+    copiedForAgent: "Monitor, findings and hint copied",
+    searchError: "Search the error",
+    askedOfPrometheus: "Asked of Prometheus",
+    copyQuery: "Copy",
+    openInPrometheus: "Open in Prometheus",
+    noAddress: "No address given for this cluster.",
+    bearerToken: "bearer token",
+    editInSettings: "Edit in Settings",
   },
 
   vendor: {
@@ -1878,9 +1990,7 @@ export const en = {
       "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
     lokiGives: "logs from before the current pod existed",
     prometheusGives:
-      "usage history, volume fullness and traffic on pods and workloads",
-    prometheusOperatorGives:
-      "every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it",
+      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped, from the operator's objects",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
 
@@ -4484,7 +4594,7 @@ export const en = {
       "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional — the cluster works exactly as it does now.",
     integrationNotConnected: "{name} is not connected",
     integrationNotConnectedBody:
-      "It installs nothing in a cluster, so there is nothing to detect — it works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
+      "It works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
     noProfilesGcp: "No profiles — using Application Default Credentials.",
     noProfilesAzure: "No profiles — using the default az login credentials.",
     noCrdsInCluster: "This cluster has no custom resource definitions.",

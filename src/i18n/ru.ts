@@ -1831,34 +1831,97 @@ export const ru: Catalogue = {
     cancelledFor: "Отменено: {context}.",
   },
   monitors: {
+    tabMonitors: "Мониторы",
+    tabConnection: "Подключение",
+    notConnectedShort: "не подключён",
     pageHint:
       "Каждый ServiceMonitor и PodMonitor: кого выбирает, какой Prometheus его подхватывает и скрейпит ли его подключённый Prometheus на самом деле.",
-    couldNotReadMonitors: "Не удалось прочитать объекты ServiceMonitor",
+    couldNotReadMonitors: "Не удалось прочитать мониторы",
+    kindAbsent: "{kind} здесь быть не может: его CRD не установлен.",
     kindUnread: "Объекты {kind} не удалось прочитать: {reason}",
-    instances: "Инстансы Prometheus",
+    prometheusKindAbsent:
+      "CRD Prometheus оператора не установлен, поэтому здесь некому подхватывать мониторы. Подхват не оценивается.",
     noInstances:
-      "В кластере нет объекта Prometheus: мониторы некому подхватывать.",
+      "В кластере нет объекта Prometheus: мониторы некому подхватывать. Оператор удалили, а CRD остались?",
     instancesUnread:
       "Объекты Prometheus не удалось прочитать, поэтому неизвестно, какой инстанс подхватывает монитор.",
     readyOf: "{ready} из {wanted} готово",
     readyUnknown: "готовность не записана",
     retention: "хранение {value}",
-    scrapeTruth: "Правда о скрейпе",
     notConnected:
-      "К этому кластеру не подключён Prometheus, поэтому скрейпится ли монитор на самом деле, не проверено.",
+      "К этому кластеру не подключён Prometheus. Выбор и подхват прочитаны из объектов; скрейпится ли что-то на самом деле, не проверено.",
     connectPrometheus: "Подключить в настройках",
-    unanswered: "Подключённый Prometheus не ответил про свои targets: {reason}",
+    unanswered:
+      "Подключённый Prometheus не ответил про свои targets: {reason}. Скрейп неизвестен, а не пуст.",
     targetsRead: {
-      one: "{n} активный target на подключённом Prometheus",
-      few: "{n} активных target'а на подключённом Prometheus",
-      many: "{n} активных target'ов на подключённом Prometheus",
-      other: "{n} активных target'ов на подключённом Prometheus",
+      one: "Правда о скрейпе от подключённого Prometheus · {n} target",
+      few: "Правда о скрейпе от подключённого Prometheus · {n} target'а",
+      many: "Правда о скрейпе от подключённого Prometheus · {n} target'ов",
+      other: "Правда о скрейпе от подключённого Prometheus · {n} target'ов",
     },
-    filterMonitors: "Фильтр мониторов",
+    ofTotal: "из {total}",
+    needAttention: "{n} из {total} требуют внимания",
+    allScraped: {
+      one: "{n} монитор, скрейпится",
+      few: "{n} монитора, все скрейпятся",
+      many: "{n} мониторов, все скрейпятся",
+      other: "{n} мониторов, все скрейпятся",
+    },
+    filterMonitors: "Фильтр по имени или namespace",
     filterMonitorsLabel: "Фильтровать мониторы по имени или namespace",
     none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",
     noneMatch: "Ни один монитор не подходит под фильтр.",
-    needAttention: "{n} из {total} требуют внимания",
+    chipAll: "все",
+    chipBroken: "сломано",
+    chipWaiting: "ждёт",
+    chipScraped: "скрейпится",
+    chipUnchecked: "не проверено",
+    groupBroken: "Сломано",
+    groupWaiting: "Ждёт",
+    groupScraped: "Скрейпится",
+    groupUnchecked: "Не проверено",
+    keysMove: "↑↓ выбор",
+    keysOpen: "↵ открыть объект",
+    rowSelectsNothing: "ничего не выбирает",
+    rowNotPickedUp: "не подхвачен",
+    rowDownOf: "{down} из {total} down",
+    rowNoTargets: "target'а ещё нет",
+    rowUnknown: "неизвестно",
+    rowNotChecked: "не проверено",
+    rowUp: "{n} up",
+    scrapedAgo: "{ago} назад",
+    openObject: "Открыть",
+    targetsInPrometheus: "Targets в Prometheus",
+    verdictSelectsNothing: "Не выбирает ни одного Service, скрейпить нечего.",
+    verdictSelectsNothingBody:
+      "{selector} ничему не соответствует в {namespace}.",
+    verdictSelectionUnread: "Что он выбирает, посчитать не удалось.",
+    verdictNotPickedUp:
+      "Ни один Prometheus его не подхватывает, поэтому его никто не скрейпит.",
+    verdictNoInstances:
+      "В кластере нет объекта Prometheus, поэтому его некому подхватить.",
+    verdictPickedUpUnknown: "Подхватывает ли его Prometheus, неизвестно.",
+    verdictDown: "{down} из {total} target'ов down.",
+    verdictDownSince: "{down} из {total} target'ов down с {since}.",
+    prometheusSays: "Prometheus говорит",
+    verdictNoTargets: "Подхвачен, но у Prometheus для него ещё нет target'а.",
+    verdictUp: {
+      one: "{n} target up, скрейп {ago} назад.",
+      few: "{n} target'а up, скрейп {ago} назад.",
+      many: "{n} target'ов up, скрейп {ago} назад.",
+      other: "{n} target'ов up, скрейп {ago} назад.",
+    },
+    nothingToDo: "Делать здесь нечего.",
+    verdictNotChecked: "Выбран и подхвачен. Скрейпится ли, не проверено.",
+    verdictNoKind:
+      "Выбран. Подхватить его здесь некому: CRD Prometheus оператора не установлен.",
+    lastHour: "Последний час",
+    perCell: "1 мин на ячейку",
+    heartbeatUnread: "Историю прочитать не удалось: {reason}",
+    downCount: "{n} down",
+    upCount: "{n} up",
+    sinceTime: "с {time}",
+    moreLanes: "ещё {n}",
     selects: "Выбирает",
     selectsServices: {
       one: "{n} Service",
@@ -1866,31 +1929,89 @@ export const ru: Catalogue = {
       many: "{n} Service'ов",
       other: "{n} Service'ов",
     },
-    selectsNothing:
-      "не выбирает ни одного Service: селектор ничему не соответствует в namespace'ах, до которых дотягивается",
+    noServicesIn: "0 Service'ов в {namespace}",
     notCounted: "поды, здесь не считаются",
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
-    pickedUpBy: "Подхватывает",
-    notPickedUp:
-      "ни один Prometheus его не подхватывает: ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
-    pickedUpUnknown:
-      "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
-    scraped: "Скрейпится",
-    scrapedUp: "{up} up",
-    targetsDown: "{down} из {total} target'ов down",
-    noTargets:
-      "подхвачен, но у подключённого Prometheus нет target'а для него: оператор ещё не записал его или записал для другого Prometheus",
-    notChecked: "не проверено",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
-    rowOk: "скрейпится",
-    rowNotChecked: "не проверено",
-    rowDown: "target'ы down",
-    rowNotPickedUp: "не подхвачен",
-    rowSelectsNothing: "ничего не выбирает",
-    rowUnknown: "неизвестно",
-    rowNoTargets: "нет target'ов",
+    chipLabel: "лейбл",
+    chipPort: "порт",
+    chipPath: "путь",
+    chipEvery: "каждые",
+    pickedUpBy: "Подхватывает",
+    pickedUpCount: {
+      one: "{n} Prometheus",
+      few: "{n} Prometheus",
+      many: "{n} Prometheus",
+      other: "{n} Prometheus",
+    },
+    notPickedUp:
+      "ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
+    pickedUpUnknown:
+      "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
+    notJudged: "не оценивается",
+    picksUp: "подхватывает",
+    picksUpAll: "все мониторы во всех namespace",
+    picksUpOwn: "все мониторы в своём namespace",
+    picksUpMatching: "мониторы по {selector}",
+    inNamespacesMatching: "в namespace по {selector}",
+    targets: "Targets",
+    health: "Состояние",
+    scrapeUrl: "Адрес скрейпа",
+    lastScrape: "Последний скрейп",
+    lastError: "Последняя ошибка",
+    noTargetYet: "пока нет",
+    noTargets:
+      "Оператор не записал для него ни одного target'а: за именованным портом нет эндпоинта, или записал для другого Prometheus, не того, что подключён.",
+    moreTargets: "ещё {n} target'ов",
+    notChecked: "не проверено",
+    mostLikely: "Скорее всего",
+    hintLoopbackWhy:
+      "kubeadm привязывает {component} к 127.0.0.1, поэтому снаружи ноды до :{port} никто не достаёт.",
+    hintLoopbackHow:
+      "Поставь {flag} в манифесте статического пода в /etc/kubernetes/manifests или выключи этот монитор в чарте.",
+    hintRefusedWhy: "На :{port} по этому адресу никто не слушает.",
+    hintRefusedHow:
+      "Проверь, на каком порту процесс на самом деле отдаёт метрики, и что имя порта Service в мониторе указывает на него.",
+    hintNotFoundWhy:
+      "Service отвечает, путь нет: на порту {port} никто не отдаёт {path}.",
+    hintNotFoundHow:
+      "Проверь, что приложение отдаёт: другой порт, другой путь или метрик нет вовсе. Монитор на Service, который никогда не собирались скрейпить, это шум в каждом списке алертов.",
+    hintUnauthorizedWhy:
+      "Эндпоинт хочет учётные данные, которые скрейп не шлёт.",
+    hintUnauthorizedHow:
+      "Дай эндпоинту bearerTokenFile или basicAuth в мониторе, или открой путь метрик сервис-аккаунту Prometheus.",
+    hintTlsWhy:
+      "TLS-рукопожатие не прошло: сертификату Prometheus не доверяет.",
+    hintTlsHow:
+      "Укажи в tlsConfig.ca правильный CA или поставь insecureSkipVerify на эндпоинте, если сертификат самоподписанный намеренно.",
+    hintTimeoutWhy: "Target не ответил за время scrape timeout.",
+    hintTimeoutHow:
+      "NetworkPolicy между Prometheus и подом, или эндпоинт, который отдаёт метрики дольше scrapeTimeout.",
+    hintDnsWhy: "Адрес скрейпа не резолвится.",
+    hintDnsHow:
+      "Service или под за монитором исчез, или эндпоинт называет хост, который Prometheus не может найти.",
+    hintSelectsNothingWhy: "Ни один Service в {namespace} не несёт {selector}.",
+    hintSelectsNothingHow:
+      "Сравни селектор с лейблами Service, для которого монитор писали. Лейбл, который ставит приложение, обычно тот, что выбрал Helm-чарт, а не тот, что помнишь ты.",
+    hintPodPortWhy:
+      "Поды подходят, но ни у одного нет порта контейнера с именем {port}.",
+    hintPodPortHow:
+      "Назови порт в спеке пода или направь PodMonitor на порт, который контейнер объявляет на самом деле.",
+    hintNoEndpointsWhy:
+      "Service есть, но за портом {port} нет ни одного эндпоинта.",
+    hintNoEndpointsHow:
+      "Поды за Service не готовы, или имя порта Service в мониторе не совпадает ни с одним портом, который Service объявляет.",
+    copyForAgent: "Скопировать для агента",
+    copiedForAgent: "Монитор, находки и подсказка скопированы",
+    searchError: "Найти ошибку",
+    askedOfPrometheus: "Запрос к Prometheus",
+    copyQuery: "Копировать",
+    openInPrometheus: "Открыть в Prometheus",
+    noAddress: "Адрес для этого кластера не задан.",
+    bearerToken: "bearer-токен",
+    editInSettings: "Изменить в настройках",
   },
 
   vendor: {
@@ -1916,9 +2037,7 @@ export const ru: Catalogue = {
       "VirtualService и DestinationRule, прочитанные как маршрутизация, а не как сырые ресурсы",
     lokiGives: "логи за время до того, как появился текущий под",
     prometheusGives:
-      "историю нагрузки, заполненность томов и трафик подов и рабочих нагрузок",
-    prometheusOperatorGives:
-      "каждый ServiceMonitor и PodMonitor: кого выбирает, какой Prometheus его подхватывает и скрейпит ли его подключённый Prometheus на самом деле",
+      "историю нагрузки, заполненность томов и трафик подов и рабочих нагрузок по адресу; каждый ServiceMonitor и PodMonitor с тем, кого он выбирает, какой Prometheus его подхватывает и скрейпится ли он на самом деле, по объектам оператора",
     traefikGives:
       "каждый хост, который отдаёт этот кластер, и где каждый обрывается",
   },
@@ -4782,7 +4901,7 @@ export const ru: Catalogue = {
       "Его CustomResourceDefinition нет на этом API-сервере, поэтому странице нечего читать. Любое расширение необязательно — кластер работает ровно так же, как сейчас.",
     integrationNotConnected: "{name} не подключён",
     integrationNotConnectedBody:
-      "Он ничего не устанавливает в кластер, поэтому обнаруживать нечего — он работает по адресу, который вы задаёте приложению и который хранится для каждого кластера. Укажите адрес, и страница оживёт.",
+      "Он работает по адресу, который вы задаёте приложению и который хранится для каждого кластера. Укажите адрес, и страница оживёт.",
     noProfilesGcp:
       "Профилей нет — используются Application Default Credentials.",
     noProfilesAzure:

@@ -25,9 +25,12 @@ import {
 const monitors = (live.monitors as unknown as CustomResourceInfo[]).map((cr) =>
   readMonitor(cr, cr.kind as MonitorKind)
 );
-const instances = (live.prometheuses as unknown as CustomResourceInfo[]).map(
-  readPrometheus
-);
+const instances = {
+  state: "read" as const,
+  items: (live.prometheuses as unknown as CustomResourceInfo[]).map(
+    readPrometheus
+  ),
+};
 const services = {
   ok: true as const,
   items: live.services as unknown as ServiceInfo[],
@@ -49,8 +52,8 @@ const row = (name: string): MonitorRow => {
 
 describe("the chart's own objects", () => {
   it("reads the Prometheus instance the operator runs", () => {
-    expect(instances).toHaveLength(1);
-    const [prom] = instances;
+    expect(instances.items).toHaveLength(1);
+    const [prom] = instances.items;
     expect(prom.name).toBe("kps-kube-prometheus-stack-prometheus");
     expect(prom.replicas).toBe(1);
     expect(prom.available).toBe(1);
@@ -65,7 +68,7 @@ describe("the chart's own objects", () => {
     expect(rows).toHaveLength(16);
     for (const r of rows) {
       expect(r.pickedUp, r.monitor.name).toEqual({
-        known: true,
+        state: "judged",
         by: ["kps-kube-prometheus-stack-prometheus"],
       });
     }
@@ -132,5 +135,46 @@ describe("the chart's own objects", () => {
       expect(r.findings, name).toEqual([]);
       expect(r.scrape, name).toMatchObject({ state: "read", up, down: 0 });
     }
+  });
+});
+
+describe("the same objects with a piece of the install missing", () => {
+  /**
+   * The chart's objects with the Prometheus list refused: every monitor
+   * used to go red with "no Prometheus picks it up". Would break if a
+   * non-read list were mapped to an empty array again.
+   */
+  it("makes pick-up unknown for every monitor when the Prometheus objects are refused", () => {
+    const rows = rowsOf(
+      monitors,
+      { state: "unread", reason: "forbidden" },
+      services,
+      namespaces,
+      targets
+    );
+    expect(rows.every((r) => r.pickedUp.state === "unknown")).toBe(true);
+    expect(
+      rows.some((r) => r.findings.some((f) => f.kind === "notPickedUp"))
+    ).toBe(false);
+  });
+
+  it("judges nothing about pick-up when the Prometheus CRD is not installed, and keeps the scrape truth", () => {
+    const rows = rowsOf(
+      monitors,
+      { state: "absent" },
+      services,
+      namespaces,
+      targets
+    );
+    expect(rows.every((r) => r.pickedUp.state === "noKind")).toBe(true);
+    expect(
+      rows.some((r) => r.findings.some((f) => f.kind === "notPickedUp"))
+    ).toBe(false);
+    expect(row("kps-kube-prometheus-stack-kube-etcd").worst).toBe("err");
+    expect(
+      rows
+        .find((r) => r.monitor.name === "kps-kube-prometheus-stack-kube-etcd")
+        ?.findings.map((f) => f.kind)
+    ).toEqual(["targetsDown"]);
   });
 });
