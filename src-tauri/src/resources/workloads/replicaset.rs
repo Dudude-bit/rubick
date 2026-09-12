@@ -55,6 +55,9 @@ pub struct ReplicaSetInfo {
     pub service_account_name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
+    /// The pod template's own annotations, where a chart writes the config
+    /// checksum it rolls on. Not the same map as `annotations`.
+    pub template_annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
     pub created_at: Option<String>,
@@ -96,6 +99,11 @@ impl ReplicaSetInfo {
             service_account_name: template.service_account_name,
             labels: rs.labels().clone(),
             annotations: rs.annotations().clone(),
+            template_annotations: spec
+                .and_then(|s| s.template.as_ref())
+                .and_then(|t| t.metadata.as_ref())
+                .and_then(|m| m.annotations.clone())
+                .unwrap_or_default(),
             conditions,
             owner_references: extract_owner_references(rs.metadata.owner_references.as_ref()),
             created_at: rs.creation_timestamp().to_rfc3339_opt(),

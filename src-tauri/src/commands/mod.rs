@@ -44,6 +44,7 @@ pub mod pods;
 pub mod port_forward;
 pub mod registry;
 pub mod replicasets;
+pub mod revisions;
 pub mod search;
 pub mod services;
 pub mod settings;

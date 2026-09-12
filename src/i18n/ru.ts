@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    changes: "Изменения",
     selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все неймспейсы",
     dataTable: "Таблица данных",
@@ -1420,6 +1421,65 @@ export const ru: Catalogue = {
       other: "{n} терминала",
     },
     active: "активных: {n}",
+  },
+  changes: {
+    title: "Изменения",
+    last24h: "Последние 24 часа",
+    explained:
+      "Четыре записи на одной шкале: ревизии контроллера, история владельца доставки, история Helm и то, что приложение видело, пока было подключено. Где оно не смотрело, на шкале дыра.",
+    clusterExplained:
+      "Что приложение видело в рабочих нагрузках кластера, пока было подключено, в том порядке, в каком видело. Дыра это отрезок, когда оно не смотрело; о нём ничего не известно.",
+    notObserved: "Не наблюдали с {from} по {to}",
+    notObservedStill: "Не наблюдаем с {from}",
+    revisionNumber: "ревизия {n}",
+    revisionCurrent: "текущая",
+    revisionOldest: "самая старая из известных; сравнивать не с чем",
+    unchangedTemplate:
+      "в сравниваемом ничего не изменилось: image, env, envFrom, ports, resources, аннотации с контрольной суммой",
+    templateUnread:
+      "шаблон этой ревизии или предыдущей не прочитан; что изменилось — неизвестно",
+    revisionsMissing: {
+      one: "{n} ревизии между ними на кластере больше нет",
+      few: "{n} ревизий между ними на кластере больше нет",
+      many: "{n} ревизий между ними на кластере больше нет",
+      other: "{n} ревизий между ними на кластере больше нет",
+    },
+    readopted:
+      "снова взята откатом: на шкале момент, когда объект создан, а не когда стал текущим",
+    changeCause: "kubernetes.io/change-cause",
+    fieldContainer: "контейнер",
+    added: "добавлен",
+    removed: "убран",
+    delivered: "{owner} применил {revision}",
+    deliveredFrom: "из {from}",
+    helmRevision: "Ревизия Helm {n}: {chart}",
+    journalCreated: "{kind} появился",
+    journalDeleted: "{kind} исчез",
+    journalGeneration: "generation spec {from} → {to}",
+    journalImage: "{container}: образ {from} → {to}",
+    journalReplicas: "реплики {from} → {to}",
+    journalAnnotation: "{key} {from} → {to}",
+    journalSeenAtRelist:
+      "Замечено при перечитывании после разрыва: изменилось где-то в дыре перед этим.",
+    sinceMarker: "с момента, когда сделали ссылку",
+    sinceNothing: "На этой шкале ничего с {when}.",
+    revisionsUnread: "Ревизии не прочитаны: {reason}",
+    historyUnread: "История {owner} не прочитана: {reason}",
+    helmUnread: "История Helm для {release} не прочитана: {reason}",
+    nothingInWindow: "На этой шкале в окне ничего нет.",
+    notWatchingNow: "Сейчас за нагрузками этого кластера не следим.",
+    watchingNow: "Наблюдаем с {since}",
+    window24h: "24ч",
+    window7d: "7д",
+    deliveriesUnread: "Кто это доставляет — не прочитано: {reason}",
+    claimedOwner:
+      "{owner} не перечисляет этот объект; на объекте только метка с его именем",
+    moreRows: {
+      one: "ещё {n} строка не нарисована",
+      few: "ещё {n} строки не нарисованы",
+      many: "ещё {n} строк не нарисовано",
+      other: "ещё {n} строк не нарисовано",
+    },
   },
   files: {
     noContainers: "У этого пода не объявлено контейнеров.",
