@@ -124,6 +124,14 @@ describe("CountBlock", () => {
     expect(screen.getByText(/against 80%/)).toBeInTheDocument();
   });
 
+  /** Issue #178: the block described the autoscaler and gave no way to change it. */
+  it("offers the editor beside the autoscaler it names", () => {
+    renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));
+    expect(
+      screen.getByRole("button", { name: /Edit YAML/ })
+    ).toBeInTheDocument();
+  });
+
   it("reduces a budget that is doing its job to one clause", () => {
     renderBlock(query(conns(budget())));
 
