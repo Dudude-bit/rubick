@@ -8,6 +8,11 @@
 mod cloud;
 mod cred;
 mod exec;
+/// The silent flow's own ceiling, read by the renewal schedule's test: an
+/// attempt that can outlive the credentials it renews is not a renewal, and
+/// that is a relation between two constants nothing else states.
+#[cfg(test)]
+pub(crate) use exec::SILENT_FLOW_TIMEOUT_SECS;
 mod oidc;
 
 use crate::error::{AuthError, Error, Result};

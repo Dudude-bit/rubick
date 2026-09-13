@@ -42,7 +42,7 @@ const sample: Diagnostics = {
     version: "4.0.1",
     os: "macos aarch64",
     configPath: "~/Library/Application Support/k8s-gui/config.toml",
-    logDestination: "stdout",
+    logDestination: "/Users/someone/Library/Logs/com.k8s-gui.app/rubick.log",
   },
   findings: [],
   connections: [
@@ -170,6 +170,36 @@ describe("EnvironmentBlocks", () => {
   it("says nothing of the sort when the path is real", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     expect(screen.queryAllByText(/did not|не ответила/i)).toHaveLength(0);
+  });
+
+  /**
+   * The whole point of the file: "send me the log" has to have an answer a
+   * reader can act on. The path is the answer, and this is the only screen
+   * that names it.
+   */
+  it("names the file this run is writing to", () => {
+    render(<EnvironmentBlocks diagnostics={sample} />);
+    expect(
+      screen.getByText(/Library\/Logs\/com\.k8s-gui\.app\/rubick\.log/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * No writable log directory is its own state. Leaving the line out reads
+   * as "logs go somewhere I did not scroll to", and a blank where a path
+   * belongs is the third state collapsing into the second.
+   */
+  it("says there is no file rather than showing an empty path", () => {
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          app: { ...sample.app, logDestination: null },
+        }}
+      />
+    );
+    expect(screen.getByText(/no log file/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Logs: $/)).toBeNull();
   });
 });
 

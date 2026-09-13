@@ -3576,6 +3576,8 @@ export const ru: Catalogue = {
     pathNoKubectl: "kubectl нет в пути поиска",
     appVersion: "Версия {version}",
     logsTo: "Логи: {destination}",
+    logsNowhere: "Файла логов нет — этот запуск пишет только в консоль.",
+    logsMoreDetail: "Запустите с RUST_LOG=debug, чтобы логи стали подробнее.",
     readingFile: "Чтение файла…",
     contexts: "Контексты",
     searchFiltersList: "{n} — поиск фильтрует этот список",

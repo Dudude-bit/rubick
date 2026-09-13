@@ -88,7 +88,7 @@ const AUTH_FLOW_TIMEOUT_SECS: u64 = 30 * 60;
 /// The same cap for a renewal nobody asked for. A plugin answering from its
 /// own cache is back in under a second; one that is not wants a person, and
 /// there is nobody here to ask.
-const SILENT_FLOW_TIMEOUT_SECS: u64 = 30;
+pub(crate) const SILENT_FLOW_TIMEOUT_SECS: u64 = 30;
 
 /// An event a silent renewal must not send: each draws something — a modal,
 /// a toast, a browser tab — for a reader who asked for none of it.

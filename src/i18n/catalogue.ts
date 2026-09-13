@@ -3312,6 +3312,8 @@ export const en = {
     pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
+    logsNowhere: "No log file — this run only writes to the console.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",

@@ -38,7 +38,20 @@ const GIVE_UP_AFTER: u32 = 2;
 /// The last moment worth asking at, once the plugin has answered the margin
 /// with the token it already had. Some only mint a new one inside their own
 /// skew window: the way to one is to ask later, not more often.
-const CREEP: Duration = Duration::seconds(20);
+///
+/// Longer than the silent flow's own 30-second ceiling, deliberately: at
+/// twenty seconds an exchange that takes twenty-five finishes *after* the
+/// credentials it was renewing have died. kubelogin re-uses its `id-token`
+/// until a minute before expiry, so forty-five is still inside the window.
+const CREEP: Duration = Duration::seconds(45);
+
+/// One attempt past the deadline, for a plugin that refuses to mint a new
+/// credential until the old one is actually dead.
+///
+/// Every earlier attempt is answered with the token in use, and the schedule
+/// used to give up a few seconds short of the `401`. This is a few seconds of
+/// refusal that lifts itself instead of a Sign in screen awaiting a click.
+const PAST: Duration = Duration::seconds(5);
 
 /// What became of the attempt to renew a context's credentials on its own.
 ///
@@ -182,7 +195,13 @@ async fn run(
 ) {
     let mut wait = first;
     let mut failures = 0u32;
+    let mut timing = Timing::Margin;
     let mut stop_rx = stop_rx;
+    tracing::info!(
+        %context,
+        in_seconds = wait.as_secs(),
+        "credential renewal scheduled"
+    );
 
     loop {
         tokio::select! {
@@ -198,9 +217,16 @@ async fn run(
             return;
         }
         let Some(before) = state.client_manager.credential_deadline(&context) else {
+            tracing::info!(%context, "no deadline to renew from; nothing scheduled");
             stop(&state, &context, Renewal::NoDeadline);
             return;
         };
+        tracing::info!(
+            %context,
+            ?timing,
+            deadline = %before,
+            "running the credential plugin to renew"
+        );
 
         let attempt = renew_once(&app, &context, before, &mut stop_rx).await;
         if stopped(&mut stop_rx) {
@@ -223,6 +249,15 @@ async fn run(
                 } else {
                     Renewal::Failed
                 };
+                // The words, not just the verdict: which of the two it was
+                // decides what the reader is told, and only the message says
+                // what the plugin actually ran into.
+                tracing::warn!(
+                    %context,
+                    ?outcome,
+                    %error,
+                    "credential renewal gave up"
+                );
                 stop(&state, &context, outcome);
                 return;
             }
@@ -233,25 +268,63 @@ async fn run(
             // No deadline on the new credentials: nothing to schedule from,
             // and `Scheduled` would claim a wake-up that is not set.
             Renewed::Replaced(None) => {
+                tracing::info!(
+                    %context,
+                    "credentials renewed, but the new ones name no deadline"
+                );
                 stop(&state, &context, Renewal::NoDeadline);
                 return;
             }
-            Renewed::Replaced(Some(at)) => at,
+            Renewed::Replaced(Some(at)) => {
+                tracing::info!(%context, deadline = %at, "credentials renewed");
+                at
+            }
             // Somebody moved this context while the plugin ran, and whoever
             // did owns what happens next.
-            Renewed::Superseded => return,
+            Renewed::Superseded => {
+                tracing::info!(
+                    %context,
+                    "the context moved while the plugin ran; leaving it to whoever moved it"
+                );
+                return;
+            }
             // Nothing was replaced and nobody was told; the same schedule
             // would run the plugin every half minute for the same token.
             Renewed::Unchanged => before,
         };
 
-        let creep = matches!(renewed, Renewed::Unchanged);
-        let Some(again) = next_wait(next, Utc::now(), creep) else {
+        if matches!(renewed, Renewed::Unchanged) {
+            tracing::info!(
+                %context,
+                ?timing,
+                "the plugin answered with the credentials already in use"
+            );
+            let Some(later) = timing.next() else {
+                tracing::warn!(
+                    %context,
+                    "the plugin never minted new credentials; the sign-in screen is next"
+                );
+                stop(&state, &context, Renewal::RanOut);
+                return;
+            };
+            timing = later;
+        } else {
+            timing = Timing::Margin;
+        }
+
+        let Some(again) = next_wait(next, Utc::now(), timing) else {
             // Out of room, and nothing here will stop the `401` now. Not
             // `NeedsYou`: no plugin asked for anybody.
+            tracing::warn!(%context, ?timing, "no room left before the deadline");
             stop(&state, &context, Renewal::RanOut);
             return;
         };
+        tracing::info!(
+            %context,
+            ?timing,
+            in_seconds = again.as_secs(),
+            "next credential renewal scheduled"
+        );
         wait = again;
         state.renew_manager.record(&context, Renewal::Scheduled);
     }
@@ -267,17 +340,49 @@ fn needs_person(error: &crate::error::Error) -> bool {
     )
 }
 
-/// When to wake next, creeping toward the deadline once the ordinary margin
-/// has been tried and answered with the same token.
+/// How far into the schedule for one deadline this has got. A plugin that
+/// keeps answering with the credentials in use is asked later each time, and
+/// finally once past the deadline, which is the only moment some of them
+/// will mint a new one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Timing {
+    /// The ordinary attempt, a margin before the deadline.
+    Margin,
+    /// It answered with the same token: ask again nearer the deadline.
+    Creep,
+    /// And nearer did not help either: ask once after it.
+    Past,
+}
+
+impl Timing {
+    /// The next timing to try, or `None` when there is nothing later left.
+    fn next(self) -> Option<Self> {
+        match self {
+            Self::Margin => Some(Self::Creep),
+            Self::Creep => Some(Self::Past),
+            Self::Past => None,
+        }
+    }
+}
+
+/// When to wake next for a given timing, or `None` when it has no moment
+/// left ahead of it.
 fn next_wait(
     deadline: DateTime<Utc>,
     now: DateTime<Utc>,
-    creep: bool,
+    timing: Timing,
 ) -> Option<std::time::Duration> {
-    if !creep {
-        return wait_for(deadline, now);
+    match timing {
+        Timing::Margin => wait_for(deadline, now),
+        Timing::Creep => (deadline - CREEP - now).to_std().ok(),
+        // Always ahead of us by construction, so this is the one timing that
+        // cannot run out of room.
+        Timing::Past => Some(
+            (deadline + PAST - now)
+                .to_std()
+                .unwrap_or(std::time::Duration::ZERO),
+        ),
     }
-    (deadline - CREEP - now).to_std().ok()
 }
 
 /// The last word on a context: what became of it, and no next wake-up.
@@ -409,8 +514,8 @@ mod tests {
         let now = Utc::now();
         let deadline = now + Duration::minutes(2);
 
-        let ordinary = next_wait(deadline, now, false).expect("still ahead");
-        let crept = next_wait(deadline, now, true).expect("still ahead");
+        let ordinary = next_wait(deadline, now, Timing::Margin).expect("still ahead");
+        let crept = next_wait(deadline, now, Timing::Creep).expect("still ahead");
         assert!(
             crept > ordinary,
             "creeping has to land later than the margin it already tried"
@@ -421,7 +526,50 @@ mod tests {
         );
 
         // Already inside the creep: there is no later left to ask at.
-        assert_eq!(next_wait(now + Duration::seconds(5), now, true), None);
+        assert_eq!(
+            next_wait(now + Duration::seconds(5), now, Timing::Creep),
+            None
+        );
+    }
+
+    /// The silent flow is given thirty seconds of its own. A last attempt
+    /// twenty seconds before the deadline can therefore finish *after* the
+    /// credentials it was renewing have died — the reader gets the refusal
+    /// this exists to prevent, from the attempt meant to prevent it.
+    #[test]
+    fn the_last_attempt_before_the_deadline_has_room_to_finish() {
+        assert!(
+            CREEP.num_seconds() as u64 > crate::auth::interactive::SILENT_FLOW_TIMEOUT_SECS,
+            "a renewal that can outlive the token it renews is not a renewal"
+        );
+        assert!(
+            CREEP < Duration::minutes(1),
+            "kubelogin hands back the token it has until a minute before expiry"
+        );
+    }
+
+    /// Some plugins mint nothing until the old credential is actually dead,
+    /// so every attempt before the deadline is answered with the token in
+    /// use and the schedule used to give up a few seconds short of the
+    /// `401`. One attempt past the deadline is a few seconds of refusal that
+    /// lifts itself, instead of a Sign in screen that waits for a click.
+    #[test]
+    fn a_plugin_that_mints_nothing_early_is_asked_once_after_the_deadline() {
+        let now = Utc::now();
+        let deadline = now + Duration::seconds(10);
+
+        assert_eq!(Timing::Margin.next(), Some(Timing::Creep));
+        assert_eq!(Timing::Creep.next(), Some(Timing::Past));
+        assert_eq!(Timing::Past.next(), None, "and then there is nothing left");
+
+        // The creep has already gone by, and the attempt past the deadline
+        // is still ahead: that is the one that reaches such a plugin.
+        assert_eq!(next_wait(deadline, now, Timing::Creep), None);
+        let past = next_wait(deadline, now, Timing::Past).expect("always ahead");
+        assert!(
+            past > (Duration::seconds(10)).to_std().unwrap(),
+            "past the deadline, not before it"
+        );
     }
 
     /// Only one kind of failure predicts a sign-in *because somebody was

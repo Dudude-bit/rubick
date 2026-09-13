@@ -5,8 +5,8 @@
     windows_subsystem = "windows"
 )]
 
-use k8s_gui_common::init_tracing;
-use k8s_gui_lib::{commands, integrations, shell, state::AppState};
+use k8s_gui_common::{init_tracing, log_dir};
+use k8s_gui_lib::{commands, integrations, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
@@ -39,10 +39,17 @@ fn main() {
     );
     let shell_env = shell::import_login_shell_env();
 
-    // Initialize tracing
-    init_tracing();
+    // Initialize tracing. The file is what a reader can hand over: a
+    // packaged Windows build is a GUI-subsystem binary with no console, so
+    // stderr reaches nobody, and every question about what the app did has
+    // had to be answered by guessing.
+    let logs = log_dir(BUNDLE);
+    init_tracing(logs.as_deref());
 
     tracing::info!("Starting Rubick application");
+    if let Some(dir) = &logs {
+        tracing::info!(path = %dir.display(), "writing this run's log");
+    }
     tracing::info!(?shell_env, "login shell environment");
 
     tauri::Builder::default()
