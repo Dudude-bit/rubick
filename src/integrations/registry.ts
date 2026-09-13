@@ -61,7 +61,7 @@ import type {
   DeliveryQuery,
   DeliveryRevision,
 } from "./gitops";
-import type { CrdColumn, CrdStatus } from "./kit";
+import type { CrdColumn } from "./kit";
 import type { InClusterHint } from "./forwarded";
 
 /**
@@ -979,12 +979,13 @@ export interface Gate {
 export interface CrdView {
   /** Does this vendor own that API group? Kind narrows it where a group is shared. */
   matches: (group: string, kind: string) => boolean;
+  // No `status` here on purpose: there was one, and no surface read it. A
+  // verdict belongs in a column, which without a `cell` is drawn as a badge.
   /**
    * The columns for one of its kinds. Every vendor has a default for a kind
    * it does not recognise, because a CRD group grows faster than this file.
    */
   columnsFor: (kind: string) => CrdColumn[];
-  status: CrdStatus;
 }
 
 /**
