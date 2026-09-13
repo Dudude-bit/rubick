@@ -38,6 +38,15 @@ export const MAX_PENDING_LINES = 5000;
 export const MAX_TRACKED_VALUES = 50;
 
 /**
+ * Keys the cap does not apply to. `container` and `pod` are the lane
+ * identity, not parsed fields: the legend draws a chip per value and reads
+ * its count from here, so dropping the map turns every chip's count into
+ * the number zero and makes a departed lane vanish with its lines still in
+ * the buffer. A 60-node DaemonSet crosses fifty pods on the first read.
+ */
+const NEVER_CAPPED: ReadonlySet<string> = new Set(["container", "pod"]);
+
+/**
  * What the retained buffer can be filtered by, counted as it fills.
  *
  * Not a `useMemo` over `logs`: a recount is a pass over up to 40 000 lines
@@ -91,6 +100,7 @@ function eachField(
   visit: (key: string, value: string) => void
 ): void {
   visit("container", line.container);
+  visit("pod", line.pod);
   visit("level", line.level ?? "unknown");
   if (!line.fields) return;
   for (const key of Object.keys(line.fields)) {
@@ -110,7 +120,8 @@ function indexLine(index: FieldIndex, line: StreamedLogLine): void {
     if (values === undefined) return;
     const count = values.get(value);
     if (count !== undefined) values.set(value, count + 1);
-    else if (values.size < MAX_TRACKED_VALUES) values.set(value, 1);
+    else if (values.size < MAX_TRACKED_VALUES || NEVER_CAPPED.has(key))
+      values.set(value, 1);
     else index.values.delete(key);
   });
 }
@@ -144,8 +155,14 @@ export interface FieldSuggestion {
   wide: boolean;
 }
 
-/** The two that are not parsed fields, and are what people filter by first. */
-const PINNED_KEYS = ["level", "container"];
+/** The ones that are not parsed fields, and are what people filter by first. */
+const PINNED_KEYS = ["level", "container", "pod"];
+
+/** A pane reading one pod has nothing to offer under `pod`. */
+function offered(index: FieldIndex, key: string): boolean {
+  if (!index.keys.has(key)) return false;
+  return key !== "pod" || index.values.get(key)?.size !== 1;
+}
 
 /**
  * The index as a list: the two always-there keys, then whatever parsed,
@@ -160,7 +177,7 @@ export function fieldSuggestions(index: FieldIndex): FieldSuggestion[] {
       (a, b) => index.keys.get(b)! - index.keys.get(a)! || a.localeCompare(b)
     );
 
-  return [...PINNED_KEYS.filter((key) => index.keys.has(key)), ...parsed].map(
+  return [...PINNED_KEYS.filter((key) => offered(index, key)), ...parsed].map(
     (key) => {
       const values = index.values.get(key);
       return {

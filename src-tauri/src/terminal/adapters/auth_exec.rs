@@ -23,6 +23,15 @@ const MAX_STDOUT_SIZE: usize = 1024 * 1024;
 /// long. `resize` floors it — the pane would otherwise ask for its own width
 /// before the plugin has printed. Tested in `auth::interactive::cred`.
 const CREDENTIAL_COLS: u16 = 8192;
+
+/// The console's cursor-position query, and the answer this adapter gives.
+///
+/// `ConPTY` holds the child until something replies, and in the window that
+/// something is xterm — inside the pane. So a flow with no pane mounted (a
+/// background renewal, or the beat before one is shown) printed nothing until
+/// it timed out. The adapter owns the pty and can answer unwatched.
+const CURSOR_QUERY: &[u8] = b"\x1b[6n";
+const CURSOR_ANSWER: &[u8] = b"\x1b[1;1R";
 const INITIAL_ROWS: u16 = 24;
 
 /// Adapter for interactive auth-exec processes.
@@ -136,6 +145,8 @@ impl TerminalAdapter for AuthExecAdapter {
 
         let (output_tx, output_rx) = mpsc::unbounded_channel::<Vec<u8>>();
         let collected = self.collected_stdout.clone();
+        let writer = Arc::new(Mutex::new(writer));
+        let answering = writer.clone();
 
         // Reader thread: blocking reads off the PTY master, tees into
         // the JSON collector, forwards to the async side via mpsc.
@@ -148,6 +159,16 @@ impl TerminalAdapter for AuthExecAdapter {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
                         let data = buf[..n].to_vec();
+                        // First: the child is blocked until this is
+                        // answered, so nothing after it ever arrives.
+                        if data
+                            .windows(CURSOR_QUERY.len())
+                            .any(|window| window == CURSOR_QUERY)
+                        {
+                            let mut w = answering.lock();
+                            let _ = w.write_all(CURSOR_ANSWER);
+                            let _ = w.flush();
+                        }
                         {
                             let mut c = collected.lock();
                             if c.len() + data.len() <= MAX_STDOUT_SIZE {
@@ -184,7 +205,7 @@ impl TerminalAdapter for AuthExecAdapter {
         });
 
         self.master = Some(Arc::new(Mutex::new(pair.master)));
-        self.writer = Some(Arc::new(Mutex::new(writer)));
+        self.writer = Some(writer);
         self.output_rx = Some(output_rx);
         self._shutdown_tx = Some(shutdown_tx);
 
@@ -550,6 +571,34 @@ mod tests {
         assert!(
             text.contains("\"kind\":\"ExecCredential\""),
             "collected_stdout lost the JSON payload; got {text:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    /// A plugin that asks where the cursor is gets an answer.
+    ///
+    /// `ConPTY` holds the child until something replies to `ESC[6n`, and the
+    /// replier is xterm, inside the pane — which a background renewal never
+    /// opens, so every silent sign-in timed out (#148, again on 4.13.0).
+    /// Asserted here: the reply reaches the pty, visible as the line
+    /// discipline's echo. That the child then proceeds cannot be shown on a
+    /// real pty, which never blocked it — that is the `windows-console` job.
+    #[tokio::test]
+    async fn a_plugin_that_asks_where_the_cursor_is_gets_an_answer() {
+        let mut adapter = AuthExecAdapter::new(
+            "/bin/sh".into(),
+            vec!["-c".into(), "printf '\\033[6n'; sleep 1".into()],
+            HashMap::new(),
+        );
+
+        adapter.connect().await.expect("spawn");
+        let drained = adapter.drain_to_exit(Duration::from_secs(5)).await;
+        adapter.close().await.expect("close");
+
+        let text = String::from_utf8_lossy(&drained);
+        assert!(
+            text.contains("[1;1R"),
+            "nobody answered the cursor query; got {text:?}"
         );
     }
 }

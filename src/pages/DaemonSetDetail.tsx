@@ -1,8 +1,17 @@
 import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
+import {
+  AlignLeft,
+  BadgeCheck,
+  History,
+  Info,
+  Layers2,
+  Trash2,
+} from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 // The one place that turns replica counts into a word. These pages kept
@@ -22,6 +31,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { ChangesTab } from "@/components/changes/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   CountBlock,
@@ -251,11 +261,47 @@ export function DaemonSetDetail() {
         content: <ContainerRows template={daemonSet} namespace={namespace} />,
       },
       {
+        id: "changes",
+        label: t("changes", "title"),
+        glyph: viewGlyph(History),
+        content: daemonSet ? (
+          <ChangesTab
+            subject={{
+              kind: "DaemonSet",
+              name: daemonSet.name,
+              namespace: daemonSet.namespace,
+              labels: daemonSet.labels,
+              annotations: daemonSet.annotations,
+            }}
+          />
+        ) : null,
+      },
+      {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
         content: <PodListCard pods={pods} error={podsError} />,
+      },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                podsError={podsError}
+                laneRule="node"
+                workload={name ? { owner: name, ownerKind: "DaemonSet" } : null}
+              />
+            </div>
+          </div>
+        ),
       },
       {
         id: "conditions",
