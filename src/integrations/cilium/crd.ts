@@ -11,7 +11,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup, NO_STATUS } from "../kit";
+import { getValueByPath, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import {
   directionsOf,
@@ -147,5 +147,4 @@ export const crd: CrdView = {
     }
   },
   // Read by no surface in this app; the verdict is the first column instead.
-  status: NO_STATUS,
 };
