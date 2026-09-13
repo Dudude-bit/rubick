@@ -530,7 +530,10 @@ pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
                 health: text(rule, "health"),
                 last_error: text(rule, "lastError"),
                 query: text(rule, "query"),
-                duration_seconds: rule.get("duration").and_then(|d| d.as_f64()).unwrap_or(0.0),
+                duration_seconds: rule
+                    .get("duration")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
                 last_evaluation: optional(rule, "lastEvaluation"),
                 labels: string_map(rule.get("labels")),
                 annotations: string_map(rule.get("annotations")),
