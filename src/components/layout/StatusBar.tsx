@@ -16,6 +16,7 @@ import { useRenewal } from "@/hooks/useCredentialRenewal";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useShortcutsStore } from "@/stores/shortcutsStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
 import { useT } from "@/i18n/useT";
@@ -70,6 +71,13 @@ export function StatusBar() {
       <span>
         {formatShortcut("mod+K")} {t("action", "hintSearch")}
       </span>
+      <button
+        type="button"
+        onClick={() => useShortcutsStore.getState().setOpen(true)}
+        className="rounded-sm hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+      >
+        {"?"} {t("shortcuts", "hintKeys")}
+      </button>
 
       <div className="flex-1" />
 
