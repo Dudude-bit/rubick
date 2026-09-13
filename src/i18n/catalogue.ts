@@ -2858,10 +2858,18 @@ export const en = {
     revisionCurrent: "{said}, current",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
-    ciliumSelectsByExpression: "by {n} expression, not spelt here",
-    ciliumNoRules: "no rules — selected endpoints are denied everything",
-    ciliumDirections: "{ingress} in · {egress} out",
-    ciliumDenies: "{n} deny",
+    ciliumNotOnTheWire: "written where this window cannot read it",
+    ciliumAndExpressions: {
+      one: "and {n} expression",
+      other: "and {n} expressions",
+    },
+    ciliumSelectsByExpression: {
+      one: "by {n} expression",
+      other: "by {n} expressions",
+    },
+    ciliumIngressRules: { one: "{n} in", other: "{n} in" },
+    ciliumEgressRules: { one: "{n} out", other: "{n} out" },
+    ciliumDenies: { one: "{n} deny", other: "{n} deny" },
     ciliumLeavesCluster: "outside the cluster",
   },
   cluster: {
