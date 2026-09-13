@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.15.0] - 2026-09-13
+
+### Added
+
+- **Every run writes a log file.** `rubick.log` in the platform's log folder,
+  with the four runs before it kept beside it. A packaged Windows build has no
+  console attached, so until now "send me the log" had no answer at all.
+  Settings › Diagnostics names the file, the copied report carries the path,
+  and anything on its way into the file that looks like a credential is
+  replaced by a count of the characters that were there.
+
+- **Background credential renewal says what it did.** It said nothing before —
+  not at any level — so two releases were shipped against a report nobody could
+  read. At the ordinary level it now records when a renewal is scheduled, when
+  the plugin runs, what came back, and why it gave up.
+
+### Fixed
+
+- **Search works again on Namespaces, CRDs, Endpoints and Helm releases** —
+  and on Gateways, Ingresses, Persistent Volumes, PVCs, Storage Classes and
+  every page of a CRD integration, which had the same fault. Typing in the box
+  narrowed nothing on any of them. Lists whose box searched every column were
+  never affected, which is why this looked like separate pages rather than one
+  switch.
+
+- **The search box means the same thing everywhere.** It used to be able to
+  aim at a single column instead, and ten lists narrowed it to the name for no
+  stated reason. It now reaches every column on the page, so an Ingress can be
+  found by the hostname it serves, a Storage Class by its provisioner, a
+  Persistent Volume by the claim bound to it.
+
+- **A credential printed at the last moment is no longer lost.** A Windows
+  console hands its buffer over after the process it was running has exited,
+  and the reader stopped at the exit — so a plugin whose credential was the
+  last thing it wrote could be read as having printed nothing. In a silent
+  renewal two of those in a row put the sign-in screen back up.
+
+- **A renewal has one more attempt after the deadline.** Some plugins mint
+  nothing while the old credential is still alive, and every attempt before it
+  expired came back with the token already in use. The last attempt before the
+  deadline also has room to finish now: it was scheduled closer to expiry than
+  the plugin is given to answer.
+
+- **A key pressed after a shell exits closes the pane** rather than painting a
+  red "the shell stopped accepting input" over what was a clean exit.
+
 ## [4.14.0] - 2026-09-12
 
 ### Added
