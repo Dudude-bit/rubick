@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-09-13T01:03:57Z",
+  "recordedAt": "2026-09-13T01:11:45Z",
   "cluster": "killercoda v1.36.1, kube-prometheus-stack (operator v0.85, Prometheus v3.14.0), helm install kps --skip-crds, serviceMonitorSelectorNilUsesHelmValues=false",
   "rules": [
     {
@@ -4079,7 +4079,7 @@
       "lastError": "vector contains metrics with the same labelset after applying alert labels",
       "query": "label_replace(vector(1), \"a\", \"x\", \"\", \"\") or label_replace(vector(1), \"b\", \"y\", \"\", \"\")",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:40.824598737Z",
+      "lastEvaluation": "2026-09-13T01:11:40.824311167Z",
       "labels": {
         "a": "same",
         "b": "same"
@@ -4098,7 +4098,7 @@
       "lastError": "",
       "query": "vector(1)",
       "durationSeconds": 60,
-      "lastEvaluation": "2026-09-13T01:03:56.386719599Z",
+      "lastEvaluation": "2026-09-13T01:11:26.386334976Z",
       "labels": {
         "severity": "warning"
       },
@@ -4124,19 +4124,41 @@
       "group": "shop",
       "file": "/etc/prometheus/rules/prometheus-kps-kube-prometheus-stack-prometheus-rulefiles-0/k8s-gui-test-shop-alerts-f265ea35-ea43-464c-9cd7-477b195088c2.yaml",
       "name": "ShopPodCrashLooping",
-      "state": "inactive",
+      "state": "firing",
       "health": "ok",
       "lastError": "",
       "query": "max_over_time(kube_pod_container_status_waiting_reason{namespace=\"k8s-gui-test\",reason=\"CrashLoopBackOff\"}[5m]) >= 1",
       "durationSeconds": 60,
-      "lastEvaluation": "2026-09-13T01:03:56.386984462Z",
+      "lastEvaluation": "2026-09-13T01:11:26.386564959Z",
       "labels": {
         "severity": "critical"
       },
       "annotations": {
         "summary": "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping."
       },
-      "alerts": []
+      "alerts": [
+        {
+          "state": "firing",
+          "activeAt": "2026-09-13T01:10:26.384748801Z",
+          "value": "1e+00",
+          "labels": {
+            "alertname": "ShopPodCrashLooping",
+            "container": "crash-demo",
+            "endpoint": "http",
+            "instance": "192.168.1.118:8080",
+            "job": "kube-state-metrics",
+            "namespace": "k8s-gui-test",
+            "pod": "crash-demo",
+            "reason": "CrashLoopBackOff",
+            "service": "kps-kube-state-metrics",
+            "severity": "critical",
+            "uid": "7c38a96e-917f-4f76-9b2a-0563d3d3709c"
+          },
+          "annotations": {
+            "summary": "Pod k8s-gui-test/crash-demo is crash looping."
+          }
+        }
+      ]
     },
     {
       "group": "alertmanager.rules",
@@ -4147,7 +4169,7 @@
       "lastError": "",
       "query": "max_over_time(alertmanager_config_last_reload_successful{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[5m]) == 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:43.005808721Z",
+      "lastEvaluation": "2026-09-13T01:11:43.005376305Z",
       "labels": {
         "severity": "critical"
       },
@@ -4167,7 +4189,7 @@
       "lastError": "",
       "query": "max_over_time(alertmanager_cluster_members{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[5m]) < on (namespace, service, cluster) group_left () count by (namespace, service, cluster) (max_over_time(alertmanager_cluster_members{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[5m]))",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:43.006018788Z",
+      "lastEvaluation": "2026-09-13T01:11:43.005600819Z",
       "labels": {
         "severity": "critical"
       },
@@ -4187,7 +4209,7 @@
       "lastError": "",
       "query": "(rate(alertmanager_notifications_failed_total{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m]) / ignoring (reason) group_left () rate(alertmanager_notifications_total{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m])) > 0.01",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:43.006139665Z",
+      "lastEvaluation": "2026-09-13T01:11:43.005726245Z",
       "labels": {
         "severity": "warning"
       },
@@ -4207,7 +4229,7 @@
       "lastError": "",
       "query": "min by (namespace, service, integration) (rate(alertmanager_notifications_failed_total{container=\"alertmanager\",integration=~\".*\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m]) / ignoring (reason) group_left () rate(alertmanager_notifications_total{container=\"alertmanager\",integration=~\".*\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m]) > 0) > 0.01",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:43.006228759Z",
+      "lastEvaluation": "2026-09-13T01:11:43.005860938Z",
       "labels": {
         "severity": "critical"
       },
@@ -4227,7 +4249,7 @@
       "lastError": "",
       "query": "min by (namespace, service, integration) (rate(alertmanager_notifications_failed_total{container=\"alertmanager\",integration!~\".*\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m]) / ignoring (reason) group_left () rate(alertmanager_notifications_total{container=\"alertmanager\",integration!~\".*\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[15m]) > 0) > 0.01",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:43.006384223Z",
+      "lastEvaluation": "2026-09-13T01:11:43.006166557Z",
       "labels": {
         "severity": "warning"
       },
@@ -4247,7 +4269,7 @@
       "lastError": "",
       "query": "count by (namespace, service, cluster) (count_values by (namespace, service, cluster) (\"config_hash\", alertmanager_config_hash{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"})) != 1",
       "durationSeconds": 1200,
-      "lastEvaluation": "2026-09-13T01:03:43.006515464Z",
+      "lastEvaluation": "2026-09-13T01:11:43.006375959Z",
       "labels": {
         "severity": "critical"
       },
@@ -4267,7 +4289,7 @@
       "lastError": "",
       "query": "(count by (namespace, service, cluster) (avg_over_time(up{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[5m]) < 0.5) / count by (namespace, service, cluster) (up{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"})) >= 0.5",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:43.006585567Z",
+      "lastEvaluation": "2026-09-13T01:11:43.00650233Z",
       "labels": {
         "severity": "critical"
       },
@@ -4287,7 +4309,7 @@
       "lastError": "",
       "query": "(count by (namespace, service, cluster) (changes(process_start_time_seconds{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[10m]) > 4) / count by (namespace, service, cluster) (up{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"})) >= 0.5",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:43.00667528Z",
+      "lastEvaluation": "2026-09-13T01:11:43.006643861Z",
       "labels": {
         "severity": "critical"
       },
@@ -4307,7 +4329,7 @@
       "lastError": "",
       "query": "max_over_time(alertmanager_cluster_failed_peers{container=\"alertmanager\",job=\"kps-kube-prometheus-stack-alertmanager\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:43.006761741Z",
+      "lastEvaluation": "2026-09-13T01:11:43.00673693Z",
       "labels": {
         "severity": "warning"
       },
@@ -4327,7 +4349,7 @@
       "lastError": "",
       "query": "max_over_time(reloader_last_reload_successful{namespace=~\".+\"}[5m]) == 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:42.205687423Z",
+      "lastEvaluation": "2026-09-13T01:11:42.206087076Z",
       "labels": {
         "severity": "warning"
       },
@@ -4347,7 +4369,7 @@
       "lastError": "",
       "query": "max without (endpoint) (sum without (instance, pod) (up{job=~\".*etcd.*\"} == bool 0) or count without (To) (sum without (instance, pod) (rate(etcd_network_peer_sent_failures_total{job=~\".*etcd.*\"}[2m])) > 0.01)) > 0",
       "durationSeconds": 1200,
-      "lastEvaluation": "2026-09-13T01:03:48.103069716Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102026391Z",
       "labels": {
         "severity": "warning"
       },
@@ -4381,12 +4403,12 @@
       "group": "etcd",
       "file": "/etc/prometheus/rules/prometheus-kps-kube-prometheus-stack-prometheus-rulefiles-0/monitoring-kps-kube-prometheus-stack-etcd-42dbf01a-9b05-49e7-9473-07c8897d1dff.yaml",
       "name": "etcdInsufficientMembers",
-      "state": "pending",
+      "state": "firing",
       "health": "ok",
       "lastError": "",
       "query": "sum without (instance, pod) (up{job=~\".*etcd.*\"} == bool 1) < ((count without (instance, pod) (up{job=~\".*etcd.*\"}) + 1) / 2)",
       "durationSeconds": 180,
-      "lastEvaluation": "2026-09-13T01:03:48.103691283Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102415789Z",
       "labels": {
         "severity": "critical"
       },
@@ -4397,7 +4419,7 @@
       },
       "alerts": [
         {
-          "state": "pending",
+          "state": "firing",
           "activeAt": "2026-09-13T01:03:18.101644552Z",
           "value": "0e+00",
           "labels": {
@@ -4426,7 +4448,7 @@
       "lastError": "",
       "query": "etcd_server_has_leader{job=~\".*etcd.*\"} == 0",
       "durationSeconds": 60,
-      "lastEvaluation": "2026-09-13T01:03:48.104123114Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102634301Z",
       "labels": {
         "severity": "critical"
       },
@@ -4446,7 +4468,7 @@
       "lastError": "",
       "query": "increase((max without (instance, pod) (etcd_server_leader_changes_seen_total{job=~\".*etcd.*\"}) or 0 * absent(etcd_server_leader_changes_seen_total{job=~\".*etcd.*\"}))[15m:1m]) >= 4",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:48.104238645Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102679743Z",
       "labels": {
         "severity": "warning"
       },
@@ -4466,7 +4488,7 @@
       "lastError": "",
       "query": "100 * sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|FailedPrecondition|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded\",job=~\".*etcd.*\"}[5m])) / sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~\".*etcd.*\"}[5m])) > 1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.10452891Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102781612Z",
       "labels": {
         "severity": "warning"
       },
@@ -4486,7 +4508,7 @@
       "lastError": "",
       "query": "100 * sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|FailedPrecondition|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded\",job=~\".*etcd.*\"}[5m])) / sum without (grpc_type, grpc_code) (rate(grpc_server_handled_total{job=~\".*etcd.*\"}[5m])) > 5",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:48.104722306Z",
+      "lastEvaluation": "2026-09-13T01:11:18.102872264Z",
       "labels": {
         "severity": "critical"
       },
@@ -4506,7 +4528,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, sum without (grpc_type) (rate(grpc_server_handling_seconds_bucket{grpc_method!=\"Defragment\",grpc_type=\"unary\",job=~\".*etcd.*\"}[5m]))) > 0.15",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.104919979Z",
+      "lastEvaluation": "2026-09-13T01:11:18.10295125Z",
       "labels": {
         "severity": "critical"
       },
@@ -4526,7 +4548,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, rate(etcd_network_peer_round_trip_time_seconds_bucket{job=~\".*etcd.*\"}[5m])) > 0.15",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105082414Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103014655Z",
       "labels": {
         "severity": "warning"
       },
@@ -4546,7 +4568,7 @@
       "lastError": "",
       "query": "rate(etcd_server_proposals_failed_total{job=~\".*etcd.*\"}[15m]) > 5",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:48.105284428Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103086627Z",
       "labels": {
         "severity": "warning"
       },
@@ -4566,7 +4588,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket{job=~\".*etcd.*\"}[5m])) > 0.5",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105424975Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103145887Z",
       "labels": {
         "severity": "warning"
       },
@@ -4586,7 +4608,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket{job=~\".*etcd.*\"}[5m])) > 1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105593957Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103198359Z",
       "labels": {
         "severity": "critical"
       },
@@ -4606,7 +4628,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, rate(etcd_disk_backend_commit_duration_seconds_bucket{job=~\".*etcd.*\"}[5m])) > 0.25",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105694284Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103283018Z",
       "labels": {
         "severity": "warning"
       },
@@ -4626,7 +4648,7 @@
       "lastError": "",
       "query": "(last_over_time(etcd_mvcc_db_total_size_in_bytes{job=~\".*etcd.*\"}[5m]) / last_over_time(etcd_server_quota_backend_bytes{job=~\".*etcd.*\"}[5m])) * 100 > 95",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105798769Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103350908Z",
       "labels": {
         "severity": "critical"
       },
@@ -4646,7 +4668,7 @@
       "lastError": "",
       "query": "predict_linear(etcd_mvcc_db_total_size_in_bytes{job=~\".*etcd.*\"}[4h], 4 * 60 * 60) > etcd_server_quota_backend_bytes{job=~\".*etcd.*\"}",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.105957005Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103468122Z",
       "labels": {
         "severity": "warning"
       },
@@ -4666,7 +4688,7 @@
       "lastError": "",
       "query": "(last_over_time(etcd_mvcc_db_total_size_in_use_in_bytes{job=~\".*etcd.*\"}[5m]) / last_over_time(etcd_mvcc_db_total_size_in_bytes{job=~\".*etcd.*\"}[5m])) < 0.5 and etcd_mvcc_db_total_size_in_use_in_bytes{job=~\".*etcd.*\"} > 104857600",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.10612356Z",
+      "lastEvaluation": "2026-09-13T01:11:18.103549423Z",
       "labels": {
         "severity": "warning"
       },
@@ -4686,7 +4708,7 @@
       "lastError": "",
       "query": "100 * (count by (cluster, job, namespace, service) (up == 0) / count by (cluster, job, namespace, service) (up)) > 10",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:31.075538786Z",
+      "lastEvaluation": "2026-09-13T01:11:31.075369605Z",
       "labels": {
         "severity": "warning"
       },
@@ -4758,7 +4780,7 @@
       "lastError": "",
       "query": "vector(1)",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:31.076180104Z",
+      "lastEvaluation": "2026-09-13T01:11:31.075979967Z",
       "labels": {
         "severity": "none"
       },
@@ -4793,7 +4815,7 @@
       "lastError": "",
       "query": "group by (namespace) (ALERTS{severity=\"info\"} == 1) unless on (namespace) group by (namespace) (ALERTS{alertname!=\"InfoInhibitor\",alertstate=\"firing\",severity=~\"warning|critical\"} == 1)",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:31.076322787Z",
+      "lastEvaluation": "2026-09-13T01:11:31.076132232Z",
       "labels": {
         "severity": "none"
       },
@@ -4813,7 +4835,7 @@
       "lastError": "",
       "query": "sum by (cluster) (apiserver_request:burnrate1h) > (14.4 * 0.01) and on (cluster) sum by (cluster) (apiserver_request:burnrate5m) > (14.4 * 0.01)",
       "durationSeconds": 120,
-      "lastEvaluation": "2026-09-13T01:03:28.134476778Z",
+      "lastEvaluation": "2026-09-13T01:11:28.134782717Z",
       "labels": {
         "long": "1h",
         "severity": "critical",
@@ -4835,7 +4857,7 @@
       "lastError": "",
       "query": "sum by (cluster) (apiserver_request:burnrate6h) > (6 * 0.01) and on (cluster) sum by (cluster) (apiserver_request:burnrate30m) > (6 * 0.01)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:28.134760517Z",
+      "lastEvaluation": "2026-09-13T01:11:28.135002698Z",
       "labels": {
         "long": "6h",
         "severity": "critical",
@@ -4857,7 +4879,7 @@
       "lastError": "",
       "query": "sum by (cluster) (apiserver_request:burnrate1d) > (3 * 0.01) and on (cluster) sum by (cluster) (apiserver_request:burnrate2h) > (3 * 0.01)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:28.134846153Z",
+      "lastEvaluation": "2026-09-13T01:11:28.135111634Z",
       "labels": {
         "long": "1d",
         "severity": "warning",
@@ -4879,7 +4901,7 @@
       "lastError": "",
       "query": "sum by (cluster) (apiserver_request:burnrate3d) > (1 * 0.01) and on (cluster) sum by (cluster) (apiserver_request:burnrate6h) > (1 * 0.01)",
       "durationSeconds": 10800,
-      "lastEvaluation": "2026-09-13T01:03:28.134928883Z",
+      "lastEvaluation": "2026-09-13T01:11:28.135203921Z",
       "labels": {
         "long": "3d",
         "severity": "warning",
@@ -4901,7 +4923,7 @@
       "lastError": "",
       "query": "(sum by (cluster) (rate(kube_state_metrics_list_total{job=\"kube-state-metrics\",result=\"error\"}[5m])) / sum by (cluster) (rate(kube_state_metrics_list_total{job=\"kube-state-metrics\"}[5m]))) > 0.01",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:47.277505395Z",
+      "lastEvaluation": "2026-09-13T01:11:17.277752647Z",
       "labels": {
         "severity": "critical"
       },
@@ -4921,7 +4943,7 @@
       "lastError": "",
       "query": "(sum by (cluster) (rate(kube_state_metrics_watch_total{job=\"kube-state-metrics\",result=\"error\"}[5m])) / sum by (cluster) (rate(kube_state_metrics_watch_total{job=\"kube-state-metrics\"}[5m]))) > 0.01",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:47.277774537Z",
+      "lastEvaluation": "2026-09-13T01:11:17.277957278Z",
       "labels": {
         "severity": "critical"
       },
@@ -4941,7 +4963,7 @@
       "lastError": "",
       "query": "stdvar by (cluster) (kube_state_metrics_total_shards{job=\"kube-state-metrics\"}) != 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:47.277867592Z",
+      "lastEvaluation": "2026-09-13T01:11:17.278059084Z",
       "labels": {
         "severity": "critical"
       },
@@ -4961,7 +4983,7 @@
       "lastError": "",
       "query": "2 ^ max by (cluster) (kube_state_metrics_total_shards{job=\"kube-state-metrics\"}) - 1 - sum by (cluster) (2 ^ max by (cluster, shard_ordinal) (kube_state_metrics_shard_ordinal{job=\"kube-state-metrics\"})) != 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:47.277912688Z",
+      "lastEvaluation": "2026-09-13T01:11:17.278116741Z",
       "labels": {
         "severity": "critical"
       },
@@ -4976,12 +4998,12 @@
       "group": "kubernetes-apps",
       "file": "/etc/prometheus/rules/prometheus-kps-kube-prometheus-stack-prometheus-rulefiles-0/monitoring-kps-kube-prometheus-stack-kubernetes-apps-0a18eefa-0279-4b01-9d00-6170c23f9b17.yaml",
       "name": "KubePodCrashLooping",
-      "state": "inactive",
+      "state": "pending",
       "health": "ok",
       "lastError": "",
       "query": "max_over_time(kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",namespace=~\".*\",reason=\"CrashLoopBackOff\"}[5m]) >= 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.162332284Z",
+      "lastEvaluation": "2026-09-13T01:11:37.161918489Z",
       "labels": {
         "severity": "warning"
       },
@@ -4990,18 +5012,42 @@
         "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping",
         "summary": "Pod is crash looping."
       },
-      "alerts": []
+      "alerts": [
+        {
+          "state": "pending",
+          "activeAt": "2026-09-13T01:10:07.160658967Z",
+          "value": "1e+00",
+          "labels": {
+            "alertname": "KubePodCrashLooping",
+            "container": "crash-demo",
+            "endpoint": "http",
+            "instance": "192.168.1.118:8080",
+            "job": "kube-state-metrics",
+            "namespace": "k8s-gui-test",
+            "pod": "crash-demo",
+            "reason": "CrashLoopBackOff",
+            "service": "kps-kube-state-metrics",
+            "severity": "warning",
+            "uid": "7c38a96e-917f-4f76-9b2a-0563d3d3709c"
+          },
+          "annotations": {
+            "description": "Pod k8s-gui-test/crash-demo (crash-demo) is in waiting state (reason: \"CrashLoopBackOff\") on cluster .",
+            "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping",
+            "summary": "Pod is crash looping."
+          }
+        }
+      ]
     },
     {
       "group": "kubernetes-apps",
       "file": "/etc/prometheus/rules/prometheus-kps-kube-prometheus-stack-prometheus-rulefiles-0/monitoring-kps-kube-prometheus-stack-kubernetes-apps-0a18eefa-0279-4b01-9d00-6170c23f9b17.yaml",
       "name": "KubePodNotReady",
-      "state": "inactive",
+      "state": "pending",
       "health": "ok",
       "lastError": "",
       "query": "sum by (namespace, pod, job, cluster) (max by (namespace, pod, job, cluster) (kube_pod_status_phase{job=\"kube-state-metrics\",namespace=~\".*\",phase=~\"Pending|Unknown\"} or (kube_pod_status_phase{job=\"kube-state-metrics\",namespace=~\".*\",phase=\"Running\"} == 1 and on (namespace, pod, cluster) kube_pod_status_ready{condition=\"true\",job=\"kube-state-metrics\",namespace=~\".*\"} == 0)) * on (namespace, pod, cluster) group_left () topk by (namespace, pod, cluster) (1, max by (namespace, pod, owner_kind, cluster) (kube_pod_owner{owner_kind!=\"Job\"}))) > 0 unless on (namespace, pod, cluster) kube_pod_status_reason{job=\"kube-state-metrics\",namespace=~\".*\",reason=\"SchedulingGated\"} == 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.162636741Z",
+      "lastEvaluation": "2026-09-13T01:11:37.162304629Z",
       "labels": {
         "severity": "warning"
       },
@@ -5010,7 +5056,25 @@
         "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodnotready",
         "summary": "Pod has been in a non-ready state for more than 15 minutes."
       },
-      "alerts": []
+      "alerts": [
+        {
+          "state": "pending",
+          "activeAt": "2026-09-13T01:06:07.160658967Z",
+          "value": "1e+00",
+          "labels": {
+            "alertname": "KubePodNotReady",
+            "job": "kube-state-metrics",
+            "namespace": "k8s-gui-test",
+            "pod": "crash-demo",
+            "severity": "warning"
+          },
+          "annotations": {
+            "description": "Pod k8s-gui-test/crash-demo has been in a non-ready state for longer than 15 minutes on cluster .",
+            "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodnotready",
+            "summary": "Pod has been in a non-ready state for more than 15 minutes."
+          }
+        }
+      ]
     },
     {
       "group": "kubernetes-apps",
@@ -5021,7 +5085,7 @@
       "lastError": "",
       "query": "kube_deployment_status_observed_generation{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_deployment_metadata_generation{job=\"kube-state-metrics\",namespace=~\".*\"}",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163327467Z",
+      "lastEvaluation": "2026-09-13T01:11:37.162947442Z",
       "labels": {
         "severity": "warning"
       },
@@ -5041,7 +5105,7 @@
       "lastError": "",
       "query": "(kube_deployment_spec_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} > kube_deployment_status_replicas_available{job=\"kube-state-metrics\",namespace=~\".*\"}) and (changes(kube_deployment_status_replicas_updated{job=\"kube-state-metrics\",namespace=~\".*\"}[10m]) == 0)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163450593Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163040047Z",
       "labels": {
         "severity": "warning"
       },
@@ -5061,7 +5125,7 @@
       "lastError": "",
       "query": "kube_deployment_status_condition{condition=\"Progressing\",job=\"kube-state-metrics\",namespace=~\".*\",status=\"false\"} != 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163612892Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163191749Z",
       "labels": {
         "severity": "warning"
       },
@@ -5081,7 +5145,7 @@
       "lastError": "",
       "query": "(kube_statefulset_status_replicas_ready{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_statefulset_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}) and (changes(kube_statefulset_status_replicas_updated{job=\"kube-state-metrics\",namespace=~\".*\"}[10m]) == 0)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163697887Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163256706Z",
       "labels": {
         "severity": "warning"
       },
@@ -5101,7 +5165,7 @@
       "lastError": "",
       "query": "kube_statefulset_status_observed_generation{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_statefulset_metadata_generation{job=\"kube-state-metrics\",namespace=~\".*\"}",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163822872Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163378667Z",
       "labels": {
         "severity": "warning"
       },
@@ -5121,7 +5185,7 @@
       "lastError": "",
       "query": "(max by (namespace, statefulset, job, cluster) (kube_statefulset_status_current_revision{job=\"kube-state-metrics\",namespace=~\".*\"} unless kube_statefulset_status_update_revision{job=\"kube-state-metrics\",namespace=~\".*\"}) * on (namespace, statefulset, job, cluster) (kube_statefulset_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_statefulset_status_replicas_updated{job=\"kube-state-metrics\",namespace=~\".*\"})) and on (namespace, statefulset, job, cluster) (changes(kube_statefulset_status_replicas_updated{job=\"kube-state-metrics\",namespace=~\".*\"}[5m]) == 0)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.163898712Z",
+      "lastEvaluation": "2026-09-13T01:11:37.16344088Z",
       "labels": {
         "severity": "warning"
       },
@@ -5141,7 +5205,7 @@
       "lastError": "",
       "query": "((kube_daemonset_status_current_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_daemonset_status_desired_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"}) or (kube_daemonset_status_number_misscheduled{job=\"kube-state-metrics\",namespace=~\".*\"} != 0) or (kube_daemonset_status_updated_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_daemonset_status_desired_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"}) or (kube_daemonset_status_number_available{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_daemonset_status_desired_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"})) and (changes(kube_daemonset_status_updated_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"}[5m]) == 0)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.164194008Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163609108Z",
       "labels": {
         "severity": "warning"
       },
@@ -5161,7 +5225,7 @@
       "lastError": "",
       "query": "kube_pod_container_status_waiting_reason{job=\"kube-state-metrics\",namespace=~\".*\",reason!=\"CrashLoopBackOff\"} > 0",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:37.164462487Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163854434Z",
       "labels": {
         "severity": "warning"
       },
@@ -5181,7 +5245,7 @@
       "lastError": "",
       "query": "kube_daemonset_status_desired_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"} - kube_daemonset_status_current_number_scheduled{job=\"kube-state-metrics\",namespace=~\".*\"} > 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:37.164526482Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163905356Z",
       "labels": {
         "severity": "warning"
       },
@@ -5201,7 +5265,7 @@
       "lastError": "",
       "query": "kube_daemonset_status_number_misscheduled{job=\"kube-state-metrics\",namespace=~\".*\"} > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.164650849Z",
+      "lastEvaluation": "2026-09-13T01:11:37.163979478Z",
       "labels": {
         "severity": "warning"
       },
@@ -5221,7 +5285,7 @@
       "lastError": "",
       "query": "time() - max by (namespace, job_name, cluster) (kube_job_status_start_time{job=\"kube-state-metrics\",namespace=~\".*\"} and kube_job_status_active{job=\"kube-state-metrics\",namespace=~\".*\"} > 0) > 43200",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:37.164731518Z",
+      "lastEvaluation": "2026-09-13T01:11:37.164027797Z",
       "labels": {
         "severity": "warning"
       },
@@ -5241,7 +5305,7 @@
       "lastError": "",
       "query": "kube_job_failed{job=\"kube-state-metrics\",namespace=~\".*\"} > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.164846348Z",
+      "lastEvaluation": "2026-09-13T01:11:37.164153366Z",
       "labels": {
         "severity": "warning"
       },
@@ -5261,7 +5325,7 @@
       "lastError": "",
       "query": "(kube_horizontalpodautoscaler_status_desired_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_horizontalpodautoscaler_status_current_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}) and (kube_horizontalpodautoscaler_status_current_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} > kube_horizontalpodautoscaler_spec_min_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}) and (kube_horizontalpodautoscaler_status_current_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} < kube_horizontalpodautoscaler_spec_max_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}) and changes(kube_horizontalpodautoscaler_status_current_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}[15m]) == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.164900781Z",
+      "lastEvaluation": "2026-09-13T01:11:37.164230485Z",
       "labels": {
         "severity": "warning"
       },
@@ -5281,7 +5345,7 @@
       "lastError": "",
       "query": "(kube_horizontalpodautoscaler_status_current_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} == kube_horizontalpodautoscaler_spec_max_replicas{job=\"kube-state-metrics\",namespace=~\".*\"}) and on (namespace, horizontalpodautoscaler, cluster) (kube_horizontalpodautoscaler_spec_max_replicas{job=\"kube-state-metrics\",namespace=~\".*\"} != kube_horizontalpodautoscaler_spec_min_replicas{job=\"kube-state-metrics\",namespace=~\".*\"})",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.165273081Z",
+      "lastEvaluation": "2026-09-13T01:11:37.164375375Z",
       "labels": {
         "severity": "warning"
       },
@@ -5301,7 +5365,7 @@
       "lastError": "",
       "query": "(kube_poddisruptionbudget_status_desired_healthy{job=\"kube-state-metrics\",namespace=~\".*\"} - kube_poddisruptionbudget_status_current_healthy{job=\"kube-state-metrics\",namespace=~\".*\"}) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:37.165382604Z",
+      "lastEvaluation": "2026-09-13T01:11:37.164457003Z",
       "labels": {
         "severity": "warning"
       },
@@ -5321,7 +5385,7 @@
       "lastError": "",
       "query": "((sum by (cluster) (namespace_cpu:kube_pod_container_resource_requests:sum) - sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) > 0) and count by (cluster) (max by (cluster, node) (kube_node_role{job=\"kube-state-metrics\",role=\"control-plane\"})) < 3) or (sum by (cluster) (namespace_cpu:kube_pod_container_resource_requests:sum) - ((sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) - max by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"})) > 0) > 0)",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:31.879160124Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879130876Z",
       "labels": {
         "severity": "warning"
       },
@@ -5341,7 +5405,7 @@
       "lastError": "",
       "query": "((sum by (cluster) (namespace_memory:kube_pod_container_resource_requests:sum) - sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) > 0) and count by (cluster) (max by (cluster, node) (kube_node_role{job=\"kube-state-metrics\",role=\"control-plane\"})) < 3) or (sum by (cluster) (namespace_memory:kube_pod_container_resource_requests:sum) - ((sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) - max by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"})) > 0) > 0)",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:31.87946851Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879413415Z",
       "labels": {
         "severity": "warning"
       },
@@ -5361,7 +5425,7 @@
       "lastError": "",
       "query": "sum by (cluster) (min without (resource) (kube_resourcequota{job=\"kube-state-metrics\",resource=~\"(cpu|requests.cpu)\",type=\"hard\"})) / sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"cpu\"}) > 1.5",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:31.879627878Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879552018Z",
       "labels": {
         "severity": "warning"
       },
@@ -5381,7 +5445,7 @@
       "lastError": "",
       "query": "sum by (cluster) (min without (resource) (kube_resourcequota{job=\"kube-state-metrics\",resource=~\"(memory|requests.memory)\",type=\"hard\"})) / sum by (cluster) (kube_node_status_allocatable{job=\"kube-state-metrics\",resource=\"memory\"}) > 1.5",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:31.879751491Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879665065Z",
       "labels": {
         "severity": "warning"
       },
@@ -5401,7 +5465,7 @@
       "lastError": "",
       "query": "topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"used\"})) / on (cluster, namespace, resource, resourcequota) group_left () topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"hard\"}) > 0) > 0.9 < 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:31.879840163Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879762324Z",
       "labels": {
         "severity": "info"
       },
@@ -5421,7 +5485,7 @@
       "lastError": "",
       "query": "topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"used\"})) / on (cluster, namespace, resource, resourcequota) group_left () topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"hard\"}) > 0) == 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:31.879914733Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879834826Z",
       "labels": {
         "severity": "info"
       },
@@ -5441,7 +5505,7 @@
       "lastError": "",
       "query": "topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"used\"})) / on (cluster, namespace, resource, resourcequota) group_left () topk by (cluster, namespace, resource, resourcequota) (1, max without (instance, job, type) (kube_resourcequota{job=\"kube-state-metrics\",type=\"hard\"}) > 0) > 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:31.879974073Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879899494Z",
       "labels": {
         "severity": "warning"
       },
@@ -5461,7 +5525,7 @@
       "lastError": "",
       "query": "sum without (id, metrics_path, name, image, endpoint, job, node) (topk by (cluster, namespace, pod, container, instance) (1, increase(container_cpu_cfs_throttled_periods_total{container!=\"\",job=\"kubelet\",metrics_path=\"/metrics/cadvisor\"}[5m]))) / on (cluster, namespace, pod, container, instance) group_left () sum without (id, metrics_path, name, image, endpoint, job, node) (topk by (cluster, namespace, pod, container, instance) (1, increase(container_cpu_cfs_periods_total{job=\"kubelet\",metrics_path=\"/metrics/cadvisor\"}[5m]))) > (25 / 100)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:31.880030983Z",
+      "lastEvaluation": "2026-09-13T01:11:31.879961375Z",
       "labels": {
         "severity": "info"
       },
@@ -5481,7 +5545,7 @@
       "lastError": "",
       "query": "(kubelet_volume_stats_available_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} / kubelet_volume_stats_capacity_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}) < 0.03 and kubelet_volume_stats_used_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} > 0 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_access_mode{access_mode=\"ReadOnlyMany\"} == 1 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_labels{label_excluded_from_alerts=\"true\"} == 1",
       "durationSeconds": 60,
-      "lastEvaluation": "2026-09-13T01:03:34.072190937Z",
+      "lastEvaluation": "2026-09-13T01:11:34.072856789Z",
       "labels": {
         "severity": "critical"
       },
@@ -5501,7 +5565,7 @@
       "lastError": "",
       "query": "(kubelet_volume_stats_available_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} / kubelet_volume_stats_capacity_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}) < 0.15 and kubelet_volume_stats_used_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} > 0 and predict_linear(kubelet_volume_stats_available_bytes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}[6h], 4 * 24 * 3600) < 0 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_access_mode{access_mode=\"ReadOnlyMany\"} == 1 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_labels{label_excluded_from_alerts=\"true\"} == 1",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:34.072493232Z",
+      "lastEvaluation": "2026-09-13T01:11:34.073163399Z",
       "labels": {
         "severity": "warning"
       },
@@ -5521,7 +5585,7 @@
       "lastError": "",
       "query": "(kubelet_volume_stats_inodes_free{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} / kubelet_volume_stats_inodes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}) < 0.03 and kubelet_volume_stats_inodes_used{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} > 0 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_access_mode{access_mode=\"ReadOnlyMany\"} == 1 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_labels{label_excluded_from_alerts=\"true\"} == 1",
       "durationSeconds": 60,
-      "lastEvaluation": "2026-09-13T01:03:34.072673265Z",
+      "lastEvaluation": "2026-09-13T01:11:34.073390451Z",
       "labels": {
         "severity": "critical"
       },
@@ -5541,7 +5605,7 @@
       "lastError": "",
       "query": "(kubelet_volume_stats_inodes_free{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} / kubelet_volume_stats_inodes{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}) < 0.15 and kubelet_volume_stats_inodes_used{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"} > 0 and predict_linear(kubelet_volume_stats_inodes_free{job=\"kubelet\",metrics_path=\"/metrics\",namespace=~\".*\"}[6h], 4 * 24 * 3600) < 0 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_access_mode{access_mode=\"ReadOnlyMany\"} == 1 unless on (cluster, namespace, persistentvolumeclaim) kube_persistentvolumeclaim_labels{label_excluded_from_alerts=\"true\"} == 1",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:34.072943163Z",
+      "lastEvaluation": "2026-09-13T01:11:34.073519771Z",
       "labels": {
         "severity": "warning"
       },
@@ -5561,7 +5625,7 @@
       "lastError": "",
       "query": "kube_persistentvolume_status_phase{job=\"kube-state-metrics\",phase=~\"Failed|Pending\"} > 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:34.07311397Z",
+      "lastEvaluation": "2026-09-13T01:11:34.073691248Z",
       "labels": {
         "severity": "critical"
       },
@@ -5581,7 +5645,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.01, sum without (namespace, service, endpoint) (rate(apiserver_client_certificate_expiration_seconds_bucket{job=\"apiserver\"}[5m]))) < 604800 and on (job, cluster, instance) apiserver_client_certificate_expiration_seconds_count{job=\"apiserver\"} > 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:50.588259518Z",
+      "lastEvaluation": "2026-09-13T01:11:20.587915222Z",
       "labels": {
         "severity": "warning"
       },
@@ -5601,7 +5665,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.01, sum without (namespace, service, endpoint) (rate(apiserver_client_certificate_expiration_seconds_bucket{job=\"apiserver\"}[5m]))) < 86400 and on (job, cluster, instance) apiserver_client_certificate_expiration_seconds_count{job=\"apiserver\"} > 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:50.588527219Z",
+      "lastEvaluation": "2026-09-13T01:11:20.588191127Z",
       "labels": {
         "severity": "critical"
       },
@@ -5621,7 +5685,7 @@
       "lastError": "",
       "query": "sum by (cluster, instance, name, reason) (increase(aggregator_unavailable_apiservice_total{job=\"apiserver\"}[1m])) > 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:50.588669971Z",
+      "lastEvaluation": "2026-09-13T01:11:20.588321052Z",
       "labels": {
         "severity": "warning"
       },
@@ -5641,7 +5705,7 @@
       "lastError": "",
       "query": "(1 - max by (name, namespace, cluster) (avg_over_time(aggregator_unavailable_apiservice{job=\"apiserver\"}[10m]))) * 100 < 85",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:50.588725478Z",
+      "lastEvaluation": "2026-09-13T01:11:20.588378185Z",
       "labels": {
         "severity": "warning"
       },
@@ -5661,7 +5725,7 @@
       "lastError": "",
       "query": "absent(up{job=\"apiserver\"})",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:50.588860474Z",
+      "lastEvaluation": "2026-09-13T01:11:20.58854471Z",
       "labels": {
         "severity": "critical"
       },
@@ -5681,7 +5745,7 @@
       "lastError": "",
       "query": "up{job=\"apiserver\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:50.58890265Z",
+      "lastEvaluation": "2026-09-13T01:11:20.588596863Z",
       "labels": {
         "severity": "warning"
       },
@@ -5701,7 +5765,7 @@
       "lastError": "",
       "query": "sum by (cluster) (rate(apiserver_request_terminations_total{job=\"apiserver\"}[10m])) / (sum by (cluster) (rate(apiserver_request_total{job=\"apiserver\"}[10m])) + sum by (cluster) (rate(apiserver_request_terminations_total{job=\"apiserver\"}[10m]))) > 0.2",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:50.588934729Z",
+      "lastEvaluation": "2026-09-13T01:11:20.588631486Z",
       "labels": {
         "severity": "warning"
       },
@@ -5721,7 +5785,7 @@
       "lastError": "",
       "query": "absent(up{job=\"kube-controller-manager\"})",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:34.81017576Z",
+      "lastEvaluation": "2026-09-13T01:11:34.81027365Z",
       "labels": {
         "severity": "critical"
       },
@@ -5741,7 +5805,7 @@
       "lastError": "",
       "query": "up{job=\"kube-controller-manager\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:34.810319746Z",
+      "lastEvaluation": "2026-09-13T01:11:34.810452936Z",
       "labels": {
         "severity": "warning"
       },
@@ -5783,7 +5847,7 @@
       "lastError": "",
       "query": "count by (cluster) (count by (git_version, cluster) (label_replace(kubernetes_build_info{job!~\"kube-dns|coredns\"}, \"git_version\", \"$1\", \"git_version\", \"(v[0-9]*.[0-9]*).*\"))) > 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:46.162010064Z",
+      "lastEvaluation": "2026-09-13T01:11:16.161992356Z",
       "labels": {
         "severity": "warning"
       },
@@ -5803,7 +5867,7 @@
       "lastError": "",
       "query": "(sum by (cluster, instance, job, namespace) (rate(rest_client_requests_total{code=~\"5..\",job=\"apiserver\"}[5m])) / sum by (cluster, instance, job, namespace) (rate(rest_client_requests_total{job=\"apiserver\"}[5m]))) > 0.01",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:46.162264057Z",
+      "lastEvaluation": "2026-09-13T01:11:16.162297827Z",
       "labels": {
         "severity": "warning"
       },
@@ -5823,7 +5887,7 @@
       "lastError": "",
       "query": "absent(up{job=\"kube-proxy\"})",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:46.898855437Z",
+      "lastEvaluation": "2026-09-13T01:11:16.898957523Z",
       "labels": {
         "severity": "critical"
       },
@@ -5859,7 +5923,7 @@
       "lastError": "",
       "query": "up{job=\"kube-proxy\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:46.899373263Z",
+      "lastEvaluation": "2026-09-13T01:11:16.899443034Z",
       "labels": {
         "severity": "warning"
       },
@@ -5879,7 +5943,7 @@
       "lastError": "",
       "query": "kube_node_status_condition{condition=\"Ready\",job=\"kube-state-metrics\",status=\"true\"} == 0 and on (cluster, node) kube_node_spec_unschedulable{job=\"kube-state-metrics\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.268304959Z",
+      "lastEvaluation": "2026-09-13T01:11:42.268705024Z",
       "labels": {
         "severity": "warning"
       },
@@ -5899,7 +5963,7 @@
       "lastError": "",
       "query": "kube_node_status_condition{condition=~\"(MemoryPressure|DiskPressure|PIDPressure)\",job=\"kube-state-metrics\",status=\"true\"} == 1 and on (cluster, node) kube_node_spec_unschedulable{job=\"kube-state-metrics\"} == 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:42.268558031Z",
+      "lastEvaluation": "2026-09-13T01:11:42.268959305Z",
       "labels": {
         "severity": "info"
       },
@@ -5919,7 +5983,7 @@
       "lastError": "",
       "query": "(kube_node_spec_taint{effect=\"NoSchedule\",job=\"kube-state-metrics\",key=\"node.kubernetes.io/unreachable\"} unless ignoring (key, value) kube_node_spec_taint{job=\"kube-state-metrics\",key=~\"ToBeDeletedByClusterAutoscaler|cloud.google.com/impending-node-termination|aws-node-termination-handler/spot-itn\"}) == 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.268728634Z",
+      "lastEvaluation": "2026-09-13T01:11:42.269220718Z",
       "labels": {
         "severity": "warning"
       },
@@ -5939,7 +6003,7 @@
       "lastError": "",
       "query": "(max by (cluster, instance) (kubelet_running_pods{job=\"kubelet\",metrics_path=\"/metrics\"} > 1) * on (cluster, instance) group_left (node) max by (cluster, instance, node) (kubelet_node_name{job=\"kubelet\",metrics_path=\"/metrics\"})) / on (cluster, node) group_left () max by (cluster, node) (kube_node_status_capacity{job=\"kube-state-metrics\",resource=\"pods\"} != 1) > 0.95",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.268878486Z",
+      "lastEvaluation": "2026-09-13T01:11:42.269483826Z",
       "labels": {
         "severity": "info"
       },
@@ -5959,7 +6023,7 @@
       "lastError": "",
       "query": "sum by (cluster, node) (changes(kube_node_status_condition{condition=\"Ready\",job=\"kube-state-metrics\",status=\"true\"}[15m])) > 2 and on (cluster, node) kube_node_spec_unschedulable{job=\"kube-state-metrics\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.269090995Z",
+      "lastEvaluation": "2026-09-13T01:11:42.269917758Z",
       "labels": {
         "severity": "warning"
       },
@@ -5979,7 +6043,7 @@
       "lastError": "",
       "query": "sum by (cluster, eviction_signal, instance) (rate(kubelet_evictions{job=\"kubelet\",metrics_path=\"/metrics\"}[15m])) * on (cluster, instance) group_left (node) max by (cluster, instance, node) (kubelet_node_name{job=\"kubelet\",metrics_path=\"/metrics\"}) > 0",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:42.269228719Z",
+      "lastEvaluation": "2026-09-13T01:11:42.270137244Z",
       "labels": {
         "severity": "info"
       },
@@ -5999,7 +6063,7 @@
       "lastError": "",
       "query": "node_quantile:kubelet_pleg_relist_duration_seconds:histogram_quantile{quantile=\"0.99\"} >= 10",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:42.269341746Z",
+      "lastEvaluation": "2026-09-13T01:11:42.27030685Z",
       "labels": {
         "severity": "warning"
       },
@@ -6019,7 +6083,7 @@
       "lastError": "",
       "query": "histogram_quantile(0.99, sum by (cluster, instance, le) (topk by (cluster, instance, le, operation_type) (1, rate(kubelet_pod_worker_duration_seconds_bucket{job=\"kubelet\",metrics_path=\"/metrics\"}[5m])))) * on (cluster, instance) group_left (node) topk by (cluster, instance, node) (1, kubelet_node_name{job=\"kubelet\",metrics_path=\"/metrics\"}) > 60",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.269388461Z",
+      "lastEvaluation": "2026-09-13T01:11:42.270406198Z",
       "labels": {
         "severity": "warning"
       },
@@ -6039,7 +6103,7 @@
       "lastError": "",
       "query": "kubelet_certificate_manager_client_ttl_seconds < 604800",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:42.269681275Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271215127Z",
       "labels": {
         "severity": "warning"
       },
@@ -6059,7 +6123,7 @@
       "lastError": "",
       "query": "kubelet_certificate_manager_client_ttl_seconds < 86400",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:42.269726285Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271288794Z",
       "labels": {
         "severity": "critical"
       },
@@ -6079,7 +6143,7 @@
       "lastError": "",
       "query": "kubelet_certificate_manager_server_ttl_seconds < 604800",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:42.269762684Z",
+      "lastEvaluation": "2026-09-13T01:11:42.2713701Z",
       "labels": {
         "severity": "warning"
       },
@@ -6099,7 +6163,7 @@
       "lastError": "",
       "query": "kubelet_certificate_manager_server_ttl_seconds < 86400",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:42.269849717Z",
+      "lastEvaluation": "2026-09-13T01:11:42.27142626Z",
       "labels": {
         "severity": "critical"
       },
@@ -6119,7 +6183,7 @@
       "lastError": "",
       "query": "increase(kubelet_certificate_manager_client_expiration_renew_errors[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.269884377Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271491276Z",
       "labels": {
         "severity": "warning"
       },
@@ -6139,7 +6203,7 @@
       "lastError": "",
       "query": "increase(kubelet_server_expiration_renew_errors[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.269965273Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271586193Z",
       "labels": {
         "severity": "warning"
       },
@@ -6159,7 +6223,7 @@
       "lastError": "",
       "query": "up{job=\"kubelet\",metrics_path=\"/metrics\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.270006581Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271646243Z",
       "labels": {
         "severity": "warning"
       },
@@ -6179,7 +6243,7 @@
       "lastError": "",
       "query": "count by (cluster) (kube_node_info{job=\"kube-state-metrics\"}) unless on (cluster) count by (cluster) (up{job=\"kubelet\",metrics_path=\"/metrics\"} == 1)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:42.270078345Z",
+      "lastEvaluation": "2026-09-13T01:11:42.271738978Z",
       "labels": {
         "severity": "critical"
       },
@@ -6199,7 +6263,7 @@
       "lastError": "",
       "query": "absent(up{job=\"kube-scheduler\"})",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:35.830102961Z",
+      "lastEvaluation": "2026-09-13T01:11:35.829819181Z",
       "labels": {
         "severity": "critical"
       },
@@ -6219,7 +6283,7 @@
       "lastError": "",
       "query": "up{job=\"kube-scheduler\"} == 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:35.830271149Z",
+      "lastEvaluation": "2026-09-13T01:11:35.829942161Z",
       "labels": {
         "severity": "warning"
       },
@@ -6261,7 +6325,7 @@
       "lastError": "",
       "query": "(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_size_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 15 and predict_linear(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"}[6h], 24 * 60 * 60) < 0 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.104557782Z",
+      "lastEvaluation": "2026-09-13T01:11:36.104080861Z",
       "labels": {
         "severity": "warning"
       },
@@ -6281,7 +6345,7 @@
       "lastError": "",
       "query": "(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_size_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 10 and predict_linear(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"}[6h], 4 * 60 * 60) < 0 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.1048977Z",
+      "lastEvaluation": "2026-09-13T01:11:36.104486971Z",
       "labels": {
         "severity": "critical"
       },
@@ -6301,7 +6365,7 @@
       "lastError": "",
       "query": "(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_size_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 5 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 1800,
-      "lastEvaluation": "2026-09-13T01:03:36.105092578Z",
+      "lastEvaluation": "2026-09-13T01:11:36.104744372Z",
       "labels": {
         "severity": "warning"
       },
@@ -6321,7 +6385,7 @@
       "lastError": "",
       "query": "(node_filesystem_avail_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_size_bytes{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 3 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 1800,
-      "lastEvaluation": "2026-09-13T01:03:36.105224899Z",
+      "lastEvaluation": "2026-09-13T01:11:36.10491087Z",
       "labels": {
         "severity": "critical"
       },
@@ -6341,7 +6405,7 @@
       "lastError": "",
       "query": "(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_files{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 40 and predict_linear(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"}[6h], 24 * 60 * 60) < 0 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.105346611Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105081391Z",
       "labels": {
         "severity": "warning"
       },
@@ -6361,7 +6425,7 @@
       "lastError": "",
       "query": "(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_files{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 20 and predict_linear(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"}[6h], 4 * 60 * 60) < 0 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.105516043Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105316598Z",
       "labels": {
         "severity": "critical"
       },
@@ -6381,7 +6445,7 @@
       "lastError": "",
       "query": "(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_files{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 5 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.105663449Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105562167Z",
       "labels": {
         "severity": "warning"
       },
@@ -6401,7 +6465,7 @@
       "lastError": "",
       "query": "(node_filesystem_files_free{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} / node_filesystem_files{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} * 100 < 3 and node_filesystem_readonly{fstype!=\"\",job=\"node-exporter\",mountpoint!=\"\"} == 0)",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.10578806Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105728402Z",
       "labels": {
         "severity": "critical"
       },
@@ -6421,7 +6485,7 @@
       "lastError": "",
       "query": "rate(node_network_receive_errs_total{job=\"node-exporter\"}[2m]) / rate(node_network_receive_packets_total{job=\"node-exporter\"}[2m]) > 0.01",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.105921319Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105845977Z",
       "labels": {
         "severity": "warning"
       },
@@ -6441,7 +6505,7 @@
       "lastError": "",
       "query": "rate(node_network_transmit_errs_total{job=\"node-exporter\"}[2m]) / rate(node_network_transmit_packets_total{job=\"node-exporter\"}[2m]) > 0.01",
       "durationSeconds": 3600,
-      "lastEvaluation": "2026-09-13T01:03:36.106109428Z",
+      "lastEvaluation": "2026-09-13T01:11:36.105987504Z",
       "labels": {
         "severity": "warning"
       },
@@ -6461,7 +6525,7 @@
       "lastError": "",
       "query": "(node_nf_conntrack_entries{job=\"node-exporter\"} / node_nf_conntrack_entries_limit) > 0.75",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:36.106261236Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106138587Z",
       "labels": {
         "severity": "warning"
       },
@@ -6481,7 +6545,7 @@
       "lastError": "",
       "query": "node_textfile_scrape_error{job=\"node-exporter\"} == 1",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:36.10632605Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106197643Z",
       "labels": {
         "severity": "warning"
       },
@@ -6501,7 +6565,7 @@
       "lastError": "",
       "query": "(node_timex_offset_seconds{job=\"node-exporter\"} > 0.05 and deriv(node_timex_offset_seconds{job=\"node-exporter\"}[5m]) >= 0) or (node_timex_offset_seconds{job=\"node-exporter\"} < -0.05 and deriv(node_timex_offset_seconds{job=\"node-exporter\"}[5m]) <= 0)",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:36.106363365Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106235827Z",
       "labels": {
         "severity": "warning"
       },
@@ -6521,7 +6585,7 @@
       "lastError": "",
       "query": "min_over_time(node_timex_sync_status{job=\"node-exporter\"}[5m]) == 0 and node_timex_maxerror_seconds{job=\"node-exporter\"} >= 16",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:36.106497598Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106337294Z",
       "labels": {
         "severity": "warning"
       },
@@ -6541,7 +6605,7 @@
       "lastError": "",
       "query": "node_md_disks_required{device=~\"(/dev/)?(mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|md.+|dasd.+)\",job=\"node-exporter\"} - ignoring (state) (node_md_disks{device=~\"(/dev/)?(mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|md.+|dasd.+)\",job=\"node-exporter\",state=\"active\"}) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.106566806Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106394604Z",
       "labels": {
         "severity": "critical"
       },
@@ -6561,7 +6625,7 @@
       "lastError": "",
       "query": "node_md_disks{device=~\"(/dev/)?(mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|md.+|dasd.+)\",job=\"node-exporter\",state=\"failed\"} > 0",
       "durationSeconds": 0,
-      "lastEvaluation": "2026-09-13T01:03:36.106735478Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106564014Z",
       "labels": {
         "severity": "warning"
       },
@@ -6581,7 +6645,7 @@
       "lastError": "",
       "query": "(node_filefd_allocated{job=\"node-exporter\"} * 100 / node_filefd_maximum{job=\"node-exporter\"} > 70)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.10681599Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106626753Z",
       "labels": {
         "severity": "warning"
       },
@@ -6601,7 +6665,7 @@
       "lastError": "",
       "query": "(node_filefd_allocated{job=\"node-exporter\"} * 100 / node_filefd_maximum{job=\"node-exporter\"} > 90)",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.106882114Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106680862Z",
       "labels": {
         "severity": "critical"
       },
@@ -6621,7 +6685,7 @@
       "lastError": "",
       "query": "sum without (mode) (avg without (cpu) (rate(node_cpu_seconds_total{job=\"node-exporter\",mode!~\"idle|iowait\"}[2m]))) * 100 > 90",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.106943582Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106747092Z",
       "labels": {
         "severity": "info"
       },
@@ -6641,7 +6705,7 @@
       "lastError": "",
       "query": "node_load1{job=\"node-exporter\"} / count without (cpu, mode) (node_cpu_seconds_total{job=\"node-exporter\",mode=\"idle\"}) > 2",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.107058035Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106853788Z",
       "labels": {
         "severity": "warning"
       },
@@ -6661,7 +6725,7 @@
       "lastError": "",
       "query": "rate(node_vmstat_pgmajfault{job=\"node-exporter\"}[5m]) > 500",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.107153552Z",
+      "lastEvaluation": "2026-09-13T01:11:36.10691867Z",
       "labels": {
         "severity": "warning"
       },
@@ -6681,7 +6745,7 @@
       "lastError": "",
       "query": "100 - (node_memory_MemAvailable_bytes{job=\"node-exporter\"} / node_memory_MemTotal_bytes{job=\"node-exporter\"} * 100) > 90",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.10721999Z",
+      "lastEvaluation": "2026-09-13T01:11:36.106967787Z",
       "labels": {
         "severity": "warning"
       },
@@ -6701,7 +6765,7 @@
       "lastError": "",
       "query": "rate(node_disk_io_time_weighted_seconds_total{device=~\"(/dev/)?(mmcblk.p.+|nvme.+|rbd.+|sd.+|vd.+|xvd.+|dm-.+|md.+|dasd.+)\",job=\"node-exporter\"}[5m]) > 10",
       "durationSeconds": 1800,
-      "lastEvaluation": "2026-09-13T01:03:36.107279023Z",
+      "lastEvaluation": "2026-09-13T01:11:36.107026631Z",
       "labels": {
         "severity": "warning"
       },
@@ -6721,7 +6785,7 @@
       "lastError": "",
       "query": "node_systemd_unit_state{job=\"node-exporter\",state=\"failed\"} == 1",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:36.107378844Z",
+      "lastEvaluation": "2026-09-13T01:11:36.107118412Z",
       "labels": {
         "severity": "warning"
       },
@@ -6741,7 +6805,7 @@
       "lastError": "",
       "query": "increase(node_systemd_service_restart_total{job=\"node-exporter\"}[5m]) > 2",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:36.107410001Z",
+      "lastEvaluation": "2026-09-13T01:11:36.107148163Z",
       "labels": {
         "severity": "warning"
       },
@@ -6761,7 +6825,7 @@
       "lastError": "",
       "query": "(node_bonding_slaves{job=\"node-exporter\"} - node_bonding_active{job=\"node-exporter\"}) != 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:36.107456054Z",
+      "lastEvaluation": "2026-09-13T01:11:36.107181391Z",
       "labels": {
         "severity": "warning"
       },
@@ -6781,7 +6845,7 @@
       "lastError": "",
       "query": "changes(node_network_up{device!~\"veth.+\",job=\"node-exporter\"}[2m]) > 2",
       "durationSeconds": 120,
-      "lastEvaluation": "2026-09-13T01:03:57.273988123Z",
+      "lastEvaluation": "2026-09-13T01:11:27.273703864Z",
       "labels": {
         "severity": "warning"
       },
@@ -6801,7 +6865,7 @@
       "lastError": "",
       "query": "max_over_time(prometheus_config_last_reload_successful{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) == 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:44.840120414Z",
+      "lastEvaluation": "2026-09-13T01:11:44.839803323Z",
       "labels": {
         "severity": "critical"
       },
@@ -6821,7 +6885,7 @@
       "lastError": "",
       "query": "increase(prometheus_sd_refresh_failures_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[10m]) > 0",
       "durationSeconds": 1200,
-      "lastEvaluation": "2026-09-13T01:03:44.8403623Z",
+      "lastEvaluation": "2026-09-13T01:11:44.839972608Z",
       "labels": {
         "severity": "warning"
       },
@@ -6841,7 +6905,7 @@
       "lastError": "",
       "query": "increase(prometheus_sd_kubernetes_failures_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.840442732Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840035138Z",
       "labels": {
         "severity": "warning"
       },
@@ -6861,7 +6925,7 @@
       "lastError": "",
       "query": "(predict_linear(prometheus_notifications_queue_length{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m], 60 * 30) > min_over_time(prometheus_notifications_queue_capacity{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]))",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.840529907Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840122634Z",
       "labels": {
         "severity": "warning"
       },
@@ -6881,7 +6945,7 @@
       "lastError": "",
       "query": "(rate(prometheus_notifications_errors_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) / rate(prometheus_notifications_sent_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) * 100 > 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.840763253Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840266861Z",
       "labels": {
         "severity": "warning"
       },
@@ -6901,7 +6965,7 @@
       "lastError": "",
       "query": "max_over_time(prometheus_notifications_alertmanagers_discovered{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) < 1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:44.840882693Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840367691Z",
       "labels": {
         "severity": "warning"
       },
@@ -6943,7 +7007,7 @@
       "lastError": "",
       "query": "increase(prometheus_tsdb_reloads_failures_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[3h]) > 0",
       "durationSeconds": 14400,
-      "lastEvaluation": "2026-09-13T01:03:44.841185975Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840613764Z",
       "labels": {
         "severity": "warning"
       },
@@ -6963,7 +7027,7 @@
       "lastError": "",
       "query": "increase(prometheus_tsdb_compactions_failed_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[3h]) > 0",
       "durationSeconds": 14400,
-      "lastEvaluation": "2026-09-13T01:03:44.84128179Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840682537Z",
       "labels": {
         "severity": "warning"
       },
@@ -6983,7 +7047,7 @@
       "lastError": "",
       "query": "(sum without (type) (rate(prometheus_tsdb_head_samples_appended_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) <= 0 and (sum without (scrape_job) (prometheus_target_metadata_cache_entries{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}) > 0 or sum without (rule_group) (prometheus_rule_group_rules{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}) > 0))",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:44.84136545Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840737067Z",
       "labels": {
         "severity": "warning"
       },
@@ -7003,7 +7067,7 @@
       "lastError": "",
       "query": "rate(prometheus_target_scrapes_sample_duplicate_timestamp_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:44.841661905Z",
+      "lastEvaluation": "2026-09-13T01:11:44.840969368Z",
       "labels": {
         "severity": "warning"
       },
@@ -7023,7 +7087,7 @@
       "lastError": "",
       "query": "rate(prometheus_target_scrapes_sample_out_of_order_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:44.841745662Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841029384Z",
       "labels": {
         "severity": "warning"
       },
@@ -7043,7 +7107,7 @@
       "lastError": "",
       "query": "((rate(prometheus_remote_storage_failed_samples_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) / ((rate(prometheus_remote_storage_failed_samples_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) + (rate(prometheus_remote_storage_succeeded_samples_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) or rate(prometheus_remote_storage_samples_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])))) * 100 > 1",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.841821816Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841116121Z",
       "labels": {
         "severity": "critical"
       },
@@ -7063,7 +7127,7 @@
       "lastError": "",
       "query": "(max_over_time(prometheus_remote_storage_queue_highest_timestamp_seconds{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) - max_over_time(prometheus_remote_storage_queue_highest_sent_timestamp_seconds{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) > 120",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842075406Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841331348Z",
       "labels": {
         "severity": "critical"
       },
@@ -7083,7 +7147,7 @@
       "lastError": "",
       "query": "(max_over_time(prometheus_remote_storage_shards_desired{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > max_over_time(prometheus_remote_storage_shards_max{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]))",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842204378Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841421329Z",
       "labels": {
         "severity": "warning"
       },
@@ -7103,7 +7167,7 @@
       "lastError": "",
       "query": "increase(prometheus_rule_evaluation_failures_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842299259Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841500854Z",
       "labels": {
         "severity": "critical"
       },
@@ -7116,7 +7180,7 @@
         {
           "state": "pending",
           "activeAt": "2026-09-13T01:03:44.838705639Z",
-          "value": "1.5307333333333333e+00",
+          "value": "1e+01",
           "labels": {
             "alertname": "PrometheusRuleFailures",
             "container": "prometheus",
@@ -7130,7 +7194,7 @@
             "severity": "critical"
           },
           "annotations": {
-            "description": "Prometheus monitoring/prometheus-kps-kube-prometheus-stack-prometheus-0 has failed to evaluate 2 rules in the last 5m.",
+            "description": "Prometheus monitoring/prometheus-kps-kube-prometheus-stack-prometheus-0 has failed to evaluate 10 rules in the last 5m.",
             "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/prometheus/prometheusrulefailures",
             "summary": "Prometheus is failing rule evaluations."
           }
@@ -7146,7 +7210,7 @@
       "lastError": "",
       "query": "increase(prometheus_rule_group_iterations_missed_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842686858Z",
+      "lastEvaluation": "2026-09-13T01:11:44.841888464Z",
       "labels": {
         "severity": "warning"
       },
@@ -7166,7 +7230,7 @@
       "lastError": "",
       "query": "increase(prometheus_target_scrape_pool_exceeded_target_limit_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842872088Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842087072Z",
       "labels": {
         "severity": "warning"
       },
@@ -7186,7 +7250,7 @@
       "lastError": "",
       "query": "increase(prometheus_target_scrape_pool_exceeded_label_limits_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.842950742Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842166629Z",
       "labels": {
         "severity": "warning"
       },
@@ -7206,7 +7270,7 @@
       "lastError": "",
       "query": "increase(prometheus_target_scrapes_exceeded_body_size_limit_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.843031099Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842238912Z",
       "labels": {
         "severity": "warning"
       },
@@ -7226,7 +7290,7 @@
       "lastError": "",
       "query": "increase(prometheus_target_scrapes_exceeded_sample_limit_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.843148523Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842310306Z",
       "labels": {
         "severity": "warning"
       },
@@ -7246,7 +7310,7 @@
       "lastError": "",
       "query": "increase(prometheus_target_sync_failed_total{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[30m]) > 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:44.84321523Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842402931Z",
       "labels": {
         "severity": "critical"
       },
@@ -7266,7 +7330,7 @@
       "lastError": "",
       "query": "avg_over_time(prometheus_engine_queries{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) / max_over_time(prometheus_engine_queries_concurrent_max{job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) > 0.8",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.843285303Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842510038Z",
       "labels": {
         "severity": "warning"
       },
@@ -7286,7 +7350,7 @@
       "lastError": "",
       "query": "min without (alertmanager) (rate(prometheus_notifications_errors_total{alertmanager!~\"\",job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m]) / rate(prometheus_notifications_sent_total{alertmanager!~\"\",job=\"kps-kube-prometheus-stack-prometheus\",namespace=\"monitoring\"}[5m])) * 100 > 3",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:44.843401597Z",
+      "lastEvaluation": "2026-09-13T01:11:44.842631027Z",
       "labels": {
         "severity": "critical"
       },
@@ -7306,7 +7370,7 @@
       "lastError": "",
       "query": "(sum by (cluster, controller, namespace) (rate(prometheus_operator_list_operations_failed_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[10m])) / sum by (cluster, controller, namespace) (rate(prometheus_operator_list_operations_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[10m]))) > 0.4",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:48.300384723Z",
+      "lastEvaluation": "2026-09-13T01:11:18.299935001Z",
       "labels": {
         "severity": "warning"
       },
@@ -7326,7 +7390,7 @@
       "lastError": "",
       "query": "(sum by (cluster, controller, namespace) (rate(prometheus_operator_watch_operations_failed_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m])) / sum by (cluster, controller, namespace) (rate(prometheus_operator_watch_operations_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]))) > 0.4",
       "durationSeconds": 900,
-      "lastEvaluation": "2026-09-13T01:03:48.300704107Z",
+      "lastEvaluation": "2026-09-13T01:11:18.300280453Z",
       "labels": {
         "severity": "warning"
       },
@@ -7346,7 +7410,7 @@
       "lastError": "",
       "query": "min_over_time(prometheus_operator_syncs{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\",status=\"failed\"}[5m]) > 0",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.300884416Z",
+      "lastEvaluation": "2026-09-13T01:11:18.300471935Z",
       "labels": {
         "severity": "warning"
       },
@@ -7366,7 +7430,7 @@
       "lastError": "",
       "query": "(sum by (cluster, controller, namespace) (rate(prometheus_operator_reconcile_errors_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]))) / (sum by (cluster, controller, namespace) (rate(prometheus_operator_reconcile_operations_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]))) > 0.1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.300979517Z",
+      "lastEvaluation": "2026-09-13T01:11:18.300581734Z",
       "labels": {
         "severity": "warning"
       },
@@ -7386,7 +7450,7 @@
       "lastError": "",
       "query": "(sum by (cluster, controller, namespace) (rate(prometheus_operator_status_update_errors_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]))) / (sum by (cluster, controller, namespace) (rate(prometheus_operator_status_update_operations_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]))) > 0.1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.301154898Z",
+      "lastEvaluation": "2026-09-13T01:11:18.300778822Z",
       "labels": {
         "severity": "warning"
       },
@@ -7406,7 +7470,7 @@
       "lastError": "",
       "query": "rate(prometheus_operator_node_address_lookup_errors_total{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]) > 0.1",
       "durationSeconds": 600,
-      "lastEvaluation": "2026-09-13T01:03:48.301282639Z",
+      "lastEvaluation": "2026-09-13T01:11:18.301000031Z",
       "labels": {
         "severity": "warning"
       },
@@ -7426,7 +7490,7 @@
       "lastError": "",
       "query": "min by (cluster, controller, namespace) (max_over_time(prometheus_operator_ready{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\"}[5m]) == 0)",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:48.301370231Z",
+      "lastEvaluation": "2026-09-13T01:11:18.301202955Z",
       "labels": {
         "severity": "warning"
       },
@@ -7446,7 +7510,7 @@
       "lastError": "",
       "query": "min_over_time(prometheus_operator_managed_resources{job=\"kps-kube-prometheus-stack-operator\",namespace=\"monitoring\",state=\"rejected\"}[5m]) > 0",
       "durationSeconds": 300,
-      "lastEvaluation": "2026-09-13T01:03:48.30146551Z",
+      "lastEvaluation": "2026-09-13T01:11:18.301339784Z",
       "labels": {
         "severity": "warning"
       },
