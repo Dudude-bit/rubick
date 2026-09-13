@@ -9,4 +9,7 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 # Logging and tracing
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry"] }
+# The log file's directory, by each platform's own convention.
+dirs = "6"

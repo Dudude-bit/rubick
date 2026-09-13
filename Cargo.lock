@@ -2920,6 +2920,8 @@ dependencies = [
 name = "k8s-gui-common"
 version = "4.14.0"
 dependencies = [
+ "dirs",
+ "tracing",
  "tracing-subscriber",
 ]
 

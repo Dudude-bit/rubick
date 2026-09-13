@@ -1248,7 +1248,7 @@ export interface InstallationInfo {
   version: string;
   os: string;
   configPath: string | null;
-  logDestination: string;
+  logDestination: string | null;
 }
 
 export interface KubeconfigInfo {
@@ -1813,6 +1813,7 @@ export type Renewal =
   | "needsYou"
   | "failed"
   | "ranOut"
+  | "lastChance"
   | "delegated"
   | "unknown";
 

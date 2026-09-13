@@ -37,7 +37,7 @@ const empty: Diagnostics = {
     version: "4.0.1",
     os: "macos aarch64",
     configPath: null,
-    logDestination: "stdout",
+    logDestination: "/Users/someone/Library/Logs/com.k8s-gui.app/rubick.log",
   },
   findings: [],
   connections: [],

@@ -2936,7 +2936,9 @@ export const en = {
     renewalFailed:
       "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
     renewalRanOut:
-      "Renewing them quietly was tried twice and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+      "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalLastChance:
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire — some plugins mint nothing until the old ones are actually gone. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:
@@ -3312,6 +3314,9 @@ export const en = {
     pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
+    logsNowhere:
+      "No log file this run — nothing on disk to send. This window could not create the folder it writes to.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",
