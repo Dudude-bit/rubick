@@ -57,6 +57,33 @@ describe("the Cilium row", () => {
   });
 
   /**
+   * `IntegrationsCatalog` draws a fact carrying a `to` as a plain blue link
+   * and drops its tone, so a finding that also carried a link came out blue
+   * — the finding this whole vendor exists for. The way in is its own line,
+   * the shape Istio and Traefik already use. Fails if a toned line grows a
+   * `to` again.
+   */
+  it("never hangs a link on a line that carries a tone", async () => {
+    answers([policy("typo", REJECTED), policy("fresh", null)]);
+
+    for (const line of await facts()) {
+      expect(line.tone && line.to).toBeFalsy();
+    }
+  });
+
+  /**
+   * A cluster can have both, and reporting only the louder one hides the
+   * quieter. Fails if either finding starts suppressing the other.
+   */
+  it("reports a rejected policy and an unanswered one together", async () => {
+    answers([policy("typo", REJECTED), policy("fresh", null)]);
+
+    const said = JSON.stringify(await facts());
+    expect(said).toContain("factCiliumRejected");
+    expect(said).toContain("factCiliumUnanswered");
+  });
+
+  /**
    * Silence is its own line, and a quieter one: a policy written a second
    * ago and a policy the agent is not running look the same, and neither is
    * a rejection. Fails if the two findings are merged.
@@ -74,12 +101,13 @@ describe("the Cilium row", () => {
     ).toBe("warn");
   });
 
-  /** Nothing to report is not a finding: a clean cluster gets counts only. */
-  it("adds no finding when every policy is in force", async () => {
+  /** Nothing to report is not a finding: a clean cluster gets counts and a way in. */
+  it("adds no finding when every policy was accepted", async () => {
     answers([policy("ok", VALID)], [policy("wide", VALID)]);
 
     const lines = await facts();
-    expect(lines).toHaveLength(1);
     expect(JSON.stringify(lines)).toContain("factCiliumClusterwide");
+    expect(lines.some((line) => line.tone)).toBe(false);
+    expect(lines.at(-1)?.to).toBeDefined();
   });
 });

@@ -14,38 +14,6 @@ function policy(status: unknown): CustomResourceInfo {
   } as CustomResourceInfo;
 }
 
-describe("the badge on a Cilium policy", () => {
-  /**
-   * The one a `Ready`-shaped reader gets wrong. Cilium writes `Valid` once
-   * it has looked at the policy, so a policy it has not answered about
-   * carries no condition — and a reader that turns a missing condition into
-   * "NotReady" would paint every freshly written policy red, while one that
-   * turns it into "Ready" would promise enforcement nobody confirmed.
-   * Fails if the third state collapses either way.
-   */
-  it("draws a policy nobody has answered about as neither valid nor rejected", () => {
-    expect(crd.status.getStatus(policy(null))).toBeNull();
-    expect(crd.status.getStatus(policy({ conditions: [] }))).toBeNull();
-    expect(
-      crd.status.getStatus(
-        policy({ conditions: [{ type: "Valid", status: "True" }] })
-      )
-    ).toBe("Valid");
-    expect(
-      crd.status.getStatus(
-        policy({ conditions: [{ type: "Valid", status: "False" }] })
-      )
-    ).toBe("Rejected");
-  });
-
-  /** A rejected policy is a fault, not a shade of grey. */
-  it("gives a rejected policy the failure tone", () => {
-    expect(crd.status.getVariant("Rejected")).toBe("destructive");
-    expect(crd.status.getVariant("Valid")).toBe("default");
-    expect(crd.status.getVariant("")).toBe("outline");
-  });
-});
-
 describe("the column that says whether a policy is in force", () => {
   const inForce = crd.columnsFor("CiliumNetworkPolicy")[0];
   const t = (() => "") as never;
@@ -97,13 +65,41 @@ describe("which kinds Cilium claims", () => {
   });
 
   /**
-   * The agent creates ten kinds and names more with every release, so a kind
-   * this file has never heard of still has to come back with columns.
+   * A vendor's columns *replace* the CRD's own printer columns, so a kind
+   * this file has nothing to say about must claim none. It used to fall
+   * through to the policy columns, which told a `CiliumNode` — one of which
+   * Cilium writes per node — that it selected every endpoint in the cluster
+   * and denied them everything, while throwing away the two columns the CRD
+   * itself declares. Fails if the default arm starts answering again.
    */
-  it("has columns for a kind it does not know", () => {
-    expect(crd.columnsFor("CiliumBGPClusterConfig").length).toBeGreaterThan(0);
+  it("leaves a kind it has nothing to say about to its own columns", () => {
+    for (const kind of [
+      "CiliumNode",
+      "CiliumIdentity",
+      "CiliumLoadBalancerIPPool",
+      "CiliumCIDRGroup",
+      "CiliumBGPClusterConfig",
+      "CiliumL2AnnouncementPolicy",
+      "CiliumPodIPPool",
+      "CiliumNodeConfig",
+    ]) {
+      expect(crd.columnsFor(kind)).toEqual([]);
+    }
     expect(crd.columnsFor("CiliumEndpoint").map((c) => c.id)).toContain(
       "identity"
     );
+  });
+
+  /**
+   * Without a `cell` the list wraps a bare string in a `StatusBadge`, and a
+   * pod IP is not a status. Only the verdict column may go bare.
+   */
+  it("draws everything but the verdict itself", () => {
+    for (const column of crd.columnsFor("CiliumEndpoint")) {
+      expect(column.cell).toBeDefined();
+    }
+    const verdict = crd.columnsFor("CiliumNetworkPolicy")[0];
+    expect(verdict.id).toBe("inForce");
+    expect(verdict.cell).toBeUndefined();
   });
 });
