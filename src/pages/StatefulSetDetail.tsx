@@ -58,6 +58,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -169,6 +170,13 @@ export function StatefulSetDetail() {
         content: (
           <>
             <WorkloadOverview
+              alerts={
+                <AlertsAbout
+                  kind={ResourceType.StatefulSet}
+                  name={name ?? ""}
+                  namespace={namespace ?? null}
+                />
+              }
               count={
                 <CountBlock
                   title={t("columns", "replicas")}

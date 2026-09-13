@@ -55,6 +55,32 @@ describe("what /integrations/<slug> answers", () => {
     );
   });
 
+  /**
+   * The merged Prometheus: an address answers while the operator's kinds
+   * are not in the cluster. Would break if the scan's "not found" were
+   * allowed to close a page the connection can fill.
+   */
+  it("opens a configured vendor's page over a scan that found none of its kinds", () => {
+    expect(
+      pageDecision(connectVendor, [{ id: "prometheus", installed: false }], {
+        state: "connected",
+      })
+    ).toBe("ready");
+  });
+
+  it("calls a scanned-but-absent configured vendor not connected rather than not installed", () => {
+    expect(
+      pageDecision(connectVendor, [{ id: "prometheus", installed: false }], {
+        state: "notConfigured",
+      })
+    ).toBe("notConfigured");
+    expect(
+      pageDecision(connectVendor, [{ id: "prometheus", installed: null }], {
+        state: "notConfigured",
+      })
+    ).toBe("cannotTell");
+  });
+
   it("waits while the connection is still being read", () => {
     expect(pageDecision(connectVendor, [], { state: "reading" })).toBe(
       "detecting"
@@ -73,11 +99,12 @@ describe("what /integrations/<slug> answers", () => {
         state: "notConfigured",
       })
     ).toBe("ready");
+    // Neither way in: the address is the one the reader can still give.
     expect(
       pageDecision(hybrid, [{ id: "argocd", installed: false }], {
         state: "notConfigured",
       })
-    ).toBe("absent");
+    ).toBe("notConfigured");
   });
 });
 

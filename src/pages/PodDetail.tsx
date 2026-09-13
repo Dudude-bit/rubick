@@ -43,6 +43,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import {
   ConditionRows,
   DetailAction,
@@ -763,6 +764,13 @@ export function PodDetail() {
                   takes the first slot is the question a Pod does have in the
                   same place: where the one is. */}
                 <WorkloadOverview
+                  alerts={
+                    <AlertsAbout
+                      kind={ResourceType.Pod}
+                      name={name ?? ""}
+                      namespace={namespace ?? null}
+                    />
+                  }
                   count={
                     <FactBlock
                       title={t("columns", "placement")}

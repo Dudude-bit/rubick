@@ -342,6 +342,211 @@ pub async fn prometheus_query_range(
 /// A `vector` is a `matrix` with one point per series as far as every caller
 /// here is concerned, and keeping the distinction would put a `match` on
 /// result type in three places that do not care.
+/// One target as `/api/v1/targets` lists it: which scrape pool it belongs
+/// to, whether the last scrape worked, and what Prometheus said when it did
+/// not. The pool is how a target is traced back to the `ServiceMonitor` or
+/// `PodMonitor` the operator wrote it from: `serviceMonitor/<ns>/<name>/<i>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeTarget {
+    pub scrape_pool: String,
+    pub scrape_url: String,
+    /// `up`, `down` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last scrape worked.
+    pub last_error: String,
+    pub last_scrape: Option<String>,
+    pub labels: HashMap<String, String>,
+}
+
+/// Every active target of the configured Prometheus.
+#[tauri::command]
+pub async fn prometheus_targets(state: State<'_, AppState>) -> Result<Vec<ScrapeTarget>> {
+    let entry = configured(&state)?;
+    let value = get_json(
+        &entry,
+        "/api/v1/targets",
+        &[("state", "active".to_string())],
+    )
+    .await
+    .map_err(unreachable)?;
+    parse_targets(&value)
+}
+
+pub fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its targets");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |target: &serde_json::Value, key: &str| {
+        target
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    Ok(body
+        .get("data")
+        .and_then(|d| d.get("activeTargets"))
+        .and_then(|t| t.as_array())
+        .into_iter()
+        .flatten()
+        .map(|target| ScrapeTarget {
+            scrape_pool: text(target, "scrapePool"),
+            scrape_url: text(target, "scrapeUrl"),
+            health: text(target, "health"),
+            last_error: text(target, "lastError"),
+            last_scrape: target
+                .get("lastScrape")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            labels: target
+                .get("labels")
+                .and_then(|m| m.as_object())
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// One alert of one rule, as `/api/v1/rules` lists it under the rule:
+/// the labels after templating are what name the object it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertInstance {
+    /// `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    pub active_at: Option<String>,
+    pub value: String,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+}
+
+/// One alerting rule as `/api/v1/rules?type=alert` lists it. The `file` is
+/// how a rule is traced back to the `PrometheusRule` the operator wrote it
+/// from: the operator names the file after the object's namespace and name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertRule {
+    pub group: String,
+    pub file: String,
+    pub name: String,
+    /// `inactive`, `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    /// `ok`, `err` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last evaluation worked.
+    pub last_error: String,
+    pub query: String,
+    /// The `for` clause, in seconds.
+    pub duration_seconds: f64,
+    pub last_evaluation: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+    pub alerts: Vec<AlertInstance>,
+}
+
+/// Every alerting rule the configured Prometheus has loaded, with the
+/// alerts each one has active.
+#[tauri::command]
+pub async fn prometheus_rules(state: State<'_, AppState>) -> Result<Vec<AlertRule>> {
+    let entry = configured(&state)?;
+    let value = get_json(&entry, "/api/v1/rules", &[("type", "alert".to_string())])
+        .await
+        .map_err(unreachable)?;
+    parse_rules(&value)
+}
+
+fn string_map(value: Option<&serde_json::Value>) -> HashMap<String, String> {
+    value
+        .and_then(|m| m.as_object())
+        .map(|map| {
+            map.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its rules");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |node: &serde_json::Value, key: &str| {
+        node.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let optional = |node: &serde_json::Value, key: &str| {
+        node.get(key).and_then(|v| v.as_str()).map(str::to_string)
+    };
+    let mut rules = Vec::new();
+    for group in body
+        .get("data")
+        .and_then(|d| d.get("groups"))
+        .and_then(|g| g.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let group_name = text(group, "name");
+        let file = text(group, "file");
+        for rule in group
+            .get("rules")
+            .and_then(|r| r.as_array())
+            .into_iter()
+            .flatten()
+        {
+            // `type=alert` is asked for; a recording rule that came anyway
+            // has no state and is not an alert.
+            if rule.get("type").and_then(|t| t.as_str()) == Some("recording") {
+                continue;
+            }
+            rules.push(AlertRule {
+                group: group_name.clone(),
+                file: file.clone(),
+                name: text(rule, "name"),
+                state: text(rule, "state"),
+                health: text(rule, "health"),
+                last_error: text(rule, "lastError"),
+                query: text(rule, "query"),
+                duration_seconds: rule
+                    .get("duration")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
+                last_evaluation: optional(rule, "lastEvaluation"),
+                labels: string_map(rule.get("labels")),
+                annotations: string_map(rule.get("annotations")),
+                alerts: rule
+                    .get("alerts")
+                    .and_then(|a| a.as_array())
+                    .into_iter()
+                    .flatten()
+                    .map(|alert| AlertInstance {
+                        state: text(alert, "state"),
+                        active_at: optional(alert, "activeAt"),
+                        value: text(alert, "value"),
+                        labels: string_map(alert.get("labels")),
+                        annotations: string_map(alert.get("annotations")),
+                    })
+                    .collect(),
+            });
+        }
+    }
+    Ok(rules)
+}
+
 fn parse_result(body: &serde_json::Value) -> Result<Vec<PromSeries>> {
     if body.get("status").and_then(|s| s.as_str()) != Some("success") {
         let message = body
@@ -405,6 +610,103 @@ fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.
+    #[test]
+    fn targets_keep_the_pool_the_health_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "activeTargets": [
+                {
+                    "discoveredLabels": {"__address__": "10.0.0.9:8080"},
+                    "labels": {"job": "shop/web", "namespace": "shop", "service": "web", "instance": "10.0.0.9:8080"},
+                    "scrapePool": "serviceMonitor/shop/web/0",
+                    "scrapeUrl": "http://10.0.0.9:8080/metrics",
+                    "lastError": "",
+                    "lastScrape": "2026-09-12T08:00:00.000Z",
+                    "lastScrapeDuration": 0.01,
+                    "health": "up"
+                },
+                {
+                    "labels": {"job": "shop/db"},
+                    "scrapePool": "serviceMonitor/shop/db/0",
+                    "scrapeUrl": "http://10.0.0.7:9187/metrics",
+                    "lastError": "Get \"http://10.0.0.7:9187/metrics\": dial tcp 10.0.0.7:9187: connect: connection refused",
+                    "lastScrape": "2026-09-12T08:00:01.000Z",
+                    "health": "down"
+                }
+            ], "droppedTargets": [] }
+        });
+        let targets = parse_targets(&body).unwrap();
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].scrape_pool, "serviceMonitor/shop/web/0");
+        assert_eq!(targets[0].health, "up");
+        assert_eq!(
+            targets[0].labels.get("service").map(String::as_str),
+            Some("web")
+        );
+        assert_eq!(targets[1].health, "down");
+        assert!(targets[1].last_error.contains("connection refused"));
+    }
+
+    /// A Prometheus that refuses is a refusal, not an empty pool list.
+    /// Would break if a firing alert's labels or the rule's own error were
+    /// dropped on the way through, or a recording rule slipped in as an alert.
+    #[test]
+    fn rules_keep_the_file_the_state_the_alerts_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [{
+                "name": "kubernetes-apps",
+                "file": "/etc/prometheus/rules/prometheus-kps-rulefiles-0/monitoring-kps-kubernetes-apps-1a2b.yaml",
+                "rules": [
+                    {
+                        "type": "alerting", "name": "KubePodCrashLooping", "state": "firing",
+                        "health": "ok", "lastError": "", "query": "max_over_time(...) >= 1",
+                        "duration": 900, "labels": {"severity": "warning"},
+                        "annotations": {"summary": "Pod is crash looping."},
+                        "alerts": [{
+                            "state": "firing", "activeAt": "2026-09-12T20:00:00Z", "value": "1e+00",
+                            "labels": {"namespace": "shop", "pod": "web-1", "severity": "warning"},
+                            "annotations": {"summary": "Pod shop/web-1 is crash looping."}
+                        }]
+                    },
+                    { "type": "recording", "name": "cluster:cpu", "health": "ok", "query": "sum(...)" },
+                    {
+                        "type": "alerting", "name": "Broken", "state": "inactive", "health": "err",
+                        "lastError": "found duplicate series", "query": "up", "duration": 0,
+                        "labels": {}, "annotations": {}, "alerts": []
+                    }
+                ]
+            }]}
+        });
+        let rules = parse_rules(&body).unwrap();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].group, "kubernetes-apps");
+        assert!(rules[0]
+            .file
+            .ends_with("monitoring-kps-kubernetes-apps-1a2b.yaml"));
+        assert_eq!(rules[0].state, "firing");
+        assert_eq!(rules[0].duration_seconds, 900.0);
+        assert_eq!(
+            rules[0].alerts[0].labels.get("pod").map(String::as_str),
+            Some("web-1")
+        );
+        assert_eq!(rules[1].health, "err");
+        assert!(rules[1].last_error.contains("duplicate"));
+    }
+
+    #[test]
+    fn a_refused_rule_list_is_an_error_not_no_rules() {
+        let body = serde_json::json!({"status": "error", "error": "forbidden"});
+        assert!(parse_rules(&body).is_err());
+    }
+
+    #[test]
+    fn a_refused_target_list_is_an_error_not_no_targets() {
+        let body = serde_json::json!({ "status": "error", "error": "forbidden" });
+        assert!(parse_targets(&body).is_err());
+    }
     use serde_json::json;
 
     /// Would break if the credential started travelling to the webview —
