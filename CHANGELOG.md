@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.16.0] - 2026-09-13
+
+### Added
+
+- **Cilium.** The CNI is detected, its policy objects read as policies, and it
+  has a page that answers the question neither list can: **is this pod
+  covered, and by what.** A policy names labels and a `CiliumEndpoint` carries
+  the labels Cilium resolved for the pod, so the page joins the two and gives
+  each endpoint one of four answers — covered, selected only by policies that
+  were rejected, selected by nothing at all, or not decidable because a
+  policy's rules are written somewhere the app cannot read.
+
+  The second of those is the reason the whole thing exists. **A policy the
+  Cilium operator rejects is still an object**: it has a name, an age and a
+  spec, it sits in every list beside the policies that work, and the only
+  record of its being thrown away is a condition inside its status that no
+  ordinary list of custom resources shows. A namespace you believe is closed
+  can be one typo away from open, with nothing red anywhere. The policy list
+  now leads with whether the operator accepted it, and the page says which
+  pods are left uncovered because of it.
+
+### Fixed
+
+- **A CRD's own Age column is no longer drawn twice.** The list draws name and
+  age itself and skips the CRD's versions of them — comparing the heading
+  case-sensitively, so a CRD that writes `Age` rather than `AGE` got both. That
+  was every Cilium and cert-manager kind.
+
+- **`AzureIdentity` was counted as "AzureIdentitys".** Counts that name a
+  Kubernetes kind no longer bend the kind's spelling to make a plural.
+
+### Changed
+
+- A vendor integration no longer declares a status for its custom resources.
+  The field existed on every one of them and no screen ever read it; a verdict
+  a vendor wants shown is a column like any other. Nothing on screen changes.
+
 ## [4.15.0] - 2026-09-13
 
 ### Added
