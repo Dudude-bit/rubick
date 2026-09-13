@@ -2187,6 +2187,9 @@ export const en = {
     rowPartlyLoaded: "{n} not loaded",
     rowEvalError: "evaluation error",
     rowQuiet: "quiet",
+    rowRecordingOnly: "recording rules only",
+    recordingOnly:
+      "Recording rules only. Prometheus lists them apart from alerts, and nothing here fires.",
     filter: "Filter by name, namespace or alert",
     filterLabel: "Filter rule objects by name, namespace or alert",
     ruleCount: {

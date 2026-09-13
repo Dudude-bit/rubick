@@ -627,25 +627,34 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
               ? loaded.state === "unanswered"
                 ? "warn"
                 : "mut"
-              : loaded.files.length === 0
-                ? "err"
-                : loaded.rules.some((r) => r.loaded === null)
+              : object.rules.length === 0
+                ? "mut"
+                : loaded.files.length === 0
                   ? "err"
-                  : "ok"
+                  : loaded.rules.some((r) => r.loaded === null)
+                    ? "err"
+                    : "ok"
           }
           title={t("alerts", "loaded")}
           count={
             loaded.state !== "read"
               ? t("monitors", "notChecked")
-              : loaded.files.length === 0
-                ? t("alerts", "notLoadedShort")
-                : t("alerts", "loadedOf", {
-                    n: loaded.rules.filter((r) => r.loaded !== null).length,
-                    total: loaded.rules.length,
-                  })
+              : object.rules.length === 0
+                ? t("alerts", "rowRecordingOnly")
+                : loaded.files.length === 0
+                  ? t("alerts", "notLoadedShort")
+                  : t("alerts", "loadedOf", {
+                      n: loaded.rules.filter((r) => r.loaded !== null).length,
+                      total: loaded.rules.length,
+                    })
           }
           last={false}
         >
+          {loaded.state === "read" && object.rules.length === 0 && (
+            <p className="text-xs text-fg-mut">
+              {t("alerts", "recordingOnly")}
+            </p>
+          )}
           {loaded.state === "notConnected" && (
             <p className="text-xs text-fg-mut">{t("alerts", "notConnected")}</p>
           )}
@@ -654,9 +663,11 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
               {t("alerts", "unanswered", { reason: loaded.reason })}
             </p>
           )}
-          {loaded.state === "read" && loaded.files.length === 0 && (
-            <p className="text-xs text-fg-mut">{t("alerts", "notLoaded")}</p>
-          )}
+          {loaded.state === "read" &&
+            object.rules.length > 0 &&
+            loaded.files.length === 0 && (
+              <p className="text-xs text-fg-mut">{t("alerts", "notLoaded")}</p>
+            )}
           {loaded.state === "read" && loaded.files.length > 0 && (
             <Chips>
               {loaded.files.map((file) => (
