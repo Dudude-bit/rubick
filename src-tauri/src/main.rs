@@ -48,7 +48,8 @@ fn main() {
 
     tracing::info!("Starting Rubick application");
     if let Some(dir) = &logs {
-        tracing::info!(path = %dir.display(), "writing this run's log");
+        let file = dir.join(k8s_gui_common::LOG_FILE);
+        tracing::info!(path = %file.display(), "writing this run's log");
     }
     tracing::info!(?shell_env, "login shell environment");
 
