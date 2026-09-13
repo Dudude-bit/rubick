@@ -276,7 +276,6 @@ export function CustomResourceList({
       refresh={watchFailed || !watchEnabled ? "resourceList" : false}
       live={watchEnabled && !watchFailed}
       resyncing={resyncing}
-      searchKey="name"
       searchPlaceholder={t("action", "searchKindPlaceholder", {
         kind: crdKind,
       })}

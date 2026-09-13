@@ -214,7 +214,6 @@ export function Crds() {
         data={crds}
         fill
         isLoading={isLoading}
-        searchKey="kind"
         searchPlaceholder={t("action", "searchKindPlaceholder", {
           kind: "CRDs",
         })}
