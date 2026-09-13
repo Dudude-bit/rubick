@@ -29,6 +29,7 @@ import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
+import { stallWatch } from "@/lib/stall-watch";
 import {
   Search,
   SearchX,
@@ -310,6 +311,13 @@ function DataTableInner<TData extends RowData>({
   const [wasLong, setWasLong] = React.useState(
     () => data.length > VIRTUALISE_ABOVE_ROWS
   );
+  // The stall watch names the big lists on screen; a table says its size
+  // and takes it back when it leaves.
+  const tableId = React.useId();
+  React.useEffect(() => {
+    stallWatch.noteList(tableId, rowLabel ?? "rows", data.length);
+  }, [tableId, rowLabel, data.length]);
+  React.useEffect(() => () => stallWatch.forgetList(tableId), [tableId]);
   const isLong =
     data.length > VIRTUALISE_ABOVE_ROWS
       ? true

@@ -18,8 +18,11 @@ const FRAME_MS = 16.7;
  * evidence of a blocked main thread is a frame that arrives late, so a
  * requestAnimationFrame loop watches the gap between frames instead.
  */
+/** Where a late frame is written: the recorder while it runs, the stall watch always. */
+export type TaskSink = Pick<PerfRecorder, "record" | "taskSource">;
+
 export function startFrameWatch(
-  recorder: PerfRecorder = perf,
+  recorder: TaskSink = perf,
   host: FrameHost = window
 ): () => void {
   const Observer = host.PerformanceObserver;
