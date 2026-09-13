@@ -1,8 +1,18 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { BadgeCheck, Info, Layers2, Scale, Trash2 } from "lucide-react";
+import {
+  AlignLeft,
+  BadgeCheck,
+  History,
+  Info,
+  Layers2,
+  Scale,
+  Trash2,
+} from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 // The one place that turns replica counts into a word. These pages kept
@@ -22,6 +32,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { ChangesTab } from "@/components/changes/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -268,11 +279,49 @@ export function StatefulSetDetail() {
         content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
       {
+        id: "changes",
+        label: t("changes", "title"),
+        glyph: viewGlyph(History),
+        content: statefulSet ? (
+          <ChangesTab
+            subject={{
+              kind: "StatefulSet",
+              name: statefulSet.name,
+              namespace: statefulSet.namespace,
+              labels: statefulSet.labels,
+              annotations: statefulSet.annotations,
+            }}
+          />
+        ) : null,
+      },
+      {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods),
         content: <PodListCard pods={pods} error={podsError} />,
+      },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                podsError={podsError}
+                laneRule="ordinal"
+                workload={
+                  name ? { owner: name, ownerKind: "StatefulSet" } : null
+                }
+              />
+            </div>
+          </div>
+        ),
       },
       {
         id: "conditions",

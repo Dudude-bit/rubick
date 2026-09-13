@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.14.0] - 2026-09-12
+
+### Added
+
+- **Events opens on stories.** One card per object per window instead of a
+  flat feed: the activity in a sentence built from the counts ("Cannot pull
+  the image, 12 times within 1 hour: ..."), the other reasons as chips, and a
+  density strip of when each was last seen. Pods hang on their controller only
+  where a controller event in the window says whose they are; where none does,
+  the card says it folded them by the generated suffix of their names. A
+  warning in the last five minutes is still happening, an older one settled, a
+  story without warnings done — and a window the cluster answered with nothing
+  is a different sentence from a filter that matched nothing. Timeline lays a
+  story on one clock and marks a container's remembered exit as coming from
+  the pod status rather than from an event. The flat list is one tab away,
+  unchanged.
+
+### Fixed
+
+- **Renewing credentials quietly now works on Windows.** The background
+  renewal added in 4.13.0 ran the credential plugin with no terminal pane
+  mounted, and on Windows the console holds the plugin until something answers
+  its "where is the cursor" query — which, until now, only a mounted pane did.
+  The renewal answers it itself, so a plugin that would have hung finishes and
+  the session is replaced as intended.
+
 ## [4.13.0] - 2026-09-12
 
 ### Added

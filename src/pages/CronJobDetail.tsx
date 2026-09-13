@@ -5,8 +5,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Info, Layers2, Play, Trash2 } from "lucide-react";
+import { AlignLeft, Info, Layers2, Play, Trash2 } from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -216,24 +218,23 @@ export function CronJobDetail() {
   // is a fetch that answers a question already answered.
   const inFlight = (cronJob?.active ?? 0) > 0;
 
-  const { data: pods = [] } = useLiveQuery({
+  // The refusal is carried rather than swallowed: an empty list from a 403
+  // reads as "this CronJob has run nothing", which is the one thing the pane
+  // may not say on a read that did not happen.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
-      try {
-        const all = await commands.listPods({
-          namespace,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-        });
-        return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
-      } catch {
-        return [];
-      }
+      const all = await commands.listPods({
+        namespace,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      });
+      return all.filter((pod) => matchCronJobPods({ name, namespace }, pod));
     },
     enabled: !!namespace && !!name && inFlight,
     placeholderData: keepPreviousData,
@@ -379,6 +380,26 @@ export function CronJobDetail() {
           </Section>
         ),
       },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                podsError={podsError}
+                laneRule="run"
+                workload={name ? { owner: name, ownerKind: "CronJob" } : null}
+              />
+            </div>
+          </div>
+        ),
+      },
       yamlTab({
         yaml,
         onCopy: copyYaml,
@@ -388,7 +409,7 @@ export function CronJobDetail() {
         namespace: cronJob?.namespace || namespace,
       }),
     ],
-    [cronJob, jobs, pods, yaml, copyYaml, namespace, name, t]
+    [cronJob, jobs, pods, podsError, yaml, copyYaml, namespace, name, t]
   );
 
   if (!cronJob && !isLoading && !error) {

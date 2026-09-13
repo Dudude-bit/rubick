@@ -212,6 +212,7 @@ fn main() {
             commands::replicasets::get_replicaset,
             commands::replicasets::get_replicaset_pods,
             commands::replicasets::get_deployment_replicasets,
+            commands::revisions::get_controller_revisions,
             // Service commands
             commands::services::list_services,
             commands::services::get_service,

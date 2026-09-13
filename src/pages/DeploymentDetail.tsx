@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Scale,
   Trash2,
+  History,
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -22,13 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -36,6 +30,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
@@ -52,6 +47,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { RevisionRows } from "@/components/resources/child-rows";
+import { ChangesTab } from "@/components/changes/ChangesTab";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ScaleDialog } from "@/components/resources/ScaleDialog";
 import { ContainerRows } from "@/components/resources/container-rows";
@@ -82,9 +78,7 @@ import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
-import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { podToShow } from "@/lib/pod-selection";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { DeploymentInfo } from "@/generated/types";
@@ -103,7 +97,6 @@ export function DeploymentDetail() {
   useEffect(() => {
     if (!imageDialogOpen) imageGateReset();
   }, [imageDialogOpen, imageGateReset]);
-  const [selectedLogPod, setSelectedLogPod] = useState<string | null>(null);
   const {
     name,
     namespace,
@@ -159,28 +152,6 @@ export function DeploymentDetail() {
     includeNodes: false,
     enabled: !!deployment,
   });
-
-  // The chosen pod has to be one of this workload's pods. Genuine
-  // sync-async-data-into-local-state — it could be derived as
-  // `selectedLogPod ?? pods[0]?.name` at use sites, but the reader can pick
-  // a different pod from the dropdown and that choice has to win over the
-  // automatic one.
-  //
-  // The condition used to be `!selectedLogPod`, which only ever ran once.
-  // Walk to another Deployment, or watch the chosen pod get rolled away, and
-  // the name stayed pointing at a pod this list no longer has: `logPod` came
-  // back undefined, the Logs tab rendered nothing, and the effect that would
-  // have fixed it was gated on the very value that was wrong. Nothing short
-  // of a reload recovered. Membership rather than emptiness, so a selection
-  // that has gone stale is replaced instead of kept.
-  useEffect(() => {
-    const shown = podToShow(pods, selectedLogPod);
-    if (shown === selectedLogPod) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedLogPod(shown);
-  }, [pods, selectedLogPod]);
-
-  const logPod = pods.find((p) => p.name === selectedLogPod);
 
   const { data: rolloutStatus } = useLiveQuery({
     queryKey: ["rollout-status", namespace, name],
@@ -465,65 +436,37 @@ export function DeploymentDetail() {
       content: <RevisionRows revisions={revisions} />,
     },
     {
+      id: "changes",
+      label: t("changes", "title"),
+      glyph: viewGlyph(History),
+      content: deployment ? (
+        <ChangesTab
+          subject={{
+            kind: "Deployment",
+            name: deployment.name,
+            namespace: deployment.namespace,
+            labels: deployment.labels,
+            annotations: deployment.annotations,
+          }}
+        />
+      ) : null,
+    },
+    {
       id: "logs",
       label: t("action", "logs"),
       glyph: viewGlyph(AlignLeft),
       kind: "surface",
       content: (
         <div className="flex h-full flex-col">
-          <SectionHeader
-            className="flex-none pb-2"
-            title={t("action", "logs")}
-            actions={
-              <Select
-                value={selectedLogPod || ""}
-                onValueChange={setSelectedLogPod}
-              >
-                <SelectTrigger
-                  aria-label="Pod"
-                  className="h-6 w-56 gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
-                >
-                  <SelectValue placeholder={t("action", "selectPod")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {pods.map((pod) => {
-                    const phase = pod.status?.display || "Unknown";
-                    return (
-                      <SelectItem key={pod.name} value={pod.name}>
-                        <span className="flex items-center gap-2">
-                          <span className="font-mono">{pod.name}</span>
-                          <StatusBadge status={phase} showDot />
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            }
-          />
-          <div className="min-h-0 flex-1 border-t border-hair">
-            {logPod ? (
-              <LogViewer
-                key={`${logPod.namespace}:${logPod.name}`}
-                podName={logPod.name}
-                namespace={logPod.namespace}
-                containers={podContainers(logPod)}
-                // The live half still reads one pod, because that is all the
-                // API server will follow. The workload is what a *range* is
-                // asked about — the pods this Deployment had an hour ago are
-                // gone from this very selector, and they are the ones
-                // somebody reading a rollout came for.
-                workload={
-                  name ? { owner: name, ownerKind: "Deployment" } : null
-                }
-              />
-            ) : (
-              <p className="py-8 text-center text-xs text-fg-fnt">
-                {pods.length === 0
-                  ? t("empty", "noPodsToReadLogs")
-                  : t("empty", "selectPodForLogs")}
-              </p>
-            )}
+          <div className="min-h-0 flex-1">
+            <LogViewer
+              key={`${namespace}/${name}`}
+              namespace={namespace || ""}
+              pods={pods.map(lanePodOf)}
+              podsError={podsError}
+              laneRule="pod"
+              workload={name ? { owner: name, ownerKind: "Deployment" } : null}
+            />
           </div>
         </div>
       ),

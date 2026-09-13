@@ -136,7 +136,12 @@ async fn init_containers_and_previous_runs_reach_the_frontend() {
         state.event_tx.clone(),
     );
 
-    let lines = streamer
+    // Two honest answers, and the node decides which: the run that printed
+    // the error, or the kubelet saying the runtime no longer has that run's
+    // log. The one answer that is never right is the kubelet's sentence
+    // drawn as a line the container printed, which is what a 200 with that
+    // body used to become.
+    match streamer
         .get_logs(
             &LogConfig::new("init-demo", &namespace)
                 .with_container("migrate")
@@ -144,16 +149,31 @@ async fn init_containers_and_previous_runs_reach_the_frontend() {
                 .with_previous(true),
         )
         .await
-        .expect("migrate has a previous run to read");
-    for line in &lines {
-        println!("  migrate/previous: {}", line.message);
+    {
+        Ok(lines) => {
+            for line in &lines {
+                println!("  migrate/previous: {}", line.message);
+            }
+            assert!(
+                lines
+                    .iter()
+                    .any(|l| l.message.contains("relation \"orders\" does not exist")),
+                "the previous run is the one that printed the error",
+            );
+        }
+        Err(Error::LogNotKept { container, said }) => {
+            println!("  migrate/previous: not kept by the node: {said}");
+            assert_eq!(container, "migrate");
+            assert!(said.starts_with("unable to retrieve container logs for "));
+            assert_eq!(
+                StreamFailureKind::classify(&Error::LogNotKept { container, said }),
+                StreamFailureKind::LogNotKept,
+            );
+        }
+        Err(other) => {
+            panic!("the previous run should be readable or reported as not kept: {other}")
+        }
     }
-    assert!(
-        lines
-            .iter()
-            .any(|l| l.message.contains("relation \"orders\" does not exist")),
-        "the previous run is the one that printed the error",
-    );
 
     // ----- and the one that has none, which must not read as a failure.
     let err = streamer

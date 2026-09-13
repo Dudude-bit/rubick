@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -81,23 +83,22 @@ export function JobDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [] } = useLiveQuery({
+  // The refusal is carried rather than swallowed: an empty list from a 403
+  // reads as "this Job ran no pods", which is the one thing the pane may not
+  // say on a read that did not happen.
+  const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: ["job-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
-      try {
-        return await commands.listPods({
-          namespace,
-          labelSelector: `job-name=${name}`,
-          fieldSelector: null,
-          limit: null,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-        });
-      } catch {
-        return [];
-      }
+      return await commands.listPods({
+        namespace,
+        labelSelector: `job-name=${name}`,
+        fieldSelector: null,
+        limit: null,
+        statusFilter: null,
+        selector: null,
+        nodeName: null,
+      });
     },
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
@@ -244,6 +245,26 @@ export function JobDetail() {
         ),
       },
       {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                podsError={podsError}
+                laneRule="pod"
+                workload={name ? { owner: name, ownerKind: "Job" } : null}
+              />
+            </div>
+          </div>
+        ),
+      },
+      {
         id: "conditions",
         label: t("nav", "conditions"),
         glyph: viewGlyph(BadgeCheck),
@@ -274,6 +295,7 @@ export function JobDetail() {
       t,
       job,
       pods,
+      podsError,
       yaml,
       copyYaml,
       namespace,

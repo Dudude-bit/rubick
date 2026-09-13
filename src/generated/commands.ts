@@ -23,6 +23,7 @@ import type {
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
+  ControllerRevisionInfo,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -532,6 +533,18 @@ export async function getRolloutStatus(
   namespace: string | null
 ): Promise<RolloutStatus> {
   return invoke<RolloutStatus>("get_rollout_status", { name, namespace });
+}
+
+export async function getControllerRevisions(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ControllerRevisionInfo[]> {
+  return invoke<ControllerRevisionInfo[]>("get_controller_revisions", {
+    kind,
+    name,
+    namespace,
+  });
 }
 
 export async function listStatefulsets(
