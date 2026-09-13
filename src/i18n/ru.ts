@@ -2498,6 +2498,12 @@ export const ru: Catalogue = {
       many: "{n} привязок",
       other: "{n} привязки",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      few: "{n} AzureIdentity",
+      many: "{n} AzureIdentity",
+      other: "{n} AzureIdentity",
+    },
     azureProhibited: {
       one: "{n} запрещённая цель",
       few: "{n} запрещённые цели",

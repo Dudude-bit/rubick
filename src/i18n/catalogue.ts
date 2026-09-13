@@ -2363,6 +2363,10 @@ export const en = {
       one: "{n} prohibited target",
       other: "{n} prohibited targets",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      other: "{n} AzureIdentities",
+    },
     azureNoIdentityNamed: {
       one: "no AzureIdentity named {name}",
       other: "no AzureIdentity named {name}",
