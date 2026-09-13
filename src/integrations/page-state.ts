@@ -35,11 +35,11 @@ export function pageDecision(
 
   if (vendor.configured) {
     if (!connection || connection.state === "reading") return "detecting";
-    // The scan may still know the vendor and have not found it — that is
-    // "absent", a cluster answer. Only a vendor the scan has no entry for
-    // is answered by the connection alone.
+    // An address that was given opens the page whether or not the scan
+    // found the vendor's kinds: unreachable is said on the page, and a
+    // cluster without the kinds still has the connection to show.
+    if (connection.state !== "notConfigured") return "ready";
     const scanned = detected?.some((entry) => entry.id === vendor.id);
-    if (!scanned && connection.state !== "notConfigured") return "ready";
     if (!scanned) return "notConfigured";
   }
 
@@ -48,5 +48,7 @@ export function pageDecision(
   // "absent" is a claim about the cluster that nothing established.
   const entry = detected.find((candidate) => candidate.id === vendor.id);
   if (entry && entry.installed === null) return "cannotTell";
-  return "absent";
+  // Absent from the scan and with no address: for a vendor that takes one,
+  // the way in is the address, so that is the answer to give.
+  return vendor.configured ? "notConfigured" : "absent";
 }
