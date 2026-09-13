@@ -12,8 +12,8 @@ import { alertsAbout, readRule, rowsOf, type RuleRow } from "./model";
 /**
  * What kube-prometheus-stack wrote on a real cluster, plus three rule
  * objects written for the page: one the chart's Prometheus picks up with
- * an always-firing alert, one nothing picks up, one whose rule cannot
- * evaluate. Recorded on 2026-09-13 with `kubectl get -o json` and the
+ * an always-firing alert and a crash-loop alert about a pod written to
+ * crash, one nothing picks up, one whose rule cannot evaluate. Recorded on 2026-09-13 with `kubectl get -o json` and the
  * Prometheus `/api/v1/rules` (see `recordedAt` and `cluster` in the
  * fixture); the shapes are the operator's and Prometheus's, not ours.
  */
@@ -98,8 +98,8 @@ describe("the chart's rule objects", () => {
     expect(shop.group).toBe("firing");
     expect(shop.findings[0]).toMatchObject({
       kind: "firing",
-      alerts: 1,
-      rules: 1,
+      alerts: 2,
+      rules: 2,
     });
     expect(shop.object.recording).toBe(1);
     expect(rows[0].group).toBe("firing");
@@ -125,9 +125,32 @@ describe("the chart's rule objects", () => {
     );
   });
 
-  it("finds the Watchdog firing about nothing in particular", () => {
-    const general = row("kps-kube-prometheus-stack-general.rules");
-    expect(general.group).toBe("firing");
+  /**
+   * The crashing pod is named by the test object's alert and by the chart's,
+   * both through the `pod` label, and by nothing in another namespace. The
+   * Watchdog fires about no object at all. Breaks if the label table loses
+   * `Pod` or the namespace stops being matched.
+   */
+  it("names the alerts about a crashing pod by the label they carry, and none about a pod nothing names", () => {
+    const about = alertsAbout(loaded.rules, {
+      kind: "Pod",
+      name: "crash-demo",
+      namespace: "k8s-gui-test",
+    });
+    expect(about.find((a) => a.rule === "ShopPodCrashLooping")).toMatchObject({
+      state: "firing",
+      severity: "critical",
+      via: { label: "pod", value: "crash-demo" },
+    });
+    expect(about.map((a) => a.rule)).toContain("KubePodCrashLooping");
+    expect(
+      alertsAbout(loaded.rules, {
+        kind: "Pod",
+        name: "crash-demo",
+        namespace: "monitoring",
+      })
+    ).toEqual([]);
+    expect(row("kps-kube-prometheus-stack-general.rules").group).toBe("firing");
     expect(
       alertsAbout(loaded.rules, {
         kind: "Pod",
