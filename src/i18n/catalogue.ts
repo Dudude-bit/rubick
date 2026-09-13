@@ -522,6 +522,11 @@ export const en = {
     serves: "Serves",
     parents: "Parents",
     verdicts: "Verdicts",
+    ciliumSelects: "Selects",
+    ciliumInForce: "In force",
+    ciliumRules: "Rules",
+    ciliumReach: "Reach",
+    ciliumSecurityLabels: "Security labels",
     programmed: "Programmed",
   },
   action: {
@@ -1971,6 +1976,8 @@ export const en = {
   // Here rather than in the vendor module because a vendor module is a plain
   // table with no hook to call: it names the key, and the row translates it.
   vendor: {
+    ciliumGives:
+      "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
     scyllaGives:
@@ -2481,6 +2488,22 @@ export const en = {
       many: "{n} not ready",
       other: "{n} not ready",
     },
+    factCiliumPolicies: {
+      one: "{n} network policy",
+      other: "{n} network policies",
+    },
+    factCiliumClusterwide: {
+      one: "{n} cluster-wide",
+      other: "{n} cluster-wide",
+    },
+    factCiliumRejected: {
+      one: "{n} policy Cilium rejected — it enforces nothing",
+      other: "{n} policies Cilium rejected — they enforce nothing",
+    },
+    factCiliumUnanswered: {
+      one: "{n} policy the agent has not answered about",
+      other: "{n} policies the agent has not answered about",
+    },
     drainingCount: {
       one: "{n} draining",
       few: "{n} draining",
@@ -2834,6 +2857,12 @@ export const en = {
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
     nodeCordonedWord: "cordoned",
+    ciliumSelectsAll: "every endpoint in scope",
+    ciliumSelectsByExpression: "by {n} expression, not spelt here",
+    ciliumNoRules: "no rules — selected endpoints are denied everything",
+    ciliumDirections: "{ingress} in · {egress} out",
+    ciliumDenies: "{n} deny",
+    ciliumLeavesCluster: "outside the cluster",
   },
   cluster: {
     integrationsHint:

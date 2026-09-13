@@ -490,6 +490,11 @@ export const ru: Catalogue = {
     serves: "Обслуживает",
     parents: "Родители",
     verdicts: "Вердикты",
+    ciliumSelects: "Выбирает",
+    ciliumInForce: "Действует",
+    ciliumRules: "Правила",
+    ciliumReach: "Куда",
+    ciliumSecurityLabels: "Метки безопасности",
     programmed: "Запрограммирован",
   },
   action: {
@@ -2023,6 +2028,8 @@ export const ru: Catalogue = {
     cancelledFor: "Отменено: {context}.",
   },
   vendor: {
+    ciliumGives:
+      "все сетевые политики Cilium и то, принял ли их агент: отвергнутая политика ничего не применяет и выглядит точно так же, как рабочая",
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
     scyllaGives:
@@ -2688,6 +2695,30 @@ export const ru: Catalogue = {
       many: "{n} хостов маршрутизируются",
       other: "{n} хоста маршрутизируются",
     },
+    factCiliumPolicies: {
+      one: "{n} сетевая политика",
+      few: "{n} сетевые политики",
+      many: "{n} сетевых политик",
+      other: "{n} сетевой политики",
+    },
+    factCiliumClusterwide: {
+      one: "{n} общекластерная",
+      few: "{n} общекластерные",
+      many: "{n} общекластерных",
+      other: "{n} общекластерной",
+    },
+    factCiliumRejected: {
+      one: "{n} политику Cilium отверг — она ничего не применяет",
+      few: "{n} политики Cilium отверг — они ничего не применяют",
+      many: "{n} политик Cilium отверг — они ничего не применяют",
+      other: "{n} политики Cilium отверг — они ничего не применяют",
+    },
+    factCiliumUnanswered: {
+      one: "про {n} политику агент ещё не ответил",
+      few: "про {n} политики агент ещё не ответил",
+      many: "про {n} политик агент ещё не ответил",
+      other: "про {n} политики агент ещё не ответил",
+    },
     istioOrJoin: " или ",
     istioAndMoreBelow: "{said}, и ещё ниже",
     istioAndJoin: ", и ",
@@ -3069,6 +3100,12 @@ export const ru: Catalogue = {
       "Сырая конфигурация nginx, вставляемая в блок server дословно. Показана ровно как написана: приложение её не пересказывает, потому что она может переписать, перенаправить или запретить что угодно на этом маршруте.",
     revisionCurrent: "{said}, текущая",
     nodeCordonedWord: "закрыт для планирования",
+    ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumSelectsByExpression: "по выражениям ({n}), здесь не расписаны",
+    ciliumNoRules: "правил нет — выбранным эндпоинтам запрещено всё",
+    ciliumDirections: "{ingress} входящих · {egress} исходящих",
+    ciliumDenies: "{n} запрещающих",
+    ciliumLeavesCluster: "за пределы кластера",
   },
   cluster: {
     integrationsHint:
