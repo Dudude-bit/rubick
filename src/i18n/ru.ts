@@ -2406,6 +2406,9 @@ export const ru: Catalogue = {
     rowPartlyLoaded: "{n} не загружено",
     rowEvalError: "ошибка вычисления",
     rowQuiet: "тихо",
+    rowRecordingOnly: "только recording-правила",
+    recordingOnly:
+      "Только recording-правила. Prometheus перечисляет их отдельно от алертов, и здесь ничего не горит.",
     filter: "Фильтр по имени, namespace или алерту",
     filterLabel: "Фильтровать объекты правил по имени, namespace или алерту",
     ruleCount: {
