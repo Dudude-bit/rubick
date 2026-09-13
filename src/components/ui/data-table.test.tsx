@@ -767,6 +767,36 @@ describe("a list past the virtualisation threshold", () => {
    * a search had left. End then aimed at row 499 of a list showing eleven,
    * found nothing to focus, and did nothing — silently.
    */
+  /**
+   * A search box aimed at one column narrows the list.
+   *
+   * `searchKey` puts the text on that column's filter instead of the global
+   * one, and a column filter in react-table 9 does nothing unless the filter
+   * function it resolves to is registered on the feature set. Nothing
+   * failed: Namespaces, CRDs, Endpoints and Helm releases simply stopped
+   * filtering while every page on the global path kept working (#185).
+   */
+  it("narrows the list when the search is aimed at one column", async () => {
+    wrap(
+      <DataTable
+        columns={columns}
+        data={[
+          { name: "orders-api", namespace: "ns" },
+          { name: "billing-worker", namespace: "ns" },
+        ]}
+        searchKey="name"
+        getRowHref={href}
+      />
+    );
+    expect(screen.getByText("billing-worker")).toBeInTheDocument();
+
+    fireEvent.change(search(), { target: { value: "orders" } });
+    await waitFor(() =>
+      expect(screen.queryByText("billing-worker")).toBeNull()
+    );
+    expect(screen.getByText("orders-api")).toBeInTheDocument();
+  });
+
   it("sends End to the end of what the search left", async () => {
     long();
     fireEvent.change(search(), { target: { value: "pod-19" } });
