@@ -768,29 +768,62 @@ describe("a list past the virtualisation threshold", () => {
    * found nothing to focus, and did nothing — silently.
    */
   /**
-   * A search box aimed at one column narrows the list.
+   * The box reaches every column a reader can see, not only the name.
    *
-   * `searchKey` puts the text on that column's filter instead of the global
-   * one, and a column filter in react-table 9 does nothing unless the filter
-   * function it resolves to is registered on the feature set. Nothing
-   * failed: Namespaces, CRDs, Endpoints and Helm releases simply stopped
-   * filtering while every page on the global path kept working (#185).
+   * Ten lists used to aim it at one column, and searching an Ingress by the
+   * hostname it serves — or a StorageClass by its provisioner — found
+   * nothing. Fails if a second road back to a single column returns.
    */
-  it("narrows the list when the search is aimed at one column", async () => {
+  /**
+   * A column holding a structure is searched by the text it shows.
+   *
+   * An accessor over an array of objects stringifies to `[object Object]`,
+   * so the box matched nothing on it and "object" matched every row. The
+   * Ingress hosts column, which is the one people open that page to read,
+   * was one. Fails if such a column goes back to a bare `accessorKey`.
+   */
+  it("matches a column whose value is a structure by what it shows", async () => {
     wrap(
       <DataTable
-        columns={columns}
-        data={[
-          { name: "orders-api", namespace: "ns" },
-          { name: "billing-worker", namespace: "ns" },
+        columns={[
+          ...columns,
+          {
+            id: "hosts",
+            accessorFn: (row: Item & { hosts?: string[] }) =>
+              (row.hosts ?? []).join(" "),
+            header: "Hosts",
+          },
         ]}
-        searchKey="name"
+        data={[
+          { name: "a-1", namespace: "ns", hosts: ["legacy.nginx.test"] },
+          { name: "b-2", namespace: "ns", hosts: ["checkout.test"] },
+        ]}
+        getRowHref={href}
+      />
+    );
+
+    fireEvent.change(search(), { target: { value: "legacy.nginx" } });
+    await waitFor(() => expect(screen.queryByText("b-2")).toBeNull());
+    expect(screen.getByText("a-1")).toBeInTheDocument();
+  });
+
+  it("matches on a column other than the first", async () => {
+    wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          { accessorKey: "namespace", header: "Namespace" },
+        ]}
+        data={[
+          { name: "orders-api", namespace: "payments" },
+          { name: "billing-worker", namespace: "shop" },
+        ]}
         getRowHref={href}
       />
     );
     expect(screen.getByText("billing-worker")).toBeInTheDocument();
 
-    fireEvent.change(search(), { target: { value: "orders" } });
+    fireEvent.change(search(), { target: { value: "payments" } });
     await waitFor(() =>
       expect(screen.queryByText("billing-worker")).toBeNull()
     );

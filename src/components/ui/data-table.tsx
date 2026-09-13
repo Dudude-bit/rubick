@@ -54,7 +54,6 @@ interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
   data: TData[];
   isLoading?: boolean;
-  searchKey?: string;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -241,7 +240,6 @@ function DataTableInner<TData extends RowData>({
   columns,
   data,
   isLoading = false,
-  searchKey,
   searchPlaceholder,
   enableVirtualScroll,
   fill = false,
@@ -371,16 +369,14 @@ function DataTableInner<TData extends RowData>({
     enabled: keyboardNavEnabled,
   });
 
+  // One road. The box used to be able to aim at a single column instead,
+  // chosen by whether a caller passed a `searchKey`, and nothing said which
+  // pages should — so ten of them narrowed the search to the name for no
+  // stated reason, and the road they took was the one that quietly stopped
+  // filtering (#185). A column opts out with `enableGlobalFilter: false`.
   React.useEffect(() => {
-    const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
-
-    if (searchColumn) {
-      searchColumn.setFilterValue(deferredSearch);
-      setGlobalFilter("");
-    } else {
-      setGlobalFilter(deferredSearch);
-    }
-  }, [deferredSearch, searchKey, table]);
+    setGlobalFilter(deferredSearch);
+  }, [deferredSearch]);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;

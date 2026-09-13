@@ -39,10 +39,10 @@ import {
  *
  * No `sortFns` registry: no column names one, and sorting's `auto` reaches
  * the built-ins. A filter's `auto` does *not* — it resolves through the slot
- * below, so left empty every search box aimed at one column matched nothing
- * while nothing failed (#185). Pinned by "reverses the rows when its header
- * is toggled twice" and "narrows the list when the search is aimed at one
- * column", both in data-table.test.tsx.
+ * below, and left empty a column filter matches nothing while nothing fails
+ * (#185). No column filters one today; the entry stays so the first that
+ * does works, and `columnFilteringFeature` is here because the vendor makes
+ * global filtering depend on it.
  */
 export const tableStack = tableFeatures({
   rowSortingFeature,
