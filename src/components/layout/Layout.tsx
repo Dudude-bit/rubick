@@ -14,6 +14,8 @@ import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "@/hooks/useScopeTabs";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
 import { useCopyLink } from "@/hooks/useCopyLink";
+import { useShortcuts } from "@/hooks/useShortcuts";
+import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { DeepLinkBanner } from "./DeepLinkBanner";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
@@ -33,6 +35,7 @@ export function Layout() {
   useScopeTabs();
   useDeepLinks();
   useCopyLink();
+  useShortcuts();
   // Opens the tunnels this cluster asked to have up. Only the ones marked
   // for it — everything else waits to be pressed in the rail.
   useClusterForwards();
@@ -105,6 +108,7 @@ export function Layout() {
         </div>
       </div>
       <CommandPalette />
+      <ShortcutsOverlay />
       <YamlEditorDialog />
       {/* Outside the outlet: one instance, and it survives the route change
           that `Open full page` performs. */}
