@@ -1,7 +1,9 @@
 import { Network } from "lucide-react";
 
-import { defineVendor } from "../registry";
+import { defineVendor, pageCount } from "../registry";
+import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
+import { countUnrestricted, fetchPicture, PICTURE_KEY } from "./data";
 import { facts } from "./facts";
 
 /**
@@ -20,9 +22,11 @@ import { facts } from "./facts";
  * not answered about carries no condition at all. That is a third state, and
  * it is drawn as one.
  *
- * No page. What a page would add over the CRD views — which pods a policy
- * actually selects — needs the endpoint list, and that is one object per pod
- * on every node; the row and the columns are what can be said without it.
+ * The page is the join the CRD views cannot do: a policy names labels, a
+ * `CiliumEndpoint` carries the labels Cilium resolved for the pod, and only
+ * the two together say whether a pod is covered — or is selected solely by
+ * policies that were thrown away, which reads as covered from every other
+ * screen in this app.
  */
 export default defineVendor({
   id: "cilium",
@@ -31,6 +35,16 @@ export default defineVendor({
     gives: "ciliumGives",
     icon: Network,
     facts,
+  },
+  page: {
+    count: pageCount({
+      queryKey: PICTURE_KEY,
+      queryFn: fetchPicture,
+      select: countUnrestricted,
+      staleTime: ROUTING_STALE,
+    }),
+    load: () => import("./page"),
+    gate: { crd: "ciliumnetworkpolicies.cilium.io", namespaced: true },
   },
   crd,
 });

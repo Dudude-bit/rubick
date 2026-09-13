@@ -8,9 +8,9 @@
  * ones that work, and the namespace it was meant to close is open.
  */
 
-import { crdObjectsPath } from "../kit";
+import { integrationPagePath } from "../paths";
 import type { VendorFact } from "../registry";
-import { fetchPolicies, KINDS } from "./data";
+import { fetchPolicies } from "./data";
 import { enforcementOf } from "./model";
 
 export async function facts(): Promise<VendorFact[]> {
@@ -60,7 +60,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (all.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: crdObjectsPath(KINDS.policies),
+      to: integrationPagePath("cilium"),
     });
   }
 
