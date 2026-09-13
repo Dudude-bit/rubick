@@ -523,6 +523,8 @@ export const en = {
     parents: "Parents",
     verdicts: "Verdicts",
     ciliumSelects: "Selects",
+    ciliumClusterwide: "Cluster-wide",
+    ciliumNamespaced: "In this namespace",
     ciliumInForce: "In force",
     ciliumRules: "Rules",
     ciliumReach: "Reach",
@@ -2862,6 +2864,31 @@ export const en = {
     revisionCurrent: "{said}, current",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
+    ciliumCovered: "covered",
+    ciliumUnrestricted: "nothing selects it",
+    ciliumOnlyRejected: "only rejected policies",
+    ciliumCannotSay: "cannot say",
+    ciliumNothingSelects:
+      "No policy in this cluster selects this endpoint. Whatever it may reach, it may reach.",
+    ciliumEnforcesNothing: "rejected — enforces nothing",
+    ciliumUnreadablePolicies: {
+      one: "{n} more policy names endpoints somewhere this window cannot read",
+      other:
+        "{n} more policies name endpoints somewhere this window cannot read",
+    },
+    ciliumFindingRejected: {
+      one: "{n} policy the operator rejected — it enforces nothing",
+      other: "{n} policies the operator rejected — they enforce nothing",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} endpoint is selected only by policies that were rejected — it reads as covered and is not",
+      other:
+        "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} endpoint no policy selects",
+      other: "{n} endpoints no policy selects",
+    },
     ciliumNotOnTheWire: "written where this window cannot read it",
     ciliumAndExpressions: {
       one: "and {n} expression",
@@ -4307,6 +4334,8 @@ export const en = {
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+    ciliumPageDescription:
+      "Every endpoint with the policies that select it, and the ones nothing selects at all",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
