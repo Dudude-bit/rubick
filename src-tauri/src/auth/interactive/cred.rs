@@ -762,6 +762,65 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    /// A plugin that asks where the cursor is, with nobody but us to answer.
+    ///
+    /// `ConPTY` does not get on with the child until `ESC[6n` is answered, and
+    /// a silent renewal opens no pane — so xterm, the answerer in the app, is
+    /// not there. 4.14.0 moved the answer into the adapter's reader thread and
+    /// shipped it without once running it on Windows: every test in
+    /// `terminal::adapters::auth_exec` is `#[cfg(unix)]`, and the two console
+    /// tests above hand the answer in themselves before the child asks. This
+    /// is that fix, executed, with nothing written to the child at all.
+    #[tokio::test]
+    async fn a_credential_behind_a_cursor_query_needs_nobody_to_answer_but_us() {
+        use crate::terminal::{AuthExecAdapter, TerminalAdapter};
+        use std::collections::HashMap;
+        use std::time::Duration;
+
+        const TOKEN: &str = "token-behind-a-cursor-query";
+        let payload = format!(
+            "\u{1b}[6n{{\"kind\":\"ExecCredential\",\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"status\":{{\"token\":\"{TOKEN}\"}}}}"
+        );
+        let path = std::env::temp_dir().join(format!("rubick-ask-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, payload.as_bytes()).expect("the test writes its own input");
+
+        let mut adapter = AuthExecAdapter::new(
+            "cmd.exe".to_string(),
+            vec![
+                "/C".into(),
+                "type".into(),
+                path.to_string_lossy().to_string(),
+            ],
+            HashMap::new(),
+        );
+        let collected = adapter.collected_stdout();
+        adapter.connect().await.expect("the child has to start");
+
+        let ceiling = Duration::from_secs(super::super::SILENT_FLOW_TIMEOUT_SECS);
+        let started = std::time::Instant::now();
+        adapter.drain_to_exit(ceiling).await;
+        let took = started.elapsed();
+        adapter.close().await.expect("close");
+        let _ = std::fs::remove_file(&path);
+
+        let buffer = collected.lock().clone();
+        let credential = extract_exec_credential(&buffer).unwrap_or_else(|why| {
+            panic!(
+                "nothing came back in {took:?} from {} bytes: {why}",
+                buffer.len()
+            )
+        });
+        assert_eq!(
+            credential.status.and_then(|status| status.token).as_deref(),
+            Some(TOKEN)
+        );
+        assert!(
+            took < ceiling,
+            "the child was still held at the silent flow's ceiling: {took:?}"
+        );
+    }
+
     /// The same token down a console wide enough that no line of it wraps.
     /// If this one comes back whole while the 80-column one does not, the
     /// wrapping is the damage and a console kept wide is the cure.

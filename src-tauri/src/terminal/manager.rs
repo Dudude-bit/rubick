@@ -21,6 +21,16 @@ enum Gate {
 /// Seconds to wait for the frontend before giving up on the gate.
 const SUBSCRIBE_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_mins(1);
 
+/// How long the loop keeps reading after the child is gone.
+///
+/// **The child exiting is not the stream ending.** A Windows console hands
+/// its buffer over *after* the process has died, so stopping at
+/// `is_running()` drops whatever it still held — and for a credential plugin
+/// what it still held is the token. `AuthExecAdapter::drain_to_exit` has
+/// waited a second of quiet since #106; this loop, which every real session
+/// runs through and no test did, broke on the first empty read (#148).
+const QUIET_AFTER_EXIT: tokio::time::Duration = tokio::time::Duration::from_secs(1);
+
 /// Terminal manager for handling multiple sessions
 pub struct TerminalManager {
     event_tx: broadcast::Sender<AppEvent>,
@@ -205,6 +215,7 @@ impl TerminalManager {
             }
 
             // I/O loop
+            let mut quiet_since: Option<tokio::time::Instant> = None;
             loop {
                 tokio::select! {
                     _ = &mut cancel_rx => {
@@ -240,16 +251,21 @@ impl TerminalManager {
                     () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
                         match adapter.read_output().await {
                             Ok(Some(data)) => {
+                                quiet_since = None;
                                 let data_str = String::from_utf8_lossy(&data).to_string();
                                 let _ = event_tx.send(AppEvent::TerminalOutput {
                                     session_id: session_id_clone.clone(),
                                     data: data_str,
                                 });
                             }
+                            Ok(None) if adapter.is_running() => quiet_since = None,
                             Ok(None) => {
-                                // No data, check if still running
-                                if !adapter.is_running() {
-                                    break;
+                                // Gone, but see `QUIET_AFTER_EXIT`: what the
+                                // console had left is still on its way.
+                                match quiet_since {
+                                    None => quiet_since = Some(tokio::time::Instant::now()),
+                                    Some(since) if since.elapsed() >= QUIET_AFTER_EXIT => break,
+                                    Some(_) => {}
                                 }
                             }
                             Err(e) => {
@@ -366,6 +382,89 @@ mod tests {
         fn is_running(&self) -> bool {
             self.connected.load(Ordering::SeqCst)
         }
+    }
+
+    /// A child that is already gone, with its last bytes still on the way.
+    ///
+    /// `is_running()` false from the first read, the payload on the third:
+    /// the shape of a Windows console, which hands its buffer over after the
+    /// process has died. `cat` on a real pty never does this, which is how a
+    /// truncated credential reached two releases.
+    struct GoneButStillTalking {
+        reads: usize,
+        payload: Vec<u8>,
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for GoneButStillTalking {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            self.reads += 1;
+            if self.reads == 3 {
+                Ok(Some(self.payload.clone()))
+            } else {
+                Ok(None)
+            }
+        }
+
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            false
+        }
+    }
+
+    /// What the child had left is read even though the child is gone.
+    ///
+    /// The loop used to break on the first empty read once `is_running()`
+    /// went false. For a credential plugin the bytes that go missing that way
+    /// are the token, the flow then reports a plugin that "produced no
+    /// output", and in a silent renewal two of those in a row put the Sign in
+    /// screen back up (#148). Fails if the break returns.
+    #[tokio::test]
+    async fn a_child_that_has_exited_still_gets_read_to_the_end() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let session_id = manager
+            .create_session(Box::new(GoneButStillTalking {
+                reads: 0,
+                payload: b"{\"kind\":\"ExecCredential\"}".to_vec(),
+            }))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+
+        let heard = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { data, .. } => return Some(data),
+                    AppEvent::TerminalClosed { .. } => return None,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends either way");
+
+        assert_eq!(
+            heard.as_deref(),
+            Some("{\"kind\":\"ExecCredential\"}"),
+            "the loop closed the session before the console handed its buffer over"
+        );
     }
 
     #[tokio::test]

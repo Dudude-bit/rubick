@@ -601,4 +601,38 @@ mod tests {
             "nobody answered the cursor query; got {text:?}"
         );
     }
+
+    #[cfg(windows)]
+    /// The same claim where the question is actually asked, and the only
+    /// place the answer decides anything: `ConPTY` holds the child until
+    /// `ESC[6n` is answered. Every other test in this module spawns
+    /// `/bin/sh` and is `#[cfg(unix)]`, so before this one the Windows job
+    /// named this module and ran nothing in it.
+    #[tokio::test]
+    async fn a_child_that_asks_where_the_cursor_is_is_not_left_waiting() {
+        let path = std::env::temp_dir().join(format!("rubick-ask-{}.txt", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"\x1b[6nfinished").expect("the test writes its own input");
+
+        let mut adapter = AuthExecAdapter::new(
+            "cmd.exe".into(),
+            vec![
+                "/C".into(),
+                "type".into(),
+                path.to_string_lossy().to_string(),
+            ],
+            HashMap::new(),
+        );
+        adapter.connect().await.expect("spawn");
+        let started = std::time::Instant::now();
+        let drained = adapter.drain_to_exit(Duration::from_secs(20)).await;
+        let took = started.elapsed();
+        adapter.close().await.expect("close");
+        let _ = std::fs::remove_file(&path);
+
+        let text = String::from_utf8_lossy(&drained);
+        assert!(
+            text.contains("finished"),
+            "the child never got past the cursor query in {took:?}; got {text:?}"
+        );
+    }
 }

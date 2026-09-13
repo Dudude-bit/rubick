@@ -114,6 +114,17 @@ jobs:
         # subject *is* the platform — ConPTY hands back a rendered screen
         # rather than the child's bytes, and no other runner can tell us what
         # that does to a credential.
+        #
+        # Counted first, because a filter matching nothing exits 0. Every test
+        # in `terminal::adapters::auth_exec` was `#[cfg(unix)]`, so this job
+        # ran zero of them and stayed green while the ConPTY fix it exists to
+        # cover went out untested — twice.
+        shell: pwsh
         run: |
-          cargo test --workspace auth::interactive::cred::tests -- --nocapture
-          cargo test --workspace terminal::adapters::auth_exec
+          foreach ($filter in @('auth::interactive::cred::tests', 'terminal::adapters::auth_exec')) {
+            $listed = cargo test --workspace $filter -- --list | Select-String ': test$'
+            if (-not $listed) { throw "no tests matched $filter — this job proves nothing" }
+            Write-Host "$filter -> $($listed.Count) tests"
+            cargo test --workspace $filter -- --nocapture
+            if ($LASTEXITCODE -ne 0) { throw "$filter failed" }
+          }
