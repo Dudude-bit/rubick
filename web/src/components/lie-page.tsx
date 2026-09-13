@@ -16,7 +16,7 @@ export function LiePage({ lie }: { lie: Lie }) {
     <>
       <Nav />
       <main>
-        <Section eyebrow={`Lie #${n} of 3`}>
+        <Section eyebrow={`Lie #${n} of ${LIES.length}`}>
           <Reveal>
             <h1 className="max-w-4xl font-display text-4xl font-bold tracking-tight md:text-6xl">
               {lie.lie}
@@ -41,7 +41,7 @@ export function LiePage({ lie }: { lie: Lie }) {
           <Reveal settle className="mt-12">
             <WindowFrame img={lie.img} alt={lie.alt} eager />
           </Reveal>
-          <ReproducePanel className="mt-16" />
+          <ReproducePanel className="mt-16" own={lie.reproduce} />
           <Reveal className="mt-16 flex flex-wrap items-center gap-4">
             <ButtonLink href="/#install">Get Rubick</ButtonLink>
             {others.map((o) => (
