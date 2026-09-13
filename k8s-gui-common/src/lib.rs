@@ -4,4 +4,4 @@
 
 pub mod tracing;
 
-pub use tracing::{init_tracing, log_dir, LOG_FILE};
+pub use tracing::{init_tracing, log_dir, log_path, LOG_FILE};

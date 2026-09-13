@@ -101,7 +101,14 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         kc.parse_error = kc.parse_error.as_deref().map(&scrub);
     }
     d.app.config_path = d.app.config_path.as_deref().map(&scrub);
-    d.app.log_destination = d.app.log_destination.as_deref().map(&scrub);
+    // The home directory only. `scrub` also replaces context names as bare
+    // substrings, and a context called `logs` or `app` would rewrite the
+    // constant part of this path into one that does not exist — hiding
+    // nothing, since that part names nobody.
+    d.app.log_destination = d.app.log_destination.as_deref().map(|path| match &home {
+        Some(home) => path.replace(home.as_str(), "~"),
+        None => path.to_string(),
+    });
 
     d
 }

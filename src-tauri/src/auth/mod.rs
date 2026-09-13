@@ -11,6 +11,8 @@
 mod azure_aks;
 mod gcp_gke;
 mod interactive;
+
+pub(crate) use interactive::for_the_log;
 mod kubeconfig_tokens;
 mod oidc;
 pub mod renew;

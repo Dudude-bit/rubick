@@ -21,14 +21,18 @@ enum Gate {
 /// Seconds to wait for the frontend before giving up on the gate.
 const SUBSCRIBE_TIMEOUT: tokio::time::Duration = tokio::time::Duration::from_mins(1);
 
-/// How long the loop keeps reading after the child is gone.
+/// How long the loop keeps reading after the child is gone, for an adapter
+/// that says something can still arrive.
 ///
 /// **The child exiting is not the stream ending.** A Windows console hands
 /// its buffer over *after* the process has died, so stopping at
 /// `is_running()` drops whatever it still held — and for a credential plugin
-/// what it still held is the token. `AuthExecAdapter::drain_to_exit` has
-/// waited a second of quiet since #106; this loop, which every real session
-/// runs through and no test did, broke on the first empty read (#148).
+/// what it still held is the token. This loop, which every real session runs
+/// through and no test did, broke on the first empty read (#148).
+///
+/// Only for `TerminalAdapter::may_still_deliver`: a pod shell saw its own
+/// EOF and waiting past it would hold the exec socket, the session entry and
+/// the "Connected" badge for a second of nothing.
 const QUIET_AFTER_EXIT: tokio::time::Duration = tokio::time::Duration::from_secs(1);
 
 /// Terminal manager for handling multiple sessions
@@ -226,6 +230,14 @@ impl TerminalManager {
                         match input {
                             Some(TerminalInput::Data(data)) => {
                                 if let Err(e) = adapter.write_input(data.as_bytes()).await {
+                                    // Already gone: the same drop that ended
+                                    // the stream closed stdin, so this is the
+                                    // session ending and not a shell that
+                                    // broke. Reported, it paints a red
+                                    // "Reconnect" over a clean exit.
+                                    if !adapter.is_running() {
+                                        break;
+                                    }
                                     tracing::error!("Failed to write input: {}", e);
                                     emit_failure(
                                         &event_tx,
@@ -259,6 +271,7 @@ impl TerminalManager {
                                 });
                             }
                             Ok(None) if adapter.is_running() => quiet_since = None,
+                            Ok(None) if !adapter.may_still_deliver() => break,
                             Ok(None) => {
                                 // Gone, but see `QUIET_AFTER_EXIT`: what the
                                 // console had left is still on its way.
@@ -384,15 +397,33 @@ mod tests {
         }
     }
 
-    /// A child that is already gone, with its last bytes still on the way.
+    /// A child that goes quiet, then dies, with its last bytes still on the
+    /// way — the shape of a Windows console, which hands its buffer over
+    /// after the process has died.
     ///
-    /// `is_running()` false from the first read, the payload on the third:
-    /// the shape of a Windows console, which hands its buffer over after the
-    /// process has died. `cat` on a real pty never does this, which is how a
-    /// truncated credential reached two releases.
+    /// Alive for the first `alive_for` reads, so the loop's "still running"
+    /// arm is exercised too: without it a quiet second while the child was
+    /// still working would end the session.
     struct GoneButStillTalking {
         reads: usize,
+        alive_for: usize,
+        payload_at: usize,
         payload: Vec<u8>,
+        console: bool,
+        writes_fail: bool,
+    }
+
+    impl GoneButStillTalking {
+        fn console(payload: &[u8]) -> Self {
+            Self {
+                reads: 0,
+                alive_for: 2,
+                payload_at: 5,
+                payload: payload.to_vec(),
+                console: true,
+                writes_fail: false,
+            }
+        }
     }
 
     #[async_trait::async_trait]
@@ -403,7 +434,10 @@ mod tests {
 
         async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
             self.reads += 1;
-            if self.reads == 3 {
+            // Quiet while alive, quiet again once gone, and the payload two
+            // reads after the death — a chunk no `is_running()` check can
+            // wait for on its own.
+            if self.reads == self.payload_at {
                 Ok(Some(self.payload.clone()))
             } else {
                 Ok(None)
@@ -411,7 +445,11 @@ mod tests {
         }
 
         async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
-            Ok(())
+            if self.writes_fail {
+                Err(Error::Terminal("Write failed: broken pipe".to_string()))
+            } else {
+                Ok(())
+            }
         }
 
         async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
@@ -423,7 +461,11 @@ mod tests {
         }
 
         fn is_running(&self) -> bool {
-            false
+            self.reads < self.alive_for
+        }
+
+        fn may_still_deliver(&self) -> bool {
+            self.console
         }
     }
 
@@ -440,10 +482,9 @@ mod tests {
         let manager = TerminalManager::new(event_tx);
 
         let session_id = manager
-            .create_session(Box::new(GoneButStillTalking {
-                reads: 0,
-                payload: b"{\"kind\":\"ExecCredential\"}".to_vec(),
-            }))
+            .create_session(Box::new(GoneButStillTalking::console(
+                b"{\"kind\":\"ExecCredential\"}",
+            )))
             .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
@@ -464,6 +505,131 @@ mod tests {
             heard.as_deref(),
             Some("{\"kind\":\"ExecCredential\"}"),
             "the loop closed the session before the console handed its buffer over"
+        );
+    }
+
+    /// A stream whose end the adapter saw for itself ends the session at
+    /// once.
+    ///
+    /// Only a console keeps talking past the child, and the second spent
+    /// waiting for one is a second a pod shell would hold its exec socket,
+    /// its session entry and its "Connected" badge for nothing. Fails if
+    /// `may_still_deliver` stops being consulted.
+    #[tokio::test]
+    async fn a_stream_that_is_over_ends_the_session_without_waiting() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let mut adapter = GoneButStillTalking::console(b"never read");
+        adapter.console = false;
+        let session_id = manager
+            .create_session(Box::new(adapter))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+
+        let started = std::time::Instant::now();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let AppEvent::TerminalClosed { .. } =
+                    event_rx.recv().await.expect("the bus stays open")
+                {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("the session closes");
+
+        assert!(
+            started.elapsed() < QUIET_AFTER_EXIT,
+            "waited the console's grace on a stream that had already ended: {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// A shell that simply has nothing to say is not closed under the reader.
+    ///
+    /// The quiet window is for a child that has *gone*. Without the arm that
+    /// resets it while `is_running()` holds, a pod shell waiting at its
+    /// prompt reaches the "stream is over" arm on its first idle tick and
+    /// the pane closes under the person typing into it. Fails if that arm is
+    /// deleted.
+    #[tokio::test]
+    async fn a_shell_that_goes_quiet_is_not_closed_under_the_reader() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let mut adapter = GoneButStillTalking::console(b"$ ");
+        adapter.console = false;
+        adapter.alive_for = 100;
+        adapter.payload_at = 3;
+        let session_id = manager
+            .create_session(Box::new(adapter))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+
+        let heard = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { data, .. } => return Some(data),
+                    AppEvent::TerminalClosed { .. } => return None,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session says something either way");
+
+        assert_eq!(
+            heard.as_deref(),
+            Some("$ "),
+            "an idle tick closed a shell that was still running"
+        );
+    }
+
+    /// A keystroke that lands after the shell is gone closes the pane; it
+    /// does not paint a fault over it.
+    ///
+    /// `PodExecAdapter`'s stdin and stdout die in the same drop, so a key
+    /// pressed between the shell exiting and the pane hearing about it fails
+    /// to write. Reported, it reaches `PodTerminal` as a red "The shell
+    /// stopped accepting input" with a Reconnect button over what was a
+    /// clean `exit`. Fails if the write error is announced again.
+    #[tokio::test]
+    async fn a_keystroke_after_the_shell_is_gone_is_not_a_fault() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+
+        let mut adapter = GoneButStillTalking::console(b"logout");
+        adapter.alive_for = 0;
+        adapter.writes_fail = true;
+        let session_id = manager
+            .create_session(Box::new(adapter))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+        manager
+            .send_input(&session_id, "q")
+            .await
+            .expect("the pane still thinks it is connected");
+
+        let heard = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::StreamFailed { message, .. } => return Some(message),
+                    AppEvent::TerminalClosed { .. } => return None,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends either way");
+
+        assert_eq!(
+            heard, None,
+            "a clean exit was reported as a shell that stopped accepting input"
         );
     }
 

@@ -76,6 +76,11 @@ pub enum Renewal {
     /// It was tried until there was no room left before the deadline, and the
     /// plugin kept answering with the credentials already in use.
     RanOut,
+    /// One attempt is left and it lands *after* the deadline — for a plugin
+    /// that mints nothing while the old credential is alive. Kept apart from
+    /// `Scheduled`, which promises a renewal before the deadline: this one
+    /// means a few seconds of refusal are coming whatever happens.
+    LastChance,
     /// `kubectl proxy` holds the credentials and renews them itself.
     Delegated,
     /// Nothing has said yet. The default, because every other answer is a
@@ -255,7 +260,7 @@ async fn run(
                 tracing::warn!(
                     %context,
                     ?outcome,
-                    %error,
+                    why = %crate::auth::for_the_log(&error.to_string()),
                     "credential renewal gave up"
                 );
                 stop(&state, &context, outcome);
@@ -312,13 +317,14 @@ async fn run(
             timing = Timing::Margin;
         }
 
-        let Some(again) = next_wait(next, Utc::now(), timing) else {
+        let Some((rung, again)) = rung_with_room(next, Utc::now(), timing) else {
             // Out of room, and nothing here will stop the `401` now. Not
             // `NeedsYou`: no plugin asked for anybody.
             tracing::warn!(%context, ?timing, "no room left before the deadline");
             stop(&state, &context, Renewal::RanOut);
             return;
         };
+        timing = rung;
         tracing::info!(
             %context,
             ?timing,
@@ -326,7 +332,17 @@ async fn run(
             "next credential renewal scheduled"
         );
         wait = again;
-        state.renew_manager.record(&context, Renewal::Scheduled);
+        // Past is after the deadline by construction: the credentials are
+        // gone by then, and calling that "scheduled" would put a reassuring
+        // chip over a window that is about to be refused.
+        state.renew_manager.record(
+            &context,
+            if timing == Timing::Past {
+                Renewal::LastChance
+            } else {
+                Renewal::Scheduled
+            },
+        );
     }
 }
 
@@ -362,6 +378,29 @@ impl Timing {
             Self::Creep => Some(Self::Past),
             Self::Past => None,
         }
+    }
+}
+
+/// The first rung from `timing` onward that still has a moment ahead of it,
+/// and when that moment is.
+///
+/// Walking rather than giving up is the whole reason `Past` exists. A
+/// credential with less than `CREEP` of life left when the margin attempt
+/// answers "same token" has no room on the creep rung — and if that ended
+/// the ladder, the one attempt that reaches a plugin which mints nothing
+/// early would never be made, for exactly the short-lived credentials it was
+/// added for.
+fn rung_with_room(
+    deadline: DateTime<Utc>,
+    now: DateTime<Utc>,
+    timing: Timing,
+) -> Option<(Timing, std::time::Duration)> {
+    let mut rung = timing;
+    loop {
+        if let Some(wait) = next_wait(deadline, now, rung) {
+            return Some((rung, wait));
+        }
+        rung = rung.next()?;
     }
 }
 
@@ -548,6 +587,37 @@ mod tests {
         );
     }
 
+    /// The rung that has no room hands the ladder on; it does not end it.
+    ///
+    /// A credential answered "same token" with less than `CREEP` of life
+    /// left has no moment on the creep rung — and giving up there would skip
+    /// the one attempt past the deadline, for exactly the short-lived
+    /// credentials it was added for. This is the walk `run` does between
+    /// rungs, which no test reached while it was written inline.
+    #[test]
+    fn a_rung_with_no_room_hands_on_rather_than_ending_the_ladder() {
+        let now = Utc::now();
+
+        // Forty seconds left: the creep rung wanted forty-five.
+        let deadline = now + Duration::seconds(40);
+        assert_eq!(next_wait(deadline, now, Timing::Creep), None, "no room");
+        let (rung, wait) = rung_with_room(deadline, now, Timing::Creep).expect("one left");
+        assert_eq!(rung, Timing::Past, "the creep rung handed on");
+        assert!(
+            wait > (Duration::seconds(40)).to_std().unwrap(),
+            "and it lands after the deadline, which is the whole point"
+        );
+
+        // Past is the last one: once it has been used there is nothing left.
+        assert_eq!(
+            rung_with_room(deadline, now, Timing::Past).map(|(r, _)| r),
+            Some(Timing::Past)
+        );
+        assert!(rung_with_room(deadline, now, Timing::Past)
+            .and_then(|_| Timing::Past.next())
+            .is_none());
+    }
+
     /// Some plugins mint nothing until the old credential is actually dead,
     /// so every attempt before the deadline is answered with the token in
     /// use and the schedule used to give up a few seconds short of the
@@ -602,5 +672,41 @@ mod tests {
         assert_eq!(manager.outcome("no-plugin"), Renewal::Scheduled);
         manager.forget("no-plugin");
         assert_eq!(manager.outcome("no-plugin"), Renewal::Unknown);
+    }
+
+    /// TEMPORARY simulation of `run`'s rung ladder for a plugin that always
+    /// answers with the token in use.
+    #[test]
+    fn sim_ladder_reachability() {
+        fn walk(life: i64, plugin: i64) -> Vec<Timing> {
+            let t0 = Utc::now();
+            let deadline = t0 + Duration::seconds(life);
+            let mut now = t0;
+            let mut timing = Timing::Margin;
+            let mut reached: Vec<Timing> = Vec::new();
+            let Some(mut wait) = wait_for(deadline, now) else {
+                return reached;
+            };
+            for _ in 0..10 {
+                now += Duration::from_std(wait).unwrap();
+                reached.push(timing);
+                now += Duration::seconds(plugin);
+                let Some(later) = timing.next() else { break };
+                timing = later;
+                let Some(again) = next_wait(deadline, now, timing) else {
+                    break;
+                };
+                wait = again;
+            }
+            reached
+        }
+        for life in [45i64, 60, 70, 76, 100, 105, 110, 150, 300, 3600] {
+            for plugin in [0i64, 1, 5, 25] {
+                println!(
+                    "life={life:5} plugin={plugin:3} -> {:?}",
+                    walk(life, plugin)
+                );
+            }
+        }
     }
 }

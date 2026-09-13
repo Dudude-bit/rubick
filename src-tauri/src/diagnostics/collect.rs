@@ -101,8 +101,11 @@ impl InstallationInfo {
                     .to_string_lossy()
                     .into_owned()
             }),
-            log_destination: k8s_gui_common::log_dir(crate::BUNDLE)
-                .map(|dir| dir.join(k8s_gui_common::LOG_FILE))
+            // Asked, not recomputed: `log_dir` says where a file would go,
+            // which is not the same as one being open. A path named for a
+            // directory that could not be created sends a reader looking for
+            // a file that is not there.
+            log_destination: k8s_gui_common::log_path()
                 .map(|file| file.to_string_lossy().into_owned()),
         }
     }

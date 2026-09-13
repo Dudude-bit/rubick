@@ -199,7 +199,9 @@ describe("EnvironmentBlocks", () => {
       />
     );
     expect(screen.getByText(/no log file/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^Logs: $/)).toBeNull();
+    // The path line is gone, not blank: `Logs:` with nothing after it reads
+    // as a destination the reader failed to scroll to.
+    expect(screen.queryByText(/^Logs:/)).toBeNull();
   });
 });
 

@@ -520,6 +520,8 @@ async fn read_auth_url(path: &PathBuf) -> Result<String> {
 /// plugin printed: without them "no JSON object found in 6 bytes" is
 /// indistinguishable from PTY init noise, a one-line plugin error, a
 /// truncated JSON header or an empty terminal response.
+/// A look at what the plugin printed, with nothing in it a reader could use
+/// as a credential — the same text reaches the pane and `rubick.log`.
 fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
     let truncated = data.len() > max_bytes;
     let slice = &data[..data.len().min(max_bytes)];
@@ -542,7 +544,7 @@ fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
     if truncated {
         let _ = write!(out, " (+{} more bytes)", data.len() - max_bytes);
     }
-    out
+    super::cred::without_credentials(&out)
 }
 
 fn create_browser_script(session_id: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -816,14 +818,36 @@ mod preview_tests {
 
     #[test]
     fn truncates_with_suffix_when_over_limit() {
-        let data = vec![b'x'; 250];
+        // Spaced, so the length is what is being measured and not the
+        // credential masking — an unbroken run of 250 characters is a
+        // credential as far as this can tell, and is reported as one.
+        let data = b"x ".repeat(125);
         let preview = preview_bytes(&data, 200);
         assert!(
             preview.ends_with("(+50 more bytes)"),
             "expected truncation suffix; got {preview:?}"
         );
-        // 200 'x' chars between the surrounding quotes.
-        assert!(preview.starts_with(&format!("\"{}\"", "x".repeat(200))));
+        assert!(preview.starts_with(&format!("\"{}", "x ".repeat(100))));
+    }
+
+    /// The plugin's stdout reaches `rubick.log`, which outlives the run and
+    /// which Diagnostics invites the reader to send. A preview of an
+    /// `ExecCredential` the extractor choked on must carry the shape and not
+    /// the token. Fails if the preview stops going through the one door.
+    #[test]
+    fn a_preview_of_the_plugins_stdout_carries_no_token() {
+        let token = "e".repeat(3794);
+        let preview = preview_bytes(
+            format!(r#"{{"kind":"ExecCredential","status":{{"token":"{token}"}}}}"#).as_bytes(),
+            8192,
+        );
+
+        assert!(
+            !preview.contains(&token),
+            "the token reached the log: {preview}"
+        );
+        assert!(preview.contains("<3794 characters>"), "{preview}");
+        assert!(preview.contains("ExecCredential"), "{preview}");
     }
 
     #[test]

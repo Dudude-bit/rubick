@@ -295,6 +295,13 @@ impl TerminalAdapter for AuthExecAdapter {
     fn is_running(&self) -> bool {
         self.is_alive.load(std::sync::atomic::Ordering::SeqCst)
     }
+
+    /// A console does. `is_alive` goes false the moment `child.wait()`
+    /// returns, and on Windows the bytes the console still held — the
+    /// credential — arrive after that.
+    fn may_still_deliver(&self) -> bool {
+        true
+    }
 }
 
 /// Reading a whole session out of the console, for tests on both sides of

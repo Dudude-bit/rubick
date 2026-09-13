@@ -1813,6 +1813,7 @@ export type Renewal =
   | "needsYou"
   | "failed"
   | "ranOut"
+  | "lastChance"
   | "delegated"
   | "unknown";
 

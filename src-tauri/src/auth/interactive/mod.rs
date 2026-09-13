@@ -13,6 +13,15 @@ mod exec;
 /// that is a relation between two constants nothing else states.
 #[cfg(test)]
 pub(crate) use exec::SILENT_FLOW_TIMEOUT_SECS;
+
+/// What any text becomes before it is written to a file that outlives the
+/// run. One door, because the two callers — a credential plugin's stdout and
+/// a `config.toml` that would not parse — carry different secrets and the
+/// same rule: `rubick.log` is pasted into issues.
+#[must_use]
+pub(crate) fn for_the_log(text: &str) -> String {
+    cred::without_credentials(text)
+}
 mod oidc;
 
 use crate::error::{AuthError, Error, Result};

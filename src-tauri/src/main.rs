@@ -43,13 +43,12 @@ fn main() {
     // packaged Windows build is a GUI-subsystem binary with no console, so
     // stderr reaches nobody, and every question about what the app did has
     // had to be answered by guessing.
-    let logs = log_dir(BUNDLE);
-    init_tracing(logs.as_deref());
+    init_tracing(log_dir(BUNDLE).as_deref());
 
     tracing::info!("Starting Rubick application");
-    if let Some(dir) = &logs {
-        let file = dir.join(k8s_gui_common::LOG_FILE);
-        tracing::info!(path = %file.display(), "writing this run's log");
+    match k8s_gui_common::log_path() {
+        Some(file) => tracing::info!(path = %file.display(), "writing this run's log"),
+        None => tracing::warn!("no log file this run; this run leaves nothing to send"),
     }
     tracing::info!(?shell_env, "login shell environment");
 
