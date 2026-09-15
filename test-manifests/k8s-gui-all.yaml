@@ -3073,3 +3073,25 @@ spec:
       ports:
         - protocol: UDP
           port: 53
+---
+# Two readings that used to print wrongly. The first rule names ports and no
+# peer: anything may be reached, but only on 5432 — a restriction, not the
+# "allows all" the direction column used to claim. The second names only a
+# protocol, which is every UDP port, and used to render as the literal "null".
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ports-without-peers
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: log-demo
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP

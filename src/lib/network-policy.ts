@@ -12,7 +12,6 @@
 import type { T as Translator } from "@/i18n/useT";
 import type {
   PolicyDirection,
-  PolicyPeer,
   PolicyPort,
   PolicySelects,
 } from "@/generated/types";
@@ -41,17 +40,6 @@ export function reachOf(selected: number | null): Reach {
   if (selected === null) return { kind: "cannotSay" };
   if (selected === 0) return { kind: "nothing" };
   return { kind: "pods", count: selected };
-}
-
-/**
- * Whether a peer's two selectors are both written, which is the AND.
- *
- * `podSelector` and `namespaceSelector` in one peer mean those pods *in*
- * those namespaces. In two peers they mean either. Drawing the first as two
- * lines widens a rule in the direction that opens the cluster.
- */
-export function isIntersection(peer: PolicyPeer): boolean {
-  return peer.pods.kind !== "notSaid" && peer.namespaces.kind !== "notSaid";
 }
 
 /**
@@ -111,7 +99,17 @@ export function directionFact(
   }
 }
 
-export function portText(port: PolicyPort): string {
+/**
+ * One port entry, in words.
+ *
+ * `port` is optional and the API server does not fill it in: an entry that
+ * names only a protocol is *every* port of that protocol, which is the
+ * widest thing the entry can say. Printing the field would put the literal
+ * `null` on the row where the reader needs the opposite of a restriction.
+ */
+export function portText(port: PolicyPort, t: Translator): string {
+  if (port.port === null)
+    return t("empty", "everyPortOf", { protocol: port.protocol });
   const range = port.endPort ? `${port.port}-${port.endPort}` : port.port;
   return `${port.protocol}/${range}`;
 }

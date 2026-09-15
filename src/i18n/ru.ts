@@ -3784,12 +3784,14 @@ export const ru: Catalogue = {
     selectsNoPods: "ни одного пода",
     everyPodHere: "каждый под здесь",
     noSelectorOnPolicy: "селектора нет",
-    thisNamespaceOnly: "этот неймспейс",
     everyPodThere: "любой под",
     fromAnywhere: "откуда угодно",
+    toAnywhere: "куда угодно",
     podsInNamespaces: "{pods} в {namespaces}",
-    podsAndNamespaces: "{pods} · {namespaces}",
+    inThisNamespace: "этом неймспейсе",
+    inEveryNamespace: "любом неймспейсе",
     exceptRanges: "кроме {ranges}",
+    everyPortOf: "любой порт {protocol}",
     governsNeither:
       "Политика не называет ни одного направления, поэтому ни на что не действует.",
     podsUnread:

@@ -938,9 +938,9 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     (name, namespace) => commands.getNetworkPolicy(name, namespace),
     (policy, _target, t) => {
       const reach = reachOf(policy.selected);
-      const directions: [string, PolicyDirection][] = [
-        ["Ingress", policy.ingress],
-        ["Egress", policy.egress],
+      const directions: [string, PolicyDirection, boolean][] = [
+        ["Ingress", policy.ingress, false],
+        ["Egress", policy.egress, true],
       ];
       return {
         createdAt: policy.createdAt,
@@ -972,27 +972,36 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
               },
             ],
           },
-          ...directions.map(([title, direction]) => ({
+          // Rules only where `policyTypes` names the direction. The object
+          // keeps an `ingress:` block the policy does not govern, and drawing
+          // it told a reader ingress was restricted to those peers while the
+          // list row and the detail page both said the policy makes no claim
+          // about it — and while ingress was in fact wide open.
+          ...directions.map(([title, direction, outbound]) => ({
             title,
-            count: direction.rules.length || undefined,
-            items: direction.rules.map((rule) => ({
-              label:
-                rule.ports.length === 0
-                  ? t("empty", "everyPort")
-                  : rule.ports.map(portText).join(", "),
-              value:
-                rule.peers.length === 0 ? (
-                  <span className="text-warn">
-                    {t("empty", "fromAnywhere")}
-                  </span>
-                ) : (
-                  <span className="flex flex-col gap-0.5">
-                    {rule.peers.map((peer, j) => (
-                      <Peer key={j} peer={peer} />
-                    ))}
-                  </span>
-                ),
-            })),
+            count: direction.governed
+              ? direction.rules.length || undefined
+              : undefined,
+            items: direction.governed
+              ? direction.rules.map((rule) => ({
+                  label:
+                    rule.ports.length === 0
+                      ? t("empty", "everyPort")
+                      : rule.ports.map((port) => portText(port, t)).join(", "),
+                  value:
+                    rule.peers.length === 0 ? (
+                      <span className="text-warn">
+                        {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
+                      </span>
+                    ) : (
+                      <span className="flex flex-col gap-0.5">
+                        {rule.peers.map((peer, j) => (
+                          <Peer key={j} peer={peer} />
+                        ))}
+                      </span>
+                    ),
+                }))
+              : [],
             emptyMessage: directionFact(direction, t).value,
           })),
         ],

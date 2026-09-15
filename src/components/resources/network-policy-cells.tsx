@@ -16,7 +16,6 @@ import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import {
-  isIntersection,
   namespacesOf,
   podsOf,
   reachOf,
@@ -138,23 +137,22 @@ export function Peer({ peer }: { peer: PolicyPeer }) {
       {namespaces.kind === "written"
         ? namespaces.query
         : namespaces.kind === "everyNamespace"
-          ? t("empty", "everyNamespace")
-          : t("empty", "thisNamespaceOnly")}
+          ? t("empty", "inEveryNamespace")
+          : t("empty", "inThisNamespace")}
     </span>
   );
 
-  // One string, not two halves and a word: "those pods in those namespaces"
-  // and "those pods, or every pod in those namespaces" are different
-  // sentences, and in Russian they are different word orders too.
+  // Always "in", because the two selectors of one peer are always an AND:
+  // those pods, *in* those namespaces. The OR is between peers, and peers
+  // are already separate lines. Picking a second sentence for a peer that
+  // names only one of the two read it as unscoped, which is the direction
+  // that opens the cluster.
   return (
     <span className="text-fg-mid">
-      {parts(
-        t(
-          "empty",
-          isIntersection(peer) ? "podsInNamespaces" : "podsAndNamespaces"
-        ),
-        { pods: podNode, namespaces: namespaceNode }
-      )}
+      {parts(t("empty", "podsInNamespaces"), {
+        pods: podNode,
+        namespaces: namespaceNode,
+      })}
     </span>
   );
 }

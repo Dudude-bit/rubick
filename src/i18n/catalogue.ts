@@ -3485,15 +3485,22 @@ export const en = {
     selectsNoPods: "no pods",
     everyPodHere: "every pod here",
     noSelectorOnPolicy: "no selector",
-    thisNamespaceOnly: "this namespace",
     everyPodThere: "every pod",
-    fromAnywhere: "anywhere",
-    // The AND and the OR of a NetworkPolicy peer. One string each, because
-    // the word between the two halves is what tells them apart and a
-    // translator needs the word order along with it.
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
     podsInNamespaces: "{pods} in {namespaces}",
-    podsAndNamespaces: "{pods} · {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
     exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
     governsNeither:
       "This policy names neither direction, so it applies to nothing.",
     podsUnread:

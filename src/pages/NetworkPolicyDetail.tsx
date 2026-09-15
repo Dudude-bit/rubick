@@ -24,27 +24,27 @@ import type {
   PolicyRule,
 } from "@/generated/types";
 
-function Rule({ rule }: { rule: PolicyRule }) {
+function Rule({ rule, outbound }: { rule: PolicyRule; outbound: boolean }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-1 border-b border-hair py-2 last:border-b-0">
       <div className="flex flex-col gap-0.5 text-[12px]">
         {rule.peers.length === 0 ? (
           // No peer is not "no source": it is every source, and it is the
           // shape a policy takes when somebody meant to restrict and left the
-          // list empty.
+          // list empty. Which word depends on the direction — the English is
+          // the same shape both ways and the Russian is not.
           <span className="text-warn">
-            <T section="empty" k="fromAnywhere" />
+            {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
           </span>
         ) : (
           rule.peers.map((peer, i) => <Peer key={i} peer={peer} />)
         )}
       </div>
       <div className="text-[11px] text-fg-fnt">
-        {rule.ports.length === 0 ? (
-          <T section="empty" k="everyPort" />
-        ) : (
-          rule.ports.map(portText).join(", ")
-        )}
+        {rule.ports.length === 0
+          ? t("empty", "everyPort")
+          : rule.ports.map((port) => portText(port, t)).join(", ")}
       </div>
     </div>
   );
@@ -53,9 +53,11 @@ function Rule({ rule }: { rule: PolicyRule }) {
 function Direction({
   title,
   direction,
+  outbound,
 }: {
   title: string;
   direction: PolicyDirection;
+  outbound: boolean;
 }) {
   const t = useT();
   const fact = directionFact(direction, t);
@@ -69,7 +71,9 @@ function Direction({
           {fact.value}
         </p>
       ) : (
-        direction.rules.map((rule, i) => <Rule key={i} rule={rule} />)
+        direction.rules.map((rule, i) => (
+          <Rule key={i} rule={rule} outbound={outbound} />
+        ))
       )}
     </Section>
   );
@@ -138,8 +142,12 @@ export function NetworkPolicyDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.NetworkPolicy, policy);
   const intercept = useDeliveryIntercept(deliveryQuery);
-  const ruleCount =
-    (policy?.ingress.rules.length ?? 0) + (policy?.egress.rules.length ?? 0);
+  // Only the rules the tab draws. A policy carrying an `ingress:` block that
+  // `policyTypes` does not name keeps those rules on the object, and counting
+  // them promised a reader rules the tab then refuses to show.
+  const ruleCount = [policy?.ingress, policy?.egress]
+    .filter((direction) => direction?.governed)
+    .reduce((n, direction) => n + (direction?.rules.length ?? 0), 0);
 
   const tabs = [
     {
@@ -168,10 +176,14 @@ export function NetworkPolicyDetail() {
           ) : (
             <>
               {policy.ingress.governed && (
-                <Direction title="Ingress" direction={policy.ingress} />
+                <Direction
+                  title="Ingress"
+                  direction={policy.ingress}
+                  outbound={false}
+                />
               )}
               {policy.egress.governed && (
-                <Direction title="Egress" direction={policy.egress} />
+                <Direction title="Egress" direction={policy.egress} outbound />
               )}
             </>
           )}
@@ -200,9 +212,24 @@ export function NetworkPolicyDetail() {
       namespace={namespace}
       badges={
         policy && (
-          <span className="text-[11px] text-fg-mut">
-            {directionFact(policy.ingress, t).value} ·{" "}
-            {directionFact(policy.egress, t).value}
+          // Each half keeps its own tone: "allows all" is the one verdict
+          // the colour exists for, and a fixed muted span dropped it here
+          // while the row and the fact below it both painted it.
+          <span className="text-[11px]">
+            {[policy.ingress, policy.egress]
+              .map((direction) => directionFact(direction, t))
+              .map((fact, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="text-fg-fnt"> · </span>}
+                  <span
+                    className={
+                      fact.tone === "warn" ? "text-warn" : "text-fg-mut"
+                    }
+                  >
+                    {fact.value}
+                  </span>
+                </span>
+              ))}
           </span>
         )
       }

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { PolicyDirection, PolicyPeer } from "@/generated/types";
 import {
   directionFact,
-  isIntersection,
   namespacesOf,
   podsOf,
   portText,
@@ -19,6 +18,10 @@ const direction = (over: Partial<PolicyDirection>): PolicyDirection => ({
   deniesEverything: false,
   ...over,
 });
+
+/** A translator that hands back the key, so a test asserts which was chosen. */
+const say = ((_section: string, key: string, values?: { n?: number }) =>
+  values?.n === undefined ? key : `${key}:${values.n}`) as never;
 
 const peer = (over: Partial<PolicyPeer>): PolicyPeer => ({
   pods: { kind: "notSaid" },
@@ -55,6 +58,28 @@ describe("what a policy does in one direction", () => {
     expect(verdictOf(direction({ governed: false, rules: [] }))).toBe(
       "notGoverned"
     );
+  });
+
+  /**
+   * A rule with no peers but with ports lets traffic through from anywhere
+   * *on those ports*, which is a restriction. Reading peers alone summarised
+   * "out to 5432 and nothing else" as "allows all", in warn amber, on the
+   * column people scan the list with.
+   */
+  it("does not call a direction open because one rule named no peer", () => {
+    expect(
+      verdictOf(
+        direction({
+          rules: [
+            {
+              peers: [],
+              ports: [{ protocol: "TCP", port: "5432", endPort: null }],
+            },
+          ],
+          opensToEverything: false,
+        })
+      )
+    ).toBe("restricts");
   });
 
   it("says a direction with real rules restricts rather than opens", () => {
@@ -108,25 +133,6 @@ describe("how many pods a policy is actually in front of", () => {
 
 describe("the two selectors inside one peer", () => {
   /**
-   * Both written in one peer is an intersection: those pods in those
-   * namespaces. Drawing it as two separate reaches widens the rule, and it
-   * widens it in the direction that lets more traffic in.
-   */
-  it("marks a peer that names both selectors as an intersection", () => {
-    expect(
-      isIntersection(
-        peer({
-          pods: { kind: "written", query: "app=web" },
-          namespaces: { kind: "written", query: "tier=front" },
-        })
-      )
-    ).toBe(true);
-    expect(
-      isIntersection(peer({ pods: { kind: "written", query: "app=web" } }))
-    ).toBe(false);
-  });
-
-  /**
    * The same three shapes mean opposite things on the two axes. An absent
    * `namespaceSelector` is this policy's own namespace, the narrowest peer
    * there is; an absent `podSelector` is every pod, the widest. One renderer
@@ -143,9 +149,6 @@ describe("the two selectors inside one peer", () => {
 });
 
 describe("the words each direction is given", () => {
-  const say = ((_section: string, key: string, values?: { n?: number }) =>
-    values?.n === undefined ? key : `${key}:${values.n}`) as never;
-
   /**
    * The list, the detail page and the peek panel all call this, which is the
    * point: the same policy drawn by three surfaces used to be three chances
@@ -195,14 +198,27 @@ describe("how a port is written", () => {
    * `port` would say a policy opens 8000 when it opens 8000 through 8100.
    */
   it("keeps a range a range and a named port its name", () => {
-    expect(portText({ protocol: "TCP", port: "5432", endPort: null })).toBe(
-      "TCP/5432"
-    );
-    expect(portText({ protocol: "TCP", port: "8000", endPort: 8100 })).toBe(
-      "TCP/8000-8100"
-    );
-    expect(portText({ protocol: "UDP", port: "dns", endPort: null })).toBe(
+    expect(
+      portText({ protocol: "TCP", port: "5432", endPort: null }, say)
+    ).toBe("TCP/5432");
+    expect(
+      portText({ protocol: "TCP", port: "8000", endPort: 8100 }, say)
+    ).toBe("TCP/8000-8100");
+    expect(portText({ protocol: "UDP", port: "dns", endPort: null }, say)).toBe(
       "UDP/dns"
+    );
+  });
+
+  /**
+   * The API server does not fill `port` in, so an entry naming only a
+   * protocol arrives with `port: null` and means *every* port of it — the
+   * widest thing the entry can say. Printing the field put the literal
+   * "null" on the row where the reader needed the opposite of a
+   * restriction. Fails if the null case goes back through the template.
+   */
+  it("says every port of a protocol rather than printing the missing field", () => {
+    expect(portText({ protocol: "UDP", port: null, endPort: null }, say)).toBe(
+      "everyPortOf"
     );
   });
 });

@@ -460,7 +460,10 @@ pub struct PolicyDirection {
     /// the policy says nothing about it and some other policy may.
     pub governed: bool,
     pub rules: Vec<PolicyRule>,
-    /// Some rule names no peers: everything is allowed this way.
+    /// Some rule names neither peers nor ports: everything is allowed this
+    /// way, from anywhere and on every port. A rule that names no peer but
+    /// does name ports opens every *source* on those ports, which is a
+    /// restriction and must not be summarised as "allows all".
     pub opens_to_everything: bool,
     /// Governed, with no rules at all: nothing is allowed this way.
     pub denies_everything: bool,
@@ -522,7 +525,9 @@ fn direction_of(
     let rules = rules.unwrap_or_default();
     PolicyDirection {
         governed,
-        opens_to_everything: rules.iter().any(|rule| rule.peers.is_empty()),
+        opens_to_everything: rules
+            .iter()
+            .any(|rule| rule.peers.is_empty() && rule.ports.is_empty()),
         denies_everything: governed && rules.is_empty(),
         rules,
     }
@@ -892,7 +897,34 @@ mod network_policy_rule_tests {
         assert_eq!(ports[1].protocol, "UDP");
         assert_eq!(ports[1].port.as_deref(), Some("dns"));
         assert_eq!(ports[2].end_port, Some(8100));
-        // Second rule names ports and no peers, which is the open shape.
-        assert!(info.egress.opens_to_everything);
+    }
+
+    /// The rule that opens every source on one port, which is a restriction
+    /// and used to be summarised as "allows all".
+    ///
+    /// A rule with no peers lets traffic through from anywhere — but only on
+    /// the ports it names, and a policy whose whole point is "out to 5432
+    /// and nothing else" is the opposite of open. Only a rule that names
+    /// neither peers nor ports opens the direction. Fails if the verdict
+    /// goes back to reading peers alone.
+    #[test]
+    fn naming_a_port_and_no_peer_restricts_rather_than_opens() {
+        let ported: NetworkPolicyInfo = (&policy(&serde_json::json!({
+            "podSelector": {},
+            "policyTypes": ["Egress"],
+            "egress": [{ "ports": [{ "protocol": "TCP", "port": 5432 }] }],
+        })))
+            .into();
+        assert!(ported.egress.governed);
+        assert!(!ported.egress.opens_to_everything);
+        assert!(!ported.egress.denies_everything);
+
+        let wide: NetworkPolicyInfo = (&policy(&serde_json::json!({
+            "podSelector": {},
+            "policyTypes": ["Egress"],
+            "egress": [{}],
+        })))
+            .into();
+        assert!(wide.egress.opens_to_everything);
     }
 }
