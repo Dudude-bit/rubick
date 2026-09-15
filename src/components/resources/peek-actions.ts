@@ -355,6 +355,8 @@ const DELETE_COMMANDS: Partial<Record<ResourceKind, DeleteCommand>> = {
   Secret: (name, namespace) => commands.deleteSecret(name, namespace),
   Service: (name, namespace) => commands.deleteService(name, namespace),
   Ingress: (name, namespace) => commands.deleteIngress(name, namespace),
+  NetworkPolicy: (name, namespace) =>
+    commands.deleteNetworkPolicy(name, namespace),
   Endpoints: (name, namespace) => commands.deleteEndpoints(name, namespace),
   PersistentVolumeClaim: (name, namespace) =>
     commands.deletePersistentVolumeClaim(name, namespace),

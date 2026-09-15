@@ -50,7 +50,11 @@ pub async fn list_network_policies(
     let params = ListParams::default();
     let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
     let pods_api = ctx.namespaced_or_cluster_api::<Pod>();
-    let (policies, pods) = tokio::join!(policies_api.list(&params), pods_api.list(&params));
+    // Metadata only: the question is which labels a pod carries, and the
+    // bodies are the whole weight of a pod list on a cluster with ten
+    // thousand of them — pulled on every poll of this page.
+    let (policies, pods) =
+        tokio::join!(policies_api.list(&params), pods_api.list_metadata(&params));
     let policies = policies?.items;
     let pods = pods.ok().map(|list| list.items);
 
@@ -80,7 +84,7 @@ pub async fn get_network_policy(
     // handed it.
     if let Ok(pods) = ctx
         .namespaced_api::<Pod>()
-        .list(&ListParams::default())
+        .list_metadata(&ListParams::default())
         .await
     {
         info.selected = Some(

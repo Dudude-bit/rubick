@@ -209,6 +209,7 @@ export function NetworkPolicyDetail() {
       error={error}
       resourceKind={ResourceType.NetworkPolicy}
       title={policy?.name || name || ""}
+      createdAt={policy?.createdAt}
       namespace={namespace}
       badges={
         policy && (

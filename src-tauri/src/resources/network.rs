@@ -600,9 +600,9 @@ impl From<&k8s_openapi::api::networking::v1::NetworkPolicy> for NetworkPolicyInf
 /// lacks `list pods` would invent it. The two live one `Option` apart, which
 /// is why the join is one function rather than a line in each caller.
 #[must_use]
-pub fn joined_to_pods(
+pub fn joined_to_pods<P: kube::Resource>(
     policies: &[k8s_openapi::api::networking::v1::NetworkPolicy],
-    pods: Option<&[k8s_openapi::api::core::v1::Pod]>,
+    pods: Option<&[P]>,
 ) -> Vec<NetworkPolicyInfo> {
     policies
         .iter()
@@ -742,10 +742,11 @@ mod network_policy_tests {
             "policyTypes": ["Ingress"],
         }))];
 
-        let refused = joined_to_pods(&policies, None);
+        let refused = joined_to_pods::<k8s_openapi::api::core::v1::Pod>(&policies, None);
         assert_eq!(refused[0].selected, None);
 
-        let read_and_empty = joined_to_pods(&policies, Some(&[]));
+        let read_and_empty =
+            joined_to_pods::<k8s_openapi::api::core::v1::Pod>(&policies, Some(&[]));
         assert_eq!(read_and_empty[0].selected, Some(0));
     }
 

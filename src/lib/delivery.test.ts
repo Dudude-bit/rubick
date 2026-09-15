@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 import type { Delivery, DeliverySource } from "@/integrations";
+import { RESOURCE_REGISTRY } from "./resource-registry";
 import {
+  apiGroupOf,
   deliveryApplyIntercept,
   deliveryCell,
   deliveryIntercept,
@@ -371,5 +373,63 @@ describe("which lists carry the column", () => {
       group: "",
       kind: "ConfigMap",
     });
+  });
+});
+
+/**
+ * The table nothing cross-checked, which is how a kind gets left out of it.
+ *
+ * `API_GROUPS` is a hand-kept map beside a registry that already states every
+ * kind's `apiVersion`. A kind missing from it makes `apiGroupOf` answer
+ * `null` and `deliveryScopeOf` return no column — so the list page, the
+ * detail page and the peek all go silent about who applied the object, with
+ * nothing failing anywhere. That happened to `NetworkPolicy` on the commit
+ * that added it, and the checklist in CLAUDE.md does not mention this table.
+ *
+ * A group written wrong is worse than one missing: Flux's inventory id is
+ * `namespace_name_group_kind`, so `"app"` for `"apps"` reports a delivered
+ * object as labelled and disowned.
+ */
+describe("the delivery table against the resource registry", () => {
+  /** Kinds the cluster writes rather than a person: nobody delivers these. */
+  const NOT_DELIVERED = new Set(["Endpoints", "Event", "Namespace", "Node"]);
+
+  /**
+   * Kinds a person does deliver and this table has never named. Listed here
+   * rather than left out, because a guard that quietly excused them would
+   * read as "every kind is covered" — which is the shape of the bug it is
+   * guarding against. Each is a page where the Delivery column is missing
+   * today; filling them in is a change to those pages, not to this table.
+   */
+  const NOT_YET = new Set([
+    "Gateway",
+    "GatewayClass",
+    "HTTPRoute",
+    "GRPCRoute",
+    "TLSRoute",
+    "TCPRoute",
+    "UDPRoute",
+    "HorizontalPodAutoscaler",
+    "PodDisruptionBudget",
+  ]);
+
+  it("names every kind the registry gives a page, in the registry's own group", () => {
+    const missing: string[] = [];
+    const wrong: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      if (NOT_DELIVERED.has(entry.kind) || NOT_YET.has(entry.kind)) continue;
+      const group = apiGroupOf(entry.kind);
+      if (group === null) {
+        missing.push(entry.kind);
+        continue;
+      }
+      // "apps/v1" -> "apps"; a core kind's "v1" has no slash and no group.
+      const fromRegistry = entry.apiVersion.includes("/")
+        ? entry.apiVersion.split("/")[0]
+        : "";
+      if (group !== fromRegistry)
+        wrong.push(`${entry.kind}: ${group} ≠ ${fromRegistry}`);
+    }
+    expect({ missing, wrong }).toEqual({ missing: [], wrong: [] });
   });
 });
