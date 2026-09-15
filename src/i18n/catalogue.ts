@@ -998,6 +998,8 @@ export const en = {
     closeNamed: "Close {name}",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
+    filterClusters: "Filter clusters",
+    filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
     reload: "Reload",
     useTheDefault: "Use the default",
@@ -5486,6 +5488,12 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    // `n` is the total, not the number shown: "1 of 42 context" is what
+    // happens when the count that picks the form is the filtered one.
+    contextsMatching: {
+      one: "{shown} of {n} context",
+      other: "{shown} of {n} contexts",
+    },
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
