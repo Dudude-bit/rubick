@@ -303,7 +303,6 @@ export function HelmReleasesTab({
           data={releases}
           isLoading={isLoading}
           searchPlaceholder={t("action", "searchReleases")}
-          searchKey="name"
           getRowId={getHelmReleaseRowId}
           getRowHref={helmReleaseHref}
         />

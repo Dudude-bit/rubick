@@ -71,6 +71,7 @@ function Fields({
   fields: [string, string][];
   onFieldClick?: (key: string, value: string) => void;
 }) {
+  const t = useT();
   if (fields.length === 0) return null;
   return (
     <span className="text-fg-fnt">
@@ -79,7 +80,7 @@ function Fields({
           {" "}
           <button
             type="button"
-            title={`Filter on ${key}=${value}`}
+            title={t("action", "filterOn", { key, value })}
             className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
             onClick={(event) => {
               event.stopPropagation();
@@ -115,6 +116,8 @@ interface LogLineProps {
   viewMode: ViewMode;
   searchQuery: string;
   containerColor: string | undefined;
+  /** The lane's name, where the pane reads more than one pod. */
+  laneLabel?: string | null;
   expanded: boolean;
   onToggleDetail: (id: number) => void;
   lineId: number;
@@ -127,6 +130,7 @@ export const LogLineComponent = memo(function LogLineComponent({
   viewMode,
   searchQuery,
   containerColor,
+  laneLabel = null,
   expanded,
   onToggleDetail,
   lineId,
@@ -162,10 +166,21 @@ export const LogLineComponent = memo(function LogLineComponent({
         <span
           className={`block min-w-0 ${viewMode === "table" ? "break-all" : "truncate"}`}
         >
+          {laneLabel !== null && (
+            <LaneLabel
+              label={laneLabel}
+              color={containerColor}
+              pod={log.pod}
+              onFieldClick={onFieldClick}
+            />
+          )}
           {viewMode === "table" && (
             <button
               type="button"
-              title={`Filter on level=${level}`}
+              title={t("action", "filterOn", {
+                key: "level",
+                value: LEVEL_WORDS[level],
+              })}
               className={`mr-2 text-[10px] font-semibold uppercase tracking-wide hover:underline ${LEVEL_COLORS[level]}`}
               onClick={() => onLevelClick?.(level)}
             >
@@ -235,7 +250,10 @@ function LineDetail({
           />
           <button
             type="button"
-            title={`Filter on container=${log.container}`}
+            title={t("action", "filterOn", {
+              key: "container",
+              value: log.container,
+            })}
             className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
             onClick={() => onFieldClick?.("container", log.container)}
           >
@@ -244,7 +262,18 @@ function LineDetail({
         </span>
         <button
           type="button"
-          title={`Filter on level=${level}`}
+          title={t("action", "filterOn", { key: "pod", value: log.pod })}
+          className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
+          onClick={() => onFieldClick?.("pod", log.pod)}
+        >
+          {log.pod}
+        </button>
+        <button
+          type="button"
+          title={t("action", "filterOn", {
+            key: "level",
+            value: LEVEL_WORDS[level],
+          })}
           className={`hover:underline ${LEVEL_COLORS[level]}`}
           onClick={() => onLevelClick?.(level)}
         >
@@ -264,7 +293,7 @@ function LineDetail({
               <dt>
                 <button
                   type="button"
-                  title={`Filter on ${key}=${value}`}
+                  title={t("action", "filterOn", { key, value })}
                   className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
                   onClick={() => onFieldClick?.(key, value)}
                 >
@@ -287,15 +316,43 @@ function LineDetail({
  * the row, not a badge to be scanned for, and 2 481 identical lines are
  * the least interesting thing on screen once you know how many there are.
  */
+/** The pod a line came from, in the lane's colour, and a filter on it. */
+function LaneLabel({
+  label,
+  color,
+  pod,
+  onFieldClick,
+}: {
+  label: string;
+  color: string | undefined;
+  pod: string;
+  onFieldClick?: (key: string, value: string) => void;
+}) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      title={t("action", "filterOn", { key: "pod", value: pod })}
+      className="mr-2 text-[10px] font-semibold hover:underline"
+      style={{ color: color ?? "hsl(var(--fg-fnt))" }}
+      onClick={() => onFieldClick?.("pod", pod)}
+    >
+      {label}
+    </button>
+  );
+}
+
 export const LogRunRow = memo(function LogRunRow({
   run,
   expanded,
   containerColor,
+  laneLabel = null,
   onToggle,
 }: {
   run: LogRun;
   expanded: boolean;
   containerColor: string | undefined;
+  laneLabel?: string | null;
   onToggle: (id: number) => void;
 }) {
   const t = useT();
@@ -315,6 +372,14 @@ export const LogRunRow = memo(function LogRunRow({
       <Time timestamp={run.head.timestamp} />
       <Gutter color={containerColor} dim />
       <span className="block min-w-0 truncate text-fg-mut">
+        {laneLabel !== null && (
+          <span
+            className="mr-2 text-[10px] font-semibold"
+            style={{ color: containerColor ?? "hsl(var(--fg-fnt))" }}
+          >
+            {laneLabel}
+          </span>
+        )}
         <span aria-hidden="true" className="mr-1 text-fg-fnt">
           {expanded ? "▾" : "▸"}
         </span>

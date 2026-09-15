@@ -165,7 +165,6 @@ export const EndpointsList = createResourceListPage<EndpointsInfo>({
   title: "Endpoints",
   description: ({ scope, t }) =>
     t("empty", "endpointsFor", { scope: scope.inWords }),
-  searchKey: "name",
   fetcher: ({ namespace }) =>
     commands.listEndpoints({
       namespace,

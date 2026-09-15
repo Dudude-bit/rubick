@@ -75,6 +75,20 @@ kubectl delete pv k8s-gui-test-pv
 | Ingress   | `api-ingress`       | -                    | No TLS, with a path rewrite                      |
 | Endpoints | `external-db`       | -                    | Written by hand rather than by the control plane |
 
+#### NetworkPolicies
+
+Six of them, because the shape of one and its effect come apart. Each row is a
+reading the list page has to get right on its own.
+
+| Name                  | What it exercises                                                    |
+| --------------------- | -------------------------------------------------------------------- |
+| `deny-all-ingress`    | `podSelector: {}` — every pod here, the widest a policy gets         |
+| `allow-from-anywhere` | `ingress: [{}]` — one character from the row above and its opposite  |
+| `selects-nothing`     | a typo'd label: accepted, listed, and in front of nothing            |
+| `intersection-peer`   | two selectors in ONE peer, which is an AND                           |
+| `union-peers`         | the same two as two peers, which is an OR and much wider             |
+| `egress-to-cidr`      | egress only, a CIDR with an `except` hole, and silence about ingress |
+
 ## Draining a node
 
 `drain-scene.yaml` and `drain-kind.yaml` are separate, because draining wants a

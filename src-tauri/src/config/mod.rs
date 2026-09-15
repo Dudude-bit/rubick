@@ -151,17 +151,21 @@ impl AppConfig {
             Err(why) => match Self::config_path() {
                 Ok(path) if path.exists() => {
                     let (config, recovery) = Self::move_aside(&path, why.to_string());
+                    // `toml` renders the offending source line, and the
+                    // line that fails to parse is as likely as any to be the
+                    // bearer token or the registry password this file exists
+                    // to hold. Diagnostics still shows `recovery.why` whole,
+                    // on the reader's own screen; the log file, which
+                    // outlives the run and gets pasted into issues, does not.
+                    let why = crate::auth::for_the_log(&recovery.why);
                     if let Some(backup) = &recovery.backup {
                         tracing::error!(
-                            "config.toml did not parse ({}); started on defaults, kept it at {}",
-                            recovery.why,
-                            backup
+                            "config.toml did not parse ({why}); started on defaults, kept it at {backup}"
                         );
                     } else {
                         tracing::error!(
-                            "config.toml did not parse ({}) and could not be moved aside; \
+                            "config.toml did not parse ({why}) and could not be moved aside; \
                              started on defaults, {} is still there",
-                            recovery.why,
                             recovery.path
                         );
                     }

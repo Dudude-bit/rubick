@@ -87,6 +87,31 @@ pub enum StreamFailureKind {
     /// answer, and the control that asked it should say so instead of
     /// reporting a failure.
     NoPreviousRun,
+    /// The run happened and the node dropped its log. Not a transport
+    /// failure: retrying reaches the same node, which still does not have it.
+    LogNotKept,
+}
+
+/// The kubelet's answer, with a 200 and `text/plain`, when the node no longer
+/// has the log: a refusal shaped exactly like output. Matched as the whole
+/// body, never as a substring, so a program printing the sentence among its
+/// own lines keeps its logs.
+#[must_use]
+pub fn is_runtime_dropped_log(body: &str) -> bool {
+    let body = body.trim();
+    !body.contains('\n') && body.starts_with(DROPPED_LOG)
+}
+
+const DROPPED_LOG: &str = "unable to retrieve container logs for ";
+
+/// The same refusal inside an error rather than a body: some versions answer
+/// the log request with a 400 carrying that sentence, and by the time it
+/// reaches `classify` it is wrapped in the apiserver's and this app's own
+/// words. Read as a substring on purpose — error text is not container
+/// output, which is why `is_runtime_dropped_log` must never be.
+#[must_use]
+pub fn mentions_dropped_log(text: &str) -> bool {
+    text.contains(DROPPED_LOG)
 }
 
 /// The apiserver's phrasing when `--previous` is asked of a container
@@ -117,12 +142,21 @@ impl StreamFailureKind {
         if matches!(error, crate::error::Error::NoPreviousRun { .. }) {
             return Self::NoPreviousRun;
         }
+        if matches!(error, crate::error::Error::LogNotKept { .. }) {
+            return Self::LogNotKept;
+        }
         if matches!(error, crate::error::Error::NotFound { .. }) {
             return Self::Gone;
         }
         let text = error.to_string();
         if is_missing_previous_run(&text) {
             return Self::NoPreviousRun;
+        }
+        // Before the generic rule below: this sentence ends in nothing
+        // recognisable, so it would fall through to `Broken` and be offered a
+        // reconnect that reaches the same node, which still does not have it.
+        if mentions_dropped_log(&text) {
+            return Self::LogNotKept;
         }
         let text = text.to_lowercase();
         if text.contains("not found") || text.contains("notfound") {
@@ -955,6 +989,7 @@ mod tests {
             (StreamFailureKind::Gone, "gone"),
             (StreamFailureKind::Broken, "broken"),
             (StreamFailureKind::NoPreviousRun, "no-previous-run"),
+            (StreamFailureKind::LogNotKept, "log-not-kept"),
         ];
         for (kind, expected) in kinds {
             assert_eq!(serde_json::to_value(kind).unwrap(), expected);
@@ -982,5 +1017,75 @@ mod tests {
             readable_cause(&Error::Connection("kube-apiserver unreachable".into())),
             "kube-apiserver unreachable",
         );
+    }
+}
+
+#[cfg(test)]
+mod runtime_dropped_log_tests {
+    use super::*;
+
+    /// Recorded from a v1.36 node whose containerd had already collected the
+    /// previous container. The apiserver answered 200 with `text/plain` and
+    /// this as the whole body, so nothing but the words tells it from output.
+    const SAID: &str = "unable to retrieve container logs for containerd://3bb6fd00e2a155012f125f8daba848e7614637b61bbbcd51720e2baa5cbeff8a";
+
+    #[test]
+    fn a_refusal_the_kubelet_returned_with_a_200_is_not_a_log_line() {
+        assert!(is_runtime_dropped_log(SAID));
+        assert!(is_runtime_dropped_log(&format!("{SAID}\n")));
+        assert_eq!(
+            StreamFailureKind::classify(&crate::error::Error::LogNotKept {
+                container: "migrate".to_string(),
+                said: SAID.to_string(),
+            }),
+            StreamFailureKind::LogNotKept
+        );
+    }
+
+    /// The sentence is only the kubelet's when it is the whole body. A
+    /// program that prints it among its own lines still has its logs, and
+    /// hiding them behind a refusal would be the same lie pointed the other
+    /// way.
+    #[test]
+    fn a_container_that_prints_the_sentence_itself_keeps_its_logs() {
+        assert!(!is_runtime_dropped_log(&format!("starting\n{SAID}\ndone")));
+        // The case the whole-body clause exists for: an entrypoint wrapper
+        // that echoes a captured error as its first line, and keeps going.
+        assert!(!is_runtime_dropped_log(&format!(
+            "{SAID}\nrows copied: 412"
+        )));
+        assert!(!is_runtime_dropped_log("applying 015_backfill.sql"));
+        assert!(!is_runtime_dropped_log(""));
+    }
+
+    /// Some versions answer the log request with a 400 carrying the same
+    /// sentence. By the time it reaches `classify` it is wrapped in the
+    /// apiserver's words and this app's own, so the whole-body rule cannot
+    /// see it — and it fell through to `Broken`, with a reconnect that
+    /// reaches the same node and fails the same way for ever.
+    #[test]
+    fn the_same_refusal_inside_an_error_is_not_a_broken_connection() {
+        let wrapped = crate::error::Error::LogStream(format!(
+            "Failed to start log stream: ApiError: BadRequest: {SAID}"
+        ));
+        assert!(mentions_dropped_log(&wrapped.to_string()));
+        assert_eq!(
+            StreamFailureKind::classify(&wrapped),
+            StreamFailureKind::LogNotKept
+        );
+    }
+
+    /// The neighbouring case, which the apiserver phrases completely
+    /// differently: a 400 with a `Status` object. Reading one as the other
+    /// turns "the run never happened" into "the node lost it", and the two
+    /// send a reader to different places.
+    #[test]
+    fn a_run_that_never_happened_is_still_its_own_answer() {
+        assert!(!is_runtime_dropped_log(
+            "previous terminated container \"seed\" in pod \"init-demo\" not found"
+        ));
+        assert!(is_missing_previous_run(
+            "previous terminated container \"seed\" in pod \"init-demo\" not found"
+        ));
     }
 }

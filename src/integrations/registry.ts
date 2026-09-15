@@ -55,8 +55,13 @@ import type {
   StyledSegment,
 } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
-import type { Delivery, DeliveryQuery } from "./gitops";
-import type { CrdColumn, CrdStatus } from "./kit";
+import type {
+  Delivery,
+  DeliveryOwner,
+  DeliveryQuery,
+  DeliveryRevision,
+} from "./gitops";
+import type { CrdColumn } from "./kit";
 import type { InClusterHint } from "./forwarded";
 
 /**
@@ -466,6 +471,18 @@ export interface Capabilities {
   "delivery.source": (
     objects: DeliveryQuery[]
   ) => Promise<Array<Delivery | null>>;
+  /**
+   * What a delivery owner has applied over time, newest first, in the
+   * owner's own record of it.
+   *
+   * `null` for an owner kind the vendor does not own, the same rule as
+   * `object.related`; an empty list is an owner that keeps no history, which
+   * a Kustomization really does not. A read that fails throws, so a page
+   * never draws "nothing was ever applied" over a 403.
+   */
+  "delivery.history": (
+    owner: DeliveryOwner
+  ) => Promise<DeliveryRevision[] | null>;
   /**
    * Usage over a window longer than this app has been open.
    *
@@ -962,12 +979,13 @@ export interface Gate {
 export interface CrdView {
   /** Does this vendor own that API group? Kind narrows it where a group is shared. */
   matches: (group: string, kind: string) => boolean;
+  // No `status` here on purpose: there was one, and no surface read it. A
+  // verdict belongs in a column, which without a `cell` is drawn as a badge.
   /**
    * The columns for one of its kinds. Every vendor has a default for a kind
    * it does not recognise, because a CRD group grows faster than this file.
    */
   columnsFor: (kind: string) => CrdColumn[];
-  status: CrdStatus;
 }
 
 /**

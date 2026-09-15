@@ -786,6 +786,69 @@ describe("a list past the virtualisation threshold", () => {
    * a search had left. End then aimed at row 499 of a list showing eleven,
    * found nothing to focus, and did nothing — silently.
    */
+  /**
+   * The box reaches every column a reader can see, not only the name.
+   *
+   * Ten lists used to aim it at one column, and searching an Ingress by the
+   * hostname it serves — or a StorageClass by its provisioner — found
+   * nothing. Fails if a second road back to a single column returns.
+   */
+  /**
+   * A column holding a structure is searched by the text it shows.
+   *
+   * An accessor over an array of objects stringifies to `[object Object]`,
+   * so the box matched nothing on it and "object" matched every row. The
+   * Ingress hosts column, which is the one people open that page to read,
+   * was one. Fails if such a column goes back to a bare `accessorKey`.
+   */
+  it("matches a column whose value is a structure by what it shows", async () => {
+    wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          {
+            id: "hosts",
+            accessorFn: (row: Item & { hosts?: string[] }) =>
+              (row.hosts ?? []).join(" "),
+            header: "Hosts",
+          },
+        ]}
+        data={[
+          { name: "a-1", namespace: "ns", hosts: ["legacy.nginx.test"] },
+          { name: "b-2", namespace: "ns", hosts: ["checkout.test"] },
+        ]}
+        getRowHref={href}
+      />
+    );
+
+    fireEvent.change(search(), { target: { value: "legacy.nginx" } });
+    await waitFor(() => expect(screen.queryByText("b-2")).toBeNull());
+    expect(screen.getByText("a-1")).toBeInTheDocument();
+  });
+
+  it("matches on a column other than the first", async () => {
+    wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          { accessorKey: "namespace", header: "Namespace" },
+        ]}
+        data={[
+          { name: "orders-api", namespace: "payments" },
+          { name: "billing-worker", namespace: "shop" },
+        ]}
+        getRowHref={href}
+      />
+    );
+    expect(screen.getByText("billing-worker")).toBeInTheDocument();
+
+    fireEvent.change(search(), { target: { value: "payments" } });
+    await waitFor(() =>
+      expect(screen.queryByText("billing-worker")).toBeNull()
+    );
+    expect(screen.getByText("orders-api")).toBeInTheDocument();
+  });
+
   it("sends End to the end of what the search left", async () => {
     long();
     fireEvent.change(search(), { target: { value: "pod-19" } });

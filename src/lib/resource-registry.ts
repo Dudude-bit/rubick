@@ -2,6 +2,7 @@ import {
   Box,
   Boxes,
   Braces,
+  BrickWall,
   Cable,
   Layers,
   LockKeyhole,
@@ -132,6 +133,18 @@ export const RESOURCE_REGISTRY = [
     plural: "ingresses",
     displayPlural: "Ingresses",
     icon: Globe,
+    apiVersion: "networking.k8s.io/v1",
+    scope: "namespaced",
+    category: "network",
+  },
+  {
+    kind: "NetworkPolicy",
+    plural: "networkpolicies",
+    displayPlural: "NetworkPolicies",
+    // Not the PodDisruptionBudget's shield: both guard something, and two
+    // rows in one nav with the same glyph is the nav failing at the one
+    // thing it does.
+    icon: BrickWall,
     apiVersion: "networking.k8s.io/v1",
     scope: "namespaced",
     category: "network",
