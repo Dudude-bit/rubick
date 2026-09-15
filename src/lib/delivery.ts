@@ -45,6 +45,7 @@ const API_GROUPS: Record<string, string> = {
   Deployment: "apps",
   Ingress: "networking.k8s.io",
   Job: "batch",
+  NetworkPolicy: "networking.k8s.io",
   PersistentVolume: "",
   PersistentVolumeClaim: "",
   Pod: "",

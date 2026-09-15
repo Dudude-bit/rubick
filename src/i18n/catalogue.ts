@@ -191,6 +191,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    selects: "Selects",
     files: "Files",
     members: "Members",
     racks: "Racks",
@@ -3475,6 +3476,33 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "says nothing",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    everyPodThere: "every pod",
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
+    exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
@@ -5033,6 +5061,7 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    pods: { one: "{n} pod", other: "{n} pods" },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",

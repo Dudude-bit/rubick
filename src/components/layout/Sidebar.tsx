@@ -139,6 +139,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // No count: `ResourceCounts` has no endpoints field to read.
       resource(ResourceType.Endpoints),
       resource(ResourceType.Ingress, "ingresses"),
+      resource(ResourceType.NetworkPolicy),
     ],
   },
   {

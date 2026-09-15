@@ -161,6 +161,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
     racks: "Стойки",
@@ -3776,6 +3777,23 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    saysNothing: "ничего не говорит",
+    deniesAll: "запрещает всё",
+    allowsAll: "разрешает всё",
+    podsNotRead: "поды не прочитаны",
+    selectsNoPods: "ни одного пода",
+    everyPodHere: "каждый под здесь",
+    noSelectorOnPolicy: "селектора нет",
+    everyPodThere: "любой под",
+    fromAnywhere: "откуда угодно",
+    toAnywhere: "куда угодно",
+    podsInNamespaces: "{pods} в {namespaces}",
+    inThisNamespace: "этом неймспейсе",
+    inEveryNamespace: "любом неймспейсе",
+    exceptRanges: "кроме {ranges}",
+    everyPortOf: "любой порт {protocol}",
+    governsNeither:
+      "Политика не называет ни одного направления, поэтому ни на что не действует.",
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
@@ -5397,6 +5415,12 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    pods: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
     notReadList: "Не прочитано: {list}",
     podsStreaming: {
       one: "{streaming} из {n} пода стримится",
