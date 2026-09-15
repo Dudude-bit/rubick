@@ -357,6 +357,19 @@ const DELETE_COMMANDS: Partial<Record<ResourceKind, DeleteCommand>> = {
   Ingress: (name, namespace) => commands.deleteIngress(name, namespace),
   NetworkPolicy: (name, namespace) =>
     commands.deleteNetworkPolicy(name, namespace),
+  Gateway: (name, namespace) => commands.deleteGateway(name, namespace),
+  GatewayClass: (name) => commands.deleteGatewayClass(name),
+  // The five route kinds share one command and tell it which they are.
+  HTTPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("HTTPRoute", name, namespace),
+  GRPCRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("GRPCRoute", name, namespace),
+  TLSRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("TLSRoute", name, namespace),
+  TCPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("TCPRoute", name, namespace),
+  UDPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("UDPRoute", name, namespace),
   Endpoints: (name, namespace) => commands.deleteEndpoints(name, namespace),
   PersistentVolumeClaim: (name, namespace) =>
     commands.deletePersistentVolumeClaim(name, namespace),
