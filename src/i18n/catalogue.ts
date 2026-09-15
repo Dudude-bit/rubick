@@ -1978,6 +1978,44 @@ export const en = {
   // What each extension gets the reader, in the words of the thing they get.
   // Here rather than in the vendor module because a vendor module is a plain
   // table with no hook to call: it names the key, and the row translates it.
+  slow: {
+    panel: "Why slow",
+    title: "Why slow",
+    hint: "What the app measured in the last minute, without the recorder.",
+    stalls: {
+      one: "{n} stall",
+      other: "{n} stalls",
+    },
+    stallsLabel: "Stalls",
+    stallsValue: {
+      one: "{n} stall, the longest {longest} ms",
+      other: "{n} stalls, the longest {longest} ms",
+    },
+    sourceLongTask:
+      "A stall is the main thread blocked for 50 ms or more, from the webview's own long-task observer.",
+    sourceFrameGap:
+      "A stall is a frame that came 50 ms or more late; this webview has no long-task observer, so late frames stand in.",
+    listsLabel: "Big lists on screen",
+    listRows: {
+      one: "{n} row of {label}",
+      other: "{n} rows of {label}",
+    },
+    noBigList: "None over a thousand rows.",
+    listsWhy:
+      "Every watch batch is filtered and sorted over the whole list, and a search re-reads every row.",
+    answerLabel: "Largest answer",
+    answerRows: {
+      one: "{n} row from {command}",
+      other: "{n} rows from {command}",
+    },
+    noBigAnswer: "None over a thousand rows.",
+    answerWhy:
+      "A big answer is parsed on the main thread before anything can be drawn.",
+    whatToDo:
+      "Narrow the namespace scope or the search: the list and its answers shrink with them. For timings per command and per render, turn on the recorder.",
+    openRecorder: "Open Settings › Diagnostics",
+  },
+
   vendor: {
     ciliumGives:
       "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",

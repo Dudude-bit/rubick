@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+
+import { STALL_WINDOW_MS, StallWatch } from "./stall-watch";
+
+describe("StallWatch", () => {
+  /** A stall from two minutes ago is not why the app is slow now. */
+  it("keeps the last minute of stalls and names the longest", () => {
+    let now = 100_000;
+    const watch = new StallWatch(() => now);
+    watch.noteStall(80);
+    now += 30_000;
+    watch.noteStall(320);
+    now += STALL_WINDOW_MS;
+    watch.noteStall(60);
+    const report = watch.report();
+    expect(report.stalls.map((s) => s.ms)).toEqual([320, 60]);
+    expect(report.longest?.ms).toBe(320);
+  });
+
+  /** An answer is remembered by its length and nothing else about it is looked at. */
+  it("remembers only big answers, by row count, and the biggest of them", () => {
+    const watch = new StallWatch(() => 1_000);
+    watch.noteAnswer("list_pods", new Array(12_000).fill(0));
+    watch.noteAnswer("list_services", new Array(30).fill(0));
+    watch.noteAnswer("get_pod", { name: "a" });
+    watch.noteAnswer("list_events", new Array(4_000).fill(0));
+    expect(watch.report().largest).toEqual({
+      name: "list_pods",
+      rows: 12_000,
+      at: 1_000,
+    });
+  });
+
+  it("lists the big tables on screen, largest first, and forgets one that unmounts", () => {
+    const watch = new StallWatch(() => 0);
+    watch.noteList("pods", "pods", 10_400);
+    watch.noteList("events", "events", 2_300);
+    watch.noteList("nodes", "nodes", 12);
+    expect(watch.report().lists.map((l) => [l.label, l.rows])).toEqual([
+      ["pods", 10_400],
+      ["events", 2_300],
+    ]);
+    watch.forgetList("pods");
+    expect(watch.report().lists.map((l) => l.label)).toEqual(["events"]);
+  });
+});
