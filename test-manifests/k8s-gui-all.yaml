@@ -2946,3 +2946,130 @@ spec:
   hostname: shop.k8s-gui.test
   paths:
     - /legacy/*
+---
+# Six NetworkPolicies, each drawn a different way by the list page.
+#
+# The pair that costs one character: `ingress: []` below denies everything to
+# every pod in the namespace, and `allow-from-anywhere` two documents down
+# allows everything to the pods it picks. Both are governed, both have one
+# `policyTypes` entry, and only the rules tell them apart.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: k8s-gui-test
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-anywhere
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: cloud-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - {}
+---
+# The typo. `app: cloud-dmeo` matches no pod in this namespace, so the policy is
+# accepted, listed, and enforces nothing — the row is the only place that says
+# the count is zero.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: selects-nothing
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: cloud-dmeo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: log-demo
+---
+# Two selectors in ONE peer, which is an intersection: backend pods in
+# namespaces labelled `tier: trusted`, and not either on its own.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: intersection-peer
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: expr-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: log-demo
+          namespaceSelector:
+            matchLabels:
+              tier: trusted
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# The same two selectors as two peers, which is a union and far wider.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: union-peers
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: expr-demo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: log-demo
+        - namespaceSelector:
+            matchLabels:
+              tier: trusted
+---
+# Egress only, with a CIDR and an `except` hole in it. Its Ingress column says
+# the policy makes no claim at all — which is not the same as denying.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-to-cidr
+  namespace: k8s-gui-test
+spec:
+  podSelector:
+    matchLabels:
+      app: busy-demo
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+            except:
+              - 10.1.0.0/16
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53

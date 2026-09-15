@@ -75,6 +75,7 @@ const ROUTABLE = new Set<ResourceKind>([
   "Secret",
   "Service",
   "Ingress",
+  "NetworkPolicy",
   "Gateway",
   "GatewayClass",
   "Namespace",

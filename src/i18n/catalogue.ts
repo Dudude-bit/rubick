@@ -191,6 +191,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    selects: "Selects",
     files: "Files",
     members: "Members",
     racks: "Racks",
@@ -3475,6 +3476,26 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "says nothing",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    thisNamespaceOnly: "this namespace",
+    everyPodThere: "every pod",
+    fromAnywhere: "anywhere",
+    // The AND and the OR of a NetworkPolicy peer. One string each, because
+    // the word between the two halves is what tells them apart and a
+    // translator needs the word order along with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    podsAndNamespaces: "{pods} · {namespaces}",
+    exceptRanges: "except {ranges}",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
@@ -5033,6 +5054,7 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    pods: { one: "{n} pod", other: "{n} pods" },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",

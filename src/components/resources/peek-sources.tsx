@@ -40,12 +40,15 @@ import {
 } from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
+import { Peer } from "./network-policy-cells";
+import { directionFact, portText, reachOf } from "@/lib/network-policy";
 import type { KeyValue, KeyValueTone } from "./key-values";
 import type {
   ConditionInfo,
   ContainerPhase,
   CustomResourceDetailInfo,
   NodeInfo,
+  PolicyDirection,
   RouteInfo,
 } from "@/generated/types";
 
@@ -927,6 +930,75 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     ],
   })),
 
+  // The peek draws what the list draws, and for the same reason: without an
+  // entry here the panel falls through to the generic manifest walker, which
+  // flattens `ingress.0.from.0.namespaceSelector` into a dotted path and
+  // silently loses the AND between a peer's two selectors.
+  NetworkPolicy: source(
+    (name, namespace) => commands.getNetworkPolicy(name, namespace),
+    (policy, _target, t) => {
+      const reach = reachOf(policy.selected);
+      const directions: [string, PolicyDirection][] = [
+        ["Ingress", policy.ingress],
+        ["Egress", policy.egress],
+      ];
+      return {
+        createdAt: policy.createdAt,
+        groups: [
+          {
+            title: t("columns", "selector"),
+            items: [
+              {
+                label: t("columns", "selects"),
+                value:
+                  policy.selects.kind === "written"
+                    ? policy.selects.query
+                    : policy.selects.kind === "everything"
+                      ? t("empty", "everyPodHere")
+                      : t("empty", "noSelectorOnPolicy"),
+                mono: policy.selects.kind === "written",
+              },
+              {
+                label: t("columns", "pods"),
+                // The three answers the list gives, said the same way. A
+                // refused pod list is not a policy with nothing behind it.
+                value:
+                  reach.kind === "cannotSay"
+                    ? t("empty", "podsNotRead")
+                    : reach.kind === "nothing"
+                      ? t("empty", "selectsNoPods")
+                      : t("count", "pods", { n: reach.count }),
+                tone: reach.kind === "nothing" ? ("warn" as const) : undefined,
+              },
+            ],
+          },
+          ...directions.map(([title, direction]) => ({
+            title,
+            count: direction.rules.length || undefined,
+            items: direction.rules.map((rule) => ({
+              label:
+                rule.ports.length === 0
+                  ? t("empty", "everyPort")
+                  : rule.ports.map(portText).join(", "),
+              value:
+                rule.peers.length === 0 ? (
+                  <span className="text-warn">
+                    {t("empty", "fromAnywhere")}
+                  </span>
+                ) : (
+                  <span className="flex flex-col gap-0.5">
+                    {rule.peers.map((peer, j) => (
+                      <Peer key={j} peer={peer} />
+                    ))}
+                  </span>
+                ),
+            })),
+            emptyMessage: directionFact(direction, t).value,
+          })),
+        ],
+      };
+    }
+  ),
   Ingress: source(commands.getIngress, (ingress, target, t) => ({
     createdAt: ingress.createdAt,
     groups: [
