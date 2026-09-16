@@ -44,7 +44,7 @@ const context = (name: string): ContextInfo =>
     auth: { kind: "token", source: null },
   }) as unknown as ContextInfo;
 
-const ARN = "arn:aws:eks:us-east-1:1234:cluster/billing";
+const ARN = "arn:aws:eks:us-east-1:1234:cluster/a7f3c91";
 const NAMES = ["prod-eus2-mki", "prod-euw1-mki", "dev-euw1-mki", ARN];
 
 const onSelect = vi.fn();
@@ -111,18 +111,23 @@ describe("narrowing the cluster list", () => {
   /**
    * A renamed cluster shows its alias as the name on the row, so filtering on
    * the context name alone would hide it from the only word its owner uses.
+   *
+   * The alias must not appear anywhere in the context name, or the name rung
+   * answers first and the alias lookup is never reached: this test passed
+   * with `aliasOf` deleted from the hook while the fixture was
+   * `…:cluster/billing` renamed to `billing`.
    */
   it("finds a cluster by the name its user renamed it to", async () => {
     const user = userEvent.setup();
     useClusterIdentityStore.setState({
-      marks: { [ARN]: { alias: "billing" } },
+      marks: { [ARN]: { alias: "payments" } },
     });
     render(<Harness />);
 
-    await user.type(box(), "billing");
+    await user.type(box(), "payments");
 
     expect(rows()).toHaveLength(1);
-    expect(rows()[0].textContent).toContain("billing");
+    expect(rows()[0].textContent).toContain("payments");
   });
 
   /** Typing does not disturb the row the caret was parked on before it. */

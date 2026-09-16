@@ -33,6 +33,16 @@ export interface ClusterFilter {
   total: number;
   /** The needle `shown` was actually computed from. */
   query: string;
+  /**
+   * Whether `shown` is a narrowed list rather than the whole kubeconfig.
+   *
+   * Owned here and not recomputed by each reader, because the only field a
+   * reader could reasonably reach for is the live `filter` — and that is a
+   * different question from the one `shown` answers until the deferred
+   * render lands. The subheading asked it that way and read "400 contexts,
+   * pick one to start" over an empty list for as long as the render took.
+   */
+  filtering: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -61,6 +71,7 @@ export function useClusterFilter(): ClusterFilter {
     // "nothing matches" sentence must never name a query the list has not
     // caught up with.
     query,
+    filtering: query.trim() !== "",
     inputRef,
   };
 }

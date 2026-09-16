@@ -160,3 +160,82 @@ describe("the front door's count", () => {
     expect(screen.getByText(/1 of 4 contexts/)).toBeInTheDocument();
   });
 });
+
+/**
+ * The same two readers, at the one moment they can disagree.
+ *
+ * `shown` is deferred and the box is not, so between a keystroke and the
+ * render that lands there is a commit where the needle is new and the rows
+ * are old. Deciding "is a filter on" from the live needle while counting the
+ * deferred rows put "400 contexts in your kubeconfig. Pick one to start."
+ * above an empty list, with "Nothing matches" printed between them — an
+ * instruction to pick one of nothing.
+ *
+ * Mounted outside `act` on purpose: React Testing Library flushes the
+ * transition before every assertion, which is exactly what hides this. The
+ * assertion is the invariant rather than a timing — at no commit may the
+ * heading claim the whole kubeconfig while the list shows a narrowed one.
+ */
+describe("the heading and the rows, mid-transition", () => {
+  it("never claims the whole kubeconfig above a narrowed list", async () => {
+    const { createRoot } = await import("react-dom/client");
+    const previous = (globalThis as Record<string, unknown>)
+      .IS_REACT_ACT_ENVIRONMENT;
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = false;
+    // Enough rows that the deferred render is long enough to observe; this
+    // is the big-kubeconfig case the feature exists for.
+    useClusterStore.setState({
+      contexts: Array.from({ length: 300 }, (_, i) => context(`ctx-${i}`)),
+      isLoading: false,
+      isAuthenticating: false,
+      pendingContext: null,
+      error: null,
+      errorContext: null,
+    });
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    root.render(
+      <QueryClientProvider client={client}>
+        <ClusterFrontDoor />
+      </QueryClientProvider>
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const box = host.querySelector("input") as HTMLInputElement;
+    // The subheading is the element right after the heading; "N of M" is the
+    // narrowed wording and a bare "M contexts" is the whole-kubeconfig one.
+    const subheading = () =>
+      host.querySelector("h1")?.nextElementSibling?.textContent ?? "";
+    const setValue = (value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      setter?.call(box, value);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    setValue("zzz");
+    for (let i = 0; i < 12; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      const narrowed = host.querySelectorAll("[data-cluster-row]").length < 300;
+      if (narrowed) expect(subheading()).toContain(" of 300");
+    }
+
+    setValue("");
+    for (let i = 0; i < 12; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      const narrowed = host.querySelectorAll("[data-cluster-row]").length < 300;
+      if (narrowed) expect(subheading()).toContain(" of 300");
+    }
+
+    root.unmount();
+    host.remove();
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = previous;
+  });
+});

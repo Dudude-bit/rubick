@@ -136,7 +136,7 @@ export function ClusterFrontDoor() {
  * pick one of nothing is an instruction that cannot be followed.
  */
 function subheading(t: ReturnType<typeof useT>, cluster: ClusterFilter) {
-  const filtered = cluster.filter.trim() !== "";
+  const filtered = cluster.filtering;
   const count = filtered
     ? t("count", "contextsMatching", {
         shown: cluster.shown.length,
