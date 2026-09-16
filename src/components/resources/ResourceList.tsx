@@ -368,6 +368,7 @@ export function ResourceList<
           // height to take; on its own page the table is the page.
           fill={!embedded}
           isLoading={showSkeleton}
+          searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
           quickActions={resolvedQuickActions}

@@ -13,6 +13,7 @@ import {
 } from "@/lib/resource-registry";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
+import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import {
   ResourceName,
   RESOURCE_NAME_SHELL,
@@ -181,6 +182,15 @@ export function ObjectLink({
       to={to}
       onClick={handle}
       onAuxClick={handle}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        useObjectMenuStore.getState().open({
+          name,
+          to,
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }}
       // The name is split across spans so the tail can carry its own hue, and
       // the accessible-name algorithm joins those spans with a space — which
       // announces "k3d-agent -0" for a pod that is called neither. Naming the

@@ -845,6 +845,7 @@ export const ru: Catalogue = {
     nameCopied: "Скопировано: {name}",
     copyContextName: "Копировать имя контекста",
     openInNewTab: "Открыть в новой вкладке",
+    copyLink: "Копировать ссылку",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
@@ -1730,6 +1731,9 @@ export const ru: Catalogue = {
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
     tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    bigDownloadTitle: "Скачать {name} ({size})?",
+    bigDownloadBody:
+      "Файл идёт через exec-канал, а он медленный: такой размер это минуты, и после 30 секунд тишины скачивание прекращается. В ваш файл ничего не пишется, пока не придёт всё целиком.",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:
@@ -3237,6 +3241,7 @@ export const ru: Catalogue = {
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
+    objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
@@ -3366,6 +3371,13 @@ export const ru: Catalogue = {
   settings: {
     installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
+    whatsNew: "Что нового",
+    whatsNewHint:
+      "Заметки к этой версии, те, что открываются один раз после обновления.",
+    searchWhatsNewWords: "release notes changelog что нового заметки к выпуску",
+    showWhatsNew: "Показать",
+    whatsNewIn: "Что нового в {version}",
+    whatsNewSince: "Всё с версии {version}",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",

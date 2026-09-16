@@ -868,6 +868,7 @@ export const en = {
     nameCopied: "{name} copied",
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
@@ -1683,6 +1684,9 @@ export const en = {
     pathCopied: "Path copied",
     copyPath: "Copy path",
     tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
@@ -2966,6 +2970,9 @@ export const en = {
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at it live.",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
@@ -3086,6 +3093,13 @@ export const en = {
   settings: {
     installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
