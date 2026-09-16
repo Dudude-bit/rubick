@@ -982,6 +982,8 @@ export const ru: Catalogue = {
     closeNamed: "Закрыть {name}",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
+    filterClusters: "Фильтр кластеров",
+    filterClustersPlaceholder: "Фильтр кластеров…",
     change: "Изменить…",
     reload: "Перечитать",
     useTheDefault: "По умолчанию",
@@ -6291,6 +6293,12 @@ export const ru: Catalogue = {
       few: "{n} контекста",
       many: "{n} контекстов",
       other: "{n} контекста",
+    },
+    contextsMatching: {
+      one: "{shown} из {n} контекста",
+      few: "{shown} из {n} контекстов",
+      many: "{shown} из {n} контекстов",
+      other: "{shown} из {n} контекстов",
     },
     contextsFromFile: {
       one: "{n} контекст",
