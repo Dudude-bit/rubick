@@ -5,6 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.17.0] - 2026-09-17
+
+### Added
+
+- **NetworkPolicies.** The core kind, which this app did not read at all: a
+  list, a page and a peek. A NetworkPolicy is the one built-in kind where the
+  shape of the object and its effect come apart, so each row says what the
+  policy _does_ rather than what it contains. `ingress: []` on a governed
+  direction **denies everything**; `ingress: [{}]` is a rule with no peers and
+  **allows everything** — one character of YAML, opposite meanings. A
+  direction `policyTypes` does not name is one the policy **makes no claim
+  about**, and another policy may govern it. `podSelector: {}` is every pod in
+  the namespace, the widest thing a policy can say, and never a blank cell.
+
+  The column it exists for is **how many pods each policy actually picks**. A
+  policy whose selector matches nothing is accepted, listed, and enforces
+  nothing, and no other screen can say so — the selector is in one object and
+  the labels are in another. Where the pods could not be read that count is
+  blank rather than zero: zero is the finding, and handing it to somebody who
+  merely lacks permission to list pods would invent it.
+
+- **Find a cluster by typing part of its name.** A filter box above the
+  cluster list, any substring, case-blind, with `mod+F` to reach it. The
+  needle reaches exactly what the command palette's `!` reaches, and no more:
+  `prod` must not find `pre-orders-dev` in a list nothing ranks. The count
+  beside the heading counts the rows under it.
+
+  Thanks to [@igordcard](https://github.com/igordcard) for this one.
+
+- **Copy a name where you read it.** The hover mark that addresses had, on
+  every object name and page title. A right-click opens the app's own menu —
+  copy the name, copy a link that opens the same place, open it in a new tab —
+  instead of the webview's, whose "copy link address" produced an internal
+  address that opens nothing anywhere.
+
+- **What a new version brought.** The first launch after an update opens the
+  notes for every release since the one last seen, read from the changelog. A
+  first install records where it starts and opens nothing. Settings › About
+  keeps a way back to them.
+
+### Changed
+
+- **A click on a row opens the peek, wherever on the row it lands; the page is
+  a double click.** Before, the name peeked and the whitespace beside it
+  navigated, with nothing on screen saying which you would get. Leaving a
+  peek for the page now carries the open tab with it, so a peek's Logs no
+  longer lands on Overview.
+
+- **A list's search lives in the address**, which is what a tab records, so it
+  survives leaving the tab and coming back. The namespace column is hidden
+  while exactly one namespace is chosen — it said the same word on every row.
+
+### Fixed
+
+- **The Delivery column was silent for nine kinds.** A kind missing from the
+  table of API groups made every GitOps surface answer "nothing to say" — the
+  column, the detail block and the peek marks together, with nothing failing.
+  Gateways, the five route kinds, HorizontalPodAutoscalers and
+  PodDisruptionBudgets were all in that state on pages already written to ask.
+
+- **The peek offered no Delete for a Gateway, a GatewayClass or a route**,
+  though the commands had existed for releases.
+
+- **The Files tab on a ConfigMap key mounted over a single file** opened on the
+  file and said it could not be opened; it opens on the folder, with the file
+  as a row that names the mount it came from. Downloads over 100 MiB are asked
+  about rather than refused, up to 2 GiB.
+
+- **The command palette stayed closed** after opening a hit in a background
+  tab, so opening three pods meant typing the search three times.
+
 ## [4.16.0] - 2026-09-13
 
 ### Added
