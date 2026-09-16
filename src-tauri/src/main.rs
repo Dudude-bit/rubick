@@ -396,6 +396,9 @@ fn main() {
             commands::storage::delete_storage_class,
             // Network commands
             commands::network::list_ingresses,
+            commands::network::list_network_policies,
+            commands::network::get_network_policy,
+            commands::network::delete_network_policy,
             commands::network::get_ingress,
             commands::network::resolve_ingress_class,
             commands::network::delete_ingress,

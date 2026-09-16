@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
@@ -18,6 +18,7 @@ import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 vi.mock("./data-table-rows", async (importOriginal) => {
@@ -55,8 +56,8 @@ const columns: ColumnDef<Item>[] = [
 ];
 
 function LocationProbe() {
-  const { pathname } = useLocation();
-  return <span data-testid="location">{pathname}</span>;
+  const { pathname, search } = useLocation();
+  return <span data-testid="location">{`${pathname}${search}`}</span>;
 }
 
 const wrap = (ui: ReactNode) =>
@@ -191,14 +192,78 @@ describe("DataTable rows", () => {
       />
     );
 
-  // A list is the page you are already browsing, so opening a row from it is
-  // a drill-down, not a look-without-leaving. If this starts peeking, Back
-  // stops being the way home from a list.
-  it("navigates on a plain click anywhere in the row", () => {
+  /**
+   * Issue #178: the name in a row peeked and the whitespace beside it went
+   * to the page, and nobody could tell which they would get. Now both peek,
+   * and the page is a double click. Would break if the row went back to
+   * navigating on a plain click, or if the double click stopped opening it.
+   */
+  it("peeks on a plain click anywhere in the row, and opens the page on a double click", () => {
     renderTable();
     fireEvent.click(whitespace());
-    expect(location()).toBe("/pods/ns/a-1");
+    expect(location()).toBe("/pods?peek=pods%2Fns%2Fa-1");
     expect(tabs()).toHaveLength(1);
+    fireEvent.doubleClick(whitespace());
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The name is where the eye goes when told "double click the row", and it
+   * is the one spot a `target.closest("a")` guard turned into nothing at
+   * all: the whitespace opened the page and the name only peeked. A link
+   * that points somewhere else — a row's node, its owner — keeps its own
+   * meaning, because the reader aimed at that link rather than at the row.
+   */
+  it("opens the page on a double click on the row's own name, and not on a link elsewhere", () => {
+    renderTable();
+    fireEvent.doubleClick(screen.getByText("a-1"));
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The gutter the quick actions live in belongs to them: a single click
+   * there is deliberately inert, and a double click navigated, so the same
+   * spot answered two ways depending on how fast the reader clicked.
+   */
+  it("leaves the quick-actions gutter to the quick actions", () => {
+    const onClick = vi.fn();
+    renderTable({ quickAction: onClick });
+    const gutter = row().querySelector("[data-quick-actions]") as HTMLElement;
+    fireEvent.click(gutter);
+    expect(location()).toBe("/pods");
+    fireEvent.doubleClick(gutter);
+    expect(location()).toBe("/pods");
+  });
+
+  it("leaves a double click on a link to somewhere else alone", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: () => <RouteLink to="/nodes/worker-1">worker-1</RouteLink>,
+          },
+        ]}
+        data={[DATA[0]]}
+        getRowHref={href}
+      />
+    );
+    fireEvent.doubleClick(screen.getByText("worker-1"));
+    expect(location()).toBe("/pods");
+  });
+
+  // A row whose route has no peek behind it is a plain link, as it always was.
+  it("navigates on a plain click where the route is not an object", () => {
+    wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={(row) => `/helm/${row.namespace}/${row.name}`}
+      />
+    );
+    fireEvent.click(whitespace());
+    expect(location()).toBe("/helm/ns/a-1");
   });
 
   // This is the regression the whole change exists for: the row used to call
@@ -1027,5 +1092,82 @@ describe("a table given the page's height", () => {
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
     expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
+  });
+});
+
+describe("the namespace column", () => {
+  const withNamespace: ColumnDef<Item>[] = [
+    ...columns,
+    { accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  /** Issue #178: with one namespace chosen the column repeated the scope bar on every row. */
+  it("is hidden while one namespace is chosen, and back for all or several", () => {
+    useClusterStore.setState({ namespaceScope: ["ns"] });
+    const { unmount } = wrap(
+      <DataTable<Item> columns={withNamespace} data={DATA} />
+    );
+    expect(screen.queryByText("Namespace")).toBeNull();
+    unmount();
+    useClusterStore.setState({ namespaceScope: [] });
+    wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
+    expect(screen.getByText("Namespace")).toBeInTheDocument();
+  });
+});
+
+describe("the search box", () => {
+  /**
+   * Issue #178: the search was component state, so leaving the tab and
+   * coming back remounted the table with an empty box. It lives in the
+   * query string now, which is what a tab records. Would break if the box
+   * stopped reading the parameter, or stopped writing it.
+   */
+  it("reads its value from the query string and writes it back", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    await waitFor(() => expect(screen.queryByText("a-1")).toBeNull());
+    fireEvent.change(search(), { target: { value: "a-1" } });
+    expect(location()).toBe("/pods?q=a-1");
+    fireEvent.change(search(), { target: { value: "" } });
+    expect(location()).toBe("/pods");
+  });
+
+  /**
+   * The half the seed-once version could not do. The address changes under
+   * a table that stays mounted whenever the reader clicks the sidebar row
+   * for the list they are already on, follows a deep link, or jumps from
+   * the palette — and the box kept the old text and the old rows while the
+   * tab recorded the new address, so the filter was silently gone on the
+   * way back. Fails if the box stops following the parameter.
+   */
+  it("follows the query string when the address changes underneath it", async () => {
+    function Elsewhere() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/pods")}>
+          drop it
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+          <Elsewhere />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    fireEvent.click(screen.getByRole("button", { name: "drop it" }));
+    await waitFor(() => expect(search()).toHaveValue(""));
+    expect(screen.getByText("a-1")).toBeInTheDocument();
   });
 });

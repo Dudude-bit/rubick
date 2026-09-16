@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { usePeek } from "./usePeek";
+import { peekTargetOfHref, usePeek } from "./usePeek";
 
 const at =
   (entry: string) =>
@@ -149,5 +149,27 @@ describe("usePeek", () => {
     const { result } = renderPeek("/events?type=Warning&peek=pods/ns/a-1");
     act(() => result.current.peek.close());
     expect(result.current.search).toBe("?type=Warning");
+  });
+});
+
+describe("peekTargetOfHref", () => {
+  /** A row's route is the peek's value with a slash in front; anything else has no peek. */
+  it("reads a core route and refuses every other shape", () => {
+    expect(peekTargetOfHref("/pods/default/nginx")).toEqual({
+      kind: "Pod",
+      name: "nginx",
+      namespace: "default",
+    });
+    expect(peekTargetOfHref("/nodes/k3d-agent-0?tab=pods")).toEqual({
+      kind: "Node",
+      name: "k3d-agent-0",
+      namespace: null,
+    });
+    expect(peekTargetOfHref("/helm/default/release")).toBeNull();
+    expect(
+      peekTargetOfHref(
+        "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
+      )
+    ).toBeNull();
   });
 });

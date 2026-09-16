@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import type { PodVolumeInfo } from "@/generated/types";
 import {
+  DOWNLOAD_CONFIRM_BYTES,
   DOWNLOAD_MAX_BYTES,
   MAX_ENTRIES,
   PREVIEW_MAX_BYTES,
@@ -14,6 +15,7 @@ import {
   mountFor,
   parentOf,
   sortEntries,
+  startPath,
 } from "./container-files";
 
 const volumes: PodVolumeInfo[] = [
@@ -125,6 +127,35 @@ describe("mountFor", () => {
   });
 });
 
+describe("startPath", () => {
+  const volumes = (subPath: string | null): PodVolumeInfo[] => [
+    {
+      name: "config",
+      source: "configMap",
+      refs: [{ kind: "ConfigMap", name: "app-config" }],
+      mounts: [
+        {
+          container: "app",
+          path: "/etc/app/app.conf",
+          readOnly: true,
+          subPath,
+        },
+      ],
+    },
+  ];
+
+  /**
+   * Issue #178: a ConfigMap key mounted over one file made the tab open on
+   * the file and say it could not be opened. Would break if the tab went
+   * back to opening on the mount path whatever the mount is.
+   */
+  it("opens a single-file mount at its parent, a directory mount at itself", () => {
+    expect(startPath(volumes("app.conf"), "app")).toBe("/etc/app");
+    expect(startPath(volumes(null), "app")).toBe("/etc/app/app.conf");
+    expect(startPath(volumes("app.conf"), "sidecar")).toBe("/");
+  });
+});
+
 describe("paths", () => {
   it("joins and climbs without doubling the root slash", () => {
     expect(joinPath("/", "etc")).toBe("/etc");
@@ -177,10 +208,12 @@ describe("the caps both halves apply", () => {
       readFileSync(resolve(process.cwd(), "shared/file-limits.json"), "utf8")
     ) as {
       downloadMaxBytes: number;
+      downloadConfirmBytes: number;
       previewMaxBytes: number;
       maxEntries: number;
     };
     expect(DOWNLOAD_MAX_BYTES).toBe(shared.downloadMaxBytes);
+    expect(DOWNLOAD_CONFIRM_BYTES).toBe(shared.downloadConfirmBytes);
     expect(PREVIEW_MAX_BYTES).toBe(shared.previewMaxBytes);
     expect(MAX_ENTRIES).toBe(shared.maxEntries);
   });

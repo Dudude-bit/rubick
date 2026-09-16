@@ -161,6 +161,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
     racks: "Стойки",
@@ -844,6 +845,7 @@ export const ru: Catalogue = {
     nameCopied: "Скопировано: {name}",
     copyContextName: "Копировать имя контекста",
     openInNewTab: "Открыть в новой вкладке",
+    copyLink: "Копировать ссылку",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
@@ -1731,6 +1733,9 @@ export const ru: Catalogue = {
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
     tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    bigDownloadTitle: "Скачать {name} ({size})?",
+    bigDownloadBody:
+      "Файл идёт через exec-канал, а он медленный: такой размер это минуты, и после 30 секунд тишины скачивание прекращается. В ваш файл ничего не пишется, пока не придёт всё целиком.",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:
@@ -3238,6 +3243,7 @@ export const ru: Catalogue = {
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
+    objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
@@ -3367,6 +3373,13 @@ export const ru: Catalogue = {
   settings: {
     installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
+    whatsNew: "Что нового",
+    whatsNewHint:
+      "Заметки к этой версии, те, что открываются один раз после обновления.",
+    searchWhatsNewWords: "release notes changelog что нового заметки к выпуску",
+    showWhatsNew: "Показать",
+    whatsNewIn: "Что нового в {version}",
+    whatsNewSince: "Всё с версии {version}",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",
@@ -3778,6 +3791,23 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    saysNothing: "ничего не говорит",
+    deniesAll: "запрещает всё",
+    allowsAll: "разрешает всё",
+    podsNotRead: "поды не прочитаны",
+    selectsNoPods: "ни одного пода",
+    everyPodHere: "каждый под здесь",
+    noSelectorOnPolicy: "селектора нет",
+    everyPodThere: "любой под",
+    fromAnywhere: "откуда угодно",
+    toAnywhere: "куда угодно",
+    podsInNamespaces: "{pods} в {namespaces}",
+    inThisNamespace: "этом неймспейсе",
+    inEveryNamespace: "любом неймспейсе",
+    exceptRanges: "кроме {ranges}",
+    everyPortOf: "любой порт {protocol}",
+    governsNeither:
+      "Политика не называет ни одного направления, поэтому ни на что не действует.",
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
@@ -5399,6 +5429,12 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    pods: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
     notReadList: "Не прочитано: {list}",
     podsStreaming: {
       one: "{streaming} из {n} пода стримится",
