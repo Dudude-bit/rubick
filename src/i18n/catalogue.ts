@@ -2970,6 +2970,9 @@ export const en = {
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at it live.",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",

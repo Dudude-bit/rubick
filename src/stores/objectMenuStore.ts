@@ -1,9 +1,14 @@
 import { create } from "zustand";
 
-import type { PeekTarget } from "@/hooks/usePeek";
-
-/** What the reader right-clicked, and where the pointer was. */
-export interface ObjectMenuTarget extends PeekTarget {
+/**
+ * What the reader right-clicked, and where the pointer was. Its own shape
+ * rather than a `PeekTarget` with two fields added: the menu copies a name
+ * and opens an address, and a kind and a namespace it never reads would be
+ * three more things every caller has to be able to supply — which is what
+ * kept the menu off the links that have no kind to give.
+ */
+export interface ObjectMenuTarget {
+  name: string;
   to: string;
   x: number;
   y: number;

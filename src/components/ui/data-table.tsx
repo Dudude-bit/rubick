@@ -273,9 +273,15 @@ function DataTableInner<TData extends RowData>({
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
   const [params, setParams] = useSearchParams();
-  const [searchValue, setSearchValue] = React.useState(() =>
-    searchParam ? (params.get(searchParam) ?? "") : ""
-  );
+  const inTheUrl = searchParam ? (params.get(searchParam) ?? "") : "";
+  const [searchValue, setSearchValue] = React.useState(inTheUrl);
+  // The query string is the authority, and the state beside it is only so
+  // that typing does not wait for a navigation. Seeded once, the two came
+  // apart whenever the address changed under a mounted table — the sidebar
+  // row for the list you are already on, a deep link, a jump from the
+  // palette: the box and the rows kept the old search while the tab
+  // recorded the new address, and the filter vanished on the way back.
+  React.useEffect(() => setSearchValue(inTheUrl), [inTheUrl]);
   const changeSearch = (value: string) => {
     setSearchValue(value);
     if (!searchParam) return;
@@ -558,7 +564,23 @@ function DataTableInner<TData extends RowData>({
       href && peekTargetOfHref(href)
         ? (event: React.MouseEvent) => {
             const target = event.target as HTMLElement;
-            if (target.closest("button") || target.closest("a")) return;
+            // The same places a single click keeps its hands off, so the
+            // two gestures agree about what belongs to the row and what
+            // belongs to the controls sitting in it.
+            if (
+              target.closest("button") ||
+              target.closest('[role="menuitem"]') ||
+              target.closest("[data-quick-actions]")
+            ) {
+              return;
+            }
+            // A link to somewhere else — a row's node, its owner — keeps the
+            // double click, because the reader aimed at that link and not at
+            // the row. The row's own name is the place the eye goes to when
+            // told "double click the row", so it must not be the one spot
+            // where nothing happens.
+            const link = target.closest("a");
+            if (link && link.getAttribute("href") !== href) return;
             navigate(href);
           }
         : undefined;

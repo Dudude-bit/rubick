@@ -124,7 +124,12 @@ function Items({ items }: { items: ChangeItem[] }) {
   );
 }
 
-/** `**bold**`, `` `code` `` and `_emphasis_`, which is all the notes use. */
+/**
+ * `**bold**`, `` `code` `` and `_emphasis_`, which is all the notes use —
+ * and they nest: the changelog leads a bullet with a bold sentence that
+ * names a kind in code. Bold and emphasis recurse into their own content
+ * for that reason; code does not, because backticks are where markup stops.
+ */
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|(?<![\w])_([^_]+)_(?![\w])/g;
@@ -135,7 +140,7 @@ function inline(text: string): ReactNode[] {
     if (match[1] !== undefined)
       out.push(
         <strong key={match.index} className="font-semibold text-fg">
-          {match[1]}
+          {inline(match[1])}
         </strong>
       );
     else if (match[2] !== undefined)
@@ -144,7 +149,7 @@ function inline(text: string): ReactNode[] {
           {match[2]}
         </code>
       );
-    else out.push(<em key={match.index}>{match[3]}</em>);
+    else out.push(<em key={match.index}>{inline(match[3])}</em>);
     last = match.index + match[0].length;
   }
   if (last < text.length) out.push(text.slice(last));

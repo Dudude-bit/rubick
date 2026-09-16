@@ -185,10 +185,7 @@ export function ObjectLink({
       onContextMenu={(event) => {
         event.preventDefault();
         useObjectMenuStore.getState().open({
-          kind,
           name,
-          namespace,
-          crd,
           to,
           x: event.clientX,
           y: event.clientY,

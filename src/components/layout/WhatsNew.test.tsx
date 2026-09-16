@@ -18,6 +18,7 @@ vi.mock("../../../CHANGELOG.md?raw", () => ({
 ### Added
 
 - **Credentials renew themselves.** Quietly, and _later_ rather than more often.
+- **\`AzureIdentity\` was counted as "AzureIdentitys".** The kind's own spelling.
 
 ## [4.12.0] - 2026-09-11
 
@@ -82,5 +83,20 @@ describe("WhatsNew", () => {
     expect(await screen.findByText("What's new in 4.13.0")).toBeInTheDocument();
     expect(screen.getByText("Everything since 4.12.0")).toBeInTheDocument();
     expect(screen.getByText(/Files tab on a pod/)).toBeInTheDocument();
+  });
+
+  /**
+   * The changelog leads a bullet with a bold sentence and names a kind in code
+   * inside it — line 36 of the file this parses does exactly that. A flat
+   * renderer printed the backticks, so the first release the feature ever
+   * showed had `\`AzureIdentity\`` on screen. Fails if the markup stops
+   * nesting.
+   */
+  it("renders code inside a bold lead as code, not as backticks", async () => {
+    useWhatsNewStore.setState({ seenVersion: "4.12.0", showing: [] });
+    wrap(<WhatsNew />);
+    const line = await screen.findByText(/was counted as/);
+    expect(line.textContent).not.toContain("`");
+    expect(line.querySelector("code")?.textContent).toBe("AzureIdentity");
   });
 });

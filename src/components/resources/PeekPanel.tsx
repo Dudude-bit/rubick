@@ -20,7 +20,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
-import { usePeek, type PeekTarget } from "@/hooks/usePeek";
+import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import {
@@ -173,11 +173,18 @@ function PeekContent({
   const routable = !!target.crd || isRoutableKind(target.kind, namespace);
   // The tab the reader is on comes along: leaving Logs for the page and
   // landing on Overview is a second click nobody asked for.
+  //
+  // Through `pageTab`, because the two sides do not spell every tab the
+  // same. The peek calls a workload's pods `children` — one arm serving
+  // Pods and a CronJob's Jobs — and no detail page has a tab by that name,
+  // so the reader landed on Overview anyway and the address kept a
+  // `?tab=children` the tab then recorded as its route.
   const openFullPage = () => {
     const path = target.crd
       ? getCustomResourceUrl(target.crd, target.name, namespace)
       : getResourceDetailUrl(target.kind, target.name, namespace);
-    navigate(activeTab === "overview" ? path : `${path}?tab=${activeTab}`);
+    const tab = pageTab(activeTab, target.kind);
+    navigate(tab === null ? path : `${path}?tab=${tab}`);
   };
 
   // Enter is the panel's shortcut, not the focused control's — once the

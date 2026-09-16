@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
@@ -205,6 +205,52 @@ describe("DataTable rows", () => {
     expect(tabs()).toHaveLength(1);
     fireEvent.doubleClick(whitespace());
     expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The name is where the eye goes when told "double click the row", and it
+   * is the one spot a `target.closest("a")` guard turned into nothing at
+   * all: the whitespace opened the page and the name only peeked. A link
+   * that points somewhere else — a row's node, its owner — keeps its own
+   * meaning, because the reader aimed at that link rather than at the row.
+   */
+  it("opens the page on a double click on the row's own name, and not on a link elsewhere", () => {
+    renderTable();
+    fireEvent.doubleClick(screen.getByText("a-1"));
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The gutter the quick actions live in belongs to them: a single click
+   * there is deliberately inert, and a double click navigated, so the same
+   * spot answered two ways depending on how fast the reader clicked.
+   */
+  it("leaves the quick-actions gutter to the quick actions", () => {
+    const onClick = vi.fn();
+    renderTable({ quickAction: onClick });
+    const gutter = row().querySelector("[data-quick-actions]") as HTMLElement;
+    fireEvent.click(gutter);
+    expect(location()).toBe("/pods");
+    fireEvent.doubleClick(gutter);
+    expect(location()).toBe("/pods");
+  });
+
+  it("leaves a double click on a link to somewhere else alone", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: () => <RouteLink to="/nodes/worker-1">worker-1</RouteLink>,
+          },
+        ]}
+        data={[DATA[0]]}
+        getRowHref={href}
+      />
+    );
+    fireEvent.doubleClick(screen.getByText("worker-1"));
+    expect(location()).toBe("/pods");
   });
 
   // A row whose route has no peek behind it is a plain link, as it always was.
@@ -1091,5 +1137,37 @@ describe("the search box", () => {
     expect(location()).toBe("/pods?q=a-1");
     fireEvent.change(search(), { target: { value: "" } });
     expect(location()).toBe("/pods");
+  });
+
+  /**
+   * The half the seed-once version could not do. The address changes under
+   * a table that stays mounted whenever the reader clicks the sidebar row
+   * for the list they are already on, follows a deep link, or jumps from
+   * the palette — and the box kept the old text and the old rows while the
+   * tab recorded the new address, so the filter was silently gone on the
+   * way back. Fails if the box stops following the parameter.
+   */
+  it("follows the query string when the address changes underneath it", async () => {
+    function Elsewhere() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/pods")}>
+          drop it
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+          <Elsewhere />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    fireEvent.click(screen.getByRole("button", { name: "drop it" }));
+    await waitFor(() => expect(search()).toHaveValue(""));
+    expect(screen.getByText("a-1")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import { Copy, ExternalLink, Link2 } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import {
   DropdownMenu,
@@ -28,7 +29,13 @@ export function ObjectMenu() {
   const openTab = useScopeTabStore((state) => state.openTab);
   if (target === null) return null;
   const link = context ? buildDeepLink(context, target.to) : null;
-  return (
+  // Into the body, because `position: fixed` is measured from the nearest
+  // ancestor that has a transform rather than from the window, and the page
+  // container this used to sit in carries one: the menu opened a sidebar's
+  // width away from the pointer, and drifted further the more the list was
+  // scrolled. Anchoring outside every page wrapper is what makes the two
+  // numbers the ones the pointer reported.
+  return createPortal(
     <DropdownMenu open onOpenChange={(open) => !open && close()}>
       <DropdownMenuTrigger asChild>
         <span
@@ -51,7 +58,12 @@ export function ObjectMenu() {
         </DropdownMenuItem>
         {link !== null && (
           <DropdownMenuItem
-            onSelect={() => void copy(link, t("cluster", "linkCopied"))}
+            onSelect={() =>
+              void copy(
+                link,
+                t("cluster", "objectLinkCopied", { name: target.name })
+              )
+            }
           >
             <Link2 className="mr-2 size-3.5" aria-hidden />
             {t("action", "copyLink")}
@@ -64,6 +76,7 @@ export function ObjectMenu() {
           {t("action", "openInNewTab")}
         </DropdownMenuItem>
       </DropdownMenuContent>
-    </DropdownMenu>
+    </DropdownMenu>,
+    document.body
   );
 }

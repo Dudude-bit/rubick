@@ -3241,6 +3241,7 @@ export const ru: Catalogue = {
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
+    objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",

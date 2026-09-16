@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { toKind, toPlural } from "@/lib/resource-registry";
+import { ResourceType, toKind, toPlural } from "@/lib/resource-registry";
 
 export interface PeekTarget {
   kind: string;
@@ -133,4 +133,22 @@ export function usePeek() {
   }, [setParams]);
 
   return { target, open, close };
+}
+
+/**
+ * The peek's tab as the detail page spells it, or `null` for a tab the page
+ * opens on anyway.
+ *
+ * The two sides name most tabs alike, and one they do not: the peek has a
+ * single `children` tab that shows a workload's pods and a CronJob's jobs,
+ * while each page names that tab after the kind it lists. A tab id no page
+ * has does not fail — the page falls back to Overview and keeps the query
+ * parameter, which the scope tab then records as the route to come back to.
+ */
+export function pageTab(tab: string, kind: string): string | null {
+  if (tab === "overview") return null;
+  if (tab !== "children") return tab;
+  return toPlural(
+    toKind(kind) === ResourceType.CronJob ? ResourceType.Job : ResourceType.Pod
+  );
 }
