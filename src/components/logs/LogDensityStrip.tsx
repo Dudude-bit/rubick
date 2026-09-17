@@ -243,7 +243,15 @@ export function LogDensityStrip({
   const commit = useCallback(
     (lo: number, hi: number) => {
       if (count === 0) return;
-      onSelect(buckets[clamp(lo)].start, buckets[clamp(hi)].start + step - 1);
+      // Never past now. The last slice is still filling, so its nominal end
+      // is in the future by up to one rung — and a rung goes to a day. A
+      // range that has not happened yet is not an interval a reader can
+      // choose to keep: ending the drag on the newest slice, the natural
+      // "from here to the end" gesture, handed the freeze an upper bound
+      // hours ahead and every line arriving until then was held outside the
+      // cap, unevictable and uncounted.
+      const end = Math.min(buckets[clamp(hi)].start + step - 1, Date.now());
+      onSelect(buckets[clamp(lo)].start, end);
     },
     [buckets, count, step, clamp, onSelect]
   );

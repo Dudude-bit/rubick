@@ -44,6 +44,7 @@ import {
 } from "./lanes";
 import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
+import { historyRoom } from "./hooks/log-buffer";
 import { LogHistoryBar } from "./LogHistoryBar";
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend, type LegendEntry } from "./LogLegend";
@@ -793,6 +794,10 @@ export function LogViewer({
     previous: previousRun,
     intake,
     frozen,
+    // The lines an interval was holding are gone with the buffer, so the
+    // freeze goes with them rather than sitting in the toolbar offering to
+    // thaw a window that can never refill.
+    onWiped: useCallback(() => setFrozen(null), []),
   });
 
   /**
@@ -921,13 +926,13 @@ export function LogViewer({
    */
   const { logs, historyHeld } = useMemo(() => {
     if (history.lines.length === 0) return { logs: live, historyHeld: 0 };
-    const room = Math.max(0, limit - live.length);
+    const room = historyRoom(limit, live.length, frozenLines);
     const kept =
       room >= history.lines.length
         ? history.lines
         : history.lines.slice(history.lines.length - room);
     return { logs: [...kept, ...live], historyHeld: kept.length };
-  }, [history.lines, live, limit]);
+  }, [history.lines, live, limit, frozenLines]);
 
   // Everything the pane is holding, history included — the status bar's fill
   // and the "N lines received" sentences are about the buffer on screen and

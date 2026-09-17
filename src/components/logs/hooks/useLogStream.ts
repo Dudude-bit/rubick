@@ -135,6 +135,13 @@ interface UseLogStreamOptions {
    * it; thawing lets the next batch evict as if it had never been set.
    */
   frozen?: Frozen | null;
+  /**
+   * Called whenever the buffer is emptied — a Keep change, Clear, a switch
+   * of pod or run. Whoever owns a freeze has to hear it: the interval's
+   * lines are gone and cannot come back, and a chip still offering to thaw
+   * them is the pane promising something it no longer holds.
+   */
+  onWiped?: () => void;
 }
 
 /** Not a character any pod, namespace or container name may carry. */
@@ -264,6 +271,7 @@ export function useLogStream({
   previous = false,
   intake = NO_INTAKE,
   frozen = null,
+  onWiped,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
   // Read by the release closure below, which the stream effect owns: a
@@ -349,8 +357,12 @@ export function useLogStream({
 
   const session = useRef<Session | null>(null);
 
+  const wiped = useRef(onWiped);
+  wiped.current = onWiped;
+
   const clearLogs = useCallback(() => {
     setBuffer(emptyBuffer());
+    wiped.current?.();
   }, []);
 
   const togglePause = useCallback(() => {
@@ -618,7 +630,10 @@ export function useLogStream({
 
       setIsConnecting(true);
       setFailures([]);
-      if (!resuming) setBuffer(emptyBuffer());
+      if (!resuming) {
+        setBuffer(emptyBuffer());
+        wiped.current?.();
+      }
       // The next line to arrive is the first one under whatever this
       // restart changed, so the boundaries move on the transitions and
       // not on every restart: an intake edited while it is already on

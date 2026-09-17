@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   appendCapped,
+  historyRoom,
   backfillPerContainer,
   emptyBuffer,
   fieldSuggestions,
@@ -328,5 +329,24 @@ describe("backfillPerContainer", () => {
   it("always asks for at least one line", () => {
     expect(backfillPerContainer(1, 40)).toBe(1);
     expect(backfillPerContainer(0, 0)).toBe(1);
+  });
+});
+
+describe("how much room history gets beside the live lines", () => {
+  /**
+   * The cap counts what it may evict. Frozen lines are what it may not, and
+   * the status bar already says so — counting them twice made freezing an
+   * interval wipe the history the reader had just fetched, with the bar
+   * blaming the live stream for filling the buffer.
+   */
+  it("measures the cap against the lines the cap can evict", () => {
+    expect(historyRoom(20_000, 17_000, 0)).toBe(3_000);
+    expect(historyRoom(20_000, 22_000, 5_000)).toBe(3_000);
+  });
+
+  /** A buffer genuinely full of evictable lines leaves no room, as before. */
+  it("leaves none when the evictable lines fill the cap", () => {
+    expect(historyRoom(5_000, 5_000, 0)).toBe(0);
+    expect(historyRoom(5_000, 9_000, 1_000)).toBe(0);
   });
 });

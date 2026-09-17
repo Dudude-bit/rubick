@@ -326,3 +326,20 @@ export function backfillPerContainer(
 ): number {
   return Math.max(1, Math.ceil(limit / Math.max(1, containers)));
 }
+
+/**
+ * How many history lines a pane may hold beside its live ones.
+ *
+ * The cap counts the lines it is allowed to evict, and frozen lines are the
+ * ones it is not — which is what the status bar's meter says two inches
+ * away. Measuring the whole buffer against `limit` here instead made
+ * freezing an interval delete the loaded history from the pane and then
+ * blame the live stream for having filled it.
+ */
+export function historyRoom(
+  limit: number,
+  liveLines: number,
+  frozenLines: number
+): number {
+  return Math.max(0, limit - Math.max(0, liveLines - frozenLines));
+}
