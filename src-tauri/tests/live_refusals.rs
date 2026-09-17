@@ -6,14 +6,20 @@
 //! none had ever been tested against a real 403 until this file.
 //!
 //! Ignored by default. It needs a cluster and an identity narrow enough to be
-//! refused, which is two objects and an impersonating context:
+//! refused, which is two objects and an impersonating context.
+//!
+//! The role has to allow **pods, services and ingresses**: `Snapshot::of`
+//! takes those three with `?`, so an identity refused any of them makes
+//! `connections_of` return `Err` and this file panics before reaching a
+//! single assertion instead of testing anything. What it must refuse is the
+//! claim list — the read this file is about.
 //!
 //! ```text
 //! kubectl create serviceaccount narrow -n k8s-gui-test
-//! kubectl create role pods-only -n k8s-gui-test \
-//!   --verb=get,list,watch --resource=pods
-//! kubectl create rolebinding narrow-pods-only -n k8s-gui-test \
-//!   --role=pods-only --serviceaccount=k8s-gui-test:narrow
+//! kubectl create role no-claims -n k8s-gui-test \
+//!   --verb=get,list,watch --resource=pods,services,ingresses
+//! kubectl create rolebinding narrow-no-claims -n k8s-gui-test \
+//!   --role=no-claims --serviceaccount=k8s-gui-test:narrow
 //! # then a kubeconfig context whose user carries
 //! #   as: system:serviceaccount:k8s-gui-test:narrow
 //! K8S_GUI_REFUSED_CONTEXT=narrow cargo test --test live_refusals -- --ignored --nocapture
@@ -41,8 +47,15 @@ fn namespace() -> String {
     std::env::var("K8S_GUI_INIT_NAMESPACE").unwrap_or_else(|_| "k8s-gui-test".to_string())
 }
 
+/// A pod that **mounts a claim**, because the assertion below is about claim
+/// edges and a pod without one would let the loop run zero times and pass.
+///
+/// `shell-demo` in `test-manifests/k8s-gui-all.yaml` is a bare pod — a stable
+/// name, unlike a Deployment's generated ones — and it mounts `pvc-demo`.
+/// The default used to be `log-demo`, which is a Deployment and no pod at
+/// all, so the read returned `not found` and the harness panicked.
 fn pod_name() -> String {
-    std::env::var("K8S_GUI_REFUSED_POD").unwrap_or_else(|_| "log-demo".to_string())
+    std::env::var("K8S_GUI_REFUSED_POD").unwrap_or_else(|_| "shell-demo".to_string())
 }
 
 /// The neighbourhood of a pod read by an identity allowed to see pods and
@@ -92,6 +105,15 @@ async fn a_refused_neighbourhood_says_so_instead_of_drawing_an_empty_one() {
             .iter()
             .any(|unread| unread.kind == "PersistentVolumeClaim"),
         "the refused claim list has to be named among them"
+    );
+    // Before the verdicts: a pod that mounts no claim would leave this loop
+    // with nothing to walk, and a harness that asserts nothing passes for the
+    // wrong reason. The whole file is about what a claim edge says.
+    assert!(
+        !claims.is_empty(),
+        "{pod} mounts no PersistentVolumeClaim, so nothing here tests what a \
+         refused claim list does to a claim edge; point K8S_GUI_REFUSED_POD at \
+         a pod that mounts one"
     );
     for edge in &claims {
         assert_eq!(
