@@ -71,6 +71,7 @@ import type {
   ManifestResult,
   NamespaceAccess,
   NamespaceInfo,
+  NetworkPolicyInfo,
   NodeBudget,
   NodeFilters,
   NodeInfo,
@@ -1288,6 +1289,26 @@ export async function listIngresses(
   filters: ResourceFilters | null
 ): Promise<IngressInfo[]> {
   return invoke<IngressInfo[]>("list_ingresses", { filters });
+}
+
+export async function listNetworkPolicies(
+  namespace: string | null
+): Promise<NetworkPolicyInfo[]> {
+  return invoke<NetworkPolicyInfo[]>("list_network_policies", { namespace });
+}
+
+export async function getNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<NetworkPolicyInfo> {
+  return invoke<NetworkPolicyInfo>("get_network_policy", { name, namespace });
+}
+
+export async function deleteNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_network_policy", { name, namespace });
 }
 
 export async function listEndpoints(

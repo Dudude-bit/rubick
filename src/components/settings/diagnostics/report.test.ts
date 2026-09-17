@@ -33,7 +33,7 @@ const base: Diagnostics = {
     version: "4.0.1",
     os: "macos aarch64",
     configPath: null,
-    logDestination: "stdout",
+    logDestination: "/Users/someone/Library/Logs/com.k8s-gui.app/rubick.log",
   },
   findings: [
     {
@@ -71,6 +71,20 @@ describe("asMarkdown", () => {
   it("says a kubeconfig was never loaded", () => {
     const out = asMarkdown({ ...base, kubeconfig: null });
     expect(out).toContain("None loaded.");
+  });
+
+  /**
+   * The paste is read by somebody who will ask for the log next. Without
+   * this line they ask, and the reader does not know either — which is the
+   * exchange this whole file exists to end.
+   */
+  it("names the log file, and says so when there is not one", () => {
+    expect(asMarkdown(base)).toContain(
+      "Log: `/Users/someone/Library/Logs/com.k8s-gui.app/rubick.log`"
+    );
+    expect(
+      asMarkdown({ ...base, app: { ...base.app, logDestination: null } })
+    ).toContain("Log: no file this run.");
   });
 
   /**

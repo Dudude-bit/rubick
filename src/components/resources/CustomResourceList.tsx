@@ -13,6 +13,7 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
+import { drawnSeparately } from "./printer-columns";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "@/components/resources/ResourceList";
@@ -159,8 +160,7 @@ export function CustomResourceList({
     } else {
       // Fallback to printer columns from CRD
       for (const pc of printerColumns) {
-        // Skip NAME and AGE as we handle them separately
-        if (pc.name === "NAME" || pc.name === "AGE") continue;
+        if (drawnSeparately(pc.name)) continue;
 
         cols.push({
           size: UNKNOWN_COLUMN_SIZE,
@@ -276,7 +276,6 @@ export function CustomResourceList({
       refresh={watchFailed || !watchEnabled ? "resourceList" : false}
       live={watchEnabled && !watchFailed}
       resyncing={resyncing}
-      searchKey="name"
       searchPlaceholder={t("action", "searchKindPlaceholder", {
         kind: crdKind,
       })}

@@ -13,12 +13,12 @@ import { DataTable } from "@/components/ui/data-table";
 import { byNamespace } from "@/components/ui/row-grouping";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { RouteLink } from "@/components/ui/route-link";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { createAgeColumn } from "@/components/resources/columns";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { ObjectLink } from "@/components/resources/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -104,13 +104,18 @@ export function Crds() {
         accessorKey: "kind",
         header: () => <T section="columns" k="kind" />,
         size: 220,
+        // An `ObjectLink` and not a `RouteLink`: the row's own href resolves
+        // to a peek, so a click on the whitespace opens one. A name that
+        // navigated instead left this list answering a click two different
+        // ways inside one row — which is the thing #178 item 2 was about.
         cell: ({ row }) => (
-          <RouteLink
-            to={crdHref(row.original.name)}
+          <ObjectLink
+            kind={ResourceType.CustomResourceDefinition}
+            name={row.original.name}
             className="font-mono text-info hover:underline"
           >
             {row.original.kind}
-          </RouteLink>
+          </ObjectLink>
         ),
       },
       {
@@ -214,7 +219,6 @@ export function Crds() {
         data={crds}
         fill
         isLoading={isLoading}
-        searchKey="kind"
         searchPlaceholder={t("action", "searchKindPlaceholder", {
           kind: "CRDs",
         })}

@@ -6,7 +6,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, NO_STATUS } from "../kit";
+import { getValueByPath } from "../kit";
 import type { CrdView } from "../registry";
 
 /**
@@ -347,5 +347,4 @@ export const crd: CrdView = {
         return virtualServiceColumns;
     }
   },
-  status: NO_STATUS,
 };

@@ -226,6 +226,40 @@ export function rankContexts(
   });
 }
 
+/**
+ * The clusters worth showing for `needle`, in the order they were handed over.
+ *
+ * Not `rankContexts`. That re-sorts by rung, and the front door's list is
+ * already ordered by something the reader chose — most recently used first,
+ * then the kubeconfig's own order. A filter box narrows a list; it does not
+ * get to rearrange it. So this returns the same objects in the same order,
+ * and whatever grouped or sorted them still does.
+ *
+ * `deepest` is where the ladder stops counting. The palette *ranks*, so a
+ * `subsequence` hit sinks to the bottom where it costs nothing; an unranked
+ * list has no bottom, so `prod` matching `pre-orders-dev` would sit between
+ * two real matches with nothing on the row to explain why. Stopping at
+ * `substring` is what makes every row on screen visibly contain what was
+ * typed. It is a ceiling on the one ladder, not a second way of matching.
+ */
+export function filterContexts<T extends { name: string }>(
+  needle: string,
+  contexts: readonly T[],
+  /** What this person calls a cluster, where they call it something. */
+  aliasOf?: (context: string) => string | undefined,
+  deepest: MatchRung = "substring"
+): T[] {
+  const query = needle.trim();
+  // Nothing typed is not "nothing matches": it is the whole list.
+  if (query === "") return contexts.slice();
+
+  const floor = RUNGS.indexOf(deepest);
+  return contexts.filter((entry) => {
+    const match = matchContext(query, entry.name, aliasOf?.(entry.name));
+    return match !== null && RUNGS.indexOf(match.rung) <= floor;
+  });
+}
+
 /** The context text, split into the parts that matched and the parts that did not. */
 export function splitMarks(
   context: string,

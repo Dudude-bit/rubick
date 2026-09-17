@@ -36,8 +36,11 @@ export async function facts(): Promise<VendorFact[]> {
     {
       say: [
         {
-          key: "kindCount" as const,
-          values: { n: identities.length, kind: "AzureIdentity" },
+          // Its own key, not `kindCount`: that one pluralises a kind by
+          // adding an `s`, which is right for `Gateway` and gives
+          // `AzureIdentitys` here. A kind name is the cluster's to spell.
+          key: "azureIdentities" as const,
+          values: { n: identities.length },
         },
         { key: "azureBindings" as const, values: { n: bindings.length } },
         ...(prohibited.length === 0

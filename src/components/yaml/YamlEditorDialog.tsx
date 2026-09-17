@@ -61,6 +61,7 @@ interface YamlEditorActionProps {
   fetchYaml: () => Promise<string>;
   menuLabel?: string;
   readOnly?: boolean;
+  className?: string;
 }
 
 /** Open it, and say why if it will not open. Shared by both affordances. */
@@ -101,6 +102,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
       label={editorLabel(t, props)}
       icon={FileJson}
       onClick={open}
+      className={props.className}
     />
   );
 }

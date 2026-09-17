@@ -1,0 +1,16 @@
+# A kind cluster with no network plugin, ready for Cilium to be installed on
+# top. From https://rubick.tech, the landing page of a Kubernetes client that
+# tries not to lie to you.
+#
+#   kind create cluster --config https://rubick.tech/lies/cilium-kind.yaml
+#
+# The default plugin is turned off because it does not enforce network policy
+# at all, which is its own lie and not the one this page is about.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: rubick-lies
+networking:
+  disableDefaultCNI: true
+  kubeProxyMode: none
+nodes:
+  - role: control-plane

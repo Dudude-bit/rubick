@@ -161,6 +161,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
     racks: "Стойки",
@@ -490,6 +491,13 @@ export const ru: Catalogue = {
     serves: "Обслуживает",
     parents: "Родители",
     verdicts: "Вердикты",
+    ciliumSelects: "Выбирает",
+    ciliumClusterwide: "Общекластерная",
+    ciliumNamespaced: "В этом неймспейсе",
+    ciliumInForce: "Действует",
+    ciliumRules: "Правила",
+    ciliumReach: "Куда",
+    ciliumSecurityLabels: "Метки безопасности",
     programmed: "Запрограммирован",
   },
   action: {
@@ -837,6 +845,7 @@ export const ru: Catalogue = {
     nameCopied: "Скопировано: {name}",
     copyContextName: "Копировать имя контекста",
     openInNewTab: "Открыть в новой вкладке",
+    copyLink: "Копировать ссылку",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
@@ -973,6 +982,8 @@ export const ru: Catalogue = {
     closeNamed: "Закрыть {name}",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
+    filterClusters: "Фильтр кластеров",
+    filterClustersPlaceholder: "Фильтр кластеров…",
     change: "Изменить…",
     reload: "Перечитать",
     useTheDefault: "По умолчанию",
@@ -1722,6 +1733,9 @@ export const ru: Catalogue = {
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
     tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    bigDownloadTitle: "Скачать {name} ({size})?",
+    bigDownloadBody:
+      "Файл идёт через exec-канал, а он медленный: такой размер это минуты, и после 30 секунд тишины скачивание прекращается. В ваш файл ничего не пишется, пока не придёт всё целиком.",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:
@@ -2023,6 +2037,8 @@ export const ru: Catalogue = {
     cancelledFor: "Отменено: {context}.",
   },
   vendor: {
+    ciliumGives:
+      "все сетевые политики Cilium и то, принял ли их агент: отвергнутая политика ничего не применяет и выглядит точно так же, как рабочая",
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
     scyllaGives:
@@ -2491,6 +2507,12 @@ export const ru: Catalogue = {
       many: "{n} привязок",
       other: "{n} привязки",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      few: "{n} AzureIdentity",
+      many: "{n} AzureIdentity",
+      other: "{n} AzureIdentity",
+    },
     azureProhibited: {
       one: "{n} запрещённая цель",
       few: "{n} запрещённые цели",
@@ -2687,6 +2709,30 @@ export const ru: Catalogue = {
       few: "{n} хоста маршрутизируются",
       many: "{n} хостов маршрутизируются",
       other: "{n} хоста маршрутизируются",
+    },
+    factCiliumPolicies: {
+      one: "{n} сетевая политика",
+      few: "{n} сетевые политики",
+      many: "{n} сетевых политик",
+      other: "{n} сетевой политики",
+    },
+    factCiliumClusterwide: {
+      one: "{n} общекластерная",
+      few: "{n} общекластерные",
+      many: "{n} общекластерных",
+      other: "{n} общекластерной",
+    },
+    factCiliumRejected: {
+      one: "{n} политику Cilium отверг — она ничего не применяет",
+      few: "{n} политики Cilium отверг — они ничего не применяют",
+      many: "{n} политик Cilium отверг — они ничего не применяют",
+      other: "{n} политики Cilium отверг — они ничего не применяют",
+    },
+    factCiliumUnanswered: {
+      one: "про {n} политику агент ещё не ответил",
+      few: "про {n} политики агент ещё не ответил",
+      many: "про {n} политик агент ещё не ответил",
+      other: "про {n} политики агент ещё не ответил",
     },
     istioOrJoin: " или ",
     istioAndMoreBelow: "{said}, и ещё ниже",
@@ -3069,6 +3115,72 @@ export const ru: Catalogue = {
       "Сырая конфигурация nginx, вставляемая в блок server дословно. Показана ровно как написана: приложение её не пересказывает, потому что она может переписать, перенаправить или запретить что угодно на этом маршруте.",
     revisionCurrent: "{said}, текущая",
     nodeCordonedWord: "закрыт для планирования",
+    ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumCovered: "под политикой",
+    ciliumUnrestricted: "ничего не выбирает",
+    ciliumOnlyRejected: "только отвергнутые",
+    ciliumCannotSay: "нельзя сказать",
+    ciliumNothingSelects:
+      "Ни одна политика в кластере не выбирает этот эндпоинт. Куда он может дойти — туда и дойдёт.",
+    ciliumEnforcesNothing: "отвергнута — ничего не применяет",
+    ciliumUnreadablePolicies: {
+      one: "ещё {n} политика называет эндпоинты там, куда это окно не смотрит",
+      few: "ещё {n} политики называют эндпоинты там, куда это окно не смотрит",
+      many: "ещё {n} политик называют эндпоинты там, куда это окно не смотрит",
+      other:
+        "ещё {n} политики называют эндпоинты там, куда это окно не смотрит",
+    },
+    ciliumFindingRejected: {
+      one: "{n} политику оператор отверг — она ничего не применяет",
+      few: "{n} политики оператор отверг — они ничего не применяют",
+      many: "{n} политик оператор отверг — они ничего не применяют",
+      other: "{n} политики оператор отверг — они ничего не применяют",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} эндпоинт выбирают только отвергнутые политики — он выглядит закрытым и не закрыт",
+      few: "{n} эндпоинта выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+      many: "{n} эндпоинтов выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+      other:
+        "{n} эндпоинта выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} эндпоинт, который не выбирает ни одна политика",
+      few: "{n} эндпоинта, которых не выбирает ни одна политика",
+      many: "{n} эндпоинтов, которых не выбирает ни одна политика",
+      other: "{n} эндпоинта, которых не выбирает ни одна политика",
+    },
+    ciliumNotOnTheWire: "записано там, куда это окно не смотрит",
+    ciliumAndExpressions: {
+      one: "и {n} выражение",
+      few: "и {n} выражения",
+      many: "и {n} выражений",
+      other: "и {n} выражения",
+    },
+    ciliumSelectsByExpression: {
+      one: "по {n} выражению",
+      few: "по {n} выражениям",
+      many: "по {n} выражениям",
+      other: "по {n} выражения",
+    },
+    ciliumIngressRules: {
+      one: "{n} входящее",
+      few: "{n} входящих",
+      many: "{n} входящих",
+      other: "{n} входящих",
+    },
+    ciliumEgressRules: {
+      one: "{n} исходящее",
+      few: "{n} исходящих",
+      many: "{n} исходящих",
+      other: "{n} исходящих",
+    },
+    ciliumDenies: {
+      one: "{n} запрещающее",
+      few: "{n} запрещающих",
+      many: "{n} запрещающих",
+      other: "{n} запрещающих",
+    },
+    ciliumLeavesCluster: "за пределы кластера",
   },
   cluster: {
     integrationsHint:
@@ -3131,6 +3243,7 @@ export const ru: Catalogue = {
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
+    objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
@@ -3170,7 +3283,9 @@ export const ru: Catalogue = {
     renewalFailed:
       "Тихое обновление пробовали, и оно не вернулось — это сбой чтения, а не что-то про вас. ",
     renewalRanOut:
-      "Тихое обновление пробовали дважды, и оба раза плагин отдавал те же учётные данные — подставить было нечего. ",
+      "Тихое обновление пробовали во все моменты, на которые оставалось место, и плагин каждый раз отдавал те же учётные данные — подставить было нечего. ",
+    renewalLastChance:
+      "Тихое обновление пробовали, пока данные ещё принимали, и плагин отдал те же самые — ещё одна попытка назначена сразу после истечения: некоторые плагины не выпускают новые, пока старые живы. ",
     renewalNeedsYouBody:
       "Окно пробовало обновить их тихо; плагину понадобился человек — это и есть этот экран. ",
     renewalDelegated:
@@ -3258,6 +3373,13 @@ export const ru: Catalogue = {
   settings: {
     installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
+    whatsNew: "Что нового",
+    whatsNewHint:
+      "Заметки к этой версии, те, что открываются один раз после обновления.",
+    searchWhatsNewWords: "release notes changelog что нового заметки к выпуску",
+    showWhatsNew: "Показать",
+    whatsNewIn: "Что нового в {version}",
+    whatsNewSince: "Всё с версии {version}",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",
@@ -3576,6 +3698,9 @@ export const ru: Catalogue = {
     pathNoKubectl: "kubectl нет в пути поиска",
     appVersion: "Версия {version}",
     logsTo: "Логи: {destination}",
+    logsNowhere:
+      "В этот запуск файла логов нет — отправить нечего. Окно не смогло создать папку, в которую пишет.",
+    logsMoreDetail: "Запустите с RUST_LOG=debug, чтобы логи стали подробнее.",
     readingFile: "Чтение файла…",
     contexts: "Контексты",
     searchFiltersList: "{n} — поиск фильтрует этот список",
@@ -3666,6 +3791,23 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    saysNothing: "ничего не говорит",
+    deniesAll: "запрещает всё",
+    allowsAll: "разрешает всё",
+    podsNotRead: "поды не прочитаны",
+    selectsNoPods: "ни одного пода",
+    everyPodHere: "каждый под здесь",
+    noSelectorOnPolicy: "селектора нет",
+    everyPodThere: "любой под",
+    fromAnywhere: "откуда угодно",
+    toAnywhere: "куда угодно",
+    podsInNamespaces: "{pods} в {namespaces}",
+    inThisNamespace: "этом неймспейсе",
+    inEveryNamespace: "любом неймспейсе",
+    exceptRanges: "кроме {ranges}",
+    everyPortOf: "любой порт {protocol}",
+    governsNeither:
+      "Политика не называет ни одного направления, поэтому ни на что не действует.",
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
@@ -4584,6 +4726,8 @@ export const ru: Catalogue = {
     couldNotReadIngresses: "Не удалось прочитать Ingress этого кластера",
     albPageDescription:
       "Строка на ALB, а не на Ingress — потому что именно этот контроллер сажает несколько Ingress из разных пространств имён на один балансировщик.",
+    ciliumPageDescription:
+      "Каждый эндпоинт с политиками, которые его выбирают, и те, которых не выбирает ничего",
     crdCouldNotBeListed: "Не удалось перечислить {crd}",
     albUnreadNote:
       "Группы всё равно строятся по самим Ingress; не хватает того, что настроил для них класс.",
@@ -5285,6 +5429,12 @@ export const ru: Catalogue = {
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
   count: {
+    pods: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
     notReadList: "Не прочитано: {list}",
     podsStreaming: {
       one: "{streaming} из {n} пода стримится",
@@ -6143,6 +6293,12 @@ export const ru: Catalogue = {
       few: "{n} контекста",
       many: "{n} контекстов",
       other: "{n} контекста",
+    },
+    contextsMatching: {
+      one: "{shown} из {n} контекста",
+      few: "{shown} из {n} контекстов",
+      many: "{shown} из {n} контекстов",
+      other: "{shown} из {n} контекстов",
     },
     contextsFromFile: {
       one: "{n} контекст",
