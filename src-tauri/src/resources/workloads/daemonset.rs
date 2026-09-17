@@ -84,6 +84,8 @@ pub struct DaemonSetDetailInfo {
     pub selector: String,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
 }
 
@@ -124,6 +126,8 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             selector,
             conditions,
             owner_references: extract_owner_references(ds.metadata.owner_references.as_ref()),
+            generation: ds.metadata.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: ds.creation_timestamp().to_rfc3339_opt(),
         }
     }

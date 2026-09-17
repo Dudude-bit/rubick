@@ -43,6 +43,8 @@ import { deliveryApplyIntercept, deliveryOfManifest } from "@/lib/delivery";
 import { applyWarnings, changesReplicaCount } from "@/lib/governance";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
+import { useAsk } from "@/hooks/useAsk";
+import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck, FileJson } from "lucide-react";
 import { errorToShow } from "@/lib/error-utils";
 
@@ -108,6 +110,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 // DropdownMenuItem-based action for use in action menus
 // Main Dialog Component
 export function YamlEditorDialog() {
+  const asking = useAsk();
   const t = useT();
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
@@ -241,6 +244,17 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         addHistoryEntry(editedContent, "Applied");
+        const askable = resourceKey ? askableKind(resourceKey.kind) : null;
+        if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
+          asking.ask(
+            {
+              kind: askable,
+              namespace: resourceKey.namespace ?? currentNamespace ?? null,
+              name: resourceKey.name,
+            },
+            { action: "apply", replicas: null, generationBefore: null }
+          );
+        }
 
         toast({
           title: t("action", "applySucceeded"),
@@ -271,6 +285,7 @@ export function YamlEditorDialog() {
       setIsApplying(false);
     }
   }, [
+    asking,
     editedContent,
     resourceKey,
     currentNamespace,
@@ -493,6 +508,7 @@ export function YamlEditorDialog() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {asking.dialog}
     </>
   );
 }

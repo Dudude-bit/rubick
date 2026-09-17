@@ -3180,6 +3180,8 @@ export const ru: Catalogue = {
     nginxRawSnippet:
       "Сырая конфигурация nginx, вставляемая в блок server дословно. Показана ровно как написана: приложение её не пересказывает, потому что она может переписать, перенаправить или запретить что угодно на этом маршруте.",
     revisionCurrent: "{said}, текущая",
+    rolloutSeen: "готово {ready} из {desired}",
+    rolloutSeenRevision: "готово {ready} из {desired}, ревизия {revision}",
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
     ciliumCovered: "под политикой",

@@ -1410,6 +1410,8 @@ export interface DaemonSetDetailInfo {
   selector: string;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
@@ -1447,6 +1449,8 @@ export interface StatefulSetDetailInfo {
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
