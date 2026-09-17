@@ -76,7 +76,9 @@ export function useAsk(): {
       baseline: null,
       sessionId: target.sessionId,
       crd: target.crd,
-      after: after ?? null,
+      // Stamped here, where the click is: the judge needs to tell a
+      // condition the action caused from one that was already there.
+      after: after ? { ...after, askedAt: Date.now() } : null,
       deadline: after ? Date.now() + OUTCOME_DEADLINE_MS : null,
     };
     if (add(watch) === "full") {

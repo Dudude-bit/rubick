@@ -375,6 +375,50 @@ describe("an action being followed", () => {
     ]);
   });
 
+  /**
+   * The apiserver bumps `generation` the moment the action lands, while the
+   * status still describes the rollout before it. A Deployment already stuck
+   * with `Progressing=False` therefore answered "failed" within a second of
+   * the click — with the *previous* revision's message — and the watch then
+   * closed, so the fix it was following could never report success. The
+   * success arm had refused a stale "yes" all along; this is the same
+   * suspicion applied to a "no".
+   */
+  it("does not read a failure the reader's action cannot have caused", () => {
+    const asked = 1_700_000_100_000;
+    const stuck = (at: string | null) => ({
+      ...look(8, 7, { updated: 1, ready: 2 }),
+      conditions: [
+        {
+          type: "Progressing",
+          status: "False",
+          reason: "ProgressDeadlineExceeded",
+          message: "the previous rollout timed out.",
+          lastTransitionTime: at,
+        },
+      ],
+    });
+    const watch = {
+      ...after("image", null, 7),
+      after: {
+        action: "image" as const,
+        replicas: null,
+        generationBefore: 7,
+        askedAt: asked,
+      },
+    };
+
+    // Stamped a minute before the click: somebody else's rollout.
+    expect(
+      walk(watch, [stuck(new Date(asked - 60_000).toISOString())])
+    ).toEqual([]);
+
+    // Stamped after it: this one, and it is the reader's to hear about.
+    expect(walk(watch, [stuck(new Date(asked + 1_000).toISOString())])).toEqual(
+      [{ says: "rolloutFailed", detail: "the previous rollout timed out." }]
+    );
+  });
+
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
     for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {

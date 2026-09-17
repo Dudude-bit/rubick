@@ -132,6 +132,12 @@ export interface After {
   replicas: number | null;
   /** `metadata.generation` as the page saw it before the action; `null` when it did not know. */
   generationBefore: number | null;
+  /**
+   * When the reader asked, so a condition older than the question can be
+   * told from one the question caused. Optional only because the callers
+   * that cannot know the generation cannot always know this either.
+   */
+  askedAt?: number;
 }
 
 /** How long an action is given before "no answer" is the answer. */
@@ -226,6 +232,8 @@ export function judge(
 interface Rollout {
   settled: boolean;
   failed: string | null;
+  /** When the failing condition last changed, as the cluster stamped it. */
+  failedAt: number | null;
   desired: number;
   ready: number;
   generation: number | null;
@@ -243,6 +251,10 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
       progressing?.status === "False"
         ? (progressing.message ?? progressing.reason ?? "Progressing=False")
         : null;
+    const failedAt =
+      failed !== null && progressing?.lastTransitionTime
+        ? (Date.parse(progressing.lastTransitionTime) ?? null)
+        : null;
     return {
       settled:
         r.updated === r.desired &&
@@ -251,6 +263,7 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
         (progressing === undefined ||
           progressing.reason === "NewReplicaSetAvailable"),
       failed,
+      failedAt: Number.isNaN(failedAt) ? null : failedAt,
       desired: r.desired,
       ready: r.ready,
       generation: d.generation ?? null,
@@ -264,6 +277,7 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
     return {
       settled: r.ready === r.desired && r.current === r.desired,
       failed: null,
+      failedAt: null,
       desired: r.desired,
       ready: r.ready,
       generation: s.generation ?? null,
@@ -274,6 +288,7 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
   const d = resource as DaemonSetInfo;
   return {
     settled: d.current === d.desired && d.ready === d.desired,
+    failedAt: null,
     failed: null,
     desired: d.desired,
     ready: d.ready,
@@ -322,16 +337,34 @@ function judgeOutcome(
     seen: seenWords(now),
   };
   if (!acknowledged(now, baseline, after)) return { verdict: null, baseline };
-  if (now.failed !== null) {
-    return {
-      verdict: { says: "rolloutFailed", detail: now.failed },
-      baseline,
-    };
-  }
   const caughtUp =
     now.generation === null ||
     now.observedGeneration === null ||
     now.observedGeneration >= now.generation;
+  if (now.failed !== null) {
+    // The same suspicion the success arm applies, and for the same reason.
+    // The apiserver bumps `generation` the moment the action lands, while
+    // the status still describes the rollout before it — so a Deployment
+    // already stuck with `Progressing=False` answered "failed" within a
+    // second of the click, with the *previous* revision's message, and the
+    // watch closed before the fix it was following could succeed.
+    //
+    // A stamp settles it where the cluster wrote one: a condition that last
+    // changed before the reader asked is about something they did not do.
+    // Without a stamp, falling back to "has the controller looked yet" is
+    // still better than believing whatever was there.
+    const ours =
+      now.failedAt !== null && after.askedAt !== undefined
+        ? now.failedAt >= after.askedAt
+        : caughtUp;
+    if (ours) {
+      return {
+        verdict: { says: "rolloutFailed", detail: now.failed },
+        baseline,
+      };
+    }
+    return { verdict: null, baseline };
+  }
   if (now.settled && caughtUp) {
     return {
       verdict: { says: "rolledOut", detail: seenWords(now) },
