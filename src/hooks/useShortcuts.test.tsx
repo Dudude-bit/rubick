@@ -127,6 +127,20 @@ describe("the keys that are the same on every screen", () => {
     menu.remove();
   });
 
+  /**
+   * Caps Lock is a state a reader can be in without noticing, and the
+   * browser reports "G" for the same physical key. Every neighbouring
+   * handler here lowercases; this one compared raw, so the chords and the
+   * page keys died silently while the modified shortcuts listed beside them
+   * in the overlay went on working.
+   */
+  it("answers a chord typed with caps lock on", () => {
+    mount();
+    press("G");
+    press("P");
+    expect(screen.getByTestId("path")).toHaveTextContent("/pods");
+  });
+
   /** A `g` typed into a search box is a letter. */
   it("stays quiet inside a field", () => {
     mount();

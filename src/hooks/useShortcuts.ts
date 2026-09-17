@@ -27,7 +27,11 @@ export function useShortcuts(): void {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (claimedByTarget(event.target)) return;
-      const key = event.key;
+      // Lowercased, as every neighbouring handler in this app does it. With
+      // Caps Lock on the browser reports "G" and "P", nothing matched the
+      // table, and every chord and page key died silently while the
+      // modified shortcuts drawn beside them in the overlay kept working.
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
       // Before the layer test, and only this key: the list of shortcuts is
       // itself a dialog and holds the focus, so a test that steps aside for
