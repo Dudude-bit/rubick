@@ -10,6 +10,7 @@ import {
   isOpen,
   judge,
   LOST_SIGHT_MS,
+  outOfTimeVerdict,
   type Says,
   type Verdict,
   type Watch,
@@ -390,10 +391,9 @@ export function useTellMeWhen() {
       const store = useTellMeWhenStore.getState();
       store.expire(now);
       for (const watch of store.timeOut(now)) {
-        coalescer.current?.push({
-          watch,
-          verdict: { says: "timedOut", detail: watch.baseline?.seen ?? null },
-        });
+        // Already told it lost sight: the deadline has nothing to add.
+        if (watch.status.state === "lost" && watch.status.told) continue;
+        coalescer.current?.push({ watch, verdict: outOfTimeVerdict(watch) });
       }
     }, TIMEOUT_EVERY_MS);
     return () => clearInterval(tick);

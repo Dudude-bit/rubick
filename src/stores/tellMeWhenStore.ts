@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 
 import {
   isOpen,
+  outOfTimeVerdict,
   MAX_WATCHES_PER_CLUSTER,
   WATCH_TTL_MS,
   type Baseline,
@@ -86,10 +87,7 @@ export const useTellMeWhenStore = create<TellMeWhenState>()(
                   ...w,
                   status: {
                     state: "done" as const,
-                    verdict: {
-                      says: "timedOut" as const,
-                      detail: w.baseline?.seen ?? null,
-                    },
+                    verdict: outOfTimeVerdict(w),
                     at: now,
                   },
                 }

@@ -419,6 +419,51 @@ describe("an action being followed", () => {
     );
   });
 
+  /**
+   * `generation` moves the instant the apiserver accepts the write, but the
+   * replica counts still describe the rollout before it — so the first look
+   * after a click is the *old* rollout, complete and settled, wearing the new
+   * generation. Answering "rolled out" there reports the state the reader was
+   * trying to leave. Fails if the `observedGeneration` half of the success
+   * arm is dropped.
+   */
+  it("says nothing while the controller has not looked at the generation yet", () => {
+    expect(
+      walk(after("image"), [
+        look(4, 4),
+        look(5, 4, {}, "8"),
+        look(5, 5, {}, "9"),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: "3 of 3 ready, revision 9" }]);
+  });
+
+  /**
+   * Same suspicion on the failure arm, where the cluster left no stamp to
+   * settle it: an unobserved generation means the `Progressing=False` on
+   * screen is about the rollout before the click. Fails if the fallback
+   * stops asking whether the controller has caught up.
+   */
+  it("holds a failure with no stamp until the controller has looked", () => {
+    const stuck = (observed: number, message: string) => ({
+      ...look(8, observed, { updated: 1, ready: 2 }),
+      conditions: [
+        {
+          type: "Progressing",
+          status: "False",
+          reason: "ProgressDeadlineExceeded",
+          message,
+          lastTransitionTime: null,
+        },
+      ],
+    });
+    expect(
+      walk(after("image", null, 7), [
+        stuck(7, "the rollout before the click timed out."),
+        stuck(8, "this rollout timed out."),
+      ])
+    ).toEqual([{ says: "rolloutFailed", detail: "this rollout timed out." }]);
+  });
+
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
     for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {

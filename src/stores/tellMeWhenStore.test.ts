@@ -148,4 +148,39 @@ describe("a deadline", () => {
     });
     expect(useTellMeWhenStore.getState().timeOut(130_000)).toEqual([]);
   });
+
+  /**
+   * Both deadlines are two minutes, so a watch whose stream went down
+   * reaches its deadline at about the moment it would have said so. "No
+   * answer within two minutes" would be said about a window nobody
+   * watched: the app knew it could not look, and has to say that instead.
+   */
+  it("says it lost sight, not that there was no answer, when the stream was down", () => {
+    useTellMeWhenStore.setState({ watches: [] });
+    const store = useTellMeWhenStore.getState();
+    store.add({
+      id: "d2",
+      context: "prod",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "payments",
+      ask: "rollout",
+      startedAt: 0,
+      status: { state: "watching" },
+      baseline: { armed: true, seen: "2 of 3 ready" },
+      after: { action: "restart", replicas: null, generationBefore: 4 },
+      deadline: 120_000,
+    });
+    useTellMeWhenStore
+      .getState()
+      .setStatus("d2", { state: "lost", since: 30_000, told: false });
+    useTellMeWhenStore.getState().timeOut(120_000);
+    expect(
+      useTellMeWhenStore.getState().watches.find((w) => w.id === "d2")!.status
+    ).toEqual({
+      state: "done",
+      verdict: { says: "lostSight", detail: null },
+      at: 120_000,
+    });
+  });
 });

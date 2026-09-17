@@ -143,6 +143,18 @@ export interface After {
 /** How long an action is given before "no answer" is the answer. */
 export const OUTCOME_DEADLINE_MS = 2 * 60 * 1000;
 
+/**
+ * What a watch that ran out of time has to say. Both deadlines are two
+ * minutes, so a watch whose stream went down races its own timeout, and
+ * "no answer within two minutes" would be said about a window nobody
+ * watched. A watch that lost sight knows why it has nothing, and says that.
+ */
+export function outOfTimeVerdict(watch: Watch): Verdict {
+  return watch.status.state === "lost"
+    ? { says: "lostSight", detail: null }
+    : { says: "timedOut", detail: watch.baseline?.seen ?? null };
+}
+
 export type WatchStatus =
   | { state: "watching" }
   | { state: "lost"; since: number; told: boolean }
