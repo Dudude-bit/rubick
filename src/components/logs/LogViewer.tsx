@@ -44,7 +44,7 @@ import {
 } from "./lanes";
 import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
-import { historyRoom } from "./hooks/log-buffer";
+import { historyRoom, lostLines } from "./hooks/log-buffer";
 import { LogHistoryBar } from "./LogHistoryBar";
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend, type LegendEntry } from "./LogLegend";
@@ -53,7 +53,7 @@ import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
 import { useT } from "@/i18n/useT";
-import type { Frozen } from "./hooks/log-buffer";
+import type { Frozen, LostLines } from "./hooks/log-buffer";
 import {
   countCollapsed,
   expandRuns,
@@ -261,10 +261,12 @@ function StreamFailureNotice({
 function DroppedNotice({
   dropped,
   limit,
+  lost,
   onDownload,
 }: {
   dropped: number;
   limit: number;
+  lost: LostLines;
   onDownload: () => void;
 }) {
   const t = useT();
@@ -276,13 +278,18 @@ function DroppedNotice({
       className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px]"
     >
       <p className="text-warn">
-        {t("count", "olderLinesDropped", {
-          n: dropped,
-          count: formatCount(dropped),
-        })}
+        {t(
+          "count",
+          lost === "head" ? "olderLinesDropped" : "linesDroppedAroundKept",
+          { n: dropped, count: formatCount(dropped) }
+        )}
         <span className="text-fg-mut">
           {" "}
-          {t("empty", "bufferHoldsNewest", { count: formatCount(limit) })}
+          {t(
+            "empty",
+            lost === "head" ? "bufferHoldsNewest" : "bufferHoldsKeptAndNewest",
+            { count: formatCount(limit) }
+          )}
         </span>
       </p>
       <Button variant="outline" size="sm" onClick={onDownload}>
@@ -799,6 +806,11 @@ export function LogViewer({
     // thaw a window that can never refill.
     onWiped: useCallback(() => setFrozen(null), []),
   });
+
+  // Not `dropped > 0`: with an interval frozen, eviction steps over it and
+  // takes what is around it, so the missing lines are a hole beside the
+  // kept block and not a head the log starts after.
+  const lost = lostLines(dropped, frozen);
 
   /**
    * Every lane the pane has seen: the pods on the list, and the pods no
@@ -1460,7 +1472,7 @@ export function LogViewer({
           logs={scoped}
           scope={scopeKey}
           retained={retained}
-          headDropped={dropped > 0}
+          lost={lost}
           intake={intake.length > 0}
           selection={timeRange}
           frozen={frozen}
@@ -1559,10 +1571,11 @@ export function LogViewer({
         />
       )}
 
-      {dropped > 0 && (
+      {lost !== "none" && (
         <DroppedNotice
           dropped={dropped}
           limit={limit}
+          lost={lost}
           onDownload={handleDownloadLogs}
         />
       )}

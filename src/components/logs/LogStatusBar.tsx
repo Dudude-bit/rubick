@@ -129,7 +129,10 @@ export function LogStatusBar({
           className="whitespace-nowrap text-info hover:text-fg"
         >
           <span aria-hidden="true">❄ </span>
-          {t("count", "frozenLines", { n: formatCount(frozenLines) })}
+          {t("count", "frozenLines", {
+            n: frozenLines,
+            count: formatCount(frozenLines),
+          })}
           <span className="text-info/70"> · {t("action", "thawFrozen")}</span>
         </button>
       )}

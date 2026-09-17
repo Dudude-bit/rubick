@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   appendCapped,
   historyRoom,
+  lostLines,
   backfillPerContainer,
   emptyBuffer,
   fieldSuggestions,
@@ -348,5 +349,22 @@ describe("how much room history gets beside the live lines", () => {
   it("leaves none when the evictable lines fill the cap", () => {
     expect(historyRoom(5_000, 5_000, 0)).toBe(0);
     expect(historyRoom(5_000, 9_000, 1_000)).toBe(0);
+  });
+});
+
+describe("where the buffer lost lines", () => {
+  /**
+   * Three readers said "older lines have been dropped" off `dropped > 0`
+   * alone — the notice, the strip's axis and its spoken summary. With an
+   * interval frozen that is the wrong end: eviction steps over the frozen
+   * lines and takes what is around them, so the reader looking before the
+   * left edge for the missing lines finds the frozen block instead.
+   */
+  it("calls the loss a head only while nothing is frozen", () => {
+    const frozen = { from: 1_000, to: 2_000 };
+    expect(lostLines(0, null)).toBe("none");
+    expect(lostLines(0, frozen)).toBe("none");
+    expect(lostLines(40, null)).toBe("head");
+    expect(lostLines(40, frozen)).toBe("aroundKept");
   });
 });

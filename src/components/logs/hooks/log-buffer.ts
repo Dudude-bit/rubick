@@ -259,6 +259,22 @@ export function orderByTimestamp(
  * inside a fresh wrapper, which is the identity the suggestion list
  * memoizes on.
  */
+/**
+ * Where the buffer lost lines, which is not always the same place.
+ *
+ * With nothing frozen, eviction takes the head and the log simply starts
+ * later than it did. A frozen interval keeps its place while everything
+ * around it goes, so what is missing is a hole beside the kept block —
+ * and "older lines have been dropped" would send the reader to the wrong
+ * end of the buffer looking for it.
+ */
+export type LostLines = "none" | "head" | "aroundKept";
+
+export function lostLines(dropped: number, frozen: Frozen | null): LostLines {
+  if (dropped === 0) return "none";
+  return frozen === null ? "head" : "aroundKept";
+}
+
 export function appendCapped(
   prev: LogBuffer,
   batch: readonly StreamedLogLine[],

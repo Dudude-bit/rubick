@@ -4684,6 +4684,16 @@ export const en = {
     nothingToReconnectTo: "Nothing left to reconnect to",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
+    // Said instead of the three above whenever an interval is frozen. The
+    // eviction steps over the frozen lines and takes what is around them,
+    // so the loss is a hole beside the kept block and not a head the log
+    // begins after.
+    bufferHoldsKeptAndNewest:
+      "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
+    linesDroppedAroundKeptAxis:
+      "Lines have been dropped around the frozen interval — the log is not continuous from here.",
+    linesDroppedAroundKeptSummary:
+      "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
     nothingHasMatched: "Nothing has matched",
@@ -5379,8 +5389,8 @@ export const en = {
     shown: "{n} shown",
     hiddenByFilter: "{n} hidden by filter and grouping",
     frozenLines: {
-      one: "{n} frozen line",
-      other: "{n} frozen lines",
+      one: "{count} frozen line",
+      other: "{count} frozen lines",
     },
     spanInSlices: "{span} in {step} slices",
     densitySummary:
@@ -5523,6 +5533,10 @@ export const en = {
     olderLinesDropped: {
       one: "{count} older line has been dropped.",
       other: "{count} older lines have been dropped.",
+    },
+    linesDroppedAroundKept: {
+      one: "{count} line has been dropped around the frozen interval.",
+      other: "{count} lines have been dropped around the frozen interval.",
     },
     rowsStandFor: { one: "This row stands", other: "These {n} rows stand" },
     forLines: { one: "for {count} line.", other: "for {count} lines." },

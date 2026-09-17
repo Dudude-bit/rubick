@@ -24,6 +24,7 @@ import {
   type DensityBucket,
   type DensityCursor,
 } from "./density";
+import type { LostLines } from "./hooks/log-buffer";
 import { formatCount, formatSpan, type StreamedLogLine } from "./types";
 import { useT } from "@/i18n/useT";
 
@@ -117,7 +118,7 @@ interface LogDensityStripProps {
   /** Lines held in total, to tell "nothing yet" from "nothing matches". */
   retained: number;
   /** The cap has evicted: the left edge is not the start of the log. */
-  headDropped: boolean;
+  lost: LostLines;
   /**
    * Intake is set, so the buffer this maps is not everything the
    * container wrote. A map that quietly stops being a map is the one
@@ -143,7 +144,7 @@ export function LogDensityStrip({
   logs,
   scope,
   retained,
-  headDropped,
+  lost,
   intake,
   selection,
   frozen,
@@ -349,8 +350,8 @@ export function LogDensityStrip({
 
   const spanMs = density.to - density.from;
   const summary = useMemo(
-    () => describe(density, headDropped, intake, t),
-    [density, headDropped, intake, t]
+    () => describe(density, lost, intake, t),
+    [density, lost, intake, t]
   );
 
   const band = mode === "band";
@@ -490,12 +491,21 @@ export function LogDensityStrip({
         style={{ height: AXIS_PX }}
       >
         <span
-          title={headDropped ? t("empty", "olderLinesDroppedAxis") : undefined}
+          title={
+            lost === "none"
+              ? undefined
+              : t(
+                  "empty",
+                  lost === "head"
+                    ? "olderLinesDroppedAxis"
+                    : "linesDroppedAroundKeptAxis"
+                )
+          }
         >
           {/* The left edge is only the start of the log while nothing has
               been evicted. Once it has, saying so is the difference
               between a window on the log and a claim about it. */}
-          {headDropped && <span aria-hidden="true">⋯ </span>}
+          {lost !== "none" && <span aria-hidden="true">⋯ </span>}
           {axisLabel(origin, step, spanMs)}
         </span>
         <span>{axisLabel(mid, step, spanMs)}</span>
@@ -831,7 +841,7 @@ function Placeholder({ children }: { children: React.ReactNode }) {
  */
 function describe(
   density: Density,
-  headDropped: boolean,
+  lost: LostLines,
   intake: boolean,
   t: ReturnType<typeof useT>
 ): string {
@@ -868,7 +878,13 @@ function describe(
           ? t("count", "andNMore", { n: bursts.length - SPOKEN_BURSTS })
           : ""
       }.`,
-    headDropped && t("empty", "olderLinesDroppedSummary"),
+    lost !== "none" &&
+      t(
+        "empty",
+        lost === "head"
+          ? "olderLinesDroppedSummary"
+          : "linesDroppedAroundKeptSummary"
+      ),
     intake && t("empty", "intakeCoversKeptOnly"),
     t("action", "densityKeysHint"),
   ]
