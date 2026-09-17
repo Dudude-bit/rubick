@@ -423,6 +423,46 @@ export interface EndpointTargetRef {
   namespace: string;
 }
 
+export interface NetworkPolicyInfo {
+  name: string;
+  namespace: string;
+  selects: PolicySelects;
+  selected: number | null;
+  ingress: PolicyDirection;
+  egress: PolicyDirection;
+  labels: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyDirection {
+  governed: boolean;
+  rules: PolicyRule[];
+  opensToEverything: boolean;
+  deniesEverything: boolean;
+}
+
+export interface PolicyRule {
+  peers: PolicyPeer[];
+  ports: PolicyPort[];
+}
+
+export interface PolicyPort {
+  protocol: string;
+  port: string | null;
+  endPort: number | null;
+}
+
+export interface PolicyPeer {
+  pods: PolicySelects;
+  namespaces: PolicySelects;
+  ipBlock: PolicyIpBlock | null;
+}
+
+export interface PolicyIpBlock {
+  cidr: string;
+  except: string[];
+}
+
 export interface IngressInfo {
   name: string;
   namespace: string;
@@ -1248,7 +1288,7 @@ export interface InstallationInfo {
   version: string;
   os: string;
   configPath: string | null;
-  logDestination: string;
+  logDestination: string | null;
 }
 
 export interface KubeconfigInfo {
@@ -1813,6 +1853,7 @@ export type Renewal =
   | "needsYou"
   | "failed"
   | "ranOut"
+  | "lastChance"
   | "delegated"
   | "unknown";
 
@@ -1904,6 +1945,11 @@ export type ObjectFacts =
     };
 
 export type Existence = "present" | "missing" | "notChecked";
+
+export type PolicySelects =
+  | { kind: "everything" }
+  | { kind: "written"; query: string }
+  | { kind: "notSaid" };
 
 export type EnvVarSourceType =
   "configMapKeyRef" | "secretKeyRef" | "fieldRef" | "resourceFieldRef";

@@ -1,33 +1,9 @@
-import type { CrdColumn, CrdStatus } from "../kit";
+import type { CrdColumn } from "../kit";
 import { getValueByPath, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
 
 /** `status.phase` is CNPG's own sentence; the badge colours it and keeps the words. */
-const status: CrdStatus = {
-  getStatus: (resource) => {
-    const phase = getValueByPath(resource, "status.phase");
-    return typeof phase === "string" ? phase : null;
-  },
-  getVariant: (value) => {
-    const phase = value.toLowerCase();
-    if (phase === "cluster in healthy state" || phase === "completed") {
-      return "default";
-    }
-    if (
-      phase.includes("failed") ||
-      phase.includes("unrecoverable") ||
-      phase.includes("error")
-    ) {
-      return "destructive";
-    }
-    if (phase.includes("hibernated") || phase.includes("pending")) {
-      return "outline";
-    }
-    return "secondary";
-  },
-};
-
 const text = (value: unknown) => String(value ?? "-");
 
 const clusterColumns: CrdColumn[] = [
@@ -152,5 +128,4 @@ export const crd: CrdView = {
         return defaultColumns;
     }
   },
-  status,
 };

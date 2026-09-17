@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
+import type { Renewal } from "@/generated/types";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -20,6 +21,30 @@ import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
 import { StallIndicator } from "./StallIndicator";
 import { useT } from "@/i18n/useT";
+
+/**
+ * Which renewal states put a sign-in hint in the strip, as a total map.
+ *
+ * Total, not a ternary chain ending in `null`: a chain paints every state it
+ * has not heard of as "nothing to say", and `lastChance` — one attempt left,
+ * landing after the deadline — would have arrived silently.
+ */
+const SIGN_IN_HINT: Record<
+  Renewal,
+  "renewalNeedsYouHint" | "renewalRanOutHint" | null
+> = {
+  needsYou: "renewalNeedsYouHint",
+  ranOut: "renewalRanOutHint",
+  // Coming, and nothing to do about it yet — the refusal lifts itself when
+  // the attempt after the deadline lands.
+  lastChance: "renewalRanOutHint",
+  scheduled: null,
+  noDeadline: null,
+  passed: null,
+  failed: null,
+  delegated: null,
+  unknown: null,
+};
 
 /**
  * The window's bottom line: what the keyboard does on the left, what is
@@ -51,12 +76,7 @@ export function StatusBar() {
   // and they differ in why. Everything else is quiet, and a chip that is
   // permanently lit stops being read.
   const renewal = useRenewal();
-  const signInHint =
-    renewal === "needsYou"
-      ? "renewalNeedsYouHint"
-      : renewal === "ranOut"
-        ? "renewalRanOutHint"
-        : null;
+  const signInHint = SIGN_IN_HINT[renewal];
 
   const connecting = isLoading || isAuthenticating;
 

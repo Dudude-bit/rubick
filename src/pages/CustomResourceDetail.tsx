@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
@@ -177,7 +177,14 @@ export function CustomResourceDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const copyToClipboard = useCopyToClipboard();
-  const [activeTab, setActiveTab] = useState("overview");
+  // A link may name the tab it was copied from, and the peek's "open full
+  // page" carries the one the reader was on. Every other detail page reads
+  // it through `useResourceDetail`; this one held its own state and landed
+  // on Overview whatever the address said.
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(
+    () => searchParams.get("tab") ?? "overview"
+  );
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const decodedCrdName = crdName ? decodeURIComponent(crdName) : "";

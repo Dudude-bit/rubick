@@ -92,6 +92,11 @@ const NodeDetail = lazy(() =>
 const IngressDetail = lazy(() =>
   import("@/pages/IngressDetail").then((m) => ({ default: m.IngressDetail }))
 );
+const NetworkPolicyDetail = lazy(() =>
+  import("@/pages/NetworkPolicyDetail").then((m) => ({
+    default: m.NetworkPolicyDetail,
+  }))
+);
 const GatewayDetail = lazy(() =>
   import("@/pages/GatewayDetail").then((m) => ({ default: m.GatewayDetail }))
 );
@@ -322,6 +327,10 @@ export default function App() {
               <Route
                 path={`${toPlural(ResourceType.Ingress)}/:namespace/:name`}
                 element={<IngressDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.NetworkPolicy)}/:namespace/:name`}
+                element={<NetworkPolicyDetail />}
               />
               <Route
                 path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}

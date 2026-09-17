@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   flexRender,
   useTable,
@@ -30,6 +30,8 @@ import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { stallWatch } from "@/lib/stall-watch";
+import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   Search,
   SearchX,
@@ -55,7 +57,12 @@ interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
   data: TData[];
   isLoading?: boolean;
-  searchKey?: string;
+  /**
+   * The query-string key the search lives under. A tab records its route
+   * with the query string, so a search kept here survives leaving the tab
+   * and coming back; one kept in state did not.
+   */
+  searchParam?: string;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -242,7 +249,7 @@ function DataTableInner<TData extends RowData>({
   columns,
   data,
   isLoading = false,
-  searchKey,
+  searchParam,
   searchPlaceholder,
   enableVirtualScroll,
   fill = false,
@@ -258,6 +265,7 @@ function DataTableInner<TData extends RowData>({
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
+  const { open: openPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -265,7 +273,29 @@ function DataTableInner<TData extends RowData>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const [searchValue, setSearchValue] = React.useState("");
+  const [params, setParams] = useSearchParams();
+  const inTheUrl = searchParam ? (params.get(searchParam) ?? "") : "";
+  const [searchValue, setSearchValue] = React.useState(inTheUrl);
+  // The query string is the authority, and the state beside it is only so
+  // that typing does not wait for a navigation. Seeded once, the two came
+  // apart whenever the address changed under a mounted table — the sidebar
+  // row for the list you are already on, a deep link, a jump from the
+  // palette: the box and the rows kept the old search while the tab
+  // recorded the new address, and the filter vanished on the way back.
+  React.useEffect(() => setSearchValue(inTheUrl), [inTheUrl]);
+  const changeSearch = (value: string) => {
+    setSearchValue(value);
+    if (!searchParam) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(searchParam, value);
+        else next.delete(searchParam);
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const deferredSearch = React.useDeferredValue(searchValue);
 
   // Compact rows stay strictly single-line — a pod name like
@@ -297,13 +327,19 @@ function DataTableInner<TData extends RowData>({
     return seen.size >= (grouping.minGroups ?? 1);
   }, [data, grouping]);
 
+  // One namespace chosen is the same word on every row, and the scope bar
+  // above already says it; several are grouped, and the caption says it.
+  const oneNamespace = useClusterStore(
+    (state) => state.namespaceScope.length === 1
+  );
   const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
     const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
+    if (oneNamespace) state.namespace = false;
     return state;
-  }, [groupingActive, grouping]);
+  }, [groupingActive, grouping, oneNamespace]);
 
   // Latched rather than derived: between the two marks the answer is
   // "whatever it already was", which is a fact about the last render and not
@@ -379,16 +415,14 @@ function DataTableInner<TData extends RowData>({
     enabled: keyboardNavEnabled,
   });
 
+  // One road. The box used to be able to aim at a single column instead,
+  // chosen by whether a caller passed a `searchKey`, and nothing said which
+  // pages should — so ten of them narrowed the search to the name for no
+  // stated reason, and the road they took was the one that quietly stopped
+  // filtering (#185). A column opts out with `enableGlobalFilter: false`.
   React.useEffect(() => {
-    const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
-
-    if (searchColumn) {
-      searchColumn.setFilterValue(deferredSearch);
-      setGlobalFilter("");
-    } else {
-      setGlobalFilter(deferredSearch);
-    }
-  }, [deferredSearch, searchKey, table]);
+    setGlobalFilter(deferredSearch);
+  }, [deferredSearch]);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;
@@ -509,9 +543,16 @@ function DataTableInner<TData extends RowData>({
 
     const href = getRowHref?.(row);
     if (href) {
-      // A list is where you are already browsing, so plain click goes there
-      // rather than peeking: the peek exists to check a name mentioned
-      // elsewhere without losing the page, and here the page is the list.
+      // A plain click on a row whose object has a peek opens the peek, the
+      // same as the click on the name inside it: one gesture, one answer,
+      // wherever on the row it lands. The page itself is a double click, or
+      // Enter, away. Modified clicks open tabs exactly as before.
+      const peek = "key" in event ? null : peekTargetOfHref(href);
+      if (peek && readLinkIntent(event) === "activate") {
+        event.preventDefault();
+        openPeek(peek);
+        return;
+      }
       linkGesture(event, href, () => navigate(href));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
       // No destination, so nothing to open a tab on; only a plain click acts.
@@ -526,6 +567,31 @@ function DataTableInner<TData extends RowData>({
       ? (event: React.MouseEvent | React.KeyboardEvent) =>
           handleRowGesture(row.original, event)
       : undefined;
+    const href = getRowHref?.(row.original);
+    const openPage =
+      href && peekTargetOfHref(href)
+        ? (event: React.MouseEvent) => {
+            const target = event.target as HTMLElement;
+            // The same places a single click keeps its hands off, so the
+            // two gestures agree about what belongs to the row and what
+            // belongs to the controls sitting in it.
+            if (
+              target.closest("button") ||
+              target.closest('[role="menuitem"]') ||
+              target.closest("[data-quick-actions]")
+            ) {
+              return;
+            }
+            // A link to somewhere else — a row's node, its owner — keeps the
+            // double click, because the reader aimed at that link and not at
+            // the row. The row's own name is the place the eye goes to when
+            // told "double click the row", so it must not be the one spot
+            // where nothing happens.
+            const link = target.closest("a");
+            if (link && link.getAttribute("href") !== href) return;
+            navigate(href);
+          }
+        : undefined;
 
     return (
       <TableRow
@@ -549,6 +615,7 @@ function DataTableInner<TData extends RowData>({
           "relative group"
         )}
         onClick={act}
+        onDoubleClick={openPage}
         onAuxClick={act}
         onKeyDown={
           rowProps &&
@@ -655,7 +722,7 @@ function DataTableInner<TData extends RowData>({
               aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) => changeSearch(event.target.value)}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
@@ -801,7 +868,7 @@ function DataTableInner<TData extends RowData>({
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => setSearchValue("")}
+                          onClick={() => changeSearch("")}
                         >
                           {t("action", "clearSearch")}
                         </Button>

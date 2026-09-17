@@ -191,6 +191,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    selects: "Selects",
     files: "Files",
     members: "Members",
     racks: "Racks",
@@ -522,6 +523,13 @@ export const en = {
     serves: "Serves",
     parents: "Parents",
     verdicts: "Verdicts",
+    ciliumSelects: "Selects",
+    ciliumClusterwide: "Cluster-wide",
+    ciliumNamespaced: "In this namespace",
+    ciliumInForce: "In force",
+    ciliumRules: "Rules",
+    ciliumReach: "Reach",
+    ciliumSecurityLabels: "Security labels",
     programmed: "Programmed",
   },
   action: {
@@ -860,6 +868,7 @@ export const en = {
     nameCopied: "{name} copied",
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
@@ -991,6 +1000,8 @@ export const en = {
     closeNamed: "Close {name}",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
+    filterClusters: "Filter clusters",
+    filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
     reload: "Reload",
     useTheDefault: "Use the default",
@@ -1675,6 +1686,9 @@ export const en = {
     pathCopied: "Path copied",
     copyPath: "Copy path",
     tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
@@ -2009,6 +2023,8 @@ export const en = {
   },
 
   vendor: {
+    ciliumGives:
+      "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
     scyllaGives:
@@ -2394,6 +2410,10 @@ export const en = {
       one: "{n} prohibited target",
       other: "{n} prohibited targets",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      other: "{n} AzureIdentities",
+    },
     azureNoIdentityNamed: {
       one: "no AzureIdentity named {name}",
       other: "no AzureIdentity named {name}",
@@ -2518,6 +2538,22 @@ export const en = {
       few: "{n} not ready",
       many: "{n} not ready",
       other: "{n} not ready",
+    },
+    factCiliumPolicies: {
+      one: "{n} network policy",
+      other: "{n} network policies",
+    },
+    factCiliumClusterwide: {
+      one: "{n} cluster-wide",
+      other: "{n} cluster-wide",
+    },
+    factCiliumRejected: {
+      one: "{n} policy Cilium rejected — it enforces nothing",
+      other: "{n} policies Cilium rejected — they enforce nothing",
+    },
+    factCiliumUnanswered: {
+      one: "{n} policy the agent has not answered about",
+      other: "{n} policies the agent has not answered about",
     },
     drainingCount: {
       one: "{n} draining",
@@ -2872,6 +2908,45 @@ export const en = {
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
     nodeCordonedWord: "cordoned",
+    ciliumSelectsAll: "every endpoint in scope",
+    ciliumCovered: "covered",
+    ciliumUnrestricted: "nothing selects it",
+    ciliumOnlyRejected: "only rejected policies",
+    ciliumCannotSay: "cannot say",
+    ciliumNothingSelects:
+      "No policy in this cluster selects this endpoint. Whatever it may reach, it may reach.",
+    ciliumEnforcesNothing: "rejected — enforces nothing",
+    ciliumUnreadablePolicies: {
+      one: "{n} more policy names endpoints somewhere this window cannot read",
+      other:
+        "{n} more policies name endpoints somewhere this window cannot read",
+    },
+    ciliumFindingRejected: {
+      one: "{n} policy the operator rejected — it enforces nothing",
+      other: "{n} policies the operator rejected — they enforce nothing",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} endpoint is selected only by policies that were rejected — it reads as covered and is not",
+      other:
+        "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} endpoint no policy selects",
+      other: "{n} endpoints no policy selects",
+    },
+    ciliumNotOnTheWire: "written where this window cannot read it",
+    ciliumAndExpressions: {
+      one: "and {n} expression",
+      other: "and {n} expressions",
+    },
+    ciliumSelectsByExpression: {
+      one: "by {n} expression",
+      other: "by {n} expressions",
+    },
+    ciliumIngressRules: { one: "{n} in", other: "{n} in" },
+    ciliumEgressRules: { one: "{n} out", other: "{n} out" },
+    ciliumDenies: { one: "{n} deny", other: "{n} deny" },
+    ciliumLeavesCluster: "outside the cluster",
   },
   cluster: {
     integrationsHint:
@@ -2935,6 +3010,9 @@ export const en = {
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at it live.",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
@@ -2974,7 +3052,9 @@ export const en = {
     renewalFailed:
       "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
     renewalRanOut:
-      "Renewing them quietly was tried twice and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+      "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalLastChance:
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire — some plugins mint nothing until the old ones are actually gone. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:
@@ -3053,6 +3133,13 @@ export const en = {
   settings: {
     installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
@@ -3350,6 +3437,9 @@ export const en = {
     pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
+    logsNowhere:
+      "No log file this run — nothing on disk to send. This window could not create the folder it writes to.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",
@@ -3440,6 +3530,33 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "says nothing",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    everyPodThere: "every pod",
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
+    exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
@@ -4299,6 +4416,8 @@ export const en = {
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+    ciliumPageDescription:
+      "Every endpoint with the policies that select it, and the ones nothing selects at all",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
@@ -4996,6 +5115,7 @@ export const en = {
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
   count: {
+    pods: { one: "{n} pod", other: "{n} pods" },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",
@@ -5449,6 +5569,12 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    // `n` is the total, not the number shown: "1 of 42 context" is what
+    // happens when the count that picks the form is the filtered one.
+    contextsMatching: {
+      one: "{shown} of {n} context",
+      other: "{shown} of {n} contexts",
+    },
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },

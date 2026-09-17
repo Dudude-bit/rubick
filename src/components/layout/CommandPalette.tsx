@@ -730,7 +730,10 @@ export function CommandPalette() {
             } else {
               void switchNamespace(hit.name);
             }
-            close();
+            // A tab opened behind the palette leaves it standing: the next
+            // one is a keystroke away, and closing was the reason a reader
+            // could not open three pods in a row.
+            if (!newTab) close();
             return;
           }
           // Crossing a cluster boundary costs a tab: switching this one
@@ -742,7 +745,7 @@ export function CommandPalette() {
               namespace: hit.namespace ?? "",
               background: newTab,
             });
-            close();
+            if (!newTab) close();
             return;
           }
           go(entry.path, {
@@ -755,7 +758,6 @@ export function CommandPalette() {
         case "recent":
           if (newTab) {
             openTab({ href: entry.path, background: true });
-            close();
             return;
           }
           go(entry.path, {
@@ -767,7 +769,6 @@ export function CommandPalette() {
         case "link":
           if (newTab) {
             openTab({ href: entry.path, background: true });
-            close();
             return;
           }
           go(entry.path);
@@ -1168,7 +1169,10 @@ function EntryRow({
               namespace={entry.hit.namespace}
               showKind={false}
               onClick={(event) => {
+                // The row underneath picks too; without stopping here a
+                // ctrl-click on the name opened the object in two tabs.
                 event.preventDefault();
+                event.stopPropagation();
                 onPick(event);
               }}
             />
@@ -1198,7 +1202,10 @@ function EntryRow({
               namespace={entry.namespace}
               showKind={false}
               onClick={(event) => {
+                // The row underneath picks too; without stopping here a
+                // ctrl-click on the name opened the object in two tabs.
                 event.preventDefault();
+                event.stopPropagation();
                 onPick(event);
               }}
             />

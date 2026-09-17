@@ -118,8 +118,6 @@ export interface ResourceListProps<
   headerContent?: ReactNode;
   /** Render without header wrapper for embedded list views */
   embedded?: boolean;
-  /** Optional column to target for search */
-  searchKey?: string;
   /** Optional search input placeholder */
   searchPlaceholder?: string;
   /** Generate navigation URL for row click */
@@ -175,7 +173,6 @@ export function ResourceList<
   headerActions,
   headerContent,
   embedded = false,
-  searchKey,
   searchPlaceholder,
   getRowHref,
   quickActions,
@@ -371,7 +368,7 @@ export function ResourceList<
           // height to take; on its own page the table is the page.
           fill={!embedded}
           isLoading={showSkeleton}
-          searchKey={searchKey}
+          searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
           quickActions={resolvedQuickActions}
