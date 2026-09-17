@@ -9,6 +9,7 @@ import {
   Coalescer,
   isOpen,
   judge,
+  detailWords,
   LOST_SIGHT_MS,
   outOfTimeVerdict,
   type Says,
@@ -93,7 +94,10 @@ export function notice(
 ): { title: string; body: string } {
   const lines = answers.map((a) => answerLine(a, t));
   if (answers.length === 1) {
-    return { title: lines[0], body: answers[0].verdict.detail ?? "" };
+    return {
+      title: lines[0],
+      body: detailWords(answers[0].verdict.detail, t) ?? "",
+    };
   }
   return {
     title: t("tell", "severalAnswered", { n: answers.length }),

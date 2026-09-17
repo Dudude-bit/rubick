@@ -337,7 +337,15 @@ describe("an action being followed", () => {
         look(5, 4, { updated: 1, ready: 2 }),
         look(5, 5, { updated: 3, ready: 3 }, "9"),
       ])
-    ).toEqual([{ says: "rolledOut", detail: "3 of 3 ready, revision 9" }]);
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 3, desired: 3, revision: "9" },
+        },
+      },
+    ]);
   });
 
   it("acknowledges a scale by the count asked for, not by a generation the page did not know", () => {
@@ -347,7 +355,15 @@ describe("an action being followed", () => {
         look(5, 5, { desired: 5, ready: 3, updated: 5, available: 3 }),
         look(5, 5, { desired: 5, ready: 5, updated: 5, available: 5 }),
       ])
-    ).toEqual([{ says: "rolledOut", detail: "5 of 5 ready, revision 8" }]);
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 5, desired: 5, revision: "8" },
+        },
+      },
+    ]);
   });
 
   it("carries the controller's words when the rollout it follows gives up", () => {
@@ -434,7 +450,15 @@ describe("an action being followed", () => {
         look(5, 4, {}, "8"),
         look(5, 5, {}, "9"),
       ])
-    ).toEqual([{ says: "rolledOut", detail: "3 of 3 ready, revision 9" }]);
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 3, desired: 3, revision: "9" },
+        },
+      },
+    ]);
   });
 
   /**
@@ -464,11 +488,43 @@ describe("an action being followed", () => {
     ).toEqual([{ says: "rolloutFailed", detail: "this rollout timed out." }]);
   });
 
+  /**
+   * `detail` is documented as "the cluster's own words", and for a rollout
+   * it was ours: `seenWords` built "3 of 3 ready, revision 8" in English at
+   * judge time, and both readers — the Watching tab and the desktop
+   * notification — printed it to a Russian reader as it was. A key survives
+   * the trip and becomes words where the translator is.
+   */
+  it("carries its own sentence as a key and the cluster's as a string", () => {
+    const [ours] = walk(after("restart"), [look(4, 4), look(5, 5, {}, "9")]);
+    expect(typeof ours.detail).toBe("object");
+
+    const [theirs] = walk(after("image"), [
+      look(4, 4),
+      {
+        ...look(5, 5, { updated: 1, ready: 2 }),
+        conditions: [
+          {
+            type: "Progressing",
+            status: "False",
+            reason: "ProgressDeadlineExceeded",
+            message: "ReplicaSet has timed out progressing.",
+            lastTransitionTime: null,
+          },
+        ],
+      },
+    ]);
+    expect(theirs.detail).toBe("ReplicaSet has timed out progressing.");
+  });
+
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
     for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {
       current = { ...current, baseline: judge(current, "applied", l).baseline };
     }
-    expect(current.baseline?.seen).toBe("2 of 3 ready, revision 8");
+    expect(current.baseline?.seen).toEqual({
+      key: "rolloutSeenRevision",
+      values: { ready: 2, desired: 3, revision: "8" },
+    });
   });
 });

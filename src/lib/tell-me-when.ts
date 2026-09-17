@@ -1,3 +1,5 @@
+import { sayWords, type Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import type {
   CustomResourceInfo,
   DaemonSetInfo,
@@ -70,8 +72,14 @@ export type Says =
 
 export interface Verdict {
   says: Says;
-  /** The cluster's own words where it had any, kept whole. */
-  detail: string | null;
+  /**
+   * What the answer carries under it: the cluster's own words as a string,
+   * kept whole and never translated, or a sentence of ours as a `Saying`,
+   * which becomes words in the reader's language at render. The two are
+   * told apart by their type, because they are not the same kind of thing
+   * and one of them was going out in English to every reader.
+   */
+  detail: string | Saying | null;
 }
 
 /**
@@ -118,8 +126,8 @@ export interface Baseline {
   generation?: number | null;
   /** The object was seen mid-rollout at least once. */
   unsettledSeen?: boolean;
-  /** The last look, in words, for a verdict that has to say what it saw. */
-  seen?: string | null;
+  /** The last look, for a verdict that has to say what it saw. */
+  seen?: Saying | null;
 }
 
 /**
@@ -178,6 +186,18 @@ export interface Watch {
   after?: After | null;
   /** When "no answer" becomes the answer; `null` for a watch with the day-long default. */
   deadline?: number | null;
+}
+
+/**
+ * A verdict's detail in words. The cluster's own string is handed back as
+ * it was written; ours is a key and becomes the reader's language here.
+ */
+export function detailWords(
+  detail: string | Saying | null | undefined,
+  t: T
+): string | null {
+  if (detail === null || detail === undefined) return null;
+  return typeof detail === "string" ? detail : sayWords(detail, t);
 }
 
 export function isOpen(watch: Watch): boolean {
@@ -311,9 +331,17 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
 }
 
 /** "3 of 3 ready, revision 8": what the last look said, for a verdict to carry. */
-function seenWords(now: Rollout): string {
-  const ready = `${now.ready} of ${now.desired} ready`;
-  return now.revision ? `${ready}, revision ${now.revision}` : ready;
+function seenWords(now: Rollout): Saying {
+  return now.revision === null
+    ? { key: "rolloutSeen", values: { ready: now.ready, desired: now.desired } }
+    : {
+        key: "rolloutSeenRevision",
+        values: {
+          ready: now.ready,
+          desired: now.desired,
+          revision: now.revision,
+        },
+      };
 }
 
 /**

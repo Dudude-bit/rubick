@@ -4,6 +4,7 @@ import { Bell, Square, X } from "lucide-react";
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
 import {
+  detailWords,
   isOpen,
   SAYS_TONE,
   type After,
@@ -112,6 +113,9 @@ function Row({
           ? SAYS_TONE[status.verdict.says]
           : "bg-fg-fnt";
 
+  const detail =
+    status.state === "done" ? detailWords(status.verdict.detail, t) : null;
+
   const line = (() => {
     switch (status.state) {
       case "watching":
@@ -151,20 +155,12 @@ function Row({
         <span
           className={cn(
             "block truncate font-mono text-[11px]",
-            status.state === "done" && status.verdict.detail
-              ? "text-fg-mut"
-              : "text-fg-fnt"
+            detail === null ? "text-fg-fnt" : "text-fg-mut"
           )}
-          title={
-            status.state === "done"
-              ? (status.verdict.detail ?? undefined)
-              : undefined
-          }
+          title={detail ?? undefined}
         >
           {line}
-          {status.state === "done" && status.verdict.detail
-            ? ` · ${status.verdict.detail}`
-            : ""}
+          {detail === null ? "" : ` · ${detail}`}
         </span>
       </span>
       <ActivityAction

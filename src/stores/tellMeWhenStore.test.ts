@@ -131,7 +131,10 @@ describe("a deadline", () => {
       ask: "rollout",
       startedAt: 0,
       status: { state: "watching" },
-      baseline: { armed: true, seen: "2 of 3 ready" },
+      baseline: {
+        armed: true,
+        seen: { key: "rolloutSeen", values: { ready: 2, desired: 3 } },
+      },
       after: { action: "restart", replicas: null, generationBefore: 4 },
       deadline: 120_000,
     });
@@ -143,7 +146,10 @@ describe("a deadline", () => {
       .watches.find((w) => w.id === "d1")!;
     expect(closed.status).toEqual({
       state: "done",
-      verdict: { says: "timedOut", detail: "2 of 3 ready" },
+      verdict: {
+        says: "timedOut",
+        detail: { key: "rolloutSeen", values: { ready: 2, desired: 3 } },
+      },
       at: 120_000,
     });
     expect(useTellMeWhenStore.getState().timeOut(130_000)).toEqual([]);
@@ -167,7 +173,10 @@ describe("a deadline", () => {
       ask: "rollout",
       startedAt: 0,
       status: { state: "watching" },
-      baseline: { armed: true, seen: "2 of 3 ready" },
+      baseline: {
+        armed: true,
+        seen: { key: "rolloutSeen", values: { ready: 2, desired: 3 } },
+      },
       after: { action: "restart", replicas: null, generationBefore: 4 },
       deadline: 120_000,
     });

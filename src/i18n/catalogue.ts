@@ -2869,6 +2869,10 @@ export const en = {
     nginxRawSnippet:
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
+    // What a rollout last looked like, carried by a verdict. `revision` is
+    // the Deployment's own annotation and goes out as the cluster wrote it.
+    rolloutSeen: "{ready} of {desired} ready",
+    rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
     ciliumCovered: "covered",
