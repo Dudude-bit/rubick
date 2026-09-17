@@ -5,24 +5,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatShortcut } from "@/lib/platform";
 import { SECTIONS, SHORTCUTS, type Shortcut } from "@/lib/shortcuts";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 import { useT } from "@/i18n/useT";
-
-const IS_MAC =
-  typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad/.test(navigator.platform);
-
-function keyWord(key: string): string {
-  return key
-    .replace("mod", IS_MAC ? "⌘" : "Ctrl")
-    .replace("shift", "⇧")
-    .replace("ctrl", "Ctrl")
-    .replace("esc", "Esc")
-    .replace("enter", "↵")
-    .replace("del", "Del")
-    .replace("tab", "Tab");
-}
 
 function Keys({ entry }: { entry: Shortcut }) {
   const t = useT();
@@ -37,7 +23,7 @@ function Keys({ entry }: { entry: Shortcut }) {
             </span>
           )}
           <kbd className="rounded border border-hair px-1.5 py-0.5 text-fg-mid">
-            {keyWord(key)}
+            {formatShortcut(key)}
           </kbd>
         </span>
       ))}

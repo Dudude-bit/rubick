@@ -53,6 +53,39 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keys: ["mod+f"],
     labelKey: "filterClusters",
   },
+  // Advertised on screen where they work, and so owed a place here: the
+  // overlay is titled "every key the app answers to", and the Files tab was
+  // printing its own hint for a key this table had never heard of.
+  {
+    id: "downloadFile",
+    section: "table",
+    keys: ["mod+s"],
+    labelKey: "downloadFile",
+  },
+  {
+    id: "upADirectory",
+    section: "table",
+    keys: ["del"],
+    labelKey: "upADirectory",
+  },
+  {
+    id: "selectLogs",
+    section: "logs",
+    keys: ["mod+a"],
+    labelKey: "selectLogs",
+  },
+  {
+    id: "connectCluster",
+    section: "global",
+    keys: ["enter"],
+    labelKey: "connectCluster",
+  },
+  {
+    id: "scopeAnother",
+    section: "global",
+    keys: ["mod+enter"],
+    labelKey: "scopeAnother",
+  },
 
   {
     id: "goOverview",

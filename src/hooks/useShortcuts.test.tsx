@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
+import { ShortcutsOverlay } from "@/components/layout/ShortcutsOverlay";
 import { useShortcuts } from "./useShortcuts";
 
 function Probe() {
@@ -21,6 +22,20 @@ const mount = () =>
   render(
     <MemoryRouter initialEntries={["/"]}>
       <Probe />
+    </MemoryRouter>
+  );
+
+/**
+ * With the list of shortcuts really on screen, which is the only way to see
+ * what it does to the keys. Mounting the hook alone leaves no dialog in the
+ * document, and every assertion about stepping aside for one then passes
+ * against behaviour the app does not have.
+ */
+const mountWithOverlay = () =>
+  render(
+    <MemoryRouter initialEntries={["/"]}>
+      <Probe />
+      <ShortcutsOverlay />
     </MemoryRouter>
   );
 
@@ -63,6 +78,53 @@ describe("the keys that are the same on every screen", () => {
     expect(useShortcutsOverlayStore.getState().open).toBe(true);
     press("?");
     expect(useShortcutsOverlayStore.getState().open).toBe(false);
+  });
+
+  /**
+   * The same two presses with the list actually drawn. It is a dialog and it
+   * holds the focus, so a handler that steps aside for any layer opened it
+   * and could never close it — and the test above passed anyway, because
+   * nothing was rendered to step aside for.
+   */
+  it("closes the list with the same key that opened it, drawn", () => {
+    mountWithOverlay();
+    press("?");
+    expect(useShortcutsOverlayStore.getState().open).toBe(true);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    press("?");
+    expect(useShortcutsOverlayStore.getState().open).toBe(false);
+  });
+
+  /**
+   * A peek panel is a non-modal Sheet the reader is meant to keep working
+   * behind, and a plain row click opens one. Asking whether any dialog exists
+   * anywhere made every one of these keys dead for as long as it was up.
+   */
+  it("still answers a chord while a non-modal panel is open behind it", () => {
+    mount();
+    const panel = document.createElement("div");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("data-state", "open");
+    document.body.appendChild(panel);
+    press("g");
+    press("p");
+    expect(screen.getByTestId("path")).toHaveTextContent("/pods");
+    panel.remove();
+  });
+
+  /** And a layer the reader is actually inside keeps its own keys. */
+  it("stays quiet when the focus is inside a layer", () => {
+    mount();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = document.createElement("button");
+    menu.appendChild(item);
+    document.body.appendChild(menu);
+    item.focus();
+    press("g", item);
+    press("p", item);
+    expect(screen.getByTestId("path")).toHaveTextContent("/");
+    menu.remove();
   });
 
   /** A `g` typed into a search box is a letter. */

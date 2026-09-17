@@ -68,4 +68,31 @@ describe("the one table of shortcuts", () => {
       if (entry.section === "page") expect(entry.tab, entry.id).toBeTruthy();
     }
   });
+
+  /**
+   * The other half of "every key the app answers to": a shortcut the app
+   * *prints* on screen has to be in the table that claims to list them all.
+   * The keydown sweep above cannot see these — they are written as React
+   * `onKeyDown` props, not window listeners — and the Files tab was printing
+   * its own hint for `mod+s` two screens from an overlay that had never
+   * heard of it.
+   */
+  it("holds every shortcut the app draws a hint for", () => {
+    const advertised = new Set<string>();
+    for (const path of sources("src")) {
+      const text = readFileSync(path, "utf8");
+      for (const m of text.matchAll(/formatShortcut\("([^"]+)"\)/g)) {
+        const key = m[1].toLowerCase();
+        // A lone modifier is printed inside a sentence — "⌘-click to add
+        // another" — and is not a key combination the app answers to.
+        if (!key.includes("+")) continue;
+        advertised.add(key);
+      }
+    }
+    const listed = new Set(
+      SHORTCUTS.flatMap((entry) => entry.keys.map((k) => k.toLowerCase()))
+    );
+    const missing = [...advertised].filter((key) => !listed.has(key));
+    expect(missing).toEqual([]);
+  });
 });

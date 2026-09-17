@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { claimedByTarget } from "@/hooks/useCopyLink";
+import { claimedByLayer, claimedByTarget } from "@/hooks/useCopyLink";
 import {
   CHORD_MS,
   chordsOf,
@@ -9,11 +9,6 @@ import {
   pageKeysOf,
 } from "@/lib/shortcuts";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
-
-/** A Radix layer is up, and its own keys come first. */
-function aLayerIsOpen(): boolean {
-  return document.querySelector('[role="dialog"][data-state="open"]') !== null;
-}
 
 /**
  * The keys that are the same on every screen: `?` for the list of them,
@@ -31,12 +26,24 @@ export function useShortcuts(): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (claimedByTarget(event.target) || aLayerIsOpen()) return;
+      if (claimedByTarget(event.target)) return;
       const key = event.key;
+
+      // Before the layer test, and only this key: the list of shortcuts is
+      // itself a dialog and holds the focus, so a test that steps aside for
+      // layers left `?` able to open it and unable to close it again.
+      const overlay = useShortcutsOverlayStore.getState();
+      if (key === "?" && overlay.open) {
+        event.preventDefault();
+        overlay.toggle();
+        return;
+      }
+
+      if (claimedByLayer(event.target)) return;
 
       if (key === "?") {
         event.preventDefault();
-        useShortcutsOverlayStore.getState().toggle();
+        overlay.toggle();
         return;
       }
 
