@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
+import { StallIndicator } from "./StallIndicator";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -93,6 +94,7 @@ export function StatusBar() {
 
       <div className="flex-1" />
 
+      <StallIndicator />
       <ActivityPanel />
       <ThemeControl />
 
