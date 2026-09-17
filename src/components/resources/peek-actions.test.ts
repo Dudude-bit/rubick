@@ -7,6 +7,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { ContainerState, PodInfo, ServiceInfo } from "@/generated/types";
 import {
+  deleteCommandFor,
   describeBareRestart,
   describeDeletion,
   peekMutationKeys,
@@ -14,7 +15,8 @@ import {
   scaleCommandFor,
   type PeekAction,
 } from "./peek-actions";
-import { SCALABLE_KINDS } from "@/lib/resource-registry";
+import { RESOURCE_REGISTRY, SCALABLE_KINDS } from "@/lib/resource-registry";
+import * as generated from "@/generated/commands";
 
 function container(
   name: string,
@@ -408,5 +410,94 @@ describe("peekMutationKeys", () => {
     expect(keys).toContain("pods");
     expect(keys).toContain("pod");
     expect(keys).toContain("peek");
+  });
+});
+
+/**
+ * The table that goes quiet rather than breaking.
+ *
+ * A kind missing from `DELETE_COMMANDS` simply has no Delete in its peek,
+ * while its detail page deletes it perfectly well — there is no error and
+ * nothing to notice. `NetworkPolicy` shipped that way, and so did all seven
+ * Gateway API kinds, whose commands had existed for releases.
+ *
+ * Read from the generated bindings rather than restated: the guard is only
+ * worth having if it learns about a new `delete_*` command by itself. The
+ * names are not a function of the kind (`deleteConfigmap`, `deleteCrd`,
+ * `deleteGatewayRoute` for five kinds), so the mapping is spelled out — and
+ * a kind that should deliberately have no peek Delete is named here, not
+ * left to look like an oversight.
+ */
+describe("the peek's delete table against the commands that exist", () => {
+  /** The delete command each kind would use, if it should have one at all. */
+  const EXPECTED: Partial<Record<string, string>> = {
+    ConfigMap: "deleteConfigmap",
+    CronJob: "deleteCronjob",
+    CustomResourceDefinition: "deleteCrd",
+    DaemonSet: "deleteDaemonset",
+    Deployment: "deleteDeployment",
+    Endpoints: "deleteEndpoints",
+    Gateway: "deleteGateway",
+    GatewayClass: "deleteGatewayClass",
+    GRPCRoute: "deleteGatewayRoute",
+    HTTPRoute: "deleteGatewayRoute",
+    Ingress: "deleteIngress",
+    Job: "deleteJob",
+    NetworkPolicy: "deleteNetworkPolicy",
+    PersistentVolume: "deletePersistentVolume",
+    PersistentVolumeClaim: "deletePersistentVolumeClaim",
+    Pod: "deletePod",
+    Secret: "deleteSecret",
+    Service: "deleteService",
+    StatefulSet: "deleteStatefulset",
+    StorageClass: "deleteStorageClass",
+    TCPRoute: "deleteGatewayRoute",
+    TLSRoute: "deleteGatewayRoute",
+    UDPRoute: "deleteGatewayRoute",
+  };
+
+  /**
+   * Kinds with no delete of their own, said out loud. A Node is drained and
+   * cordoned rather than deleted; an Event and a ReplicaSet are written by
+   * the cluster; a Namespace takes everything in it with it, which is not a
+   * thing to offer beside Copy name. HorizontalPodAutoscaler and
+   * PodDisruptionBudget have no command at all.
+   */
+  const DELIBERATELY_NONE = new Set([
+    "Event",
+    "HorizontalPodAutoscaler",
+    "Namespace",
+    "Node",
+    "PodDisruptionBudget",
+    "ReplicaSet",
+  ]);
+
+  it("offers a Delete for every kind whose command exists, and no other", () => {
+    const missing: string[] = [];
+    const unexpected: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      const offered = deleteCommandFor(entry.kind) !== null;
+      const should = !DELIBERATELY_NONE.has(entry.kind);
+      if (should && !offered) missing.push(entry.kind);
+      if (!should && offered) unexpected.push(entry.kind);
+    }
+    expect({ missing, unexpected }).toEqual({ missing: [], unexpected: [] });
+  });
+
+  /**
+   * The half that catches a command being added with nobody noticing: every
+   * kind above names a `delete_*` the bindings really export. Fails when a
+   * new one lands and `EXPECTED` has not been read.
+   */
+  it("names commands the generated bindings actually export", () => {
+    for (const [kind, command] of Object.entries(EXPECTED)) {
+      expect(generated, `${kind} names ${command}`).toHaveProperty(command!);
+      expect(DELIBERATELY_NONE.has(kind)).toBe(false);
+    }
+    const covered = new Set([...Object.keys(EXPECTED), ...DELIBERATELY_NONE]);
+    const uncovered = RESOURCE_REGISTRY.map((e) => e.kind).filter(
+      (kind) => !covered.has(kind)
+    );
+    expect(uncovered).toEqual([]);
   });
 });

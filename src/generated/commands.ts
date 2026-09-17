@@ -22,6 +22,7 @@ import type {
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
+  ControllerRevisionInfo,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -70,6 +71,7 @@ import type {
   ManifestResult,
   NamespaceAccess,
   NamespaceInfo,
+  NetworkPolicyInfo,
   NodeBudget,
   NodeFilters,
   NodeInfo,
@@ -92,6 +94,7 @@ import type {
   RegistryImageResult,
   RegistryImportEntry,
   RegistrySearchRequest,
+  Renewal,
   ReplicaSetInfo,
   ResolveProbe,
   ResourceConnections,
@@ -709,6 +712,18 @@ export async function getResourceConnections(
   });
 }
 
+export async function getControllerRevisions(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ControllerRevisionInfo[]> {
+  return invoke<ControllerRevisionInfo[]>("get_controller_revisions", {
+    kind,
+    name,
+    namespace,
+  });
+}
+
 export async function terminalInput(
   sessionId: string,
   data: string
@@ -1276,6 +1291,26 @@ export async function listIngresses(
   return invoke<IngressInfo[]>("list_ingresses", { filters });
 }
 
+export async function listNetworkPolicies(
+  namespace: string | null
+): Promise<NetworkPolicyInfo[]> {
+  return invoke<NetworkPolicyInfo[]>("list_network_policies", { namespace });
+}
+
+export async function getNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<NetworkPolicyInfo> {
+  return invoke<NetworkPolicyInfo>("get_network_policy", { name, namespace });
+}
+
+export async function deleteNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_network_policy", { name, namespace });
+}
+
 export async function listEndpoints(
   filters: ResourceFilters | null
 ): Promise<EndpointsInfo[]> {
@@ -1489,6 +1524,10 @@ export async function connectionAttempt(
 
 export async function disconnectCluster(context: string): Promise<void> {
   return invoke<void>("disconnect_cluster", { context });
+}
+
+export async function credentialRenewal(context: string): Promise<Renewal> {
+  return invoke<Renewal>("credential_renewal", { context });
 }
 
 export async function getClusterInfo(context: string): Promise<ClusterInfo> {

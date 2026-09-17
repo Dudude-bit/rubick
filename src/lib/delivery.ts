@@ -36,23 +36,45 @@ import { formatAge } from "./utils";
  * site would not fail — it would quietly report a delivered object as
  * *labelled and disowned*, which is the loudest wrong thing this feature can
  * say.
+ *
+ * **Every kind the registry names belongs here.** A missing one makes
+ * `apiGroupOf` answer `null`, which every caller reads as "no delivery to
+ * speak of" — column, detail block and peek go quiet together, and nothing
+ * fails. Whether a *list* draws the column is {@link MADE_BY_THE_CLUSTER}'s
+ * separate question.
  */
+const GATEWAY = "gateway.networking.k8s.io";
+
 const API_GROUPS: Record<string, string> = {
   ConfigMap: "",
-  CustomResourceDefinition: "apiextensions.k8s.io",
   CronJob: "batch",
+  CustomResourceDefinition: "apiextensions.k8s.io",
   DaemonSet: "apps",
   Deployment: "apps",
+  Endpoints: "",
+  Event: "",
+  Gateway: GATEWAY,
+  GatewayClass: GATEWAY,
+  GRPCRoute: GATEWAY,
+  HorizontalPodAutoscaler: "autoscaling",
+  HTTPRoute: GATEWAY,
   Ingress: "networking.k8s.io",
   Job: "batch",
+  Namespace: "",
+  NetworkPolicy: "networking.k8s.io",
+  Node: "",
   PersistentVolume: "",
   PersistentVolumeClaim: "",
   Pod: "",
+  PodDisruptionBudget: "policy",
   ReplicaSet: "apps",
   Secret: "",
   Service: "",
   StatefulSet: "apps",
   StorageClass: "storage.k8s.io",
+  TCPRoute: GATEWAY,
+  TLSRoute: GATEWAY,
+  UDPRoute: GATEWAY,
 };
 
 /** A kind's group, or `null` for one this table does not name. */
@@ -93,16 +115,26 @@ export function deliveryOf(
 
 /**
  * The kinds whose *lists* get no Delivery column, because the cluster makes
- * them from something else that is delivered.
+ * them rather than a person.
  *
  * A Pod comes from its controller and a ReplicaSet from its Deployment;
  * neither carries a delivery label, so the column would read `not delivered`
  * on every row of every cluster — which is the section-one trap with the
- * colours swapped. Their *detail* pages still ask, and simply say nothing,
- * because a Pod that somehow is delivered is worth knowing about and costs
- * nothing to check.
+ * colours swapped. An Event is written by a component and a Node by the
+ * machine joining; nobody commits either to a repository. A Namespace is
+ * deliberately not here — those are among the first things a GitOps
+ * repository holds.
+ *
+ * Their *detail* pages still ask, and simply say nothing, because a Pod that
+ * somehow is delivered is worth knowing about and costs nothing to check.
  */
-const MADE_BY_THE_CLUSTER = new Set(["Pod", "ReplicaSet", "Endpoints"]);
+const MADE_BY_THE_CLUSTER = new Set([
+  "Endpoints",
+  "Event",
+  "Node",
+  "Pod",
+  "ReplicaSet",
+]);
 
 /** What a list page passes to get the column, or `null` for no column. */
 export function deliveryScopeOf(

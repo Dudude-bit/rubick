@@ -11,6 +11,7 @@ import {
   type ResourceColouring,
 } from "@/stores/displaySettingsStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useObjectMenuStore } from "@/stores/objectMenuStore";
 
 /** Where the click landed: the peek is a query parameter, not component state. */
 function LocationProbe() {
@@ -49,6 +50,32 @@ describe("ResourceRef", () => {
       ],
       activeId: "ref-tab",
       pendingHref: null,
+    });
+  });
+
+  /**
+   * Issue #178: a right-click reached the webview's own menu, whose "Copy
+   * link address" copied `http://tauri.localhost/...`. The link opens the
+   * app's menu instead.
+   *
+   * The `preventDefault` is asserted and not assumed: it is the whole of
+   * what stops the webview menu, and filling the store while letting the
+   * event through would leave the reader with the menu they complained
+   * about. Without that assertion this test passed with the line deleted.
+   */
+  it("opens the object menu on a right-click, at the pointer, and claims the event", () => {
+    wrap(<ResourceRef kind="Pod" name="web" namespace="shop" />);
+    const claimed = fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Pod web" }),
+      { clientX: 40, clientY: 60 }
+    );
+    // `fireEvent` returns false when a handler called `preventDefault`.
+    expect(claimed).toBe(false);
+    expect(useObjectMenuStore.getState().target).toEqual({
+      name: "web",
+      to: "/pods/shop/web",
+      x: 40,
+      y: 60,
     });
   });
 

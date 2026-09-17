@@ -8,9 +8,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { Layout } from "@/components/layout/Layout";
 import { ErrorProvider } from "@/contexts/error-context";
 import { useAuthFlowEvents } from "@/hooks/useAuthFlowEvents";
+import { useWatchForRenewals } from "@/hooks/useCredentialRenewal";
 import { AuthTerminal } from "@/components/terminal/AuthTerminal";
 import { usePortForwardEvents } from "@/hooks/usePortForwardEvents";
 import { useTellMeWhen } from "@/hooks/useTellMeWhen";
+import { useChangeJournal } from "@/hooks/useChangeJournal";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { usePortForwardStore } from "@/stores/portForwardStore";
@@ -53,6 +55,9 @@ const NamespaceList = lazy(() =>
 const Events = lazy(() =>
   import("@/pages/Events").then((m) => ({ default: m.Events }))
 );
+const Changes = lazy(() =>
+  import("@/pages/Changes").then((m) => ({ default: m.Changes }))
+);
 const Helm = lazy(() =>
   import("@/pages/Helm").then((m) => ({ default: m.Helm }))
 );
@@ -85,6 +90,11 @@ const NodeDetail = lazy(() =>
 );
 const IngressDetail = lazy(() =>
   import("@/pages/IngressDetail").then((m) => ({ default: m.IngressDetail }))
+);
+const NetworkPolicyDetail = lazy(() =>
+  import("@/pages/NetworkPolicyDetail").then((m) => ({
+    default: m.NetworkPolicyDetail,
+  }))
 );
 const GatewayDetail = lazy(() =>
   import("@/pages/GatewayDetail").then((m) => ({ default: m.GatewayDetail }))
@@ -185,7 +195,9 @@ export default function App() {
   // Global event hooks (ErrorProvider now handles error toasts)
   const { authTerminalSession, closeAuthTerminal } = useAuthFlowEvents();
   usePortForwardEvents();
+  useWatchForRenewals();
   useTellMeWhen();
+  useChangeJournal();
   usePortForwardAutoStart();
   useAutoUpdater();
 
@@ -275,6 +287,7 @@ export default function App() {
                 element={<NamespaceList />}
               />
               <Route path="events" element={<Events />} />
+              <Route path="changes" element={<Changes />} />
               <Route path="helm" element={<Helm />} />
               <Route
                 path="helm/:source/:namespace/:name"
@@ -312,6 +325,10 @@ export default function App() {
               <Route
                 path={`${toPlural(ResourceType.Ingress)}/:namespace/:name`}
                 element={<IngressDetail />}
+              />
+              <Route
+                path={`${toPlural(ResourceType.NetworkPolicy)}/:namespace/:name`}
+                element={<NetworkPolicyDetail />}
               />
               <Route
                 path={`${toPlural(ResourceType.Gateway)}/:namespace/:name`}
@@ -413,6 +430,7 @@ export default function App() {
             terminalSessionId={authTerminalSession.terminalSessionId}
             context={authTerminalSession.context}
             command={authTerminalSession.command}
+            replay={authTerminalSession.replay}
           />
         )}
       </ErrorBoundary>

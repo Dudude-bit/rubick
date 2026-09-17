@@ -270,6 +270,31 @@ describe("the field index", () => {
     expect(wide.lines).toBe(MAX_TRACKED_VALUES + 10);
   });
 
+  /**
+   * `pod` and `container` are the lane identity, not parsed fields: the
+   * legend draws a chip per value and reads its count from here. Dropped
+   * at the cap, every chip's count reads zero and a pod that has left the
+   * list vanishes with its lines still in the buffer — which a DaemonSet
+   * on sixty nodes reaches on its first read.
+   */
+  it("never stops counting the lanes, however many pods a workload has", () => {
+    const buffer = appendCapped(
+      emptyBuffer(),
+      Array.from({ length: MAX_TRACKED_VALUES + 10 }, (_, i) => ({
+        ...line(i),
+        pod: `api-${i}`,
+        container: `c${i}`,
+      })) as StreamedLogLine[],
+      1000
+    );
+
+    expect(buffer.fields.values.get("pod")?.size).toBe(MAX_TRACKED_VALUES + 10);
+    expect(buffer.fields.values.get("container")?.size).toBe(
+      MAX_TRACKED_VALUES + 10
+    );
+    expect(buffer.fields.values.get("pod")?.get("api-0")).toBe(1);
+  });
+
   it("never offers the key the message itself was parsed out of", () => {
     const buffer = appendCapped(
       emptyBuffer(),

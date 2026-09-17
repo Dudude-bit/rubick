@@ -175,7 +175,6 @@ export function PersistentVolumeClaimList() {
       refresh={watchFailed || scope.several ? undefined : false}
       live={watchEnabled && !watchFailed}
       resyncing={resyncing}
-      searchKey="name"
       getRowHref={(row) =>
         getResourceDetailUrl(
           ResourceType.PersistentVolumeClaim,
