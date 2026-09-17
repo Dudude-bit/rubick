@@ -88,6 +88,8 @@ interface Call {
   section: string;
   key: string;
   given: Set<string>;
+  /** The values literal as written, for a rule about what `n` is given. */
+  literal: string;
   /** The text around the call, where a wrapper's own substitution shows. */
   near: string;
 }
@@ -105,7 +107,8 @@ function callsIn(file: string, source: string): Call[] {
     const brace = source.indexOf("{", m.index! + m[0].length);
     const end = brace < 0 ? -1 : matchFrom(source, brace);
     if (end < 0) continue;
-    const given = keysOf(source.slice(brace, end));
+    const literal = source.slice(brace, end);
+    const given = keysOf(literal);
     // `{}` means the caller deliberately passed none and something else
     // substitutes; only a literal that names values is evidence.
     if (given === null || given.size === 0) continue;
@@ -114,6 +117,7 @@ function callsIn(file: string, source: string): Call[] {
       section,
       key,
       given,
+      literal,
       // Everything written around the call, for the rule below.
       near: source.slice(Math.max(0, m.index! - 200), end + 800),
     });
@@ -148,6 +152,37 @@ describe("every t() call supplies what its string asks for", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  /**
+   * `n` picks the plural form, and `Intl.PluralRules.select` takes a number.
+   * A formatted count is a string: `Number("1 234")` is `NaN`, every category
+   * falls back to `other`, and Russian then prints the wrong form for every
+   * count above 999 — the exact magnitude at which a formatter starts adding
+   * a separator, so it works in every small test and fails on a real log.
+   * The number still prints correctly, which is why nothing looked wrong.
+   *
+   * Only plural entries: where the string has no forms, `n` is an ordinary
+   * placeholder and a formatted value is what the reader should see.
+   */
+  it("chooses a plural form from a number, never from a formatted count", () => {
+    const wrong: string[] = [];
+    for (const file of files("src")) {
+      for (const call of callsIn(file, readFileSync(file, "utf8"))) {
+        const entry = (en as Record<string, Record<string, string | Plural>>)[
+          call.section
+        ]?.[call.key];
+        if (entry === undefined || typeof entry === "string") continue;
+        if (
+          /[{,]\s*n\s*:\s*(formatCount|toLocaleString|Intl)/.test(call.literal)
+        ) {
+          wrong.push(
+            `${file.replace(/^src\//, "")}: t("${call.section}", "${call.key}") picks its form from a formatted string`
+          );
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   /**

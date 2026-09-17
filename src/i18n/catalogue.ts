@@ -953,6 +953,16 @@ export const en = {
     chipQueryTitle: "{label} — a query over the buffered lines",
     chipQueryTimeTitle:
       "{label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+    chipFrozenTitle:
+      "{label} — frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+    startFreezeLabel:
+      "Freeze {label} — keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label} — these lines can be evicted again",
+    startFreezeTitle: "Freeze this interval",
+    stopFreezeTitle: "Thaw this interval",
+    thawFrozen: "thaw",
+    frozenNote:
+      "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
     stopIntakeLabel:
       "Stop discarding lines that do not match {label} — new lines are kept from now on, the ones already discarded do not come back",
     startIntakeLabel:
@@ -4724,6 +4734,16 @@ export const en = {
     nothingToReconnectTo: "Nothing left to reconnect to",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
+    // Said instead of the three above whenever an interval is frozen. The
+    // eviction steps over the frozen lines and takes what is around them,
+    // so the loss is a hole beside the kept block and not a head the log
+    // begins after.
+    bufferHoldsKeptAndNewest:
+      "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
+    linesDroppedAroundKeptAxis:
+      "Lines have been dropped around the frozen interval — the log is not continuous from here.",
+    linesDroppedAroundKeptSummary:
+      "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
     nothingHasMatched: "Nothing has matched",
@@ -5466,6 +5486,10 @@ export const en = {
     arrivingBefore: "{rate}/s arriving before it was set",
     shown: "{n} shown",
     hiddenByFilter: "{n} hidden by filter and grouping",
+    frozenLines: {
+      one: "{count} frozen line",
+      other: "{count} frozen lines",
+    },
     spanInSlices: "{span} in {step} slices",
     densitySummary:
       "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
@@ -5607,6 +5631,10 @@ export const en = {
     olderLinesDropped: {
       one: "{count} older line has been dropped.",
       other: "{count} older lines have been dropped.",
+    },
+    linesDroppedAroundKept: {
+      one: "{count} line has been dropped around the frozen interval.",
+      other: "{count} lines have been dropped around the frozen interval.",
     },
     rowsStandFor: { one: "This row stands", other: "These {n} rows stand" },
     forLines: { one: "for {count} line.", other: "for {count} lines." },
