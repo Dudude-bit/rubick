@@ -119,15 +119,6 @@ export interface CrdColumn {
   cell?: (value: unknown, t: T) => React.ReactNode;
 }
 
-export interface CrdStatus {
-  getStatus: (
-    resource: CustomResourceInfo | CustomResourceDetailInfo
-  ) => string | null;
-  getVariant: (
-    status: string
-  ) => "default" | "secondary" | "destructive" | "outline";
-}
-
 /** Matches every kind in one API group. */
 export function matchByGroup(targetGroup: string): CrdView["matches"] {
   const normalizedTarget = targetGroup.toLowerCase();
@@ -194,39 +185,3 @@ export function getValueByPath(
 
   return current;
 }
-
-/**
- * `Ready` from a conditions array, which is how most operators state health.
- */
-export function conditionStatus(conditionType: string = "Ready"): CrdStatus {
-  return {
-    getStatus: (resource) => {
-      const conditions = getValueByPath(resource, "status.conditions") as
-        Array<{ type: string; status: string }> | undefined;
-
-      if (!Array.isArray(conditions)) return null;
-
-      const condition = conditions.find((c) => c.type === conditionType);
-      if (!condition) return null;
-
-      return condition.status === "True" ? "Ready" : "NotReady";
-    },
-    getVariant: (status) => {
-      const normalized = status.toLowerCase();
-      if (normalized === "ready" || normalized === "true") return "default";
-      if (normalized === "notready" || normalized === "false")
-        return "destructive";
-      return "secondary";
-    },
-  };
-}
-
-/**
- * For a vendor whose objects carry no status at all. Named rather than made
- * optional: a vendor that has not decided is different from one whose
- * resources genuinely do not report health.
- */
-export const NO_STATUS: CrdStatus = {
-  getStatus: () => null,
-  getVariant: () => "outline",
-};

@@ -55,7 +55,7 @@ const NO_MATCH = "zq";
 const feed = (namespace: string, count: number) =>
   Array.from({ length: count }, (_, index) => event(namespace, index));
 
-function mount() {
+function mount(view: "list" | "stories" = "list") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -64,15 +64,15 @@ function mount() {
   // nothing about what a render costs.
   const tree = () => (
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[`/events?view=${view}`]}>
         <TooltipProvider>
           <Events />
         </TooltipProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );
-  const view = render(tree());
-  return { ...view, redraw: () => view.rerender(tree()) };
+  const rendered = render(tree());
+  return { ...rendered, redraw: () => rendered.rerender(tree()) };
 }
 
 const asked = () =>
@@ -283,4 +283,75 @@ describe("what the join costs", () => {
     // test above set for a render alone. Two characters bring it to 23s,
     // and the rest is headroom for the same loaded machine.
   }, 45_000);
+});
+
+describe("stories", () => {
+  const warning = (
+    namespace: string,
+    name: string,
+    index: number
+  ): EventInfo => ({
+    ...event(namespace, index),
+    uid: `${namespace}-warn-${index}`,
+    type: "Warning",
+    reason: "BackOff",
+    message: "Back-off restarting failed container app",
+    count: 7,
+    involvedObject: { kind: "Pod", name, namespace, uid: null },
+    lastTimestamp: new Date(Date.now() - 30_000).toISOString(),
+  });
+
+  /** The default view is the story, not the row: one sentence per object, worded from the counts. */
+  it("opens on stories and words a crash loop from its events", async () => {
+    listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
+    mount("stories");
+
+    const card = await screen.findByRole("article", { name: /api/ });
+    expect(card.textContent).toContain("Cannot stay up");
+    expect(card.textContent).toContain("7 times");
+    expect(card.textContent).toContain("still happening");
+    // Folded by name and honest about it.
+    expect(card.textContent).toContain("Grouped by the generated suffix");
+    expect(screen.getByRole("tab", { name: "Stories" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  /** A quiet window is a real answer only because the read succeeded; the copy says both. */
+  it("says the window is quiet rather than drawing nothing", async () => {
+    mount("stories");
+    expect(
+      await screen.findByText(/Nothing happened in .* in the last 1 hour/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The quiet sentence is byte-identical to what a swallowed refusal used to
+   * draw — and the sentence went as far as "the read succeeded", about a
+   * request that came back 403. An assertion on the empty feed proves nothing
+   * unless the refused feed says something else.
+   */
+  it("says a refused read was refused, not that the scope is quiet", async () => {
+    listEvents.mockRejectedValue(
+      new Error(
+        'events is forbidden: User "alice" cannot list resource "events"'
+      )
+    );
+    mount("stories");
+    expect(
+      await screen.findByText(/Could not read the events/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
+    expect(document.body.textContent).toContain("forbidden");
+  });
+
+  it("keeps the flat list one tab away", async () => {
+    listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
+    mount("stories");
+    await screen.findByRole("article", { name: /api/ });
+    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(document.body.textContent).toContain("BackOff");
+  });
 });

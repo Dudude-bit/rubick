@@ -275,6 +275,15 @@ the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
+Then three tables keyed by kind, each of which fails by staying quiet rather
+than by breaking. `API_GROUPS` in `lib/delivery.ts` — a kind absent from it
+answers `null`, which every caller reads as "no delivery to speak of", so the
+column, the detail block and the peek marks go silent together. `ROUTABLE` in
+`ResourceRef.tsx` — absent, and every reference to the kind renders as text
+instead of a link. `peek-actions.ts` — absent, and the peek offers no Delete
+even though the command exists. All three have guards now; the guards are what
+noticed.
+
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in
 the Rust markers table with the exact same string, or it is permanently

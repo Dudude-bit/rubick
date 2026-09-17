@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  filterContexts,
   matchContext,
   matchesAllClusters,
   parseBang,
@@ -164,5 +165,78 @@ describe("a cluster that has been renamed", () => {
 
   it("is refused when neither name is on the ladder", () => {
     expect(matchContext("zzz", ARN, "payments")).toBeNull();
+  });
+});
+
+describe("narrowing a list that is already in an order", () => {
+  const rows = [
+    { name: "staging" },
+    { name: ARN },
+    { name: "prod-eu" },
+    { name: "prod" },
+    { name: GKE },
+  ];
+
+  /**
+   * The front door orders its rows by how recently each cluster was used and
+   * a filter box is not allowed to overrule that. Swap `rankContexts` in here
+   * and this is the test that notices.
+   */
+  it("keeps the order it was handed rather than the ranking's", () => {
+    expect(filterContexts("prod", rows).map((row) => row.name)).toEqual([
+      ARN,
+      "prod-eu",
+      "prod",
+      GKE,
+    ]);
+  });
+
+  /** The same objects, so whatever grouped or sorted them still can. */
+  it("hands back the rows it was given and not copies of them", () => {
+    expect(filterContexts("prod", rows)[0]).toBe(rows[1]);
+  });
+
+  /**
+   * A renamed cluster shows its alias as the only name on the row, so a
+   * filter that ignored aliases would hide the cluster from the one word its
+   * owner knows it by. Drop the alias argument and this fails.
+   */
+  it("finds a cluster by the name its user gave it", () => {
+    const found = filterContexts("payments", rows, (context) =>
+      context === ARN ? "payments" : undefined
+    );
+    expect(found.map((row) => row.name)).toEqual([ARN]);
+  });
+
+  /**
+   * The ceiling on the ladder. `pre-orders-dev` contains p-r-o-d scattered
+   * across it, which the palette may offer because ranking sinks it — this
+   * list does not rank, so it must not appear at all.
+   */
+  it("leaves out a name the needle only scatters across", () => {
+    const found = filterContexts("prod", [
+      { name: "pre-orders-dev" },
+      { name: "prod" },
+    ]);
+    expect(found.map((row) => row.name)).toEqual(["prod"]);
+  });
+
+  /** A needle arrives from a text box, so it arrives with whatever was typed. */
+  it("ignores case and the space left by a fat thumb", () => {
+    expect(filterContexts("  PROD ", rows).map((row) => row.name)).toEqual([
+      ARN,
+      "prod-eu",
+      "prod",
+      GKE,
+    ]);
+  });
+
+  /**
+   * An empty box means "everything", never "nothing matched". Returning an
+   * empty list here would blank the front door before a key was pressed.
+   */
+  it("hands back every cluster when nothing has been typed", () => {
+    expect(filterContexts("", rows)).toEqual(rows);
+    expect(filterContexts("   ", rows)).toEqual(rows);
   });
 });

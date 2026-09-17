@@ -5,6 +5,7 @@ import { crd } from "./crd";
 import { APPLICATIONS_KEY, ARGO_STALE, fetchApplications } from "./data";
 import { facts } from "./facts";
 import { ownerOf } from "./owner";
+import { historyOf } from "./history";
 import { relatedTo } from "./related";
 
 /**
@@ -30,6 +31,7 @@ export default defineVendor({
   name: "Argo CD",
   provides: {
     "delivery.source": (objects) => ownerOf(objects),
+    "delivery.history": historyOf,
     "object.related": relatedTo,
   },
   extension: {

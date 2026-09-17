@@ -51,6 +51,9 @@ export function YamlEditor({
     <CodeMirror
       value={value}
       height={height}
+      // The wrapper react-codemirror renders needs the height too: `height`
+      // only reaches `.cm-editor`, whose percentage resolves against it.
+      style={{ height }}
       // The palette is ours; see editor-theme.ts.
       theme="none"
       extensions={extensions}

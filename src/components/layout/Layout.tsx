@@ -17,6 +17,8 @@ import { useCopyLink } from "@/hooks/useCopyLink";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
 import { DeepLinkBanner } from "./DeepLinkBanner";
+import { ObjectMenu } from "@/components/resources/ObjectMenu";
+import { WhatsNew } from "./WhatsNew";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "@/hooks/usePrefetchCoreLists";
 import { useCritical } from "@/hooks/useCritical";
@@ -98,6 +100,7 @@ export function Layout() {
                 ) : (
                   <>
                     <DeepLinkBanner />
+                    <ObjectMenu />
                     <Outlet />
                   </>
                 )}
@@ -110,6 +113,7 @@ export function Layout() {
       <CommandPalette />
       <ShortcutsOverlay />
       <YamlEditorDialog />
+      <WhatsNew />
       {/* Outside the outlet: one instance, and it survives the route change
           that `Open full page` performs. */}
       <PeekPanel />

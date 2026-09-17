@@ -47,7 +47,7 @@ export function useDeepLinks(): void {
         // at it live", so it must not appear until the connect has actually
         // landed — and awaiting is what makes this connect the one that wins
         // the launch race with the saved-cluster auto-restore.
-        await cluster.connect(link.context);
+        await cluster.connect(link.context, { keepRoute: true });
         if (cancelled) return;
       }
       useDeepLinkStore.getState().arrive({ status: "live", link });

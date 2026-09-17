@@ -10,6 +10,7 @@ import {
   Route,
   Settings,
   type LucideIcon,
+  History,
 } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
@@ -105,6 +106,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
     items: [
       { labelKey: "overview", path: "/", icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
+      { labelKey: "changes", path: "/changes", icon: History },
     ],
   },
   {
@@ -137,6 +139,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // No count: `ResourceCounts` has no endpoints field to read.
       resource(ResourceType.Endpoints),
       resource(ResourceType.Ingress, "ingresses"),
+      resource(ResourceType.NetworkPolicy),
     ],
   },
   {

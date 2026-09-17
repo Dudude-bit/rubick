@@ -66,6 +66,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "true",
     // Gateway API: a controller took the object and it is working.
     "accepted",
+    // Cilium's own word for a policy its agent parsed and is enforcing.
+    "valid",
     "programmed",
     "claimed",
   ],
@@ -113,6 +115,9 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "false",
     // Gateway API: a controller looked and said no.
     "refused",
+    // Cilium threw the policy away. It is still an object, and the
+    // namespace it was written to close is open.
+    "rejected",
     // A PersistentVolumeClaim whose volume is gone. Every pod that mounts it
     // fails to start, which is as broken as this list gets.
     "lost",

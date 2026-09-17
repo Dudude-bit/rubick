@@ -77,10 +77,15 @@ impl QueryTerm {
                 }
             }
             QueryTerm::Field { key, op, value } => {
-                let actual = if key == "container" {
-                    Some(&line.container)
-                } else {
-                    line.fields.as_ref().and_then(|fields| fields.get(key))
+                // Neither is a parsed field, and both are what a reader
+                // asks about by name: the legend, the lane label and the
+                // row detail all offer them as chips. A chip promoted to
+                // intake is evaluated here instead, so missing one silences
+                // every stream rather than narrowing it.
+                let actual = match key.as_str() {
+                    "container" => Some(&line.container),
+                    "pod" => Some(&line.pod),
+                    _ => line.fields.as_ref().and_then(|fields| fields.get(key)),
                 };
                 match op {
                     FieldOp::Is => actual == Some(value),
@@ -227,10 +232,16 @@ mod tests {
         fields: Option<BTreeMap<String, String>>,
         #[serde(default = "default_container")]
         container: String,
+        #[serde(default = "default_pod")]
+        pod: String,
     }
 
     fn default_container() -> String {
         "app".to_string()
+    }
+
+    fn default_pod() -> String {
+        "pod".to_string()
     }
 
     impl CaseLine {
@@ -243,7 +254,7 @@ mod tests {
                 fields: self.fields.clone(),
                 raw: self.raw.clone(),
                 segments: None,
-                pod: "pod".to_string(),
+                pod: self.pod.clone(),
                 container: self.container.clone(),
                 namespace: "default".to_string(),
             }
@@ -261,6 +272,7 @@ mod tests {
             level: None,
             fields: None,
             container: default_container(),
+            pod: default_pod(),
         }
         .build()
     }
