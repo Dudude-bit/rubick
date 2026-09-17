@@ -35,6 +35,7 @@ function custom(
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

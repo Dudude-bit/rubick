@@ -159,6 +159,47 @@ pub(super) fn read_jwt(token: &str) -> TokenReading {
 /// Extract an `ExecCredential` JSON object from a (possibly noisy)
 /// stdout buffer.
 ///
+/// The length of a run that is long enough to be a credential rather than a
+/// word. A `kubectl` subcommand or an error's prose never reaches it; the
+/// shortest thing here that does is a base64 client key.
+const CREDENTIAL_RUN: usize = 32;
+
+/// Replace anything credential-shaped with a count of what was there.
+///
+/// **Every text that can carry a credential goes through here**, because one
+/// string reaches two places with different rules: the pane, where whoever
+/// reads it owns the token anyway, and `rubick.log`, which outlives the run
+/// and which Diagnostics invites the reader to send to a maintainer. What is
+/// wanted from a preview is the shape — which field, how long, what came
+/// before the JSON — and never the bytes.
+#[must_use]
+pub(crate) fn without_credentials(text: &str) -> String {
+    use std::fmt::Write as _;
+
+    fn flush(run: &mut String, out: &mut String) {
+        let len = run.chars().count();
+        if len >= CREDENTIAL_RUN {
+            let _ = write!(out, "<{len} characters>");
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    }
+
+    let mut out = String::with_capacity(text.len());
+    let mut run = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '+' | '/' | '=') {
+            run.push(ch);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(ch);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
 /// The child runs under a real PTY, so prompts, status lines and ANSI
 /// sequences are tee'd into the buffer ahead of the final JSON, and a raw
 /// `from_slice` fails because the bytes do not start with `{`. So scan every
@@ -489,6 +530,49 @@ mod tests {
         assert_eq!(cred.status.unwrap().token.as_deref(), Some("abcd"));
     }
 
+    /// The token never reaches the file.
+    ///
+    /// `rubick.log` outlives the run and Diagnostics invites the reader to
+    /// send it, so the plugin's stdout preview — which is the `ExecCredential`
+    /// JSON — cannot carry the bearer token it failed to parse. Fails if the
+    /// preview stops going through this.
+    #[test]
+    fn a_preview_of_a_credential_keeps_the_shape_and_drops_the_secret() {
+        let token = "a".repeat(3794);
+        let masked = without_credentials(&format!(
+            r#"error: not logged in{{"kind":"ExecCredential","status":{{"token":"{token}"}}}}"#
+        ));
+
+        assert!(!masked.contains(&token), "the token survived: {masked}");
+        assert!(
+            masked.contains("<3794 characters>"),
+            "the length is what a reader needs: {masked}"
+        );
+        // The shape is the whole point of a preview.
+        assert!(masked.contains("\"kind\""), "{masked}");
+        assert!(masked.contains("ExecCredential"), "{masked}");
+        assert!(masked.contains("error: not logged in"), "{masked}");
+    }
+
+    /// A `config.toml` that will not parse goes through the same door, and
+    /// `toml` renders the offending source line — which is as likely as any
+    /// to be the line holding the token.
+    #[test]
+    fn a_config_line_that_would_not_parse_loses_its_value_and_keeps_its_key() {
+        let masked = without_credentials(
+            "TOML parse error at line 4\n  |\n4 | token = \"glpat-C8xV9kQ2mNpR7tZ4wY1bA6sD3fG5hJ0kL2\"\n  |",
+        );
+        assert!(
+            !masked.contains("glpat-C8xV9kQ2mNpR7tZ4wY1bA6sD3fG5hJ0kL2"),
+            "{masked}"
+        );
+        assert!(
+            masked.contains("token = "),
+            "the key is what names the fault: {masked}"
+        );
+        assert!(masked.contains("line 4"), "{masked}");
+    }
+
     #[test]
     fn extracts_plain_exec_credential() {
         // Sanity: an unadorned JSON payload still parses (this is
@@ -759,6 +843,65 @@ mod tests {
             "the console changed the token: {} characters came back where {} went in",
             got.len(),
             sent.len()
+        );
+    }
+
+    #[cfg(windows)]
+    /// A plugin that asks where the cursor is, with nobody but us to answer.
+    ///
+    /// `ConPTY` does not get on with the child until `ESC[6n` is answered, and
+    /// a silent renewal opens no pane — so xterm, the answerer in the app, is
+    /// not there. 4.14.0 moved the answer into the adapter's reader thread and
+    /// shipped it without once running it on Windows: every test in
+    /// `terminal::adapters::auth_exec` is `#[cfg(unix)]`, and the two console
+    /// tests above hand the answer in themselves before the child asks. This
+    /// is that fix, executed, with nothing written to the child at all.
+    #[tokio::test]
+    async fn a_credential_behind_a_cursor_query_needs_nobody_to_answer_but_us() {
+        use crate::terminal::{AuthExecAdapter, TerminalAdapter};
+        use std::collections::HashMap;
+        use std::time::Duration;
+
+        const TOKEN: &str = "token-behind-a-cursor-query";
+        let payload = format!(
+            "\u{1b}[6n{{\"kind\":\"ExecCredential\",\"apiVersion\":\"client.authentication.k8s.io/v1beta1\",\"status\":{{\"token\":\"{TOKEN}\"}}}}"
+        );
+        let path = std::env::temp_dir().join(format!("rubick-ask-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, payload.as_bytes()).expect("the test writes its own input");
+
+        let mut adapter = AuthExecAdapter::new(
+            "cmd.exe".to_string(),
+            vec![
+                "/C".into(),
+                "type".into(),
+                path.to_string_lossy().to_string(),
+            ],
+            HashMap::new(),
+        );
+        let collected = adapter.collected_stdout();
+        adapter.connect().await.expect("the child has to start");
+
+        let ceiling = Duration::from_secs(super::super::SILENT_FLOW_TIMEOUT_SECS);
+        let started = std::time::Instant::now();
+        adapter.drain_to_exit(ceiling).await;
+        let took = started.elapsed();
+        adapter.close().await.expect("close");
+        let _ = std::fs::remove_file(&path);
+
+        let buffer = collected.lock().clone();
+        let credential = extract_exec_credential(&buffer).unwrap_or_else(|why| {
+            panic!(
+                "nothing came back in {took:?} from {} bytes: {why}",
+                buffer.len()
+            )
+        });
+        assert_eq!(
+            credential.status.and_then(|status| status.token).as_deref(),
+            Some(TOKEN)
+        );
+        assert!(
+            took < ceiling,
+            "the child was still held at the silent flow's ceiling: {took:?}"
         );
     }
 

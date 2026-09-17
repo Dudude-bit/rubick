@@ -131,6 +131,19 @@ export function podContainers(pod: PodContainerLists): ContainerInfo[] {
 }
 
 /**
+ * Every container the pod ran, in the order a reader is asked to pick one.
+ *
+ * Run order and pick order are different questions and this is the second.
+ * A surface that offers all of them — including the stopped ones, which is
+ * the point of offering them — still must not lead with the mesh proxy: a
+ * strip built on run order defaulted to `istio-proxy`, because a sidecar is
+ * an init container and init containers run first.
+ */
+export function offeredContainers(pod: PodContainerLists): ContainerInfo[] {
+  return podContainers(pod).sort(byPhase);
+}
+
+/**
  * App containers first, then sidecars, then the rest.
  *
  * Run order answers "what happened"; this order answers "which one do you
@@ -295,9 +308,7 @@ export function shellTargets(pod: PodContainerLists): ContainerInfo[] {
   // The reason is discarded — only its absence decides membership — so this
   // asks in no language rather than making every caller supply one.
   const noWords: T = () => "";
-  return podContainers(pod)
-    .filter((c) => whyNoShell(c, noWords) === null)
-    .sort(byPhase);
+  return offeredContainers(pod).filter((c) => whyNoShell(c, noWords) === null);
 }
 
 /** "4s", from the two stamps the kubelet writes on a finished run. */

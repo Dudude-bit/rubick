@@ -49,6 +49,7 @@ function application(
     annotations: {},
     createdAt: null,
     ownerReferences,
+    generation: null,
   };
 }
 

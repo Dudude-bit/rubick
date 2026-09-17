@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Bug,
+  FolderOpen,
   Info,
   Network,
   RefreshCw,
@@ -20,6 +21,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { DebugPodDialog } from "@/components/debug";
+import { FilesTab } from "@/components/files/FilesTab";
+import type { Via } from "@/generated/types";
 import { LogViewer } from "@/components/logs/LogViewer";
 import { PodShell } from "@/components/terminal/PodShell";
 import { yamlTab } from "@/components/resources/yaml-tab";
@@ -49,6 +52,7 @@ import { UsageBlock } from "@/components/resources/usage-block";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { MostLikelyPanel } from "@/components/pod/MostLikelyPanel";
 import { VolumeRows } from "@/components/resources/volume-rows";
 import {
   KeyValueSection,
@@ -62,6 +66,7 @@ import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodePlacement } from "@/hooks/useNodePlacement";
 import { SpotMark } from "@/components/resources/spot-mark";
 import { commands } from "@/lib/commands";
@@ -69,6 +74,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -277,6 +283,14 @@ export function PodDetail() {
     container: string | null;
   } | null>(null);
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
+  // Which tab asked for the debug container: the shell opens a terminal in
+  // it, the files tab reads through it.
+  const [debugFor, setDebugFor] = useState<"shell" | "files">("shell");
+  // Which container the Files tab wants read. The debug container's
+  // /proc/1/root is whatever it targets, so defaulting the dialog to
+  // containers[0] could read one container and label it another.
+  const [debugTarget, setDebugTarget] = useState<string | null>(null);
+  const [filesVia, setFilesVia] = useState<Via | null>(null);
   // Which container the Logs tab was sent to read, from a row in the
   // Containers tab. The viewer decides where to open on its own when
   // nobody has asked, so this stays null for an ordinary visit.
@@ -314,6 +328,23 @@ export function PodDetail() {
   });
 
   const connections = useConnections(ResourceType.Pod, name, namespace);
+  // The pod's own events, for the "most likely" sentence: read here rather
+  // than inside the panel so a refusal reaches it as a line, not a crash.
+  const podEvents = useLiveQuery({
+    queryKey: [...queryKeys.events(namespace), "pod", name],
+    queryFn: () =>
+      commands.listEvents({
+        namespace: namespace || null,
+        involved_object_name: name ?? null,
+        involved_object_kind: "Pod",
+        event_type: null,
+        field_selector: null,
+        limit: 200,
+      }),
+    enabled: !!name,
+    refresh: "slow",
+    retry: false,
+  });
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
   // The kubelet on this pod's node writes its status. If the node stopped
   // answering, everything below is the last thing it said, not the state now.
@@ -400,6 +431,9 @@ export function PodDetail() {
         `/${toPlural(ResourceType.Pod)}/${result.namespace}/${result.podName}`,
         { replace: false }
       );
+    } else if (debugFor === "files") {
+      setFilesVia({ container: result.containerName, root: "/proc/1/root" });
+      setActiveTab("files");
     } else {
       openTerminal(result.containerName);
     }
@@ -700,6 +734,26 @@ export function PodDetail() {
                 {podStatus?.status !== "available" && (
                   <MetricsStatusBanner status={podStatus} />
                 )}
+                {pod && (
+                  <MostLikelyPanel
+                    pod={pod}
+                    events={podEvents.data ?? []}
+                    eventsError={
+                      podEvents.error
+                        ? normalizeTauriError(podEvents.error)
+                        : null
+                    }
+                    // The log tab opened on the current run with no
+                    // container selected, so the row that says "read the
+                    // last lines of X before the exit" landed on whatever
+                    // the pane happened to be showing.
+                    onOpenTab={(tab, container) =>
+                      tab === "logs" && container
+                        ? openLogs(container)
+                        : setActiveTab(tab)
+                    }
+                  />
+                )}
 
                 {/* A Pod is the only member of the family with no count block: it
                   does not have a replica count, it *is* one, and the page that
@@ -840,8 +894,30 @@ export function PodDetail() {
                 ended={shellEnded}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
-                onDebug={() => setDebugDialogOpen(true)}
+                onDebug={() => {
+                  setDebugFor("shell");
+                  setDebugDialogOpen(true);
+                }}
                 onEnd={handleTerminalClose}
+              />
+            ) : null,
+          },
+          {
+            id: "files",
+            label: t("columns", "files"),
+            glyph: viewGlyph(FolderOpen),
+            kind: "surface",
+            content: pod ? (
+              <FilesTab
+                key={`files:${pod.uid}`}
+                pod={pod}
+                via={filesVia}
+                onDebug={(target) => {
+                  setDebugFor("files");
+                  setDebugTarget(target);
+                  setDebugDialogOpen(true);
+                }}
+                onStopVia={() => setFilesVia(null)}
               />
             ) : null,
           },
@@ -896,6 +972,7 @@ export function PodDetail() {
           podName={pod.name}
           namespace={pod.namespace}
           containers={lifetimeContainers(pod).map((c) => c.name)}
+          preferredTarget={debugTarget ?? undefined}
           kubernetesVersion={clusterInfo?.git_version}
           onDebugStart={handleDebugStart}
         />

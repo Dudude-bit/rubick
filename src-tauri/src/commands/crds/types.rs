@@ -109,6 +109,9 @@ pub struct CustomResourceInfo {
     pub annotations: BTreeMap<String, String>,
     pub created_at: Option<DateTime<Utc>>,
     pub owner_references: Vec<OwnerReferenceInfo>,
+    /// `metadata.generation`, so a page can compare it with what the
+    /// operator says it has observed.
+    pub generation: Option<i64>,
 }
 
 /// Owner reference information
@@ -139,4 +142,6 @@ pub struct CustomResourceDetailInfo {
     pub owner_references: Vec<OwnerReferenceInfo>,
     pub finalizers: Vec<String>,
     pub resource_version: Option<String>,
+    /// `metadata.generation`, as on the list shape.
+    pub generation: Option<i64>,
 }

@@ -83,7 +83,6 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
   fetcher: ({ namespace }) => commands.listGateways(namespace),
   deleter: (item) => commands.deleteGateway(item.name, item.namespace),
   watch: ({ namespace }) => commands.subscribeGatewayWatch(namespace),
-  searchKey: "name",
   columns: () => [
     createNameColumn<GatewayInfo>(ResourceType.Gateway),
     createNamespaceColumn<GatewayInfo>(),

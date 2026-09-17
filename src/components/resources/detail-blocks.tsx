@@ -598,7 +598,9 @@ function EventRow({
         />
         <span className="truncate">{event.reason ?? "—"}</span>
       </span>
-      <span className="truncate text-fg-mid">
+      {/* The row truncates, and an Event has no detail page to open, so the
+       *  controller's own sentence is otherwise unreachable. */}
+      <span className="truncate text-fg-mid" title={event.message ?? undefined}>
         {showObject && (
           <ResourceRef
             kind={subject.kind}

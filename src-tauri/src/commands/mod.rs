@@ -12,6 +12,7 @@
 // `subscribe_namespaced!` says so in as many words.
 #![allow(clippy::unused_async)]
 
+pub mod files;
 pub mod filters;
 pub mod helpers;
 
@@ -43,6 +44,7 @@ pub mod pods;
 pub mod port_forward;
 pub mod registry;
 pub mod replicasets;
+pub mod revisions;
 pub mod search;
 pub mod services;
 pub mod settings;

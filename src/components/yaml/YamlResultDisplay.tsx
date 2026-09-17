@@ -1,6 +1,7 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import type { ManifestResult } from "@/generated/types";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n/useT";
 
 export interface YamlResultDisplayProps {
   result: ManifestResult;
@@ -12,6 +13,7 @@ export interface YamlResultDisplayProps {
  * green block on the canvas would be the only surface on the screen.
  */
 export function YamlResultDisplay({ result }: YamlResultDisplayProps) {
+  const t = useT();
   return (
     <div className="border-t border-hair pt-2 text-xs">
       <p
@@ -25,15 +27,17 @@ export function YamlResultDisplay({ result }: YamlResultDisplayProps) {
         ) : (
           <XCircle className="h-3.5 w-3.5 flex-none" />
         )}
-        {result.success ? "Success" : "Error"}
+        {result.success ? t("settings", "success") : t("action", "error")}
       </p>
+      {/* Bounded: a line per object squeezed the editor and pushed the
+       *  dialog's buttons past the window. */}
       {result.stdout && (
-        <pre className="mt-1.5 whitespace-pre-wrap font-mono text-[11px] text-fg-mid">
+        <pre className="mt-1.5 max-h-40 overflow-y-auto scrollbar-thin whitespace-pre-wrap font-mono text-[11px] text-fg-mid">
           {result.stdout}
         </pre>
       )}
       {result.stderr && (
-        <pre className="mt-1.5 whitespace-pre-wrap font-mono text-[11px] text-err">
+        <pre className="mt-1.5 max-h-40 overflow-y-auto scrollbar-thin whitespace-pre-wrap font-mono text-[11px] text-err">
           {result.stderr}
         </pre>
       )}

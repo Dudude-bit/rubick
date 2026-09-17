@@ -67,7 +67,6 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   description?:
     string | ((deps: { scope: NamespaceScope; t: Translator }) => string);
   /** Search key (column accessor) for the in-page search box. */
-  searchKey?: string;
   /**
    * Optional watch subscription factory. When supplied, the page subscribes to
    * backend `resource-event` updates and the polling `refresh` rate is
@@ -193,7 +192,6 @@ export function createResourceListPage<T extends ListableResource>(
             ? config.description({ scope, t })
             : config.description
         }
-        searchKey={config.searchKey}
         queryKey={queryKey}
         getRowId={getResourceRowId}
         queryFn={queryFn}

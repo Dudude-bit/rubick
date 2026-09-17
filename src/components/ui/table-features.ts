@@ -15,6 +15,7 @@ import {
   columnVisibilityFeature,
   createFilteredRowModel,
   createSortedRowModel,
+  filterFn_includesString,
   globalFilteringFeature,
   rowSortingFeature,
   tableFeatures,
@@ -36,11 +37,12 @@ import {
  * rows between the table's own rows and hides the column it took over: a
  * rendering concern, not a row model.
  *
- * No `sortFns`/`filterFns` registries: those name the *extra* functions a
- * column may ask for by string, and no column here asks for one. Every column
- * resolves through `auto`, which reaches the built-ins regardless — registering
- * the full sets only puts every one of them in the bundle. Pinned by
- * "reverses the rows when its header is toggled twice" in data-table.test.tsx.
+ * No `sortFns` registry: no column names one, and sorting's `auto` reaches
+ * the built-ins. A filter's `auto` does *not* — it resolves through the slot
+ * below, and left empty a column filter matches nothing while nothing fails
+ * (#185). No column filters one today; the entry stays so the first that
+ * does works, and `columnFilteringFeature` is here because the vendor makes
+ * global filtering depend on it.
  */
 export const tableStack = tableFeatures({
   rowSortingFeature,
@@ -50,6 +52,7 @@ export const tableStack = tableFeatures({
   columnVisibilityFeature,
   sortedRowModel: createSortedRowModel(),
   filteredRowModel: createFilteredRowModel(),
+  filterFns: { includesString: filterFn_includesString },
 });
 
 /**

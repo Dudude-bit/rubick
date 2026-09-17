@@ -224,6 +224,7 @@ pub fn dynamic_object_to_custom_resource_info(obj: &DynamicObject) -> CustomReso
         labels: f.labels,
         annotations: f.annotations,
         created_at: f.created_at,
+        generation: obj.metadata.generation,
         owner_references: f.owner_references,
     }
 }
@@ -241,6 +242,7 @@ pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResour
         labels: f.labels,
         annotations: f.annotations,
         created_at: f.created_at,
+        generation: obj.metadata.generation,
         owner_references: f.owner_references,
         finalizers: obj.metadata.finalizers.clone().unwrap_or_default(),
         resource_version: obj.metadata.resource_version.clone(),

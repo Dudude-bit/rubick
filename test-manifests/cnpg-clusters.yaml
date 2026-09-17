@@ -1,0 +1,83 @@
+# CloudNativePG specimens for the Operators page. Needs the operator:
+#   kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.30/releases/cnpg-1.30.0.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-demo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: shop-wal
+  namespace: cnpg-demo
+stringData:
+  ID: nobody
+  KEY: nothing
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: shop-db
+  namespace: cnpg-demo
+spec:
+  instances: 2
+  storage:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+  # An object store that does not exist: WAL archiving fails on purpose, so
+  # the page has a ContinuousArchiving=False to show.
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://shop-wal/
+      endpointURL: http://minio.nowhere.invalid:9000
+      s3Credentials:
+        accessKeyId:
+          name: shop-wal
+          key: ID
+        secretAccessKey:
+          name: shop-wal
+          key: KEY
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: shop-db-daily
+  namespace: cnpg-demo
+spec:
+  schedule: "0 0 3 * * *"
+  cluster:
+    name: shop-db
+  method: barmanObjectStore
+  suspend: true
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: shop-db-pooler-rw
+  namespace: cnpg-demo
+spec:
+  cluster:
+    name: shop-db
+  instances: 1
+  type: rw
+  pgbouncer:
+    poolMode: transaction
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: staging-db
+  namespace: cnpg-demo
+  annotations:
+    cnpg.io/hibernation: "on"
+spec:
+  instances: 1
+  storage:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi

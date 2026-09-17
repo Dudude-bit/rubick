@@ -17,6 +17,8 @@ export interface AuthTerminalProps {
   terminalSessionId: string;
   context: string;
   command: string;
+  /** What the plugin printed while this modal was still being held back. */
+  replay?: () => string;
 }
 
 /**
@@ -30,6 +32,7 @@ export function AuthTerminal({
   terminalSessionId,
   context,
   command,
+  replay,
 }: AuthTerminalProps) {
   const t = useT();
   const handleClose = useCallback(() => {
@@ -66,6 +69,7 @@ export function AuthTerminal({
         <div className="flex-1 px-6 pb-6 overflow-hidden">
           <Terminal
             sessionId={terminalSessionId}
+            replay={replay}
             metadata={{
               title: t("action", "authentication"),
               subtitle: context,

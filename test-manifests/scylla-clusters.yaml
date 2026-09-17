@@ -1,0 +1,36 @@
+# ScyllaCluster specimens for the Operators page. The CRDs alone are enough
+# for detection and for the page's "no operator" state:
+#   curl -sL https://raw.githubusercontent.com/scylladb/scylla-operator/v1.22.0/deploy/operator.yaml | <split CRDs> | kubectl apply --server-side -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scylla-demo
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: events-scylla
+  namespace: scylla-demo
+spec:
+  version: 2025.2.1
+  agentVersion: 3.5.0
+  repairs:
+    - name: weekly
+      interval: 7d
+  backups:
+    - name: daily
+      interval: 1d
+      location:
+        - s3:events-scylla-backups
+      retention: 14
+  datacenter:
+    name: eu
+    racks:
+      - name: eu-1a
+        members: 3
+        storage:
+          capacity: 900Gi
+      - name: eu-1b
+        members: 3
+        storage:
+          capacity: 900Gi

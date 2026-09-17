@@ -37,6 +37,7 @@ pub mod config;
 pub mod diagnostics;
 pub mod drain;
 pub mod error;
+pub mod files;
 pub mod integrations;
 pub mod logs;
 pub mod metrics;
@@ -48,6 +49,12 @@ pub mod terminal;
 pub mod utils;
 pub mod validation;
 pub mod watch;
+
+/// Matches `identifier` in `tauri.conf.json`: the folder both the app and
+/// the platform's own conventions put this application's files under. Here
+/// rather than in `main.rs` because Diagnostics has to name the same folder
+/// to tell a reader where this run's log went.
+pub const BUNDLE: &str = "com.k8s-gui.app";
 
 pub use error::{Error, Result};
 pub use state::AppState;

@@ -61,7 +61,6 @@ export const PersistentVolumeList =
     title: "Persistent Volumes",
     description: ({ t }) => t("empty", "persistentVolumesAre"),
     scope: "cluster",
-    searchKey: "name",
     fetcher: () => commands.listPersistentVolumes(null),
     watch: () => commands.subscribePersistentvolumeWatch(),
     deleter: (item) => commands.deletePersistentVolume(item.name),
