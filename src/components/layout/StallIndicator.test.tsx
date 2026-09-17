@@ -8,6 +8,31 @@ import { StallIndicator } from "./StallIndicator";
 describe("StallIndicator", () => {
   beforeEach(() => {
     vi.useRealTimers();
+    // One process holds one watch, so a test that wants an empty one says so.
+    stallWatch.reset();
+  });
+
+  /**
+   * The two rows are fed by the table and the command wrapper and by nothing
+   * else: a log buffer or a watch batch can block the thread without
+   * reaching either. Reading "None over a thousand rows" there was the app
+   * being confident about a channel it never looked at, and then advising
+   * the reader to narrow a scope that was not the cause. Fails if the empty
+   * case goes back to answering for everything.
+   */
+  it("says what it did not count when both rows come back empty", async () => {
+    const { rerender } = render(<StallIndicator />);
+    stallWatch.noteStall(900);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    rerender(<StallIndicator />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Why slow" })
+    );
+    expect(
+      await screen.findByText(/Log lines and watch batches are not counted/)
+    ).toBeInTheDocument();
   });
 
   /** Nothing is drawn while nothing stalled; a stall names itself and what was on screen. */

@@ -92,6 +92,14 @@ export function StallIndicator() {
           />
         </dl>
         <div className="border-t border-hair px-3 py-3 text-xs text-fg-mut">
+          {/* Said whenever both rows came back empty: they are fed by the
+              table and the command wrapper and by nothing else, so "nothing
+              over a thousand" is a fact about what was counted and not about
+              what was on screen. A log buffer blocking the thread reaches
+              neither. */}
+          {report.lists.length === 0 && report.largest === null && (
+            <p className="mb-2 text-fg-fnt">{t("slow", "notCounted")}</p>
+          )}
           <p>{t("slow", "whatToDo")}</p>
           <button
             type="button"

@@ -88,6 +88,15 @@ export class StallWatch {
     if (this.lists.delete(id)) this.notify();
   }
 
+  /** Everything forgotten. One process holds one of these, so a test that
+   *  wants an empty watch has to say so. */
+  reset(): void {
+    this.stalls = [];
+    this.answers = [];
+    this.lists.clear();
+    this.notify();
+  }
+
   report(now: number = this.now()): StallReport {
     const since = now - STALL_WINDOW_MS;
     const stalls = this.stalls.filter((s) => s.at >= since);

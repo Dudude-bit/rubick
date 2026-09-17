@@ -2006,7 +2006,11 @@ export const en = {
       one: "{n} row of {label}",
       other: "{n} rows of {label}",
     },
-    noBigList: "None over a thousand rows.",
+    // Not "none": these two facts are fed by the table and by the command
+    // wrapper, and nothing else. A log buffer or a watch batch can block
+    // the thread without reaching either, so an empty answer here is the
+    // app saying it did not look, not that there was nothing to see.
+    noBigList: "Nothing over a thousand rows on a table this counts.",
     listsWhy:
       "Every watch batch is filtered and sorted over the whole list, and a search re-reads every row.",
     answerLabel: "Largest answer",
@@ -2014,11 +2018,13 @@ export const en = {
       one: "{n} row from {command}",
       other: "{n} rows from {command}",
     },
-    noBigAnswer: "None over a thousand rows.",
+    noBigAnswer: "Nothing over a thousand rows from a command this counts.",
     answerWhy:
       "A big answer is parsed on the main thread before anything can be drawn.",
     whatToDo:
       "Narrow the namespace scope or the search: the list and its answers shrink with them. For timings per command and per render, turn on the recorder.",
+    notCounted:
+      "Log lines and watch batches are not counted above, so a stall on the Logs tab or during a resync will leave both rows empty.",
     openRecorder: "Open Settings › Diagnostics",
   },
 
