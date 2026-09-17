@@ -2064,6 +2064,12 @@ export const ru: Catalogue = {
       many: "{n} строк {label}",
       other: "{n} строк {label}",
     },
+    listRowsPlain: {
+      one: "{n} строка",
+      few: "{n} строки",
+      many: "{n} строк",
+      other: "{n} строк",
+    },
     noBigList:
       "Ни одной таблицы из тех, что здесь считаются, длиннее тысячи строк.",
     listsWhy:

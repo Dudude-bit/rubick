@@ -2006,6 +2006,12 @@ export const en = {
       one: "{n} row of {label}",
       other: "{n} rows of {label}",
     },
+    // For a table that wears no label: the kind's plural goes out
+    // untranslated, and there is no word here to put in its place.
+    listRowsPlain: {
+      one: "{n} row",
+      other: "{n} rows",
+    },
     // Not "none": these two facts are fed by the table and by the command
     // wrapper, and nothing else. A log buffer or a watch batch can block
     // the thread without reaching either, so an empty answer here is the

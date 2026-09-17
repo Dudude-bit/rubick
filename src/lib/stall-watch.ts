@@ -14,9 +14,13 @@ export interface BigAnswer {
   at: number;
 }
 
-/** A list on screen, by the label its table wears. */
+/**
+ * A list on screen, by the label its table wears. The label is a kind's
+ * plural and goes out untranslated; `null` where a table wears none, so the
+ * sentence drops the word instead of printing an English one into it.
+ */
 export interface OpenList {
-  label: string;
+  label: string | null;
   rows: number;
 }
 
@@ -78,7 +82,7 @@ export class StallWatch {
     this.notify();
   }
 
-  noteList(id: string, label: string, rows: number): void {
+  noteList(id: string, label: string | null, rows: number): void {
     if (rows >= BIG_LIST_ROWS) this.lists.set(id, { label, rows });
     else this.lists.delete(id);
     this.notify();

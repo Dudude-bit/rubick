@@ -351,7 +351,7 @@ function DataTableInner<TData extends RowData>({
   // and takes it back when it leaves.
   const tableId = React.useId();
   React.useEffect(() => {
-    stallWatch.noteList(tableId, rowLabel ?? "rows", data.length);
+    stallWatch.noteList(tableId, rowLabel ?? null, data.length);
   }, [tableId, rowLabel, data.length]);
   React.useEffect(() => () => stallWatch.forgetList(tableId), [tableId]);
   const isLong =

@@ -69,10 +69,12 @@ export function StallIndicator() {
                 ? t("slow", "noBigList")
                 : report.lists
                     .map((list) =>
-                      t("slow", "listRows", {
-                        n: list.rows,
-                        label: list.label,
-                      })
+                      list.label === null
+                        ? t("slow", "listRowsPlain", { n: list.rows })
+                        : t("slow", "listRows", {
+                            n: list.rows,
+                            label: list.label,
+                          })
                     )
                     .join(", ")
             }
