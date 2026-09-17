@@ -1124,8 +1124,7 @@ fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
             .map(std::string::String::as_str),
     );
     // Named here as well as left `notChecked` on the reference: the row goes
-    // quiet either way, and a reader owed an explanation for a volume the
-    // page will not talk about gets it in the one place the page collects
+    // quiet either way, and the explanation belongs where the page collects
     // them.
     if let Err(why) = &snapshot.claims {
         unread.push(UnexploredKind::unanswered(
@@ -1239,11 +1238,8 @@ struct Snapshot {
     pods: Vec<Pod>,
     services: Vec<Service>,
     ingresses: Vec<Ingress>,
-    /// `Err` carries the refusal, and it is not an empty list. A token
-    /// without `persistentvolumeclaims` used to reach `named_object` with no
-    /// claims at all, which resolved every claim a pod mounts to
-    /// `Existence::Missing` and told a person, in red, that a volume that is
-    /// mounted and healthy does not exist.
+    /// `Err` carries the refusal, and it is not an empty list; reading it as
+    /// one is the defect this module's doc comment describes.
     claims: Read<PersistentVolumeClaim>,
     /// `Err` carries why the read failed, and is not the same answer as an
     /// empty list: `autoscaling/v2` is not served by every cluster this app
@@ -2650,13 +2646,8 @@ mod refused_claim_tests {
          \"persistentvolumeclaims\" in API group \"\" in the namespace \
          \"k8s-gui-test\": Forbidden";
 
-    /// The defect this file's own doc comment describes, found in it: a
-    /// refused list read as "no claims came back", so every claim a pod
-    /// mounts resolved to `Missing` and the page said, in red, that a
-    /// volume that is mounted and healthy does not exist.
-    ///
-    /// Deleting the `Err` arm of `named_object` puts that back, and this
-    /// fails.
+    /// Deleting the `Err` arm of `named_object` puts the defect back — a
+    /// refused list read as "no claims came back" — and this fails.
     #[test]
     fn a_claim_list_the_cluster_refused_leaves_the_claim_unchecked() {
         let refused: Read<PersistentVolumeClaim> = Err(REFUSED.to_string());
