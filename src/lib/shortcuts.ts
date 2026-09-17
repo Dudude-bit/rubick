@@ -44,6 +44,15 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { id: "help", section: "global", keys: ["?"], labelKey: "help" },
   { id: "escape", section: "global", keys: ["esc"], labelKey: "escape" },
+  // Claimed only on the screen that *is* the cluster list, which is why the
+  // table names the file rather than the hook: the same component renders a
+  // pane inside a resource page and deliberately leaves the key alone there.
+  {
+    id: "filterClusters",
+    section: "global",
+    keys: ["mod+f"],
+    labelKey: "filterClusters",
+  },
 
   {
     id: "goOverview",
@@ -211,6 +220,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/components/logs/LogViewer.tsx": "0..9 solo a container",
   "src/features/infrastructure/useBuilderKeyboardShortcuts.ts":
     "del, mod+a, mod+shift+i",
+  "src/components/cluster/ClusterList.tsx":
+    "mod+f focuses the cluster filter, on the front door only",
   "src/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
 };

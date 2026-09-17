@@ -5081,6 +5081,7 @@ export const en = {
     lede: "Every key the app answers to. Unmodified keys stay quiet inside a field or a terminal.",
     then: "then",
     sectionGlobal: "Everywhere",
+    filterClusters: "Find a cluster by name",
     sectionNavigate: "Go to",
     sectionPage: "On an object's page",
     sectionTabs: "Tabs",

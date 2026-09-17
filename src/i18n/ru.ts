@@ -5433,6 +5433,7 @@ export const ru: Catalogue = {
     lede: "Все клавиши, на которые отвечает приложение. Клавиши без модификаторов молчат в поле ввода и в терминале.",
     then: "затем",
     sectionGlobal: "Везде",
+    filterClusters: "Найти кластер по имени",
     sectionNavigate: "Перейти",
     sectionPage: "На странице объекта",
     sectionTabs: "Вкладки",
