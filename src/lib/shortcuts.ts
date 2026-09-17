@@ -255,6 +255,11 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "del, mod+a, mod+shift+i",
   "src/components/cluster/ClusterList.tsx":
     "mod+f focuses the cluster filter, on the front door only",
+  "src/components/layout/ScopeTabs.tsx":
+    "mod+click and mod+Enter add a namespace instead of replacing it",
+  "src/components/logs/LogList.tsx":
+    "mod+a selects the rendered window, not the whole buffer",
+  "src/components/files/FilesTab.tsx": "mod+s downloads, Backspace goes up",
   "src/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
 };

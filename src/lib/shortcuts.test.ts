@@ -22,14 +22,24 @@ describe("the one table of shortcuts", () => {
   /**
    * The completeness test the plan asks for. A shortcut added in a
    * component's own listener is invisible to the overlay, so every file that
-   * listens for `keydown` has to be named here with what it owns. A new
-   * listener anywhere else fails this until it is.
+   * answers a chord has to be named here with what it owns. A new one
+   * anywhere else fails this until it is.
+   *
+   * Both ways of listening count. Sweeping only `addEventListener` missed
+   * three files that answer ⌘-chords from a React `onKeyDown` prop — Ctrl+A
+   * in the log list among them — and the second guard below could not see
+   * them either, because none of the three draws a hint. A handler that only
+   * reads `event.key` is a control answering its own Enter, not a shortcut.
    */
   it("knows every file that listens for a key", () => {
     const listeners = sources("src")
-      .filter((path) =>
-        /addEventListener\(\s*["']keydown["']/.test(readFileSync(path, "utf8"))
-      )
+      .filter((path) => {
+        const text = readFileSync(path, "utf8");
+        if (/addEventListener\(\s*["']keydown["']/.test(text)) return true;
+        return (
+          /onKeyDown/.test(text) && /\b(metaKey|ctrlKey|altKey)\b/.test(text)
+        );
+      })
       .map((path) => path.replace(/\\/g, "/"));
     const unlisted = listeners.filter((path) => !(path in KEYDOWN_SITES));
     expect(unlisted).toEqual([]);
