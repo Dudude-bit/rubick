@@ -14,13 +14,14 @@
  * the occasional hairline, which is the same rhythm the overview uses.
  */
 
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailTabs } from "./DetailTabs";
@@ -213,6 +214,18 @@ export function ResourceDetailLayout({
   onTabChange,
 }: ResourceDetailLayoutProps) {
   const { deliveries } = useDelivery(delivery ?? null);
+
+  // A page key (`l`, `y`, `e`, `o`) names a tab, and this frame is the one
+  // thing every detail page renders through, so it answers for all of them:
+  // a page without that tab simply does not move.
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const wanted = (event as CustomEvent<{ tab: string }>).detail?.tab;
+      if (wanted && tabs.some((tab) => tab.id === wanted)) onTabChange(wanted);
+    };
+    window.addEventListener(DETAIL_TAB_OPEN, onOpen);
+    return () => window.removeEventListener(DETAIL_TAB_OPEN, onOpen);
+  }, [tabs, onTabChange]);
 
   if (isLoading) {
     return <DetailSkeleton />;
