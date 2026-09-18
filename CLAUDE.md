@@ -120,6 +120,15 @@ Claims here are settled by running things, not by reasoning about them.
   correct on first read went wrong a second later.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
+- **A scroller sized in per cent does not scroll here.** `height: 100%`
+  resolves against the parent's _specified_ height, and a box sized by its
+  flex parent has `height: auto` — so in this webview the child grows to its
+  own content, the parent's `overflow-hidden` eats the rest, and the screen
+  ends mid-word with no scrollbar and nothing failing. It has bitten the YAML
+  editor (#163) and What's New. `ScrollArea` needs a height of its own
+  (`h-[200px]`, `max-h-[60vh]`), which `scroll-area.test.ts` checks; where the
+  height comes from a flex parent, make the element itself the scroller —
+  `min-h-0 flex-1 overflow-y-auto scrollbar-thin`.
 
 ## Rust
 

@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useT } from "@/i18n/useT";
 import {
   parseChangelog,
@@ -73,7 +72,14 @@ export function WhatsNew() {
               : (releases[0].date ?? "")}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="min-h-0 flex-1 pr-3">
+        {/* The scroller is this element, not a viewport sized in per cent
+            inside it: the dialog's height comes from these notes, so the box
+            has to measure itself first and be clamped after. `ScrollArea`
+            asks its viewport for `height: 100%`, which resolves against a
+            root whose own height is `auto` — 892px of notes in a 581px root,
+            clipped by `overflow-hidden`, and 4.17.0's notes ended mid-word
+            with no scrollbar anywhere. */}
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pr-3">
           <div className="flex flex-col gap-5">
             {releases.map((release) => (
               <section key={release.version} className="flex flex-col gap-3">
@@ -94,7 +100,7 @@ export function WhatsNew() {
               </section>
             ))}
           </div>
-        </ScrollArea>
+        </div>
         <DialogFooter>
           <Button size="sm" onClick={close}>
             {t("action", "close")}
