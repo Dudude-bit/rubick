@@ -148,6 +148,10 @@ fn without_client_retries(mut config: Config) -> Config {
 /// streams this app lives on are untouched. The number is also the one the
 /// frontend says in its sentence, so it lives in `shared/read-deadlines.json`
 /// and a test on each side holds the two equal.
+// Seconds on purpose: the number is `listDeadlineSeconds` from the shared
+// file, and a test holds the two equal. `from_mins(1)` would read tidier and
+// hide which number this is.
+#[allow(clippy::duration_suboptimal_units)]
 pub const READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The one place a client is built, so every client carries the deadline.
