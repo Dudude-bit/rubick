@@ -32,10 +32,13 @@ concurrency:
 jobs:
   bundle:
     name: flatpak
-    # A Release that failed has no AppImage to build from.
+    # A failed Release has no AppImage; a *dispatched* one has no tag either,
+    # since workflow_run carries the upstream ref and not its inputs. Skip
+    # that rather than go red — this workflow's own dispatch takes the tag.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     env:
       TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
@@ -57,7 +60,7 @@ jobs:
       - name: Install flatpak-builder
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils
+          sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils xvfb
 
       - name: Add Flathub and install the runtime
         run: |
@@ -82,15 +85,35 @@ jobs:
         run: |
           flatpak-builder --user --force-clean --repo=repo builddir \
             packaging/flatpak/com.k8s_gui.app.yml
-          flatpak build-bundle repo "Rubick-${TAG#v}.flatpak" com.k8s_gui.app
+          # Without --runtime-repo the bundle points nowhere for its runtime,
+          # and a stock AlmaLinux 8 — whose flatpak configures no remote —
+          # refuses it with "runtime not found".
+          flatpak build-bundle \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
+            repo "Rubick-${TAG#v}.flatpak" com.k8s_gui.app
           ls -la ./*.flatpak
 
-      # Proof rather than hope: the bundle has to install and its binary has to
-      # resolve every library against the runtime, or the asset is a download
-      # that fails on the machine it was made for.
-      - name: Install it and check the binary resolves
+      # Taken where the answer is not already known: the steps above put the
+      # runtime on this runner, so the old check passed whether or not the
+      # bundle could find one. A fresh FLATPAK_USER_DIR has neither.
+      - name: Install it the way a reader with no Flathub would
+        timeout-minutes: 25
+        env:
+          FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
         run: |
+          mkdir -p "$FLATPAK_USER_DIR"
+          echo "remotes before the install (must be none):"
+          flatpak --user remotes
+          if [ -n "$(flatpak --user remotes)" ]; then
+            echo "::error::the check location is not pristine"
+            exit 1
+          fi
           flatpak install -y --user --noninteractive "Rubick-${TAG#v}.flatpak"
+
+      - name: Check every library resolves
+        env:
+          FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
+        run: |
           flatpak run --command=ldd com.k8s_gui.app /app/bin/Rubick > ldd.txt
           if grep -q "not found" ldd.txt; then
             echo "::error::unresolved libraries in the bundle"
@@ -98,6 +121,32 @@ jobs:
             exit 1
           fi
           echo "every library resolved"
+
+      # ldd reads one ELF's NEEDED list and says nothing about the WebKit
+      # helper, the dlopen'd GTK modules, or the dropped environment — each
+      # of which fails as a blank window. Only the timeout killing a living
+      # process is a pass.
+      - name: Start it and require it to stay up
+        timeout-minutes: 5
+        env:
+          FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
+        run: |
+          set +e
+          xvfb-run -a --server-args='-screen 0 1280x900x24' \
+            timeout --signal=TERM 45 flatpak run com.k8s_gui.app > run.log 2>&1
+          status=$?
+          set -e
+          echo "---- what it said ----"
+          cat run.log || true
+          if [ "$status" -ne 124 ]; then
+            echo "::error::the app did not stay up (exit $status)"
+            exit 1
+          fi
+          if grep -qiE "WebKitWebProcess|cannot open shared object|No such schema|Failed to execute child" run.log; then
+            echo "::error::it stayed up but could not bring up its web process"
+            exit 1
+          fi
+          echo "still running after 45s, with nothing broken in its output"
 
       - name: Attach it to the release
         env:

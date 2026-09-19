@@ -28,13 +28,38 @@ separate-locales: false
 finish-args:
   - --share=network
   - --share=ipc
-  - --socket=wayland
-  - --socket=fallback-x11
+  # x11, because GDK_BACKEND below forces it: the Wayland backend crashes
+  # (tauri-apps/tauri#8541) and the AppImage's launcher avoids it the same way.
+  - --socket=x11
   - --device=dri
-  # The whole point of the app: it reads the kubeconfig and the caches and
-  # credential helpers it points at.
+  # The kubeconfig, the caches, and the helpers under $HOME: krew, asdf,
+  # ~/.local/bin. The ones in /usr/bin need host-os below.
   - --filesystem=home
+  # A sandbox's /usr is the runtime's, so an EKS context whose exec block
+  # names /usr/local/bin/aws cannot connect at all. This puts the host tree
+  # under /run/host, where the path resolver now looks.
+  - --filesystem=host-os:ro
   - --talk-name=org.freedesktop.secrets
+  # notify-rust talks to this name directly, not through the portal, and a
+  # denied call is swallowed: notify() reports delivered for nothing shown.
+  - --talk-name=org.freedesktop.Notifications
+  # single-instance asks to own tauri.conf.json's hyphenated identifier plus
+  # .SingleInstance, which this app-id does not prefix; the refusal is
+  # swallowed, and every rubick:// link then opens a second window.
+  - --own-name=com.k8s-gui.app.SingleInstance
+  # What the AppImage's AppRun exported and `command:` here does not: the
+  # binary is built against /app/lib, not the runtime's tree.
+  - --env=GDK_BACKEND=x11
+  - --env=XDG_DATA_DIRS=/app/share:/usr/share
+  - --env=GSETTINGS_SCHEMA_DIR=/app/share/glib-2.0/schemas
+  - --env=GTK_PATH=/app/lib/x86_64-linux-gnu/gtk-3.0
+  - --env=GTK_IM_MODULE_FILE=/app/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules.cache
+  - --env=GDK_PIXBUF_MODULE_FILE=/app/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+  - --env=GIO_EXTRA_MODULES=/app/lib/x86_64-linux-gnu/gio/modules
+  # WebKit execs its web process by a path compiled in on Ubuntu, which in
+  # the sandbox is the runtime's — and the runtime carries no WebKit. A
+  # missing web process is a blank window, not an error.
+  - --env=WEBKIT_EXEC_PATH=/app/lib/x86_64-linux-gnu/webkit2gtk-4.1
 modules:
   - name: rubick
     buildsystem: simple
@@ -42,9 +67,13 @@ modules:
       - mkdir -p /app/bin /app/lib /app/share
       - cp -a squashfs-root/usr/bin/. /app/bin/
       - cp -a squashfs-root/usr/lib/. /app/lib/
+      # The compiled GSettings schemas GSETTINGS_SCHEMA_DIR points at.
+      - cp -a squashfs-root/usr/share/glib-2.0 /app/share/
       - install -Dm644 squashfs-root/usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.k8s_gui.app /app/share/applications/com.k8s_gui.app.desktop
-      - for s in 32 128 256@2 512; do d=squashfs-root/usr/share/icons/hicolor/${s}x${s}/apps/Rubick.png; if [ -f "$d" ]; then install -Dm644 "$d" /app/share/icons/hicolor/${s}x${s}/apps/com.k8s_gui.app.png; fi; done
+      # The three sizes the AppImage carries, named as hicolor names them.
+      # No `if -f`: an icon that stopped shipping must break the build.
+      - for d in 32x32 128x128 256x256@2; do install -Dm644 "squashfs-root/usr/share/icons/hicolor/$d/apps/Rubick.png" "/app/share/icons/hicolor/$d/apps/com.k8s_gui.app.png"; done
     sources:
       - type: dir
         path: squashfs-root
