@@ -189,7 +189,10 @@ export function ResourceName({
           </span>
         </span>
         <span
-          className={cn("flex-none", tailClass)}
+          // Never shrinks, so the stem gives up its room first — but capped
+          // at the box, so a tail that alone exceeds it is ellipsised rather
+          // than cut mid-hash into something that reads like a whole name.
+          className={cn("max-w-full flex-none truncate", tailClass)}
           style={tailStyle}
           data-testid="resource-ref-tail"
         >

@@ -222,6 +222,7 @@ export function Crds() {
         searchPlaceholder={t("action", "searchKindPlaceholder", {
           kind: "CRDs",
         })}
+        searchParam="q"
         getRowId={getCrdRowId}
         getRowHref={(row) => crdHref(row.name)}
         grouping={byNamespace<CrdListItem>("CRDs")}
