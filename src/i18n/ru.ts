@@ -5094,6 +5094,10 @@ export const ru: Catalogue = {
     installedByRelease: "Установлено релизом Helm {name}",
     conditionIs: "{type} — {status}",
     releaseNotRead: "не удалось прочитать",
+    gwRowControllerConfigured: "отвечает по настройкам своего контроллера",
+    gwControllerConfiguredSay:
+      "backendRefs нет — отвечает контроллер этого маршрута",
+    gwControllerConfiguredTitle: "Настройки, которые это приложение не читает",
     bufferHoldsNewest:
       "Буфер хранит последние {count}; того, что было раньше, здесь больше нет.",
     bufferHoldsKeptAndNewest:
@@ -6176,6 +6180,13 @@ export const ru: Catalogue = {
         "собственный прокси {vendor} — обслуживаемые им хосты ({n}) описаны на",
     },
     nOfTotal: "{n} из {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} говорит контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      few: "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      many: "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      other:
+        "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+    },
     podsFailing: {
       one: "{n} из {total} упал · {name} — {status}",
       few: "{n} из {total} упали · {name} — {status}",
