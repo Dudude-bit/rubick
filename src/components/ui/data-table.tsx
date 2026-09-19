@@ -28,6 +28,10 @@ import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
+import {
+  useColumnWidthsStore,
+  type ColumnWidths,
+} from "@/stores/columnWidthsStore";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { stallWatch } from "@/lib/stall-watch";
 import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
@@ -376,6 +380,27 @@ function DataTableInner<TData extends RowData>({
     return [...filteredColumns, createActionsColumn<TData>(actionCount)];
   }, [columns, actionCount]);
 
+  // Keyed by what the table lists rather than by `tableId`, which is a
+  // `useId` and new on every mount — a width that forgot itself on the way to
+  // the next page is a control that does not hold. A table with no label
+  // still resizes; it just has nowhere to remember it.
+  const widthsKey = rowLabel ?? null;
+  const storedWidths = useColumnWidthsStore((state) =>
+    widthsKey ? state.widths[widthsKey] : undefined
+  );
+  const saveWidths = useColumnWidthsStore((state) => state.set);
+  const [localWidths, setLocalWidths] = React.useState<ColumnWidths>({});
+  const columnSizing = storedWidths ?? localWidths;
+  const setColumnSizing = React.useCallback(
+    (updater: ColumnWidths | ((old: ColumnWidths) => ColumnWidths)) => {
+      const next =
+        typeof updater === "function" ? updater(columnSizing) : updater;
+      if (widthsKey) saveWidths(widthsKey, next);
+      else setLocalWidths(next);
+    },
+    [columnSizing, widthsKey, saveWidths]
+  );
+
   const table = useTable({
     // Which features exist is part of the table's type, named in one place.
     // Row models come with them: in v9 the sorted and filtered ones are slots
@@ -387,11 +412,17 @@ function DataTableInner<TData extends RowData>({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnSizingChange: setColumnSizing,
+    // Committed while the handle moves, so the column follows the pointer.
+    // `onEnd` leaves the header the old width until the drag is released,
+    // which reads as the drag having done nothing.
+    columnResizeMode: "onChange",
     state: {
       sorting,
       columnFilters,
       globalFilter,
       columnVisibility,
+      columnSizing,
     },
   });
 
@@ -832,6 +863,38 @@ function DataTableInner<TData extends RowData>({
                                 header.column.columnDef.header,
                                 header.getContext()
                               )}
+                          {/* The grip sits on the column's own right edge and
+                              is wider than it looks: 9px of target around a
+                              1px rule, which is what makes it catchable
+                              without a visible seam between every pair of
+                              headers. Double-click puts the column back to
+                              the width its definition declares — the way out
+                              of a drag, since there is no menu to hold one.
+                              Not a button: it starts a drag rather than doing
+                              something, and a keyboard has the same reach
+                              through the column's own width either way. */}
+                          {header.column.getCanResize() && (
+                            <span
+                              role="presentation"
+                              onMouseDown={header.getResizeHandler()}
+                              onTouchStart={header.getResizeHandler()}
+                              onDoubleClick={() =>
+                                setColumnSizing((old) => {
+                                  const next = { ...old };
+                                  delete next[header.column.id];
+                                  return next;
+                                })
+                              }
+                              title={t("action", "dragToResize")}
+                              className={cn(
+                                "absolute inset-y-0 right-0 z-10 w-[9px] translate-x-1/2 cursor-col-resize touch-none select-none",
+                                "after:absolute after:inset-y-1 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-hair after:opacity-0 after:transition-opacity",
+                                "hover:after:opacity-100",
+                                header.column.getIsResizing() &&
+                                  "after:bg-info after:opacity-100"
+                              )}
+                            />
+                          )}
                         </TableHead>
                       );
                     })}

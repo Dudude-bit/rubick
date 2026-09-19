@@ -1224,6 +1224,7 @@ export const en = {
     openActions: "Open actions",
     openFullPage: "Open full page",
     copyName: "Copy name",
+    dragToResize: "Drag to resize · double-click to reset",
     more: "More",
     moreActions: "More actions",
     goBack: "Go back",
