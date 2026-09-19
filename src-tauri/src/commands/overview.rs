@@ -1371,7 +1371,7 @@ mod tests {
                 name: Some(name.to_string()),
                 ..Default::default()
             },
-            status: Some(NodeStatus {
+            status: Some(k8s_openapi::api::core::v1::NodeStatus {
                 allocatable: Some(quantities(&[("cpu", cpu), ("memory", memory)])),
                 ..Default::default()
             }),
@@ -1879,7 +1879,7 @@ mod tests {
                 ..Default::default()
             }),
             status: Some(NodeStatus {
-                conditions: Some(vec![NodeCondition {
+                conditions: Some(vec![k8s_openapi::api::core::v1::NodeCondition {
                     type_: "Ready".to_string(),
                     status: "True".to_string(),
                     ..Default::default()
@@ -2146,11 +2146,135 @@ mod tests {
             crate::resources::restarts(&pod)
         );
         assert_eq!(is_terminal(&stripped), is_terminal(&pod));
+        // The one pod field the store path needs that no assertion above
+        // reads: the scheduler view accounts by node and silently skips a
+        // pod without one, so a strip that took it would quietly empty the
+        // capacity panel.
+        assert_eq!(
+            stripped.spec.as_ref().and_then(|s| s.node_name.as_deref()),
+            Some("n1")
+        );
         let before = serde_json::to_vec(&pod).unwrap().len();
         let after = serde_json::to_vec(&stripped).unwrap().len();
         assert!(
             after * 2 < before,
             "strip kept the bulk: {after} of {before} bytes"
+        );
+    }
+
+    /// Where the answer came from, which the frontend shows and the join
+    /// across namespaces downgrades. Flipping `from_snapshot`'s
+    /// `OverviewSource::Watch` to `List` left every Rust test green: the
+    /// only assertion on it is an `#[ignore]`d live test that loops until
+    /// it sees `Watch` and never checks the fallback half.
+    #[tokio::test]
+    async fn an_overview_built_from_the_stores_says_it_came_from_the_watch() {
+        let snapshot = Snapshot {
+            pods: arcs([in_namespace::<Pod>("app")]),
+            nodes: arcs([Node::default()]),
+            deployments: arcs([]),
+            jobs: arcs([]),
+            events: arcs([]),
+        };
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
+        let ctx = ResourceContext {
+            client: kube::Client::try_from(config).expect("a client"),
+            namespace: None,
+        };
+        let built = from_snapshot(
+            &ctx,
+            &snapshot,
+            Sides {
+                counts: ResourceCounts::default(),
+                usage_by_node: None,
+            },
+        );
+        assert_eq!(built.served_from, OverviewSource::Watch);
+    }
+
+    /// The other four strips had no test at all: emptying `strip_node`,
+    /// `strip_job` and `strip_event`, or adding `status = None` to
+    /// `strip_deployment`, each left the whole suite green. The deployment
+    /// one is the sharp case — `deployment_problems` reads `spec.replicas`
+    /// and `status`, and `status` is exactly what a careless strip reaches
+    /// for.
+    #[test]
+    fn what_the_overview_reads_off_the_other_kinds_survives_their_strips() {
+        let mut deployment = Deployment {
+            metadata: ObjectMeta {
+                name: Some("api".to_string()),
+                namespace: Some("shop".to_string()),
+                annotations: Some(
+                    [("last-applied".to_string(), "{}".repeat(200))]
+                        .into_iter()
+                        .collect(),
+                ),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(3),
+                ..Default::default()
+            }),
+            status: Some(k8s_openapi::api::apps::v1::DeploymentStatus {
+                ready_replicas: Some(1),
+                ..Default::default()
+            }),
+        };
+        let before = deployment.clone();
+        crate::overview::strip_deployment(&mut deployment);
+        assert_eq!(
+            deployment_problems([&deployment]),
+            deployment_problems([&before]),
+            "a Deployment strip that reached status would empty the panel"
+        );
+        assert!(
+            deployment.metadata.annotations.is_none(),
+            "a strip that keeps everything proves nothing"
+        );
+
+        let mut node = Node {
+            metadata: ObjectMeta {
+                name: Some("n1".to_string()),
+                annotations: Some(
+                    [("csi".to_string(), "x".repeat(400))].into_iter().collect(),
+                ),
+                ..Default::default()
+            },
+            status: Some(NodeStatus {
+                conditions: Some(vec![NodeCondition {
+                    type_: "Ready".to_string(),
+                    status: "True".to_string(),
+                    ..Default::default()
+                }]),
+                allocatable: Some(
+                    [("cpu".to_string(), Quantity("4".to_string()))]
+                        .into_iter()
+                        .collect(),
+                ),
+                images: Some(vec![k8s_openapi::api::core::v1::ContainerImage::default(); 50]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let node_before = node.clone();
+        crate::overview::strip_node(&mut node);
+        // Compared as what the frontend receives, which is the only shape
+        // both sides have in common.
+        let seen = |n: &Node| {
+            serde_json::to_value(
+                summarize_nodes([n], &BTreeMap::new(), &BTreeMap::new(), None).summaries,
+            )
+            .expect("a node summary serialises")
+        };
+        assert_eq!(
+            seen(&node),
+            seen(&node_before),
+            "the capacity view is derived from what the strip has to keep"
+        );
+        assert!(
+            node.status.as_ref().and_then(|s| s.images.as_ref()).is_none(),
+            "a strip that keeps the image list proves nothing"
         );
     }
 

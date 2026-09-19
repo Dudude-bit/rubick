@@ -123,6 +123,20 @@ impl Health {
     }
 }
 
+/// The apiserver's own order, which is by namespace then name.
+fn by_name<K: kube::Resource>(mut items: Vec<Arc<K>>) -> Vec<Arc<K>> {
+    items.sort_by(|a, b| {
+        let key = |o: &Arc<K>| {
+            (
+                o.meta().namespace.clone().unwrap_or_default(),
+                o.meta().name.clone().unwrap_or_default(),
+            )
+        };
+        key(a).cmp(&key(b))
+    });
+    items
+}
+
 impl OverviewCache {
     /// The stores' contents for `context`, or `None` when they cannot be
     /// trusted: not started and in cooldown, still filling past the wait,
@@ -163,12 +177,17 @@ impl OverviewCache {
             return None;
         }
         drop(health);
+        // By name, because a reflector store hands its contents back in hash
+        // order while the listing path gets the apiserver's own. Without
+        // this the node rows and any problems that tie reshuffle between
+        // polls — a list that changes under the reader while nothing in the
+        // cluster did, and which differs from what listing shows.
         Some(Snapshot {
-            pods: watch.pods.state(),
-            nodes: watch.nodes.state(),
-            deployments: watch.deployments.state(),
-            jobs: watch.jobs.state(),
-            events: watch.events.state(),
+            pods: by_name(watch.pods.state()),
+            nodes: by_name(watch.nodes.state()),
+            deployments: by_name(watch.deployments.state()),
+            jobs: by_name(watch.jobs.state()),
+            events: by_name(watch.events.state()),
         })
     }
 
@@ -519,6 +538,25 @@ mod tests {
             !cache.cooling_down("prod"),
             "a reconnect has to be able to start the watches again"
         );
+    }
+
+    /// A reflector store hands its contents back in hash order. The listing
+    /// path gets the apiserver's, so without a sort the two answers differ
+    /// and the watch-served one reshuffles between polls while nothing in
+    /// the cluster changed.
+    #[test]
+    fn a_snapshot_is_in_the_order_the_apiserver_would_have_given() {
+        let node = |name: &str| {
+            let mut node = Node::default();
+            node.metadata.name = Some(name.to_string());
+            Arc::new(node)
+        };
+        let jumbled = vec![node("worker-3"), node("control"), node("worker-1")];
+        let ordered: Vec<_> = by_name(jumbled)
+            .iter()
+            .map(|n| n.metadata.name.clone().unwrap_or_default())
+            .collect();
+        assert_eq!(ordered, ["control", "worker-1", "worker-3"]);
     }
 
     /// The same for the whole-window teardown, which a kubeconfig change runs.
