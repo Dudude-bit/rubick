@@ -19,6 +19,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
+import { crdWidthsKey } from "@/lib/resource-identity";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
@@ -251,9 +252,7 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
-      // The plural alone collides: `certificates` belongs to cert-manager
-      // and to Knative, with different columns behind the same word.
-      widthsKey={`${crdPlural}.${crdGroup}`}
+      widthsKey={crdWidthsKey(crdPlural, crdGroup)}
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.

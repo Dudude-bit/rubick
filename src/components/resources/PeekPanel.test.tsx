@@ -382,6 +382,25 @@ describe("PeekPanel", () => {
     expect(screen.getByTestId("peek-skeleton")).toBeInTheDocument();
   });
 
+  /**
+   * The panel is named by its title, and the name has to be the object:
+   * the kind from `ResourceName`'s hidden span, then the name, and nothing
+   * else. A label that leaks in from a control beside it is the identity
+   * said twice with a verb in the middle.
+   *
+   * What this does *not* catch: re-nesting `CopyName` inside `SheetTitle`.
+   * Checked by moving it — the computed name is byte-identical either way
+   * here, so the arrangement the comment in PeekPanel.tsx defends is not
+   * observable in this environment and is not guarded by anything.
+   */
+  it("announces itself as the object and nothing else", () => {
+    vi.mocked(commands.getPod).mockReturnValue(new Promise(() => {}));
+    wrap(POD_PEEK);
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(
+      "Pod crash-demo-56588f6b8c-8bj9v"
+    );
+  });
+
   /** The badge says what the kubelet last wrote. Once that kubelet stops
    *  answering, the word is a memory: the pods list and the pod page both
    *  drop the colour for it, and this panel drew the same pod confident
