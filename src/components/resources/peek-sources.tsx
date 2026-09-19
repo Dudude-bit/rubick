@@ -35,6 +35,7 @@ import { conditionRole } from "@/lib/condition-health";
 import {
   redirectOnly,
   parentCarriesTraffic,
+  addressedToController,
   selfAnswered,
   gatewayProgrammed,
 } from "@/lib/route-trace";
@@ -243,7 +244,10 @@ function gatewayRouteSource(kind: string): PeekSource {
               ? t("empty", "gwRedirectsNoBackends")
               : selfAnswered(route)
                 ? t("empty", "gwFilterNoBackends")
-                : `${t("empty", "gwNoBackendRefsSay")}.`,
+                : addressedToController(route, route.parents[0]?.controllerName)
+                      .length > 0
+                  ? t("empty", "gwRowControllerConfigured")
+                  : `${t("empty", "gwNoBackendRefsSay")}.`,
           },
           {
             title: t("columns", "verdicts"),

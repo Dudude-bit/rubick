@@ -4742,6 +4742,10 @@ export const en = {
     // Both values are the cluster's own words; only "is" was ours.
     conditionIs: "{type} is {status}",
     releaseNotRead: "could not be read",
+    gwRowControllerConfigured: "answered by its controller's own settings",
+    gwControllerConfiguredSay:
+      "No backendRefs — this route's own controller answers",
+    gwControllerConfiguredTitle: "Configuration this app does not read",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
     // Said instead of the three above whenever an interval is frozen. The
@@ -5564,6 +5568,11 @@ export const en = {
       other: "{vendor}'s own proxy — the {n} hosts it serves are on",
     },
     nOfTotal: "{n} of {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} tells this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever that says, and this app does not read it.",
+      other:
+        "{keys} tell this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever those say, and this app does not read them.",
+    },
     // Tab and group marks, which were built by concatenation — no whole
     // string for a scanner to find, which is how they stayed English.
     podsFailing: {
