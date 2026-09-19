@@ -57,6 +57,7 @@ import {
   planPeekActions,
   reachableContainer,
   restartCommandFor,
+  restartNeedsAsking,
   scaleCommandFor,
   type ForwardBackend,
   type PeekActionId,
@@ -302,10 +303,11 @@ export function useObjectActions({
         // one-way door and gets the same gate as a delete.
         if (kind === "Pod" && !pod?.ownerReferences?.length)
           return setConfirming("restart");
-        // A managed restart is reversible and normally fires straight through,
-        // but on a critical cluster it is still a change, so it takes the gate
-        // — the peek's one-click restart was the last way past it.
-        return criticalActive
+        // A managed restart is reversible, but it still asks when a delivery
+        // controller would undo it or the cluster is marked critical — the
+        // same rule the page applies, so the two surfaces cannot disagree
+        // about the same click.
+        return restartNeedsAsking(intercept("Restart") !== null, criticalActive)
           ? setConfirming("managedRestart")
           : restart.mutate();
       case "delete":

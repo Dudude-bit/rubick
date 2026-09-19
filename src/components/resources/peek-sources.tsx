@@ -689,7 +689,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "ready"),
-            value: `${set.replicas.ready} of ${set.replicas.desired}`,
+            value: t("count", "nOfTotal", {
+              n: set.replicas.ready,
+              total: set.replicas.desired,
+            }),
             tone:
               set.replicas.ready < set.replicas.desired ? "warn" : undefined,
           },
@@ -759,7 +762,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "succeeded"),
-            value: `${job.succeeded} of ${job.completions ?? 1}`,
+            value: t("count", "nOfTotal", {
+              n: job.succeeded,
+              total: job.completions ?? 1,
+            }),
           },
           {
             label: t("settings", "failed"),

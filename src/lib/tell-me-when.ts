@@ -307,7 +307,14 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
     const s = resource as StatefulSetInfo;
     const r = s.replicas;
     return {
-      settled: r.ready === r.desired && r.current === r.desired,
+      // `updated` is what tells a finished rollout from one that has not
+      // started: every other count is already at `desired` the instant the
+      // template changes, and under `OnDelete` they stay there forever
+      // while nothing rolls. The Deployment arm has always asked this.
+      settled:
+        r.ready === r.desired &&
+        r.current === r.desired &&
+        r.updated === r.desired,
       failed: null,
       failedAt: null,
       desired: r.desired,
@@ -319,7 +326,10 @@ function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
   }
   const d = resource as DaemonSetInfo;
   return {
-    settled: d.current === d.desired && d.ready === d.desired,
+    settled:
+      d.current === d.desired &&
+      d.ready === d.desired &&
+      d.updated === d.desired,
     failedAt: null,
     failed: null,
     desired: d.desired,
