@@ -4739,6 +4739,9 @@ export const en = {
     // Beside the status on every page and peek: what the object's own Helm
     // annotation says, which is a claim and not a read.
     installedByRelease: "Installed by the Helm release {name}",
+    // Both values are the cluster's own words; only "is" was ours.
+    conditionIs: "{type} is {status}",
+    releaseNotRead: "could not be read",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
     // Said instead of the three above whenever an interval is frozen. The
@@ -5561,6 +5564,20 @@ export const en = {
       other: "{vendor}'s own proxy — the {n} hosts it serves are on",
     },
     nOfTotal: "{n} of {total}",
+    // Tab and group marks, which were built by concatenation — no whole
+    // string for a scanner to find, which is how they stayed English.
+    podsFailing: {
+      one: "{n} of {total} failing · {name} is {status}",
+      other: "{n} of {total} failing · {name} is {status}",
+    },
+    someSpot: "{n} of {total} spot",
+    // A pool caption names its values until there are too many, then counts
+    // them. Both halves were English, and the node count was the
+    // `n === 1 ? "node" : "nodes"` shape this catalogue forbids by name.
+    machineTypes: { one: "{n} machine type", other: "{n} machine types" },
+    zonesCount: { one: "{n} zone", other: "{n} zones" },
+    nodesCount: { one: "{n} node", other: "{n} nodes" },
+    allSpot: "spot",
     nReady: "{n} ready",
     nNotReady: "{n} not ready",
     nPublished: "{n} published",

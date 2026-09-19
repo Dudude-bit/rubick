@@ -174,6 +174,7 @@ export interface HelmRelease {
   source: string;
   suspended: boolean | null;
   sourceRef: string | null;
+  unreadable: string | null;
 }
 
 export interface ClusterOverview {

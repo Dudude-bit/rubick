@@ -318,7 +318,7 @@ export function DaemonSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
+        mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,
       },
       {
@@ -345,7 +345,7 @@ export function DaemonSetDetail() {
         id: "conditions",
         label: t("columns", "conditions"),
         glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(daemonSet?.conditions),
+        mark: conditionsMark(daemonSet?.conditions, t),
         content: (
           <Section>
             <SectionHeader

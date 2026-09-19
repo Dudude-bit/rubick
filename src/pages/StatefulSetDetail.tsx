@@ -339,7 +339,7 @@ export function StatefulSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
+        mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,
       },
       {
@@ -368,7 +368,7 @@ export function StatefulSetDetail() {
         id: "conditions",
         label: t("columns", "conditions"),
         glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(statefulSet?.conditions),
+        mark: conditionsMark(statefulSet?.conditions, t),
         content: (
           <Section>
             <SectionHeader

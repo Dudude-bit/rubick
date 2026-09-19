@@ -5092,6 +5092,8 @@ export const ru: Catalogue = {
       "Приём всё ещё включён — переподключение продолжит с этого момента, и пропущенное потоком назад не подтянется.",
     nothingToReconnectTo: "Переподключаться уже не к чему",
     installedByRelease: "Установлено релизом Helm {name}",
+    conditionIs: "{type} — {status}",
+    releaseNotRead: "не удалось прочитать",
     bufferHoldsNewest:
       "Буфер хранит последние {count}; того, что было раньше, здесь больше нет.",
     bufferHoldsKeptAndNewest:
@@ -6174,6 +6176,32 @@ export const ru: Catalogue = {
         "собственный прокси {vendor} — обслуживаемые им хосты ({n}) описаны на",
     },
     nOfTotal: "{n} из {total}",
+    podsFailing: {
+      one: "{n} из {total} упал · {name} — {status}",
+      few: "{n} из {total} упали · {name} — {status}",
+      many: "{n} из {total} упало · {name} — {status}",
+      other: "{n} из {total} упало · {name} — {status}",
+    },
+    someSpot: "{n} из {total} прерываемых",
+    machineTypes: {
+      one: "{n} тип машин",
+      few: "{n} типа машин",
+      many: "{n} типов машин",
+      other: "{n} типов машин",
+    },
+    zonesCount: {
+      one: "{n} зона",
+      few: "{n} зоны",
+      many: "{n} зон",
+      other: "{n} зон",
+    },
+    nodesCount: {
+      one: "{n} узел",
+      few: "{n} узла",
+      many: "{n} узлов",
+      other: "{n} узлов",
+    },
+    allSpot: "прерываемые",
     nReady: "готово {n}",
     nNotReady: "не готово {n}",
     nPublished: "опубликовано {n}",
