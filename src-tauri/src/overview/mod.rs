@@ -40,7 +40,7 @@ const COOLDOWN: Duration = Duration::from_mins(5);
 const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
 /// The first request waits this long for the stores to fill before listing.
-const READY_TIMEOUT: Duration = Duration::from_secs(60);
+const READY_TIMEOUT: Duration = Duration::from_mins(1);
 /// Just under the five minutes kube used to enforce; see `watch::WATCH_TIMEOUT_SECS`.
 const WATCH_TIMEOUT_SECS: u32 = 290;
 const PAGE_SIZE: u32 = 500;
