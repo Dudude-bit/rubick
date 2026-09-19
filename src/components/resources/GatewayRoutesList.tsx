@@ -508,7 +508,9 @@ export function GatewayRoutesList() {
       ))}
 
       {showMap && (
-        <div className="mt-3 flex flex-col gap-1">
+        // Bounded and shrink-proof: as a full-height sibling of the only
+        // scroller, the map left the route list a box 0px tall.
+        <div className="mt-3 flex max-h-[45%] shrink-0 flex-col gap-1 overflow-y-auto scrollbar-thin">
           {topology.columns[topology.spine ?? 1].nodes.length === 0 ? (
             <p className="max-w-[64ch] text-xs text-fg-mut">
               {t("empty", "gwNothingToDraw")}
@@ -519,7 +521,8 @@ export function GatewayRoutesList() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* A floor: whatever is above it, the list stays a list. */}
+      <div className="min-h-[8rem] flex-1 overflow-y-auto scrollbar-thin">
         {error && routes.length === 0 ? (
           <div className="max-w-[68ch] py-8">
             <p className="text-xs text-err">

@@ -328,7 +328,7 @@ export function CrdDetail() {
       id: "conditions",
       label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
-      mark: conditionsMark(conditions),
+      mark: conditionsMark(conditions, t),
       content: (
         <Section>
           <SectionHeader

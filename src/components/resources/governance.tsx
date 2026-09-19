@@ -21,6 +21,7 @@
 
 import type { T } from "@/i18n/useT";
 import { ResourceRef } from "./ResourceRef";
+import { EditGoverning } from "./EditGoverning";
 import {
   autoscalerFinding,
   autoscalerRange,
@@ -166,6 +167,7 @@ export function governanceRows(
             {" "}
             · {autoscalerRange(auto.facts, t)}
           </span>
+          <EditGoverning object={auto.object} />
         </>
       ),
     });
@@ -192,6 +194,7 @@ export function governanceRows(
             {" "}
             keeps {budgetRule(budget.facts, t)} — {budgetRoom(budget.facts, t)}
           </span>
+          <EditGoverning object={budget.object} />
         </>
       ),
     });

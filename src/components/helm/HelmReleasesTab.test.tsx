@@ -25,6 +25,7 @@ const release = (name: string): HelmRelease => ({
   source: "native",
   suspended: false,
   sourceRef: null,
+  unreadable: null,
 });
 
 function mount(props: Partial<Parameters<typeof HelmReleasesTab>[0]> = {}) {
@@ -91,5 +92,30 @@ describe("what the releases tab does when the read fails", () => {
     expect(
       screen.queryByText(/do not have permission to list/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The release the app could not read must be on the page as itself, not as
+ * an absence. A secret that would not decode was dropped with a
+ * `tracing::warn!` nobody reads, so the page reported the survivors as the
+ * whole truth — "this cluster has no Helm releases" composed out of a read
+ * that failed, which is the one lie this app exists not to tell.
+ */
+describe("a release whose secret would not decode", () => {
+  it("is a row that says so, not a row that is missing", async () => {
+    mount({
+      releases: [
+        {
+          ...release("shop-api"),
+          status: "",
+          chart: "",
+          unreadable: "missing field `config`",
+        },
+      ],
+    });
+    expect(await screen.findByText("shop-api")).toBeInTheDocument();
+    expect(screen.getByText("could not be read")).toBeInTheDocument();
+    expect(screen.getByTitle("missing field `config`")).toBeInTheDocument();
   });
 });

@@ -56,6 +56,8 @@ import {
   peekMutationKeys,
   planPeekActions,
   reachableContainer,
+  restartCommandFor,
+  restartNeedsAsking,
   scaleCommandFor,
   type ForwardBackend,
   type PeekActionId,
@@ -180,16 +182,53 @@ export function useObjectActions({
       variant: "destructive",
     });
 
+  const asking = useAsk();
+  const askTarget = (() => {
+    const askable = askableKind(kind);
+    return askable ? { kind: askable, namespace, name } : null;
+  })();
+
+  /**
+   * The object's generation as the panel last read it, or `null` where the
+   * detail has not loaded — which is the honest answer, and the one
+   * `acknowledged` already handles.
+   */
+  const generationOf = (object: unknown): number | null => {
+    if (!object || typeof object !== "object") return null;
+    const value = (object as { generation?: number | null }).generation;
+    return typeof value === "number" ? value : null;
+  };
+
   const restart = useMutation({
-    mutationFn: () =>
-      kind === "Deployment"
-        ? commands.restartDeployment(name, namespace)
-        : commands.restartPod(name, namespace),
+    mutationFn: async () => {
+      // The same table the offer came from, so the button and the command
+      // cannot name different kinds.
+      const roll = restartCommandFor(kind);
+      if (!roll) return;
+      await roll(name, namespace);
+    },
     // No success toast: the surface stays on the object and the list moves. A
     // banner saying what already happened on screen is noise.
     onSuccess: () => {
       invalidate();
       setConfirming(null);
+      // Every rolled workload is followed to its answer, not just the one
+      // kind that could be rolled when this was written — the detail pages
+      // follow all three, and a peek that did not would answer differently
+      // for the same click. A restarted pod is the exception because it is
+      // a deletion: the pod that replaces it is a different object.
+      if (askTarget && kind !== "Pod") {
+        asking.ask(askTarget, {
+          action: "restart",
+          replicas: null,
+          // The generation the panel already had. Without it `acknowledged`
+          // has only "did I see it unsettled" to go on, and a rollout that
+          // is already finished by the first watch event — a small one, or
+          // one with nothing to roll — is never recognised as this click's,
+          // so the watch times out on a restart that worked.
+          generationBefore: generationOf(detail),
+        });
+      }
     },
     onError: failed("restart"),
   });
@@ -215,18 +254,19 @@ export function useObjectActions({
       if (!scaleCommand) throw new Error(`No scale command for ${kind}`);
       return scaleCommand(name, replicas, namespace);
     },
-    onSuccess: () => {
+    onSuccess: (_data, replicas) => {
       invalidate();
       setDialog(null);
+      if (askTarget) {
+        asking.ask(askTarget, {
+          action: "scale",
+          replicas,
+          generationBefore: null,
+        });
+      }
     },
     onError: failed("scale"),
   });
-
-  const asking = useAsk();
-  const askTarget = (() => {
-    const askable = askableKind(kind);
-    return askable ? { kind: askable, namespace, name } : null;
-  })();
 
   const plan = planPeekActions(kind, detail, t, {
     watching: askTarget ? asking.watching(askTarget) : false,
@@ -279,10 +319,11 @@ export function useObjectActions({
         // one-way door and gets the same gate as a delete.
         if (kind === "Pod" && !pod?.ownerReferences?.length)
           return setConfirming("restart");
-        // A managed restart is reversible and normally fires straight through,
-        // but on a critical cluster it is still a change, so it takes the gate
-        // — the peek's one-click restart was the last way past it.
-        return criticalActive
+        // A managed restart is reversible, but it still asks when a delivery
+        // controller would undo it or the cluster is marked critical — the
+        // same rule the page applies, so the two surfaces cannot disagree
+        // about the same click.
+        return restartNeedsAsking(intercept("Restart") !== null, criticalActive)
           ? setConfirming("managedRestart")
           : restart.mutate();
       case "delete":

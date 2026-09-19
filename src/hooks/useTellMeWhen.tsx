@@ -9,7 +9,9 @@ import {
   Coalescer,
   isOpen,
   judge,
+  detailWords,
   LOST_SIGHT_MS,
+  outOfTimeVerdict,
   type Says,
   type Verdict,
   type Watch,
@@ -65,6 +67,7 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
   forwardDied: "saysForwardDied",
   gone: "saysGone",
   lostSight: "saysLostSight",
+  timedOut: "saysTimedOut",
 };
 
 /**
@@ -91,7 +94,10 @@ export function notice(
 ): { title: string; body: string } {
   const lines = answers.map((a) => answerLine(a, t));
   if (answers.length === 1) {
-    return { title: lines[0], body: answers[0].verdict.detail ?? "" };
+    return {
+      title: lines[0],
+      body: detailWords(answers[0].verdict.detail, t) ?? "",
+    };
   }
   return {
     title: t("tell", "severalAnswered", { n: answers.length }),
@@ -99,7 +105,8 @@ export function notice(
   };
 }
 
-const EXPIRE_EVERY_MS = 60_000;
+/** Deadlines are two minutes; a check every ten seconds keeps the answer within a breath of it. */
+const TIMEOUT_EVERY_MS = 10_000;
 
 /** The stream behind one open watch, and the timer that says it went quiet. */
 interface Stream {
@@ -383,10 +390,16 @@ export function useTellMeWhen() {
   }, []);
 
   useEffect(() => {
-    const tick = setInterval(
-      () => useTellMeWhenStore.getState().expire(Date.now()),
-      EXPIRE_EVERY_MS
-    );
+    const tick = setInterval(() => {
+      const now = Date.now();
+      const store = useTellMeWhenStore.getState();
+      store.expire(now);
+      for (const watch of store.timeOut(now)) {
+        // Already told it lost sight: the deadline has nothing to add.
+        if (watch.status.state === "lost" && watch.status.told) continue;
+        coalescer.current?.push({ watch, verdict: outOfTimeVerdict(watch) });
+      }
+    }, TIMEOUT_EVERY_MS);
     return () => clearInterval(tick);
   }, []);
 }

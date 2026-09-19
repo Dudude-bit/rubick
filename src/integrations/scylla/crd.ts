@@ -1,34 +1,21 @@
-import type { CrdColumn, CrdStatus } from "../kit";
+import type { CrdColumn } from "../kit";
 import { conditionOf, getValueByPath, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
 
 /** Scylla's three conditions folded into one word for a badge, the words kept. */
-const status: CrdStatus = {
-  getStatus: (resource) => {
-    if (conditionOf(resource, "Degraded")?.status === "True") return "Degraded";
-    if (conditionOf(resource, "Available")?.status === "False")
-      return "Unavailable";
-    if (conditionOf(resource, "Progressing")?.status === "True")
-      return "Progressing";
-    if (conditionOf(resource, "Available")?.status === "True")
-      return "Available";
-    return null;
-  },
-  getVariant: (value) => {
-    switch (value) {
-      case "Available":
-        return "default";
-      case "Progressing":
-        return "secondary";
-      case "Degraded":
-      case "Unavailable":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  },
-};
+/** Scylla's three conditions folded into the one word the column draws. */
+function condensedStatus(
+  resource: Parameters<CrdColumn["accessor"]>[0]
+): string | null {
+  if (conditionOf(resource, "Degraded")?.status === "True") return "Degraded";
+  if (conditionOf(resource, "Available")?.status === "False")
+    return "Unavailable";
+  if (conditionOf(resource, "Progressing")?.status === "True")
+    return "Progressing";
+  if (conditionOf(resource, "Available")?.status === "True") return "Available";
+  return null;
+}
 
 const text = (value: unknown) => String(value ?? "-");
 
@@ -68,7 +55,7 @@ const defaultColumns: CrdColumn[] = [
   {
     id: "conditions",
     header: "conditions",
-    accessor: (resource) => status.getStatus(resource),
+    accessor: (resource) => condensedStatus(resource),
     cell: text,
   },
 ];
@@ -77,5 +64,4 @@ export const crd: CrdView = {
   matches: matchByGroup(GROUP),
   columnsFor: (kind) =>
     kind === "ScyllaCluster" ? clusterColumns : defaultColumns,
-  status,
 };

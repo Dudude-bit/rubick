@@ -2,6 +2,7 @@ import { ClusterList } from "@/components/cluster/ClusterList";
 import { Spinner } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
 
+import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -30,6 +31,10 @@ import { useT } from "@/i18n/useT";
 export function ClusterFrontDoor() {
   const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
+  // The needle, the rows and the count beside the heading, from one place —
+  // a heading that kept reading `contexts.length` would go on saying "42
+  // contexts" over three rows, with nothing failing anywhere.
+  const cluster = useClusterFilter();
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connectStartedAt = useClusterStore((s) => s.connectStartedAt);
@@ -62,7 +67,16 @@ export function ClusterFrontDoor() {
           onRetry={() => connect(errorContext)}
         />
         <div className="mt-7">
-          <ClusterList onSelect={connect} failedContext={errorContext} />
+          <ClusterList
+            contexts={cluster.shown}
+            total={cluster.total}
+            filter={cluster.filter}
+            onFilterChange={cluster.setFilter}
+            query={cluster.query}
+            inputRef={cluster.inputRef}
+            onSelect={connect}
+            failedContext={errorContext}
+          />
         </div>
         <SourceLine kubeconfig={kubeconfig} />
       </Door>
@@ -95,14 +109,43 @@ export function ClusterFrontDoor() {
     <Door>
       <Heading
         title={t("cluster", "connectACluster")}
-        sub={`${t("count", "contexts", { n: contexts.length })} ${t("cluster", "pickOneToStart")}`}
+        sub={subheading(t, cluster)}
       />
       <div className="mt-5">
-        <ClusterList onSelect={connect} />
+        <ClusterList
+          contexts={cluster.shown}
+          total={cluster.total}
+          filter={cluster.filter}
+          onFilterChange={cluster.setFilter}
+          query={cluster.query}
+          inputRef={cluster.inputRef}
+          onSelect={connect}
+        />
       </div>
       <SourceLine kubeconfig={kubeconfig} />
     </Door>
   );
+}
+
+/**
+ * How many clusters are on offer, and what to do about them.
+ *
+ * "Pick one to start" is dropped when the filter has excluded everything: the
+ * count is still worth saying — it is how the reader knows the kubeconfig has
+ * 93 clusters and their needle reached none of them — but an instruction to
+ * pick one of nothing is an instruction that cannot be followed.
+ */
+function subheading(t: ReturnType<typeof useT>, cluster: ClusterFilter) {
+  const filtered = cluster.filtering;
+  const count = filtered
+    ? t("count", "contextsMatching", {
+        shown: cluster.shown.length,
+        n: cluster.total,
+      })
+    : t("count", "contexts", { n: cluster.total });
+
+  if (filtered && cluster.shown.length === 0) return count;
+  return `${count} ${t("cluster", "pickOneToStart")}`;
 }
 
 /**

@@ -35,6 +35,7 @@ const corpus = JSON.parse(
       level?: LogLevel;
       fields?: Record<string, string>;
       container?: string;
+      pod?: string;
     };
     epoch?: number;
     expect: boolean;
@@ -56,7 +57,7 @@ function build(
     level: partial.level ?? null,
     fields: partial.fields ?? null,
     format: "plain",
-    pod: "pod",
+    pod: partial.pod ?? "pod",
     container: partial.container ?? "app",
     namespace: "default",
   };

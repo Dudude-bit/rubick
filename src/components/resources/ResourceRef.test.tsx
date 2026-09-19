@@ -11,6 +11,7 @@ import {
   type ResourceColouring,
 } from "@/stores/displaySettingsStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useObjectMenuStore } from "@/stores/objectMenuStore";
 
 /** Where the click landed: the peek is a query parameter, not component state. */
 function LocationProbe() {
@@ -52,6 +53,32 @@ describe("ResourceRef", () => {
     });
   });
 
+  /**
+   * Issue #178: a right-click reached the webview's own menu, whose "Copy
+   * link address" copied `http://tauri.localhost/...`. The link opens the
+   * app's menu instead.
+   *
+   * The `preventDefault` is asserted and not assumed: it is the whole of
+   * what stops the webview menu, and filling the store while letting the
+   * event through would leave the reader with the menu they complained
+   * about. Without that assertion this test passed with the line deleted.
+   */
+  it("opens the object menu on a right-click, at the pointer, and claims the event", () => {
+    wrap(<ResourceRef kind="Pod" name="web" namespace="shop" />);
+    const claimed = fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Pod web" }),
+      { clientX: 40, clientY: 60 }
+    );
+    // `fireEvent` returns false when a handler called `preventDefault`.
+    expect(claimed).toBe(false);
+    expect(useObjectMenuStore.getState().target).toEqual({
+      name: "web",
+      to: "/pods/shop/web",
+      x: 40,
+      y: 60,
+    });
+  });
+
   describe("routing", () => {
     it("links a routable namespaced kind to its detail page", () => {
       wrap(
@@ -89,7 +116,10 @@ describe("ResourceRef", () => {
         />
       );
       expect(screen.queryByRole("link")).toBeNull();
-      expect(screen.getByText(/traefik/)).toBeInTheDocument();
+      // The drawn name, not the hidden one the reader is given.
+      expect(screen.getByTestId("resource-ref-name")).toHaveTextContent(
+        "traefik"
+      );
     });
 
     /**
@@ -207,6 +237,19 @@ describe("ResourceRef", () => {
       }
     );
 
+    // The same for the half that is not a link. A bare span is role=generic,
+    // where ARIA prohibits naming — an `aria-label` there is dropped and the
+    // two spans are announced joined, "k3d-agent -0" again. The name has to
+    // be real text a reader can be given.
+    it.each([true, false])(
+      "announces the kind and the real name when it is not a link (showKind=%s)",
+      (showKind) => {
+        wrap(<ResourceRef kind="Pod" name="k3d-agent-0" showKind={showKind} />);
+        expect(screen.queryByRole("link")).toBeNull();
+        expect(screen.getByText("Pod k3d-agent-0")).toBeInTheDocument();
+      }
+    );
+
     // A ragged left edge is exactly what an icon column exists to prevent.
     it("reserves the mark's width for a kind the registry does not carry", () => {
       wrap(<ResourceRef kind="HelmRelease" name="traefik" namespace="ns" />);
@@ -215,7 +258,7 @@ describe("ResourceRef", () => {
 
     it("still names the kind when it is not routable", () => {
       wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
-      expect(screen.getByText("Pod", { exact: false })).toBeInTheDocument();
+      expect(screen.getByText("Pod orphan")).toBeInTheDocument();
     });
   });
 
@@ -370,7 +413,7 @@ describe("ResourceRef", () => {
     it("does not call onClick for an unroutable reference", async () => {
       const onClick = vi.fn();
       wrap(<ResourceRef kind="HelmRelease" name="traefik" onClick={onClick} />);
-      await userEvent.click(screen.getByText(/traefik/));
+      await userEvent.click(screen.getByTestId("resource-ref-name"));
       expect(onClick).not.toHaveBeenCalled();
     });
   });

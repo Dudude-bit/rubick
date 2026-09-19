@@ -1,0 +1,80 @@
+# A Flatpak built from the AppImage this release already produces.
+#
+# Why this exists: on RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — none of
+# the other Linux artifacts can run, and not for a packaging reason.
+#
+#   * the .rpm and .deb require `libwebkit2gtk-4.1.so.0`; RHEL 8 ships
+#     `webkit2gtk3`, which provides `libwebkit2gtk-4.0.so.37`, and there is no
+#     4.1 package for it at all;
+#   * the AppImage does bundle webkit 4.1, so that half is solved — but the
+#     binary needs `GLIBC_2.39` and RHEL 8 has 2.28. An AppImage does not
+#     carry a libc.
+#
+# A Flatpak carries both: `org.freedesktop.Platform//24.08` brings glibc 2.39,
+# and the AppImage's own bundled webkit comes along in /app/lib. Checked, not
+# assumed — the versions above were read off the runtime and off the binary.
+#
+# This is a **bundle**, published as a release asset, not a Flathub
+# submission. Flathub forbids prebuilt binaries and builds offline, which is
+# where a bun project runs out of road; none of that applies to a bundle the
+# reader installs with `flatpak install ./Rubick.flatpak`.
+app-id: com.k8s_gui.app
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+# The AppImage's binary keeps the product's own capitalisation.
+command: Rubick
+separate-locales: false
+finish-args:
+  - --share=network
+  - --share=ipc
+  # x11, because GDK_BACKEND below forces it: the Wayland backend crashes
+  # (tauri-apps/tauri#8541) and the AppImage's launcher avoids it the same way.
+  - --socket=x11
+  - --device=dri
+  # The kubeconfig, the caches, and the helpers under $HOME: krew, asdf,
+  # ~/.local/bin. The ones in /usr/bin need host-os below.
+  - --filesystem=home
+  # A sandbox's /usr is the runtime's, so an EKS context whose exec block
+  # names /usr/local/bin/aws cannot connect at all. This puts the host tree
+  # under /run/host, where the path resolver now looks.
+  - --filesystem=host-os:ro
+  - --talk-name=org.freedesktop.secrets
+  # notify-rust talks to this name directly, not through the portal, and a
+  # denied call is swallowed: notify() reports delivered for nothing shown.
+  - --talk-name=org.freedesktop.Notifications
+  # single-instance asks to own tauri.conf.json's hyphenated identifier plus
+  # .SingleInstance, which this app-id does not prefix; the refusal is
+  # swallowed, and every rubick:// link then opens a second window.
+  - --own-name=com.k8s-gui.app.SingleInstance
+  # What the AppImage's AppRun exported and `command:` here does not: the
+  # binary is built against /app/lib, not the runtime's tree.
+  - --env=GDK_BACKEND=x11
+  - --env=XDG_DATA_DIRS=/app/share:/usr/share
+  - --env=GSETTINGS_SCHEMA_DIR=/app/share/glib-2.0/schemas
+  - --env=GTK_PATH=/app/lib/x86_64-linux-gnu/gtk-3.0
+  - --env=GTK_IM_MODULE_FILE=/app/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules.cache
+  - --env=GDK_PIXBUF_MODULE_FILE=/app/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+  - --env=GIO_EXTRA_MODULES=/app/lib/x86_64-linux-gnu/gio/modules
+  # WebKit execs its web process by a path compiled in on Ubuntu, which in
+  # the sandbox is the runtime's — and the runtime carries no WebKit. A
+  # missing web process is a blank window, not an error.
+  - --env=WEBKIT_EXEC_PATH=/app/lib/x86_64-linux-gnu/webkit2gtk-4.1
+modules:
+  - name: rubick
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/bin /app/lib /app/share
+      - cp -a squashfs-root/usr/bin/. /app/bin/
+      - cp -a squashfs-root/usr/lib/. /app/lib/
+      # The compiled GSettings schemas GSETTINGS_SCHEMA_DIR points at.
+      - cp -a squashfs-root/usr/share/glib-2.0 /app/share/
+      - install -Dm644 squashfs-root/usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
+      - desktop-file-edit --set-key=Icon --set-value=com.k8s_gui.app /app/share/applications/com.k8s_gui.app.desktop
+      # The three sizes the AppImage carries, named as hicolor names them.
+      # No `if -f`: an icon that stopped shipping must break the build.
+      - for d in 32x32 128x128 256x256@2; do install -Dm644 "squashfs-root/usr/share/icons/hicolor/$d/apps/Rubick.png" "/app/share/icons/hicolor/$d/apps/com.k8s_gui.app.png"; done
+    sources:
+      - type: dir
+        path: squashfs-root
+        dest: squashfs-root

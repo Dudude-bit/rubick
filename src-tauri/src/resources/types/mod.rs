@@ -17,8 +17,8 @@ pub use common::{
     ContainerState, EnvFromInfo, EnvVarInfo, EnvVarSourceInfo, EnvVarSourceType, TerminationInfo,
 };
 pub use deployment::{
-    DeploymentContainerInfo, DeploymentContainerResources, DeploymentInfo, ReplicaInfo,
-    TemplateContainers,
+    template_container_images, ContainerImage, DeploymentContainerInfo,
+    DeploymentContainerResources, DeploymentInfo, ReplicaInfo, TemplateContainers,
 };
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};

@@ -34,7 +34,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useNodeActions } from "@/hooks/useNodeActions";
-import { useT } from "@/i18n/useT";
+import { useT, type T as TranslateFn } from "@/i18n/useT";
 
 /**
  * Nodes, grouped by the pool the cloud says made them.
@@ -44,20 +44,20 @@ import { useT } from "@/i18n/useT";
  * every other cluster `poolOf` returns null for every node, no group reaches
  * the minimum, and the page is exactly the flat list it always was.
  */
-const poolGrouping: RowGrouping<NodeInfo> = {
+const poolGrouping = (t: TranslateFn): RowGrouping<NodeInfo> => ({
   keyOf: poolOf,
   caption: (pool, nodes) => {
     const facts = poolFacts(nodes);
-    const spot = spotMark(facts);
+    const spot = spotMark(facts, t);
     return (
       <span className="inline-flex items-baseline gap-2">
         <span className="font-mono text-fg-mid">{pool}</span>
-        <span>{describePool(facts)}</span>
+        <span>{describePool(facts, t)}</span>
         {spot && <SpotMark says={spot} />}
       </span>
     );
   },
-};
+});
 
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
 function InternalIpCell({ address }: { address: string | undefined }) {
@@ -170,6 +170,7 @@ export const columns = (
 
 export function NodeList() {
   const t = useT();
+  const grouping = useMemo(() => poolGrouping(t), [t]);
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -345,7 +346,7 @@ export function NodeList() {
         queryFn={() => commands.listNodes(null)}
         columns={nodeColumns}
         quickActions={quickActions}
-        grouping={poolGrouping}
+        grouping={grouping}
         emptyStateLabel={toPlural(ResourceType.Node)}
         staleTime={STALE_TIMES.resourceList}
         refresh={watchFailed ? undefined : false}

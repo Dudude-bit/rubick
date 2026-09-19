@@ -99,6 +99,11 @@ impl PathResolver {
                     paths.push(Self::krew_bin().join(binary_name));
                 }
             }
+            paths.extend(
+                Self::host_directories()
+                    .into_iter()
+                    .map(|dir| dir.join(binary_name)),
+            );
         }
 
         #[cfg(windows)]
@@ -188,6 +193,42 @@ impl PathResolver {
         }
     }
 
+    /// Whether this process is running inside a Flatpak sandbox. The file is
+    /// written by flatpak into every sandbox and exists nowhere else.
+    #[must_use]
+    pub fn in_sandbox() -> bool {
+        std::path::Path::new("/.flatpak-info").exists()
+    }
+
+    /// The host's own binary directories, reachable only from a sandbox.
+    ///
+    /// A sandbox's `/usr` is the runtime's, so a kubeconfig `exec` block
+    /// naming `aws` or a dnf kubectl resolves to nothing. `host-os:ro` puts
+    /// the host tree under `/run/host`. Last in the list, and every caller
+    /// still runs what it finds, so one that cannot execute is refused
+    /// rather than reported as present.
+    #[must_use]
+    pub fn host_directories() -> Vec<PathBuf> {
+        Self::host_directories_when(Self::in_sandbox())
+    }
+
+    fn host_directories_when(in_sandbox: bool) -> Vec<PathBuf> {
+        if !in_sandbox {
+            return Vec::new();
+        }
+        [
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+            "/snap/bin",
+        ]
+        .iter()
+        .map(|dir| PathBuf::from(format!("/run/host{dir}")))
+        .collect()
+    }
+
     /// Standard install directories for CLI tools, by platform convention.
     #[must_use]
     pub fn fallback_directories() -> Vec<PathBuf> {
@@ -219,6 +260,7 @@ impl PathResolver {
             // `krew_bin` so `KREW_ROOT` counts, and so this list and
             // `search_paths` look in the same place.
             paths.push(Self::krew_bin());
+            paths.extend(Self::host_directories());
         }
 
         #[cfg(windows)]
@@ -467,6 +509,38 @@ mod tests {
         assert!(
             dirs.iter().any(|d| d.ends_with("opt/homebrew/bin")),
             "Missing /opt/homebrew/bin on ARM"
+        );
+    }
+
+    /// Inside a Flatpak the sandbox's own `/usr` is the runtime's, so a
+    /// kubeconfig naming a host-installed `aws` or `kubectl` finds nothing
+    /// unless the host tree under `/run/host` is searched too. Deleting that
+    /// branch leaves an EKS context unable to connect with no word about why.
+    #[test]
+    fn a_sandbox_also_looks_at_the_host_s_own_directories() {
+        let dirs = PathResolver::host_directories_when(true);
+        assert!(
+            dirs.contains(&PathBuf::from("/run/host/usr/bin")),
+            "the host's /usr/bin is where dnf puts kubectl: {dirs:?}"
+        );
+        assert!(
+            dirs.contains(&PathBuf::from("/run/host/usr/local/bin")),
+            "the host's /usr/local/bin is where the AWS installer puts aws: {dirs:?}"
+        );
+        assert!(
+            dirs.iter().all(|d| d.starts_with("/run/host")),
+            "a host directory is only ever reachable under /run/host: {dirs:?}"
+        );
+    }
+
+    /// Off a sandbox `/run/host` does not exist, and offering it would put
+    /// paths that can never resolve in front of the reader in Diagnostics.
+    /// Deleting the guard makes every machine claim to have searched them.
+    #[test]
+    fn off_a_sandbox_there_is_no_host_tree_to_add() {
+        assert!(
+            PathResolver::host_directories_when(false).is_empty(),
+            "nothing under /run/host exists outside a sandbox"
         );
     }
 }
