@@ -19,6 +19,11 @@ pub struct HelmRelease {
     /// Additional info for Flux releases
     pub suspended: Option<bool>,
     pub source_ref: Option<String>,
+    /// Why this release could not be read, where it could not be. A secret
+    /// that will not decode used to be dropped with a warning nobody sees,
+    /// and the page then reported the survivors as the whole truth — "this
+    /// cluster has no releases" produced by a read that failed.
+    pub unreadable: Option<String>,
 }
 
 /// Helm release detail (from Kubernetes Secret)

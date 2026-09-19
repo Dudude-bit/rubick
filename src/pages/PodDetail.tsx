@@ -925,7 +925,7 @@ export function PodDetail() {
             id: "conditions",
             label: t("columns", "conditions"),
             glyph: viewGlyph(BadgeCheck),
-            mark: conditionsMark(pod?.status.conditions),
+            mark: conditionsMark(pod?.status.conditions, t),
             content: (
               <Section>
                 <SectionHeader

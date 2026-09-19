@@ -231,7 +231,7 @@ export function JobDetail() {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
+        mark: podsMark(pods, t),
         content: (
           <PodListCard pods={pods} emptyMessage={t("empty", "noPodsForJob")} />
         ),
@@ -260,7 +260,7 @@ export function JobDetail() {
         id: "conditions",
         label: t("nav", "conditions"),
         glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(job?.conditions),
+        mark: conditionsMark(job?.conditions, t),
         content: (
           <Section>
             <SectionHeader

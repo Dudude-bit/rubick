@@ -166,12 +166,40 @@ pub async fn list_helm_releases_native(
                                 source: "native".to_string(),
                                 suspended: None,
                                 source_ref: None,
+                                unreadable: None,
                             };
                             releases_map.insert(key, helm_release);
                         }
                     }
                     Err(e) => {
+                        // A row rather than a silence: the labels say which
+                        // release this is without decoding anything, so the
+                        // page can name what it could not read instead of
+                        // leaving the reader to believe it is not there.
                         tracing::warn!("Failed to decode Helm release secret: {}", e);
+                        let labels = secret.metadata.labels.unwrap_or_default();
+                        let name = labels.get("name").cloned().unwrap_or_default();
+                        let namespace = secret.metadata.namespace.clone().unwrap_or_default();
+                        if !name.is_empty() {
+                            releases_map
+                                .entry((namespace.clone(), name.clone()))
+                                .or_insert_with(|| HelmRelease {
+                                    name,
+                                    namespace,
+                                    revision: labels
+                                        .get("version")
+                                        .and_then(|v| v.parse().ok())
+                                        .unwrap_or(0),
+                                    status: String::new(),
+                                    chart: String::new(),
+                                    app_version: None,
+                                    updated: String::new(),
+                                    source: "native".to_string(),
+                                    suspended: None,
+                                    source_ref: None,
+                                    unreadable: Some(e.to_string()),
+                                });
+                        }
                     }
                 }
             }
@@ -318,30 +346,49 @@ pub async fn get_helm_release_detail(
 
     let mut target_release: Option<HelmSecretRelease> = None;
     let mut max_revision = 0;
+    // A secret that is there and will not decode is not a release that is
+    // not there. Dropping both into one answer made "not found" — which the
+    // frontend paints as "this may be gone" — the report for a release the
+    // cluster holds and this app could not read.
+    let mut unreadable: Option<String> = None;
 
     for secret in secret_list {
         if let Some(data) = secret.data {
             if let Some(release_data) = data.get("release") {
-                if let Ok(release) = decode_helm_release(&release_data.0) {
-                    if let Some(target_rev) = revision {
-                        if release.version == target_rev {
+                match decode_helm_release(&release_data.0) {
+                    Ok(release) => {
+                        if let Some(target_rev) = revision {
+                            if release.version == target_rev {
+                                target_release = Some(release);
+                                break;
+                            }
+                        } else if release.version > max_revision {
+                            max_revision = release.version;
                             target_release = Some(release);
-                            break;
                         }
-                    } else if release.version > max_revision {
-                        max_revision = release.version;
-                        target_release = Some(release);
+                    }
+                    Err(error) => {
+                        tracing::warn!("Failed to decode Helm release secret: {error}");
+                        unreadable.get_or_insert_with(|| error.to_string());
                     }
                 }
             }
         }
     }
 
-    let release = target_release.ok_or_else(|| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "Release {name} not found in namespace {namespace}"
-        )))
-    })?;
+    let release = match (target_release, unreadable) {
+        (Some(release), _) => release,
+        (None, Some(why)) => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} in namespace {namespace} could not be read: {why}"
+            ))))
+        }
+        (None, None) => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} not found in namespace {namespace}"
+            ))))
+        }
+    };
 
     Ok(HelmReleaseDetail {
         name: release.name,

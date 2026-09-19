@@ -322,7 +322,7 @@ export function NodeDetail() {
       // back to that same count (from connections, always loaded), and show
       // nothing rather than a false zero when neither source has looked yet.
       mark: podsOnThisNode.data
-        ? podsMark(podsOnThisNode.data)
+        ? podsMark(podsOnThisNode.data, t)
         : podCount !== undefined
           ? countMark(podCount)
           : undefined,
@@ -338,7 +338,7 @@ export function NodeDetail() {
       id: "conditions",
       label: t("columns", "conditions"),
       glyph: viewGlyph(BadgeCheck),
-      mark: conditionsMark(node?.status.conditions),
+      mark: conditionsMark(node?.status.conditions, t),
       content: (
         <Section>
           <SectionHeader
