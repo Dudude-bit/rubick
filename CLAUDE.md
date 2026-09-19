@@ -120,6 +120,15 @@ Claims here are settled by running things, not by reasoning about them.
   correct on first read went wrong a second later.
 - **The peek panel renders the same objects as the detail pages.** A fix on one
   leaves the other wrong; check both.
+- **A scroller sized in per cent does not scroll here.** `height: 100%`
+  resolves against the parent's _specified_ height, and a box sized by its
+  flex parent has `height: auto` — so in this webview the child grows to its
+  own content, the parent's `overflow-hidden` eats the rest, and the screen
+  ends mid-word with no scrollbar and nothing failing. It has bitten the YAML
+  editor (#163) and What's New. `ScrollArea` needs a height of its own
+  (`h-[200px]`, `max-h-[60vh]`), which `scroll-area.test.ts` checks; where the
+  height comes from a flex parent, make the element itself the scroller —
+  `min-h-0 flex-1 overflow-y-auto scrollbar-thin`.
 
 ## Rust
 
@@ -274,6 +283,15 @@ Half-done is invisible: each of these fails by the kind simply not appearing.
 the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
+
+Then three tables keyed by kind, each of which fails by staying quiet rather
+than by breaking. `API_GROUPS` in `lib/delivery.ts` — a kind absent from it
+answers `null`, which every caller reads as "no delivery to speak of", so the
+column, the detail block and the peek marks go silent together. `ROUTABLE` in
+`ResourceRef.tsx` — absent, and every reference to the kind renders as text
+instead of a link. `peek-actions.ts` — absent, and the peek offers no Delete
+even though the command exists. All three have guards now; the guards are what
+noticed.
 
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in

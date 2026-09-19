@@ -1,0 +1,4 @@
+# Unpacked beside the manifest by the Flatpak workflow: a `dir` source is
+# resolved relative to the manifest, not the working directory.
+rubick.AppImage
+squashfs-root/

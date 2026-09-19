@@ -1,0 +1,129 @@
+# A namespace that looks protected and is not.
+# From https://rubick.tech, the landing page of a Kubernetes client that
+# tries not to lie to you. Needs a cluster running Cilium:
+#
+#   kind create cluster --config https://rubick.tech/lies/cilium-kind.yaml
+#   helm repo add cilium https://helm.cilium.io/
+#   helm install cilium cilium/cilium -n kube-system --set ipam.mode=kubernetes
+#   kubectl apply -f https://rubick.tech/lies/protected.yaml
+#   kubectl -n rubick-lies get cnp
+#   kubectl delete -f https://rubick.tech/lies/protected.yaml
+#
+# Four policies go in. Three are enforced. In the fourth, one In operator is
+# missing its values list, which the operator cannot parse, so it keeps the
+# object and throws the rule away. The policy still reads as if it covers the
+# cache pods. `kubectl get cnp` prints a VALID column and will tell you; a
+# generic list of custom resources shows four rows and stops there.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rubick-lies
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: rubick-lies
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: rubick-lies
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: db }
+  template:
+    metadata:
+      labels: { app: db }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: rubick-lies
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cache }
+  template:
+    metadata:
+      labels: { app: cache }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+---
+# Enforced. The api pods accept ingress from the frontend only.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: api-from-frontend
+  namespace: rubick-lies
+spec:
+  endpointSelector:
+    matchLabels: { app: api }
+  ingress:
+    - fromEndpoints:
+        - matchLabels: { app: frontend }
+---
+# Enforced.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: api-egress-to-db
+  namespace: rubick-lies
+spec:
+  endpointSelector:
+    matchLabels: { app: api }
+  egress:
+    - toEndpoints:
+        - matchLabels: { app: db }
+---
+# Enforced.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: db-from-api
+  namespace: rubick-lies
+spec:
+  endpointSelector:
+    matchLabels: { app: db }
+  ingress:
+    - fromEndpoints:
+        - matchLabels: { app: api }
+---
+# Thrown away. The In operator three lines down needs a values list and has
+# none, so the operator writes Valid: False into the status and enforces the
+# whole policy not at all. The object keeps its name and its age, the
+# selector at the top still reads as if it covers the cache pods, and the
+# cache pods are open.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cache-locked-down
+  namespace: rubick-lies
+spec:
+  endpointSelector:
+    matchLabels: { app: cache }
+  ingress:
+    - fromEndpoints:
+        - matchExpressions:
+            - key: app
+              operator: In

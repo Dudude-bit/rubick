@@ -28,6 +28,12 @@ interface UpdaterState {
   // Settings
   autoCheckEnabled: boolean;
   settingsLoaded: boolean;
+  /**
+   * Whether this build can install an update it downloads, or `null` while
+   * nobody has asked. Three states on purpose: an answer we failed to get
+   * is not the same as "it cannot".
+   */
+  canInstall: boolean | null;
 
   // Internal state
   update: Update | null;
@@ -62,6 +68,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
   error: undefined,
   autoCheckEnabled: true,
   settingsLoaded: false,
+  canInstall: null,
   update: null,
 
   loadSettings: async () => {
@@ -74,6 +81,12 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     } catch (error) {
       console.error("Failed to load updater settings:", error);
       set({ settingsLoaded: true });
+    }
+    try {
+      set({ canInstall: await commands.updaterCanInstall() });
+    } catch (error) {
+      // Left unknown rather than assumed; the checks behave as they did.
+      console.error("Failed to ask whether updates can be installed:", error);
     }
   },
 

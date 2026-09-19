@@ -7,6 +7,9 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { ContainerState, PodInfo, ServiceInfo } from "@/generated/types";
 import {
+  restartCommandFor,
+  restartNeedsAsking,
+  deleteCommandFor,
   describeBareRestart,
   describeDeletion,
   peekMutationKeys,
@@ -14,7 +17,9 @@ import {
   scaleCommandFor,
   type PeekAction,
 } from "./peek-actions";
-import { SCALABLE_KINDS } from "@/lib/resource-registry";
+import { RESOURCE_REGISTRY, SCALABLE_KINDS } from "@/lib/resource-registry";
+import { askableKind } from "@/lib/tell-me-when";
+import * as generated from "@/generated/commands";
 
 function container(
   name: string,
@@ -116,7 +121,22 @@ describe("planPeekActions", () => {
 
   it("offers a plain Delete for a kind with nothing else to do", () => {
     expect(labels(all("ConfigMap"))).toEqual(["Delete"]);
+  });
+
+  /**
+   * A DaemonSet's replica count is how many nodes it fits, so Scale would be
+   * a control with nothing to set — but it rolls like the other two, and
+   * offering that only to a Deployment left `kubectl` as the only way.
+   */
+  it("offers a DaemonSet the restart it has and not the scale it has not", () => {
     expect(labels(all("DaemonSet"))).toEqual([
+      "Restart",
+      "Delete",
+      "Tell me when the rollout finishes",
+    ]);
+    expect(labels(all("StatefulSet"))).toEqual([
+      "Scale",
+      "Restart",
       "Delete",
       "Tell me when the rollout finishes",
     ]);
@@ -408,5 +428,172 @@ describe("peekMutationKeys", () => {
     expect(keys).toContain("pods");
     expect(keys).toContain("pod");
     expect(keys).toContain("peek");
+  });
+});
+
+/**
+ * The table that goes quiet rather than breaking.
+ *
+ * A kind missing from `DELETE_COMMANDS` simply has no Delete in its peek,
+ * while its detail page deletes it perfectly well — there is no error and
+ * nothing to notice. `NetworkPolicy` shipped that way, and so did all seven
+ * Gateway API kinds, whose commands had existed for releases.
+ *
+ * Read from the generated bindings rather than restated: the guard is only
+ * worth having if it learns about a new `delete_*` command by itself. The
+ * names are not a function of the kind (`deleteConfigmap`, `deleteCrd`,
+ * `deleteGatewayRoute` for five kinds), so the mapping is spelled out — and
+ * a kind that should deliberately have no peek Delete is named here, not
+ * left to look like an oversight.
+ */
+describe("the peek's delete table against the commands that exist", () => {
+  /** The delete command each kind would use, if it should have one at all. */
+  const EXPECTED: Partial<Record<string, string>> = {
+    ConfigMap: "deleteConfigmap",
+    CronJob: "deleteCronjob",
+    CustomResourceDefinition: "deleteCrd",
+    DaemonSet: "deleteDaemonset",
+    Deployment: "deleteDeployment",
+    Endpoints: "deleteEndpoints",
+    Gateway: "deleteGateway",
+    GatewayClass: "deleteGatewayClass",
+    GRPCRoute: "deleteGatewayRoute",
+    HTTPRoute: "deleteGatewayRoute",
+    Ingress: "deleteIngress",
+    Job: "deleteJob",
+    NetworkPolicy: "deleteNetworkPolicy",
+    PersistentVolume: "deletePersistentVolume",
+    PersistentVolumeClaim: "deletePersistentVolumeClaim",
+    Pod: "deletePod",
+    Secret: "deleteSecret",
+    Service: "deleteService",
+    StatefulSet: "deleteStatefulset",
+    StorageClass: "deleteStorageClass",
+    TCPRoute: "deleteGatewayRoute",
+    TLSRoute: "deleteGatewayRoute",
+    UDPRoute: "deleteGatewayRoute",
+  };
+
+  /**
+   * Kinds with no delete of their own, said out loud. A Node is drained and
+   * cordoned rather than deleted; an Event and a ReplicaSet are written by
+   * the cluster; a Namespace takes everything in it with it, which is not a
+   * thing to offer beside Copy name. HorizontalPodAutoscaler and
+   * PodDisruptionBudget have no command at all.
+   */
+  const DELIBERATELY_NONE = new Set([
+    "Event",
+    "HorizontalPodAutoscaler",
+    "Namespace",
+    "Node",
+    "PodDisruptionBudget",
+    "ReplicaSet",
+  ]);
+
+  it("offers a Delete for every kind whose command exists, and no other", () => {
+    const missing: string[] = [];
+    const unexpected: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      const offered = deleteCommandFor(entry.kind) !== null;
+      const should = !DELIBERATELY_NONE.has(entry.kind);
+      if (should && !offered) missing.push(entry.kind);
+      if (!should && offered) unexpected.push(entry.kind);
+    }
+    expect({ missing, unexpected }).toEqual({ missing: [], unexpected: [] });
+  });
+
+  /**
+   * The half that catches a command being added with nobody noticing: every
+   * kind above names a `delete_*` the bindings really export. Fails when a
+   * new one lands and `EXPECTED` has not been read.
+   */
+  it("names commands the generated bindings actually export", () => {
+    for (const [kind, command] of Object.entries(EXPECTED)) {
+      expect(generated, `${kind} names ${command}`).toHaveProperty(command!);
+      expect(DELIBERATELY_NONE.has(kind)).toBe(false);
+    }
+    const covered = new Set([...Object.keys(EXPECTED), ...DELIBERATELY_NONE]);
+    const uncovered = RESOURCE_REGISTRY.map((e) => e.kind).filter(
+      (kind) => !covered.has(kind)
+    );
+    expect(uncovered).toEqual([]);
+  });
+});
+
+/**
+ * The same shape as the delete table above, and the gap this closed.
+ *
+ * `restart_deployment` had existed for releases while a StatefulSet's peek
+ * and page offered nothing, so the only way to roll one was `kubectl` — and
+ * nothing said so, because a missing entry is silence, not an error. The
+ * backend gaining a `restart_*` command is the event this watches for.
+ */
+describe("the peek's restart table against the commands that exist", () => {
+  /** What each kind rolls with. Names are not a function of the kind. */
+  const EXPECTED: Partial<Record<string, string>> = {
+    DaemonSet: "restartDaemonset",
+    Deployment: "restartDeployment",
+    Pod: "restartPod",
+    StatefulSet: "restartStatefulset",
+  };
+
+  it("offers a Restart for every kind whose command exists, and no other", () => {
+    const missing: string[] = [];
+    const unexpected: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      const offered = restartCommandFor(entry.kind) !== null;
+      const should = entry.kind in EXPECTED;
+      if (should && !offered) missing.push(entry.kind);
+      if (!should && offered) unexpected.push(entry.kind);
+    }
+    expect({ missing, unexpected }).toEqual({ missing: [], unexpected: [] });
+  });
+
+  /**
+   * Rolling a workload from the peek also follows it to its answer, the way
+   * the detail pages do — and that followed `kind === "Deployment"` for one
+   * release after the other two kinds gained the button, so the same click
+   * answered differently depending on which surface it was on. A kind that
+   * can be rolled but not asked about would follow nothing and say nothing.
+   */
+  it("can ask about every workload it can roll", () => {
+    const rollable = Object.keys(EXPECTED).filter((kind) => kind !== "Pod");
+    expect(rollable.filter((kind) => askableKind(kind) === null)).toEqual([]);
+  });
+
+  /**
+   * The half that notices the backend growing one. Every `restart_*` the
+   * bindings export has to be claimed by a kind above; a new one fails this
+   * until somebody decides which kind it belongs to.
+   */
+  it("leaves no restart command in the bindings unclaimed", () => {
+    const exported = Object.keys(generated).filter((name) =>
+      /^restart[A-Z]/.test(name)
+    );
+    const claimed = new Set(Object.values(EXPECTED));
+    expect(exported.filter((name) => !claimed.has(name))).toEqual([]);
+    for (const [kind, command] of Object.entries(EXPECTED)) {
+      expect(generated, `${kind} names ${command}`).toHaveProperty(command!);
+    }
+  });
+});
+
+/**
+ * The page opens its dialog on `intercept !== null || critical`
+ * (delivery-intercept.tsx). The peek asked only the second half, so a restart
+ * a delivery controller would undo fired straight through from the peek and
+ * asked first on the page — the same click, two answers, which is the
+ * page <-> peek divergence CLAUDE.md names.
+ */
+describe("when a managed restart has to ask first", () => {
+  it("asks whenever the delivery controller would undo it, critical or not", () => {
+    expect(restartNeedsAsking(true, false)).toBe(true);
+    expect(restartNeedsAsking(false, true)).toBe(true);
+    expect(restartNeedsAsking(true, true)).toBe(true);
+  });
+
+  /** Nothing to warn about and nothing to gate: the one case that fires. */
+  it("fires straight through when neither applies", () => {
+    expect(restartNeedsAsking(false, false)).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
 } from "./data";
 import { facts } from "./facts";
 import { ownerOf } from "./owner";
+import { historyOf } from "./history";
 import { relatedTo } from "./related";
 
 /**
@@ -38,6 +39,7 @@ export default defineVendor({
   name: "Flux",
   provides: {
     "delivery.source": (objects) => ownerOf(objects),
+    "delivery.history": historyOf,
     "object.related": relatedTo,
   },
   extension: {

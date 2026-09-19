@@ -118,11 +118,15 @@ function actionsFor(
     case "Pod":
       return podActions(detail as PodInfo | undefined, t);
     case "Deployment":
+    case "StatefulSet":
       return [
-        ...scaleAction(kind),
-        { id: "restart", label: "Restart", icon: RefreshCw },
-        ...deleteAction(kind),
+        ...scaleAction(kind, t),
+        ...restartAction(kind, t),
+        ...deleteAction(kind, t),
       ];
+    // No replicas to scale: a DaemonSet's count is how many nodes it fits.
+    case "DaemonSet":
+      return [...restartAction(kind, t), ...deleteAction(kind, t)];
     case "Node":
       // The node page offers exactly one thing; cordon and drain exist in the
       // backend but have never had a control, and the peek is not the place
@@ -131,10 +135,10 @@ function actionsFor(
     case "Service":
       return [
         serviceForwardAction(detail as ServiceInfo | undefined, t, context),
-        ...deleteAction(kind),
+        ...deleteAction(kind, t),
       ];
     default:
-      return [...scaleAction(kind), ...deleteAction(kind)];
+      return [...scaleAction(kind, t), ...deleteAction(kind, t)];
   }
 }
 
@@ -194,9 +198,9 @@ export function scaleCommandFor(kind: string): ScaleCommand | null {
   return isScalable(kind) ? SCALE_COMMANDS[kind] : null;
 }
 
-function scaleAction(kind: ResourceKind): PeekAction[] {
+function scaleAction(kind: ResourceKind, t: T): PeekAction[] {
   if (!isScalable(kind)) return [];
-  return [{ id: "scale", label: "Scale", icon: Scale }];
+  return [{ id: "scale", label: t("action", "scale"), icon: Scale }];
 }
 
 /* ---------- Pod ---------- */
@@ -291,7 +295,7 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
           icon: RefreshCw,
           danger: true,
         },
-    ...deleteAction("Pod"),
+    ...deleteAction("Pod", t),
   ];
 }
 
@@ -355,6 +359,21 @@ const DELETE_COMMANDS: Partial<Record<ResourceKind, DeleteCommand>> = {
   Secret: (name, namespace) => commands.deleteSecret(name, namespace),
   Service: (name, namespace) => commands.deleteService(name, namespace),
   Ingress: (name, namespace) => commands.deleteIngress(name, namespace),
+  NetworkPolicy: (name, namespace) =>
+    commands.deleteNetworkPolicy(name, namespace),
+  Gateway: (name, namespace) => commands.deleteGateway(name, namespace),
+  GatewayClass: (name) => commands.deleteGatewayClass(name),
+  // The five route kinds share one command and tell it which they are.
+  HTTPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("HTTPRoute", name, namespace),
+  GRPCRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("GRPCRoute", name, namespace),
+  TLSRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("TLSRoute", name, namespace),
+  TCPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("TCPRoute", name, namespace),
+  UDPRoute: (name, namespace) =>
+    commands.deleteGatewayRoute("UDPRoute", name, namespace),
   Endpoints: (name, namespace) => commands.deleteEndpoints(name, namespace),
   PersistentVolumeClaim: (name, namespace) =>
     commands.deletePersistentVolumeClaim(name, namespace),
@@ -368,9 +387,53 @@ export function deleteCommandFor(kind: string): DeleteCommand | null {
   return (resolved && DELETE_COMMANDS[resolved]) ?? null;
 }
 
-function deleteAction(kind: ResourceKind): PeekAction[] {
+/**
+ * Rolling a workload is not one command, and the kind decides which. A kind
+ * offered Restart with no entry here used to fall through to `restartPod`,
+ * which for anything but a pod is a delete — the same word for the opposite
+ * outcome. So the offer and the command come from this one table.
+ */
+type RestartCommand = (name: string, namespace: string | null) => Promise<void>;
+
+const RESTART_COMMANDS: Partial<Record<ResourceKind, RestartCommand>> = {
+  Pod: (name, namespace) => commands.restartPod(name, namespace),
+  Deployment: (name, namespace) => commands.restartDeployment(name, namespace),
+  StatefulSet: (name, namespace) =>
+    commands.restartStatefulset(name, namespace),
+  DaemonSet: (name, namespace) => commands.restartDaemonset(name, namespace),
+};
+
+/**
+ * Whether a managed restart has to ask first.
+ *
+ * The page's rule, in one place both surfaces can read: a dialog is owed when
+ * a delivery controller would undo the restart, or when the cluster is marked
+ * critical. The peek asked only the second half, so on an ordinary cluster an
+ * Argo-managed StatefulSet restarted from the peek fired straight through
+ * while the page for the same object asked "Argo CD will undo this Restart".
+ */
+export function restartNeedsAsking(
+  intercepted: boolean,
+  criticalActive: boolean
+): boolean {
+  return intercepted || criticalActive;
+}
+
+export function restartCommandFor(kind: string): RestartCommand | null {
+  const resolved = toKind(kind);
+  return (resolved && RESTART_COMMANDS[resolved]) ?? null;
+}
+
+function restartAction(kind: ResourceKind, t: T): PeekAction[] {
+  if (!RESTART_COMMANDS[kind]) return [];
+  return [{ id: "restart", label: t("action", "restart"), icon: RefreshCw }];
+}
+
+function deleteAction(kind: ResourceKind, t: T): PeekAction[] {
   if (!DELETE_COMMANDS[kind]) return [];
-  return [{ id: "delete", label: "Delete", icon: Trash2, danger: true }];
+  return [
+    { id: "delete", label: t("action", "delete"), icon: Trash2, danger: true },
+  ];
 }
 
 /* ---------- What a confirmation has to say ---------- */

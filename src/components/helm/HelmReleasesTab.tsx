@@ -104,6 +104,17 @@ export function HelmReleasesTab({
         cell: ({ row }) => {
           const status = row.original.status;
           const suspended = row.original.suspended;
+          // A release whose secret would not decode is here by name and
+          // nothing else. Painting it with an empty status would be the
+          // silence this row exists to break.
+          const unreadable = row.original.unreadable;
+          if (unreadable) {
+            return (
+              <span className="text-[11px] text-warn" title={unreadable}>
+                {t("empty", "releaseNotRead")}
+              </span>
+            );
+          }
           return (
             <div className="flex items-center gap-1.5">
               <StatusBadge status={suspended ? "suspended" : status} showDot />
@@ -303,7 +314,6 @@ export function HelmReleasesTab({
           data={releases}
           isLoading={isLoading}
           searchPlaceholder={t("action", "searchReleases")}
-          searchKey="name"
           getRowId={getHelmReleaseRowId}
           getRowHref={helmReleaseHref}
         />

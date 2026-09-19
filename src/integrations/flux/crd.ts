@@ -5,49 +5,13 @@
  * pages read, so these are where its chart, version and source actually are.
  */
 
-import type { CrdColumn, CrdStatus } from "../kit";
+import type { CrdColumn } from "../kit";
 import { getValueByPath, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
 
 /**
  * Status configuration for Flux resources (uses standard conditions)
  */
-const fluxStatusConfig: CrdStatus = {
-  getStatus: (resource) => {
-    const conditions = getValueByPath(resource, "status.conditions") as
-      Array<{ type: string; status: string; reason?: string }> | undefined;
-
-    if (!Array.isArray(conditions)) return null;
-
-    const readyCondition = conditions.find((c) => c.type === "Ready");
-    if (readyCondition) {
-      if (readyCondition.status === "True") return "Ready";
-      if (readyCondition.reason === "Progressing") return "Progressing";
-      return "NotReady";
-    }
-
-    const stalledCondition = conditions.find((c) => c.type === "Stalled");
-    if (stalledCondition?.status === "True") return "Stalled";
-
-    return "Unknown";
-  },
-  getVariant: (status) => {
-    switch (status.toLowerCase()) {
-      case "ready":
-        return "default";
-      case "progressing":
-      case "reconciling":
-        return "secondary";
-      case "notready":
-      case "stalled":
-      case "failed":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  },
-};
-
 /**
  * Columns for HelmRelease list
  */
@@ -286,5 +250,4 @@ export const crd: CrdView = {
         return helmReleaseColumns;
     }
   },
-  status: fluxStatusConfig,
 };

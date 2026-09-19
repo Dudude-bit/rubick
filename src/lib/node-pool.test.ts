@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
 import type { NodeInfo } from "@/generated/types";
 import {
   describePool,
@@ -10,6 +13,9 @@ import {
   spotMark,
   statesPlacement,
 } from "./node-pool";
+
+/** The English catalogue, so these assertions read as the screen does. */
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 function node(
   labels: Record<string, string>,
@@ -257,7 +263,7 @@ describe("a pool whose nodes disagree", () => {
       inZone("europe-west1-c"),
     ]);
     expect(facts.zones).toEqual(["europe-west1-b", "europe-west1-c"]);
-    expect(describePool(facts)).toBe(
+    expect(describePool(facts, t)).toBe(
       "e2-standard-4 · europe-west1-b, -c · 2 nodes"
     );
   });
@@ -268,7 +274,7 @@ describe("a pool whose nodes disagree", () => {
       inZone("us-east-1a", "m5.large"),
       inZone("us-east-1a", "m5.xlarge"),
     ]);
-    expect(describePool(facts)).toBe(
+    expect(describePool(facts, t)).toBe(
       "m5.large, m5.xlarge · us-east-1a · 2 nodes"
     );
   });
@@ -280,7 +286,9 @@ describe("a pool whose nodes disagree", () => {
         inZone("us-east-1a", machine)
       )
     );
-    expect(describePool(facts)).toBe("4 machine types · us-east-1a · 4 nodes");
+    expect(describePool(facts, t)).toBe(
+      "4 machine types · us-east-1a · 4 nodes"
+    );
   });
 
   /**
@@ -290,22 +298,22 @@ describe("a pool whose nodes disagree", () => {
    */
   it("counts the spot nodes when only some of them are spot", () => {
     expect(
-      spotMark(poolFacts([inZone("a", "m", true), inZone("a", "m", false)]))
+      spotMark(poolFacts([inZone("a", "m", true), inZone("a", "m", false)]), t)
     ).toBe("1 of 2 spot");
     expect(
-      spotMark(poolFacts([inZone("a", "m", true), inZone("a", "m", true)]))
+      spotMark(poolFacts([inZone("a", "m", true), inZone("a", "m", true)]), t)
     ).toBe("spot");
   });
 
   /** No label saying spot is not the same as a label saying on demand. */
   it("marks nothing when nothing said spot", () => {
-    expect(spotMark(poolFacts([inZone("a")]))).toBe(null);
+    expect(spotMark(poolFacts([inZone("a")]), t)).toBe(null);
   });
 
   /** A pool that only names itself still says how big it is. */
   it("drops the facets the cluster did not state", () => {
     const bare = node({ "eks.amazonaws.com/nodegroup": "workers" });
-    expect(describePool(poolFacts([bare]))).toBe("1 node");
+    expect(describePool(poolFacts([bare]), t)).toBe("1 node");
   });
 });
 

@@ -76,7 +76,11 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     // "4 params", with the pairs themselves in the tooltip.
     size: 110,
-    accessorKey: "parameters",
+    id: "parameters",
+    accessorFn: (row) =>
+      Object.entries(row.parameters)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" "),
     header: () => <T section="columns" k="parameters" />,
     cell: ({ row }) => {
       const params = Object.entries(row.original.parameters);
@@ -107,7 +111,6 @@ export const StorageClassList = createResourceListPage<StorageClassInfo>({
   title: "Storage Classes",
   description: ({ t }) => t("empty", "storageClassesAre"),
   scope: "cluster",
-  searchKey: "name",
   fetcher: () => commands.listStorageClasses(null),
   watch: () => commands.subscribeStorageclassWatch(),
   deleter: (item) => commands.deleteStorageClass(item.name),

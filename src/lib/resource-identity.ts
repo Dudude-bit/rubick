@@ -120,3 +120,14 @@ export function kindHue(kind: string): number {
   if (!resolved) return NEUTRAL_HUE;
   return KIND_HUES.get(resolved) ?? NEUTRAL_HUE;
 }
+
+/**
+ * Where a CRD list files the widths a reader dragged.
+ *
+ * The plural alone collides: `certificates` belongs to cert-manager and to
+ * Knative, with different columns behind the same word, so one list would
+ * open wearing the other's widths. The group is what tells them apart.
+ */
+export function crdWidthsKey(plural: string, group: string): string {
+  return `${plural}.${group}`;
+}

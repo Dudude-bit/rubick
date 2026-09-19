@@ -139,40 +139,60 @@ export function ResourceName({
         aria-hidden="true"
         data-testid="resource-ref-icon"
       />
+      {/* The tail is the part that says *which* object this is — a pod's
+          generated suffix, a ReplicaSet's template hash — and truncating the
+          name as one run is what hid it. A long shared prefix then filled
+          the column and every row ended in the same ellipsis. Everything up
+          to the tail shrinks and ellipses; the tail does not shrink at all.
+          Where `splitName` finds no tail this is exactly what it was. */}
       <span
-        className={cn("truncate font-mono", RESOURCE_NAME_SIZE[size])}
+        className={cn(
+          // `overflow-hidden` is not decoration: it is the clipping the
+          // single `truncate` used to do for the whole name. Without it a
+          // tail that cannot shrink paints outside its box — over the copy
+          // mark in a list cell, over the next column, and into a scrollbar
+          // in the peek. Narrower than the tail it is now cut instead, which
+          // only happens below any width a column can be dragged to.
+          "flex min-w-0 overflow-hidden whitespace-nowrap font-mono",
+          RESOURCE_NAME_SIZE[size]
+        )}
         data-testid="resource-ref-name"
       >
-        {namespace && (
-          <span className="text-fg-fnt" data-testid="resource-ref-namespace">
-            {namespace}/
-          </span>
-        )}
-        {/* The kind reaches a screen reader either way — when it is shown as
-            an icon only, the text still has to name it. */}
-        {showKind ? (
-          <>
-            <span
-              className={cn(colouring !== "full" && "text-fg-mut")}
-              style={colouring === "full" ? kindStyle : undefined}
-              data-testid="resource-ref-kind"
-            >
-              {kind}
+        <span className="truncate">
+          {namespace && (
+            <span className="text-fg-fnt" data-testid="resource-ref-namespace">
+              {namespace}/
             </span>
-            <span className="text-fg-fnt">/</span>
-          </>
-        ) : (
-          <span className="sr-only">{kind} </span>
-        )}
-        <span
-          className={stemClass}
-          style={stemStyle}
-          data-testid="resource-ref-stem"
-        >
-          {stem}
+          )}
+          {/* The kind reaches a screen reader either way — when it is shown as
+            an icon only, the text still has to name it. */}
+          {showKind ? (
+            <>
+              <span
+                className={cn(colouring !== "full" && "text-fg-mut")}
+                style={colouring === "full" ? kindStyle : undefined}
+                data-testid="resource-ref-kind"
+              >
+                {kind}
+              </span>
+              <span className="text-fg-fnt">/</span>
+            </>
+          ) : (
+            <span className="sr-only">{kind} </span>
+          )}
+          <span
+            className={stemClass}
+            style={stemStyle}
+            data-testid="resource-ref-stem"
+          >
+            {stem}
+          </span>
         </span>
         <span
-          className={tailClass}
+          // Never shrinks, so the stem gives up its room first — but capped
+          // at the box, so a tail that alone exceeds it is ellipsised rather
+          // than cut mid-hash into something that reads like a whole name.
+          className={cn("max-w-full flex-none truncate", tailClass)}
           style={tailStyle}
           data-testid="resource-ref-tail"
         >
