@@ -403,6 +403,22 @@ const RESTART_COMMANDS: Partial<Record<ResourceKind, RestartCommand>> = {
   DaemonSet: (name, namespace) => commands.restartDaemonset(name, namespace),
 };
 
+/**
+ * Whether a managed restart has to ask first.
+ *
+ * The page's rule, in one place both surfaces can read: a dialog is owed when
+ * a delivery controller would undo the restart, or when the cluster is marked
+ * critical. The peek asked only the second half, so on an ordinary cluster an
+ * Argo-managed StatefulSet restarted from the peek fired straight through
+ * while the page for the same object asked "Argo CD will undo this Restart".
+ */
+export function restartNeedsAsking(
+  intercepted: boolean,
+  criticalActive: boolean
+): boolean {
+  return intercepted || criticalActive;
+}
+
 export function restartCommandFor(kind: string): RestartCommand | null {
   const resolved = toKind(kind);
   return (resolved && RESTART_COMMANDS[resolved]) ?? null;

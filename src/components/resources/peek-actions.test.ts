@@ -8,6 +8,7 @@ import type { T } from "@/i18n/useT";
 import type { ContainerState, PodInfo, ServiceInfo } from "@/generated/types";
 import {
   restartCommandFor,
+  restartNeedsAsking,
   deleteCommandFor,
   describeBareRestart,
   describeDeletion,
@@ -574,5 +575,25 @@ describe("the peek's restart table against the commands that exist", () => {
     for (const [kind, command] of Object.entries(EXPECTED)) {
       expect(generated, `${kind} names ${command}`).toHaveProperty(command!);
     }
+  });
+});
+
+/**
+ * The page opens its dialog on `intercept !== null || critical`
+ * (delivery-intercept.tsx). The peek asked only the second half, so a restart
+ * a delivery controller would undo fired straight through from the peek and
+ * asked first on the page — the same click, two answers, which is the
+ * page <-> peek divergence CLAUDE.md names.
+ */
+describe("when a managed restart has to ask first", () => {
+  it("asks whenever the delivery controller would undo it, critical or not", () => {
+    expect(restartNeedsAsking(true, false)).toBe(true);
+    expect(restartNeedsAsking(false, true)).toBe(true);
+    expect(restartNeedsAsking(true, true)).toBe(true);
+  });
+
+  /** Nothing to warn about and nothing to gate: the one case that fires. */
+  it("fires straight through when neither applies", () => {
+    expect(restartNeedsAsking(false, false)).toBe(false);
   });
 });

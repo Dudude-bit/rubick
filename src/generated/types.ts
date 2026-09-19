@@ -1421,6 +1421,7 @@ export interface DaemonSetInfo {
   desired: number;
   current: number;
   ready: number;
+  updated: number;
   containerImages: ContainerImage[];
   templateAnnotations: Record<string, string>;
   generation: number | null;
@@ -1458,6 +1459,7 @@ export interface StatefulSetReplicaInfo {
   desired: number;
   ready: number;
   current: number;
+  updated: number;
 }
 
 export interface StatefulSetInfo {

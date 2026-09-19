@@ -146,16 +146,23 @@ describe("a pod", () => {
   });
 });
 
+/** `updated` follows `current` here: these cases are about reaching the count. */
 function statefulSet(
   ready: number,
   current: number,
-  desired = 3
+  desired = 3,
+  updated = current
 ): StatefulSetInfo {
-  return { replicas: { desired, ready, current } } as StatefulSetInfo;
+  return { replicas: { desired, ready, current, updated } } as StatefulSetInfo;
 }
 
-function daemonSet(ready: number, current: number, desired = 3): DaemonSetInfo {
-  return { desired, current, ready } as DaemonSetInfo;
+function daemonSet(
+  ready: number,
+  current: number,
+  desired = 3,
+  updated = current
+): DaemonSetInfo {
+  return { desired, current, ready, updated } as DaemonSetInfo;
 }
 
 describe("a statefulset or daemonset", () => {
@@ -516,6 +523,68 @@ describe("an action being followed", () => {
     ]);
     expect(theirs.detail).toBe("ReplicaSet has timed out progressing.");
   });
+
+  /**
+   * The two kinds whose only counts are `desired`/`ready`/`current`, all of
+   * which are already satisfied the instant the template changes. The
+   * controller's first status write after a restart carries
+   * `observedGeneration` caught up and every pod still Ready — it has only
+   * *requested* the first deletion — so without `updated` the watch answered
+   * "rolled out, 3 of 3 ready" while all three pods were the old ones.
+   *
+   * Under `updateStrategy: OnDelete` it is not a race but a certainty:
+   * nothing ever rolls, and every count except `updated` sits at `desired`
+   * forever. Verified on kind — `kubectl rollout restart` on an OnDelete
+   * StatefulSet bumps the generation, the status catches up, and the pod is
+   * not replaced.
+   */
+  it.each([
+    [
+      "StatefulSet",
+      (updated: number) => ({
+        name: "payments",
+        namespace: "shop",
+        generation: 5,
+        observedGeneration: 5,
+        replicas: { desired: 3, ready: 3, current: 3, updated },
+      }),
+    ],
+    [
+      "DaemonSet",
+      (updated: number) => ({
+        name: "payments",
+        namespace: "shop",
+        generation: 5,
+        observedGeneration: 5,
+        desired: 3,
+        ready: 3,
+        current: 3,
+        updated,
+      }),
+    ],
+  ])(
+    "holds a %s restart until the pods are on the new template",
+    (kind, look) => {
+      const watch = {
+        ...watchOn(kind as Watch["kind"], "rollout"),
+        after: {
+          action: "restart" as const,
+          replicas: null,
+          generationBefore: 4,
+        },
+        deadline: 120_000,
+      };
+      // Every count at `desired` except the one that says which template.
+      expect(walk(watch, [look(0)])).toEqual([]);
+      expect(walk(watch, [look(2)])).toEqual([]);
+      expect(walk(watch, [look(3)])).toEqual([
+        {
+          says: "rolledOut",
+          detail: { key: "rolloutSeen", values: { ready: 3, desired: 3 } },
+        },
+      ]);
+    }
+  );
 
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
