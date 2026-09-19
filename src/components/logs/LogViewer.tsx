@@ -1195,6 +1195,9 @@ export function LogViewer({
 
   const handleCopyLogs = useCallback(() => {
     if (visibleLogs.length === 0) return;
+    // Not while the filter is still walking: what is here is how far it got,
+    // and copying it would hand over a subset with a count stated as fact.
+    if (settling) return;
     copyToClipboard(
       logsToText(visibleLogs),
       t("count", "linesCopied", {
@@ -1202,7 +1205,7 @@ export function LogViewer({
         count: formatCount(visibleLogs.length),
       })
     );
-  }, [copyToClipboard, visibleLogs, t]);
+  }, [copyToClipboard, visibleLogs, settling, t]);
 
   const shownContainers = useMemo(
     () => (lanes ? containers : containers.filter((name) => !hidden.has(name))),
@@ -1284,8 +1287,12 @@ export function LogViewer({
   ]);
 
   // What the reader is not being shown: dropped by the query or by the
-  // legend, plus the lines standing behind a collapsed run.
-  const hiddenByView = retained - visibleLogs.length + collapsedCount;
+  // legend, plus the lines standing behind a collapsed run. Nothing while
+  // the walk is on — every line it has not reached yet would be counted as
+  // one the filter rejected, which is a number about work not yet done.
+  const hiddenByView = settling
+    ? 0
+    : retained - visibleLogs.length + collapsedCount;
 
   // Offered where it can answer. The kubelet sets `lastTerminated` for
   // exactly the container instances whose logs `--previous` still
@@ -1474,6 +1481,7 @@ export function LogViewer({
           logs={scoped}
           scope={scopeKey}
           retained={retained}
+          settling={settling}
           lost={lost}
           intake={intake.length > 0}
           selection={timeRange}

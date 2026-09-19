@@ -128,7 +128,13 @@ export function useFilteredLogs(
   terms: readonly QueryTerm[],
   laneOf: (line: StreamedLogLine) => string
 ): FilteredLogs {
-  const key = `${[...hidden].sort().join(",")}|${terms.map(termLabel).join(",")}`;
+  // `termLabel` is the reader's rendering, and it draws the typed text
+  // `level=error` and the parsed level filter identically — so a key built
+  // from it does not notice Enter, which is the moment one becomes the
+  // other. The kind goes in the key too.
+  const key = `${[...hidden].sort().join(",")}|${terms
+    .map((term) => `${term.kind}:${termLabel(term)}`)
+    .join(",")}`;
   const [pass, setPass] = useState<Pass>(() =>
     started(key, logs, hidden, terms, laneOf)
   );

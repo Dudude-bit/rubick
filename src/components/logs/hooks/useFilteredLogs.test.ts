@@ -156,6 +156,54 @@ describe("useFilteredLogs", () => {
   });
 
   /**
+   * The legend is half of what the pass filters on, and it was not in the
+   * key: hiding a container mid-stream left the pass built for the old set
+   * in place, so the lines went on being shown until something else — a
+   * query change — happened to restart it.
+   */
+  it("starts over when the legend hides something", () => {
+    const logs = [
+      { ...line(1, "hit a"), container: "app" },
+      { ...line(2, "hit b"), container: "sidecar" },
+    ] as StreamedLogLine[];
+    const { result, rerender } = renderHook(
+      ({ hidden }) => useFilteredLogs(logs, hidden, HIT, BY_CONTAINER),
+      { initialProps: { hidden: NONE as ReadonlySet<string> } }
+    );
+    expect(result.current.scoped.map((l) => l.id)).toEqual([1, 2]);
+
+    rerender({ hidden: new Set(["sidecar"]) });
+    expect(result.current.scoped.map((l) => l.id)).toEqual([1]);
+  });
+
+  /**
+   * `termLabel` is for the reader's eye, and it renders the text `level=error`
+   * and the parsed level filter as the same string. Keyed on it, pressing
+   * Enter — which is exactly when a typed term becomes a real one — left the
+   * old pass in place, so the list went on matching the words rather than
+   * the level, for as long as the query stood.
+   */
+  it("starts over when a typed term becomes a real one on Enter", () => {
+    const logs = [
+      { ...line(1, "level=error in the message"), level: "info" },
+      { ...line(2, "nothing special"), level: "error" },
+    ] as StreamedLogLine[];
+    const typed: QueryTerm[] = [{ kind: "text", value: "level=error" }];
+    const parsed: QueryTerm[] = [{ kind: "level", op: "=", value: "error" }];
+
+    const { result, rerender } = renderHook(
+      ({ terms }) => useFilteredLogs(logs, NONE, terms, BY_CONTAINER),
+      { initialProps: { terms: typed } }
+    );
+    // Typed: the words are what match.
+    expect(result.current.scoped.map((l) => l.id)).toEqual([1]);
+
+    rerender({ terms: parsed });
+    // Parsed: the level is.
+    expect(result.current.scoped.map((l) => l.id)).toEqual([2]);
+  });
+
+  /**
    * What the legend hides is a lane, and a lane is the pod when the pane
    * shows several and the container otherwise. Filtering on `container`
    * regardless would leave a hidden pod's lines on screen in the view that
