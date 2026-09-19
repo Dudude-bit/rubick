@@ -39,6 +39,8 @@ const COOLDOWN: Duration = Duration::from_mins(5);
 /// Watches nobody has asked for this long are stopped.
 const IDLE_AFTER: Duration = Duration::from_mins(3);
 const REAP_EVERY: Duration = Duration::from_secs(30);
+/// How often the wait for readiness looks at whether a kind has given up.
+const BROKEN_POLL: Duration = Duration::from_millis(250);
 /// The first request waits this long for the stores to fill before listing.
 const READY_TIMEOUT: Duration = Duration::from_mins(1);
 /// Just under the five minutes kube used to enforce; see `watch::WATCH_TIMEOUT_SECS`.
@@ -138,7 +140,18 @@ impl OverviewCache {
             .entry(context.to_string())
             .or_insert_with(|| Arc::new(self.start(context, client())))
             .clone();
-        let ready = tokio::time::timeout(READY_TIMEOUT, watch.wait_until_ready()).await;
+        // Health is consulted *while* waiting, not after it. A watch the
+        // cluster refuses never becomes ready, so waiting the whole minute
+        // first meant a refused kind cost every overview request a minute
+        // before falling back to listing — and the requests come every ten
+        // seconds. The cache knows it is broken within a couple of retries.
+        let ready = tokio::time::timeout(READY_TIMEOUT, async {
+            tokio::select! {
+                ready = watch.wait_until_ready() => ready,
+                () = watch.until_broken() => false,
+            }
+        })
+        .await;
         match ready {
             Ok(true) => {}
             Ok(false) | Err(_) => return None,
@@ -160,10 +173,16 @@ impl OverviewCache {
     }
 
     /// Stop and drop the watches of one cluster; the next request starts them again.
+    ///
+    /// The cooldown goes with them, or "starts them again" would be false:
+    /// a cluster dropped after ten failures holds a five-minute pause, and
+    /// a reader who reconnects — the one event that plausibly fixes what
+    /// failed — would keep listing for the rest of it.
     pub fn forget(&self, context: &str) {
         if let Some((_, watch)) = self.clusters.remove(context) {
             watch.stop.cancel();
         }
+        self.cooldown.remove(context);
     }
 
     pub fn forget_all(&self) {
@@ -171,6 +190,7 @@ impl OverviewCache {
             entry.value().stop.cancel();
         }
         self.clusters.clear();
+        self.cooldown.clear();
     }
 
     /// The watches this process holds, for diagnostics.
@@ -253,6 +273,20 @@ impl OverviewCache {
 impl ClusterWatch {
     /// True once every store has its first list; false when a writer was
     /// dropped, which is the cluster being forgotten mid-wait.
+    /// Resolves once any kind has failed often enough to stop serving.
+    ///
+    /// Polled rather than signalled: the streaks are behind a mutex the
+    /// drivers already take on every error, and a watcher channel for a
+    /// question asked once per request is more machinery than it saves.
+    async fn until_broken(&self) {
+        loop {
+            if !self.health.lock().serves() {
+                return;
+            }
+            tokio::time::sleep(BROKEN_POLL).await;
+        }
+    }
+
     async fn wait_until_ready(&self) -> bool {
         let all = tokio::join!(
             self.pods.wait_until_ready(),
@@ -466,5 +500,38 @@ mod tests {
             cache.cooldown.get("prod").is_none(),
             "an expired cooldown is forgotten"
         );
+    }
+
+    /// Forgetting is what a reconnect does, and it is the one event that
+    /// plausibly fixes whatever made the watches give up. Leaving the
+    /// cooldown behind made `forget`'s own promise — "the next request
+    /// starts them again" — false for the next five minutes.
+    #[test]
+    fn forgetting_a_cluster_lifts_the_pause_it_was_holding() {
+        let cache = OverviewCache::default();
+        cache
+            .cooldown
+            .insert("prod".to_string(), Instant::now() + COOLDOWN);
+        assert!(cache.cooling_down("prod"));
+
+        cache.forget("prod");
+        assert!(
+            !cache.cooling_down("prod"),
+            "a reconnect has to be able to start the watches again"
+        );
+    }
+
+    /// The same for the whole-window teardown, which a kubeconfig change runs.
+    #[test]
+    fn forgetting_every_cluster_lifts_every_pause() {
+        let cache = OverviewCache::default();
+        for context in ["prod", "dev"] {
+            cache
+                .cooldown
+                .insert(context.to_string(), Instant::now() + COOLDOWN);
+        }
+        cache.forget_all();
+        assert!(!cache.cooling_down("prod"));
+        assert!(!cache.cooling_down("dev"));
     }
 }

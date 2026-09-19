@@ -318,6 +318,11 @@ pub fn disconnect_cluster(context: String, state: State<'_, AppState>) -> Result
     state.renew_manager.forget(&context);
     state.client_manager.disconnect(&context);
     state.remove_session(&context);
+    // The overview's watches too. They are cluster-wide and long-lived, and
+    // `connect_cluster` already forgets them; leaving this one out meant a
+    // cluster the reader left went on streaming five of them on a client
+    // that was just disconnected.
+    state.overview_cache.forget(&context);
 
     // Clear current context if it matches
     if state.get_current_context().as_ref() == Some(&context) {

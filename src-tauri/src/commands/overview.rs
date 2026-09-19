@@ -2035,7 +2035,68 @@ mod tests {
         assert_eq!(whole.deployments.len(), 2);
         assert_eq!(whole.jobs.len(), 1);
         assert_eq!(whole.events.len(), 2);
-        assert_eq!(snapshot.nodes.len(), 2, "nodes are never projected");
+    }
+
+    /// What the line above used to claim, asserted where it can fail.
+    ///
+    /// `project` takes the snapshot by reference and returns no nodes at
+    /// all, so `snapshot.nodes.len()` was the test's own input read back:
+    /// no edit to the projection or to `from_snapshot` could move it.
+    /// Reserved capacity is the *cluster's* number — a namespace's requests
+    /// over every node's allocatable — and narrowing the nodes to the
+    /// namespace is the mistake this exists to catch.
+    #[tokio::test]
+    async fn the_capacity_view_stays_the_whole_clusters_however_the_scope_narrows() {
+        let snapshot = Snapshot {
+            pods: arcs([
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("data"),
+            ]),
+            nodes: arcs([Node::default(), Node::default()]),
+            deployments: arcs([]),
+            jobs: arcs([]),
+            events: arcs([]),
+        };
+        // A client that never connects: `from_snapshot` reads only the
+        // namespace off the context, and the stores are already in hand.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let nowhere = || {
+            let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
+            kube::Client::try_from(config).expect("a client that never connects")
+        };
+        let sides = || Sides {
+            counts: ResourceCounts::default(),
+            usage_by_node: None,
+        };
+
+        let scoped = from_snapshot(
+            &ResourceContext {
+                client: nowhere(),
+                namespace: Some("app".to_string()),
+            },
+            &snapshot,
+            sides(),
+        );
+        let whole = from_snapshot(
+            &ResourceContext {
+                client: nowhere(),
+                namespace: None,
+            },
+            &snapshot,
+            sides(),
+        );
+
+        assert!(
+            !whole.nodes.is_empty(),
+            "the assertion is worthless if there were no nodes to lose"
+        );
+        assert_eq!(
+            scoped.nodes.len(),
+            whole.nodes.len(),
+            "a namespace does not have fewer nodes than its cluster"
+        );
+        assert!(scoped.nodes_known, "the stores serve only while every watch is healthy");
     }
 
     /// The stores hold objects with their bulk stripped; every fact the
