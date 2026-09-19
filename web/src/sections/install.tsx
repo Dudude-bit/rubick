@@ -232,6 +232,11 @@ export function Install() {
                 fallbackLabel="Rubick.rpm"
                 meta="Fedora, openSUSE"
               />
+              <DownloadRow
+                asset={assets.flatpak}
+                fallbackLabel="Rubick.flatpak"
+                meta="RHEL 8, and anywhere old"
+              />
             </div>
             <Comment>
               Arch:{" "}
@@ -249,6 +254,17 @@ export function Install() {
                 @Prototik
               </a>{" "}
               from the same .deb we publish. Thanks to him for it.
+            </Comment>
+            <Comment>
+              On RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — take the
+              Flatpak. The others cannot run there: the .rpm wants a WebKitGTK
+              that platform has no package for, and the AppImage, which brings
+              its own, still needs a newer glibc than it has. The Flatpak runs
+              on a runtime that has both, and fetches it from Flathub the first
+              time you install — several hundred megabytes, once.{" "}
+              <code className="text-neutral-300">
+                flatpak install ./Rubick-*.flatpak
+              </code>
             </Comment>
           </Panel>
         </div>

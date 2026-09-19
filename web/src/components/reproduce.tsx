@@ -2,7 +2,44 @@ import { CommandLine } from "./command-line";
 import { Reveal } from "./motion/reveal";
 import { LINKS } from "../lib/site";
 
-export function ReproducePanel({ className = "" }: { className?: string }) {
+export function ReproducePanel({
+  className = "",
+  own,
+}: {
+  className?: string;
+  /** A lie the shared cluster cannot show brings its own recipe. */
+  own?: {
+    heading: string;
+    blurb: string;
+    commands: string[];
+    note: string;
+  };
+}) {
+  if (own) {
+    return (
+      <Reveal
+        className={`rounded-xl border border-neutral-800 bg-neutral-900/60 p-6 md:p-8 ${className}`}
+      >
+        <p className="text-accent font-mono text-sm tracking-widest uppercase">
+          Reproduce it
+        </p>
+        <h3 className="mt-3 font-display text-2xl font-bold tracking-tight md:text-3xl">
+          {own.heading}
+        </h3>
+        <p className="mt-4 max-w-2xl text-neutral-400">{own.blurb}</p>
+        <div className="mt-6 flex flex-col gap-3">
+          {own.commands.map((command) => (
+            <CommandLine key={command} command={command} />
+          ))}
+        </div>
+        <p className="mt-6 font-mono text-sm text-neutral-500">{own.note}</p>
+      </Reveal>
+    );
+  }
+  return inner(className);
+}
+
+function inner(className: string) {
   return (
     <Reveal
       className={`rounded-xl border border-neutral-800 bg-neutral-900/60 p-6 md:p-8 ${className}`}
@@ -11,17 +48,17 @@ export function ReproducePanel({ className = "" }: { className?: string }) {
         Reproduce them
       </p>
       <h3 className="mt-3 font-display text-2xl font-bold tracking-tight md:text-3xl">
-        Three lies, one throwaway cluster.
+        Three of them, one throwaway cluster.
       </h3>
       <p className="mt-4 max-w-2xl text-neutral-400">
-        kind or k3d is enough, and no ingress controller is needed: the lies
-        live in the objects, not in the traffic. You get a pod whose phase is
-        Running while its only container crashes on every start, with the
-        ConfigMap, Secret and volume its page will list, a Service whose three
-        pods are Ready and which publishes no port next to a twin Service on the
-        same pods that publishes fine, and one host with four paths: one
-        healthy, one behind the crashlooping pod, one behind the mistyped port,
-        one pointing at a Service that does not exist.
+        kind or k3d is enough for these three, and no ingress controller is
+        needed: the lies live in the objects, not in the traffic. You get a pod
+        whose phase is Running while its only container crashes on every start,
+        with the ConfigMap, Secret and volume its page will list, a Service
+        whose three pods are Ready and which publishes no port next to a twin
+        Service on the same pods that publishes fine, and one host with four
+        paths: one healthy, one behind the crashlooping pod, one behind the
+        mistyped port, one pointing at a Service that does not exist.
       </p>
       <div className="mt-6 flex flex-col gap-3">
         <CommandLine command={`kubectl apply -f ${LINKS.lies}`} />

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { splitName, identHue, kindHue } from "./resource-identity";
+import {
+  splitName,
+  identHue,
+  kindHue,
+  crdWidthsKey,
+} from "./resource-identity";
 
 describe("splitName", () => {
   it("splits a ReplicaSet hash and pod suffix", () => {
@@ -173,5 +178,27 @@ describe("kindHue", () => {
 
   it("falls back for an unknown kind", () => {
     expect(kindHue("Frobnicator")).toBe(kindHue("Node"));
+  });
+});
+
+describe("where a CRD list files its column widths", () => {
+  /**
+   * `certificates` is cert-manager's and Knative's alike, with different
+   * printer columns behind the same word. Keyed on the plural alone, the
+   * widths a reader dragged on one opened the other with columns sized for
+   * a table it has never seen — and nothing about it looks broken, so
+   * nobody reports it.
+   */
+  it("tells two kinds sharing a plural apart by their group", () => {
+    expect(crdWidthsKey("certificates", "cert-manager.io")).not.toBe(
+      crdWidthsKey("certificates", "networking.internal.knative.dev")
+    );
+  });
+
+  /** The same list on two visits has to find what it stored last time. */
+  it("gives one kind the same key every time", () => {
+    expect(crdWidthsKey("certificates", "cert-manager.io")).toBe(
+      crdWidthsKey("certificates", "cert-manager.io")
+    );
   });
 });

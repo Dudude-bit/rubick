@@ -20,7 +20,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
-import { usePeek, type PeekTarget } from "@/hooks/usePeek";
+import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import {
@@ -38,7 +38,8 @@ import type { KeyValue } from "./key-values";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
-import { DeliveryMarks } from "./delivery";
+import { CopyName } from "./CopyName";
+import { DeliveryMarks, HelmMark } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
@@ -171,12 +172,21 @@ function PeekContent({
   // A custom resource has a page of its own too — the CRD's instance route —
   // so it gets the same Open full page and the same Enter shortcut.
   const routable = !!target.crd || isRoutableKind(target.kind, namespace);
-  const openFullPage = () =>
-    navigate(
-      target.crd
-        ? getCustomResourceUrl(target.crd, target.name, namespace)
-        : getResourceDetailUrl(target.kind, target.name, namespace)
-    );
+  // The tab the reader is on comes along: leaving Logs for the page and
+  // landing on Overview is a second click nobody asked for.
+  //
+  // Through `pageTab`, because the two sides do not spell every tab the
+  // same. The peek calls a workload's pods `children` — one arm serving
+  // Pods and a CronJob's Jobs — and no detail page has a tab by that name,
+  // so the reader landed on Overview anyway and the address kept a
+  // `?tab=children` the tab then recorded as its route.
+  const openFullPage = () => {
+    const path = target.crd
+      ? getCustomResourceUrl(target.crd, target.name, namespace)
+      : getResourceDetailUrl(target.kind, target.name, namespace);
+    const tab = pageTab(activeTab, target.kind);
+    navigate(tab === null ? path : `${path}?tab=${tab}`);
+  };
 
   // Enter is the panel's shortcut, not the focused control's — once the
   // reader has tabbed onto a button, that button owns the key.
@@ -218,17 +228,25 @@ function PeekContent({
       />
 
       <header className="flex-none px-3.5 pb-2 pt-3 pr-9">
-        <SheetTitle className="flex min-w-0 items-center">
-          <ResourceRef
-            kind={target.kind}
-            name={target.name}
-            namespace={namespace}
-            crd={target.crd}
-            showKind={false}
-            size="title"
-            className="font-semibold"
-          />
-        </SheetTitle>
+        {/* The mark sits beside the title, not inside it. Radix points the
+            dialog's `aria-labelledby` at `SheetTitle`, so a button in there
+            makes the panel announce itself as "<name> Copy name: <name>" —
+            a cost the list row and the detail heading do not pay, because
+            nothing reads those as a label. */}
+        <div className="group/name flex min-w-0 items-center gap-1">
+          <SheetTitle className="flex min-w-0 items-center">
+            <ResourceRef
+              kind={target.kind}
+              name={target.name}
+              namespace={namespace}
+              crd={target.crd}
+              showKind={false}
+              size="title"
+              className="font-semibold"
+            />
+          </SheetTitle>
+          <CopyName name={target.name} />
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
               report and draws nothing; `null` is a kind that has one and
@@ -258,6 +276,7 @@ function PeekContent({
             </>
           )}
           <DeliveryMarks deliveries={deliveries} />
+          <HelmMark object={data} />
         </div>
         <PeekActions
           target={target}

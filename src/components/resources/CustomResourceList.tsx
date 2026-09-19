@@ -13,11 +13,13 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
+import { drawnSeparately } from "./printer-columns";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "@/components/resources/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
+import { crdWidthsKey } from "@/lib/resource-identity";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useToast } from "@/components/ui/use-toast";
@@ -159,8 +161,7 @@ export function CustomResourceList({
     } else {
       // Fallback to printer columns from CRD
       for (const pc of printerColumns) {
-        // Skip NAME and AGE as we handle them separately
-        if (pc.name === "NAME" || pc.name === "AGE") continue;
+        if (drawnSeparately(pc.name)) continue;
 
         cols.push({
           size: UNKNOWN_COLUMN_SIZE,
@@ -251,6 +252,7 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
+      widthsKey={crdWidthsKey(crdPlural, crdGroup)}
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.
@@ -276,7 +278,6 @@ export function CustomResourceList({
       refresh={watchFailed || !watchEnabled ? "resourceList" : false}
       live={watchEnabled && !watchFailed}
       resyncing={resyncing}
-      searchKey="name"
       searchPlaceholder={t("action", "searchKindPlaceholder", {
         kind: crdKind,
       })}

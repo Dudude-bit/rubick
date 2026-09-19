@@ -77,6 +77,43 @@ where
     Ok(())
 }
 
+/// Roll every pod of a workload, the way `kubectl rollout restart` does.
+///
+/// There is no restart verb in the API: the controller is asked to roll
+/// because its pod template changed, and the change is a timestamp nothing
+/// else reads. A strategic-merge patch so the annotation joins whatever the
+/// template already carries rather than replacing the map.
+pub async fn restart_resource<K>(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()>
+where
+    K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>
+        + Clone
+        + std::fmt::Debug
+        + serde::de::DeserializeOwned,
+    K::DynamicType: Default,
+{
+    let ctx = ResourceContext::for_command(&state, namespace)?;
+    let patch = serde_json::json!({
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "kubectl.kubernetes.io/restartedAt":
+                            chrono::Utc::now().to_rfc3339()
+                    }
+                }
+            }
+        }
+    });
+    ctx.namespaced_api::<K>()
+        .patch(&name, &PatchParams::default(), &Patch::Strategic(&patch))
+        .await?;
+    Ok(())
+}
+
 /// List namespaced resources with common filters
 pub async fn list_resources<K>(
     namespace: Option<String>,

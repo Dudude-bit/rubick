@@ -22,6 +22,7 @@ import type {
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
+  ControllerRevisionInfo,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -70,6 +71,7 @@ import type {
   ManifestResult,
   NamespaceAccess,
   NamespaceInfo,
+  NetworkPolicyInfo,
   NodeBudget,
   NodeFilters,
   NodeInfo,
@@ -92,6 +94,7 @@ import type {
   RegistryImageResult,
   RegistryImportEntry,
   RegistrySearchRequest,
+  Renewal,
   ReplicaSetInfo,
   ResolveProbe,
   ResourceConnections,
@@ -431,6 +434,10 @@ export async function saveUpdaterSettings(
   return invoke<void>("save_updater_settings", { settings });
 }
 
+export async function updaterCanInstall(): Promise<boolean> {
+  return invoke<boolean>("updater_can_install");
+}
+
 export async function getClusterPreferences(): Promise<ClusterPreferences> {
   return invoke<ClusterPreferences>("get_cluster_preferences");
 }
@@ -560,6 +567,13 @@ export async function scaleStatefulset(
   return invoke<void>("scale_statefulset", { name, replicas, namespace });
 }
 
+export async function restartStatefulset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_statefulset", { name, namespace });
+}
+
 export async function deleteStatefulset(
   name: string,
   namespace: string | null
@@ -578,6 +592,13 @@ export async function getDaemonset(
   namespace: string | null
 ): Promise<DaemonSetDetailInfo> {
   return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
+}
+
+export async function restartDaemonset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_daemonset", { name, namespace });
 }
 
 export async function deleteDaemonset(
@@ -706,6 +727,18 @@ export async function getResourceConnections(
     name,
     namespace,
     gateway,
+  });
+}
+
+export async function getControllerRevisions(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ControllerRevisionInfo[]> {
+  return invoke<ControllerRevisionInfo[]>("get_controller_revisions", {
+    kind,
+    name,
+    namespace,
   });
 }
 
@@ -1276,6 +1309,26 @@ export async function listIngresses(
   return invoke<IngressInfo[]>("list_ingresses", { filters });
 }
 
+export async function listNetworkPolicies(
+  namespace: string | null
+): Promise<NetworkPolicyInfo[]> {
+  return invoke<NetworkPolicyInfo[]>("list_network_policies", { namespace });
+}
+
+export async function getNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<NetworkPolicyInfo> {
+  return invoke<NetworkPolicyInfo>("get_network_policy", { name, namespace });
+}
+
+export async function deleteNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_network_policy", { name, namespace });
+}
+
 export async function listEndpoints(
   filters: ResourceFilters | null
 ): Promise<EndpointsInfo[]> {
@@ -1489,6 +1542,10 @@ export async function connectionAttempt(
 
 export async function disconnectCluster(context: string): Promise<void> {
   return invoke<void>("disconnect_cluster", { context });
+}
+
+export async function credentialRenewal(context: string): Promise<Renewal> {
+  return invoke<Renewal>("credential_renewal", { context });
 }
 
 export async function getClusterInfo(context: string): Promise<ClusterInfo> {

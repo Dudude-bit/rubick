@@ -35,17 +35,21 @@ import { conditionRole } from "@/lib/condition-health";
 import {
   redirectOnly,
   parentCarriesTraffic,
+  answeredByItsController,
   selfAnswered,
   gatewayProgrammed,
 } from "@/lib/route-trace";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
+import { Peer } from "./network-policy-cells";
+import { directionFact, portText, reachOf } from "@/lib/network-policy";
 import type { KeyValue, KeyValueTone } from "./key-values";
 import type {
   ConditionInfo,
   ContainerPhase,
   CustomResourceDetailInfo,
   NodeInfo,
+  PolicyDirection,
   RouteInfo,
 } from "@/generated/types";
 
@@ -240,7 +244,12 @@ function gatewayRouteSource(kind: string): PeekSource {
               ? t("empty", "gwRedirectsNoBackends")
               : selfAnswered(route)
                 ? t("empty", "gwFilterNoBackends")
-                : `${t("empty", "gwNoBackendRefsSay")}.`,
+                : answeredByItsController(
+                      route,
+                      route.parents[0]?.controllerName
+                    ).length > 0
+                  ? t("empty", "gwRowControllerConfigured")
+                  : `${t("empty", "gwNoBackendRefsSay")}.`,
           },
           {
             title: t("columns", "verdicts"),
@@ -686,7 +695,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "ready"),
-            value: `${set.replicas.ready} of ${set.replicas.desired}`,
+            value: t("count", "nOfTotal", {
+              n: set.replicas.ready,
+              total: set.replicas.desired,
+            }),
             tone:
               set.replicas.ready < set.replicas.desired ? "warn" : undefined,
           },
@@ -756,7 +768,10 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
         items: [
           {
             label: t("columns", "succeeded"),
-            value: `${job.succeeded} of ${job.completions ?? 1}`,
+            value: t("count", "nOfTotal", {
+              n: job.succeeded,
+              total: job.completions ?? 1,
+            }),
           },
           {
             label: t("settings", "failed"),
@@ -927,6 +942,84 @@ const SOURCES: Partial<Record<ResourceKind, PeekSource>> = {
     ],
   })),
 
+  // The peek draws what the list draws, and for the same reason: without an
+  // entry here the panel falls through to the generic manifest walker, which
+  // flattens `ingress.0.from.0.namespaceSelector` into a dotted path and
+  // silently loses the AND between a peer's two selectors.
+  NetworkPolicy: source(
+    (name, namespace) => commands.getNetworkPolicy(name, namespace),
+    (policy, _target, t) => {
+      const reach = reachOf(policy.selected);
+      const directions: [string, PolicyDirection, boolean][] = [
+        ["Ingress", policy.ingress, false],
+        ["Egress", policy.egress, true],
+      ];
+      return {
+        createdAt: policy.createdAt,
+        groups: [
+          {
+            title: t("columns", "selector"),
+            items: [
+              {
+                label: t("columns", "selects"),
+                value:
+                  policy.selects.kind === "written"
+                    ? policy.selects.query
+                    : policy.selects.kind === "everything"
+                      ? t("empty", "everyPodHere")
+                      : t("empty", "noSelectorOnPolicy"),
+                mono: policy.selects.kind === "written",
+              },
+              {
+                label: t("columns", "pods"),
+                // The three answers the list gives, said the same way. A
+                // refused pod list is not a policy with nothing behind it.
+                value:
+                  reach.kind === "cannotSay"
+                    ? t("empty", "podsNotRead")
+                    : reach.kind === "nothing"
+                      ? t("empty", "selectsNoPods")
+                      : t("count", "pods", { n: reach.count }),
+                tone: reach.kind === "nothing" ? ("warn" as const) : undefined,
+              },
+            ],
+          },
+          // Rules only where `policyTypes` names the direction. The object
+          // keeps an `ingress:` block the policy does not govern, and drawing
+          // it told a reader ingress was restricted to those peers while the
+          // list row and the detail page both said the policy makes no claim
+          // about it — and while ingress was in fact wide open.
+          ...directions.map(([title, direction, outbound]) => ({
+            title,
+            count: direction.governed
+              ? direction.rules.length || undefined
+              : undefined,
+            items: direction.governed
+              ? direction.rules.map((rule) => ({
+                  label:
+                    rule.ports.length === 0
+                      ? t("empty", "everyPort")
+                      : rule.ports.map((port) => portText(port, t)).join(", "),
+                  value:
+                    rule.peers.length === 0 ? (
+                      <span className="text-warn">
+                        {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
+                      </span>
+                    ) : (
+                      <span className="flex flex-col gap-0.5">
+                        {rule.peers.map((peer, j) => (
+                          <Peer key={j} peer={peer} />
+                        ))}
+                      </span>
+                    ),
+                }))
+              : [],
+            emptyMessage: directionFact(direction, t).value,
+          })),
+        ],
+      };
+    }
+  ),
   Ingress: source(commands.getIngress, (ingress, target, t) => ({
     createdAt: ingress.createdAt,
     groups: [

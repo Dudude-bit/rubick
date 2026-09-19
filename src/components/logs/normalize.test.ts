@@ -99,6 +99,7 @@ describe("normalizeMessage refuses", () => {
 interface Sample {
   message: string;
   level: LogLevel | null;
+  pod: string;
   container: string;
   fields: Record<string, string> | null;
 }
@@ -107,6 +108,7 @@ describe("groupKeyFor", () => {
   const line = (over: Partial<Sample> = {}): Sample => ({
     message: "flood line 1 traversing",
     level: "info",
+    pod: "log-demo-7f9",
     container: "json-logger",
     fields: null,
     ...over,
@@ -121,6 +123,17 @@ describe("groupKeyFor", () => {
   it("never crosses a container boundary", () => {
     expect(groupKeyFor(line())).not.toBe(
       groupKeyFor(line({ container: "web" }))
+    );
+  });
+
+  /**
+   * Five replicas writing the same sentence inside one reorder window are
+   * five pods saying it, and the run row draws only the head line's lane.
+   * Folded together they read as one pod that cannot reach the database.
+   */
+  it("never crosses a pod boundary", () => {
+    expect(groupKeyFor(line())).not.toBe(
+      groupKeyFor(line({ pod: "log-demo-6c2" }))
     );
   });
 

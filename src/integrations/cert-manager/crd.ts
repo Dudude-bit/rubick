@@ -7,7 +7,7 @@
  * and none of that is guessable from a CRD the app has never seen.
  */
 
-import type { CrdColumn, CrdStatus } from "../kit";
+import type { CrdColumn } from "../kit";
 import { getValueByPath, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import { daysUntil } from "@/lib/utils";
@@ -15,32 +15,6 @@ import { daysUntil } from "@/lib/utils";
 /**
  * Status configuration for Certificate resources
  */
-const certificateStatusConfig: CrdStatus = {
-  getStatus: (resource) => {
-    const conditions = getValueByPath(resource, "status.conditions") as
-      Array<{ type: string; status: string }> | undefined;
-
-    if (!Array.isArray(conditions)) return null;
-
-    const readyCondition = conditions.find((c) => c.type === "Ready");
-    if (!readyCondition) return null;
-
-    return readyCondition.status === "True" ? "Ready" : "NotReady";
-  },
-  getVariant: (status) => {
-    switch (status.toLowerCase()) {
-      case "ready":
-      case "true":
-        return "default";
-      case "notready":
-      case "false":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  },
-};
-
 /**
  * Columns for Certificate list
  */
@@ -235,5 +209,4 @@ export const crd: CrdView = {
         return certificateColumns;
     }
   },
-  status: certificateStatusConfig,
 };

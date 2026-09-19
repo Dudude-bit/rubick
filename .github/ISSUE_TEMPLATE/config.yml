@@ -1,0 +1,14 @@
+# The chooser shown above "Bug report" and "Feature request". Without these
+# links a question has nowhere else to go and arrives as an issue, which is
+# what Discussions was turned on to absorb (#203).
+blank_issues_enabled: true
+contact_links:
+  - name: Question, or something you cannot get working
+    url: https://github.com/Dudude-bit/rubick/discussions/categories/q-a
+    about: Ask in Q&A. Answers stay searchable for the next person, and a question that turns out to be a bug becomes an issue from there.
+  - name: Follow-up on an issue that is already closed
+    url: https://github.com/Dudude-bit/rubick/discussions/categories/general
+    about: Discussions are the place to keep talking once an issue is closed.
+  - name: An idea you want to think through first
+    url: https://github.com/Dudude-bit/rubick/discussions/categories/ideas
+    about: Half-formed is fine here. File a feature request once it has a shape.

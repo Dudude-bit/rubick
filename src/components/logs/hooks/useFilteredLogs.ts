@@ -24,6 +24,13 @@ export interface FilteredLogs {
 
 interface Pass {
   key: string;
+  /**
+   * What the legend hides is a *lane*, which is the pod when the pane shows
+   * several and the container otherwise. Held so a pass built for one is
+   * restarted for the other: the set of hidden names can be identical
+   * across that switch, so the key alone would not notice it.
+   */
+  laneOf: (line: StreamedLogLine) => string;
   keep: (line: StreamedLogLine) => boolean;
   /** The buffer the pass was last reconciled with. */
   source: StreamedLogLine[];
@@ -88,12 +95,13 @@ function started(
   key: string,
   logs: StreamedLogLine[],
   hidden: ReadonlySet<string>,
-  terms: readonly QueryTerm[]
+  terms: readonly QueryTerm[],
+  laneOf: (line: StreamedLogLine) => string
 ): Pass {
   const keep = (line: StreamedLogLine) =>
-    !hidden.has(line.container) && matchesQuery(line, terms);
+    !hidden.has(laneOf(line)) && matchesQuery(line, terms);
   return scanned(
-    { key, keep, source: logs, cursor: 0, result: [] },
+    { key, laneOf, keep, source: logs, cursor: 0, result: [] },
     SLICE_LINES
   );
 }
@@ -117,16 +125,17 @@ function started(
 export function useFilteredLogs(
   logs: StreamedLogLine[],
   hidden: ReadonlySet<string>,
-  terms: readonly QueryTerm[]
+  terms: readonly QueryTerm[],
+  laneOf: (line: StreamedLogLine) => string
 ): FilteredLogs {
   const key = `${[...hidden].sort().join(",")}|${terms.map(termLabel).join(",")}`;
   const [pass, setPass] = useState<Pass>(() =>
-    started(key, logs, hidden, terms)
+    started(key, logs, hidden, terms, laneOf)
   );
 
   let current = pass;
-  if (pass.key !== key) {
-    current = started(key, logs, hidden, terms);
+  if (pass.key !== key || pass.laneOf !== laneOf) {
+    current = started(key, logs, hidden, terms, laneOf);
     setPass(current);
   } else if (pass.source !== logs) {
     current = scanned(advanced(pass, logs), SLICE_LINES);

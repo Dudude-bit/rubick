@@ -4,14 +4,15 @@ import { ReproducePanel } from "../components/reproduce";
 import { TrafficChain } from "../components/traffic-chain";
 import { Section } from "../components/section";
 import { WindowFrame } from "../components/window-frame";
-import { LIES } from "../lib/lies";
+import { LIES, LIES_COUNT_SAID } from "../lib/lies";
 
 export function Lies() {
   return (
     <Section eyebrow="Status: fine, apparently">
       <Reveal>
         <h2 className="max-w-3xl font-display text-3xl font-bold tracking-tight md:text-5xl">
-          Three lies you have already been told this week.
+          <span className="capitalize">{LIES_COUNT_SAID}</span> lies you have
+          already been told this week.
         </h2>
       </Reveal>
       <div className="mt-16 flex flex-col gap-24 md:gap-32">

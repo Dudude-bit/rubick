@@ -23,4 +23,16 @@ pub trait TerminalAdapter: Send + Sync {
 
     /// Check if process is still running
     fn is_running(&self) -> bool;
+
+    /// Whether anything can still arrive after the process is gone.
+    ///
+    /// Almost nothing can: a stream whose EOF the adapter saw for itself is
+    /// over, and waiting past it holds the session, the socket and the badge
+    /// for no reason. A Windows console is the exception — it hands its
+    /// buffer over *after* the child has died, and for a credential plugin
+    /// what it still holds is the token (#148). The I/O loop keeps reading
+    /// only for the adapters that say so.
+    fn may_still_deliver(&self) -> bool {
+        false
+    }
 }
