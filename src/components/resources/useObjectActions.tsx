@@ -200,9 +200,12 @@ export function useObjectActions({
     onSuccess: () => {
       invalidate();
       setConfirming(null);
-      // A restarted Deployment is followed to its answer; a restarted pod
-      // is a deletion, and the pod that replaces it is a different object.
-      if (askTarget && kind === "Deployment") {
+      // Every rolled workload is followed to its answer, not just the one
+      // kind that could be rolled when this was written — the detail pages
+      // follow all three, and a peek that did not would answer differently
+      // for the same click. A restarted pod is the exception because it is
+      // a deletion: the pod that replaces it is a different object.
+      if (askTarget && kind !== "Pod") {
         asking.ask(askTarget, {
           action: "restart",
           replicas: null,

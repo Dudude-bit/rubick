@@ -392,54 +392,60 @@ export function DaemonSetDetail() {
   }
 
   return (
-    <ResourceDetailLayout
-      freshness={freshness}
-      resource={daemonSet}
-      delivery={deliveryQuery}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.DaemonSet}
-      title={daemonSet?.name || name || ""}
-      namespace={daemonSet?.namespace || namespace}
-      createdAt={daemonSet?.createdAt}
-      statusBadge={
-        daemonSet && (
-          <StatusBadge status={workloadStatus({ ready, desired })}>
-            {t("count", "slashReady", { n: ready, total: desired })}
-          </StatusBadge>
-        )
-      }
-      badges={
-        upToDate < desired && (
-          <span className="text-[11px] text-info">
-            {t("action", "rollingOut")}
-          </span>
-        )
-      }
-      onBack={goBack}
-      actions={
-        <>
-          <InterceptedAction
-            intercept={intercept("Restart")}
-            label={t("action", "restart")}
-            icon={RefreshCw}
-            onClick={() => restartMutation.mutate(undefined)}
-            busy={restartMutation.isPending}
-          />
-          <InterceptedAction
-            intercept={intercept("Delete")}
-            label={t("action", "delete")}
-            icon={Trash2}
-            onClick={() => deleteMutation?.mutate()}
-            busy={deleteMutation?.isPending}
-            danger
-          />
-        </>
-      }
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-    />
+    <>
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={daemonSet}
+        delivery={deliveryQuery}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.DaemonSet}
+        title={daemonSet?.name || name || ""}
+        namespace={daemonSet?.namespace || namespace}
+        createdAt={daemonSet?.createdAt}
+        statusBadge={
+          daemonSet && (
+            <StatusBadge status={workloadStatus({ ready, desired })}>
+              {t("count", "slashReady", { n: ready, total: desired })}
+            </StatusBadge>
+          )
+        }
+        badges={
+          upToDate < desired && (
+            <span className="text-[11px] text-info">
+              {t("action", "rollingOut")}
+            </span>
+          )
+        }
+        onBack={goBack}
+        actions={
+          <>
+            <InterceptedAction
+              intercept={intercept("Restart")}
+              label={t("action", "restart")}
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate(undefined)}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
+              intercept={intercept("Delete")}
+              label={t("action", "delete")}
+              icon={Trash2}
+              onClick={() => deleteMutation?.mutate()}
+              busy={deleteMutation?.isPending}
+              danger
+            />
+          </>
+        }
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      {/* Past the per-cluster cap this asks which watch to give up. Without
+          it the restart's ask stores a pending replacement nobody is ever
+          shown, and following the rollout simply does not happen. */}
+      {asking.dialog}
+    </>
   );
 }
 
