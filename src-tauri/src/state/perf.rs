@@ -127,6 +127,22 @@ mod tests {
         assert_eq!(chunks[1][0].len(), 500);
     }
 
+    /// The same row arriving *first*, which is what the `!chunk.is_empty()`
+    /// guard is for: without it an over-budget row opens by flushing a chunk
+    /// that holds nothing, and the reader is handed an empty batch. The test
+    /// above never reaches that branch — its big row always finds a chunk
+    /// already open — so the guard could be deleted with the suite green.
+    #[test]
+    fn an_over_budget_row_at_the_front_yields_no_empty_chunk() {
+        let chunks = chunks_within(vec![row(500), row(10)], 100);
+        assert!(
+            chunks.iter().all(|chunk| !chunk.is_empty()),
+            "an empty batch is a message that says nothing: {chunks:?}"
+        );
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0][0].len(), 500);
+    }
+
     #[test]
     fn nothing_yields_no_chunks() {
         assert!(chunks_within(Vec::<String>::new(), 100).is_empty());

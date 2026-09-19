@@ -6,6 +6,7 @@ import {
 } from "@/lib/credentials";
 
 import { commands } from "@/lib/commands";
+import { stallWatch } from "@/lib/stall-watch";
 import { perf, sizeOf } from "@/lib/perf";
 import type { ContainerInfo, PodInfo, PodStatusInfo } from "@/generated/types";
 
@@ -149,13 +150,22 @@ export async function listPodRows(
       const at = performance.now();
       perf.record({
         kind: "ipc",
-        name: "listPodRows",
+        // Not `listPodRows`: the command wrapper already records a sample
+        // under that name for the handshake alone, and two operations
+        // sharing one row make the p50 read as the sub-millisecond half
+        // while the count doubles.
+        name: "listPodRows (stream)",
         ms: at - started,
         at,
         rows: result.length,
         bytes,
       });
     }
+    // The biggest answer in the app used to be `PodInfo[]` off a command,
+    // which the always-on stall watch saw for free. It is a stream id now,
+    // so "Largest answer" said "nothing over a thousand rows" while ten
+    // thousand rows went past. Told here, where the rows actually are.
+    stallWatch.noteAnswer("listPodRows", result);
     return result;
   } finally {
     signal?.removeEventListener("abort", onAbort);

@@ -177,9 +177,30 @@ describe("listPodRows", () => {
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a"), row("b")] });
     emit("pod-rows-done", { stream_id: "pods-1", rows: 2, complete: true });
     await answer;
-    const stats = perf.report()?.ipc.listPodRows;
+    // Its own name: the command wrapper records the handshake under
+    // `listPodRows`, and folding the whole stream into that row made the
+    // p50 the handshake's and doubled the call count.
+    const stats = perf.report()?.ipc["listPodRows (stream)"];
     expect(stats?.count).toBe(1);
     expect(stats?.maxRows).toBe(2);
     expect(stats?.maxBytes).toBeGreaterThan(0);
+  });
+
+  /**
+   * The pod list is the biggest answer the app receives, and the always-on
+   * stall watch saw it for free while it came back from a command. It is a
+   * stream id now, so "Largest answer" read "nothing over a thousand rows"
+   * with ten thousand rows going past.
+   */
+  it("tells the stall watch how many rows actually arrived", async () => {
+    const { stallWatch } = await import("./stall-watch");
+    stallWatch.reset();
+    const answer = listPodRows(null);
+    await settled();
+    const many = Array.from({ length: 1200 }, (_, i) => row(`p${i}`));
+    emit("pod-rows-batch", { stream_id: "pods-1", rows: many });
+    emit("pod-rows-done", { stream_id: "pods-1", rows: 1200, complete: true });
+    await answer;
+    expect(stallWatch.report().largest?.rows).toBe(1200);
   });
 });

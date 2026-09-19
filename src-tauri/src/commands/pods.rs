@@ -150,6 +150,16 @@ pub async fn list_pod_rows(
             () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => true,
         };
         if !started {
+            // A terminal event on every path, including this one. Tauri
+            // events have no replay, and a reader that installed its
+            // listeners and was then cancelled would otherwise wait on a
+            // promise nothing ever settles.
+            let _ = event_tx.send(AppEvent::PodRowsDone {
+                stream_id: id.clone(),
+                rows: 0,
+                complete: false,
+                elapsed_ms: 0,
+            });
             return;
         }
         // After the gate, not before it. The task can sit here for a minute
@@ -266,4 +276,98 @@ pub async fn restart_pod(
 ) -> Result<()> {
     // A standalone pod is simply gone; only a controller-managed one returns.
     delete_pod(name, namespace, Some(false), state).await
+}
+
+#[cfg(test)]
+mod paging_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// Answers two pages: the first carries a continue token, the second
+    /// does not. Enough of the apiserver for `Api::list` to walk.
+    async fn two_page_apiserver() -> (u16, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = tokio::spawn(async move {
+            let mut served = 0;
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0_u8; 4096];
+                let read = socket.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..read]).to_string();
+                let more = !request.contains("continue=");
+                let body = if more {
+                    r#"{"kind":"PodList","apiVersion":"v1","metadata":{"continue":"next"},"items":[{"metadata":{"name":"a","namespace":"shop"}}]}"#
+                } else {
+                    r#"{"kind":"PodList","apiVersion":"v1","metadata":{},"items":[{"metadata":{"name":"b","namespace":"shop"}}]}"#
+                };
+                let answer = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(answer.as_bytes()).await;
+                let _ = socket.flush().await;
+                served += 1;
+                if served >= 2 {
+                    break;
+                }
+            }
+        });
+        (port, handle)
+    }
+
+    /// The paging loop, which until now ran in no test that CI executes:
+    /// both harnesses for it are `#[ignore]`d and need a cluster. Every row
+    /// has to arrive exactly once, and the answer has to say it is complete.
+    #[tokio::test]
+    async fn every_page_arrives_once_and_the_walk_says_it_finished() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let (port, server) = two_page_apiserver().await;
+        let config = kube::Config::new(
+            format!("http://127.0.0.1:{port}")
+                .parse()
+                .expect("a cluster url"),
+        );
+        let client = kube::Client::try_from(config).expect("a client");
+        let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
+
+        let (_tx, mut cancel_rx) = oneshot::channel();
+        let mut seen: Vec<String> = Vec::new();
+        let paged = page_rows(
+            &api,
+            |rows| seen.extend(rows.into_iter().map(|row| row.name)),
+            &mut cancel_rx,
+        )
+        .await
+        .expect("two pages");
+
+        assert_eq!(seen, ["a", "b"], "every page's rows, once, in order");
+        assert_eq!(paged.rows, 2);
+        assert!(paged.complete, "the walk reached the end of the list");
+        server.abort();
+    }
+
+    /// Cancelling mid-walk is not an ending: the answer has to say it is
+    /// incomplete, or the reader draws a short list as the whole truth.
+    #[tokio::test]
+    async fn a_cancelled_walk_does_not_call_itself_complete() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let (port, server) = two_page_apiserver().await;
+        let config = kube::Config::new(
+            format!("http://127.0.0.1:{port}")
+                .parse()
+                .expect("a cluster url"),
+        );
+        let client = kube::Client::try_from(config).expect("a client");
+        let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
+
+        let (tx, mut cancel_rx) = oneshot::channel();
+        drop(tx);
+        let paged = page_rows(&api, |_| {}, &mut cancel_rx)
+            .await
+            .expect("a cancelled walk still answers");
+        assert!(!paged.complete, "a stopped list is not a finished one");
+        server.abort();
+    }
 }

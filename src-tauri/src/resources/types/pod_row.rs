@@ -254,6 +254,29 @@ mod tests {
             &row.containers[0].state,
             ContainerState::Waiting { reason: Some(r) } if r == "CrashLoopBackOff"
         ));
+
+        // Every container, both lists, against the full info — not a
+        // hand-picked index. `ready` and `started` are what the Ready column
+        // counts, and constants in their place passed every test here: the
+        // loop above skips the container lists, and the assertions below it
+        // only ever looked at one element of each.
+        for (row_side, info_side) in [
+            (&row.containers, &info.containers),
+            (&row.init_containers, &info.init_containers),
+        ] {
+            assert_eq!(row_side.len(), info_side.len());
+            for (one, full) in row_side.iter().zip(info_side.iter()) {
+                assert_eq!(one.name, full.name);
+                assert_eq!(one.ready, full.ready, "{} ready", one.name);
+                assert_eq!(one.started, full.started, "{} started", one.name);
+            }
+        }
+        // And the fixture has to contain the disagreement it is looking for,
+        // or every assertion above is true of a list of identical things.
+        assert!(
+            row.containers.iter().any(|c| !c.ready),
+            "a fixture where every container is ready proves nothing"
+        );
     }
 
     /// The point of the row. A field the table never reads that crept back
