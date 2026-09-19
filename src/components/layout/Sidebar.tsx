@@ -49,6 +49,7 @@ import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
+import { withCarriedSearch } from "@/lib/carried-search";
 
 type NavKey = keyof typeof en.nav;
 
@@ -766,12 +767,13 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
+  const { search } = useLocation();
 
   const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
 
   return (
     <NavLink
-      to={item.path}
+      to={withCarriedSearch(item.path, item.kind, search)}
       end={item.path === "/"}
       onClick={onPress}
       className={({ isActive }) =>

@@ -38,6 +38,7 @@ import type { KeyValue } from "./key-values";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
+import { CopyName } from "./CopyName";
 import { DeliveryMarks, HelmMark } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -227,7 +228,7 @@ function PeekContent({
       />
 
       <header className="flex-none px-3.5 pb-2 pt-3 pr-9">
-        <SheetTitle className="flex min-w-0 items-center">
+        <SheetTitle className="group/name flex min-w-0 items-center gap-1">
           <ResourceRef
             kind={target.kind}
             name={target.name}
@@ -237,6 +238,11 @@ function PeekContent({
             size="title"
             className="font-semibold"
           />
+          {/* The same mark the list row and the detail page carry. Without it
+              the name was the one place in the app you could see it and not
+              copy it in one gesture — the panel's own Copy name is a menu
+              item, which is a different thing to reach for. */}
+          <CopyName name={target.name} />
         </SheetTitle>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
