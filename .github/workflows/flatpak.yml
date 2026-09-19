@@ -71,6 +71,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # `gh release download` reaches a draft; the public URL would not.
+          # Extracted beside the manifest: a `dir` source is resolved
+          # relative to the manifest's own directory, not the working one.
+          cd packaging/flatpak
           gh release download "$TAG" --pattern '*_amd64.AppImage' --output rubick.AppImage
           chmod +x rubick.AppImage
           ./rubick.AppImage --appimage-extract > /dev/null
