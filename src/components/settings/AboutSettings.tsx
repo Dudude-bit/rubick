@@ -31,6 +31,7 @@ export function AboutSettings() {
     progress,
     error,
     autoCheckEnabled,
+    canInstall,
     setAutoCheckEnabled,
     checkForUpdates,
     downloadAndInstall,
@@ -99,7 +100,12 @@ export function AboutSettings() {
           hint={t("settings", "updateHint")}
           keywords={t("settings", "searchUpdateWords")}
           control={
-            available && !downloading ? (
+            canInstall === false ? (
+              // No button where pressing it can only end in a failed install.
+              <span className="text-[11px] text-fg-mut">
+                {t("settings", "managedUpdates")}
+              </span>
+            ) : available && !downloading ? (
               <Button
                 size="sm"
                 onClick={() => {
@@ -161,18 +167,20 @@ export function AboutSettings() {
             </p>
           )}
         </SettingRow>
-        <SettingRow
-          label={t("settings", "autoUpdates")}
-          hint={t("settings", "autoUpdatesHint")}
-          keywords={t("settings", "searchAutoUpdateWords")}
-          control={
-            <Switch
-              aria-label={t("settings", "autoUpdates")}
-              checked={autoCheckEnabled}
-              onCheckedChange={setAutoCheckEnabled}
-            />
-          }
-        />
+        {canInstall !== false && (
+          <SettingRow
+            label={t("settings", "autoUpdates")}
+            hint={t("settings", "autoUpdatesHint")}
+            keywords={t("settings", "searchAutoUpdateWords")}
+            control={
+              <Switch
+                aria-label={t("settings", "autoUpdates")}
+                checked={autoCheckEnabled}
+                onCheckedChange={setAutoCheckEnabled}
+              />
+            }
+          />
+        )}
       </SettingsGroup>
     </div>
   );

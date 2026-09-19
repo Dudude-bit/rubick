@@ -3413,6 +3413,8 @@ export const en = {
     checkForUpdates: "Check for updates",
     autoUpdates: "Automatic updates",
     autoUpdatesHint: "Check on startup and every 30 minutes.",
+    managedUpdates:
+      "This build updates through the package manager it was installed with.",
     diagnosticsCopied: "Diagnostics copied",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",

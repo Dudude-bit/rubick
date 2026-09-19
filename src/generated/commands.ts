@@ -434,6 +434,10 @@ export async function saveUpdaterSettings(
   return invoke<void>("save_updater_settings", { settings });
 }
 
+export async function updaterCanInstall(): Promise<boolean> {
+  return invoke<boolean>("updater_can_install");
+}
+
 export async function getClusterPreferences(): Promise<ClusterPreferences> {
   return invoke<ClusterPreferences>("get_cluster_preferences");
 }

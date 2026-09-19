@@ -3707,6 +3707,8 @@ export const ru: Catalogue = {
     checkForUpdates: "Проверить обновления",
     autoUpdates: "Автообновление",
     autoUpdatesHint: "Проверять при запуске и каждые 30 минут.",
+    managedUpdates:
+      "Эта сборка обновляется через пакетный менеджер, которым её поставили.",
     diagnosticsCopied: "Диагностика скопирована",
     copyDiagnostics: "Копировать диагностику",
     redactNamesAndPaths: "Скрывать имена и пути",

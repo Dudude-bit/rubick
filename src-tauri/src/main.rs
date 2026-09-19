@@ -378,6 +378,7 @@ fn main() {
             // Updater settings
             commands::settings::get_updater_settings,
             commands::settings::save_updater_settings,
+            commands::settings::updater_can_install,
             // Cluster preferences
             commands::settings::get_cluster_preferences,
             commands::settings::save_cluster_preferences,
