@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.0] - 2026-09-19
+
+### Added
+
+- **A Flatpak, for the platforms none of the other artifacts can run on.** On
+  RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — nothing we shipped worked,
+  and not for a packaging reason: the `.rpm` and `.deb` need
+  `libwebkit2gtk-4.1`, for which that platform has no package at all, and the
+  AppImage, which carries its own, needs a newer glibc than it has. The
+  Flatpak runs on a runtime that has both. `flatpak install
+./Rubick-*.flatpak`, and the runtime comes from Flathub the first time,
+  several hundred megabytes, once.
+
+- **Roll a StatefulSet or a DaemonSet.** Restart existed for Deployments
+  alone, so rolling a StatefulSet meant leaving the app for `kubectl`. A
+  DaemonSet gets Restart and no Scale: its replica count is how many nodes it
+  fits.
+
+- **The way back from an object to the release that installed it.** A
+  workload Helm put there now says so and links to the release, on the page
+  and in the peek. The pointer was already in the object's annotations and
+  only one screen read it.
+
+- **Every key the app answers to, on one sheet behind `?`.** Shortcuts lived
+  in six separate listeners and nowhere a person could look. They come from
+  one table now, and a test refuses a new listener the table does not name —
+  a list that is complete today and quietly stops being complete is worse
+  than no list.
+
+- **Did it work.** Restart, Scale, Apply and a changed image used to end in a
+  toast saying the request was accepted, and then silence. Each is followed
+  and answered now. Nothing is said until the object confirms the action
+  reached it, so "rolled out" is never a verdict about the state before the
+  click, and two minutes with no verdict is said in words rather than left
+  quiet.
+
+- **Freeze an interval in the log tail.** On a chatty pod, the lines you were
+  reading from four minutes ago were evicted by the live stream inside a
+  minute. A frozen range is held outside the Keep budget and survives taking
+  the filter off, so watching the tail no longer throws away what you kept.
+
+- **Why slow.** The performance recorder is off by default and always was, so
+  whoever feels a stall is exactly the person with no numbers. The cheap half
+  of it runs all the time now: a count in the status bar while there is
+  something to say, and behind it the stalls, the big lists on screen and why
+  they cost, and the largest answer the backend sent.
+
+- **Columns you can resize.** Drag any column's right edge; double-click it
+  to put that pair back to their declared widths. Widths are remembered per
+  list.
+
+### Fixed
+
+- **A claim list the cluster refused is not a missing claim.** A token
+  allowed to read a pod but not its PersistentVolumeClaims was told the claim
+  did not exist, which sends a person to rebuild storage that is running.
+
+- **A route its own controller answers is not a route that drops traffic.** A
+  rule with no `backendRefs` was drawn as broken even where the Gateway's own
+  controller is what answers it. The signal is the controller's domain, not a
+  list of vendor names.
+
+- **Release notes scroll.** The What's New dialog ended mid-word with no
+  scrollbar. The same shape was found and fixed wherever a scroller asked for
+  a height its parent does not have.
+
+- **A column dragged narrow no longer paints over the one beside it**, in
+  either density, and a header or a name that has to be cut ends in an
+  ellipsis instead of mid-word. The narrowest a column may be is no longer
+  wider than columns that are deliberately narrow, which made the actions
+  strip inflate on the first pixel of any drag.
+
+- **A list's search follows you to Events and to CRDs**, which kept their
+  filter out of the address and so showed everything while the address said
+  otherwise.
+
+- Helm says a decoder's reason once, not wrapped in our own words twice.
+
 ## [4.17.0] - 2026-09-17
 
 ### Added
