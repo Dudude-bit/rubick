@@ -19,24 +19,24 @@ use tauri::State;
 
 use super::types::{HelmRelease, HelmReleaseDetail, HelmRevision, HelmSecretRelease};
 
-/// Decode Helm release from Kubernetes Secret data
-fn decode_helm_release(data: &[u8]) -> Result<HelmSecretRelease> {
+/// Why a release secret would not decode, in the decoder's own words.
+///
+/// A plain `String`, not an `Error`: every caller either carries it as a fact
+/// about one release — a row that says what it could not read — or wraps it
+/// once. Returning an `Error` here meant the callers wrapped an already
+/// formatted error, and the reader got `Plugin error: Plugin execution
+/// failed:` twice in one sentence.
+fn decode_helm_release(data: &[u8]) -> std::result::Result<HelmSecretRelease, String> {
     // Base64 decode
-    let compressed = STANDARD.decode(data).map_err(|e| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "Base64 decode error: {e}"
-        )))
-    })?;
+    let compressed = STANDARD.decode(data).map_err(|e| format!("base64: {e}"))?;
 
     // Check for gzip magic bytes and decompress
     let json_bytes = if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
         let mut decoder = GzDecoder::new(&compressed[..]);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed).map_err(|e| {
-            Error::Plugin(PluginError::ExecutionFailed(format!(
-                "Gzip decompress error: {e}"
-            )))
-        })?;
+        decoder
+            .read_to_end(&mut decompressed)
+            .map_err(|e| format!("gzip: {e}"))?;
         decompressed
     } else {
         // Old format: not compressed
@@ -44,11 +44,7 @@ fn decode_helm_release(data: &[u8]) -> Result<HelmSecretRelease> {
     };
 
     // Parse JSON
-    serde_json::from_slice(&json_bytes).map_err(|e| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "JSON parse error: {e}"
-        )))
-    })
+    serde_json::from_slice(&json_bytes).map_err(|e| e.to_string())
 }
 
 /// The newest revision of each release, picked from metadata alone.
@@ -197,7 +193,7 @@ pub async fn list_helm_releases_native(
                                     source: "native".to_string(),
                                     suspended: None,
                                     source_ref: None,
-                                    unreadable: Some(e.to_string()),
+                                    unreadable: Some(e),
                                 });
                         }
                     }
@@ -369,7 +365,7 @@ pub async fn get_helm_release_detail(
                     }
                     Err(error) => {
                         tracing::warn!("Failed to decode Helm release secret: {error}");
-                        unreadable.get_or_insert_with(|| error.to_string());
+                        unreadable.get_or_insert(error);
                     }
                 }
             }
