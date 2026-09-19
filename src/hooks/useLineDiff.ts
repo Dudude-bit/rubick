@@ -7,6 +7,11 @@ export interface LineDiffState {
   lines: DiffLine[];
   /** A worker is still on it; `lines` is the previous answer or empty. */
   computing: boolean;
+  /**
+   * The worker could not answer at all. Not the same as `computing`: this
+   * one is over, and the caller has to say so rather than spin.
+   */
+  failed: boolean;
 }
 
 let shared: Worker | null = null;
@@ -19,6 +24,19 @@ function worker(): Worker | null {
     type: "module",
   });
   return shared;
+}
+
+/**
+ * Drop a worker that failed, so the next question gets a new one.
+ *
+ * It is shared for the life of the module, so without this one failure —
+ * the module failing to load, an out-of-memory kill — is handed to every
+ * later viewer in the session, each of which waits on it forever.
+ */
+function discard(dead: Worker) {
+  if (shared !== dead) return;
+  shared = null;
+  dead.terminate?.();
 }
 
 function small(original: string, modified: string): boolean {
@@ -51,6 +69,7 @@ export function useLineDiff(original: string, modified: string): LineDiffState {
   const [answer, setAnswer] = useState<{
     key: string;
     lines: DiffLine[];
+    failed?: boolean;
   } | null>(null);
   const asked = useRef(0);
   const key = `${original.length}:${modified.length}:${original}\u0000${modified}`;
@@ -63,17 +82,41 @@ export function useLineDiff(original: string, modified: string): LineDiffState {
     asked.current = id;
     const onAnswer = (event: MessageEvent<DiffAnswer>) => {
       if (event.data.id !== id) return;
+      if (event.data.failed !== undefined) {
+        setAnswer({ key, lines: [], failed: true });
+        return;
+      }
       setAnswer({ key, lines: event.data.lines });
     };
+    // Anything that is not a message is still an outcome. Without these the
+    // hook waits on a worker that will never speak again.
+    const onBroken = () => {
+      discard(target);
+      setAnswer({ key, lines: [], failed: true });
+    };
     target.addEventListener("message", onAnswer);
+    target.addEventListener("error", onBroken);
+    target.addEventListener("messageerror", onBroken);
     const request: DiffRequest = { id, original, modified };
     target.postMessage(request);
-    return () => target.removeEventListener("message", onAnswer);
+    return () => {
+      target.removeEventListener("message", onAnswer);
+      target.removeEventListener("error", onBroken);
+      target.removeEventListener("messageerror", onBroken);
+    };
   }, [sync, original, modified, key]);
 
   if (sync)
-    return { lines: computeLineDiff(original, modified), computing: false };
+    return {
+      lines: computeLineDiff(original, modified),
+      computing: false,
+      failed: false,
+    };
   if (answer && answer.key === key)
-    return { lines: answer.lines, computing: false };
-  return { lines: answer?.lines ?? [], computing: true };
+    return {
+      lines: answer.lines,
+      computing: false,
+      failed: answer.failed === true,
+    };
+  return { lines: answer?.lines ?? [], computing: true, failed: false };
 }

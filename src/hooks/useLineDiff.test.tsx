@@ -5,12 +5,14 @@ import { computeLineDiff, SYNC_LINES } from "@/lib/line-diff";
 import { useLineDiff } from "./useLineDiff";
 
 function Probe({ original, modified }: { original: string; modified: string }) {
-  const { lines, computing } = useLineDiff(original, modified);
+  const { lines, computing, failed } = useLineDiff(original, modified);
   return (
     <span data-testid="state">
-      {computing
-        ? "computing"
-        : `${lines.filter((l) => l.type !== "unchanged").length} changed`}
+      {failed
+        ? "failed"
+        : computing
+          ? "computing"
+          : `${lines.filter((l) => l.type !== "unchanged").length} changed`}
     </span>
   );
 }
@@ -19,18 +21,37 @@ function Probe({ original, modified }: { original: string; modified: string }) {
 class FakeWorker {
   static instances: FakeWorker[] = [];
   listeners: Array<(event: MessageEvent) => void> = [];
+  typed: Array<[string, (event: MessageEvent) => void]> = [];
   pending: Array<{ id: number; original: string; modified: string }> = [];
   constructor() {
     FakeWorker.instances.push(this);
   }
-  addEventListener(_type: string, listener: (event: MessageEvent) => void) {
-    this.listeners.push(listener);
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.typed.push([type, listener]);
+    if (type === "message") this.listeners.push(listener);
   }
-  removeEventListener(_type: string, listener: (event: MessageEvent) => void) {
+  removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.typed = this.typed.filter(([t, l]) => t !== type || l !== listener);
     this.listeners = this.listeners.filter((l) => l !== listener);
   }
+  terminated = false;
   postMessage(request: { id: number; original: string; modified: string }) {
     this.pending.push(request);
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  /** What the browser does when the worker itself dies. */
+  breaks() {
+    for (const [type, listener] of this.typed)
+      if (type === "error") listener({} as MessageEvent);
+  }
+  /** What the worker posts when the diff itself threw. */
+  fails(which = 0) {
+    const request = this.pending.splice(which, 1)[0];
+    const data = { id: request.id, lines: [], failed: "out of memory" };
+    for (const listener of [...this.listeners])
+      listener({ data } as MessageEvent);
   }
   answer(which = 0) {
     const request = this.pending.splice(which, 1)[0];
@@ -105,6 +126,50 @@ describe("where the diff is computed", () => {
       expect(screen.getByTestId("state")).toHaveTextContent("computing");
       await act(async () => worker.answer(0));
       expect(screen.getByTestId("state")).toHaveTextContent("2 changed");
+    });
+
+    /**
+     * A worker that cannot answer is an outcome, not a wait. Without an
+     * `error` listener the hook stayed `computing` forever and the dialog
+     * spun above a live Apply button, with nothing in the log.
+     */
+    it("says so when the worker itself dies, rather than waiting on it", async () => {
+      render(
+        <Probe
+          original={big(SYNC_LINES, "")}
+          modified={big(SYNC_LINES, "\nextra")}
+        />
+      );
+      expect(screen.getByTestId("state")).toHaveTextContent("computing");
+      const worker = FakeWorker.instances[0];
+      await act(async () => worker.breaks());
+      expect(screen.getByTestId("state")).toHaveTextContent("failed");
+    });
+
+    /** The diff itself throwing is the same: an answer, and a bad one. */
+    it("says so when the diff could not be computed", async () => {
+      render(
+        <Probe
+          original={big(SYNC_LINES, "")}
+          modified={big(SYNC_LINES, "\nextra")}
+        />
+      );
+      // A worker that died was discarded, so the live one is the last made.
+      const worker = FakeWorker.instances[FakeWorker.instances.length - 1];
+      await act(async () => worker.fails());
+      expect(screen.getByTestId("state")).toHaveTextContent("failed");
+    });
+
+    /**
+     * The threshold is the PR's own claim, and it was reachable only through
+     * the other disjunct: with no `Worker` at all everything is synchronous,
+     * so the small-pair test passed with the threshold deleted.
+     */
+    it("keeps a small pair off the worker even where a worker exists", () => {
+      render(<Probe original={"a\nb"} modified={"a\nc"} />);
+      expect(screen.getByTestId("state")).toHaveTextContent("2 changed");
+      const worker = FakeWorker.instances[FakeWorker.instances.length - 1];
+      expect(worker?.pending ?? []).toHaveLength(0);
     });
   });
 });

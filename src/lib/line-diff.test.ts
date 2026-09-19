@@ -91,3 +91,30 @@ describe("the line diff", () => {
     expect(took).toBeLessThan(100);
   });
 });
+
+/**
+ * The other end of Myers. It keeps one frontier per step, so a pair where
+ * everything moved costs the edit distance times the file size — two
+ * 3 000-line manifests fully rewritten is about 290 MB of Int32Array, which
+ * is a tab crash, not a diff. Past the budget the answer is coarse and
+ * still true: both sides rebuild from it, which is the property every other
+ * test here checks.
+ */
+it("gives a whole-file answer rather than unbounded memory when everything moved", () => {
+  const n = 4000;
+  const before = Array.from({ length: n }, (_, i) => `old ${i}`).join("\n");
+  const after = Array.from({ length: n }, (_, i) => `new ${i}`).join("\n");
+
+  const started = performance.now();
+  const diff = computeLineDiff(before, after);
+  const took = performance.now() - started;
+
+  expect(diff.filter((l) => l.type === "unchanged")).toHaveLength(0);
+  expect(
+    diff.filter((l) => l.type === "removed").map((l) => l.content)
+  ).toEqual(before.split("\n"));
+  expect(diff.filter((l) => l.type === "added").map((l) => l.content)).toEqual(
+    after.split("\n")
+  );
+  expect(took).toBeLessThan(2000);
+});

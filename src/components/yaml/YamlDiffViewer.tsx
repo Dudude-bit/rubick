@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 
 import { useLineDiff } from "@/hooks/useLineDiff";
 import { cn } from "@/lib/utils";
@@ -16,9 +16,14 @@ export function YamlDiffViewer({
   height = "500px",
 }: YamlDiffViewerProps) {
   const t = useT();
-  const { lines: diffLines, computing } = useLineDiff(original, modified);
+  const { lines: diffLines, computing, failed } = useLineDiff(original, modified);
+  const hasChanges = diffLines.some((line) => line.type !== "unchanged");
 
-  if (computing && diffLines.length === 0) {
+  // While a newer answer is on its way the old one is not a verdict. It can
+  // still be shown as a diff — that is a real diff of something — but
+  // "no changes" over a buffer the reader just rewrote is the third state
+  // collapsing into the second, above an Apply button.
+  if (computing && !hasChanges) {
     return (
       <div
         role="status"
@@ -30,7 +35,17 @@ export function YamlDiffViewer({
     );
   }
 
-  const hasChanges = diffLines.some((line) => line.type !== "unchanged");
+  if (failed) {
+    return (
+      <div
+        role="status"
+        className="flex h-full items-center justify-center gap-1.5 py-8 text-xs text-warn"
+      >
+        <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+        {t("empty", "diffUnavailable")}
+      </div>
+    );
+  }
 
   if (!hasChanges) {
     return (
