@@ -556,7 +556,7 @@ describe("column widths", () => {
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
-          { ...columns[1], size: 100 },
+          { ...columns[1], size: 200 },
         ]}
         data={DATA}
         rowLabel="items"
@@ -590,11 +590,45 @@ describe("column widths", () => {
     // the drag has to do is take from the neighbour: Name up by 40 of a 400
     // total is Status down by exactly the same 10 points.
     expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
-      ((300 + 40) / 400) * 100,
+      ((300 + 40) / 500) * 100,
       5
     );
     expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(
-      ((100 - 40) / 400) * 100,
+      ((200 - 40) / 500) * 100,
+      5
+    );
+  });
+
+  /**
+   * A column cannot be squeezed past the width of its own header word. Below
+   * that it is a sliver whose label is cut — and before the floor existed,
+   * the vendor's default of 20 let a drag paint one header over the next.
+   */
+  it("stops the neighbour at the narrowest a column may be", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="clamped"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 9999 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    // Everything it could take, and not the last 80 of it.
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      ((500 - 80) / 500) * 100,
       5
     );
   });

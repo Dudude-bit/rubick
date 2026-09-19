@@ -124,11 +124,12 @@ interface DataTableProps<TData extends RowData> {
  * fixed box with its own scrollbar — scroll position lost both ways.
  */
 /**
- * The narrowest a column may be dragged. The vendor's default is 20, which
- * as a share of a table this wide is about fourteen real pixels — narrower
- * than the word in its own header, which then paints over its neighbour.
+ * The narrowest a column may be dragged, in the same units the column sizes
+ * are written in. Eighty is about the width of the longest header word once
+ * it is a share of a real table; below that a column is a sliver whose own
+ * label is cut, which is not a width anybody is asking for.
  */
-const MIN_COLUMN_SIZE = 56;
+const MIN_COLUMN_SIZE = 80;
 
 const VIRTUALISE_ABOVE_ROWS = 100;
 const STAY_FLAT_BELOW_ROWS = 75;

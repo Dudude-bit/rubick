@@ -112,9 +112,12 @@ const TableHead = React.forwardRef<
     // sentence case. Uppercase + tracking made it shout over the data.
     // `whitespace-nowrap` stops two-word labels ("CPU Usage") from
     // wrapping and doubling the header's height.
-    // `relative` so the resize grip can hang on the column's own right edge.
+    // `relative` so the resize grip can sit on the column's own right edge,
+    // and `overflow-hidden` because a narrowed column otherwise paints its
+    // label straight over its neighbour's — the one thing fixed layout was
+    // chosen to prevent, and the first thing a drag makes happen.
     className={cn(
-      "relative whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
+      "relative overflow-hidden whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
       className
     )}
     {...props}
