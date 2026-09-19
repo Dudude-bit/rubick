@@ -24,19 +24,20 @@ function classesIn(attrs: string): string {
 }
 
 /**
- * A height the viewport can be measured against. `h-full` and `size-full`
- * are per cent and resolve against the parent's *specified* height, which is
- * `auto` on a flex-sized root — so they are not a height of one's own.
+ * A height the viewport can be measured against.
+ *
+ * `h-full` and `size-full` are per cent and resolve against the parent's
+ * *specified* height, which is `auto` on a flex-sized root — so they are not
+ * a height of one's own. Neither is `min-h-*`: a minimum leaves the computed
+ * `height` at `auto`, so the viewport grows to its content exactly as before
+ * and the root clips it. This accepted `min-h-64` for one commit, because
+ * the prefix list was widened to carve out `min-h-0` — which never needed
+ * carving out, since a minimum was never a height here.
  */
 function definiteHeight(classes: string): boolean {
   return classes
     .split(/\s+/)
-    .some(
-      (c) =>
-        /^(h|max-h|min-h|size)-/.test(c) &&
-        !/-(full|auto)$/.test(c) &&
-        !/^min-h-0$/.test(c)
-    );
+    .some((c) => /^(h|max-h|size)-/.test(c) && !/-(full|auto)$/.test(c));
 }
 
 describe("ScrollArea", () => {
@@ -82,6 +83,10 @@ describe("ScrollArea", () => {
     expect(definiteHeight("h-full")).toBe(false);
     expect(definiteHeight("size-full")).toBe(false);
     expect(definiteHeight("min-h-0 flex-1 pr-3")).toBe(false);
+    // A minimum is not a height: the computed one stays `auto`, and the
+    // viewport grows to its content just as it did with no class at all.
+    expect(definiteHeight("min-h-64")).toBe(false);
+    expect(definiteHeight("min-h-[20rem] flex-1")).toBe(false);
   });
 
   /** A className the guard cannot read must not be reported as a failure. */
