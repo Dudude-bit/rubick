@@ -224,6 +224,19 @@ mod tests {
         ])
     }
 
+    /// An older revision decoding is not an answer about a newer one that
+    /// does not. The list row says revision 5 could not be read; opening it
+    /// used to render revision 4's values and manifest as the release.
+    #[test]
+    fn refuses_a_stale_revision_when_the_newest_one_will_not_decode() {
+        // Opening the row asks for the release, not a revision.
+        assert!(shadows_the_answer(None, 4, 5));
+        assert!(!shadows_the_answer(None, 5, 4));
+        // Asked for one revision, only that revision shadows the answer.
+        assert!(shadows_the_answer(Some(4), 5, 4));
+        assert!(!shadows_the_answer(Some(5), 4, 3));
+    }
+
     /// A chart installed on its defaults, which is what Helm writes when
     /// nobody passed `--set` or `-f`: no `config` key at all. Requiring it
     /// made every such release fail to decode, and the list — which drops
@@ -323,6 +336,20 @@ mod tests {
     }
 }
 
+/// Whether the secret that would not decode is the one the reader asked for.
+///
+/// Asked for a revision, it is that revision. Asked for the release — which
+/// is what opening a row does — it is any revision newer than the newest one
+/// that did decode. Answering with an older revision's values and manifest
+/// would present yesterday's release as today's, on the very page opened
+/// from a row that correctly said it could not be read.
+fn shadows_the_answer(asked: Option<i32>, newest_decoded: i32, unreadable_at: i32) -> bool {
+    match asked {
+        Some(target) => unreadable_at == target,
+        None => unreadable_at > newest_decoded,
+    }
+}
+
 /// Get Helm release detail (values, manifest, notes)
 #[tauri::command]
 pub async fn get_helm_release_detail(
@@ -346,9 +373,21 @@ pub async fn get_helm_release_detail(
     // not there. Dropping both into one answer made "not found" — which the
     // frontend paints as "this may be gone" — the report for a release the
     // cluster holds and this app could not read.
-    let mut unreadable: Option<String> = None;
+    //
+    // Carried with its revision, from the label, because an older revision
+    // decoding is not an answer about a newer one that does not: handing
+    // back revision 4 as "the release" while the list row correctly says
+    // revision 5 is unreadable is the same lie one page further on.
+    let mut unreadable: Option<(i32, String)> = None;
 
     for secret in secret_list {
+        let at = secret
+            .metadata
+            .labels
+            .as_ref()
+            .and_then(|labels| labels.get("version"))
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(0);
         if let Some(data) = secret.data {
             if let Some(release_data) = data.get("release") {
                 match decode_helm_release(&release_data.0) {
@@ -356,7 +395,6 @@ pub async fn get_helm_release_detail(
                         if let Some(target_rev) = revision {
                             if release.version == target_rev {
                                 target_release = Some(release);
-                                break;
                             }
                         } else if release.version > max_revision {
                             max_revision = release.version;
@@ -365,16 +403,27 @@ pub async fn get_helm_release_detail(
                     }
                     Err(error) => {
                         tracing::warn!("Failed to decode Helm release secret: {error}");
-                        unreadable.get_or_insert(error);
+                        if unreadable.as_ref().is_none_or(|(seen, _)| at > *seen) {
+                            unreadable = Some((at, error));
+                        }
                     }
                 }
             }
         }
     }
 
+    let shadowed = unreadable
+        .as_ref()
+        .is_some_and(|(at, _)| shadows_the_answer(revision, max_revision, *at));
+
     let release = match (target_release, unreadable) {
+        (Some(_), Some((_, why))) if shadowed => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} in namespace {namespace} could not be read: {why}"
+            ))))
+        }
         (Some(release), _) => release,
-        (None, Some(why)) => {
+        (None, Some((_, why))) => {
             return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
                 "Release {name} in namespace {namespace} could not be read: {why}"
             ))))

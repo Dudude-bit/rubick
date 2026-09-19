@@ -293,6 +293,24 @@ export function addressedToController(
     .sort();
 }
 
+/**
+ * The route names no backend at all, and carries settings its own controller
+ * reads. One predicate for the trace, the list row and the peek, so the three
+ * cannot answer differently about the same route.
+ *
+ * `namesNoBackend`, not "no Service": a route with a backendRef of some other
+ * kind — an implementation's own `Backend` — does name somewhere to go, and
+ * "no backendRefs" about it would be false. `selfAnswered` draws the same
+ * line for the same reason.
+ */
+export function answeredByItsController(
+  route: RouteInfo,
+  controllerName: string | undefined
+): string[] {
+  if (!namesNoBackend(route)) return [];
+  return addressedToController(route, controllerName);
+}
+
 const said = (c: ConditionInfo): string =>
   [c.reason, c.message].filter(Boolean).join(" — ") || `${c.type}: ${c.status}`;
 
@@ -918,8 +936,8 @@ function backendSteps(
   // Configuration this app cannot read, addressed to the controller that
   // owns this route. Blind rather than err: the spec's 500 is what happens
   // when nobody said otherwise, and somebody here plainly did.
-  const addressed = addressedToController(route, controllerName);
-  if (serviceRefs.length === 0 && addressed.length > 0) {
+  const addressed = answeredByItsController(route, controllerName);
+  if (addressed.length > 0) {
     const say = t("empty", "gwControllerConfiguredSay");
     const detail = {
       title: t("empty", "gwControllerConfiguredTitle"),

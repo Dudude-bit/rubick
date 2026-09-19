@@ -586,6 +586,42 @@ describe("an action being followed", () => {
     }
   );
 
+  /**
+   * What `generationBefore: null` costs, and why the peek stopped passing it.
+   *
+   * Without it `acknowledged` has only `unsettledSeen` to go on: the first
+   * look sets the baseline's generation to whatever it already is, so
+   * "moved past the one before the click" can never become true, and the
+   * watch must catch the object mid-rollout to recognise it at all. A
+   * rollout already finished by the first watch event — a one-replica set,
+   * or a restart with nothing to roll — is then never acknowledged, and a
+   * restart that worked times out saying nothing happened.
+   */
+  it("acknowledges a restart from the generation the page already had", () => {
+    const look = (generation: number, updated: number) => ({
+      name: "payments",
+      namespace: "shop",
+      generation,
+      observedGeneration: generation,
+      replicas: { desired: 1, ready: 1, current: 1, updated },
+    });
+    const following = (generationBefore: number | null) => ({
+      ...watchOn("StatefulSet", "rollout"),
+      after: { action: "restart" as const, replicas: null, generationBefore },
+      deadline: 120_000,
+    });
+
+    // Settled on the very first look, as a one-replica rollout can be.
+    expect(walk(following(4), [look(5, 1)])).toEqual([
+      {
+        says: "rolledOut",
+        detail: { key: "rolloutSeen", values: { ready: 1, desired: 1 } },
+      },
+    ]);
+    // The same looks with nothing to compare against: never acknowledged.
+    expect(walk(following(null), [look(5, 1)])).toEqual([]);
+  });
+
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
     for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {

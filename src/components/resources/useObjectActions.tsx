@@ -188,6 +188,17 @@ export function useObjectActions({
     return askable ? { kind: askable, namespace, name } : null;
   })();
 
+  /**
+   * The object's generation as the panel last read it, or `null` where the
+   * detail has not loaded — which is the honest answer, and the one
+   * `acknowledged` already handles.
+   */
+  const generationOf = (object: unknown): number | null => {
+    if (!object || typeof object !== "object") return null;
+    const value = (object as { generation?: number | null }).generation;
+    return typeof value === "number" ? value : null;
+  };
+
   const restart = useMutation({
     mutationFn: async () => {
       // The same table the offer came from, so the button and the command
@@ -210,7 +221,12 @@ export function useObjectActions({
         asking.ask(askTarget, {
           action: "restart",
           replicas: null,
-          generationBefore: null,
+          // The generation the panel already had. Without it `acknowledged`
+          // has only "did I see it unsettled" to go on, and a rollout that
+          // is already finished by the first watch event — a small one, or
+          // one with nothing to roll — is never recognised as this click's,
+          // so the watch times out on a restart that worked.
+          generationBefore: generationOf(detail),
         });
       }
     },
