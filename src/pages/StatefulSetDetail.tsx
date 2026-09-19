@@ -7,6 +7,7 @@ import {
   History,
   Info,
   Layers2,
+  RefreshCw,
   Scale,
   Trash2,
 } from "lucide-react";
@@ -130,6 +131,40 @@ export function StatefulSetDetail() {
 
   const [scaleOpen, setScaleOpen] = useState(false);
   const asking = useAsk();
+
+  const restartMutation = useResourceMutation(
+    async () => {
+      if (!name) return;
+      await commands.restartStatefulset(name, namespace || null);
+    },
+    {
+      toast: {
+        successTitle: t("action", "kindRestarted", {
+          kind: ResourceType.StatefulSet,
+        }),
+        successDescription: t("action", "kindRestartingDetail", {
+          kind: ResourceType.StatefulSet,
+          name: name ?? "",
+        }),
+        errorPrefix: t("action", "restartKindFailed", {
+          kind: ResourceType.StatefulSet,
+        }),
+      },
+      invalidateQueryKeys:
+        namespace && name ? [["statefulset", namespace, name]] : [],
+      onSuccess: () => {
+        if (!name) return;
+        asking.ask(
+          { kind: "StatefulSet", namespace: namespace || null, name },
+          {
+            action: "restart",
+            replicas: null,
+            generationBefore: statefulSet?.generation ?? null,
+          }
+        );
+      },
+    }
+  );
 
   const scaleMutation = useResourceMutation(
     async (replicas: number) => {
@@ -406,6 +441,13 @@ export function StatefulSetDetail() {
               label={t("action", "scale")}
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
+            />
+            <InterceptedAction
+              intercept={intercept("Restart")}
+              label={t("action", "restart")}
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate(undefined)}
+              busy={restartMutation.isPending}
             />
             <InterceptedAction
               intercept={intercept("Delete")}

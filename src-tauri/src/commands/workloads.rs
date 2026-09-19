@@ -45,6 +45,17 @@ pub async fn scale_statefulset(
     crate::commands::helpers::scale_resource::<StatefulSet>(name, replicas, namespace, state).await
 }
 
+/// Restart a `StatefulSet` (rolling restart)
+#[tauri::command]
+pub async fn restart_statefulset(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_label(&name)?;
+    crate::commands::helpers::restart_resource::<StatefulSet>(name, namespace, state).await
+}
+
 #[tauri::command]
 pub async fn delete_statefulset(
     name: String,
@@ -73,6 +84,17 @@ pub async fn get_daemonset(
 ) -> Result<DaemonSetDetailInfo> {
     crate::validation::validate_dns_label(&name)?;
     get_resource_info::<DaemonSet, DaemonSetDetailInfo>(name, namespace, state).await
+}
+
+/// Restart a `DaemonSet` (rolling restart)
+#[tauri::command]
+pub async fn restart_daemonset(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_label(&name)?;
+    crate::commands::helpers::restart_resource::<DaemonSet>(name, namespace, state).await
 }
 
 #[tauri::command]

@@ -38,7 +38,7 @@ import type { KeyValue } from "./key-values";
 import { isRoutableKind, ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
-import { DeliveryMarks } from "./delivery";
+import { DeliveryMarks, HelmMark } from "./delivery";
 import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
@@ -267,6 +267,7 @@ function PeekContent({
             </>
           )}
           <DeliveryMarks deliveries={deliveries} />
+          <HelmMark object={data} />
         </div>
         <PeekActions
           target={target}

@@ -200,6 +200,26 @@ mod tests {
         ])
     }
 
+    /// A chart installed on its defaults, which is what Helm writes when
+    /// nobody passed `--set` or `-f`: no `config` key at all. Requiring it
+    /// made every such release fail to decode, and the list — which drops
+    /// what it cannot read with a warning nobody sees — said the cluster
+    /// had none. Reproduced against a real `helm install` on kind.
+    #[test]
+    fn reads_a_release_installed_with_no_values_of_its_own() {
+        let json = br#"{
+            "name": "shop-api",
+            "namespace": "k8s-gui-test",
+            "version": 1,
+            "info": { "status": "deployed" },
+            "chart": { "metadata": { "name": "shop-api", "version": "0.1.0" } }
+        }"#;
+        let encoded = STANDARD.encode(json);
+        let release = decode_helm_release(encoded.as_bytes()).expect("decodes");
+        assert_eq!(release.name, "shop-api");
+        assert_eq!(release.config, serde_json::Value::Null);
+    }
+
     /// A history of superseded revisions must cost one fetch, not ten —
     /// and the tenth beats the ninth numerically, where a string compare
     /// would hand the win to `"9"`.

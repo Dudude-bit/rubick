@@ -7,6 +7,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { ContainerState, PodInfo, ServiceInfo } from "@/generated/types";
 import {
+  restartCommandFor,
   deleteCommandFor,
   describeBareRestart,
   describeDeletion,
@@ -118,7 +119,22 @@ describe("planPeekActions", () => {
 
   it("offers a plain Delete for a kind with nothing else to do", () => {
     expect(labels(all("ConfigMap"))).toEqual(["Delete"]);
+  });
+
+  /**
+   * A DaemonSet's replica count is how many nodes it fits, so Scale would be
+   * a control with nothing to set — but it rolls like the other two, and
+   * offering that only to a Deployment left `kubectl` as the only way.
+   */
+  it("offers a DaemonSet the restart it has and not the scale it has not", () => {
     expect(labels(all("DaemonSet"))).toEqual([
+      "Restart",
+      "Delete",
+      "Tell me when the rollout finishes",
+    ]);
+    expect(labels(all("StatefulSet"))).toEqual([
+      "Scale",
+      "Restart",
       "Delete",
       "Tell me when the rollout finishes",
     ]);
@@ -499,5 +515,51 @@ describe("the peek's delete table against the commands that exist", () => {
       (kind) => !covered.has(kind)
     );
     expect(uncovered).toEqual([]);
+  });
+});
+
+/**
+ * The same shape as the delete table above, and the gap this closed.
+ *
+ * `restart_deployment` had existed for releases while a StatefulSet's peek
+ * and page offered nothing, so the only way to roll one was `kubectl` — and
+ * nothing said so, because a missing entry is silence, not an error. The
+ * backend gaining a `restart_*` command is the event this watches for.
+ */
+describe("the peek's restart table against the commands that exist", () => {
+  /** What each kind rolls with. Names are not a function of the kind. */
+  const EXPECTED: Partial<Record<string, string>> = {
+    DaemonSet: "restartDaemonset",
+    Deployment: "restartDeployment",
+    Pod: "restartPod",
+    StatefulSet: "restartStatefulset",
+  };
+
+  it("offers a Restart for every kind whose command exists, and no other", () => {
+    const missing: string[] = [];
+    const unexpected: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      const offered = restartCommandFor(entry.kind) !== null;
+      const should = entry.kind in EXPECTED;
+      if (should && !offered) missing.push(entry.kind);
+      if (!should && offered) unexpected.push(entry.kind);
+    }
+    expect({ missing, unexpected }).toEqual({ missing: [], unexpected: [] });
+  });
+
+  /**
+   * The half that notices the backend growing one. Every `restart_*` the
+   * bindings export has to be claimed by a kind above; a new one fails this
+   * until somebody decides which kind it belongs to.
+   */
+  it("leaves no restart command in the bindings unclaimed", () => {
+    const exported = Object.keys(generated).filter((name) =>
+      /^restart[A-Z]/.test(name)
+    );
+    const claimed = new Set(Object.values(EXPECTED));
+    expect(exported.filter((name) => !claimed.has(name))).toEqual([]);
+    for (const [kind, command] of Object.entries(EXPECTED)) {
+      expect(generated, `${kind} names ${command}`).toHaveProperty(command!);
+    }
   });
 });

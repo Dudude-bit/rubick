@@ -563,6 +563,13 @@ export async function scaleStatefulset(
   return invoke<void>("scale_statefulset", { name, replicas, namespace });
 }
 
+export async function restartStatefulset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_statefulset", { name, namespace });
+}
+
 export async function deleteStatefulset(
   name: string,
   namespace: string | null
@@ -581,6 +588,13 @@ export async function getDaemonset(
   namespace: string | null
 ): Promise<DaemonSetDetailInfo> {
   return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
+}
+
+export async function restartDaemonset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_daemonset", { name, namespace });
 }
 
 export async function deleteDaemonset(

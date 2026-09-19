@@ -95,6 +95,12 @@ pub(super) struct HelmSecretRelease {
     pub version: i32,
     pub info: HelmSecretInfo,
     pub chart: HelmSecretChart,
+    /// The values the installer supplied. Helm leaves the field out
+    /// altogether when there were none, which is what a chart installed on
+    /// its defaults looks like — and every release like that failed to
+    /// decode, was warned about where nobody reads, and left the Helm page
+    /// saying the cluster has none.
+    #[serde(default)]
     pub config: serde_json::Value,
     #[serde(default)]
     pub manifest: String,
