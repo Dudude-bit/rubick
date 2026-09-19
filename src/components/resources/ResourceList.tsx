@@ -105,6 +105,20 @@ export interface ResourceListProps<
   resyncing?: boolean;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
+  /**
+   * When the read that has nothing to show yet began, for a caller that owns
+   * the read. A list handed its rows as `data` disables the query inside
+   * here, so the wait is not visible from in here at all — and those are
+   * the pods, the workloads and the CRDs, the lists long enough to need the
+   * sentence in the first place.
+   */
+  waitingSince?: number | null;
+  /**
+   * Whether picking one namespace would make this read shorter. False for a
+   * cluster-scoped kind, where the picker cannot change the answer and
+   * offering it is a remedy that does nothing.
+   */
+  narrowingHelps?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
     | ColumnDef<Row>[]
@@ -181,6 +195,8 @@ export function ResourceList<
   live,
   resyncing,
   slowed: externalSlowed,
+  waitingSince: externalWaitingSince,
+  narrowingHelps = true,
   columns,
   emptyStateLabel,
   widthsKey,
@@ -337,7 +353,10 @@ export function ResourceList<
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
-  const waitingSince = queryResult.freshness.waitingSince;
+  const waitingSince =
+    externalWaitingSince !== undefined
+      ? externalWaitingSince
+      : queryResult.freshness.waitingSince;
   const waitedMs =
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
   const slow = waitedMs >= SLOW_READ_MS;
@@ -392,7 +411,7 @@ export function ResourceList<
               })}
             </span>
           </p>
-          {(scope.isAll || scope.several) && (
+          {narrowingHelps && (scope.isAll || scope.several) && (
             <>
               <p className="mt-0.5 text-fg-mut">
                 {t("empty", "narrowerIsFaster")}
@@ -438,7 +457,7 @@ export function ResourceList<
             {verbatim(failed.message)}
           </p>
           <div className="mt-2 flex gap-2 pl-[22px]">
-            {(scope.isAll || scope.several) && (
+            {narrowingHelps && (scope.isAll || scope.several) && (
               <Button size="sm" variant="outline" onClick={openNamespacePicker}>
                 {t("action", "pickOneNamespace")}
               </Button>

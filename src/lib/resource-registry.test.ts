@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   RESOURCE_REGISTRY,
+  ResourceType,
   listQueryFor,
+  narrowingHelps,
   toPlural,
   toSingularNoun,
   type ResourceKind,
@@ -77,5 +79,33 @@ describe("toSingularNoun", () => {
    *  a wrong singular is worse than a plural that reads as one. */
   it("leaves a plural it does not know alone", () => {
     expect(toSingularNoun("widgets")).toBe("widgets");
+  });
+});
+
+describe("whether picking one namespace shortens a read", () => {
+  /**
+   * The slow-read panel and the deadline block both offer "Pick one
+   * namespace". On a cluster-scoped kind that control cannot change the
+   * answer — the list is one list however it is set — so offering it sends
+   * a reader to a remedy that does nothing.
+   */
+  it("says no for the kinds a namespace does not narrow", () => {
+    for (const kind of [
+      ResourceType.Node,
+      ResourceType.PersistentVolume,
+      ResourceType.StorageClass,
+    ]) {
+      expect(narrowingHelps(kind)).toBe(false);
+    }
+  });
+
+  it("says yes for the kinds that live in a namespace", () => {
+    for (const kind of [
+      ResourceType.Pod,
+      ResourceType.Deployment,
+      ResourceType.ConfigMap,
+    ]) {
+      expect(narrowingHelps(kind)).toBe(true);
+    }
   });
 });

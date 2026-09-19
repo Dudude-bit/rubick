@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { createAgeColumn } from "@/components/resources/columns";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
@@ -47,6 +47,7 @@ export function Crds() {
   const {
     data: crdGroups = [],
     isLoading,
+    error: crdsError,
     dataUpdatedAt,
     freshness,
   } = useLiveQuery({
@@ -227,7 +228,17 @@ export function Crds() {
         getRowHref={(row) => crdHref(row.name)}
         grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
-        emptyMessage={t("empty", "noCrdsInCluster")}
+        // A read that failed leaves `crdGroups` empty exactly as a cluster
+        // with no CRDs does, and the two mean opposite things: one is an
+        // answer, the other is that nobody could look. Since the deadline
+        // landed, the second is routine rather than theoretical.
+        emptyMessage={
+          crdsError
+            ? isRefusal(crdsError)
+              ? t("nav", "noListAccess")
+              : t("empty", "couldNotReadInScope", { label: "CRDs" })
+            : t("empty", "noCrdsInCluster")
+        }
       />
 
       <ConfirmDialog

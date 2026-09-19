@@ -195,4 +195,49 @@ describe("a read on a large cluster", () => {
     });
     expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
   });
+
+  /**
+   * The pages this was built for do not own the read. Pods, every workload
+   * list and CRDs hand their rows in as `data`, which disables the internal
+   * query — so a wait read off that query is a wait nobody is having, and
+   * the block never appears on precisely the lists big enough to need it.
+   * The caller says when it started waiting, the way it already says
+   * `slowed`.
+   */
+  it("says what it is still reading when the rows come from the caller", async () => {
+    vi.useFakeTimers();
+    const startedAt = Date.now();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              data={undefined}
+              isLoading
+              waitingSince={startedAt}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByTestId("slow-read")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_READ_MS + 1000);
+    });
+    expect(screen.getByTestId("slow-read")).toHaveTextContent(
+      /Still reading pods/
+    );
+  });
 });

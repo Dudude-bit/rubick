@@ -142,9 +142,18 @@ fn without_client_retries(mut config: Config) -> Config {
 
 /// How long one request may take before the app stops waiting and says so.
 ///
-/// Applied as a layer on every client, up to the response headers. For a
-/// LIST that is the whole list, because the apiserver assembles it before it
-/// answers; for a watch, a log follow or an exec it is the first byte, so the
+/// Applied as a layer on every client, and it bounds the wait **for the
+/// response head only**: `tower::timeout` races the future that yields
+/// `Response<Body>`, and kube collects the body outside that call
+/// (`request_text`: `self.send(..).await?` is timed, `into_body().collect()`
+/// is not). For a LIST the expensive part — the apiserver reading etcd and
+/// assembling — happens before it writes anything, so that is covered. What
+/// is not covered is a transfer that stalls part-way through a body already
+/// begun; nothing here bounds that, and the 8 s "still reading" block is what
+/// a reader sees if it happens. Deliberately not kube's socket-level
+/// `read_timeout`, which would cut every idle watch.
+///
+/// For a watch, a log follow or an exec this is the first byte, so the
 /// streams this app lives on are untouched. The number is also the one the
 /// frontend says in its sentence, so it lives in `shared/read-deadlines.json`
 /// and a test on each side holds the two equal.
@@ -156,10 +165,18 @@ pub const READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60
 
 /// The one place a client is built, so every client carries the deadline.
 fn build_client(config: Config) -> Result<Client> {
+    client_with_deadline(config, READ_DEADLINE)
+}
+
+/// The deadline is a parameter so a test can use one it can wait out. The
+/// layer itself is the whole of the behaviour; without this seam the only
+/// way to reach it was a sixty-second test, so it had none and deleting the
+/// layer left every Rust test green.
+fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result<Client> {
     let builder = kube::client::ClientBuilder::try_from(config)
         .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
     Ok(builder
-        .with_layer(&tower::timeout::TimeoutLayer::new(READ_DEADLINE))
+        .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
         .build())
 }
 
@@ -1133,5 +1150,47 @@ mod read_deadline_tests {
 
         let shared: Deadlines = serde_json::from_str(SHARED).expect("shared deadlines parse");
         assert_eq!(READ_DEADLINE.as_secs(), shared.list_deadline_seconds);
+    }
+
+    /// The deadline itself, against a server that accepts the connection and
+    /// then says nothing — which is the shape this exists for. Deleting the
+    /// layer from `client_with_deadline` leaves this hanging until the test
+    /// harness kills it; nothing else in the suite notices it is gone.
+    #[tokio::test]
+    async fn a_server_that_accepts_and_never_answers_ends_in_a_deadline() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        // Accepted and then held: the client gets a connection and no bytes.
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+
+        let config = Config::new(
+            format!("http://127.0.0.1:{port}")
+                .parse()
+                .expect("cluster url"),
+        );
+        let client = client_with_deadline(config, std::time::Duration::from_millis(200))
+            .expect("client");
+
+        let request = http::Request::get("/api/v1/namespaces")
+            .body(Vec::new())
+            .expect("request");
+        let answer = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            client.request_text(request),
+        )
+        .await;
+
+        let answer = answer.expect("the deadline has to end the wait, not the test harness");
+        assert!(
+            answer.is_err(),
+            "a server that never answers cannot produce a body"
+        );
     }
 }

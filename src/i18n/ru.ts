@@ -5078,6 +5078,7 @@ export const ru: Catalogue = {
     readDeadlineHint:
       "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
+    readDeadlineShort: "Чтение {label} не уложилось в {seconds} с.",
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",

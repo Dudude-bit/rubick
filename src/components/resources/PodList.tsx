@@ -206,6 +206,7 @@ export function PodList() {
     dataUpdatedAt,
     watchLive,
     resyncing,
+    waitingSince,
   } = usePodsWithMetrics();
 
   const quickActions = useMemo<
@@ -253,6 +254,7 @@ export function PodList() {
       title="Pods"
       data={podsWithMetrics}
       isLoading={isLoading}
+      waitingSince={waitingSince}
       error={error}
       dataUpdatedAt={dataUpdatedAt}
       live={watchLive}

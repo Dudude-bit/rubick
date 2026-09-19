@@ -30,7 +30,14 @@ vi.mock("@/stores/clusterStore", () => ({
     selector ? selector(state.cluster) : state.cluster,
 }));
 vi.mock("@/hooks/useLiveQuery", () => ({
-  useLiveQuery: () => ({ data: state.pods, isLoading: false, error: null }),
+  // Freshness comes with every real answer; a mock without it made the hook
+  // read waitingSince off undefined.
+  useLiveQuery: () => ({
+    data: state.pods,
+    isLoading: false,
+    error: null,
+    freshness: { slowed: false, waitingSince: null },
+  }),
 }));
 vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ podMetrics: state.metrics, podStatus: null }),

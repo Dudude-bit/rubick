@@ -73,6 +73,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
+    freshness,
   } = useLiveQuery({
     queryKey,
     queryFn: listAcrossScope(scope.scope, async (namespace) => {
@@ -146,5 +147,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     watchLive: !watchFailed,
     /** It is re-listing: the pods here are the ones from before it started. */
     resyncing,
+    /** When a read with nothing to show began, for the list to say so. */
+    waitingSince: freshness.waitingSince,
   };
 }

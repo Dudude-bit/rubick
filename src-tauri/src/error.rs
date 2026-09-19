@@ -416,6 +416,14 @@ mod tests {
         let err = Error::from(kube::Error::Service(elapsed));
         assert!(matches!(err, Error::ReadDeadline { .. }));
         assert!(err.to_string().starts_with("READ_DEADLINE:"));
+        // The number too: the frontend prints its own copy of it from the
+        // shared file, so a drift between the two would read as the cluster
+        // having been given longer than it was.
+        assert!(
+            err.to_string()
+                .contains(&crate::client::READ_DEADLINE.as_secs().to_string()),
+            "the sentence has to carry the deadline it applied: {err}"
+        );
 
         let wrapped: tower::BoxError =
             Box::new(Wrapped(Box::new(tower::timeout::error::Elapsed::new())));

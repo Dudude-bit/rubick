@@ -25,6 +25,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { deliveryScopeOf } from "@/lib/delivery";
+import { narrowingHelps } from "@/lib/resource-registry";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
@@ -198,6 +199,7 @@ export function createResourceListPage<T extends ListableResource>(
         columns={columns}
         quickActions={quickActions}
         emptyStateLabel={config.emptyStateLabel ?? config.title}
+        narrowingHelps={narrowingHelps(config.resourceType)}
         getRowHref={(row) =>
           getResourceDetailUrl(config.resourceType, row.name, row.namespace)
         }
