@@ -767,13 +767,13 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
 
   const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
 
   return (
     <NavLink
-      to={withCarriedSearch(item.path, item.kind, search)}
+      to={withCarriedSearch(item.path, item.kind, search, pathname)}
       end={item.path === "/"}
       onClick={onPress}
       className={({ isActive }) =>

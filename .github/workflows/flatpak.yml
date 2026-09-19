@@ -47,10 +47,12 @@ jobs:
             *) echo "::error::not a release tag: '$TAG'"; exit 1 ;;
           esac
 
-      - name: Checkout the tag
+      # The branch this workflow is running from, NOT the released tag: the
+      # packaging recipe is not versioned with the app, and a tag cut before
+      # it existed has no `packaging/` at all — which is exactly how the
+      # first run of this failed. The AppImage comes from the tag below.
+      - name: Checkout the packaging recipe
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
-        with:
-          ref: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
 
       - name: Install flatpak-builder
         run: |
