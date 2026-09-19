@@ -86,6 +86,48 @@ describe("listPodRows", () => {
     expect(calls.listeners["pod-rows-batch"]).toBeUndefined();
   });
 
+  /**
+   * The backend says how many rows it emitted, and the batches travel a
+   * broadcast bus. A chunk lost on the way arrived here as a shorter list
+   * with nothing to say it was short: five hundred pods missing from a pod
+   * list, drawn as the whole truth, which is the one thing this app exists
+   * not to do.
+   */
+  it("refuses a list that arrived short of the count the backend sent", async () => {
+    const answer = listPodRows("shop");
+    await settled();
+    emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a")] });
+    // The backend emitted three; one batch never made it across.
+    emit("pod-rows-done", { stream_id: "pods-1", rows: 3, complete: true });
+    await expect(answer).rejects.toThrow(/lost 2 of 3/);
+  });
+
+  /**
+   * A failure that arrives as an event never passes through the command
+   * wrapper, and that wrapper is the only place an expired session is
+   * noticed. Before this, a 401 part-way through the pod list rendered the
+   * raw `CREDENTIALS_EXPIRED:` wire marker at the reader and left the app
+   * looking merely broken.
+   */
+  it("notices an expired session in a failure that came as an event", async () => {
+    const { readExpiredCredentials, credentialsRestored } = await import(
+      "./credentials"
+    );
+    credentialsRestored();
+
+    const answer = listPodRows("shop");
+    await settled();
+    emit("pod-rows-failed", {
+      stream_id: "pods-1",
+      message: "CREDENTIALS_EXPIRED: the token expired at 12:00",
+    });
+    await expect(answer).rejects.toThrow(/CREDENTIALS_EXPIRED/);
+    expect(readExpiredCredentials()?.reason).toBe(
+      "the token expired at 12:00"
+    );
+    credentialsRestored();
+  });
+
   /** Another screen's stream shares the channel; its rows are not this list's. */
   it("ignores chunks addressed to another stream", async () => {
     const answer = listPodRows(null);

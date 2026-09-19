@@ -115,8 +115,14 @@ pub async fn list_pod_rows(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let ctx = ResourceContext::for_list(&state, normalize_optional_namespace(namespace))?;
-    let api: kube::Api<Pod> = ctx.namespaced_or_cluster_api();
+    let namespace = normalize_optional_namespace(namespace);
+    // Built once here so a bad scope is refused before a stream id exists,
+    // and thrown away: the one the task uses is taken after the gate.
+    let _ = ResourceContext::for_list(&state, namespace.clone())?;
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let clients = state.client_manager.clone();
 
     let stream_id = generate_id("pods");
     let (cancel_tx, mut cancel_rx) = oneshot::channel();
@@ -146,6 +152,21 @@ pub async fn list_pod_rows(
         if !started {
             return;
         }
+        // After the gate, not before it. The task can sit here for a minute
+        // waiting to be subscribed, and CLAUDE.md states the rule: a held
+        // `kube::Client` carries a token that expires. Taken per run, so a
+        // renewal that happened while this waited is the one used.
+        let Some(client) = clients.get_client(&context) else {
+            let _ = event_tx.send(AppEvent::PodRowsFailed {
+                stream_id: id.clone(),
+                message: crate::error::messages::NO_CLIENT.to_string(),
+            });
+            return;
+        };
+        let api: kube::Api<Pod> = match namespace.as_deref() {
+            Some(ns) => kube::Api::namespaced((*client).clone(), ns),
+            None => kube::Api::all((*client).clone()),
+        };
         let began = Instant::now();
         let outcome = page_rows(
             &api,
