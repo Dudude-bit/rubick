@@ -1,0 +1,100 @@
+# The Flatpak, built from the AppImage a release already published.
+#
+# Its own workflow rather than a job in `release.yml` for one reason: it has
+# to be runnable against a release that already exists. RHEL 8 users are
+# blocked on every artifact we have shipped so far, and telling them to wait
+# for the next tag would be the wrong answer to a question about today.
+#
+# Why a Flatpak at all is in `packaging/flatpak/com.k8s_gui.app.yml`, with the
+# glibc and WebKitGTK versions that make the other artifacts unrunnable there.
+name: Flatpak
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Released tag to build the Flatpak for (e.g. v4.17.0).'
+        required: true
+  # After a release, for the tag that release was for. A draft is fine: the
+  # download below reaches drafts, so the bundle is on the release before
+  # anybody publishes it.
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flatpak-${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: flatpak
+    # A Release that failed has no AppImage to build from.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Refuse a run with no tag to build for
+        run: |
+          case "$TAG" in
+            v*.*.*) echo "building for $TAG" ;;
+            *) echo "::error::not a release tag: '$TAG'"; exit 1 ;;
+          esac
+
+      - name: Checkout the tag
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          ref: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils
+
+      - name: Add Flathub and install the runtime
+        run: |
+          flatpak remote-add --if-not-exists --user flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --user --noninteractive flathub \
+            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+      - name: Take the AppImage from that release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # `gh release download` reaches a draft; the public URL would not.
+          gh release download "$TAG" --pattern '*_amd64.AppImage' --output rubick.AppImage
+          chmod +x rubick.AppImage
+          ./rubick.AppImage --appimage-extract > /dev/null
+
+      - name: Build the bundle
+        run: |
+          flatpak-builder --user --force-clean --repo=repo builddir \
+            packaging/flatpak/com.k8s_gui.app.yml
+          flatpak build-bundle repo "Rubick-${TAG#v}.flatpak" com.k8s_gui.app
+          ls -la ./*.flatpak
+
+      # Proof rather than hope: the bundle has to install and its binary has to
+      # resolve every library against the runtime, or the asset is a download
+      # that fails on the machine it was made for.
+      - name: Install it and check the binary resolves
+        run: |
+          flatpak install -y --user --noninteractive "Rubick-${TAG#v}.flatpak"
+          flatpak run --command=ldd com.k8s_gui.app /app/bin/rubick > ldd.txt
+          if grep -q "not found" ldd.txt; then
+            echo "::error::unresolved libraries in the bundle"
+            grep "not found" ldd.txt
+            exit 1
+          fi
+          echo "every library resolved"
+
+      - name: Attach it to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" "Rubick-${TAG#v}.flatpak" --clobber
