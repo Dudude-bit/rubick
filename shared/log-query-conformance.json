@@ -11,7 +11,7 @@
     "",
     "A case's line is a partial log line. Both readers fill the same gaps:",
     "message and raw default to empty, level to absent, fields to none,",
-    "container to 'app', and epoch to 0."
+    "container to 'app', pod to 'pod', and epoch to 0."
   ],
   "levelOrder": ["unknown", "debug", "info", "warn", "error", "fatal"],
   "cases": [
@@ -167,6 +167,40 @@
         "value": "web"
       },
       "line": { "container": "web" },
+      "expect": true
+    },
+    {
+      "name": "pod answers as a field though nothing parsed it",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "pod",
+        "value": "api-7f9c-xspq"
+      },
+      "line": { "pod": "api-7f9c-xspq" },
+      "expect": true
+    },
+    {
+      "name": "another pod's line does not match",
+      "term": {
+        "kind": "field",
+        "op": "=",
+        "key": "pod",
+        "value": "api-7f9c-xspq"
+      },
+      "line": { "pod": "api-7f9c-a1b2" },
+      "expect": false
+    },
+    {
+      "name": "pod is not read out of the parsed fields",
+      "term": { "kind": "field", "op": "=", "key": "pod", "value": "api-a" },
+      "line": { "pod": "api-b", "fields": { "pod": "api-a" } },
+      "expect": false
+    },
+    {
+      "name": "a pod the line is not from is kept by the negated term",
+      "term": { "kind": "field", "op": "≠", "key": "pod", "value": "api-a" },
+      "line": { "pod": "api-b" },
       "expect": true
     },
     {

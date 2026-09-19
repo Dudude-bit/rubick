@@ -34,6 +34,7 @@ export function useAutoUpdater() {
   const {
     autoCheckEnabled,
     settingsLoaded,
+    canInstall,
     available,
     loadSettings,
     checkForUpdates,
@@ -50,6 +51,9 @@ export function useAutoUpdater() {
   // Initial check and periodic checks
   useEffect(() => {
     if (!settingsLoaded) return;
+    // Only a definite no stops the checks: the Flatpak bundle would download
+    // 100 MB every half hour and fail to install it. Unknown is not that no.
+    if (canInstall === false) return;
 
     const performCheck = async () => {
       if (!autoCheckEnabled) return;
@@ -81,7 +85,7 @@ export function useAutoUpdater() {
         intervalRef.current = null;
       }
     };
-  }, [settingsLoaded, autoCheckEnabled, checkForUpdates, t]);
+  }, [settingsLoaded, autoCheckEnabled, canInstall, checkForUpdates, t]);
 
   // Reset toast flag when update is dismissed
   useEffect(() => {

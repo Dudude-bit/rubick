@@ -12,7 +12,7 @@
  */
 
 import { Link } from "react-router-dom";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Package } from "lucide-react";
 
 import { gitRevisionLink, shortRevision, vendorIcon } from "@/integrations";
 import type { Delivery } from "@/integrations";
@@ -22,6 +22,7 @@ import {
   deliveryMarks,
   type DeliveryLine,
 } from "@/lib/delivery";
+import { helmOwnerOf, helmReleasePath } from "@/lib/helm-owner";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
@@ -67,6 +68,32 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
         );
       })}
     </>
+  );
+}
+
+/**
+ * The release that installed this, beside the delivery marks and drawn the
+ * same quiet way.
+ *
+ * Helm is not a delivery controller and has no vendor entry, but it answers
+ * the same question — where do I change this — and the object already carries
+ * the answer. Without it a release's Resources list was a one-way door: you
+ * could reach a Deployment from its release and never find the release from
+ * the Deployment.
+ */
+export function HelmMark({ object }: { object: unknown }) {
+  const t = useT();
+  const release = helmOwnerOf(object);
+  if (!release) return null;
+  return (
+    <Link
+      to={helmReleasePath(release)}
+      title={t("empty", "installedByRelease", { name: release.name })}
+      className="inline-flex items-center gap-1.5 text-[11px] text-fg-fnt hover:text-fg-mut"
+    >
+      <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <span className="font-mono">{release.name}</span>
+    </Link>
   );
 }
 

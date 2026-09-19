@@ -8,37 +8,9 @@
  * and not working — so both are columns and neither stands for the other.
  */
 
-import type { CrdColumn, CrdStatus } from "../kit";
+import type { CrdColumn } from "../kit";
 import { getValueByPath, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
-
-const status: CrdStatus = {
-  getStatus: (resource) => {
-    const health = getValueByPath(resource, "status.health.status") as
-      string | undefined;
-    const sync = getValueByPath(resource, "status.sync.status") as
-      string | undefined;
-    // Health first: "OutOfSync" is a statement about git, and a Degraded
-    // application that happens to match git is still the more urgent word.
-    if (health && health !== "Healthy") return health;
-    return sync ?? health ?? null;
-  },
-  getVariant: (value) => {
-    switch (value.toLowerCase()) {
-      case "healthy":
-      case "synced":
-        return "default";
-      case "progressing":
-        return "secondary";
-      case "degraded":
-      case "missing":
-      case "outofsync":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  },
-};
 
 const text = (value: unknown) => String(value ?? "-");
 
@@ -153,5 +125,4 @@ export const crd: CrdView = {
         return applicationColumns;
     }
   },
-  status,
 };

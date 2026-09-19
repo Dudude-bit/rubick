@@ -24,6 +24,7 @@ import {
   type DensityBucket,
   type DensityCursor,
 } from "./density";
+import type { LostLines } from "./hooks/log-buffer";
 import { formatCount, formatSpan, type StreamedLogLine } from "./types";
 import { useT } from "@/i18n/useT";
 
@@ -117,7 +118,7 @@ interface LogDensityStripProps {
   /** Lines held in total, to tell "nothing yet" from "nothing matches". */
   retained: number;
   /** The cap has evicted: the left edge is not the start of the log. */
-  headDropped: boolean;
+  lost: LostLines;
   /**
    * Intake is set, so the buffer this maps is not everything the
    * container wrote. A map that quietly stops being a map is the one
@@ -126,6 +127,8 @@ interface LogDensityStripProps {
   intake: boolean;
   /** The committed range, so the strip draws what the chip says. */
   selection: { from: number; to: number } | null;
+  /** The interval the cap may not evict, marked so the map says what is held. */
+  frozen: { from: number; to: number } | null;
   /** The stretch of clock the list is showing, in ms since epoch. */
   viewportFrom: number;
   viewportTo: number;
@@ -141,9 +144,10 @@ export function LogDensityStrip({
   logs,
   scope,
   retained,
-  headDropped,
+  lost,
   intake,
   selection,
+  frozen,
   viewportFrom,
   viewportTo,
   onJump,
@@ -223,6 +227,11 @@ export function LogDensityStrip({
     return { lo: indexOf(viewportFrom), hi: indexOf(viewportTo) };
   }, [count, viewportFrom, viewportTo, indexOf]);
 
+  const held = useMemo(() => {
+    if (!frozen || count === 0) return null;
+    return { lo: indexOf(frozen.from), hi: indexOf(frozen.to) };
+  }, [frozen, count, indexOf]);
+
   // Indices are clamped on the way out because the strip is not standing
   // still while it is being used: a batch landing mid-drag can drop slices
   // off the head, and the index the pointer went down on is then one past
@@ -235,7 +244,15 @@ export function LogDensityStrip({
   const commit = useCallback(
     (lo: number, hi: number) => {
       if (count === 0) return;
-      onSelect(buckets[clamp(lo)].start, buckets[clamp(hi)].start + step - 1);
+      // Never past now. The last slice is still filling, so its nominal end
+      // is in the future by up to one rung — and a rung goes to a day. A
+      // range that has not happened yet is not an interval a reader can
+      // choose to keep: ending the drag on the newest slice, the natural
+      // "from here to the end" gesture, handed the freeze an upper bound
+      // hours ahead and every line arriving until then was held outside the
+      // cap, unevictable and uncounted.
+      const end = Math.min(buckets[clamp(hi)].start + step - 1, Date.now());
+      onSelect(buckets[clamp(lo)].start, end);
     },
     [buckets, count, step, clamp, onSelect]
   );
@@ -333,8 +350,8 @@ export function LogDensityStrip({
 
   const spanMs = density.to - density.from;
   const summary = useMemo(
-    () => describe(density, headDropped, intake, t),
-    [density, headDropped, intake, t]
+    () => describe(density, lost, intake, t),
+    [density, lost, intake, t]
   );
 
   const band = mode === "band";
@@ -392,6 +409,7 @@ export function LogDensityStrip({
           band={band}
           inView={inView !== null && index >= inView.lo && index <= inView.hi}
           chosen={chosen !== null && index >= chosen.lo && index <= chosen.hi}
+          frozen={held !== null && index >= held.lo && index <= held.hi}
           dimmed={chosen !== null && (index < chosen.lo || index > chosen.hi)}
           cursor={focused && index === active}
         />
@@ -473,12 +491,21 @@ export function LogDensityStrip({
         style={{ height: AXIS_PX }}
       >
         <span
-          title={headDropped ? t("empty", "olderLinesDroppedAxis") : undefined}
+          title={
+            lost === "none"
+              ? undefined
+              : t(
+                  "empty",
+                  lost === "head"
+                    ? "olderLinesDroppedAxis"
+                    : "linesDroppedAroundKeptAxis"
+                )
+          }
         >
           {/* The left edge is only the start of the log while nothing has
               been evicted. Once it has, saying so is the difference
               between a window on the log and a claim about it. */}
-          {headDropped && <span aria-hidden="true">⋯ </span>}
+          {lost !== "none" && <span aria-hidden="true">⋯ </span>}
           {axisLabel(origin, step, spanMs)}
         </span>
         <span>{axisLabel(mid, step, spanMs)}</span>
@@ -547,6 +574,7 @@ function Slice({
   band,
   inView,
   chosen,
+  frozen,
   dimmed,
   cursor,
 }: {
@@ -558,6 +586,8 @@ function Slice({
   band: boolean;
   inView: boolean;
   chosen: boolean;
+  /** Inside the interval the cap may not evict. */
+  frozen: boolean;
   dimmed: boolean;
   cursor: boolean;
 }) {
@@ -601,7 +631,9 @@ function Slice({
 
   const chrome = `flex min-w-0 flex-1 flex-col rounded-[1px] ${
     chosen ? "bg-sel" : "hover:bg-hover"
-  } ${dimmed ? "opacity-40" : ""} ${cursor ? "ring-1 ring-inset ring-fg" : ""}`;
+  } ${dimmed ? "opacity-40" : ""} ${cursor ? "ring-1 ring-inset ring-fg" : ""} ${
+    frozen ? "border-b-2 border-info" : ""
+  }`;
 
   if (band) {
     const level =
@@ -809,7 +841,7 @@ function Placeholder({ children }: { children: React.ReactNode }) {
  */
 function describe(
   density: Density,
-  headDropped: boolean,
+  lost: LostLines,
   intake: boolean,
   t: ReturnType<typeof useT>
 ): string {
@@ -846,7 +878,13 @@ function describe(
           ? t("count", "andNMore", { n: bursts.length - SPOKEN_BURSTS })
           : ""
       }.`,
-    headDropped && t("empty", "olderLinesDroppedSummary"),
+    lost !== "none" &&
+      t(
+        "empty",
+        lost === "head"
+          ? "olderLinesDroppedSummary"
+          : "linesDroppedAroundKeptSummary"
+      ),
     intake && t("empty", "intakeCoversKeptOnly"),
     t("action", "densityKeysHint"),
   ]

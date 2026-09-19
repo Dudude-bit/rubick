@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { useUpdaterStore } from "@/stores/updaterStore";
+import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
 import { useT } from "@/i18n/useT";
 
@@ -30,6 +31,7 @@ export function AboutSettings() {
     progress,
     error,
     autoCheckEnabled,
+    canInstall,
     setAutoCheckEnabled,
     checkForUpdates,
     downloadAndInstall,
@@ -51,6 +53,23 @@ export function AboutSettings() {
             <span className="font-mono text-xs text-fg">
               {appInfo?.version ?? "…"}
             </span>
+          }
+        />
+        <SettingRow
+          label={t("settings", "whatsNew")}
+          hint={t("settings", "whatsNewHint")}
+          keywords={t("settings", "searchWhatsNewWords")}
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!appInfo}
+              onClick={() =>
+                appInfo && useWhatsNewStore.getState().show([appInfo.version])
+              }
+            >
+              {t("settings", "showWhatsNew")}
+            </Button>
           }
         />
         <SettingRow
@@ -81,7 +100,12 @@ export function AboutSettings() {
           hint={t("settings", "updateHint")}
           keywords={t("settings", "searchUpdateWords")}
           control={
-            available && !downloading ? (
+            canInstall === false ? (
+              // No button where pressing it can only end in a failed install.
+              <span className="text-[11px] text-fg-mut">
+                {t("settings", "managedUpdates")}
+              </span>
+            ) : available && !downloading ? (
               <Button
                 size="sm"
                 onClick={() => {
@@ -143,18 +167,20 @@ export function AboutSettings() {
             </p>
           )}
         </SettingRow>
-        <SettingRow
-          label={t("settings", "autoUpdates")}
-          hint={t("settings", "autoUpdatesHint")}
-          keywords={t("settings", "searchAutoUpdateWords")}
-          control={
-            <Switch
-              aria-label={t("settings", "autoUpdates")}
-              checked={autoCheckEnabled}
-              onCheckedChange={setAutoCheckEnabled}
-            />
-          }
-        />
+        {canInstall !== false && (
+          <SettingRow
+            label={t("settings", "autoUpdates")}
+            hint={t("settings", "autoUpdatesHint")}
+            keywords={t("settings", "searchAutoUpdateWords")}
+            control={
+              <Switch
+                aria-label={t("settings", "autoUpdates")}
+                checked={autoCheckEnabled}
+                onCheckedChange={setAutoCheckEnabled}
+              />
+            }
+          />
+        )}
       </SettingsGroup>
     </div>
   );

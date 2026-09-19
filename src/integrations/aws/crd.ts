@@ -9,7 +9,7 @@
 
 import { joinSayings } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { conditionStatus, matchByGroup } from "../kit";
+import { matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingFailure,
@@ -83,5 +83,4 @@ export const crd: CrdView = {
         return targetGroupBindingColumns;
     }
   },
-  status: conditionStatus("Ready"),
 };

@@ -19,6 +19,13 @@ export function asMarkdown(d: Diagnostics): string {
     "",
     `Version ${d.app.version} · ${d.app.os}`,
     "",
+    // The one line that turns "can you send the log?" into a file the reader
+    // can find. It is not on the screen twice by accident: a maintainer
+    // reading a pasted report cannot see the panel it was copied from.
+    d.app.logDestination
+      ? `Log: \`${d.app.logDestination}\``
+      : "Log: no file this run.",
+    "",
     "### Findings",
     ...(d.findings.length === 0
       ? ["Nothing needs attention."]

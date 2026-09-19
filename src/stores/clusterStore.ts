@@ -71,6 +71,16 @@ interface ClusterState {
    * nothing. Null whenever nothing is in flight.
    */
   connectStartedAt: number | null;
+  /**
+   * The cluster this window was last connected to, kept across a disconnect
+   * so that reconnecting somewhere else still counts as a change.
+   */
+  lastConnected: string | null;
+  /**
+   * How many times this window has landed on a different cluster than the
+   * one before, so a surface holding a route from the old one can let go.
+   */
+  contextSwitches: number;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -78,7 +88,15 @@ interface ClusterState {
   switchNamespace: (namespace: string) => Promise<void>;
   /** Look at these namespaces, or at the whole cluster for an empty list. */
   setNamespaceScope: (namespaces: string[]) => Promise<void>;
-  connect: (context?: string) => Promise<void>;
+  /**
+   * `keepRoute` for a caller taking the reader somewhere itself — a deep
+   * link, a tab activation. Without it the move counts as a switch and the
+   * route being delivered is the one let go of.
+   */
+  connect: (
+    context?: string,
+    options?: { keepRoute?: boolean }
+  ) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -115,6 +133,8 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   errorContext: null,
   connectionAttemptId: 0,
   connectStartedAt: null,
+  lastConnected: null,
+  contextSwitches: 0,
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
@@ -224,7 +244,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     }
   },
 
-  connect: async (context?: string) => {
+  connect: async (context?: string, options?: { keepRoute?: boolean }) => {
     const targetContext = context ?? get().currentContext;
     if (!targetContext) {
       set({
@@ -269,7 +289,15 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         return;
       }
       const connectedContext = info.context || targetContext;
+      // On the way in, not on the attempt: a failed connect left the reader
+      // where they were.
+      const arrived =
+        !options?.keepRoute &&
+        get().lastConnected !== null &&
+        get().lastConnected !== connectedContext;
       set({
+        lastConnected: connectedContext,
+        contextSwitches: get().contextSwitches + (arrived ? 1 : 0),
         currentContext: connectedContext,
         isConnected: true,
         connectedThrough: info.connected_through,

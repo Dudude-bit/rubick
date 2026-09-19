@@ -20,6 +20,7 @@ use super::cred::{
     ExecCredential, ExecCredentialRequest, ExecCredentialSpec, ExecCredentialStatus,
     ExecTerminalParams,
 };
+use super::AuthMode;
 
 /// Timeout injected into kubelogin-family exec plugins via
 /// `--authentication-timeout-sec` when the user hasn't set their own.
@@ -84,11 +85,25 @@ fn should_inject_kubelogin_timeout(command: &str, args: &[String]) -> bool {
 /// holding system resources forever.
 const AUTH_FLOW_TIMEOUT_SECS: u64 = 30 * 60;
 
+/// The same cap for a renewal nobody asked for. A plugin answering from its
+/// own cache is back in under a second; one that is not wants a person, and
+/// there is nobody here to ask.
+pub(crate) const SILENT_FLOW_TIMEOUT_SECS: u64 = 30;
+
+/// An event a silent renewal must not send: each draws something — a modal,
+/// a toast, a browser tab — for a reader who asked for none of it.
+fn announce(state: &AppState, mode: AuthMode, event: AppEvent) {
+    if mode.is_seen() {
+        state.emit(event);
+    }
+}
+
 pub(super) async fn run_exec_auth(
     state: &AppState,
     context: &str,
     exec: &ExecConfig,
     exec_cluster: Option<ExecAuthCluster>,
+    mode: AuthMode,
 ) -> Result<ExecCredentialStatus> {
     // Create the auth session BEFORE attempting native auth so a
     // concurrent `disconnect_cluster` (or any caller of
@@ -98,7 +113,7 @@ pub(super) async fn run_exec_auth(
     // credentials, then `MetadataServiceAccount`) — long enough for the
     // user to switch contexts first, and `AuthTerminalSessionCreated` then
     // lands as an orphan modal over whatever cluster they landed on.
-    let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec");
+    let (session_id, mut cancel_rx) = state.create_auth_session(context, "exec", mode.is_seen());
 
     // Race native cloud auth against the cancel signal. Dropping the
     // native_auth future at the select branch aborts gcp_auth's HTTP
@@ -107,7 +122,7 @@ pub(super) async fn run_exec_auth(
         result = try_native_cloud_auth(exec, context) => result,
         _ = &mut cancel_rx => {
             state.remove_auth_session(&session_id);
-            state.emit(AppEvent::AuthFlowCancelled {
+            announce(state, mode, AppEvent::AuthFlowCancelled {
                 session_id: session_id.clone(),
                 context: context.to_string(),
                 why: None,
@@ -183,13 +198,31 @@ pub(super) async fn run_exec_auth(
             )))
         })?;
 
-    state.emit(AppEvent::AuthTerminalSessionCreated {
-        auth_session_id: session_id.clone(),
-        terminal_session_id: terminal_session_id.clone(),
-        context: context.to_string(),
-        command: format!("{} {}", params.command, params.args.join(" ")),
-    });
+    announce(
+        state,
+        mode,
+        AppEvent::AuthTerminalSessionCreated {
+            auth_session_id: session_id.clone(),
+            terminal_session_id: terminal_session_id.clone(),
+            context: context.to_string(),
+            command: format!("{} {}", params.command, params.args.join(" ")),
+        },
+    );
 
+    // The I/O loop waits for its reader to say so, and in a silent run no
+    // event went out, so no pane will ever call `terminal_subscribed`.
+    // Without this the plugin's output is read by nobody until the timeout.
+    if !mode.is_seen() {
+        state
+            .terminal_manager
+            .mark_subscribed(&terminal_session_id)?;
+    }
+
+    let ceiling = if mode.is_seen() {
+        AUTH_FLOW_TIMEOUT_SECS
+    } else {
+        SILENT_FLOW_TIMEOUT_SECS
+    };
     let mut url_emitted = false;
     let mut last_url = String::new();
     let mut interval = tokio::time::interval(Duration::from_millis(250));
@@ -209,9 +242,26 @@ pub(super) async fn run_exec_auth(
                 if !url_emitted {
                     if let Ok(url) = read_auth_url(&url_file).await {
                         if !url.is_empty() && url != last_url {
+                            // A URL is the plugin asking for a person, and a
+                            // browser opened at one who asked for nothing is
+                            // the interruption this path exists to remove.
+                            if !mode.is_seen() {
+                                // The close is best-effort: this path is
+                                // already failing, and letting its error out
+                                // here would skip the cleanup below and leave
+                                // the browser shim and the session behind.
+                                let _ = state
+                                    .terminal_manager
+                                    .close_session(&terminal_session_id);
+                                cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
+                                state.remove_auth_session(&session_id);
+                                return Err(Error::Auth(AuthError::NeedsPerson(
+                                    "the credential plugin asked for a browser".to_string(),
+                                )));
+                            }
                             last_url.clone_from(&url);
                             url_emitted = true;
-                            state.emit(AppEvent::AuthUrlRequested {
+                            announce(state, mode, AppEvent::AuthUrlRequested {
                                 context: context.to_string(),
                                 url,
                                 flow: "exec".to_string(),
@@ -228,7 +278,7 @@ pub(super) async fn run_exec_auth(
                 state.terminal_manager.close_session(&terminal_session_id)?;
                 cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
                 state.remove_auth_session(&session_id);
-                state.emit(AppEvent::AuthFlowCancelled {
+                announce(state, mode, AppEvent::AuthFlowCancelled {
                     session_id,
                     context: context.to_string(),
                     why: None,
@@ -236,16 +286,20 @@ pub(super) async fn run_exec_auth(
                 return Err(Error::Auth(AuthError::Kubeconfig("Authentication cancelled".to_string())));
             }
         }
-        if started.elapsed() > Duration::from_secs(AUTH_FLOW_TIMEOUT_SECS) {
+        if started.elapsed() > Duration::from_secs(ceiling) {
             state.terminal_manager.close_session(&terminal_session_id)?;
             cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
             state.remove_auth_session(&session_id);
-            state.emit(AppEvent::AuthFlowCompleted {
-                session_id,
-                context: context.to_string(),
-                success: false,
-                why: Some(AuthOutcome::TimedOut),
-            });
+            announce(
+                state,
+                mode,
+                AppEvent::AuthFlowCompleted {
+                    session_id,
+                    context: context.to_string(),
+                    success: false,
+                    why: Some(AuthOutcome::TimedOut),
+                },
+            );
             return Err(Error::Timeout("Authentication timed out".to_string()));
         }
     }
@@ -269,12 +323,16 @@ pub(super) async fn run_exec_auth(
              waiting for you to finish signing in through the browser — make \
              sure the authentication URL opened and you completed the login."
             .to_string();
-        state.emit(AppEvent::AuthFlowCompleted {
-            session_id,
-            context: context.to_string(),
-            success: false,
-            why: Some(AuthOutcome::Said { text: msg.clone() }),
-        });
+        announce(
+            state,
+            mode,
+            AppEvent::AuthFlowCompleted {
+                session_id,
+                context: context.to_string(),
+                success: false,
+                why: Some(AuthOutcome::Said { text: msg.clone() }),
+            },
+        );
         return Err(Error::Auth(AuthError::Kubeconfig(msg)));
     }
 
@@ -318,23 +376,31 @@ pub(super) async fn run_exec_auth(
     if status.token.is_none()
         && (status.client_certificate_data.is_none() || status.client_key_data.is_none())
     {
-        state.emit(AppEvent::AuthFlowCompleted {
-            session_id,
-            context: context.to_string(),
-            success: false,
-            why: Some(AuthOutcome::NoTokenInCredential),
-        });
+        announce(
+            state,
+            mode,
+            AppEvent::AuthFlowCompleted {
+                session_id,
+                context: context.to_string(),
+                success: false,
+                why: Some(AuthOutcome::NoTokenInCredential),
+            },
+        );
         return Err(Error::Auth(AuthError::Kubeconfig(
             "Exec credentials missing token".to_string(),
         )));
     }
 
-    state.emit(AppEvent::AuthFlowCompleted {
-        session_id,
-        context: context.to_string(),
-        success: true,
-        why: None,
-    });
+    announce(
+        state,
+        mode,
+        AppEvent::AuthFlowCompleted {
+            session_id,
+            context: context.to_string(),
+            success: true,
+            why: None,
+        },
+    );
 
     Ok(status)
 }
@@ -454,6 +520,8 @@ async fn read_auth_url(path: &PathBuf) -> Result<String> {
 /// plugin printed: without them "no JSON object found in 6 bytes" is
 /// indistinguishable from PTY init noise, a one-line plugin error, a
 /// truncated JSON header or an empty terminal response.
+/// A look at what the plugin printed, with nothing in it a reader could use
+/// as a credential — the same text reaches the pane and `rubick.log`.
 fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
     let truncated = data.len() > max_bytes;
     let slice = &data[..data.len().min(max_bytes)];
@@ -476,7 +544,7 @@ fn preview_bytes(data: &[u8], max_bytes: usize) -> String {
     if truncated {
         let _ = write!(out, " (+{} more bytes)", data.len() - max_bytes);
     }
-    out
+    super::cred::without_credentials(&out)
 }
 
 fn create_browser_script(session_id: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
@@ -750,14 +818,36 @@ mod preview_tests {
 
     #[test]
     fn truncates_with_suffix_when_over_limit() {
-        let data = vec![b'x'; 250];
+        // Spaced, so the length is what is being measured and not the
+        // credential masking — an unbroken run of 250 characters is a
+        // credential as far as this can tell, and is reported as one.
+        let data = b"x ".repeat(125);
         let preview = preview_bytes(&data, 200);
         assert!(
             preview.ends_with("(+50 more bytes)"),
             "expected truncation suffix; got {preview:?}"
         );
-        // 200 'x' chars between the surrounding quotes.
-        assert!(preview.starts_with(&format!("\"{}\"", "x".repeat(200))));
+        assert!(preview.starts_with(&format!("\"{}", "x ".repeat(100))));
+    }
+
+    /// The plugin's stdout reaches `rubick.log`, which outlives the run and
+    /// which Diagnostics invites the reader to send. A preview of an
+    /// `ExecCredential` the extractor choked on must carry the shape and not
+    /// the token. Fails if the preview stops going through the one door.
+    #[test]
+    fn a_preview_of_the_plugins_stdout_carries_no_token() {
+        let token = "e".repeat(3794);
+        let preview = preview_bytes(
+            format!(r#"{{"kind":"ExecCredential","status":{{"token":"{token}"}}}}"#).as_bytes(),
+            8192,
+        );
+
+        assert!(
+            !preview.contains(&token),
+            "the token reached the log: {preview}"
+        );
+        assert!(preview.contains("<3794 characters>"), "{preview}");
+        assert!(preview.contains("ExecCredential"), "{preview}");
     }
 
     #[test]

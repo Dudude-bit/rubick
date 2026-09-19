@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 import type { Delivery, DeliverySource } from "@/integrations";
+import { RESOURCE_REGISTRY } from "./resource-registry";
 import {
+  apiGroupOf,
   deliveryApplyIntercept,
   deliveryCell,
   deliveryIntercept,
@@ -371,5 +373,68 @@ describe("which lists carry the column", () => {
       group: "",
       kind: "ConfigMap",
     });
+  });
+});
+
+/**
+ * The table nothing cross-checked, which is how a kind gets left out of it.
+ *
+ * `API_GROUPS` is hand-kept beside a registry that already states every
+ * kind's `apiVersion`, and a kind missing from it makes `apiGroupOf` answer
+ * `null` — which every caller reads as "no delivery to speak of". The column,
+ * the detail block and the peek go quiet together, with nothing failing.
+ * Seven Gateway kinds sat like that on pages already written to ask.
+ *
+ * A group written *wrong* is worse than one missing: Flux's inventory id is
+ * `namespace_name_group_kind`, so `"app"` for `"apps"` reports a delivered
+ * object as labelled and disowned.
+ *
+ * No exception list, on purpose. Every kind has a group, so any kind this
+ * would have to excuse is one the table should simply name; whether a list
+ * *draws* the column is `MADE_BY_THE_CLUSTER`'s separate question, asserted
+ * below.
+ */
+describe("the delivery table against the resource registry", () => {
+  it("names every kind in the registry, in the registry's own group", () => {
+    const missing: string[] = [];
+    const wrong: string[] = [];
+    for (const entry of RESOURCE_REGISTRY) {
+      const group = apiGroupOf(entry.kind);
+      if (group === null) {
+        missing.push(entry.kind);
+        continue;
+      }
+      // "apps/v1" -> "apps"; a core kind's "v1" has no slash and no group.
+      const fromRegistry = entry.apiVersion.includes("/")
+        ? entry.apiVersion.split("/")[0]
+        : "";
+      if (group !== fromRegistry)
+        wrong.push(`${entry.kind}: ${group} ≠ ${fromRegistry}`);
+    }
+    expect({ missing, wrong }).toEqual({ missing: [], wrong: [] });
+  });
+
+  /**
+   * The editorial half, stated as a list rather than left to the table's
+   * shape: a kind is refused a scope because somebody decided the column
+   * would say nothing useful on its list, never because its group was
+   * forgotten. Fails if the two questions get confused again.
+   *
+   * A scope is permission to draw the column, not proof that a page does:
+   * `NamespaceList` asks for none today, and a Namespace still carries its
+   * delivery marks in the peek, which reads the group directly.
+   */
+  it("refuses a scope only for the kinds the cluster fills", () => {
+    for (const kind of ["Pod", "ReplicaSet", "Endpoints", "Event", "Node"])
+      expect(deliveryScopeOf(kind)).toBeNull();
+
+    for (const kind of [
+      "Deployment",
+      "Gateway",
+      "HTTPRoute",
+      "Namespace",
+      "NetworkPolicy",
+    ])
+      expect(deliveryScopeOf(kind)).not.toBeNull();
   });
 });

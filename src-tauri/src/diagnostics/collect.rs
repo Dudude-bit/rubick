@@ -81,10 +81,12 @@ pub struct InstallationInfo {
     pub version: String,
     pub os: String,
     pub config_path: Option<String>,
-    /// Where logs go. Saying "stdout" is worth more than leaving it blank:
-    /// stdout is nowhere at all under a Dock launch, which is why nobody
-    /// finds them.
-    pub log_destination: String,
+    /// The file this run is writing to, so a reader asked for "the log" has
+    /// somewhere to go, and `None` when there is no such file. It used to be
+    /// a sentence saying "stdout", which under a Dock launch — or any
+    /// packaged Windows build, which has no console at all — is nowhere, and
+    /// that is why nobody ever found them.
+    pub log_destination: Option<String>,
 }
 
 impl InstallationInfo {
@@ -99,7 +101,12 @@ impl InstallationInfo {
                     .to_string_lossy()
                     .into_owned()
             }),
-            log_destination: "stdout (not captured when launched from the Dock)".to_string(),
+            // Asked, not recomputed: `log_dir` says where a file would go,
+            // which is not the same as one being open. A path named for a
+            // directory that could not be created sends a reader looking for
+            // a file that is not there.
+            log_destination: k8s_gui_common::log_path()
+                .map(|file| file.to_string_lossy().into_owned()),
         }
     }
 }

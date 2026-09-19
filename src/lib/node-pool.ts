@@ -19,6 +19,7 @@
  * is never substituted for by a pool label that merely hints at one.
  */
 
+import type { T } from "@/i18n/useT";
 import type { NodeInfo } from "@/generated/types";
 import {
   cloudOfProviderScheme,
@@ -179,10 +180,15 @@ export function elideZonePrefix(zones: readonly string[]): string[] {
  */
 const NAME_LIMIT = 3;
 
-function listOrCount(values: readonly string[], plural: string): string | null {
+function listOrCount(
+  values: readonly string[],
+  counted: "machineTypes" | "zonesCount",
+  t: T
+): string | null {
   if (values.length === 0) return null;
+  // The values themselves are the cloud's own words and stay as written.
   if (values.length <= NAME_LIMIT) return values.join(", ");
-  return `${values.length} ${plural}`;
+  return t("count", counted, { n: values.length });
 }
 
 /**
@@ -195,11 +201,11 @@ function listOrCount(values: readonly string[], plural: string): string | null {
  * know the maximum, and inventing one from the nodes that happen to exist
  * would be a number the reader would act on and that nothing checked.
  */
-export function describePool(facts: PoolFacts): string {
+export function describePool(facts: PoolFacts, t: T): string {
   const parts = [
-    listOrCount(facts.machines, "machine types"),
-    listOrCount(elideZonePrefix(facts.zones), "zones"),
-    `${facts.nodes} ${facts.nodes === 1 ? "node" : "nodes"}`,
+    listOrCount(facts.machines, "machineTypes", t),
+    listOrCount(elideZonePrefix(facts.zones), "zonesCount", t),
+    t("count", "nodesCount", { n: facts.nodes }),
   ];
   return parts.filter((part): part is string => part !== null).join(" · ");
 }
@@ -214,8 +220,8 @@ export function describePool(facts: PoolFacts): string {
  * can, and calling either of them just "spot" would be picking one node's
  * truth and calling it the pool's.
  */
-export function spotMark(facts: PoolFacts): string | null {
+export function spotMark(facts: PoolFacts, t: T): string | null {
   if (facts.spotNodes === 0) return null;
-  if (facts.spotNodes === facts.nodes) return "spot";
-  return `${facts.spotNodes} of ${facts.nodes} spot`;
+  if (facts.spotNodes === facts.nodes) return t("count", "allSpot");
+  return t("count", "someSpot", { n: facts.spotNodes, total: facts.nodes });
 }

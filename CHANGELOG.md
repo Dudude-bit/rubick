@@ -5,6 +5,304 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.18.0] - 2026-09-19
+
+### Added
+
+- **A Flatpak, for the platforms none of the other artifacts can run on.** On
+  RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — nothing we shipped worked,
+  and not for a packaging reason: the `.rpm` and `.deb` need
+  `libwebkit2gtk-4.1`, for which that platform has no package at all, and the
+  AppImage, which carries its own, needs a newer glibc than it has. The
+  Flatpak runs on a runtime that has both. `flatpak install
+./Rubick-*.flatpak`, and the runtime comes from Flathub the first time,
+  several hundred megabytes, once.
+
+- **Roll a StatefulSet or a DaemonSet.** Restart existed for Deployments
+  alone, so rolling a StatefulSet meant leaving the app for `kubectl`. A
+  DaemonSet gets Restart and no Scale: its replica count is how many nodes it
+  fits.
+
+- **The way back from an object to the release that installed it.** A
+  workload Helm put there now says so and links to the release, on the page
+  and in the peek. The pointer was already in the object's annotations and
+  only one screen read it.
+
+- **Every key the app answers to, on one sheet behind `?`.** Shortcuts lived
+  in six separate listeners and nowhere a person could look. They come from
+  one table now, and a test refuses a new listener the table does not name —
+  a list that is complete today and quietly stops being complete is worse
+  than no list.
+
+- **Did it work.** Restart, Scale, Apply and a changed image used to end in a
+  toast saying the request was accepted, and then silence. Each is followed
+  and answered now. Nothing is said until the object confirms the action
+  reached it, so "rolled out" is never a verdict about the state before the
+  click, and two minutes with no verdict is said in words rather than left
+  quiet.
+
+- **Freeze an interval in the log tail.** On a chatty pod, the lines you were
+  reading from four minutes ago were evicted by the live stream inside a
+  minute. A frozen range is held outside the Keep budget and survives taking
+  the filter off, so watching the tail no longer throws away what you kept.
+
+- **Why slow.** The performance recorder is off by default and always was, so
+  whoever feels a stall is exactly the person with no numbers. The cheap half
+  of it runs all the time now: a count in the status bar while there is
+  something to say, and behind it the stalls, the big lists on screen and why
+  they cost, and the largest answer the backend sent.
+
+- **Columns you can resize.** Drag any column's right edge; double-click it
+  to put that pair back to their declared widths. Widths are remembered per
+  list.
+
+### Fixed
+
+- **A claim list the cluster refused is not a missing claim.** A token
+  allowed to read a pod but not its PersistentVolumeClaims was told the claim
+  did not exist, which sends a person to rebuild storage that is running.
+
+- **A route its own controller answers is not a route that drops traffic.** A
+  rule with no `backendRefs` was drawn as broken even where the Gateway's own
+  controller is what answers it. The signal is the controller's domain, not a
+  list of vendor names.
+
+- **Release notes scroll.** The What's New dialog ended mid-word with no
+  scrollbar. The same shape was found and fixed wherever a scroller asked for
+  a height its parent does not have.
+
+- **A column dragged narrow no longer paints over the one beside it**, in
+  either density, and a header or a name that has to be cut ends in an
+  ellipsis instead of mid-word. The narrowest a column may be is no longer
+  wider than columns that are deliberately narrow, which made the actions
+  strip inflate on the first pixel of any drag.
+
+- **A list's search follows you to Events and to CRDs**, which kept their
+  filter out of the address and so showed everything while the address said
+  otherwise.
+
+- Helm says a decoder's reason once, not wrapped in our own words twice.
+
+## [4.17.0] - 2026-09-17
+
+### Added
+
+- **NetworkPolicies.** The core kind, which this app did not read at all: a
+  list, a page and a peek. A NetworkPolicy is the one built-in kind where the
+  shape of the object and its effect come apart, so each row says what the
+  policy _does_ rather than what it contains. `ingress: []` on a governed
+  direction **denies everything**; `ingress: [{}]` is a rule with no peers and
+  **allows everything** — one character of YAML, opposite meanings. A
+  direction `policyTypes` does not name is one the policy **makes no claim
+  about**, and another policy may govern it. `podSelector: {}` is every pod in
+  the namespace, the widest thing a policy can say, and never a blank cell.
+
+  The column it exists for is **how many pods each policy actually picks**. A
+  policy whose selector matches nothing is accepted, listed, and enforces
+  nothing, and no other screen can say so — the selector is in one object and
+  the labels are in another. Where the pods could not be read that count is
+  blank rather than zero: zero is the finding, and handing it to somebody who
+  merely lacks permission to list pods would invent it.
+
+- **Find a cluster by typing part of its name.** A filter box above the
+  cluster list, any substring, case-blind, with `mod+F` to reach it. The
+  needle reaches exactly what the command palette's `!` reaches, and no more:
+  `prod` must not find `pre-orders-dev` in a list nothing ranks. The count
+  beside the heading counts the rows under it.
+
+  Thanks to [@igordcard](https://github.com/igordcard) for this one.
+
+- **Copy a name where you read it.** The hover mark that addresses had, on
+  every object name and page title. A right-click opens the app's own menu —
+  copy the name, copy a link that opens the same place, open it in a new tab —
+  instead of the webview's, whose "copy link address" produced an internal
+  address that opens nothing anywhere.
+
+- **What a new version brought.** The first launch after an update opens the
+  notes for every release since the one last seen, read from the changelog. A
+  first install records where it starts and opens nothing. Settings › About
+  keeps a way back to them.
+
+### Changed
+
+- **A click on a row opens the peek, wherever on the row it lands; the page is
+  a double click.** Before, the name peeked and the whitespace beside it
+  navigated, with nothing on screen saying which you would get. Leaving a
+  peek for the page now carries the open tab with it, so a peek's Logs no
+  longer lands on Overview.
+
+- **A list's search lives in the address**, which is what a tab records, so it
+  survives leaving the tab and coming back. The namespace column is hidden
+  while exactly one namespace is chosen — it said the same word on every row.
+
+### Fixed
+
+- **The Delivery column was silent for nine kinds.** A kind missing from the
+  table of API groups made every GitOps surface answer "nothing to say" — the
+  column, the detail block and the peek marks together, with nothing failing.
+  Gateways, the five route kinds, HorizontalPodAutoscalers and
+  PodDisruptionBudgets were all in that state on pages already written to ask.
+
+- **The peek offered no Delete for a Gateway, a GatewayClass or a route**,
+  though the commands had existed for releases.
+
+- **The Files tab on a ConfigMap key mounted over a single file** opened on the
+  file and said it could not be opened; it opens on the folder, with the file
+  as a row that names the mount it came from. Downloads over 100 MiB are asked
+  about rather than refused, up to 2 GiB.
+
+- **The command palette stayed closed** after opening a hit in a background
+  tab, so opening three pods meant typing the search three times.
+
+## [4.16.0] - 2026-09-13
+
+### Added
+
+- **Cilium.** The CNI is detected, its policy objects read as policies, and it
+  has a page that answers the question neither list can: **is this pod
+  covered, and by what.** A policy names labels and a `CiliumEndpoint` carries
+  the labels Cilium resolved for the pod, so the page joins the two and gives
+  each endpoint one of four answers — covered, selected only by policies that
+  were rejected, selected by nothing at all, or not decidable because a
+  policy's rules are written somewhere the app cannot read.
+
+  The second of those is the reason the whole thing exists. **A policy the
+  Cilium operator rejects is still an object**: it has a name, an age and a
+  spec, it sits in every list beside the policies that work, and the only
+  record of its being thrown away is a condition inside its status that no
+  ordinary list of custom resources shows. A namespace you believe is closed
+  can be one typo away from open, with nothing red anywhere. The policy list
+  now leads with whether the operator accepted it, and the page says which
+  pods are left uncovered because of it.
+
+### Fixed
+
+- **A CRD's own Age column is no longer drawn twice.** The list draws name and
+  age itself and skips the CRD's versions of them — comparing the heading
+  case-sensitively, so a CRD that writes `Age` rather than `AGE` got both. That
+  was every Cilium and cert-manager kind.
+
+- **`AzureIdentity` was counted as "AzureIdentitys".** Counts that name a
+  Kubernetes kind no longer bend the kind's spelling to make a plural.
+
+### Changed
+
+- A vendor integration no longer declares a status for its custom resources.
+  The field existed on every one of them and no screen ever read it; a verdict
+  a vendor wants shown is a column like any other. Nothing on screen changes.
+
+## [4.15.0] - 2026-09-13
+
+### Added
+
+- **Every run writes a log file.** `rubick.log` in the platform's log folder,
+  with the four runs before it kept beside it. A packaged Windows build has no
+  console attached, so until now "send me the log" had no answer at all.
+  Settings › Diagnostics names the file, the copied report carries the path,
+  and anything on its way into the file that looks like a credential is
+  replaced by a count of the characters that were there.
+
+- **Background credential renewal says what it did.** It said nothing before —
+  not at any level — so two releases were shipped against a report nobody could
+  read. At the ordinary level it now records when a renewal is scheduled, when
+  the plugin runs, what came back, and why it gave up.
+
+### Fixed
+
+- **Search works again on Namespaces, CRDs, Endpoints and Helm releases** —
+  and on Gateways, Ingresses, Persistent Volumes, PVCs, Storage Classes and
+  every page of a CRD integration, which had the same fault. Typing in the box
+  narrowed nothing on any of them. Lists whose box searched every column were
+  never affected, which is why this looked like separate pages rather than one
+  switch.
+
+- **The search box means the same thing everywhere.** It used to be able to
+  aim at a single column instead, and ten lists narrowed it to the name for no
+  stated reason. It now reaches every column on the page, so an Ingress can be
+  found by the hostname it serves, a Storage Class by its provisioner, a
+  Persistent Volume by the claim bound to it.
+
+- **A credential printed at the last moment is no longer lost.** A Windows
+  console hands its buffer over after the process it was running has exited,
+  and the reader stopped at the exit — so a plugin whose credential was the
+  last thing it wrote could be read as having printed nothing. In a silent
+  renewal two of those in a row put the sign-in screen back up.
+
+- **A renewal has one more attempt after the deadline.** Some plugins mint
+  nothing while the old credential is still alive, and every attempt before it
+  expired came back with the token already in use. The last attempt before the
+  deadline also has room to finish now: it was scheduled closer to expiry than
+  the plugin is given to answer.
+
+- **A key pressed after a shell exits closes the pane** rather than painting a
+  red "the shell stopped accepting input" over what was a clean exit.
+
+## [4.14.0] - 2026-09-12
+
+### Added
+
+- **Events opens on stories.** One card per object per window instead of a
+  flat feed: the activity in a sentence built from the counts ("Cannot pull
+  the image, 12 times within 1 hour: ..."), the other reasons as chips, and a
+  density strip of when each was last seen. Pods hang on their controller only
+  where a controller event in the window says whose they are; where none does,
+  the card says it folded them by the generated suffix of their names. A
+  warning in the last five minutes is still happening, an older one settled, a
+  story without warnings done — and a window the cluster answered with nothing
+  is a different sentence from a filter that matched nothing. Timeline lays a
+  story on one clock and marks a container's remembered exit as coming from
+  the pod status rather than from an event. The flat list is one tab away,
+  unchanged.
+
+### Fixed
+
+- **Renewing credentials quietly now works on Windows.** The background
+  renewal added in 4.13.0 ran the credential plugin with no terminal pane
+  mounted, and on Windows the console holds the plugin until something answers
+  its "where is the cursor" query — which, until now, only a mounted pane did.
+  The renewal answers it itself, so a plugin that would have hung finishes and
+  the session is replaced as intended.
+
+## [4.13.0] - 2026-09-12
+
+### Added
+
+- **Credentials renew themselves.** A credential plugin names the moment its
+  token stops working, and until now nothing acted on it: the token went
+  stale, the next request came back `401`, and the whole window was replaced
+  by a Sign in screen — every few hours, on a plugin that can refresh without
+  a human in under a second. Rubick now runs the same plugin a couple of
+  minutes before that moment, while the old credentials still work, and swaps
+  the session only once the new one exists and the cluster has answered with
+  it. Nothing appears while it happens, and the open lists and logs carry on.
+  - A plugin that needs a person is left alone: the Sign in screen arrives
+    exactly as before, so this only ever removes an interruption.
+  - A plugin that hands back the credentials it already had is asked again
+    _later_ rather than more often — nothing is replaced and no screen is
+    rebuilt for a token that did not change.
+  - What is keeping a session alive is not guessed at. A context whose plugin
+    named no expiry is reported as such rather than assumed covered, and the
+    status bar says "sign-in needed" _before_ the refusal when renewing
+    quietly turned out to need a person.
+
+### Fixed
+
+- **The "Authorization" window no longer flashes on every cluster switch.**
+  Most credential plugins answer from their own cache in a fraction of a
+  second; the terminal pane is now held back long enough that nobody sees one
+  that does. A plugin that really does want something still shows it, with
+  whatever it printed while the pane was held back.
+- **A page for one cluster's object does not survive the move to another.**
+  Switching clusters — or opening a kubeconfig that no longer has the one a
+  tab was on — left the detail page open on an object that exists in neither
+  the new cluster nor the reader's mind. The tab now lands on the list it came
+  from.
+- **CloudNativePG and Scylla lock for a reader who cannot read CRDs.** The
+  lock that arrived in 4.11.0 was something a new integration had to opt into,
+  so the two added in 4.12.0 — and, quietly, three cloud controllers — never
+  did. A vendor page backed by custom resources now has to state what to ask
+  the cluster's authorizer about before it can be built at all.
+
 ## [4.12.0] - 2026-09-11
 
 ### Added

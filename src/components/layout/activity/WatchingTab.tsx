@@ -3,13 +3,27 @@ import { Bell, Square, X } from "lucide-react";
 
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
-import { isOpen, SAYS_TONE, type Ask, type Watch } from "@/lib/tell-me-when";
+import {
+  detailWords,
+  isOpen,
+  SAYS_TONE,
+  type After,
+  type Ask,
+  type Watch,
+} from "@/lib/tell-me-when";
 import { SAYS_KEY } from "@/hooks/useTellMeWhen";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { ACTIVITY_ROW, ActivityAction, ActivityEmpty } from "./primitives";
+
+const AFTER_KEY: Record<After["action"], keyof typeof en.tell> = {
+  restart: "afterRestart",
+  scale: "afterScale",
+  apply: "afterApply",
+  image: "afterImage",
+};
 
 const ASK_SHORT: Record<Ask, keyof typeof en.tell> = {
   rollout: "askRolloutShort",
@@ -99,6 +113,9 @@ function Row({
           ? SAYS_TONE[status.verdict.says]
           : "bg-fg-fnt";
 
+  const detail =
+    status.state === "done" ? detailWords(status.verdict.detail, t) : null;
+
   const line = (() => {
     switch (status.state) {
       case "watching":
@@ -130,25 +147,20 @@ function Row({
           <span className="text-fg-fnt">
             {" "}
             · {t("tell", ASK_SHORT[watch.ask])}
+            {watch.after
+              ? ` · ${t("tell", AFTER_KEY[watch.after.action], { n: watch.after.replicas ?? "" })}`
+              : ""}
           </span>
         </span>
         <span
           className={cn(
             "block truncate font-mono text-[11px]",
-            status.state === "done" && status.verdict.detail
-              ? "text-fg-mut"
-              : "text-fg-fnt"
+            detail === null ? "text-fg-fnt" : "text-fg-mut"
           )}
-          title={
-            status.state === "done"
-              ? (status.verdict.detail ?? undefined)
-              : undefined
-          }
+          title={detail ?? undefined}
         >
           {line}
-          {status.state === "done" && status.verdict.detail
-            ? ` · ${status.verdict.detail}`
-            : ""}
+          {detail === null ? "" : ` · ${detail}`}
         </span>
       </span>
       <ActivityAction

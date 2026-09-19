@@ -215,6 +215,18 @@ pub fn save_updater_settings(settings: UpdaterConfig) -> Result<()> {
     })
 }
 
+/// Whether this build can install an update it downloads.
+///
+/// The Flatpak bundle cannot: it replaces `current_exe`, which lives in
+/// `/app`, a read-only mount. The download succeeds and the install fails,
+/// every half hour, for what `flatpak update` does anyway. Asked of the
+/// backend because the webview cannot see the sandbox.
+#[tauri::command]
+#[must_use]
+pub fn updater_can_install() -> bool {
+    !crate::cli::paths::PathResolver::in_sandbox()
+}
+
 // ============================================================================
 // Cluster preferences
 // ============================================================================
