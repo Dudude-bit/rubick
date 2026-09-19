@@ -571,9 +571,6 @@ describe("column widths", () => {
     // Driven through `act` because the drag lives on `window`, outside
     // React's own event plumbing: without it the state update is scheduled
     // and the assertion reads the DOM before it lands.
-    // Driven through `act` because the drag lives on `window`, outside
-    // React's own event plumbing: without it the state update is scheduled
-    // and the assertion reads the DOM before it lands.
     act(() => {
       fireEvent.pointerDown(grip!, { clientX: 0 });
       fireEvent(
@@ -631,6 +628,218 @@ describe("column widths", () => {
       ((500 - 80) / 500) * 100,
       5
     );
+  });
+
+  /**
+   * The conversion the whole rewrite exists for. A table is laid out in
+   * shares, so one screen pixel is `total / width` of size — and jsdom
+   * reports every clientWidth as 0, which sends the drag down the `: 1`
+   * fallback. Every other test here therefore asserts raw pixel arithmetic
+   * and stays green with the conversion deleted or inverted; this one stubs
+   * the port's width so the arithmetic is the real one.
+   */
+  it("converts the pointer's travel through the width the table is drawn at", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="converted"
+      />
+    );
+    const port = document.querySelector("table")!.parentElement!;
+    Object.defineProperty(port, "clientWidth", {
+      value: 1000,
+      configurable: true,
+    });
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    // 500 units drawn across 1000px, so 40px of travel is 20 units — not 40.
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((300 + 20) / 500) * 100,
+        5
+      );
+    });
+    expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(
+      ((200 - 20) / 500) * 100,
+      5
+    );
+  });
+
+  /**
+   * The live drag has to win over what is stored, or the header freezes
+   * mid-drag and jumps on release. Every other test here drags once on a
+   * table with nothing stored, so swapping the precedence to
+   * `storedWidths ?? dragging` left them all green — while in the app every
+   * drag after the first, on every list the reader has ever resized, gave no
+   * feedback at all. The second drag is the whole point of this one.
+   */
+  it("follows the pointer on a second drag, after the first is stored", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="twice"
+      />
+    );
+    const grip = () =>
+      document.querySelector<HTMLElement>('[role="presentation"][title]')!;
+
+    act(() => {
+      fireEvent.pointerDown(grip(), { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((300 + 40) / 500) * 100,
+        5
+      );
+    });
+
+    // Asserted mid-drag, before the pointer is released: this is where the
+    // stored width would win and the header would sit still.
+    act(() => {
+      fireEvent.pointerDown(grip(), { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 30 } as MouseEventInit)
+      );
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((340 + 30) / 500) * 100,
+        5
+      );
+    });
+    act(() => {
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+  });
+
+  /**
+   * A column narrower than the floor is narrow on purpose — the generated
+   * actions strip is 64 units for two icons. Clamping it up to 80 made the
+   * first pixel of any drag inflate it and narrow its neighbour, in a
+   * direction nobody dragged and which could never be given back.
+   */
+  it("leaves a column already narrower than the floor where it was", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 64 },
+        ]}
+        data={DATA}
+        rowLabel="narrow"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const before = Number.parseFloat(widthOf("Status"));
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 0 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(before, 5);
+    });
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      (300 / 364) * 100,
+      5
+    );
+  });
+
+  /**
+   * A right-click on the grip used to start a drag, and the context menu
+   * then ate the pointerup that would have ended it — so the table went on
+   * resizing itself under a pointer nobody was holding down.
+   */
+  it("does not start a drag on any button but the first", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="right-clicked"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const before = widthOf("Name");
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0, button: 2 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 120 } as MouseEventInit)
+      );
+    });
+    expect(widthOf("Name")).toBe(before);
+  });
+
+  /**
+   * Double-click is the only way back to the declared widths, and the store
+   * keeps what a drag wrote — so without it a table dragged once is dragged
+   * for good, on every visit, with nothing in the UI saying so.
+   */
+  it("puts both columns back to their declared widths on a double click", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="reset"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const declared = widthOf("Name");
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(widthOf("Name")).not.toBe(declared);
+    });
+    act(() => {
+      fireEvent.doubleClick(grip!);
+    });
+    await waitFor(() => {
+      expect(widthOf("Name")).toBe(declared);
+    });
   });
 
   /**
@@ -716,6 +925,25 @@ describe("the row's quick actions", () => {
     const name = screen.getByText("a-1").closest("td");
 
     expect(name?.className).toContain("overflow-hidden");
+    expect(actions?.className).not.toContain("overflow-hidden");
+  });
+
+  /**
+   * Clipping is about the layout being fixed, not about the density. It was
+   * written as `isCompact && ...`, so on comfortable — a real setting — a
+   * column dragged to its floor painted its text straight over the column
+   * beside it, which is the one thing fixed layout was chosen to prevent.
+   */
+  it("clips a text cell in comfortable density too", () => {
+    act(() =>
+      useDisplaySettingsStore.setState({ tableDensity: "comfortable" })
+    );
+    withActions();
+    const name = screen.getByText("a-1").closest("td");
+    const actions = screen.getAllByLabelText("View")[0].closest("td");
+
+    expect(name?.className).toContain("overflow-hidden");
+    // Still not the actions cell: clipping it clips the buttons' hit area.
     expect(actions?.className).not.toContain("overflow-hidden");
   });
 

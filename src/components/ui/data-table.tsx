@@ -323,11 +323,11 @@ function DataTableInner<TData extends RowData>({
 
   // Clipped, because the table is fixed-layout: a name longer than its column
   // has nowhere to go and would otherwise paint over the namespace beside it.
-  // Text cells only — the actions cell holds 20px buttons whose pointer target
-  // is pushed back out to 24px by a pseudo-element hanging over the cell's
-  // padding, and clipping that cell clips the hit area back to 20px.
-  const clipText =
-    isCompact && "overflow-hidden text-ellipsis whitespace-nowrap";
+  // Every density, not just compact — a column dragged to its floor bleeds
+  // the same either way. Text cells only: the actions cell holds 20px buttons
+  // whose pointer target is pushed back out to 24px by a pseudo-element
+  // hanging over the cell's padding, and clipping it clips the hit area.
+  const clipText = "overflow-hidden text-ellipsis whitespace-nowrap";
 
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
@@ -443,23 +443,29 @@ function DataTableInner<TData extends RowData>({
       total: number,
       started: ColumnWidths
     ) => {
+      // Only the primary button. A right-click on the grip started a drag
+      // whose pointerup the context menu swallowed, leaving the table
+      // resizing itself until the next click anywhere.
+      if (event.button !== 0) return;
       event.preventDefault();
       const startX = event.clientX;
       // A share is `size / total`, so a screen pixel is `total / width` of
       // size. Zero width means nobody has measured the table yet, and
       // dividing by it would send the first move straight to the clamp.
       const perPixel = totalWidth > 0 ? total / totalWidth : 1;
-      const limit = sizes.own + sizes.next - MIN_COLUMN_SIZE;
+      // A floor never wider than the column already is. The actions strip is
+      // 64 units by design, so a flat 80 made the first pixel of any drag
+      // inflate it and narrow its neighbour, undoing sizing nobody touched.
+      const ownFloor = Math.min(MIN_COLUMN_SIZE, sizes.own);
+      const nextFloor = Math.min(MIN_COLUMN_SIZE, sizes.next);
+      const limit = sizes.own + sizes.next - nextFloor;
       // Outside the state updater, which React is free to defer: a drag
       // released in the same tick as its last move let go of a width nobody
       // had computed yet.
       let latest: ColumnWidths | null = null;
       const move = (moved: PointerEvent) => {
         const delta = (moved.clientX - startX) * perPixel;
-        const own = Math.max(
-          MIN_COLUMN_SIZE,
-          Math.min(limit, sizes.own + delta)
-        );
+        const own = Math.max(ownFloor, Math.min(limit, sizes.own + delta));
         latest = {
           ...started,
           [columnId]: own,
@@ -948,6 +954,12 @@ function DataTableInner<TData extends RowData>({
                               back to their declared widths. */}
                           {next && (
                             <span
+                              // `presentation`, and deliberately: anything in
+                              // the accessibility tree inside a `th` joins
+                              // that header's name, so a labelled separator
+                              // here made every column announce as "Name Drag
+                              // to resize". The keyboard path belongs on an
+                              // affordance of its own, not on this grip.
                               role="presentation"
                               onPointerDown={(event) =>
                                 startResize(

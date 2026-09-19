@@ -113,11 +113,12 @@ const TableHead = React.forwardRef<
     // `whitespace-nowrap` stops two-word labels ("CPU Usage") from
     // wrapping and doubling the header's height.
     // `relative` so the resize grip can sit on the column's own right edge,
-    // and `overflow-hidden` because a narrowed column otherwise paints its
-    // label straight over its neighbour's — the one thing fixed layout was
-    // chosen to prevent, and the first thing a drag makes happen.
+    // `overflow-hidden` because a narrowed column otherwise paints its label
+    // over its neighbour's, and `text-ellipsis` so the cut reads as a cut:
+    // without it "Restarts" becomes "Restar", a mislabelled column rather
+    // than a visibly truncated one.
     className={cn(
-      "relative overflow-hidden whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
+      "relative overflow-hidden text-ellipsis whitespace-nowrap px-2.5 py-1 text-left align-middle text-[11px] font-medium text-fg-fnt has-[[role=checkbox]]:pr-0",
       className
     )}
     {...props}

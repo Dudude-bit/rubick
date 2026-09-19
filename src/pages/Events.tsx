@@ -91,7 +91,6 @@ export function Events() {
   const scope = useNamespaceScope();
   const [eventType, setEventType] = useState<string>("all");
   const [eventLimit, setEventLimit] = useState<string>("500");
-  const [query, setQuery] = useState<string>("");
   const [params, setParams] = useSearchParams();
   const view: View = params.get("view") === "list" ? "list" : "stories";
   const range = params.get("range");
@@ -107,6 +106,11 @@ export function Events() {
       },
       { replace: true }
     );
+  // In the address, like every other list's search: a term carried here from
+  // another kind arrives as `?q=`, and a page that kept it in local state
+  // showed every event while the address claimed it was filtered.
+  const query = params.get("q") ?? "";
+  const setQuery = (value: string) => setParam("q", value || null);
   const now = useNow();
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
