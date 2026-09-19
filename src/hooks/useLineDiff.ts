@@ -14,6 +14,9 @@ export interface LineDiffState {
   failed: boolean;
 }
 
+/** How long the buffer has to stand still before the worker is asked. */
+export const SETTLE_MS = 120;
+
 let shared: Worker | null = null;
 let nextId = 0;
 
@@ -97,9 +100,15 @@ export function useLineDiff(original: string, modified: string): LineDiffState {
     target.addEventListener("message", onAnswer);
     target.addEventListener("error", onBroken);
     target.addEventListener("messageerror", onBroken);
+    // Asked once typing pauses. The worker is one worker and takes its
+    // messages in order, so a question posted per keystroke means the
+    // answer the reader is waiting for queues behind every buffer they
+    // have already moved past — and nothing can cancel a message already
+    // handed over.
     const request: DiffRequest = { id, original, modified };
-    target.postMessage(request);
+    const asking = setTimeout(() => target.postMessage(request), SETTLE_MS);
     return () => {
+      clearTimeout(asking);
       target.removeEventListener("message", onAnswer);
       target.removeEventListener("error", onBroken);
       target.removeEventListener("messageerror", onBroken);

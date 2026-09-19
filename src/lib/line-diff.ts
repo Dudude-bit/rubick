@@ -14,7 +14,6 @@
 export interface DiffLine {
   type: "added" | "removed" | "unchanged";
   content: string;
-  lineNumber: number;
 }
 
 /** Below this many lines in total the round trip to a worker costs more than the diff. */
@@ -41,19 +40,18 @@ export function computeLineDiff(
   const ops = myers(a, b);
   if (ops === null) return wholesale(a, b);
   const out: DiffLine[] = [];
-  let line = 1;
   let i = 0;
   let j = 0;
   for (const op of ops) {
     if (op === "=") {
-      out.push({ type: "unchanged", content: a[i], lineNumber: line++ });
+      out.push({ type: "unchanged", content: a[i] });
       i += 1;
       j += 1;
     } else if (op === "-") {
-      out.push({ type: "removed", content: a[i], lineNumber: line++ });
+      out.push({ type: "removed", content: a[i] });
       i += 1;
     } else {
-      out.push({ type: "added", content: b[j], lineNumber: line++ });
+      out.push({ type: "added", content: b[j] });
       j += 1;
     }
   }
@@ -66,10 +64,9 @@ export function computeLineDiff(
  * answer here, which is what the diff tests check.
  */
 function wholesale(a: readonly string[], b: readonly string[]): DiffLine[] {
-  let line = 1;
   return [
-    ...a.map((content): DiffLine => ({ type: "removed", content, lineNumber: line++ })),
-    ...b.map((content): DiffLine => ({ type: "added", content, lineNumber: line++ })),
+    ...a.map((content): DiffLine => ({ type: "removed", content })),
+    ...b.map((content): DiffLine => ({ type: "added", content })),
   ];
 }
 

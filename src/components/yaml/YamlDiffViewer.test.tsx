@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 
 import { computeLineDiff, SYNC_LINES } from "@/lib/line-diff";
+import { SETTLE_MS } from "@/hooks/useLineDiff";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 
 class FakeWorker {
@@ -44,11 +45,20 @@ class FakeWorker {
 const big = (n: number, tail: string) =>
   Array.from({ length: n }, (_, i) => `line ${i}`).join("\n") + tail;
 
+/** The buffer stands still, which is when the worker is asked. */
+async function settles() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 10);
+  });
+}
+
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.stubGlobal("Worker", FakeWorker);
   for (const instance of FakeWorker.instances) instance.pending = [];
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -58,6 +68,7 @@ describe("what the diff viewer says while a newer answer is on its way", () => {
     const { rerender } = render(
       <YamlDiffViewer original={same} modified={same} />
     );
+    await settles();
     const worker = FakeWorker.instances[FakeWorker.instances.length - 1];
     await act(async () => worker.answer());
     expect(screen.getByText(/no changes/i)).toBeInTheDocument();

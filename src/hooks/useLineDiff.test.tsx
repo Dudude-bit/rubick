@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 
+/** The buffer stands still, which is when the worker is asked. */
+async function settles() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(SETTLE_MS + 10);
+  });
+}
+
 import { computeLineDiff, SYNC_LINES } from "@/lib/line-diff";
-import { useLineDiff } from "./useLineDiff";
+import { SETTLE_MS, useLineDiff } from "./useLineDiff";
 
 function Probe({ original, modified }: { original: string; modified: string }) {
   const { lines, computing, failed } = useLineDiff(original, modified);
@@ -78,10 +85,12 @@ describe("where the diff is computed", () => {
     // One worker is shared by every viewer for the life of the module, so
     // the fake made by the first test is the one every later test talks to.
     beforeEach(() => {
+      vi.useFakeTimers();
       vi.stubGlobal("Worker", FakeWorker);
       for (const instance of FakeWorker.instances) instance.pending = [];
     });
     afterEach(() => {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     });
 
@@ -96,6 +105,7 @@ describe("where the diff is computed", () => {
           modified={big(SYNC_LINES, "\nextra")}
         />
       );
+      await settles();
       expect(screen.getByTestId("state")).toHaveTextContent("computing");
       const worker = FakeWorker.instances[0];
       expect(worker.pending).toHaveLength(1);
@@ -104,10 +114,12 @@ describe("where the diff is computed", () => {
     });
 
     /**
-     * Typing outruns the worker. An answer to the buffer as it was two
-     * keystrokes ago must not be drawn over the buffer as it is now.
+     * The worker is one worker and takes its messages in order, so a
+     * question per keystroke puts the answer the reader waits for behind
+     * every buffer they have already left — and a message already handed
+     * over cannot be cancelled. A buffer that moved on is never asked about.
      */
-    it("drops an answer to a question the caller has moved past", async () => {
+    it("never asks about a buffer the reader has already left", async () => {
       const { rerender } = render(
         <Probe
           original={big(SYNC_LINES, "")}
@@ -120,6 +132,32 @@ describe("where the diff is computed", () => {
           modified={big(SYNC_LINES, "\none\ntwo")}
         />
       );
+      await settles();
+      const worker = FakeWorker.instances[0];
+      expect(worker.pending).toHaveLength(1);
+      await act(async () => worker.answer());
+      expect(screen.getByTestId("state")).toHaveTextContent("2 changed");
+    });
+
+    /**
+     * And when two do get through — a pause, then more typing — an answer
+     * to the older one must not be drawn over the newer buffer.
+     */
+    it("drops an answer to a question the caller has moved past", async () => {
+      const { rerender } = render(
+        <Probe
+          original={big(SYNC_LINES, "")}
+          modified={big(SYNC_LINES, "\none")}
+        />
+      );
+      await settles();
+      rerender(
+        <Probe
+          original={big(SYNC_LINES, "")}
+          modified={big(SYNC_LINES, "\none\ntwo")}
+        />
+      );
+      await settles();
       const worker = FakeWorker.instances[0];
       expect(worker.pending).toHaveLength(2);
       await act(async () => worker.answer(0));
@@ -140,6 +178,7 @@ describe("where the diff is computed", () => {
           modified={big(SYNC_LINES, "\nextra")}
         />
       );
+      await settles();
       expect(screen.getByTestId("state")).toHaveTextContent("computing");
       const worker = FakeWorker.instances[0];
       await act(async () => worker.breaks());
@@ -154,6 +193,7 @@ describe("where the diff is computed", () => {
           modified={big(SYNC_LINES, "\nextra")}
         />
       );
+      await settles();
       // A worker that died was discarded, so the live one is the last made.
       const worker = FakeWorker.instances[FakeWorker.instances.length - 1];
       await act(async () => worker.fails());
