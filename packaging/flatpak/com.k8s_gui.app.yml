@@ -22,8 +22,8 @@ app-id: com.k8s_gui.app
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
-# The AppImage's binary keeps the product's own capitalisation.
-command: Rubick
+# A launcher, not the binary: see the `cd` in it.
+command: rubick
 separate-locales: false
 finish-args:
   - --share=network
@@ -56,21 +56,37 @@ finish-args:
   - --env=GTK_IM_MODULE_FILE=/app/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules.cache
   - --env=GDK_PIXBUF_MODULE_FILE=/app/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
   - --env=GIO_EXTRA_MODULES=/app/lib/x86_64-linux-gnu/gio/modules
-  # WebKit execs its web process by a path compiled in on Ubuntu, which in
-  # the sandbox is the runtime's — and the runtime carries no WebKit. A
-  # missing web process is a blank window, not an error.
-  - --env=WEBKIT_EXEC_PATH=/app/lib/x86_64-linux-gnu/webkit2gtk-4.1
 modules:
   - name: rubick
     buildsystem: simple
     build-commands:
       - mkdir -p /app/bin /app/lib /app/share
       - cp -a squashfs-root/usr/bin/. /app/bin/
+      # WebKit finds its web process through a path the AppImage tooling
+      # rewrote in the library to a RELATIVE one — `././/lib/...`, padded
+      # with `./` to keep the original string's length — so it resolves
+      # against the working directory. WEBKIT_EXEC_PATH does not override
+      # it. Without this `cd` the spawn fails and the window never opens,
+      # which `ldd` cannot see and the smoke launch caught.
+      - |
+        cat > /app/bin/rubick <<'LAUNCH'
+        #!/bin/sh
+        cd /app || exit 1
+        exec /app/bin/Rubick "$@"
+        LAUNCH
+        chmod +x /app/bin/rubick
       - cp -a squashfs-root/usr/lib/. /app/lib/
       # The compiled GSettings schemas GSETTINGS_SCHEMA_DIR points at.
       - cp -a squashfs-root/usr/share/glib-2.0 /app/share/
       - install -Dm644 squashfs-root/usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.k8s_gui.app /app/share/applications/com.k8s_gui.app.desktop
+      # Exec decides what the exported launcher runs: flatpak turns its first
+      # word into `--command=`, so leaving `Rubick` here would send the menu
+      # entry straight at the binary and past the `cd` above — working under
+      # `flatpak run <app-id>`, which takes `command:`, and a blank window
+      # for anyone clicking the icon. `%u` is how a `rubick://` link is
+      # handed over; the desktop file declares the scheme and passed nothing.
+      - desktop-file-edit --set-key=Exec --set-value='rubick %u' /app/share/applications/com.k8s_gui.app.desktop
       # The three sizes the AppImage carries, named as hicolor names them.
       # No `if -f`: an icon that stopped shipping must break the build.
       - for d in 32x32 128x128 256x256@2; do install -Dm644 "squashfs-root/usr/share/icons/hicolor/$d/apps/Rubick.png" "/app/share/icons/hicolor/$d/apps/com.k8s_gui.app.png"; done
