@@ -22,7 +22,8 @@ app-id: com.k8s_gui.app
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
-command: rubick
+# The AppImage's binary keeps the product's own capitalisation.
+command: Rubick
 separate-locales: false
 finish-args:
   - --share=network

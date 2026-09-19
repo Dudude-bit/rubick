@@ -91,7 +91,7 @@ jobs:
       - name: Install it and check the binary resolves
         run: |
           flatpak install -y --user --noninteractive "Rubick-${TAG#v}.flatpak"
-          flatpak run --command=ldd com.k8s_gui.app /app/bin/rubick > ldd.txt
+          flatpak run --command=ldd com.k8s_gui.app /app/bin/Rubick > ldd.txt
           if grep -q "not found" ldd.txt; then
             echo "::error::unresolved libraries in the bundle"
             grep "not found" ldd.txt
