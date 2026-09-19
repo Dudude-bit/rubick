@@ -1,0 +1,50 @@
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { useColumnWidthsStore } from "./columnWidthsStore";
+
+const state = () => useColumnWidthsStore.getState();
+
+beforeEach(() => {
+  localStorage.clear();
+  useColumnWidthsStore.setState({ widths: {} });
+});
+
+describe("the widths a reader dragged", () => {
+  /**
+   * Reported on #178: a pod's name is long, its prefix is shared, and the
+   * column cannot be widened. A width that forgot itself on the way to the
+   * next page would be a control that does not hold, which is why this is a
+   * store and not component state.
+   */
+  it("keeps one table's columns apart from another's", () => {
+    state().set("pods", { name: 520 });
+    state().set("deployments", { name: 300 });
+    expect(state().widths.pods).toEqual({ name: 520 });
+    expect(state().widths.deployments).toEqual({ name: 300 });
+  });
+
+  /** A later drag of the same table replaces what it said before. */
+  it("keeps the last word on a table it already knows", () => {
+    state().set("pods", { name: 520 });
+    state().set("pods", { name: 620, node: 200 });
+    expect(state().widths.pods).toEqual({ name: 620, node: 200 });
+  });
+
+  /**
+   * The way back to the declared widths. Removing the entry rather than
+   * writing zeroes is what lets the column definitions answer again — a
+   * stored `0` would be a width, and a very narrow one.
+   */
+  it("forgets a table rather than storing nothing for it", () => {
+    state().set("pods", { name: 520 });
+    state().reset("pods");
+    expect(state().widths.pods).toBeUndefined();
+    expect("pods" in state().widths).toBe(false);
+  });
+
+  it("does nothing for a table it never knew", () => {
+    const before = state().widths;
+    state().reset("nodes");
+    expect(state().widths).toBe(before);
+  });
+});

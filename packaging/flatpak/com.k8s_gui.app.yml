@@ -1,0 +1,50 @@
+# A Flatpak built from the AppImage this release already produces.
+#
+# Why this exists: on RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — none of
+# the other Linux artifacts can run, and not for a packaging reason.
+#
+#   * the .rpm and .deb require `libwebkit2gtk-4.1.so.0`; RHEL 8 ships
+#     `webkit2gtk3`, which provides `libwebkit2gtk-4.0.so.37`, and there is no
+#     4.1 package for it at all;
+#   * the AppImage does bundle webkit 4.1, so that half is solved — but the
+#     binary needs `GLIBC_2.39` and RHEL 8 has 2.28. An AppImage does not
+#     carry a libc.
+#
+# A Flatpak carries both: `org.freedesktop.Platform//24.08` brings glibc 2.39,
+# and the AppImage's own bundled webkit comes along in /app/lib. Checked, not
+# assumed — the versions above were read off the runtime and off the binary.
+#
+# This is a **bundle**, published as a release asset, not a Flathub
+# submission. Flathub forbids prebuilt binaries and builds offline, which is
+# where a bun project runs out of road; none of that applies to a bundle the
+# reader installs with `flatpak install ./Rubick.flatpak`.
+app-id: com.k8s_gui.app
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: rubick
+separate-locales: false
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # The whole point of the app: it reads the kubeconfig and the caches and
+  # credential helpers it points at.
+  - --filesystem=home
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: rubick
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/bin /app/lib /app/share
+      - cp -a squashfs-root/usr/bin/. /app/bin/
+      - cp -a squashfs-root/usr/lib/. /app/lib/
+      - install -Dm644 squashfs-root/usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
+      - desktop-file-edit --set-key=Icon --set-value=com.k8s_gui.app /app/share/applications/com.k8s_gui.app.desktop
+      - for s in 32 128 256@2 512; do d=squashfs-root/usr/share/icons/hicolor/${s}x${s}/apps/Rubick.png; if [ -f "$d" ]; then install -Dm644 "$d" /app/share/icons/hicolor/${s}x${s}/apps/com.k8s_gui.app.png; fi; done
+    sources:
+      - type: dir
+        path: squashfs-root
+        dest: squashfs-root

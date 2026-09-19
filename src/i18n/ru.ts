@@ -1208,6 +1208,7 @@ export const ru: Catalogue = {
     openActions: "Открыть действия",
     openFullPage: "Открыть страницу",
     copyName: "Копировать имя",
+    dragToResize: "Потяните, чтобы изменить ширину · двойной клик — вернуть",
     more: "Ещё",
     moreActions: "Другие действия",
     goBack: "Вернуться",
