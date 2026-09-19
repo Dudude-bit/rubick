@@ -19,24 +19,24 @@ use tauri::State;
 
 use super::types::{HelmRelease, HelmReleaseDetail, HelmRevision, HelmSecretRelease};
 
-/// Decode Helm release from Kubernetes Secret data
-fn decode_helm_release(data: &[u8]) -> Result<HelmSecretRelease> {
+/// Why a release secret would not decode, in the decoder's own words.
+///
+/// A plain `String`, not an `Error`: every caller either carries it as a fact
+/// about one release — a row that says what it could not read — or wraps it
+/// once. Returning an `Error` here meant the callers wrapped an already
+/// formatted error, and the reader got `Plugin error: Plugin execution
+/// failed:` twice in one sentence.
+fn decode_helm_release(data: &[u8]) -> std::result::Result<HelmSecretRelease, String> {
     // Base64 decode
-    let compressed = STANDARD.decode(data).map_err(|e| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "Base64 decode error: {e}"
-        )))
-    })?;
+    let compressed = STANDARD.decode(data).map_err(|e| format!("base64: {e}"))?;
 
     // Check for gzip magic bytes and decompress
     let json_bytes = if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
         let mut decoder = GzDecoder::new(&compressed[..]);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed).map_err(|e| {
-            Error::Plugin(PluginError::ExecutionFailed(format!(
-                "Gzip decompress error: {e}"
-            )))
-        })?;
+        decoder
+            .read_to_end(&mut decompressed)
+            .map_err(|e| format!("gzip: {e}"))?;
         decompressed
     } else {
         // Old format: not compressed
@@ -44,11 +44,7 @@ fn decode_helm_release(data: &[u8]) -> Result<HelmSecretRelease> {
     };
 
     // Parse JSON
-    serde_json::from_slice(&json_bytes).map_err(|e| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "JSON parse error: {e}"
-        )))
-    })
+    serde_json::from_slice(&json_bytes).map_err(|e| e.to_string())
 }
 
 /// The newest revision of each release, picked from metadata alone.
@@ -166,12 +162,40 @@ pub async fn list_helm_releases_native(
                                 source: "native".to_string(),
                                 suspended: None,
                                 source_ref: None,
+                                unreadable: None,
                             };
                             releases_map.insert(key, helm_release);
                         }
                     }
                     Err(e) => {
+                        // A row rather than a silence: the labels say which
+                        // release this is without decoding anything, so the
+                        // page can name what it could not read instead of
+                        // leaving the reader to believe it is not there.
                         tracing::warn!("Failed to decode Helm release secret: {}", e);
+                        let labels = secret.metadata.labels.unwrap_or_default();
+                        let name = labels.get("name").cloned().unwrap_or_default();
+                        let namespace = secret.metadata.namespace.clone().unwrap_or_default();
+                        if !name.is_empty() {
+                            releases_map
+                                .entry((namespace.clone(), name.clone()))
+                                .or_insert_with(|| HelmRelease {
+                                    name,
+                                    namespace,
+                                    revision: labels
+                                        .get("version")
+                                        .and_then(|v| v.parse().ok())
+                                        .unwrap_or(0),
+                                    status: String::new(),
+                                    chart: String::new(),
+                                    app_version: None,
+                                    updated: String::new(),
+                                    source: "native".to_string(),
+                                    suspended: None,
+                                    source_ref: None,
+                                    unreadable: Some(e),
+                                });
+                        }
                     }
                 }
             }
@@ -198,6 +222,39 @@ mod tests {
             ("name".to_string(), name.to_string()),
             ("version".to_string(), version.to_string()),
         ])
+    }
+
+    /// An older revision decoding is not an answer about a newer one that
+    /// does not. The list row says revision 5 could not be read; opening it
+    /// used to render revision 4's values and manifest as the release.
+    #[test]
+    fn refuses_a_stale_revision_when_the_newest_one_will_not_decode() {
+        // Opening the row asks for the release, not a revision.
+        assert!(shadows_the_answer(None, 4, 5));
+        assert!(!shadows_the_answer(None, 5, 4));
+        // Asked for one revision, only that revision shadows the answer.
+        assert!(shadows_the_answer(Some(4), 5, 4));
+        assert!(!shadows_the_answer(Some(5), 4, 3));
+    }
+
+    /// A chart installed on its defaults, which is what Helm writes when
+    /// nobody passed `--set` or `-f`: no `config` key at all. Requiring it
+    /// made every such release fail to decode, and the list — which drops
+    /// what it cannot read with a warning nobody sees — said the cluster
+    /// had none. Reproduced against a real `helm install` on kind.
+    #[test]
+    fn reads_a_release_installed_with_no_values_of_its_own() {
+        let json = br#"{
+            "name": "shop-api",
+            "namespace": "k8s-gui-test",
+            "version": 1,
+            "info": { "status": "deployed" },
+            "chart": { "metadata": { "name": "shop-api", "version": "0.1.0" } }
+        }"#;
+        let encoded = STANDARD.encode(json);
+        let release = decode_helm_release(encoded.as_bytes()).expect("decodes");
+        assert_eq!(release.name, "shop-api");
+        assert_eq!(release.config, serde_json::Value::Null);
     }
 
     /// A history of superseded revisions must cost one fetch, not ten —
@@ -279,6 +336,20 @@ mod tests {
     }
 }
 
+/// Whether the secret that would not decode is the one the reader asked for.
+///
+/// Asked for a revision, it is that revision. Asked for the release — which
+/// is what opening a row does — it is any revision newer than the newest one
+/// that did decode. Answering with an older revision's values and manifest
+/// would present yesterday's release as today's, on the very page opened
+/// from a row that correctly said it could not be read.
+fn shadows_the_answer(asked: Option<i32>, newest_decoded: i32, unreadable_at: i32) -> bool {
+    match asked {
+        Some(target) => unreadable_at == target,
+        None => unreadable_at > newest_decoded,
+    }
+}
+
 /// Get Helm release detail (values, manifest, notes)
 #[tauri::command]
 pub async fn get_helm_release_detail(
@@ -298,30 +369,71 @@ pub async fn get_helm_release_detail(
 
     let mut target_release: Option<HelmSecretRelease> = None;
     let mut max_revision = 0;
+    // A secret that is there and will not decode is not a release that is
+    // not there. Dropping both into one answer made "not found" — which the
+    // frontend paints as "this may be gone" — the report for a release the
+    // cluster holds and this app could not read.
+    //
+    // Carried with its revision, from the label, because an older revision
+    // decoding is not an answer about a newer one that does not: handing
+    // back revision 4 as "the release" while the list row correctly says
+    // revision 5 is unreadable is the same lie one page further on.
+    let mut unreadable: Option<(i32, String)> = None;
 
     for secret in secret_list {
+        let at = secret
+            .metadata
+            .labels
+            .as_ref()
+            .and_then(|labels| labels.get("version"))
+            .and_then(|v| v.parse::<i32>().ok())
+            .unwrap_or(0);
         if let Some(data) = secret.data {
             if let Some(release_data) = data.get("release") {
-                if let Ok(release) = decode_helm_release(&release_data.0) {
-                    if let Some(target_rev) = revision {
-                        if release.version == target_rev {
+                match decode_helm_release(&release_data.0) {
+                    Ok(release) => {
+                        if let Some(target_rev) = revision {
+                            if release.version == target_rev {
+                                target_release = Some(release);
+                            }
+                        } else if release.version > max_revision {
+                            max_revision = release.version;
                             target_release = Some(release);
-                            break;
                         }
-                    } else if release.version > max_revision {
-                        max_revision = release.version;
-                        target_release = Some(release);
+                    }
+                    Err(error) => {
+                        tracing::warn!("Failed to decode Helm release secret: {error}");
+                        if unreadable.as_ref().is_none_or(|(seen, _)| at > *seen) {
+                            unreadable = Some((at, error));
+                        }
                     }
                 }
             }
         }
     }
 
-    let release = target_release.ok_or_else(|| {
-        Error::Plugin(PluginError::ExecutionFailed(format!(
-            "Release {name} not found in namespace {namespace}"
-        )))
-    })?;
+    let shadowed = unreadable
+        .as_ref()
+        .is_some_and(|(at, _)| shadows_the_answer(revision, max_revision, *at));
+
+    let release = match (target_release, unreadable) {
+        (Some(_), Some((_, why))) if shadowed => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} in namespace {namespace} could not be read: {why}"
+            ))))
+        }
+        (Some(release), _) => release,
+        (None, Some((_, why))) => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} in namespace {namespace} could not be read: {why}"
+            ))))
+        }
+        (None, None) => {
+            return Err(Error::Plugin(PluginError::ExecutionFailed(format!(
+                "Release {name} not found in namespace {namespace}"
+            ))))
+        }
+    };
 
     Ok(HelmReleaseDetail {
         name: release.name,

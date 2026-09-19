@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { ClusterList } from "@/components/cluster/ClusterList";
+import { useClusterFilter } from "@/hooks/useClusterFilter";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
@@ -23,6 +24,9 @@ export function ConnectClusterEmptyState({
   const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const connect = useClusterStore((s) => s.connect);
+  // Its own needle: this pane and the front door are never on screen at the
+  // same time, so there is nothing to share a box with.
+  const cluster = useClusterFilter();
 
   return (
     <div className="flex h-full justify-center px-6 py-12">
@@ -42,7 +46,16 @@ export function ConnectClusterEmptyState({
 
         {contexts.length > 0 ? (
           <div className="mt-5">
-            <ClusterList onSelect={connect} autoFocus={false} />
+            <ClusterList
+              contexts={cluster.shown}
+              total={cluster.total}
+              filter={cluster.filter}
+              onFilterChange={cluster.setFilter}
+              query={cluster.query}
+              inputRef={cluster.inputRef}
+              onSelect={connect}
+              autoFocus={false}
+            />
           </div>
         ) : (
           <p className="mt-4 text-[11px] text-fg-fnt">

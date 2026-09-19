@@ -146,16 +146,23 @@ describe("a pod", () => {
   });
 });
 
+/** `updated` follows `current` here: these cases are about reaching the count. */
 function statefulSet(
   ready: number,
   current: number,
-  desired = 3
+  desired = 3,
+  updated = current
 ): StatefulSetInfo {
-  return { replicas: { desired, ready, current } } as StatefulSetInfo;
+  return { replicas: { desired, ready, current, updated } } as StatefulSetInfo;
 }
 
-function daemonSet(ready: number, current: number, desired = 3): DaemonSetInfo {
-  return { desired, current, ready } as DaemonSetInfo;
+function daemonSet(
+  ready: number,
+  current: number,
+  desired = 3,
+  updated = current
+): DaemonSetInfo {
+  return { desired, current, ready, updated } as DaemonSetInfo;
 }
 
 describe("a statefulset or daemonset", () => {
@@ -283,6 +290,9 @@ describe("the tone a verdict is shown in", () => {
     "renewed",
     "gone",
     "lostSight",
+    // An action that ran out of time may well have worked; the app only
+    // stopped being able to say.
+    "timedOut",
   ];
 
   /** The third-state rule on the dot: an ending that is not a failure must never wear the failure tone. Fails if a non-failure verdict is mapped to bg-err again (the fallback that painted `gone` red). */
@@ -292,5 +302,334 @@ describe("the tone a verdict is shown in", () => {
 
   it.each(failures)("paints %s with the failure tone", (says) => {
     expect(SAYS_TONE[says]).toBe("bg-err");
+  });
+});
+
+describe("an action being followed", () => {
+  const after = (
+    action: "restart" | "scale" | "apply" | "image",
+    replicas: number | null = null,
+    generationBefore: number | null = 4
+  ) => ({
+    ...watchOn("Deployment", "rollout"),
+    after: { action, replicas, generationBefore },
+    deadline: 120_000,
+  });
+  const look = (
+    generation: number,
+    observed: number,
+    replicas: Partial<DeploymentInfo["replicas"]> = {},
+    revision = "8"
+  ): DeploymentInfo => ({
+    ...deployment(replicas),
+    generation,
+    observedGeneration: observed,
+    annotations: { "deployment.kubernetes.io/revision": revision },
+  });
+
+  /**
+   * The Deployment looked fine before the click and looks fine for a
+   * second after it. Saying "rolled out" on that second is the lie this
+   * exists to avoid: nothing is said until the generation moved past the
+   * one the page saw before the click.
+   */
+  it("says nothing on a settled look whose generation is the one before the click", () => {
+    expect(walk(after("restart"), [look(4, 4), look(4, 4)])).toEqual([]);
+  });
+
+  it("says rolled out only once the new generation is observed and settled", () => {
+    expect(
+      walk(after("restart"), [
+        look(4, 4),
+        look(5, 4, { updated: 1, ready: 2 }),
+        look(5, 5, { updated: 3, ready: 3 }, "9"),
+      ])
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 3, desired: 3, revision: "9" },
+        },
+      },
+    ]);
+  });
+
+  it("acknowledges a scale by the count asked for, not by a generation the page did not know", () => {
+    expect(
+      walk(after("scale", 5, null), [
+        look(4, 4, { desired: 3 }),
+        look(5, 5, { desired: 5, ready: 3, updated: 5, available: 3 }),
+        look(5, 5, { desired: 5, ready: 5, updated: 5, available: 5 }),
+      ])
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 5, desired: 5, revision: "8" },
+        },
+      },
+    ]);
+  });
+
+  it("carries the controller's words when the rollout it follows gives up", () => {
+    expect(
+      walk(after("image"), [
+        look(4, 4),
+        {
+          ...look(5, 5, { updated: 1, ready: 2 }),
+          conditions: [
+            {
+              type: "Progressing",
+              status: "False",
+              reason: "ProgressDeadlineExceeded",
+              message: "ReplicaSet has timed out progressing.",
+              lastTransitionTime: null,
+            },
+          ],
+        },
+      ])
+    ).toEqual([
+      {
+        says: "rolloutFailed",
+        detail: "ReplicaSet has timed out progressing.",
+      },
+    ]);
+  });
+
+  /**
+   * The apiserver bumps `generation` the moment the action lands, while the
+   * status still describes the rollout before it. A Deployment already stuck
+   * with `Progressing=False` therefore answered "failed" within a second of
+   * the click — with the *previous* revision's message — and the watch then
+   * closed, so the fix it was following could never report success. The
+   * success arm had refused a stale "yes" all along; this is the same
+   * suspicion applied to a "no".
+   */
+  it("does not read a failure the reader's action cannot have caused", () => {
+    const asked = 1_700_000_100_000;
+    const stuck = (at: string | null) => ({
+      ...look(8, 7, { updated: 1, ready: 2 }),
+      conditions: [
+        {
+          type: "Progressing",
+          status: "False",
+          reason: "ProgressDeadlineExceeded",
+          message: "the previous rollout timed out.",
+          lastTransitionTime: at,
+        },
+      ],
+    });
+    const watch = {
+      ...after("image", null, 7),
+      after: {
+        action: "image" as const,
+        replicas: null,
+        generationBefore: 7,
+        askedAt: asked,
+      },
+    };
+
+    // Stamped a minute before the click: somebody else's rollout.
+    expect(
+      walk(watch, [stuck(new Date(asked - 60_000).toISOString())])
+    ).toEqual([]);
+
+    // Stamped after it: this one, and it is the reader's to hear about.
+    expect(walk(watch, [stuck(new Date(asked + 1_000).toISOString())])).toEqual(
+      [{ says: "rolloutFailed", detail: "the previous rollout timed out." }]
+    );
+  });
+
+  /**
+   * `generation` moves the instant the apiserver accepts the write, but the
+   * replica counts still describe the rollout before it — so the first look
+   * after a click is the *old* rollout, complete and settled, wearing the new
+   * generation. Answering "rolled out" there reports the state the reader was
+   * trying to leave. Fails if the `observedGeneration` half of the success
+   * arm is dropped.
+   */
+  it("says nothing while the controller has not looked at the generation yet", () => {
+    expect(
+      walk(after("image"), [
+        look(4, 4),
+        look(5, 4, {}, "8"),
+        look(5, 5, {}, "9"),
+      ])
+    ).toEqual([
+      {
+        says: "rolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 3, desired: 3, revision: "9" },
+        },
+      },
+    ]);
+  });
+
+  /**
+   * Same suspicion on the failure arm, where the cluster left no stamp to
+   * settle it: an unobserved generation means the `Progressing=False` on
+   * screen is about the rollout before the click. Fails if the fallback
+   * stops asking whether the controller has caught up.
+   */
+  it("holds a failure with no stamp until the controller has looked", () => {
+    const stuck = (observed: number, message: string) => ({
+      ...look(8, observed, { updated: 1, ready: 2 }),
+      conditions: [
+        {
+          type: "Progressing",
+          status: "False",
+          reason: "ProgressDeadlineExceeded",
+          message,
+          lastTransitionTime: null,
+        },
+      ],
+    });
+    expect(
+      walk(after("image", null, 7), [
+        stuck(7, "the rollout before the click timed out."),
+        stuck(8, "this rollout timed out."),
+      ])
+    ).toEqual([{ says: "rolloutFailed", detail: "this rollout timed out." }]);
+  });
+
+  /**
+   * `detail` is documented as "the cluster's own words", and for a rollout
+   * it was ours: `seenWords` built "3 of 3 ready, revision 8" in English at
+   * judge time, and both readers — the Watching tab and the desktop
+   * notification — printed it to a Russian reader as it was. A key survives
+   * the trip and becomes words where the translator is.
+   */
+  it("carries its own sentence as a key and the cluster's as a string", () => {
+    const [ours] = walk(after("restart"), [look(4, 4), look(5, 5, {}, "9")]);
+    expect(typeof ours.detail).toBe("object");
+
+    const [theirs] = walk(after("image"), [
+      look(4, 4),
+      {
+        ...look(5, 5, { updated: 1, ready: 2 }),
+        conditions: [
+          {
+            type: "Progressing",
+            status: "False",
+            reason: "ProgressDeadlineExceeded",
+            message: "ReplicaSet has timed out progressing.",
+            lastTransitionTime: null,
+          },
+        ],
+      },
+    ]);
+    expect(theirs.detail).toBe("ReplicaSet has timed out progressing.");
+  });
+
+  /**
+   * The two kinds whose only counts are `desired`/`ready`/`current`, all of
+   * which are already satisfied the instant the template changes. The
+   * controller's first status write after a restart carries
+   * `observedGeneration` caught up and every pod still Ready — it has only
+   * *requested* the first deletion — so without `updated` the watch answered
+   * "rolled out, 3 of 3 ready" while all three pods were the old ones.
+   *
+   * Under `updateStrategy: OnDelete` it is not a race but a certainty:
+   * nothing ever rolls, and every count except `updated` sits at `desired`
+   * forever. Verified on kind — `kubectl rollout restart` on an OnDelete
+   * StatefulSet bumps the generation, the status catches up, and the pod is
+   * not replaced.
+   */
+  it.each([
+    [
+      "StatefulSet",
+      (updated: number) => ({
+        name: "payments",
+        namespace: "shop",
+        generation: 5,
+        observedGeneration: 5,
+        replicas: { desired: 3, ready: 3, current: 3, updated },
+      }),
+    ],
+    [
+      "DaemonSet",
+      (updated: number) => ({
+        name: "payments",
+        namespace: "shop",
+        generation: 5,
+        observedGeneration: 5,
+        desired: 3,
+        ready: 3,
+        current: 3,
+        updated,
+      }),
+    ],
+  ])(
+    "holds a %s restart until the pods are on the new template",
+    (kind, look) => {
+      const watch = {
+        ...watchOn(kind as Watch["kind"], "rollout"),
+        after: {
+          action: "restart" as const,
+          replicas: null,
+          generationBefore: 4,
+        },
+        deadline: 120_000,
+      };
+      // Every count at `desired` except the one that says which template.
+      expect(walk(watch, [look(0)])).toEqual([]);
+      expect(walk(watch, [look(2)])).toEqual([]);
+      expect(walk(watch, [look(3)])).toEqual([
+        {
+          says: "rolledOut",
+          detail: { key: "rolloutSeen", values: { ready: 3, desired: 3 } },
+        },
+      ]);
+    }
+  );
+
+  /**
+   * What `generationBefore: null` costs, and why the peek stopped passing it.
+   *
+   * Without it `acknowledged` has only `unsettledSeen` to go on: the first
+   * look sets the baseline's generation to whatever it already is, so
+   * "moved past the one before the click" can never become true, and the
+   * watch must catch the object mid-rollout to recognise it at all. A
+   * rollout already finished by the first watch event — a one-replica set,
+   * or a restart with nothing to roll — is then never acknowledged, and a
+   * restart that worked times out saying nothing happened.
+   */
+  it("acknowledges a restart from the generation the page already had", () => {
+    const look = (generation: number, updated: number) => ({
+      name: "payments",
+      namespace: "shop",
+      generation,
+      observedGeneration: generation,
+      replicas: { desired: 1, ready: 1, current: 1, updated },
+    });
+    const following = (generationBefore: number | null) => ({
+      ...watchOn("StatefulSet", "rollout"),
+      after: { action: "restart" as const, replicas: null, generationBefore },
+      deadline: 120_000,
+    });
+
+    // Settled on the very first look, as a one-replica rollout can be.
+    expect(walk(following(4), [look(5, 1)])).toEqual([
+      {
+        says: "rolledOut",
+        detail: { key: "rolloutSeen", values: { ready: 1, desired: 1 } },
+      },
+    ]);
+    // The same looks with nothing to compare against: never acknowledged.
+    expect(walk(following(null), [look(5, 1)])).toEqual([]);
+  });
+
+  it("remembers the last look in words, for the timeout to say", () => {
+    let current = after("restart");
+    for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {
+      current = { ...current, baseline: judge(current, "applied", l).baseline };
+    }
+    expect(current.baseline?.seen).toEqual({
+      key: "rolloutSeenRevision",
+      values: { ready: 2, desired: 3, revision: "8" },
+    });
   });
 });

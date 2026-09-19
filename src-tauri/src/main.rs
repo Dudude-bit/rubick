@@ -5,8 +5,8 @@
     windows_subsystem = "windows"
 )]
 
-use k8s_gui_common::init_tracing;
-use k8s_gui_lib::{commands, integrations, shell, state::AppState};
+use k8s_gui_common::{init_tracing, log_dir};
+use k8s_gui_lib::{commands, integrations, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
@@ -39,10 +39,17 @@ fn main() {
     );
     let shell_env = shell::import_login_shell_env();
 
-    // Initialize tracing
-    init_tracing();
+    // Initialize tracing. The file is what a reader can hand over: a
+    // packaged Windows build is a GUI-subsystem binary with no console, so
+    // stderr reaches nobody, and every question about what the app did has
+    // had to be answered by guessing.
+    init_tracing(log_dir(BUNDLE).as_deref());
 
     tracing::info!("Starting Rubick application");
+    match k8s_gui_common::log_path() {
+        Some(file) => tracing::info!(path = %file.display(), "writing this run's log"),
+        None => tracing::warn!("no log file this run; this run leaves nothing to send"),
+    }
     tracing::info!(?shell_env, "login shell environment");
 
     tauri::Builder::default()
@@ -157,6 +164,7 @@ fn main() {
             commands::cluster::disconnect_cluster,
             commands::cluster::get_cluster_info,
             commands::cluster::connection_attempt,
+            commands::cluster::credential_renewal,
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
             commands::access::check_access,
@@ -203,6 +211,8 @@ fn main() {
             commands::deployments::delete_deployment,
             commands::deployments::scale_deployment,
             commands::deployments::restart_deployment,
+            commands::workloads::restart_statefulset,
+            commands::workloads::restart_daemonset,
             commands::deployments::update_deployment_image,
             commands::deployments::get_deployment_pods,
             commands::deployments::get_rollout_status,
@@ -211,6 +221,7 @@ fn main() {
             commands::replicasets::get_replicaset,
             commands::replicasets::get_replicaset_pods,
             commands::replicasets::get_deployment_replicasets,
+            commands::revisions::get_controller_revisions,
             // Service commands
             commands::services::list_services,
             commands::services::get_service,
@@ -367,6 +378,7 @@ fn main() {
             // Updater settings
             commands::settings::get_updater_settings,
             commands::settings::save_updater_settings,
+            commands::settings::updater_can_install,
             // Cluster preferences
             commands::settings::get_cluster_preferences,
             commands::settings::save_cluster_preferences,
@@ -387,6 +399,9 @@ fn main() {
             commands::storage::delete_storage_class,
             // Network commands
             commands::network::list_ingresses,
+            commands::network::list_network_policies,
+            commands::network::get_network_policy,
+            commands::network::delete_network_policy,
             commands::network::get_ingress,
             commands::network::resolve_ingress_class,
             commands::network::delete_ingress,

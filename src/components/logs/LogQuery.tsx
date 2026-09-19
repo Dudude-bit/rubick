@@ -13,6 +13,7 @@ import {
   ArrowUpFromLine,
   ChevronRight,
   Search,
+  Snowflake,
   X,
 } from "lucide-react";
 import {
@@ -26,6 +27,7 @@ import {
   MAX_TRACKED_VALUES,
   type FieldIndex,
   type FieldSuggestion,
+  type Frozen,
 } from "./hooks/log-buffer";
 import {
   canBeIntake,
@@ -62,6 +64,9 @@ interface LogQueryProps {
   /** Labels of the terms currently kept at the source. See `Chip`. */
   intake: ReadonlySet<string>;
   onToggleIntake: (term: QueryTerm) => void;
+  /** The interval the cap may not evict, if a time chip has frozen one. */
+  frozen: Frozen | null;
+  onToggleFreeze: (term: QueryTerm) => void;
   /** Counted as the buffer filled — see `FieldIndex`. */
   fields: FieldIndex;
 }
@@ -89,6 +94,8 @@ export function LogQuery({
   onRemoveTerm,
   intake,
   onToggleIntake,
+  frozen,
+  onToggleFreeze,
   fields,
 }: LogQueryProps) {
   const t = useT();
@@ -275,6 +282,13 @@ export function LogQuery({
               term={term}
               intake={intake.has(termLabel(term))}
               onToggleIntake={onToggleIntake}
+              frozen={
+                term.kind === "time" &&
+                frozen !== null &&
+                frozen.from === term.from &&
+                frozen.to === term.to
+              }
+              onToggleFreeze={onToggleFreeze}
               onRemove={onRemoveTerm}
             />
           ))}
@@ -489,11 +503,16 @@ function Chip({
   term,
   intake,
   onToggleIntake,
+  frozen,
+  onToggleFreeze,
   onRemove,
 }: {
   term: QueryTerm;
   intake: boolean;
   onToggleIntake: (term: QueryTerm) => void;
+  /** This chip's range is the frozen one. Only a time chip can be. */
+  frozen: boolean;
+  onToggleFreeze: (term: QueryTerm) => void;
   onRemove: (term: QueryTerm) => void;
 }) {
   const t = useT();
@@ -501,7 +520,7 @@ function Chip({
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded font-mono text-[11px] leading-[18px] ${
-        intake
+        intake || frozen
           ? "bg-info/16 text-info ring-1 ring-inset ring-info/45"
           : "bg-sel text-fg"
       }`}
@@ -510,9 +529,11 @@ function Chip({
       title={
         intake
           ? t("action", "chipIntakeTitle", { label })
-          : canBeIntake(term)
-            ? t("action", "chipQueryTitle", { label })
-            : t("action", "chipQueryTimeTitle", { label })
+          : frozen
+            ? t("action", "chipFrozenTitle", { label })
+            : canBeIntake(term)
+              ? t("action", "chipQueryTitle", { label })
+              : t("action", "chipQueryTimeTitle", { label })
       }
     >
       <span className="flex items-center gap-1 pl-1.5">
@@ -528,6 +549,7 @@ function Chip({
           </>
         ) : term.kind === "time" ? (
           <>
+            {frozen && <span aria-hidden="true">❄</span>}
             time<span className="text-fg-fnt">=</span>
             {formatTimeRange(term.from, term.to)}
           </>
@@ -567,13 +589,37 @@ function Chip({
           )}
         </button>
       )}
+      {term.kind === "time" && (
+        <button
+          type="button"
+          aria-pressed={frozen}
+          aria-label={
+            frozen
+              ? t("action", "stopFreezeLabel", { label })
+              : t("action", "startFreezeLabel", { label })
+          }
+          title={
+            frozen
+              ? t("action", "stopFreezeTitle")
+              : t("action", "startFreezeTitle")
+          }
+          onClick={() => onToggleFreeze(term)}
+          className={`px-1 ${
+            frozen ? "text-info hover:text-fg" : "text-fg-fnt hover:text-info"
+          }`}
+        >
+          <Snowflake aria-hidden="true" className="h-3 w-3" />
+        </button>
+      )}
       <button
         type="button"
         title={t("action", "removeTerm", { label })}
         onClick={() => onRemove(term)}
         className={`pr-1 ${
-          canBeIntake(term) ? "" : "pl-1"
-        } ${intake ? "text-info/70 hover:text-err" : "text-fg-fnt hover:text-err"}`}
+          intake || frozen
+            ? "text-info/70 hover:text-err"
+            : "text-fg-fnt hover:text-err"
+        }`}
       >
         <X className="h-3 w-3" />
       </button>

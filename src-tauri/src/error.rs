@@ -38,7 +38,9 @@ pub enum Error {
     /// session still works, while a 401 means the token the client was built
     /// with is accepted for nothing. Not a rare state — a GKE token lasts
     /// about an hour, `prepare_kubeconfig_for_context` strips the `exec` block
-    /// that could renew it, and nothing renews it afterwards.
+    /// that could renew it. `auth::renew` runs the plugin again before the
+    /// deadline where there is one; this is what a session it could not save
+    /// ends as.
     ///
     /// This sentence *is* the wire format: the frontend matches on the
     /// `CREDENTIALS_EXPIRED` prefix, so changing it changes an API.
@@ -103,6 +105,11 @@ pub enum Error {
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
+    /// The run happened and the node dropped its log: not `NoPreviousRun`,
+    /// and the kubelet says it with a 200, so only the body tells.
+    #[error("The node no longer has the log of {container}: {said}")]
+    LogNotKept { container: String, said: String },
+
     /// Timeout errors
     #[error("Operation timed out: {0}")]
     Timeout(String),
@@ -139,6 +146,12 @@ pub enum AuthError {
 
     #[error("Kubeconfig error: {0}")]
     Kubeconfig(String),
+
+    /// The credential plugin wants a person, and this attempt had none. Its
+    /// own variant rather than a sentence to match on: `auth::renew` tells a
+    /// coming sign-in from a failed read by it.
+    #[error("Needs a sign-in: {0}")]
+    NeedsPerson(String),
 }
 
 /// Plugin-specific errors

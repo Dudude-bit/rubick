@@ -2,7 +2,12 @@ import { Layers } from "lucide-react";
 
 import { defineVendor, pageCount } from "../registry";
 import { crd } from "./crd";
-import { CLUSTERS_KEY, SCYLLA_STALE, fetchClusters } from "./data";
+import {
+  CLUSTERS_CRD,
+  CLUSTERS_KEY,
+  SCYLLA_STALE,
+  fetchClusters,
+} from "./data";
 import { facts } from "./facts";
 import { readScyllaCluster } from "./model";
 
@@ -29,6 +34,7 @@ export default defineVendor({
       staleTime: SCYLLA_STALE,
     }),
     load: () => import("./page"),
+    gate: { crd: CLUSTERS_CRD, namespaced: true },
   },
   crd,
 });

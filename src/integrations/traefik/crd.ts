@@ -8,7 +8,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByPattern, NO_STATUS } from "../kit";
+import { getValueByPath, matchByPattern } from "../kit";
 import type { CrdView } from "../registry";
 
 /**
@@ -274,5 +274,4 @@ export const crd: CrdView = {
     if (kindLower.includes("tlsoption")) return tlsOptionColumns;
     return ingressRouteColumns;
   },
-  status: NO_STATUS,
 };

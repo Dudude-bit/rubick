@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { ServiceList } from "@/components/resources/ServiceList";
 import { IngressList } from "@/components/resources/IngressList";
+import { NetworkPolicyList } from "@/components/resources/NetworkPolicyList";
 import { EndpointsList } from "@/components/resources/EndpointsList";
 import { GatewayList } from "@/components/resources/GatewayList";
 import { GatewayRoutesList } from "@/components/resources/GatewayRoutesList";
@@ -12,6 +13,10 @@ export function Network() {
     <Routes>
       <Route path={toPlural(ResourceType.Service)} element={<ServiceList />} />
       <Route path={toPlural(ResourceType.Ingress)} element={<IngressList />} />
+      <Route
+        path={toPlural(ResourceType.NetworkPolicy)}
+        element={<NetworkPolicyList />}
+      />
       <Route path="endpoints" element={<EndpointsList />} />
       {/* Registered whether or not the cluster serves the kinds: the rows in
           the sidebar are gated on detection, but a pasted or stale URL still

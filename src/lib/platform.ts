@@ -32,6 +32,25 @@ export function formatShortcut(shortcut: string, os: string = hostOs): string {
         return mac ? "⇧" : "Shift";
       case "alt":
         return mac ? "⌥" : "Alt";
+      // The named keys, so the one renderer covers every key the shortcut
+      // table can hold. The list of shortcuts used to spell these itself and
+      // came out saying "⇧" on Windows and "Ctrl+Tab" on a Mac, two paces
+      // from a tab strip drawing the same keys the app's own way.
+      // Capitalised, not turned into glyphs: `ScopeTabs` already prints
+      // `mod+Enter` and the word is what it has always shown. The list of
+      // shortcuts spelled these itself and drew "↵" beside a tab strip
+      // saying "Enter"; the fix is that the list follows the app, not that
+      // the app follows the list.
+      case "esc":
+        return "Esc";
+      case "enter":
+        return "Enter";
+      case "tab":
+        return "Tab";
+      case "del":
+        return "Del";
+      case "space":
+        return "Space";
       default:
         return part;
     }

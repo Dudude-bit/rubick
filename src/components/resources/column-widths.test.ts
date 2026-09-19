@@ -8,6 +8,7 @@ import { columns as endpoints } from "./EndpointsList";
 import { baseColumns as ingresses } from "./IngressList";
 import { columns as jobs } from "./JobList";
 import { columns as namespaces } from "./NamespaceList";
+import { networkPolicyColumns } from "./NetworkPolicyList";
 import { columns as nodes } from "./NodeList";
 import { columns as persistentVolumeClaims } from "./PersistentVolumeClaimList";
 import { columns as persistentVolumes } from "./PersistentVolumeList";
@@ -52,6 +53,7 @@ const PAGES: [string, Column[]][] = [
   ["Ingresses", ingresses],
   ["Jobs", jobs()],
   ["Namespaces", namespaces],
+  ["NetworkPolicies", networkPolicyColumns],
   ["Nodes", nodes(new Map())],
   ["PersistentVolumeClaims", persistentVolumeClaims],
   ["PersistentVolumes", persistentVolumes()],

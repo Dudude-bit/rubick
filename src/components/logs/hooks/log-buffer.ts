@@ -38,6 +38,15 @@ export const MAX_PENDING_LINES = 5000;
 export const MAX_TRACKED_VALUES = 50;
 
 /**
+ * Keys the cap does not apply to. `container` and `pod` are the lane
+ * identity, not parsed fields: the legend draws a chip per value and reads
+ * its count from here, so dropping the map turns every chip's count into
+ * the number zero and makes a departed lane vanish with its lines still in
+ * the buffer. A 60-node DaemonSet crosses fifty pods on the first read.
+ */
+const NEVER_CAPPED: ReadonlySet<string> = new Set(["container", "pod"]);
+
+/**
  * What the retained buffer can be filtered by, counted as it fills.
  *
  * Not a `useMemo` over `logs`: a recount is a pass over up to 40 000 lines
@@ -58,6 +67,18 @@ export interface FieldIndex {
   values: Map<string, Map<string, number>>;
 }
 
+/**
+ * A stretch of clock the reader asked to keep. Lines inside it are never
+ * evicted and are not counted against the cap: the cap bounds what the
+ * stream may push out, and a frozen interval is what the reader chose to
+ * hold onto while it does. Bounded by what the buffer held when it was
+ * frozen, so the whole never exceeds twice the cap.
+ */
+export interface Frozen {
+  from: number;
+  to: number;
+}
+
 export interface LogBuffer {
   lines: StreamedLogLine[];
   /**
@@ -67,6 +88,9 @@ export interface LogBuffer {
    */
   dropped: number;
   fields: FieldIndex;
+  frozen: Frozen | null;
+  /** How many of `lines` fall inside `frozen`; zero when nothing is. */
+  frozenLines: number;
 }
 
 /**
@@ -77,7 +101,21 @@ export const emptyBuffer = (): LogBuffer => ({
   lines: [],
   dropped: 0,
   fields: { keys: new Map(), values: new Map() },
+  frozen: null,
+  frozenLines: 0,
 });
+
+export function isFrozen(
+  line: StreamedLogLine,
+  frozen: Frozen | null
+): boolean {
+  return (
+    frozen !== null && line.epoch >= frozen.from && line.epoch <= frozen.to
+  );
+}
+
+const sameInterval = (a: Frozen | null, b: Frozen | null) =>
+  a === b || (a !== null && b !== null && a.from === b.from && a.to === b.to);
 
 /**
  * Everything a line can be filtered by. `container` and `level` are not
@@ -91,6 +129,7 @@ function eachField(
   visit: (key: string, value: string) => void
 ): void {
   visit("container", line.container);
+  visit("pod", line.pod);
   visit("level", line.level ?? "unknown");
   if (!line.fields) return;
   for (const key of Object.keys(line.fields)) {
@@ -110,7 +149,8 @@ function indexLine(index: FieldIndex, line: StreamedLogLine): void {
     if (values === undefined) return;
     const count = values.get(value);
     if (count !== undefined) values.set(value, count + 1);
-    else if (values.size < MAX_TRACKED_VALUES) values.set(value, 1);
+    else if (values.size < MAX_TRACKED_VALUES || NEVER_CAPPED.has(key))
+      values.set(value, 1);
     else index.values.delete(key);
   });
 }
@@ -144,8 +184,14 @@ export interface FieldSuggestion {
   wide: boolean;
 }
 
-/** The two that are not parsed fields, and are what people filter by first. */
-const PINNED_KEYS = ["level", "container"];
+/** The ones that are not parsed fields, and are what people filter by first. */
+const PINNED_KEYS = ["level", "container", "pod"];
+
+/** A pane reading one pod has nothing to offer under `pod`. */
+function offered(index: FieldIndex, key: string): boolean {
+  if (!index.keys.has(key)) return false;
+  return key !== "pod" || index.values.get(key)?.size !== 1;
+}
 
 /**
  * The index as a list: the two always-there keys, then whatever parsed,
@@ -160,7 +206,7 @@ export function fieldSuggestions(index: FieldIndex): FieldSuggestion[] {
       (a, b) => index.keys.get(b)! - index.keys.get(a)! || a.localeCompare(b)
     );
 
-  return [...PINNED_KEYS.filter((key) => index.keys.has(key)), ...parsed].map(
+  return [...PINNED_KEYS.filter((key) => offered(index, key)), ...parsed].map(
     (key) => {
       const values = index.values.get(key);
       return {
@@ -213,42 +259,73 @@ export function orderByTimestamp(
  * inside a fresh wrapper, which is the identity the suggestion list
  * memoizes on.
  */
+/**
+ * Where the buffer lost lines, which is not always the same place.
+ *
+ * With nothing frozen, eviction takes the head and the log simply starts
+ * later than it did. A frozen interval keeps its place while everything
+ * around it goes, so what is missing is a hole beside the kept block —
+ * and "older lines have been dropped" would send the reader to the wrong
+ * end of the buffer looking for it.
+ */
+export type LostLines = "none" | "head" | "aroundKept";
+
+export function lostLines(dropped: number, frozen: Frozen | null): LostLines {
+  if (dropped === 0) return "none";
+  return frozen === null ? "head" : "aroundKept";
+}
+
 export function appendCapped(
   prev: LogBuffer,
   batch: readonly StreamedLogLine[],
-  limit: number
+  limit: number,
+  frozen: Frozen | null = prev.frozen
 ): LogBuffer {
-  if (batch.length === 0) return prev;
+  const refrozen = !sameInterval(frozen, prev.frozen);
+  const heldFrozen = refrozen
+    ? prev.lines.reduce((n, line) => n + (isFrozen(line, frozen) ? 1 : 0), 0)
+    : prev.frozenLines;
+  let batchFrozen = 0;
+  if (frozen !== null) {
+    for (const line of batch) if (isFrozen(line, frozen)) batchFrozen++;
+  }
+  const live = prev.lines.length - heldFrozen + batch.length - batchFrozen;
+  const overflow = Math.max(0, live - Math.max(0, limit));
+  if (batch.length === 0 && !refrozen && overflow === 0) return prev;
 
   const index = prev.fields;
   const fields: FieldIndex = { keys: index.keys, values: index.values };
+  const frozenLines = heldFrozen + batchFrozen;
+  const dropped = prev.dropped + overflow;
 
-  if (limit <= 0) {
+  if (frozen === null && batch.length >= limit) {
     for (const line of prev.lines) unindexLine(index, line);
-    return {
-      lines: [],
-      dropped: prev.dropped + prev.lines.length + batch.length,
-      fields,
-    };
-  }
-
-  const overflow = prev.lines.length + batch.length - limit;
-  const dropped = overflow > 0 ? prev.dropped + overflow : prev.dropped;
-
-  if (batch.length >= limit) {
-    for (const line of prev.lines) unindexLine(index, line);
-    const lines = batch.slice(batch.length - limit);
+    const lines = batch.slice(batch.length - Math.max(0, limit));
     for (const line of lines) indexLine(index, line);
-    return { lines, dropped, fields };
+    return { lines, dropped, fields, frozen, frozenLines };
   }
 
-  for (let i = 0; i < overflow; i++) unindexLine(index, prev.lines[i]);
-  const lines = overflow > 0 ? prev.lines.slice(overflow) : prev.lines.slice();
+  // Evict `overflow` lines from the head, stepping over the frozen ones:
+  // the interval keeps its place in the order, everything around it goes.
+  const lines: StreamedLogLine[] = [];
+  let evict = overflow;
+  for (const line of prev.lines) {
+    if (evict > 0 && !isFrozen(line, frozen)) {
+      unindexLine(index, line);
+      evict--;
+    } else {
+      lines.push(line);
+    }
+  }
   for (const line of batch) {
+    if (evict > 0 && !isFrozen(line, frozen)) {
+      evict--;
+      continue;
+    }
     lines.push(line);
     indexLine(index, line);
   }
-  return { lines, dropped, fields };
+  return { lines, dropped, fields, frozen, frozenLines };
 }
 
 /**
@@ -264,4 +341,21 @@ export function backfillPerContainer(
   containers: number
 ): number {
   return Math.max(1, Math.ceil(limit / Math.max(1, containers)));
+}
+
+/**
+ * How many history lines a pane may hold beside its live ones.
+ *
+ * The cap counts the lines it is allowed to evict, and frozen lines are the
+ * ones it is not — which is what the status bar's meter says two inches
+ * away. Measuring the whole buffer against `limit` here instead made
+ * freezing an interval delete the loaded history from the pane and then
+ * blame the live stream for having filled it.
+ */
+export function historyRoom(
+  limit: number,
+  liveLines: number,
+  frozenLines: number
+): number {
+  return Math.max(0, limit - Math.max(0, liveLines - frozenLines));
 }
