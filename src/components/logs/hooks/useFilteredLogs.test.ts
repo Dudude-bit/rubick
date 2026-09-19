@@ -30,6 +30,9 @@ const lines = (from: number, count: number) =>
   );
 
 const HIT: QueryTerm[] = [{ kind: "text", value: "hit" }];
+/** What the legend hides. The viewer passes the pod when the pane shows
+ *  several lanes and the container otherwise; these tests are the latter. */
+const BY_CONTAINER = (log: StreamedLogLine) => log.container;
 const NONE: ReadonlySet<string> = new Set();
 
 beforeEach(() => {
@@ -44,7 +47,7 @@ describe("useFilteredLogs", () => {
   /** A small buffer answers in the render, as it always did: nothing to settle. */
   it("filters a buffer under one slice in the same render", () => {
     const logs = lines(0, 100);
-    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT));
+    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER));
     expect(result.current.settling).toBe(false);
     expect(result.current.scoped.map((l) => l.id)).toEqual(
       logs.filter((l) => l.raw.startsWith("hit")).map((l) => l.id)
@@ -55,7 +58,7 @@ describe("useFilteredLogs", () => {
   it("looks only at the appended lines when a batch lands", () => {
     let logs = lines(0, SLICE_LINES);
     const { result, rerender } = renderHook(
-      ({ logs }) => useFilteredLogs(logs, NONE, HIT),
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
       { initialProps: { logs } }
     );
     expect(result.current.settling).toBe(false);
@@ -73,7 +76,7 @@ describe("useFilteredLogs", () => {
   /** A big buffer is walked in slices with the event loop between them, so the input keeps answering; the caller is told the walk is on. */
   it("walks a new query over a big buffer in slices and says so", () => {
     const logs = lines(0, SLICE_LINES * 3);
-    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT));
+    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER));
     expect(result.current.settling).toBe(true);
     expect(reads).toBe(SLICE_LINES);
     expect(result.current.scoped.length).toBe(SLICE_LINES / 10);
@@ -92,7 +95,7 @@ describe("useFilteredLogs", () => {
   it("keeps walking after a batch lands mid-pass and reaches the tail", () => {
     let logs = lines(0, SLICE_LINES * 2);
     const { result, rerender } = renderHook(
-      ({ logs }) => useFilteredLogs(logs, NONE, HIT),
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
       { initialProps: { logs } }
     );
     expect(result.current.settling).toBe(true);
@@ -110,7 +113,7 @@ describe("useFilteredLogs", () => {
   it("starts over on the new query when the query changes mid-pass", () => {
     const logs = lines(0, SLICE_LINES * 2);
     const { result, rerender } = renderHook(
-      ({ terms }) => useFilteredLogs(logs, NONE, terms),
+      ({ terms }) => useFilteredLogs(logs, NONE, terms, BY_CONTAINER),
       { initialProps: { terms: HIT } }
     );
     const other: QueryTerm[] = [{ kind: "text", value: "m1" }];
@@ -126,7 +129,7 @@ describe("useFilteredLogs", () => {
   it("walks a replaced buffer from the start", () => {
     let logs = lines(0, 50);
     const { result, rerender } = renderHook(
-      ({ logs }) => useFilteredLogs(logs, NONE, HIT),
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
       { initialProps: { logs } }
     );
     logs = lines(1000, 50);
@@ -143,12 +146,52 @@ describe("useFilteredLogs", () => {
   it("keeps the same array when a batch adds nothing that matches", () => {
     let logs = lines(0, 10);
     const { result, rerender } = renderHook(
-      ({ logs }) => useFilteredLogs(logs, NONE, HIT),
+      ({ logs }) => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER),
       { initialProps: { logs } }
     );
     const before = result.current.scoped;
     logs = [...logs, line(11, "quiet"), line(12, "quiet")];
     rerender({ logs });
     expect(result.current.scoped).toBe(before);
+  });
+
+  /**
+   * What the legend hides is a lane, and a lane is the pod when the pane
+   * shows several and the container otherwise. Filtering on `container`
+   * regardless would leave a hidden pod's lines on screen in the view that
+   * has pods — the legend saying one thing and the list another.
+   */
+  it("hides by whatever the pane calls a lane, not always the container", () => {
+    const byPod = (log: StreamedLogLine) => log.pod;
+    const logs = [
+      { ...line(1, "hit a"), pod: "web-1" },
+      { ...line(2, "hit b"), pod: "web-2" },
+    ] as StreamedLogLine[];
+    const { result } = renderHook(() =>
+      useFilteredLogs(logs, new Set(["web-1"]), HIT, byPod)
+    );
+    expect(result.current.scoped.map((l) => l.pod)).toEqual(["web-2"]);
+  });
+
+  /**
+   * Switching the pane between lanes and containers changes what `hidden`
+   * means while the set itself can stay identical, so the key alone cannot
+   * see it. A pass built for one has to be restarted for the other.
+   */
+  it("starts over when the pane changes what a lane is", () => {
+    const logs = [
+      { ...line(1, "hit a"), pod: "app" },
+      { ...line(2, "hit b"), pod: "web" },
+    ] as StreamedLogLine[];
+    const hidden = new Set(["app"]);
+    const { result, rerender } = renderHook(
+      ({ laneOf }) => useFilteredLogs(logs, hidden, HIT, laneOf),
+      { initialProps: { laneOf: (log: StreamedLogLine) => log.container } }
+    );
+    // Every line's container is "app", so hiding "app" hides them all.
+    expect(result.current.scoped).toEqual([]);
+    rerender({ laneOf: (log: StreamedLogLine) => log.pod });
+    // The same hidden set now names a pod, and the other pod survives.
+    expect(result.current.scoped.map((l) => l.pod)).toEqual(["web"]);
   });
 });
