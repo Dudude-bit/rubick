@@ -20,7 +20,7 @@ import {
   parentCarriesTraffic,
   redirectOnly,
   routeTraces,
-  addressedToController,
+  answeredByItsController,
   selfAnswered,
   type RouteTrace,
   type TraceSources,
@@ -403,8 +403,8 @@ export function routesBoard(
         ? t("empty", "gwRowRedirects")
         : selfAnswered(route)
           ? t("empty", "gwRowFilterNamed")
-          : addressedToController(route, route.parents[0]?.controllerName)
-                .length > 0 && !route.rules.some((r) => r.backendRefs.length)
+          : answeredByItsController(route, route.parents[0]?.controllerName)
+                .length > 0
             ? t("empty", "gwRowControllerConfigured")
             : null,
       // The worst trace is the one whose break the row shows — its
