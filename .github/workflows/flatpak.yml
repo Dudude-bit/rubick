@@ -110,6 +110,26 @@ jobs:
           fi
           flatpak install -y --user --noninteractive "Rubick-${TAG#v}.flatpak"
 
+      # The launch above goes through `command:`. Nobody else does: a menu
+      # entry, and a `rubick://` link, go through the exported desktop file,
+      # whose own Exec decides what runs. They have to be the same thing, or
+      # this job stays green while every real launch opens a blank window.
+      - name: Check the exported launcher runs what was just proven
+        env:
+          FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
+        run: |
+          exported="$FLATPAK_USER_DIR/exports/share/applications/com.k8s_gui.app.desktop"
+          cat "$exported"
+          if ! grep -qE '^Exec=.*--command=rubick( |$)' "$exported"; then
+            echo "::error::the exported desktop entry does not run the launcher"
+            exit 1
+          fi
+          if ! grep -qE '^Exec=.*@@u %u @@|^Exec=.*%u' "$exported"; then
+            echo "::error::the exported desktop entry passes no URL, so rubick:// links are dropped"
+            exit 1
+          fi
+          echo "the menu entry and the smoke launch run the same thing"
+
       - name: Check every library resolves
         env:
           FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
@@ -142,7 +162,7 @@ jobs:
             echo "::error::the app did not stay up (exit $status)"
             exit 1
           fi
-          if grep -qiE "WebKitWebProcess|cannot open shared object|No such schema|Failed to execute child" run.log; then
+          if grep -qiE "Unable to spawn|Failed to spawn|WebKitWebProcess|cannot open shared object|No such schema|Failed to execute child" run.log; then
             echo "::error::it stayed up but could not bring up its web process"
             exit 1
           fi
