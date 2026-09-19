@@ -17,6 +17,7 @@ import {
   type PeekAction,
 } from "./peek-actions";
 import { RESOURCE_REGISTRY, SCALABLE_KINDS } from "@/lib/resource-registry";
+import { askableKind } from "@/lib/tell-me-when";
 import * as generated from "@/generated/commands";
 
 function container(
@@ -545,6 +546,18 @@ describe("the peek's restart table against the commands that exist", () => {
       if (!should && offered) unexpected.push(entry.kind);
     }
     expect({ missing, unexpected }).toEqual({ missing: [], unexpected: [] });
+  });
+
+  /**
+   * Rolling a workload from the peek also follows it to its answer, the way
+   * the detail pages do — and that followed `kind === "Deployment"` for one
+   * release after the other two kinds gained the button, so the same click
+   * answered differently depending on which surface it was on. A kind that
+   * can be rolled but not asked about would follow nothing and say nothing.
+   */
+  it("can ask about every workload it can roll", () => {
+    const rollable = Object.keys(EXPECTED).filter((kind) => kind !== "Pod");
+    expect(rollable.filter((kind) => askableKind(kind) === null)).toEqual([]);
   });
 
   /**
