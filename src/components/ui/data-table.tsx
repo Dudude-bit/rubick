@@ -109,6 +109,8 @@ interface DataTableProps<TData extends RowData> {
   grouping?: RowGrouping<TData> | null;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
+  /** What dragged column widths are filed under; the row label otherwise. */
+  widthsKey?: string;
 }
 
 /**
@@ -121,6 +123,13 @@ interface DataTableProps<TData extends RowData> {
  * estimate and back, and on an unfilled table it swaps the whole list for a
  * fixed box with its own scrollbar — scroll position lost both ways.
  */
+/**
+ * The narrowest a column may be dragged. The vendor's default is 20, which
+ * as a share of a table this wide is about fourteen real pixels — narrower
+ * than the word in its own header, which then paints over its neighbour.
+ */
+const MIN_COLUMN_SIZE = 56;
+
 const VIRTUALISE_ABOVE_ROWS = 100;
 const STAY_FLAT_BELOW_ROWS = 75;
 const VIRTUAL_SCROLL_DEFAULT_HEIGHT = 600;
@@ -266,6 +275,7 @@ function DataTableInner<TData extends RowData>({
   emptyMessage,
   grouping = null,
   rowLabel,
+  widthsKey,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -384,21 +394,88 @@ function DataTableInner<TData extends RowData>({
   // `useId` and new on every mount — a width that forgot itself on the way to
   // the next page is a control that does not hold. A table with no label
   // still resizes; it just has nowhere to remember it.
-  const widthsKey = rowLabel ?? null;
+  const widthsFiledAs = widthsKey ?? rowLabel ?? null;
   const storedWidths = useColumnWidthsStore((state) =>
-    widthsKey ? state.widths[widthsKey] : undefined
+    widthsFiledAs ? state.widths[widthsFiledAs] : undefined
   );
   const saveWidths = useColumnWidthsStore((state) => state.set);
+  const forgetWidths = useColumnWidthsStore((state) => state.reset);
   const [localWidths, setLocalWidths] = React.useState<ColumnWidths>({});
-  const columnSizing = storedWidths ?? localWidths;
+  // What the drag is doing before anybody lets go. The store is persisted,
+  // so writing there per frame means a `localStorage.setItem` per frame.
+  const [dragging, setDragging] = React.useState<ColumnWidths | null>(null);
+  const columnSizing = dragging ?? storedWidths ?? localWidths;
+  const keepWidths = React.useCallback(
+    (next: ColumnWidths) => {
+      if (!widthsFiledAs) return setLocalWidths(next);
+      // An empty map is not a width anybody chose; forgetting the table is
+      // what lets the column definitions answer again.
+      if (Object.keys(next).length === 0) return forgetWidths(widthsFiledAs);
+      saveWidths(widthsFiledAs, next);
+    },
+    [widthsFiledAs, saveWidths, forgetWidths]
+  );
   const setColumnSizing = React.useCallback(
     (updater: ColumnWidths | ((old: ColumnWidths) => ColumnWidths)) => {
       const next =
         typeof updater === "function" ? updater(columnSizing) : updater;
-      if (widthsKey) saveWidths(widthsKey, next);
-      else setLocalWidths(next);
+      keepWidths(next);
     },
-    [columnSizing, widthsKey, saveWidths]
+    [columnSizing, keepWidths]
+  );
+
+  /**
+   * The drag, written here rather than taken from the vendor, whose handler
+   * commits pixel deltas. These tables are laid out in shares of their own
+   * width and the dragged column sits in its own denominator, so pixels move
+   * the rendered edge by a fraction of the travel — less and less as the
+   * drag goes on. Moving width from one column to the next holds the total
+   * still, which is what puts the edge under the finger.
+   */
+  const startResize = React.useCallback(
+    (
+      event: React.PointerEvent<HTMLSpanElement>,
+      columnId: string,
+      nextColumnId: string,
+      sizes: { own: number; next: number },
+      totalWidth: number,
+      total: number,
+      started: ColumnWidths
+    ) => {
+      event.preventDefault();
+      const startX = event.clientX;
+      // A share is `size / total`, so a screen pixel is `total / width` of
+      // size. Zero width means nobody has measured the table yet, and
+      // dividing by it would send the first move straight to the clamp.
+      const perPixel = totalWidth > 0 ? total / totalWidth : 1;
+      const limit = sizes.own + sizes.next - MIN_COLUMN_SIZE;
+      // Outside the state updater, which React is free to defer: a drag
+      // released in the same tick as its last move let go of a width nobody
+      // had computed yet.
+      let latest: ColumnWidths | null = null;
+      const move = (moved: PointerEvent) => {
+        const delta = (moved.clientX - startX) * perPixel;
+        const own = Math.max(
+          MIN_COLUMN_SIZE,
+          Math.min(limit, sizes.own + delta)
+        );
+        latest = {
+          ...started,
+          [columnId]: own,
+          [nextColumnId]: sizes.own + sizes.next - own,
+        };
+        setDragging(latest);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", stop);
+        if (latest) keepWidths(latest);
+        setDragging(null);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", stop);
+    },
+    [keepWidths]
   );
 
   const table = useTable({
@@ -413,10 +490,6 @@ function DataTableInner<TData extends RowData>({
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
     onColumnSizingChange: setColumnSizing,
-    // Committed while the handle moves, so the column follows the pointer.
-    // `onEnd` leaves the header the old width until the drag is released,
-    // which reads as the drag having done nothing.
-    columnResizeMode: "onChange",
     state: {
       sorting,
       columnFilters,
@@ -839,7 +912,9 @@ function DataTableInner<TData extends RowData>({
                 );
                 return (
                   <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.map((header, index) => {
+                      // Who gives up the width this one takes.
+                      const next = headerGroup.headers[index + 1];
                       return (
                         <TableHead
                           key={header.id}
@@ -863,35 +938,43 @@ function DataTableInner<TData extends RowData>({
                                 header.column.columnDef.header,
                                 header.getContext()
                               )}
-                          {/* The grip sits on the column's own right edge and
-                              is wider than it looks: 9px of target around a
-                              1px rule, which is what makes it catchable
-                              without a visible seam between every pair of
-                              headers. Double-click puts the column back to
-                              the width its definition declares — the way out
-                              of a drag, since there is no menu to hold one.
-                              Not a button: it starts a drag rather than doing
-                              something, and a keyboard has the same reach
-                              through the column's own width either way. */}
-                          {header.column.getCanResize() && (
+                          {/* Inside the column's own right edge, not
+                              straddling it: straddling put 4.5px of the last
+                              header past the table and gave every list a
+                              little horizontal scroll it never had. The last
+                              column has no grip — nothing to its right to
+                              take width from. Double-click puts both columns
+                              back to their declared widths. */}
+                          {next && (
                             <span
                               role="presentation"
-                              onMouseDown={header.getResizeHandler()}
-                              onTouchStart={header.getResizeHandler()}
+                              onPointerDown={(event) =>
+                                startResize(
+                                  event,
+                                  header.column.id,
+                                  next.column.id,
+                                  {
+                                    own: header.getSize(),
+                                    next: next.getSize(),
+                                  },
+                                  scrollRef.current?.clientWidth ?? 0,
+                                  totalSize,
+                                  columnSizing
+                                )
+                              }
                               onDoubleClick={() =>
                                 setColumnSizing((old) => {
-                                  const next = { ...old };
-                                  delete next[header.column.id];
-                                  return next;
+                                  const back = { ...old };
+                                  delete back[header.column.id];
+                                  delete back[next.column.id];
+                                  return back;
                                 })
                               }
                               title={t("action", "dragToResize")}
                               className={cn(
-                                "absolute inset-y-0 right-0 z-10 w-[9px] translate-x-1/2 cursor-col-resize touch-none select-none",
-                                "after:absolute after:inset-y-1 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-hair after:opacity-0 after:transition-opacity",
-                                "hover:after:opacity-100",
-                                header.column.getIsResizing() &&
-                                  "after:bg-info after:opacity-100"
+                                "absolute inset-y-0 right-0 z-10 w-[9px] cursor-col-resize touch-none select-none",
+                                "after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-hair after:opacity-0 after:transition-opacity",
+                                "hover:after:opacity-100"
                               )}
                             />
                           )}

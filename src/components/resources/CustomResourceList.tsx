@@ -251,6 +251,9 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
+      // The plural alone collides: `certificates` belongs to cert-manager
+      // and to Knative, with different columns behind the same word.
+      widthsKey={`${crdPlural}.${crdGroup}`}
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.

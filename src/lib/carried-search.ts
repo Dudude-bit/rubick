@@ -1,3 +1,5 @@
+import { getResourceListUrl, RESOURCE_REGISTRY } from "@/lib/resource-registry";
+
 /**
  * The list search, carried from one kind to the next.
  *
@@ -15,9 +17,22 @@
 export function withCarriedSearch(
   path: string,
   kind: string | undefined,
-  search: string
+  search: string,
+  from: string
 ): string {
-  if (!kind) return path;
+  if (!kind || !listsAKind(from)) return path;
   const term = new URLSearchParams(search).get("q");
   return term ? `${path}?q=${encodeURIComponent(term)}` : path;
+}
+
+/**
+ * Whether `?q=` on this page means the list search at all. `q` is not
+ * reserved — the Traefik page reads it as a hostname filter — so carrying is
+ * gated at both ends. The set is the registry's own list routes, which is
+ * where the sidebar's kind rows point.
+ */
+function listsAKind(pathname: string): boolean {
+  return RESOURCE_REGISTRY.some(
+    (entry) => getResourceListUrl(entry.kind) === pathname
+  );
 }

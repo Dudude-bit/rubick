@@ -234,7 +234,15 @@ export function ResourceRef({
   // Asked before anything is built: an element is truthy whatever it renders,
   // so `ObjectLink` returning null cannot choose the fallback.
   if (objectUrl(kind, name, namespace, crd) === null) {
-    return <span className={cn(shell, className)}>{body}</span>;
+    // Named outright for the same reason the link is: the name is drawn as
+    // two boxes so the tail can keep its hue and its place, and the
+    // accessible-name algorithm joins those with a space — "k3d-agent -0"
+    // for a pod called neither. Only the link half used to say so.
+    return (
+      <span className={cn(shell, className)} aria-label={`${kind} ${name}`}>
+        {body}
+      </span>
+    );
   }
 
   return (

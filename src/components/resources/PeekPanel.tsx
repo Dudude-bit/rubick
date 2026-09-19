@@ -228,22 +228,25 @@ function PeekContent({
       />
 
       <header className="flex-none px-3.5 pb-2 pt-3 pr-9">
-        <SheetTitle className="group/name flex min-w-0 items-center gap-1">
-          <ResourceRef
-            kind={target.kind}
-            name={target.name}
-            namespace={namespace}
-            crd={target.crd}
-            showKind={false}
-            size="title"
-            className="font-semibold"
-          />
-          {/* The same mark the list row and the detail page carry. Without it
-              the name was the one place in the app you could see it and not
-              copy it in one gesture — the panel's own Copy name is a menu
-              item, which is a different thing to reach for. */}
+        {/* The mark sits beside the title, not inside it. Radix points the
+            dialog's `aria-labelledby` at `SheetTitle`, so a button in there
+            makes the panel announce itself as "<name> Copy name: <name>" —
+            a cost the list row and the detail heading do not pay, because
+            nothing reads those as a label. */}
+        <div className="group/name flex min-w-0 items-center gap-1">
+          <SheetTitle className="flex min-w-0 items-center">
+            <ResourceRef
+              kind={target.kind}
+              name={target.name}
+              namespace={namespace}
+              crd={target.crd}
+              showKind={false}
+              size="title"
+              className="font-semibold"
+            />
+          </SheetTitle>
           <CopyName name={target.name} />
-        </SheetTitle>
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mut">
           {/* Three cases, not two. `undefined` is a kind with no phase to
               report and draws nothing; `null` is a kind that has one and

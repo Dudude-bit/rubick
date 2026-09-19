@@ -541,6 +541,85 @@ describe("column widths", () => {
   });
 
   /**
+   * A drag moves width from one column to the next; it does not add width.
+   *
+   * These tables are laid out in shares of their own width, and a dragged
+   * column sits in its own denominator — so a drag that *added* pixels moved
+   * the rendered edge by only a fraction of the travel, and the fraction
+   * shrank as the drag went on. Holding the total still is what makes a
+   * share move one-for-one with the pointer. Asserted on the shares, which
+   * is the part jsdom can see; that the grip lands under the finger follows
+   * from the total being constant.
+   */
+  it("takes the width a column gains from the one beside it", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 100 },
+        ]}
+        data={DATA}
+        rowLabel="items"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    expect(grip).not.toBeNull();
+
+    const before = Number.parseFloat(widthOf("Name"));
+    // Driven through `act` because the drag lives on `window`, outside
+    // React's own event plumbing: without it the state update is scheduled
+    // and the assertion reads the DOM before it lands.
+    // Driven through `act` because the drag lives on `window`, outside
+    // React's own event plumbing: without it the state update is scheduled
+    // and the assertion reads the DOM before it lands.
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeGreaterThan(before);
+    });
+    // Percentages always add up to 100, so summing them proves nothing. What
+    // the drag has to do is take from the neighbour: Name up by 40 of a 400
+    // total is Status down by exactly the same 10 points.
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      ((300 + 40) / 400) * 100,
+      5
+    );
+    expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(
+      ((100 - 40) / 400) * 100,
+      5
+    );
+  });
+
+  /**
+   * The last column's right edge is the table's own, and there is nothing to
+   * its right to take width from. A grip there could not move anything — and
+   * the one that used to be there straddled the edge, giving every list in
+   * the app a few pixels of horizontal scroll it never had.
+   */
+  it("puts no grip on the last column", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 100 },
+        ]}
+        data={DATA}
+      />
+    );
+    const grips = document.querySelectorAll('[role="presentation"][title]');
+    expect(grips).toHaveLength(headers().length - 1);
+  });
+
+  /**
    * The actions column is generated, so nobody was ever going to notice it
    * taking a name column's share of the table for two 20px icons — which is
    * what the default did, on every list that has quick actions at all.

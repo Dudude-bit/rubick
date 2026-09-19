@@ -11,7 +11,6 @@
 
 import {
   columnFilteringFeature,
-  columnResizingFeature,
   columnSizingFeature,
   columnVisibilityFeature,
   createFilteredRowModel,
@@ -29,10 +28,14 @@ import {
 
 /**
  * Sorting, per-column filtering, one search box over every column, hiding
- * columns, column widths and dragging them — what `DataTable` actually
- * offers. Row selection, pinning and pagination are deliberately absent: the
- * app does none of them, and in v9 leaving them out is what keeps them out of
- * the bundle.
+ * columns and column widths — what `DataTable` actually offers. Row
+ * selection, pinning and pagination are deliberately absent: the app does
+ * none of them, and in v9 leaving them out is what keeps them out of the
+ * bundle.
+ *
+ * `columnResizingFeature` is absent on purpose even though the tables *do*
+ * resize: its handler commits pixel deltas against a layout written in
+ * shares, so `DataTable` owns the drag and writes `columnSizing` itself.
  *
  * Grouping is absent for a different reason. The lists *do* group — the
  * namespace captions on a Pods list — but by `RowGrouping`, which draws caption
@@ -50,7 +53,6 @@ export const tableStack = tableFeatures({
   rowSortingFeature,
   columnFilteringFeature,
   columnSizingFeature,
-  columnResizingFeature,
   globalFilteringFeature,
   columnVisibilityFeature,
   sortedRowModel: createSortedRowModel(),

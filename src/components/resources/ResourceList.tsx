@@ -102,6 +102,14 @@ export interface ResourceListProps<
     | ((setDeleteTarget: (item: Row) => void) => ColumnDef<Row>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
+  /**
+   * What the dragged column widths are filed under, where the row label is
+   * not specific enough. Two CRDs can share a plural — `certificates` is
+   * both cert-manager's and Knative's — and their columns are built from
+   * each CRD's own printer columns, so one list's widths would be applied to
+   * an unrelated one.
+   */
+  widthsKey?: string;
   /** Overrides the table's message for "the scope genuinely has none of
    *  these". Worth setting wherever the generic sentence would leave the
    *  reader unsure whether the kind exists at all. */
@@ -166,6 +174,7 @@ export function ResourceList<
   slowed: externalSlowed,
   columns,
   emptyStateLabel,
+  widthsKey,
   emptyMessage,
   deleteConfig,
   staleTime,
@@ -375,6 +384,7 @@ export function ResourceList<
           getRowId={getRowId}
           grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
           rowLabel={emptyStateLabel.toLowerCase()}
+          widthsKey={widthsKey}
           emptyMessage={emptyMessage}
         />
       )}

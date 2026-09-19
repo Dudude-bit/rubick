@@ -23,11 +23,20 @@ describe("the widths a reader dragged", () => {
     expect(state().widths.deployments).toEqual({ name: 300 });
   });
 
-  /** A later drag of the same table replaces what it said before. */
-  it("keeps the last word on a table it already knows", () => {
-    state().set("pods", { name: 520 });
-    state().set("pods", { name: 620, node: 200 });
-    expect(state().widths.pods).toEqual({ name: 620, node: 200 });
+  /**
+   * A later write REPLACES what the table said before — it does not merge.
+   *
+   * The distinction is the whole of double-click-to-reset: the table hands
+   * back a copy of its sizing with one key deleted, so a `set` that merged
+   * would put the deleted key straight back and the reset would silently do
+   * nothing. Written with a key that disappears, because two writes that
+   * both name the same keys pass either way.
+   */
+  it("forgets a column the new widths no longer name", () => {
+    state().set("pods", { name: 520, node: 300 });
+    state().set("pods", { name: 620 });
+    expect(state().widths.pods).toEqual({ name: 620 });
+    expect("node" in state().widths.pods).toBe(false);
   });
 
   /**
