@@ -5091,6 +5091,7 @@ export const ru: Catalogue = {
     intakeStillSet:
       "Приём всё ещё включён — переподключение продолжит с этого момента, и пропущенное потоком назад не подтянется.",
     nothingToReconnectTo: "Переподключаться уже не к чему",
+    installedByRelease: "Установлено релизом Helm {name}",
     bufferHoldsNewest:
       "Буфер хранит последние {count}; того, что было раньше, здесь больше нет.",
     bufferHoldsKeptAndNewest:

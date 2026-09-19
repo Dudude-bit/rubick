@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailTabs } from "./DetailTabs";
 import { DetailAction } from "./detail-blocks";
-import { DeliveryBanner, DeliveryMarks } from "./delivery";
+import { DeliveryBanner, DeliveryMarks, HelmMark } from "./delivery";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
 import { useDelivery } from "@/hooks/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
@@ -274,6 +274,7 @@ export function ResourceDetailLayout({
             <>
               {badges}
               <DeliveryMarks deliveries={deliveries} />
+              <HelmMark object={resource} />
             </>
           }
           onBack={onBack}

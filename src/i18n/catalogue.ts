@@ -4736,6 +4736,9 @@ export const en = {
     intakeStillSet:
       "Intake is still set — reconnecting resumes from now, and what the stream missed is not fetched back.",
     nothingToReconnectTo: "Nothing left to reconnect to",
+    // Beside the status on every page and peek: what the object's own Helm
+    // annotation says, which is a claim and not a read.
+    installedByRelease: "Installed by the Helm release {name}",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
     // Said instead of the three above whenever an interval is frozen. The

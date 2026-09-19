@@ -211,6 +211,8 @@ fn main() {
             commands::deployments::delete_deployment,
             commands::deployments::scale_deployment,
             commands::deployments::restart_deployment,
+            commands::workloads::restart_statefulset,
+            commands::workloads::restart_daemonset,
             commands::deployments::update_deployment_image,
             commands::deployments::get_deployment_pods,
             commands::deployments::get_rollout_status,

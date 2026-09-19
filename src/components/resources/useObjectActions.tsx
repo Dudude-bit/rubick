@@ -56,6 +56,7 @@ import {
   peekMutationKeys,
   planPeekActions,
   reachableContainer,
+  restartCommandFor,
   scaleCommandFor,
   type ForwardBackend,
   type PeekActionId,
@@ -187,10 +188,13 @@ export function useObjectActions({
   })();
 
   const restart = useMutation({
-    mutationFn: () =>
-      kind === "Deployment"
-        ? commands.restartDeployment(name, namespace)
-        : commands.restartPod(name, namespace),
+    mutationFn: async () => {
+      // The same table the offer came from, so the button and the command
+      // cannot name different kinds.
+      const roll = restartCommandFor(kind);
+      if (!roll) return;
+      await roll(name, namespace);
+    },
     // No success toast: the surface stays on the object and the list moves. A
     // banner saying what already happened on screen is noise.
     onSuccess: () => {
