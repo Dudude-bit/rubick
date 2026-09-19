@@ -113,6 +113,8 @@ export interface ResourceListProps<
    * sentence in the first place.
    */
   waitingSince?: number | null;
+  /** Re-run the read, for a list whose read this component does not own. */
+  onRetry?: () => void;
   /**
    * Whether picking one namespace would make this read shorter. False for a
    * cluster-scoped kind, where the picker cannot change the answer and
@@ -197,6 +199,7 @@ export function ResourceList<
   slowed: externalSlowed,
   waitingSince: externalWaitingSince,
   narrowingHelps = true,
+  onRetry,
   columns,
   emptyStateLabel,
   widthsKey,
@@ -373,7 +376,11 @@ export function ResourceList<
       {!embedded && (
         <ResourceListHeader
           title={resolvedTitle}
-          count={resources.length}
+          // Nothing rather than zero when the read did not finish: a count
+          // derived from a source the app has just said it could not read
+          // is a number about nothing, printed directly above the sentence
+          // admitting as much.
+          count={ranOutOfTime ? undefined : resources.length}
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
@@ -453,9 +460,10 @@ export function ResourceList<
           <p className="mt-1 pl-[22px] text-xs text-fg-mut">
             {t("empty", "readDeadlineHint")}
           </p>
-          <p className="mt-1 select-text pl-[22px] font-mono text-[11px] text-fg-fnt">
-            {verbatim(failed.message)}
-          </p>
+          {/* No mono line here. In the branch below it carries the
+              cluster's own words, which is why it is there; this message is
+              ours, already said above in the reader's language, and the
+              `READ_DEADLINE:` marker in front of it is a wire format. */}
           <div className="mt-2 flex gap-2 pl-[22px]">
             {narrowingHelps && (scope.isAll || scope.several) && (
               <Button size="sm" variant="outline" onClick={openNamespacePicker}>
@@ -465,7 +473,10 @@ export function ResourceList<
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => void queryResult.refetch()}
+              // The caller's, where it owns the read: refetching the
+              // placeholder query here would write `[]` under a key the
+              // page never reads and leave the real list exactly as it was.
+              onClick={() => (onRetry ? onRetry() : void queryResult.refetch())}
             >
               {t("action", "retry")}
             </Button>

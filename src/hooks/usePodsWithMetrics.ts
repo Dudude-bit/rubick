@@ -74,6 +74,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     error: podsError,
     dataUpdatedAt,
     freshness,
+    refetch,
   } = useLiveQuery({
     queryKey,
     queryFn: listAcrossScope(scope.scope, async (namespace) => {
@@ -149,5 +150,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     resyncing,
     /** When a read with nothing to show began, for the list to say so. */
     waitingSince: freshness.waitingSince,
+    /** Ask again — the list's own Retry, which does not own this read. */
+    refetch,
   };
 }

@@ -197,6 +197,49 @@ describe("a read on a large cluster", () => {
   });
 
   /**
+   * Three things the deadline screen used to get wrong at once: a count of
+   * zero in the header, directly above the sentence saying the read did not
+   * finish; the `READ_DEADLINE:` wire marker printed at the reader in
+   * English under a sentence that already said it in their language; and a
+   * Retry wired to the disabled placeholder query, which writes `[]` under
+   * a key the page never reads.
+   */
+  it("says nothing it could not know when the read ran out of time", async () => {
+    const retried = vi.fn();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              data={[]}
+              error={
+                new Error(
+                  "READ_DEADLINE: the cluster did not answer within 60 s"
+                )
+              }
+              onRetry={retried}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText(/did not finish within/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("READ_DEADLINE:");
+    expect(screen.queryByText("0")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    expect(retried).toHaveBeenCalledTimes(1);
+  });
+
+  /**
    * The pages this was built for do not own the read. Pods, every workload
    * list and CRDs hand their rows in as `data`, which disables the internal
    * query — so a wait read off that query is a wait nobody is having, and
