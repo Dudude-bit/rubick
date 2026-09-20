@@ -552,7 +552,6 @@ export function isInstalled(
   return found;
 }
 
-
 export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
   isPending: boolean;

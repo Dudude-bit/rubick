@@ -780,9 +780,9 @@ describe("the heartbeat", () => {
     // Nothing but gaps says nothing.
     expect(downSince(lane(["none", "none"]), from, step)).toBeNull();
     // The walk back stops at the last up, not at the start of the lane.
-    expect(
-      downSince(lane(["down", "up", "down", "down"]), from, step)
-    ).toBe(from + 2 * step);
+    expect(downSince(lane(["down", "up", "down", "down"]), from, step)).toBe(
+      from + 2 * step
+    );
     // The earliest across lanes wins, because the outage is the pool's.
     expect(
       downSince(

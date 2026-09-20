@@ -16,10 +16,7 @@ const empty = {
   targets: { state: "none" },
 } as unknown as Picture;
 
-const picture = (
-  serviceMonitors: unknown,
-  podMonitors: unknown
-): Picture =>
+const picture = (serviceMonitors: unknown, podMonitors: unknown): Picture =>
   ({
     ...empty,
     serviceMonitors,
