@@ -16,7 +16,11 @@ export function YamlDiffViewer({
   height = "500px",
 }: YamlDiffViewerProps) {
   const t = useT();
-  const { lines: diffLines, computing, failed } = useLineDiff(original, modified);
+  const {
+    lines: diffLines,
+    computing,
+    failed,
+  } = useLineDiff(original, modified);
   const hasChanges = diffLines.some((line) => line.type !== "unchanged");
 
   // While a newer answer is on its way the old one is not a verdict. It can

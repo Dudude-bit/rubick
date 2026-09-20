@@ -22,8 +22,9 @@ beforeEach(async () => {
 });
 
 function ask(request: DiffRequest) {
-  (globalThis as unknown as { self: { onmessage: (e: unknown) => void } }).self
-    .onmessage({ data: request } as MessageEvent<DiffRequest>);
+  (
+    globalThis as unknown as { self: { onmessage: (e: unknown) => void } }
+  ).self.onmessage({ data: request } as MessageEvent<DiffRequest>);
 }
 
 describe("the diff worker", () => {
