@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 
 import { useSettingsStore } from "@/stores/settingsStore";
+import { getResourceListUrl } from "@/lib/resource-registry";
 
 import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 
@@ -224,6 +225,30 @@ describe("the Network group", () => {
     expect(
       await screen.findByRole("link", { name: "Endpoints" })
     ).toHaveAttribute("href", "/network/endpoints");
+  });
+
+  /**
+   * Reported on #178: a release's name is part of its pods, its deployments
+   * and its configmaps alike, and walking between those lists to follow one
+   * name meant typing it again at every stop.
+   *
+   * Asserted on the row's `href` rather than on the helper: a test that only
+   * calls `withCarriedSearch` stays green when the sidebar stops calling it,
+   * which is the whole of the change reverting with nothing to show for it.
+   */
+  it("carries the search on a row that lists a kind", async () => {
+    wrap(<Sidebar />, [`${getResourceListUrl("Pod")}?q=release-42`]);
+    expect(
+      await screen.findByRole("link", { name: "Deployments" })
+    ).toHaveAttribute("href", "/workloads/deployments?q=release-42");
+  });
+
+  /** Changes is not more of the same question, so it carries nothing. */
+  it("carries nothing to a row that lists no kind", async () => {
+    wrap(<Sidebar />, [`${getResourceListUrl("Pod")}?q=release-42`]);
+    expect(
+      await screen.findByRole("link", { name: "Changes" })
+    ).toHaveAttribute("href", "/changes");
   });
 });
 

@@ -1,8 +1,20 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { BadgeCheck, Info, Layers2, Scale, Trash2 } from "lucide-react";
+import {
+  AlignLeft,
+  BadgeCheck,
+  History,
+  Info,
+  Layers2,
+  RefreshCw,
+  Scale,
+  Trash2,
+} from "lucide-react";
 
+import { LogViewer } from "@/components/logs/LogViewer";
+import { useAsk } from "@/hooks/useAsk";
+import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 // The one place that turns replica counts into a word. These pages kept
@@ -22,6 +34,7 @@ import {
   viewGlyph,
 } from "@/components/resources/detail-tab";
 import { ContainerRows } from "@/components/resources/container-rows";
+import { ChangesTab } from "@/components/changes/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -117,6 +130,41 @@ export function StatefulSetDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const [scaleOpen, setScaleOpen] = useState(false);
+  const asking = useAsk();
+
+  const restartMutation = useResourceMutation(
+    async () => {
+      if (!name) return;
+      await commands.restartStatefulset(name, namespace || null);
+    },
+    {
+      toast: {
+        successTitle: t("action", "kindRestarted", {
+          kind: ResourceType.StatefulSet,
+        }),
+        successDescription: t("action", "kindRestartingDetail", {
+          kind: ResourceType.StatefulSet,
+          name: name ?? "",
+        }),
+        errorPrefix: t("action", "restartKindFailed", {
+          kind: ResourceType.StatefulSet,
+        }),
+      },
+      invalidateQueryKeys:
+        namespace && name ? [["statefulset", namespace, name]] : [],
+      onSuccess: () => {
+        if (!name) return;
+        asking.ask(
+          { kind: "StatefulSet", namespace: namespace || null, name },
+          {
+            action: "restart",
+            replicas: null,
+            generationBefore: statefulSet?.generation ?? null,
+          }
+        );
+      },
+    }
+  );
 
   const scaleMutation = useResourceMutation(
     async (replicas: number) => {
@@ -140,7 +188,19 @@ export function StatefulSetDetail() {
       },
       invalidateQueryKeys:
         namespace && name ? [["statefulset", namespace, name]] : [],
-      onSuccess: () => setScaleOpen(false),
+      onSuccess: (_data, replicas) => {
+        setScaleOpen(false);
+        if (name) {
+          asking.ask(
+            { kind: "StatefulSet", namespace: namespace || null, name },
+            {
+              action: "scale",
+              replicas,
+              generationBefore: statefulSet?.generation ?? null,
+            }
+          );
+        }
+      },
     }
   );
 
@@ -260,17 +320,55 @@ export function StatefulSetDetail() {
         content: <ContainerRows template={statefulSet} namespace={namespace} />,
       },
       {
+        id: "changes",
+        label: t("changes", "title"),
+        glyph: viewGlyph(History),
+        content: statefulSet ? (
+          <ChangesTab
+            subject={{
+              kind: "StatefulSet",
+              name: statefulSet.name,
+              namespace: statefulSet.namespace,
+              labels: statefulSet.labels,
+              annotations: statefulSet.annotations,
+            }}
+          />
+        ) : null,
+      },
+      {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
+        mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,
+      },
+      {
+        id: "logs",
+        label: t("action", "logs"),
+        glyph: viewGlyph(AlignLeft),
+        kind: "surface" as const,
+        content: (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <LogViewer
+                key={`${namespace}/${name}`}
+                namespace={namespace || ""}
+                pods={pods.map(lanePodOf)}
+                podsError={podsError}
+                laneRule="ordinal"
+                workload={
+                  name ? { owner: name, ownerKind: "StatefulSet" } : null
+                }
+              />
+            </div>
+          </div>
+        ),
       },
       {
         id: "conditions",
         label: t("columns", "conditions"),
         glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(statefulSet?.conditions),
+        mark: conditionsMark(statefulSet?.conditions, t),
         content: (
           <Section>
             <SectionHeader
@@ -345,6 +443,13 @@ export function StatefulSetDetail() {
               onClick={() => statefulSet && setScaleOpen(true)}
             />
             <InterceptedAction
+              intercept={intercept("Restart")}
+              label={t("action", "restart")}
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate(undefined)}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
               intercept={intercept("Delete")}
               label={t("action", "delete")}
               icon={Trash2}
@@ -372,6 +477,7 @@ export function StatefulSetDetail() {
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />
+      {asking.dialog}
     </>
   );
 }

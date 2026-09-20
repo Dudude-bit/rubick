@@ -21,6 +21,15 @@ import {
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { isRefusal, verbatim } from "@/lib/error-utils";
 import {
+  isReadDeadline,
+  LIST_DEADLINE_SECONDS,
+  openNamespacePicker,
+  SLOW_READ_MS,
+} from "@/lib/read-deadline";
+import { useNowSeconds } from "@/hooks/useNow";
+import { Button } from "@/components/ui/button";
+import { TriangleAlert } from "lucide-react";
+import {
   DeliveryColumnCell,
   DeliveryFilterControl,
   DeliveryRowsProvider,
@@ -96,12 +105,36 @@ export interface ResourceListProps<
   resyncing?: boolean;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
+  /**
+   * When the read that has nothing to show yet began, for a caller that owns
+   * the read. A list handed its rows as `data` disables the query inside
+   * here, so the wait is not visible from in here at all — and those are
+   * the pods, the workloads and the CRDs, the lists long enough to need the
+   * sentence in the first place.
+   */
+  waitingSince?: number | null;
+  /** Re-run the read, for a list whose read this component does not own. */
+  onRetry?: () => void;
+  /**
+   * Whether picking one namespace would make this read shorter. False for a
+   * cluster-scoped kind, where the picker cannot change the answer and
+   * offering it is a remedy that does nothing.
+   */
+  narrowingHelps?: boolean;
   /** Table column definitions - can use setDeleteTarget from useResourceListDelete hook */
   columns:
     | ColumnDef<Row>[]
     | ((setDeleteTarget: (item: Row) => void) => ColumnDef<Row>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
+  /**
+   * What the dragged column widths are filed under, where the row label is
+   * not specific enough. Two CRDs can share a plural — `certificates` is
+   * both cert-manager's and Knative's — and their columns are built from
+   * each CRD's own printer columns, so one list's widths would be applied to
+   * an unrelated one.
+   */
+  widthsKey?: string;
   /** Overrides the table's message for "the scope genuinely has none of
    *  these". Worth setting wherever the generic sentence would leave the
    *  reader unsure whether the kind exists at all. */
@@ -118,8 +151,6 @@ export interface ResourceListProps<
   headerContent?: ReactNode;
   /** Render without header wrapper for embedded list views */
   embedded?: boolean;
-  /** Optional column to target for search */
-  searchKey?: string;
   /** Optional search input placeholder */
   searchPlaceholder?: string;
   /** Generate navigation URL for row click */
@@ -166,8 +197,12 @@ export function ResourceList<
   live,
   resyncing,
   slowed: externalSlowed,
+  waitingSince: externalWaitingSince,
+  narrowingHelps = true,
+  onRetry,
   columns,
   emptyStateLabel,
+  widthsKey,
   emptyMessage,
   deleteConfig,
   staleTime,
@@ -175,7 +210,6 @@ export function ResourceList<
   headerActions,
   headerContent,
   embedded = false,
-  searchKey,
   searchPlaceholder,
   getRowHref,
   quickActions,
@@ -315,14 +349,25 @@ export function ResourceList<
     [quickActions]
   );
 
-  if (!isConnected) {
-    return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
-  }
-
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
   const showSkeleton =
     (loading || resyncing) && resources.length === 0 && !failed;
+  // How long the skeleton has been one. A clock that only runs while there
+  // is a skeleton to time: a list with rows on it is never woken by this.
+  const now = useNowSeconds(showSkeleton);
+  const waitingSince =
+    externalWaitingSince !== undefined
+      ? externalWaitingSince
+      : queryResult.freshness.waitingSince;
+  const waitedMs =
+    showSkeleton && waitingSince !== null ? now - waitingSince : 0;
+  const slow = waitedMs >= SLOW_READ_MS;
+  const ranOutOfTime = failed !== null && isReadDeadline(failed);
+
+  if (!isConnected) {
+    return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
+  }
   const resolvedTitle =
     typeof title === "function" ? title(resources.length) : title;
 
@@ -331,7 +376,11 @@ export function ResourceList<
       {!embedded && (
         <ResourceListHeader
           title={resolvedTitle}
-          count={resources.length}
+          // Nothing rather than zero when the read did not finish: a count
+          // derived from a source the app has just said it could not read
+          // is a number about nothing, printed directly above the sentence
+          // admitting as much.
+          count={ranOutOfTime ? undefined : resources.length}
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
@@ -350,7 +399,90 @@ export function ResourceList<
           deliveries={resources.map(deliveriesOf)}
         />
       )}
-      {failed && resources.length === 0 ? (
+      {slow && (
+        <div
+          role="status"
+          data-testid="slow-read"
+          className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
+        >
+          <p className="flex items-baseline gap-2 text-fg">
+            <span>
+              {t("empty", "stillReading", {
+                label: emptyStateLabel.toLowerCase(),
+                scope: scope.inWords,
+              })}
+            </span>
+            <span className="font-mono tabular-nums text-warn">
+              {t("count", "secondsShort", {
+                n: Math.round(waitedMs / 1000),
+              })}
+            </span>
+          </p>
+          {narrowingHelps && (scope.isAll || scope.several) && (
+            <>
+              <p className="mt-0.5 text-fg-mut">
+                {t("empty", "narrowerIsFaster")}
+              </p>
+              <div className="mt-1.5 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openNamespacePicker}
+                >
+                  {t("action", "pickOneNamespace")}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {failed && resources.length === 0 && ranOutOfTime ? (
+        <div
+          role="status"
+          data-testid="read-deadline"
+          className="max-w-[68ch] py-6"
+        >
+          <p className="flex items-start gap-2 text-xs text-fg">
+            <TriangleAlert
+              className="mt-0.5 h-3.5 w-3.5 flex-none text-warn"
+              aria-hidden="true"
+            />
+            <span>
+              {t("empty", "readDeadline", {
+                label: emptyStateLabel.toLowerCase(),
+                scope: scope.inWords,
+                seconds: LIST_DEADLINE_SECONDS,
+              })}
+            </span>
+          </p>
+          {/* Not a fault to retry into: a deadline on a big cluster is the
+              cluster being big, so the narrower question comes first. */}
+          <p className="mt-1 pl-[22px] text-xs text-fg-mut">
+            {t("empty", "readDeadlineHint")}
+          </p>
+          {/* No mono line here. In the branch below it carries the
+              cluster's own words, which is why it is there; this message is
+              ours, already said above in the reader's language, and the
+              `READ_DEADLINE:` marker in front of it is a wire format. */}
+          <div className="mt-2 flex gap-2 pl-[22px]">
+            {narrowingHelps && (scope.isAll || scope.several) && (
+              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
+                {t("action", "pickOneNamespace")}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              // The caller's, where it owns the read: refetching the
+              // placeholder query here would write `[]` under a key the
+              // page never reads and leave the real list exactly as it was.
+              onClick={() => (onRetry ? onRetry() : void queryResult.refetch())}
+            >
+              {t("action", "retry")}
+            </Button>
+          </div>
+        </div>
+      ) : failed && resources.length === 0 ? (
         <div className="max-w-[68ch] py-8">
           <p className="text-xs text-err">
             {/* A refusal is not a failure, and saying "could not read" about
@@ -371,13 +503,14 @@ export function ResourceList<
           // height to take; on its own page the table is the page.
           fill={!embedded}
           isLoading={showSkeleton}
-          searchKey={searchKey}
+          searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
           quickActions={resolvedQuickActions}
           getRowId={getRowId}
           grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
           rowLabel={emptyStateLabel.toLowerCase()}
+          widthsKey={widthsKey}
           emptyMessage={emptyMessage}
         />
       )}

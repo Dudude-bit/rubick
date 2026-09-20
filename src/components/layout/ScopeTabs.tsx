@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+
+import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import { Check, Search } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
@@ -311,6 +313,16 @@ function ScopeTabItem({
     }
     setOpen(next ? which : null);
   };
+
+  // A list page that ran out of time offers the narrower question, and this
+  // is where that question is asked. Only the active tab answers: the
+  // picker belongs to the scope the reader is looking at.
+  useEffect(() => {
+    if (!active) return;
+    const onOpen = () => setOpen("ns");
+    window.addEventListener(SCOPE_PICKER_OPEN, onOpen);
+    return () => window.removeEventListener(SCOPE_PICKER_OPEN, onOpen);
+  }, [active]);
 
   const pickCluster = (next: string) => {
     setOpen(null);

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   routeTraces,
   gatewayProgrammed,
+  addressedToController,
+  answeredByItsController,
   selfAnswered,
   candidateListeners,
 } from "./route-trace";
@@ -1240,5 +1242,118 @@ describe("a route attached through a ListenerSet", () => {
     expect(traces[0].steps[1].state).toBe("blind");
     expect(traces[0].servingKnown).toBe(false);
     expect(traces[0].steps[1].say).toContain("Cannot tell");
+  });
+});
+
+/**
+ * Reported on #69 by a reader running Cloudflare Tunnel over Gateway API.
+ * The route matches `/metrics` and names no backend on purpose: the
+ * annotation `gateway.cloudflare-tunnel.io/http-status: 404` tells that
+ * controller to answer 404 and keep the path off the internet. By the spec a
+ * rule with no backendRefs answers 500, and this app said so outright — "the
+ * route matches traffic and drops it" — about a route working exactly as
+ * written.
+ *
+ * The signal is the domain, not the vendor: an annotation in the domain of
+ * the controller that claimed this route is addressed to the component whose
+ * behaviour is in question. A list of known vendors would be one more table
+ * keyed by name that goes quiet for the next one.
+ */
+describe("a route configured by an annotation its controller reads", () => {
+  const route = (annotations: Record<string, string>): RouteInfo =>
+    ({
+      kind: "HTTPRoute",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      name: "uptime-kuma-block-metrics",
+      namespace: "uptime-kuma",
+      hostnames: ["kuma.fstats.dev"],
+      parentRefs: [],
+      rules: [
+        { matches: [], backendRefs: [], extensionRefs: [], hasRedirect: false },
+      ],
+      parents: [],
+      generation: 1,
+      labels: {},
+      annotations,
+      createdAt: null,
+    }) as unknown as RouteInfo;
+
+  it("names the annotations addressed to the controller that owns it", () => {
+    expect(
+      addressedToController(
+        route({
+          "gateway.cloudflare-tunnel.io/http-status": "404",
+          "gateway.cloudflare-tunnel.io/description": "Hide metrics",
+          "kubectl.kubernetes.io/last-applied-configuration": "{}",
+        }),
+        "gateway.cloudflare-tunnel.io/controller"
+      )
+    ).toEqual([
+      "gateway.cloudflare-tunnel.io/description",
+      "gateway.cloudflare-tunnel.io/http-status",
+    ]);
+  });
+
+  /** Somebody else's annotation says nothing about this controller. */
+  it("ignores annotations in any other domain", () => {
+    expect(
+      addressedToController(
+        route({ "kubectl.kubernetes.io/last-applied-configuration": "{}" }),
+        "gateway.cloudflare-tunnel.io/controller"
+      )
+    ).toEqual([]);
+  });
+
+  /**
+   * A route that names a backend of some other kind — an implementation's
+   * own `Backend` — does name somewhere to go, and saying "no backendRefs"
+   * about it would be false. `selfAnswered` has drawn this line all along;
+   * the first version of this exception filtered to Service kind and would
+   * have claimed the backend steps were blind on a route that has one.
+   */
+  it("says nothing for a route that names a backend of another kind", () => {
+    const withBackend = {
+      ...route({ "gateway.cloudflare-tunnel.io/http-status": "404" }),
+      rules: [
+        {
+          matches: [],
+          backendRefs: [{ kind: "Backend", name: "tunnel" }],
+          extensionRefs: [],
+          hasRedirect: false,
+        },
+      ],
+    } as unknown as RouteInfo;
+    expect(
+      answeredByItsController(
+        withBackend,
+        "gateway.cloudflare-tunnel.io/controller"
+      )
+    ).toEqual([]);
+    // The annotations are still there; it is the backend that decides.
+    expect(
+      addressedToController(
+        withBackend,
+        "gateway.cloudflare-tunnel.io/controller"
+      )
+    ).toEqual(["gateway.cloudflare-tunnel.io/http-status"]);
+  });
+
+  it("answers for a route that names no backend at all", () => {
+    expect(
+      answeredByItsController(
+        route({ "gateway.cloudflare-tunnel.io/http-status": "404" }),
+        "gateway.cloudflare-tunnel.io/controller"
+      )
+    ).toEqual(["gateway.cloudflare-tunnel.io/http-status"]);
+  });
+
+  /** No controller named, nothing to be addressed to. */
+  it("says nothing when no controller claimed the route", () => {
+    expect(
+      addressedToController(
+        route({ "gateway.cloudflare-tunnel.io/http-status": "404" }),
+        undefined
+      )
+    ).toEqual([]);
   });
 });

@@ -8,10 +8,12 @@ import {
 import {
   FORMAT_DESCRIPTIONS,
   formatCount,
+  formatTimeRange,
   termLabel,
   type QueryTerm,
   type StreamedLogLine,
 } from "./types";
+import type { Frozen } from "./hooks/log-buffer";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -25,8 +27,14 @@ interface LogStatusBarProps {
   /** Lines held right now, and the cap they are held against. */
   retained: number;
   limit: number;
+  /** The interval the cap may not evict, and how many lines it holds. */
+  frozen: Frozen | null;
+  frozenLines: number;
+  onThaw: () => void;
   /** Rows drawn after filtering and grouping. */
   shownCount: number;
+  /** The query is still being walked over the buffer; `shownCount` is so far. */
+  settling: boolean;
   /** Lines the filter removed and lines standing behind a collapsed run. */
   hiddenCount: number;
   /** The terms being kept at the source, as the stream is running them. */
@@ -49,7 +57,11 @@ export function LogStatusBar({
   logs,
   retained,
   limit,
+  frozen,
+  frozenLines,
+  onThaw,
   shownCount,
+  settling,
   hiddenCount,
   intake,
   intakeFrom,
@@ -59,7 +71,10 @@ export function LogStatusBar({
   const t = useT();
   const formatInfo = useMemo(() => describeFormat(logs, t), [logs, t]);
   const rate = useMemo(() => measureRate(logs), [logs]);
-  const fill = limit > 0 ? Math.min(100, (retained / limit) * 100) : 0;
+  // The meter is the cap's: frozen lines sit outside it, so they are
+  // counted beside it rather than shown as a buffer past full.
+  const live = retained - frozenLines;
+  const fill = limit > 0 ? Math.min(100, (live / limit) * 100) : 0;
 
   const intakeKey = intake.map(termLabel).join(` ${t("empty", "listAnd")} `);
 
@@ -89,7 +104,7 @@ export function LogStatusBar({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-hair px-3 py-1 text-[11px] text-fg-mut">
       <span className="whitespace-nowrap">
-        {formatCount(retained)}{" "}
+        {formatCount(live)}{" "}
         <span className="text-fg-fnt">
           {t("count", "ofLimitKept", { limit: formatCount(limit) })}
         </span>
@@ -97,7 +112,7 @@ export function LogStatusBar({
       <span
         className="h-[3px] w-14 overflow-hidden rounded-sm bg-hair"
         role="meter"
-        aria-valuenow={retained}
+        aria-valuenow={live}
         aria-valuemin={0}
         aria-valuemax={limit}
         aria-label={t("action", "bufferFill")}
@@ -107,6 +122,23 @@ export function LogStatusBar({
           style={{ width: `${fill}%` }}
         />
       </span>
+      {frozen !== null && (
+        <button
+          type="button"
+          onClick={onThaw}
+          title={t("action", "frozenNote", {
+            range: formatTimeRange(frozen.from, frozen.to),
+          })}
+          className="whitespace-nowrap text-info hover:text-fg"
+        >
+          <span aria-hidden="true">❄ </span>
+          {t("count", "frozenLines", {
+            n: frozenLines,
+            count: formatCount(frozenLines),
+          })}
+          <span className="text-info/70"> · {t("action", "thawFrozen")}</span>
+        </button>
+      )}
       {formatInfo && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -152,6 +184,7 @@ export function LogStatusBar({
       )}
       <span className="ml-auto whitespace-nowrap text-fg-fnt">
         {t("count", "shown", { n: formatCount(shownCount) })}
+        {settling && ` · ${t("action", "filtering")}`}
         {hiddenCount > 0 &&
           ` · ${t("count", "hiddenByFilter", { n: formatCount(hiddenCount) })}`}
       </span>

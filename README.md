@@ -161,6 +161,14 @@ Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minut
 
 **Built with** Tauri 2, Rust and [kube-rs](https://kube.rs); React 19, TypeScript, TanStack Query, CodeMirror, xterm.js and Recharts.
 
+## Asking something
+
+[Discussions](https://github.com/Dudude-bit/rubick/discussions) is the place
+for a question, for carrying on after an issue is closed, and for an idea that
+has not taken shape yet. Answers there stay searchable for whoever hits the
+same thing next. A bug or a feature with a clear shape is still an
+[issue](https://github.com/Dudude-bit/rubick/issues).
+
 ## License
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).

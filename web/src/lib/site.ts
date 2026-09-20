@@ -77,4 +77,5 @@ export const IMG = {
   },
   chain: { src: "/images/traffic-chain-stops.webp", width: 1190, height: 255 },
   scale: { src: "/images/scale-interception.webp", width: 512, height: 220 },
+  cilium: { src: "/images/cilium-coverage.webp", width: 1150, height: 420 },
 } satisfies Record<string, Shot>;

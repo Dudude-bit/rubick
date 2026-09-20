@@ -17,6 +17,32 @@ export function claimedByTarget(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Whether a layer the reader is *in* owns the keys.
+ *
+ * Asked of where the focus is, not of whether any dialog exists in the
+ * document — the app has settled this twice before, and the second form gets
+ * both directions wrong. Too broad: the peek panel is a non-modal Sheet,
+ * opened deliberately so the sidebar, the tabs and the list behind it keep
+ * working, and a plain row click opens one — a whole-document test made `?`,
+ * every `g` chord and every page key silently dead for as long as it was up.
+ * Too narrow: a dropdown or a context menu carries `role="menu"` and no
+ * dialog at all, so its own keys were fighting the global ones.
+ */
+export function claimedByLayer(target: EventTarget | null): boolean {
+  const focused =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+  const within = (element: HTMLElement | null) =>
+    !!element?.closest(
+      '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]'
+    );
+  return (
+    within(focused) || within(target instanceof HTMLElement ? target : null)
+  );
+}
+
 export function isCopyLinkKey(event: KeyboardEvent): boolean {
   return (
     (event.metaKey || event.ctrlKey) &&

@@ -35,7 +35,7 @@ function buildSet(
     name: "stateful-demo",
     namespace: "k8s-gui-test",
     uid: "sts-uid",
-    replicas: { desired: 1, ready: 1, current: 1 },
+    replicas: { desired: 1, ready: 1, current: 1, updated: 1 },
     serviceName: "stateful-demo",
     podManagementPolicy: "OrderedReady",
     updateStrategy: "RollingUpdate",
@@ -47,6 +47,8 @@ function buildSet(
     annotations: {},
     conditions: [],
     ownerReferences: [],
+    generation: null,
+    observedGeneration: null,
     createdAt: "2026-01-01T00:00:00Z",
     ...overrides,
   };
@@ -178,7 +180,9 @@ describe("StatefulSetDetail", () => {
   });
 
   it("states the replica count once — the bar owns it", async () => {
-    mockDetail(buildSet({ replicas: { desired: 3, ready: 3, current: 3 } }));
+    mockDetail(
+      buildSet({ replicas: { desired: 3, ready: 3, current: 3, updated: 3 } })
+    );
     connections = {
       ...governed,
       edges: governed.edges.map((edge) => ({

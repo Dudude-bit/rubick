@@ -243,9 +243,14 @@ export function EnvironmentBlocks({
           <li>{t("settings", "appVersion", { version: app.version })}</li>
           <li>{app.os}</li>
           {app.configPath && <li className="font-mono">{app.configPath}</li>}
-          <li>
-            {t("settings", "logsTo", { destination: app.logDestination })}
-          </li>
+          {app.logDestination ? (
+            <li className="font-mono break-all">
+              {t("settings", "logsTo", { destination: app.logDestination })}
+            </li>
+          ) : (
+            <li>{t("settings", "logsNowhere")}</li>
+          )}
+          <li>{t("settings", "logsMoreDetail")}</li>
         </ul>
       </Block>
     </div>
