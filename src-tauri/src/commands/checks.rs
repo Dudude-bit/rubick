@@ -400,6 +400,12 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
                 security_context: Some(k8s_openapi::api::core::v1::SecurityContext {
                     allow_privilege_escalation: Some(false),
                     run_as_non_root: Some(true),
+                    // Named, not merely demanded: `runAsNonRoot` alone is a
+                    // refusal, not a choice, and the kubelet answers it with
+                    // CreateContainerConfigError for every image whose
+                    // default user is root — busybox, the one this offers,
+                    // among them.
+                    run_as_user: Some(65534),
                     capabilities: Some(k8s_openapi::api::core::v1::Capabilities {
                         drop: Some(vec!["ALL".to_string()]),
                         ..Default::default()
@@ -678,6 +684,13 @@ mod tests {
             .expect("a copy that cannot be admitted is not a way out");
         assert_eq!(ctx.allow_privilege_escalation, Some(false));
         assert_eq!(ctx.run_as_non_root, Some(true));
+        // Demanding non-root without naming a uid is how the kubelet ends up
+        // refusing every image that defaults to root, busybox included: the
+        // copy never starts and the reader is told nothing could be asked.
+        assert!(
+            ctx.run_as_user.is_some_and(|uid| uid != 0),
+            "runAsNonRoot without a uid is CreateContainerConfigError"
+        );
         assert_eq!(
             ctx.capabilities.as_ref().and_then(|c| c.drop.as_deref()),
             Some(["ALL".to_string()].as_slice())
