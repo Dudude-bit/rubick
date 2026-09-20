@@ -623,7 +623,15 @@ function DryRunSection({ doc }: { doc: DryRunDocument }) {
           {outcome.said}
         </p>
       ) : null}
-      {doc.would !== null && outcome.says !== "unchanged" ? (
+      {/* No diff where there is nothing honest to diff against. `live` is
+          null both for an object that is not there and for one the read
+          failed on, and against "" the whole document draws green — "this
+          would all be created" — about an object that may well exist and
+          be about to be overwritten. The sentence above says which case it
+          is; a diff cannot. */}
+      {doc.would !== null &&
+      outcome.says !== "unchanged" &&
+      outcome.says !== "liveUnread" ? (
         <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
           <YamlDiffViewer
             original={doc.live ?? ""}

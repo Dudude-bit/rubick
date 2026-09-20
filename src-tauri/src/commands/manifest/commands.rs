@@ -113,6 +113,17 @@ enum NoAnswer {
     Unanswered(String),
 }
 
+/// A 401 is the session being over, not the server refusing this manifest.
+///
+/// It reaches every document and every other command equally, the app has
+/// one path for it, and that path starts with the command failing so the
+/// wrapper can see the `CREDENTIALS_EXPIRED:` marker. Classified as a
+/// refusal it blocked Apply — a sign-in problem dressed as the cluster
+/// rejecting the reader's YAML — and put the wire marker on screen as prose.
+fn session_over(err: &kube::Error) -> bool {
+    matches!(err, kube::Error::Api(status) if status.code == 401)
+}
+
 fn no_answer(err: kube::Error) -> NoAnswer {
     let said = Error::from(err_ref_clone(&err)).to_string();
     match err {
@@ -131,13 +142,48 @@ fn err_ref_clone(err: &kube::Error) -> kube::Error {
 }
 
 /// Which of the six answers this document gets.
-fn classify(live: &Live, would: &std::result::Result<String, NoAnswer>) -> DryRunOutcome {
+/// Whether applying would leave the object as it is.
+///
+/// Compared on the objects themselves and with the bookkeeping the server
+/// rewrites on every write taken out, so a resourceVersion that moved is
+/// not a change and a rotated private key is.
+fn unchanged(now: &kube::core::DynamicObject, after: &kube::core::DynamicObject) -> bool {
+    fn comparable(object: &kube::core::DynamicObject) -> serde_json::Value {
+        let mut value = serde_json::to_value(object).unwrap_or(serde_json::Value::Null);
+        if let Some(meta) = value.get_mut("metadata").and_then(|m| m.as_object_mut()) {
+            for noise in [
+                "resourceVersion",
+                "generation",
+                "managedFields",
+                "creationTimestamp",
+                "uid",
+            ] {
+                meta.remove(noise);
+            }
+        }
+        value.as_object_mut().map(|o| o.remove("status"));
+        value
+    }
+    comparable(now) == comparable(after)
+}
+
+/// Which of the six answers this document gets.
+///
+/// `same` is decided by the caller from the objects as the server holds
+/// them, not from the strings shown here: those have their private keys
+/// redacted to one constant, so a rotated `tls.key` compares equal and a
+/// Secret whose whole point changed reads as "would not change".
+fn classify(
+    live: &Live,
+    would: &std::result::Result<String, NoAnswer>,
+    same: bool,
+) -> DryRunOutcome {
     match (live, would) {
         (_, Err(NoAnswer::Refused(said))) => DryRunOutcome::Refused { said: said.clone() },
         (_, Err(NoAnswer::Unanswered(said))) => DryRunOutcome::Unanswered { said: said.clone() },
         (Live::Unread(said), Ok(_)) => DryRunOutcome::LiveUnread { said: said.clone() },
         (Live::Absent, Ok(_)) => DryRunOutcome::Created,
-        (Live::Present(now), Ok(after)) if now == after => DryRunOutcome::Unchanged,
+        (Live::Present(_), Ok(_)) if same => DryRunOutcome::Unchanged,
         (Live::Present(_), Ok(_)) => DryRunOutcome::Configured,
     }
 }
@@ -166,6 +212,15 @@ pub async fn dry_run_manifest(
 
 /// The same answer, for callers that already hold a client — the live
 /// harness in `tests/live_dry_run.rs` runs against this.
+/// The parameters that make this a preview and not an apply.
+///
+/// Its own function so a test can hold `dry_run` on it: written inline, the
+/// single call that made the difference between showing a change and making
+/// one could be deleted with every test in the workspace still green.
+fn preview_params() -> PatchParams {
+    PatchParams::apply("k8s-gui").force().dry_run()
+}
+
 pub async fn dry_run_of(
     client: kube::Client,
     manifest: &str,
@@ -173,7 +228,7 @@ pub async fn dry_run_of(
 ) -> Result<DryRun> {
     let parsed_docs =
         parse_all_documents(manifest).map_err(|e| Error::InvalidInput(e.to_string()))?;
-    let patch_params = PatchParams::apply("k8s-gui").force().dry_run();
+    let patch_params = preview_params();
     let mut documents = Vec::new();
 
     for parsed in parsed_docs {
@@ -185,20 +240,40 @@ pub async fn dry_run_of(
             is_cluster_scoped(&parsed.api_resource.kind),
         );
 
+        // The objects as the server holds them, kept beside the redacted
+        // text: "did anything change" is decided on these, because the text
+        // has every private key replaced by one constant and a rotated
+        // `tls.key` would compare equal to the old one.
+        let mut live_raw = None;
         let live = match api.get(&name).await {
-            Ok(object) => Live::Present(editor_yaml(&object)?),
+            Ok(object) => {
+                let yaml = editor_yaml(&object)?;
+                live_raw = Some(object);
+                Live::Present(yaml)
+            }
             Err(kube::Error::Api(status)) if status.code == 404 => Live::Absent,
+            Err(e) if session_over(&e) => return Err(Error::from(e)),
             Err(e) => Live::Unread(Error::from(e).to_string()),
         };
+        let mut would_raw = None;
         let would = match api
             .patch(&name, &patch_params, &Patch::Apply(&parsed.object))
             .await
         {
-            Ok(object) => Ok(editor_yaml(&object)?),
+            Ok(object) => {
+                let yaml = editor_yaml(&object)?;
+                would_raw = Some(object);
+                Ok(yaml)
+            }
+            Err(e) if session_over(&e) => return Err(Error::from(e)),
             Err(e) => Err(no_answer(e)),
         };
 
-        let outcome = classify(&live, &would);
+        let same = match (&live_raw, &would_raw) {
+            (Some(now), Some(after)) => unchanged(now, after),
+            _ => false,
+        };
+        let outcome = classify(&live, &would, same);
         documents.push(DryRunDocument {
             id: parsed.format_id(&ns, "").trim_end().to_string(),
             outcome,
@@ -256,6 +331,109 @@ pub async fn get_manifest(
 
 #[cfg(test)]
 mod dry_run_tests {
+
+    /// The equality that decides "would not change" must not be made on the
+    /// text the reader sees: `editor_yaml` replaces every private key with
+    /// one constant, so a rotated `tls.key` compares equal to the old one
+    /// and a Secret whose whole point changed reads as "would not change" —
+    /// with no diff drawn, because `Unchanged` suppresses it.
+    #[test]
+    fn a_rotated_private_key_is_a_change_even_though_both_are_redacted() {
+        let secret = |key: &str| {
+            let mut object = kube::core::DynamicObject::new(
+                "tls",
+                &kube::core::ApiResource::erase::<k8s_openapi::api::core::v1::Secret>(&()),
+            );
+            object.data = serde_json::json!({
+                "type": "kubernetes.io/tls",
+                "data": { "tls.key": key, "tls.crt": "Y2VydA==" }
+            });
+            object
+        };
+        let before = secret("b2xkLWtleQ==");
+        let after = secret("bmV3LWtleQ==");
+
+        // What the reader is shown is identical, by design.
+        assert_eq!(
+            editor_yaml(&before).expect("yaml"),
+            editor_yaml(&after).expect("yaml"),
+            "the redaction is the point of editor_yaml"
+        );
+        // And the verdict still has to say it changed.
+        assert!(
+            !unchanged(&before, &after),
+            "a rotated key is a change, whatever the screen shows"
+        );
+        assert!(unchanged(&before, &secret("b2xkLWtleQ==")));
+    }
+
+    /// And the noise the server rewrites on every write is not a change, or
+    /// every apply would read as one.
+    #[test]
+    fn bookkeeping_the_server_rewrites_is_not_a_change() {
+        let with_version = |version: &str| {
+            let mut object = kube::core::DynamicObject::new(
+                "api",
+                &kube::core::ApiResource::erase::<k8s_openapi::api::apps::v1::Deployment>(&()),
+            );
+            object.metadata.resource_version = Some(version.to_string());
+            object.data = serde_json::json!({ "spec": { "replicas": 2 } });
+            object
+        };
+        assert!(unchanged(&with_version("1"), &with_version("99")));
+    }
+
+    /// A 401 is not the cluster refusing this manifest.
+    ///
+    /// `no_answer` files everything in 400..500 as `Refused`, which blocks
+    /// Apply and prints the error where the server's own words go — so an
+    /// expired session read as "the cluster rejected your YAML", with the
+    /// `CREDENTIALS_EXPIRED:` wire marker as the explanation. It reaches
+    /// every document equally and the app already has one path for it.
+    #[test]
+    fn an_expired_session_is_not_a_refused_manifest() {
+        let status_with = |code: u16, message: &str| kube::core::Status {
+            code,
+            message: message.to_string(),
+            reason: message.to_string(),
+            status: None,
+            details: None,
+            metadata: Option::default(),
+        };
+        let unauthorised = kube::Error::Api(Box::new(status_with(401, "Unauthorized")));
+        assert!(
+            super::session_over(&unauthorised),
+            "401 has to leave by the door marked sign in again"
+        );
+
+        // And the refusals that really are ones, which must still block.
+        for code in [403, 409, 422] {
+            let refused = kube::Error::Api(Box::new(status_with(code, "denied")));
+            assert!(!super::session_over(&refused), "{code} is about the request");
+            assert!(matches!(
+                super::no_answer(refused),
+                super::NoAnswer::Refused(_)
+            ));
+        }
+    }
+
+    /// The one call that separates showing a change from making one.
+    ///
+    /// `dry_run_of` runs in no test CI executes — all three callers are
+    /// `#[ignore]`d and need a cluster — so deleting `.dry_run()` turned the
+    /// preview into a real apply with the whole workspace green. On a
+    /// cluster marked critical, that is an apply the reader never confirmed.
+    #[test]
+    fn the_preview_is_a_preview() {
+        let params = super::preview_params();
+        assert!(
+            params.dry_run,
+            "without this the confirmation dialog applies the manifest it is \
+             asking about"
+        );
+        assert!(params.force, "server-side apply takes the field manager");
+        assert_eq!(params.field_manager.as_deref(), Some("k8s-gui"));
+    }
     use super::*;
 
     /// The two answers with no current object mean opposite things, and a
@@ -264,9 +442,9 @@ mod dry_run_tests {
     #[test]
     fn an_unread_object_is_not_one_that_would_be_created() {
         let accepted: std::result::Result<String, NoAnswer> = Ok("kind: Deployment\n".to_string());
-        assert_eq!(classify(&Live::Absent, &accepted), DryRunOutcome::Created);
+        assert_eq!(classify(&Live::Absent, &accepted, false), DryRunOutcome::Created);
         assert_eq!(
-            classify(&Live::Unread("deployments is forbidden".into()), &accepted),
+            classify(&Live::Unread("deployments is forbidden".into()), &accepted, false),
             DryRunOutcome::LiveUnread {
                 said: "deployments is forbidden".into()
             }
@@ -311,11 +489,11 @@ mod dry_run_tests {
     fn the_same_object_back_is_no_change_and_a_different_one_is_a_change() {
         let now = Live::Present("spec:\n  replicas: 2\n".to_string());
         assert_eq!(
-            classify(&now, &Ok("spec:\n  replicas: 2\n".to_string())),
+            classify(&now, &Ok("spec:\n  replicas: 2\n".to_string()), true),
             DryRunOutcome::Unchanged
         );
         assert_eq!(
-            classify(&now, &Ok("spec:\n  replicas: 4\n".to_string())),
+            classify(&now, &Ok("spec:\n  replicas: 4\n".to_string()), false),
             DryRunOutcome::Configured
         );
     }
@@ -331,7 +509,7 @@ mod dry_run_tests {
             Live::Unread("forbidden".into()),
         ] {
             assert_eq!(
-                classify(&live, &refused),
+                classify(&live, &refused, false),
                 DryRunOutcome::Refused {
                     said: "admission webhook denied it".into()
                 }

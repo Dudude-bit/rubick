@@ -415,3 +415,75 @@ describe("a dry run nobody answered", () => {
     ).toBeEnabled();
   });
 });
+
+describe("what the dry run is asked, and what it draws", () => {
+  /**
+   * `dryRunManifest` was a `vi.fn()` nothing ever inspected. I pointed the
+   * queryFn at the *unedited* buffer and a namespace that does not exist
+   * and the whole suite stayed green — a preview of a different question
+   * than the one Apply will ask, which is the one thing a preview must not
+   * be.
+   */
+  it("asks about the edited buffer, in the object's own namespace", async () => {
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    await waitFor(() => expect(dryRunManifest).toHaveBeenCalled());
+    const [manifest, namespace] = dryRunManifest.mock.calls.at(-1) as [
+      string,
+      string | null,
+    ];
+    expect(manifest).toContain("replicas: 4");
+    expect(manifest).not.toBe(PLAIN);
+    expect(namespace).toBe("shop");
+  });
+
+  /**
+   * `live` is null for an object that is not there AND for one the read
+   * failed on, and the diff took the second for the first: against "" the
+   * whole document draws green, "this would all be created", about an
+   * object that may exist and be about to be overwritten.
+   */
+  it("draws no diff when the current object could not be read", async () => {
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: {
+            says: "liveUnread",
+            said: "deployments is forbidden (code: 403)",
+          },
+          live: null,
+          would: "spec:\n  replicas: 4\n",
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(
+      await screen.findByText(/deployments is forbidden/)
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("diff")).toBeNull();
+  });
+
+  /** And the case it must still draw: an object that really is not there. */
+  it("still draws the diff for an object that would be created", async () => {
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: { says: "created" },
+          live: null,
+          would: "spec:\n  replicas: 4\n",
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("diff")).toBeInTheDocument()
+    );
+  });
+});
