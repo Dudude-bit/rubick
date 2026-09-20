@@ -2795,6 +2795,61 @@ mod refused_claim_tests {
             }
             other => panic!("the cluster's own words, not {other:?}"),
         }
+
+        // The version travels inside `why` and the frontend keys on both.
+        // Checking only that the name appears let any kind↔version pairing
+        // through, so a claim named with the wrong group would read as a
+        // kind the app does not know.
+        match &claim.why {
+            crate::resources::Unread::Unanswered { version, .. } => {
+                assert_eq!(version, "v1", "the version the kind belongs to");
+            }
+            other => panic!("a refusal is Unanswered, not {other:?}"),
+        }
+        // And nothing else is named: a list that answered is not unread,
+        // however empty it came back.
+        assert_eq!(
+            unread
+                .iter()
+                .map(|entry| entry.kind.as_str())
+                .collect::<Vec<_>>(),
+            ["PersistentVolumeClaim"],
+            "only the list that was actually refused: {unread:?}"
+        );
+    }
+
+    /// Every list refused, so every kind has to be named, each with the
+    /// version it belongs to. The single-kind test above passes whether or
+    /// not the other arms exist at all.
+    #[test]
+    fn each_refused_list_is_named_with_the_version_it_belongs_to() {
+        let snapshot = Snapshot {
+            pods: Err(REFUSED.to_string()),
+            services: Err(REFUSED.to_string()),
+            ingresses: Err(REFUSED.to_string()),
+            claims: Err(REFUSED.to_string()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            slices: Ok(Vec::new()),
+            legacy: Ok(Vec::new()),
+            gateway_routes: Vec::new(),
+            gateways: None,
+        };
+        let unread = unanswered(&snapshot);
+        let named: std::collections::BTreeMap<_, _> = unread
+            .iter()
+            .filter_map(|entry| match &entry.why {
+                crate::resources::Unread::Unanswered { version, .. } => {
+                    Some((entry.kind.as_str(), version.as_str()))
+                }
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(named.get("Pod"), Some(&"v1"));
+        assert_eq!(named.get("Service"), Some(&"v1"));
+        assert_eq!(named.get("Ingress"), Some(&"networking.k8s.io/v1"));
+        assert_eq!(named.get("PersistentVolumeClaim"), Some(&"v1"));
     }
 }
 
@@ -2901,6 +2956,34 @@ mod refused_list_tests {
             !said.contains("Status {"),
             "kube's Debug output is not a sentence: {said}"
         );
+    }
+
+    /// The accessors' documented rule, which nothing checked: they hand a
+    /// refusal back as an empty slice, so a caller that turns emptiness
+    /// into a statement says it about a list nobody read. This holds the
+    /// shape — a refusal is indistinguishable through the accessor — so
+    /// that the guards at the verdict sites are the only thing standing
+    /// between a 403 and "there is simply nothing behind it".
+    #[test]
+    fn the_accessors_cannot_tell_a_refusal_from_an_empty_list() {
+        let refused = all_refused();
+        let answered = Snapshot {
+            pods: Ok(Vec::new()),
+            services: Ok(Vec::new()),
+            ingresses: Ok(Vec::new()),
+            ..all_refused()
+        };
+
+        assert!(refused.pods().is_empty());
+        assert!(answered.pods().is_empty());
+        assert_eq!(refused.pods().len(), answered.pods().len());
+
+        // Which is why the difference has to be read off the `Result`, and
+        // every verdict site does exactly that.
+        assert!(refused.pods.is_err());
+        assert!(answered.pods.is_ok());
+        assert!(refused.services.is_err());
+        assert!(refused.ingresses.is_err());
     }
 
     /// The whole neighbourhood, with every list refused, for the verdict

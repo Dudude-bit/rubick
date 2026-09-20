@@ -735,6 +735,37 @@ describe("the traffic chain", () => {
     expect(trafficChains(conns, t)).toEqual([]);
     expect(chainSilence(conns, t)).toContain("example.com");
   });
+
+  /**
+   * Every sentence this returns states a negative, and a negative is only
+   * ours to state about a list that answered. The guard was tested for a
+   * Pod subject alone, so narrowing it to Pods — leaving a Deployment page
+   * to say "No Service in this namespace" about Services nobody read —
+   * survived the whole suite.
+   */
+  it("says nothing about Services on any subject when that list went unread", () => {
+    const unread = [
+      { kind: "Service", why: { says: "unanswered", version: "v1", said: "forbidden" } },
+    ] as unknown as ResourceConnections["notLookedAt"];
+
+    const deployment = ref("Deployment", "quiet-demo");
+    const withDeployment = connections(
+      deployment,
+      [
+        {
+          from: deployment,
+          to: pod("quiet-demo-a", true),
+          relation: { verb: "selects", selector: "app=quiet-demo" },
+        },
+      ],
+      [],
+      unread
+    );
+    expect(chainSilence(withDeployment, t)).toBeNull();
+
+    const p = pod("quiet-demo-a", true);
+    expect(chainSilence(connections(p, [], [], unread), t)).toBeNull();
+  });
 });
 
 describe("the groups", () => {
