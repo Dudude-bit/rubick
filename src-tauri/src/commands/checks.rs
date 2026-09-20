@@ -28,7 +28,7 @@ use crate::utils::normalize_optional_namespace;
 /// One exec may take this long before the check gives up on it.
 const EXEC_TIMEOUT: Duration = Duration::from_secs(20);
 /// A copy of the pod may take this long to start before the check gives up.
-const COPY_READY_TIMEOUT: Duration = Duration::from_secs(60);
+const COPY_READY_TIMEOUT: Duration = Duration::from_mins(1);
 /// The copy is told to exit on its own, in case nothing else ever reaches it.
 const COPY_LIFETIME_SECS: i64 = 300;
 const COPY_CONTAINER: &str = "check";
