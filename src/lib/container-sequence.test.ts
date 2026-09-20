@@ -13,6 +13,7 @@ import type {
 import {
   containerSequence,
   declaredContainers,
+  offeredContainers,
   podContainers,
   podPorts,
   podReadiness,
@@ -447,5 +448,36 @@ describe("shellTargets", () => {
         ],
       }).map((c) => c.name)
     ).toEqual(["migrate"]);
+  });
+
+  /**
+   * A sidecar is an init container with `restartPolicy: Always`, so run
+   * order puts the mesh proxy in front of the app. A strip that offers a
+   * choice in that order opened the Files tab on `istio-proxy` rather than
+   * on the container the reader came for. Fails if the sort is dropped.
+   */
+  it("offers the reader's own container before the proxy injected beside it", () => {
+    const pod = {
+      containers: [
+        container("app"),
+        container("istio-proxy", { phase: "sidecar" }),
+      ],
+      initContainers: [
+        container("linkerd-proxy", { phase: "sidecar" }),
+        container("migrate", {
+          phase: "init",
+          state: { type: "terminated", termination: termination() },
+        }),
+      ],
+    };
+    expect(offeredContainers(pod).map((c) => c.name)).toEqual([
+      "app",
+      "linkerd-proxy",
+      "istio-proxy",
+      "migrate",
+    ]);
+    // The stopped ones are still offered — a debug container can read a
+    // stopped container's files, and the tab says so.
+    expect(offeredContainers(pod)).toHaveLength(4);
   });
 });

@@ -28,6 +28,7 @@ function resource(over: Partial<CustomResourceInfo> = {}): CustomResourceInfo {
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
     ...over,
   };
 }

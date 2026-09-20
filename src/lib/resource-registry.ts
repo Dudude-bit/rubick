@@ -2,6 +2,7 @@ import {
   Box,
   Boxes,
   Braces,
+  BrickWall,
   Cable,
   Layers,
   LockKeyhole,
@@ -132,6 +133,18 @@ export const RESOURCE_REGISTRY = [
     plural: "ingresses",
     displayPlural: "Ingresses",
     icon: Globe,
+    apiVersion: "networking.k8s.io/v1",
+    scope: "namespaced",
+    category: "network",
+  },
+  {
+    kind: "NetworkPolicy",
+    plural: "networkpolicies",
+    displayPlural: "NetworkPolicies",
+    // Not the PodDisruptionBudget's shield: both guard something, and two
+    // rows in one nav with the same glyph is the nav failing at the one
+    // thing it does.
+    icon: BrickWall,
     apiVersion: "networking.k8s.io/v1",
     scope: "namespaced",
     category: "network",
@@ -335,6 +348,18 @@ export function listQueryFor(resourceKind: ResourceKind): {
     resource: toPlural(resourceKind),
     namespaced: entry?.scope !== "cluster",
   };
+}
+
+/**
+ * Whether choosing one namespace narrows a read of this kind at all.
+ *
+ * Nodes, PersistentVolumes, StorageClasses and the other cluster-scoped
+ * kinds are one list however the namespace picker is set, so offering "pick
+ * one namespace" against a slow read of them sends a reader to a control
+ * that cannot change the answer.
+ */
+export function narrowingHelps(resourceKind: ResourceKind): boolean {
+  return RESOURCE_BY_KIND.get(resourceKind)?.scope !== "cluster";
 }
 
 export function toPlural(resourceKind: ResourceKind): string {

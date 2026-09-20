@@ -121,6 +121,7 @@ function ingressRoute(spec: Record<string, unknown>): CustomResourceInfo {
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

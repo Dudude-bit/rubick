@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   flexRender,
   useTable,
@@ -28,7 +28,14 @@ import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
 import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
+import {
+  useColumnWidthsStore,
+  type ColumnWidths,
+} from "@/stores/columnWidthsStore";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
+import { stallWatch } from "@/lib/stall-watch";
+import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   Search,
   SearchX,
@@ -54,7 +61,12 @@ interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
   data: TData[];
   isLoading?: boolean;
-  searchKey?: string;
+  /**
+   * The query-string key the search lives under. A tab records its route
+   * with the query string, so a search kept here survives leaving the tab
+   * and coming back; one kept in state did not.
+   */
+  searchParam?: string;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -97,6 +109,8 @@ interface DataTableProps<TData extends RowData> {
   grouping?: RowGrouping<TData> | null;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
+  /** What dragged column widths are filed under; the row label otherwise. */
+  widthsKey?: string;
 }
 
 /**
@@ -109,6 +123,14 @@ interface DataTableProps<TData extends RowData> {
  * estimate and back, and on an unfilled table it swaps the whole list for a
  * fixed box with its own scrollbar — scroll position lost both ways.
  */
+/**
+ * The narrowest a column may be dragged, in the same units the column sizes
+ * are written in. Eighty is about the width of the longest header word once
+ * it is a share of a real table; below that a column is a sliver whose own
+ * label is cut, which is not a width anybody is asking for.
+ */
+const MIN_COLUMN_SIZE = 80;
+
 const VIRTUALISE_ABOVE_ROWS = 100;
 const STAY_FLAT_BELOW_ROWS = 75;
 const VIRTUAL_SCROLL_DEFAULT_HEIGHT = 600;
@@ -241,7 +263,7 @@ function DataTableInner<TData extends RowData>({
   columns,
   data,
   isLoading = false,
-  searchKey,
+  searchParam,
   searchPlaceholder,
   enableVirtualScroll,
   fill = false,
@@ -254,9 +276,11 @@ function DataTableInner<TData extends RowData>({
   emptyMessage,
   grouping = null,
   rowLabel,
+  widthsKey,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
+  const { open: openPeek } = usePeek();
   const { tableDensity, setTableDensity } = useDisplaySettingsStore();
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -264,7 +288,29 @@ function DataTableInner<TData extends RowData>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const [searchValue, setSearchValue] = React.useState("");
+  const [params, setParams] = useSearchParams();
+  const inTheUrl = searchParam ? (params.get(searchParam) ?? "") : "";
+  const [searchValue, setSearchValue] = React.useState(inTheUrl);
+  // The query string is the authority, and the state beside it is only so
+  // that typing does not wait for a navigation. Seeded once, the two came
+  // apart whenever the address changed under a mounted table — the sidebar
+  // row for the list you are already on, a deep link, a jump from the
+  // palette: the box and the rows kept the old search while the tab
+  // recorded the new address, and the filter vanished on the way back.
+  React.useEffect(() => setSearchValue(inTheUrl), [inTheUrl]);
+  const changeSearch = (value: string) => {
+    setSearchValue(value);
+    if (!searchParam) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(searchParam, value);
+        else next.delete(searchParam);
+        return next;
+      },
+      { replace: true }
+    );
+  };
   const deferredSearch = React.useDeferredValue(searchValue);
 
   // Compact rows stay strictly single-line — a pod name like
@@ -277,11 +323,11 @@ function DataTableInner<TData extends RowData>({
 
   // Clipped, because the table is fixed-layout: a name longer than its column
   // has nowhere to go and would otherwise paint over the namespace beside it.
-  // Text cells only — the actions cell holds 20px buttons whose pointer target
-  // is pushed back out to 24px by a pseudo-element hanging over the cell's
-  // padding, and clipping that cell clips the hit area back to 20px.
-  const clipText =
-    isCompact && "overflow-hidden text-ellipsis whitespace-nowrap";
+  // Every density, not just compact — a column dragged to its floor bleeds
+  // the same either way. Text cells only: the actions cell holds 20px buttons
+  // whose pointer target is pushed back out to 24px by a pseudo-element
+  // hanging over the cell's padding, and clipping it clips the hit area.
+  const clipText = "overflow-hidden text-ellipsis whitespace-nowrap";
 
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
@@ -296,13 +342,19 @@ function DataTableInner<TData extends RowData>({
     return seen.size >= (grouping.minGroups ?? 1);
   }, [data, grouping]);
 
+  // One namespace chosen is the same word on every row, and the scope bar
+  // above already says it; several are grouped, and the caption says it.
+  const oneNamespace = useClusterStore(
+    (state) => state.namespaceScope.length === 1
+  );
   const columnVisibility = React.useMemo<ColumnVisibilityState>(() => {
     const state: ColumnVisibilityState = {};
     if (groupingActive) {
       for (const id of grouping?.hides ?? []) state[id] = false;
     }
+    if (oneNamespace) state.namespace = false;
     return state;
-  }, [groupingActive, grouping]);
+  }, [groupingActive, grouping, oneNamespace]);
 
   // Latched rather than derived: between the two marks the answer is
   // "whatever it already was", which is a fact about the last render and not
@@ -310,6 +362,13 @@ function DataTableInner<TData extends RowData>({
   const [wasLong, setWasLong] = React.useState(
     () => data.length > VIRTUALISE_ABOVE_ROWS
   );
+  // The stall watch names the big lists on screen; a table says its size
+  // and takes it back when it leaves.
+  const tableId = React.useId();
+  React.useEffect(() => {
+    stallWatch.noteList(tableId, rowLabel ?? null, data.length);
+  }, [tableId, rowLabel, data.length]);
+  React.useEffect(() => () => stallWatch.forgetList(tableId), [tableId]);
   const isLong =
     data.length > VIRTUALISE_ABOVE_ROWS
       ? true
@@ -332,6 +391,100 @@ function DataTableInner<TData extends RowData>({
     return [...filteredColumns, createActionsColumn<TData>(actionCount)];
   }, [columns, actionCount]);
 
+  // Keyed by what the table lists rather than by `tableId`, which is a
+  // `useId` and new on every mount — a width that forgot itself on the way to
+  // the next page is a control that does not hold. A table with no label
+  // still resizes; it just has nowhere to remember it.
+  const widthsFiledAs = widthsKey ?? rowLabel ?? null;
+  const storedWidths = useColumnWidthsStore((state) =>
+    widthsFiledAs ? state.widths[widthsFiledAs] : undefined
+  );
+  const saveWidths = useColumnWidthsStore((state) => state.set);
+  const forgetWidths = useColumnWidthsStore((state) => state.reset);
+  const [localWidths, setLocalWidths] = React.useState<ColumnWidths>({});
+  // What the drag is doing before anybody lets go. The store is persisted,
+  // so writing there per frame means a `localStorage.setItem` per frame.
+  const [dragging, setDragging] = React.useState<ColumnWidths | null>(null);
+  const columnSizing = dragging ?? storedWidths ?? localWidths;
+  const keepWidths = React.useCallback(
+    (next: ColumnWidths) => {
+      if (!widthsFiledAs) return setLocalWidths(next);
+      // An empty map is not a width anybody chose; forgetting the table is
+      // what lets the column definitions answer again.
+      if (Object.keys(next).length === 0) return forgetWidths(widthsFiledAs);
+      saveWidths(widthsFiledAs, next);
+    },
+    [widthsFiledAs, saveWidths, forgetWidths]
+  );
+  const setColumnSizing = React.useCallback(
+    (updater: ColumnWidths | ((old: ColumnWidths) => ColumnWidths)) => {
+      const next =
+        typeof updater === "function" ? updater(columnSizing) : updater;
+      keepWidths(next);
+    },
+    [columnSizing, keepWidths]
+  );
+
+  /**
+   * The drag, written here rather than taken from the vendor, whose handler
+   * commits pixel deltas. These tables are laid out in shares of their own
+   * width and the dragged column sits in its own denominator, so pixels move
+   * the rendered edge by a fraction of the travel — less and less as the
+   * drag goes on. Moving width from one column to the next holds the total
+   * still, which is what puts the edge under the finger.
+   */
+  const startResize = React.useCallback(
+    (
+      event: React.PointerEvent<HTMLSpanElement>,
+      columnId: string,
+      nextColumnId: string,
+      sizes: { own: number; next: number },
+      totalWidth: number,
+      total: number,
+      started: ColumnWidths
+    ) => {
+      // Only the primary button. A right-click on the grip started a drag
+      // whose pointerup the context menu swallowed, leaving the table
+      // resizing itself until the next click anywhere.
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      // A share is `size / total`, so a screen pixel is `total / width` of
+      // size. Zero width means nobody has measured the table yet, and
+      // dividing by it would send the first move straight to the clamp.
+      const perPixel = totalWidth > 0 ? total / totalWidth : 1;
+      // A floor never wider than the column already is. The actions strip is
+      // 64 units by design, so a flat 80 made the first pixel of any drag
+      // inflate it and narrow its neighbour, undoing sizing nobody touched.
+      const ownFloor = Math.min(MIN_COLUMN_SIZE, sizes.own);
+      const nextFloor = Math.min(MIN_COLUMN_SIZE, sizes.next);
+      const limit = sizes.own + sizes.next - nextFloor;
+      // Outside the state updater, which React is free to defer: a drag
+      // released in the same tick as its last move let go of a width nobody
+      // had computed yet.
+      let latest: ColumnWidths | null = null;
+      const move = (moved: PointerEvent) => {
+        const delta = (moved.clientX - startX) * perPixel;
+        const own = Math.max(ownFloor, Math.min(limit, sizes.own + delta));
+        latest = {
+          ...started,
+          [columnId]: own,
+          [nextColumnId]: sizes.own + sizes.next - own,
+        };
+        setDragging(latest);
+      };
+      const stop = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", stop);
+        if (latest) keepWidths(latest);
+        setDragging(null);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", stop);
+    },
+    [keepWidths]
+  );
+
   const table = useTable({
     // Which features exist is part of the table's type, named in one place.
     // Row models come with them: in v9 the sorted and filtered ones are slots
@@ -343,11 +496,13 @@ function DataTableInner<TData extends RowData>({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
+    onColumnSizingChange: setColumnSizing,
     state: {
       sorting,
       columnFilters,
       globalFilter,
       columnVisibility,
+      columnSizing,
     },
   });
 
@@ -371,16 +526,14 @@ function DataTableInner<TData extends RowData>({
     enabled: keyboardNavEnabled,
   });
 
+  // One road. The box used to be able to aim at a single column instead,
+  // chosen by whether a caller passed a `searchKey`, and nothing said which
+  // pages should — so ten of them narrowed the search to the name for no
+  // stated reason, and the road they took was the one that quietly stopped
+  // filtering (#185). A column opts out with `enableGlobalFilter: false`.
   React.useEffect(() => {
-    const searchColumn = searchKey ? table.getColumn(searchKey) : undefined;
-
-    if (searchColumn) {
-      searchColumn.setFilterValue(deferredSearch);
-      setGlobalFilter("");
-    } else {
-      setGlobalFilter(deferredSearch);
-    }
-  }, [deferredSearch, searchKey, table]);
+    setGlobalFilter(deferredSearch);
+  }, [deferredSearch]);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;
@@ -501,9 +654,16 @@ function DataTableInner<TData extends RowData>({
 
     const href = getRowHref?.(row);
     if (href) {
-      // A list is where you are already browsing, so plain click goes there
-      // rather than peeking: the peek exists to check a name mentioned
-      // elsewhere without losing the page, and here the page is the list.
+      // A plain click on a row whose object has a peek opens the peek, the
+      // same as the click on the name inside it: one gesture, one answer,
+      // wherever on the row it lands. The page itself is a double click, or
+      // Enter, away. Modified clicks open tabs exactly as before.
+      const peek = "key" in event ? null : peekTargetOfHref(href);
+      if (peek && readLinkIntent(event) === "activate") {
+        event.preventDefault();
+        openPeek(peek);
+        return;
+      }
       linkGesture(event, href, () => navigate(href));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
       // No destination, so nothing to open a tab on; only a plain click acts.
@@ -518,6 +678,31 @@ function DataTableInner<TData extends RowData>({
       ? (event: React.MouseEvent | React.KeyboardEvent) =>
           handleRowGesture(row.original, event)
       : undefined;
+    const href = getRowHref?.(row.original);
+    const openPage =
+      href && peekTargetOfHref(href)
+        ? (event: React.MouseEvent) => {
+            const target = event.target as HTMLElement;
+            // The same places a single click keeps its hands off, so the
+            // two gestures agree about what belongs to the row and what
+            // belongs to the controls sitting in it.
+            if (
+              target.closest("button") ||
+              target.closest('[role="menuitem"]') ||
+              target.closest("[data-quick-actions]")
+            ) {
+              return;
+            }
+            // A link to somewhere else — a row's node, its owner — keeps the
+            // double click, because the reader aimed at that link and not at
+            // the row. The row's own name is the place the eye goes to when
+            // told "double click the row", so it must not be the one spot
+            // where nothing happens.
+            const link = target.closest("a");
+            if (link && link.getAttribute("href") !== href) return;
+            navigate(href);
+          }
+        : undefined;
 
     return (
       <TableRow
@@ -541,6 +726,7 @@ function DataTableInner<TData extends RowData>({
           "relative group"
         )}
         onClick={act}
+        onDoubleClick={openPage}
         onAuxClick={act}
         onKeyDown={
           rowProps &&
@@ -647,7 +833,7 @@ function DataTableInner<TData extends RowData>({
               aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
+              onChange={(event) => changeSearch(event.target.value)}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
@@ -733,7 +919,9 @@ function DataTableInner<TData extends RowData>({
                 );
                 return (
                   <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.map((header, index) => {
+                      // Who gives up the width this one takes.
+                      const next = headerGroup.headers[index + 1];
                       return (
                         <TableHead
                           key={header.id}
@@ -757,6 +945,52 @@ function DataTableInner<TData extends RowData>({
                                 header.column.columnDef.header,
                                 header.getContext()
                               )}
+                          {/* Inside the column's own right edge, not
+                              straddling it: straddling put 4.5px of the last
+                              header past the table and gave every list a
+                              little horizontal scroll it never had. The last
+                              column has no grip — nothing to its right to
+                              take width from. Double-click puts both columns
+                              back to their declared widths. */}
+                          {next && (
+                            <span
+                              // `presentation`, and deliberately: anything in
+                              // the accessibility tree inside a `th` joins
+                              // that header's name, so a labelled separator
+                              // here made every column announce as "Name Drag
+                              // to resize". The keyboard path belongs on an
+                              // affordance of its own, not on this grip.
+                              role="presentation"
+                              onPointerDown={(event) =>
+                                startResize(
+                                  event,
+                                  header.column.id,
+                                  next.column.id,
+                                  {
+                                    own: header.getSize(),
+                                    next: next.getSize(),
+                                  },
+                                  scrollRef.current?.clientWidth ?? 0,
+                                  totalSize,
+                                  columnSizing
+                                )
+                              }
+                              onDoubleClick={() =>
+                                setColumnSizing((old) => {
+                                  const back = { ...old };
+                                  delete back[header.column.id];
+                                  delete back[next.column.id];
+                                  return back;
+                                })
+                              }
+                              title={t("action", "dragToResize")}
+                              className={cn(
+                                "absolute inset-y-0 right-0 z-10 w-[9px] cursor-col-resize touch-none select-none",
+                                "after:absolute after:inset-y-1 after:right-0 after:w-px after:bg-hair after:opacity-0 after:transition-opacity",
+                                "hover:after:opacity-100"
+                              )}
+                            />
+                          )}
                         </TableHead>
                       );
                     })}
@@ -793,7 +1027,7 @@ function DataTableInner<TData extends RowData>({
                           variant="ghost"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => setSearchValue("")}
+                          onClick={() => changeSearch("")}
                         >
                           {t("action", "clearSearch")}
                         </Button>

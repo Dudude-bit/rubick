@@ -132,7 +132,15 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   {
     // The column people came to this page to read, and a hostname is long.
     size: 280,
-    accessorKey: "rules",
+    // The hostnames, not the rules that hold them: an accessor over an array
+    // of objects stringifies to `[object Object]`, so the search box matched
+    // nothing on the one column people open this page to read.
+    id: "hosts",
+    accessorFn: (row) =>
+      row.rules
+        .map((rule) => rule.host)
+        .filter((host): host is string => Boolean(host))
+        .join(" "),
     header: () => <T section="columns" k="hosts" />,
     cell: ({ row }) => {
       const hosts = row.original.rules
@@ -352,7 +360,6 @@ export function IngressList() {
         refresh={watchFailed || scope.several ? undefined : false}
         live={watchEnabled && !watchFailed}
         resyncing={resyncing}
-        searchKey="name"
         getRowHref={(row) =>
           getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)
         }

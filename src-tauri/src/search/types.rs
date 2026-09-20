@@ -111,7 +111,11 @@ pub fn describe_failure(error: &crate::error::Error) -> (SearchFailureKind, Stri
     // prose: "Permission denied: …" contains none of the words the
     // text classifier looks for.
     let kind = match error {
-        Error::Timeout(_) => SearchFailureKind::Timeout,
+        // A read that ran out of *our* deadline is the same kind of answer as
+        // one that ran out of the cluster's: a retry, or a narrower question,
+        // is what helps. Without this arm the marker text falls to the
+        // classifier, which knows none of its words and files it as `Other`.
+        Error::Timeout(_) | Error::ReadDeadline { .. } => SearchFailureKind::Timeout,
         // A 401 no longer arrives as `KubeApi` — it has its own variant now.
         // The fan-out has no state for "this cluster's session is over", and
         // refused is the nearest true thing it can say about one row.

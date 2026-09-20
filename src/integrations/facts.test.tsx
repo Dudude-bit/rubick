@@ -60,6 +60,7 @@ function overdueCertificate(): CustomResourceInfo {
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

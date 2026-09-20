@@ -43,6 +43,7 @@ function object(
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

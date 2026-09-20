@@ -36,6 +36,7 @@ export const en = {
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
+    changes: "Changes",
     selectsLabels: "selects {selector}",
     allNamespacesLower: "all namespaces",
     dataTable: "Data table",
@@ -163,6 +164,7 @@ export const en = {
     routes: "Routes",
     map: "Map",
     controller: "Controller",
+    operators: "Operators",
     metadata: "Metadata",
     allIntegrations: "All integrations",
     infrastructureBuilder: "Infrastructure Builder",
@@ -192,6 +194,15 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    selects: "Selects",
+    files: "Files",
+    members: "Members",
+    racks: "Racks",
+    instances: "Instances",
+    cluster: "Cluster",
+    mode: "Mode",
+    primaryInstance: "Primary",
+    backupMethod: "Method",
     connections: "Connections",
     providerId: "Provider ID",
     resourceVersion: "Resource version",
@@ -515,9 +526,35 @@ export const en = {
     serves: "Serves",
     parents: "Parents",
     verdicts: "Verdicts",
+    ciliumSelects: "Selects",
+    ciliumClusterwide: "Cluster-wide",
+    ciliumNamespaced: "In this namespace",
+    ciliumInForce: "In force",
+    ciliumRules: "Rules",
+    ciliumReach: "Reach",
+    ciliumSecurityLabels: "Security labels",
     programmed: "Programmed",
   },
   action: {
+    laneLabelColour: "Colour lane",
+    laneLabelShort: "Short prefix",
+    laneLabelFull: "Full name",
+    showAllLanes: "Show every pod",
+    laneLabelHint:
+      "How each line names its lane: by the colour alone, by the last characters of the name, or by the whole name.",
+    filterOn: "Filter on {key}={value}",
+    laneRulePod: "lane = pod",
+    laneRuleOrdinal: "lane = ordinal",
+    laneRuleNode: "lane = node",
+    laneRuleRun: "lane = run",
+    legendGone: "· gone",
+    eventsStories: "Stories",
+    eventsAll: "All events",
+    warningsFirst: "Warnings first",
+    newestFirst: "Newest",
+    showTimeline: "Timeline",
+    hideTimeline: "Hide timeline",
+    storyWindow: "Window",
     showInaccessibleNamespaces: "Show them",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",
@@ -834,6 +871,7 @@ export const en = {
     nameCopied: "{name} copied",
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
@@ -918,6 +956,16 @@ export const en = {
     chipQueryTitle: "{label} — a query over the buffered lines",
     chipQueryTimeTitle:
       "{label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+    chipFrozenTitle:
+      "{label} — frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+    startFreezeLabel:
+      "Freeze {label} — keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label} — these lines can be evicted again",
+    startFreezeTitle: "Freeze this interval",
+    stopFreezeTitle: "Thaw this interval",
+    thawFrozen: "thaw",
+    frozenNote:
+      "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
     stopIntakeLabel:
       "Stop discarding lines that do not match {label} — new lines are kept from now on, the ones already discarded do not come back",
     startIntakeLabel:
@@ -965,6 +1013,8 @@ export const en = {
     closeNamed: "Close {name}",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
+    filterClusters: "Filter clusters",
+    filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
     reload: "Reload",
     useTheDefault: "Use the default",
@@ -1091,6 +1141,10 @@ export const en = {
     validationCompleted: "Validation completed.",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
+    applyUnanswered: "The cluster did not answer",
+    applyUnansweredHint:
+      "We stopped waiting. Whether the change was applied is unknown — admission can outlast the wait — so check the object before applying again.",
+
     applyCompleted: "Apply completed.",
     clearCanvasQuestion: "Clear canvas?",
     clearCanvasConfirm:
@@ -1162,6 +1216,7 @@ export const en = {
     connecting: "Connecting",
     streamLive: "Live",
     streamPaused: "Paused",
+    filtering: "filtering…",
     streamStopped: "Stopped",
     moreLogActions: "More log actions",
     densityStrip: "Density strip",
@@ -1177,6 +1232,7 @@ export const en = {
     openActions: "Open actions",
     openFullPage: "Open full page",
     copyName: "Copy name",
+    dragToResize: "Drag to resize · double-click to reset",
     more: "More",
     moreActions: "More actions",
     goBack: "Go back",
@@ -1293,7 +1349,9 @@ export const en = {
     close: "Close",
     save: "Save",
     delete: "Delete",
+    pickOneNamespace: "Pick one namespace",
     retry: "Retry",
+    download: "Download",
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
@@ -1403,6 +1461,470 @@ export const en = {
     watching: "Watching",
     active: "{n} active",
   },
+  changes: {
+    title: "Changes",
+    last24h: "Last 24 hours",
+    explained:
+      "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
+    clusterExplained:
+      "What this app saw change in the cluster's workloads while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
+    notObserved: "Not observed {from} to {to}",
+    notObservedStill: "Not observed since {from}",
+    revisionNumber: "revision {n}",
+    revisionCurrent: "current",
+    revisionOldest: "oldest known; nothing earlier to compare with",
+    unchangedTemplate:
+      "nothing changed in what is compared: image, env, envFrom, ports, resources, checksum annotations",
+    templateUnread:
+      "this revision's template, or the one before it, could not be read; what changed is not known",
+    revisionsMissing: {
+      one: "{n} revision in between is no longer on the cluster",
+      other: "{n} revisions in between are no longer on the cluster",
+    },
+    readopted:
+      "re-adopted by a rollback: the clock is when this object was created, not when it became current",
+    changeCause: "kubernetes.io/change-cause",
+    fieldContainer: "container",
+    added: "added",
+    removed: "removed",
+    delivered: "{owner} applied {revision}",
+    deliveredFrom: "from {from}",
+    helmRevision: "Helm revision {n}: {chart}",
+    journalCreated: "{kind} appeared",
+    journalDeleted: "{kind} gone",
+    journalGeneration: "spec generation {from} → {to}",
+    journalImage: "{container} image {from} → {to}",
+    journalReplicas: "replicas {from} → {to}",
+    journalAnnotation: "{key} {from} → {to}",
+    journalSeenAtRelist:
+      "Seen at a relist after a break: it changed sometime in the gap before this.",
+    sinceMarker: "since the link was made",
+    sinceNothing: "Nothing on this clock since {when}.",
+    revisionsUnread: "The revisions could not be read: {reason}",
+    historyUnread: "{owner}'s history could not be read: {reason}",
+    helmUnread: "Helm's history for {release} could not be read: {reason}",
+    nothingInWindow: "Nothing on this clock in the window.",
+    notWatchingNow: "Not watching this cluster's workloads right now.",
+    watchingNow: "Watching since {since}",
+    window24h: "24h",
+    window7d: "7d",
+    deliveriesUnread: "What delivers this could not be read: {reason}",
+    claimedOwner:
+      "{owner} does not list this object; it only carries the label naming it",
+    moreRows: {
+      one: "{n} more row not drawn",
+      other: "{n} more rows not drawn",
+    },
+  },
+  hints: {
+    mostLikely: "Most likely",
+    notTested:
+      "«Probably» is the app's word for a chain it read end to end but did not test: nothing here sent a packet.",
+    googleIt: "Search it",
+    copyForAgent: "Copy for agent",
+    copiedForAgent:
+      "Copied {n} characters. Read it before you paste it: the log lines are whatever the container printed.",
+    searchNoEngine:
+      "No search engine: the custom URL in Settings is not an address.",
+    searchOpens: "opens {site}; change the engine in Settings",
+    guessCrashLoop:
+      "Most likely: {container} exits on its own right after starting, {restarts} so far. The reason is probably in its last lines before the exit.",
+    guessCrashRefusedSidecar:
+      "Most likely: nothing answers on {host}:{port} inside this pod. That address belongs to sidecar {sidecar}, which is {state}; the app itself is probably fine and waits on it.",
+    guessCrashRefusedServiceEmpty:
+      "Most likely: {host}:{port} refused the connection. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
+    guessCrashRefusedServiceReady:
+      "Most likely: {host}:{port} refused the connection. That address is Service {service}, with {ready} of {total} endpoints ready, so the refusal probably comes from the process behind it rather than from the cluster.",
+    guessCrashTimeoutServiceEmpty:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
+    guessCrashTimeoutServiceReady:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably being dropped on the way — a NetworkPolicy is the usual reason, and this app did not read any.",
+    guessCrashServiceUncounted:
+      "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read — so whether anything is ready there is probably the first thing to look at, and this app cannot say.",
+    guessCrashInClusterUnread:
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster. The Services of this namespace could not be read, so what answers to it is probably worth checking by hand — this app cannot say.",
+    guessCrashLoopback:
+      "Most likely: {host}:{port} refused the connection, and that address is this pod itself — usually a sidecar that is not up, or one that never listens on that port. No container in this pod declares it.",
+    guessCrashUnreachableOutside:
+      "Most likely: {host}:{port} could not be reached, and the line does not say whether anything answered — usually a route or a name that resolves to nowhere from this cluster. The app sees the road, not the far end.",
+    guessCrashInClusterUnknown:
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster that no Service in this namespace answers to. Probably a wrong address or a Service in another namespace.",
+    guessCrashTimeoutOutside:
+      "Most likely: {host} is outside the cluster and the packets are dropped on the way, usually by an egress policy, a firewall or an allow-list without this cluster's address. The app can only see the road, not what is at the end of it.",
+    guessCrashRefusedOutside:
+      "Most likely: {host}:{port} answered and said no. Something outside the cluster refused the connection, usually the service itself or a proxy in front of it; a firewall would have timed out.",
+    guessOom:
+      "Most likely: {container} is killed for using more memory than its limit. It probably needs a higher limit, or it has a leak.",
+    guessOomWithLimit:
+      "Most likely: {container} is killed for using more memory than its limit. This pod's limits add up to {limit}; it probably needs a higher one, or it has a leak.",
+    guessImagePull:
+      "Most likely: the image {image} cannot be pulled, usually a wrong tag, a private registry without a pull secret, or a registry that is rate-limiting.",
+    guessFailedMount:
+      "Most likely: a volume{volume} cannot be mounted, {attempts} so far, usually a Secret or ConfigMap that does not exist yet or a PersistentVolumeClaim that is not bound.",
+    guessPendingSame:
+      "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
+    guessPendingVaried:
+      "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    guessUnknownUnread:
+      "The pod's events could not be read, so what is probably wrong cannot be said from here — the container states below are all this app could look at.",
+    guessProbeUnnamed:
+      "Most likely: a probe fails and the kubelet acts on it, {times} so far — the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
+    guessProbe:
+      "Most likely: the {probe} probe fails and the kubelet acts on it, {times} so far. The app probably starts slower than the probe allows, or listens on another port or path.",
+    factLastLineSaid: "The last line before the exit said: {line}",
+    factExited: "{container} exited with code {code}, {restarts} so far.",
+    factRestarts: "{container} restarted {times}.",
+    countRestarts: { one: "{n} restart", other: "{n} restarts" },
+    countAttempts: { one: "{n} attempt", other: "{n} attempts" },
+    countTimes: { one: "{n} time", other: "{n} times" },
+    factKubeletSaid: "The kubelet said: {message}",
+    factSchedulerSaid: "The scheduler said: {message}",
+    checkLastLines: "Read the last lines of {container} before the exit",
+    checkLastLinesUnnamed:
+      "Read the last lines before the exit — the event does not say which container",
+    stateWaiting: "waiting",
+    stateWaitingReason: "{reason}",
+    stateExited: "exited {code}",
+    stateRunning: "running",
+    stateRunningNotReady: "running, not ready",
+    checkSidecarLines: "Read the last lines of {sidecar}",
+    checkService:
+      "Check Service {service}: its endpoints and what stands behind them",
+    checkConfig:
+      "Look at {kind} {name}, if the address is wrong rather than down",
+    checkLimits: "Compare the memory limit with what the container uses",
+    checkNode: "See node {node}: memory pressure and what else runs there",
+    checkImageRef:
+      "Check the image reference {image}: tag, registry, pull secret",
+    checkMountedSecret:
+      "Secret {name}: one the pod mounts — the pull secret is a different field, which this app does not read",
+    checkPullSecret: "Secret {name}: a pull secret the pod mounts",
+    checkVolumeRef: "{kind} {name}: does it exist, is it bound",
+    checkRequests: "Compare the requests with what the nodes have free",
+    checkNodes: "Look at the nodes: taints, capacity, what is already placed",
+    checkProbe:
+      "Read the probe: port, path, initial delay, against what the container listens on",
+    notReadService: "the Services of {namespace} ({reason})",
+    notReadEndpoints: "the endpoints of Service {service} ({reason})",
+    notReadLogs: "the last lines of {container} ({reason})",
+    notReadEvents: "the events of this pod ({reason})",
+    notReadOtherNamespace:
+      "the Services of {namespace}, where that address lives — this app only listed this pod's own namespace",
+    notReadPolicies: "NetworkPolicies: this app has no reader for them yet",
+  },
+  files: {
+    noContainers: "This pod declares no containers.",
+    viaDebug:
+      "Viewing through debug container {debug}, at {root} of container {container}. Mode and owner are as the debug container sees them; a file the app process cannot read may still show here. The debug container stays on the pod.",
+    stopVia: "Read the container directly again",
+    restartedSince:
+      "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
+    readNewContainer: "Read the new container",
+    filterNames: {
+      one: "filter {n} name…",
+      other: "filter {n} names…",
+    },
+    notRunning:
+      "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
+    listingOf: "Files in {path}",
+    mode: "Mode",
+    size: "Size",
+    modified: "Modified",
+    stoppedBeforeAnything:
+      "You stopped this listing before anything arrived, so what is in here is unknown.",
+    cappedAt: {
+      one: "· stopped at {n} row, so this is not the whole directory",
+      other: "· stopped at {n} rows, so this is not the whole directory",
+    },
+    unreadableLines: {
+      one: "· {n} line could not be read, so a row is missing",
+      other: "· {n} lines could not be read, so rows are missing",
+    },
+    cannotSwitchViaDebug:
+      "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
+    emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    nothingReadable: {
+      one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
+      other:
+        "The tool printed {n} lines and none of them could be read, so what is in here is unknown.",
+    },
+    keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
+    readingSoFar: {
+      one: "reading · {n} entry so far · {seconds} s",
+      other: "reading · {n} entries so far · {seconds} s",
+    },
+    readingSoFarUntimed: {
+      one: "reading · {n} entry so far",
+      other: "reading · {n} entries so far",
+    },
+    readVia: {
+      one: "read via {how} · {n} entry · {seconds} s",
+      other: "read via {how} · {n} entries · {seconds} s",
+    },
+    stoppedUntimed: {
+      one: "stopped · {n} entry arrived, not the whole directory",
+      other: "stopped · {n} entries arrived, not the whole directory",
+    },
+    stoppedAfter: {
+      one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
+      other:
+        "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    },
+    gnuFind: "find (GNU)",
+    busyboxStat: "sh + stat (busybox)",
+    fromMount: "from {name}",
+    noToolsTitle: "The image has nothing to list files with",
+    noToolsBody:
+      "{tried} were each executed directly in container {container} and none exists. The image is {image}; the files are there, the tools to read them are not.",
+    openViaDebug: "Open through a debug container",
+    readMountsInstead: "Read the pod's mounts instead",
+    debugExplained:
+      "A debug container adds an ephemeral container to this pod sharing its process namespace and reads files at /proc/1/root. It is a change to the pod, it stays until the pod is replaced, and the listing will say so.",
+    refused: "The cluster refused to exec into this pod",
+    notRunningNow:
+      "Container {container} is not running, so there is nothing to exec into",
+    listFailed: "The listing did not finish: {code}",
+    unopenable:
+      "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
+
+    mountsOnlyIntro:
+      "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
+    noMounts: "Nothing is mounted into this container.",
+    binary: "binary",
+    text: "text",
+    lineCount: { one: "{n} line", other: "{n} lines" },
+    lineCountAtLeast: {
+      one: "{n} line read of more",
+      other: "{n} lines read of more",
+    },
+    mountedFrom: "mounted from {kind} {name}",
+    mountedFromSeveral: {
+      one: "mounted from volume {name}, which projects {n} source",
+      other:
+        "mounted from volume {name}, which projects {n} sources — the pod does not say which one this file came from",
+    },
+    pathCopied: "Path copied",
+    copyPath: "Copy path",
+    tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
+    noHeadInImage: "No head in this image to read the file with.",
+    readFailed: "Could not read the file (exit {code}):",
+    noPreviewBinary:
+      "No preview for a binary file. Download it to look at it elsewhere.",
+    nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
+    previewTruncated:
+      "The preview stops at {cap}; the file goes on. Download it for the rest.",
+    previewRepaired:
+      "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
+    downloaded: "Downloaded {name}",
+    downloadFailed: "Could not download {name}",
+    noCatInImage: "No cat in this image to copy the file with.",
+  },
+  operators: {
+    cnpgPageDescription:
+      "First the operator itself, then every Cluster in CloudNativePG's own words, the one that needs you first. Backups come from the Backup objects, because the status fields are deprecated and empty with plugins.",
+    cnpgOperatorExplained:
+      "CloudNativePG runs one Deployment, cnpg-controller-manager, that reconciles every Cluster in every namespace. Its version is read off that image; its CRDs are what detection found.",
+    couldNotReadClusters: "Could not read the Cluster objects",
+    clustersTab: "Clusters",
+    backupsTab: "Backups",
+    poolersTab: "Poolers",
+    operatorTab: "Operator",
+    clustersNeedAttention: {
+      one: "{n} cluster needs attention",
+      other: "{n} clusters need attention",
+    },
+    noClusters:
+      "No Cluster objects in any namespace. The operator is here; nothing has asked it for a database yet.",
+    controllerFact: "Controller",
+    controllerNotFound:
+      "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
+    controllerUnknown:
+      "the Deployments could not be read, so whether the operator's controller is running is unknown — not that it is absent",
+    inNamespace: "in {namespace}",
+    versionUnknown: "unknown: no controller image to read it from",
+    fromImage: "from the Deployment image",
+    canActFact: "Can act",
+    canPatchClusters: "patch clusters",
+    canCreateBackups: "create backups",
+    allowed: "yes",
+    refused: "refused",
+    couldNotTell: "could not tell",
+    checkedAgo: "checked for you, {ago}",
+    phaseUnknown: "phase not written",
+    primaryFact: "Primary",
+    readyFact: "Ready",
+    readyOfDeclared: {
+      one: "{ready} of {n} instance",
+      other: "{ready} of {n} instances",
+    },
+    // Scylla counts members, not instances. One string for both vendors made
+    // a ScyllaCluster report "instances", which is not the operator's word.
+    readyMembersOfDeclared: {
+      one: "{ready} of {n} member",
+      other: "{ready} of {n} members",
+    },
+    readyConditionFalse: "condition Ready False",
+    archivingFact: "WAL archiving",
+    archivingNotDeclared: "not declared",
+    backupsFact: "Backups",
+    backupsUnknown:
+      "unknown: the Backup objects could not be read, so nothing is said about them",
+    backupsNone: "none: no Backup objects for this cluster",
+    backupsLastCompleted: {
+      one: "last completed {ago} · {n} Backup object",
+      other: "last completed {ago} · {n} Backup objects",
+    },
+    backupsNoneCompleted: {
+      one: "{n} Backup object, none completed",
+      other: "{n} Backup objects, none completed",
+    },
+    schedulesUnknown: "schedules could not be read",
+    suspendedWord: "suspended",
+    specSeenFact: "Spec seen by the operator",
+    specSeenUnknownCnpg: "cannot tell: CNPG writes no observedGeneration",
+    fencedWord: "fenced",
+    findingNotReady: "The cluster says it is not Ready",
+    findingArchivingFailing: "WAL archiving has been failing for {ago}",
+    findingFailedInstances: "Instances the operator lists as failed: {names}",
+    findingSwitchover: "Switchover in progress: {from} → {to}",
+    findingFailover: "Failing over from {from}",
+    failoverExplained:
+      "This is not a switchover: the primary went away and the operator is promoting a replica without being asked. Writes are refused until it finishes.",
+    findingPhaseUnwritten:
+      "The operator has written no status for this Cluster",
+    phaseUnwrittenExplained:
+      "Nothing here has been reconciled — the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
+    findingFenced: "Fenced by hand: {names}",
+    backupNotCreated:
+      "the cluster did not create the Backup, and said nothing about why",
+    fencedAllOne:
+      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed — one cannot be taken out of it without unfencing the rest",
+    fencingUnknown:
+      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown — and fencing is written back as a whole list, so acting would overwrite it",
+    fencedUnknownWord: "fencing unreadable",
+    findingFencedUnknown:
+      "The annotation naming the fenced instances could not be read, so whether any instance is stopped is unknown.",
+    fencedExplained:
+      "Postgres is stopped in a fenced instance while its pod stays; the annotation cnpg.io/fencedInstances holds it. Unfence when the reason is gone.",
+    findingHibernated: "Hibernated",
+    hibernatedExplained:
+      "The pods are removed and the primary's PVC kept; the annotation cnpg.io/hibernation is on. Wake up puts the pods back from that PVC.",
+    actionRestart: "Restart",
+    actionRestartExplained:
+      "Rolling, replicas first and the primary last, by stamping kubectl.kubernetes.io/restartedAt on the Cluster. Each instance restarts after the previous one is back.",
+    actionReload: "Reload configuration",
+    actionReloadExplained:
+      "Re-reads postgresql.conf and pg_hba without restarting, by stamping cnpg.io/reloadedAt on the Cluster.",
+    actionBackup: "Backup now",
+    actionBackupExplained:
+      "Creates a Backup object for this cluster; the method is whatever the cluster's backup configuration declares. The operator runs it and writes the outcome on that object.",
+    actionFence: "Fence",
+    actionFenceExplained:
+      "Stops Postgres in this instance and keeps its pod, by adding it to cnpg.io/fencedInstances. Fencing the primary takes the cluster's write path with it.",
+    actionUnfence: "Unfence",
+    actionUnfenceExplained:
+      "Removes this instance from cnpg.io/fencedInstances; Postgres starts in it again.",
+    actionHibernate: "Hibernate",
+    actionHibernateExplained:
+      "Removes every pod and keeps the primary's PVC, by setting cnpg.io/hibernation to on. Nothing answers on this cluster until it is woken.",
+    actionWake: "Wake up",
+    actionWakeExplained:
+      "Sets cnpg.io/hibernation to off; the operator recreates the pods from the kept PVC.",
+    refusedPatch:
+      "the cluster refuses patch on clusters.postgresql.cnpg.io for you",
+    refusedCreateBackup:
+      "the cluster refuses create on backups.postgresql.cnpg.io for you",
+    notDuringSwitchover: "not during a switchover",
+    confirmTitle: "{action} {target}?",
+    actionDone: "{action}: done on {cluster}",
+    actionFailed: "{action} on {cluster} did not go through",
+    noBackupObjects: "No Backup objects in any namespace.",
+    allBackupObjects: "Every Backup object, as a list",
+    poolersUnknown: "The Pooler objects could not be read",
+    noPoolers: "No Pooler objects in any namespace.",
+    operatorLogs: "Logs of the controller",
+    scyllaPageDescription:
+      "First the operator: controller, ScyllaDB Manager, the NodeConfigs that set up local disks. Then every ScyllaCluster as racks and members with Scylla's three conditions, an upgrade in progress, and the Manager tasks it declares.",
+    scyllaOperatorExplained:
+      "The Scylla operator runs one Deployment, scylla-operator, and reconciles every ScyllaCluster. Repairs and backups run in ScyllaDB Manager, a separate Deployment; without it they are declared and never run.",
+    couldNotReadScyllaClusters: "Could not read the ScyllaCluster objects",
+    nodeConfigsTab: "Node configs",
+    noScyllaClusters:
+      "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
+    deploymentsUnreadable:
+      "the Deployments could not be read, so whether the operator is running is unknown — not that it is absent",
+    scyllaOperatorNotFound:
+      "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
+    managerPresent: "repairs and backups can run",
+    managerAbsent:
+      "not installed: spec.repairs and spec.backups are ignored, and status.managerId stays empty",
+    canPatchScyllaClusters: "patch scyllaclusters",
+    noStatusYet: "no status yet",
+    upgradingWord: "upgrading",
+    conditionsNotWritten: "conditions not written",
+    conditionsUnsure: "operator unsure",
+    rolledOut: "rolled out",
+    conditionsFact: "Conditions",
+    membersFact: "Members",
+    notWritten: "not written by the operator",
+    specSeenUnknownScylla: "cannot tell: no observedGeneration on this read",
+    specSeenYes: "yes · observedGeneration {n} = generation {n}",
+    specSeenBehind:
+      "behind: observedGeneration {observed}, generation {generation}",
+    repairFact: "Repair",
+    backupFact: "Backup",
+    noneDeclared: "none declared",
+    notDeclared: "not declared",
+    taskInManager:
+      "runs in ScyllaDB Manager; outcomes live there, not on this object",
+    taskNoManager: "declared, but no Manager to run it",
+    rackUpdated: "{updated} of {members} on {version}",
+    staleWord: "stale: not reconciled since the spec changed",
+    findingDegraded: "Degraded, in the operator's words",
+    findingUnavailable: "Not Available",
+    findingProgressing: "Progressing",
+    findingUpgrading: "Rolling upgrade in progress",
+    findingUpgradingFromTo: "Rolling upgrade in progress: {from} → {to}",
+    upgradeAtRack: "Currently on rack {rack}, node {node}.",
+    findingStale: "Racks the operator has not looked at since the spec changed",
+    findingMembersMissing: "Members not ready",
+    findingTasksWithoutManager:
+      "Repairs or backups are declared, but there is no ScyllaDB Manager to run them",
+    findingConditionsUnwritten:
+      "The operator has written no conditions for this cluster",
+    findingConditionsUnknown:
+      "The operator wrote Unknown for a condition, so it does not know either",
+    membersNotWritten: {
+      one: "{n} declared, ready not written",
+      other: "{n} declared, ready not written",
+    },
+    findingNoStatus: "The operator has written nothing on this object yet",
+    actionRollingRestart: "Rolling restart",
+    actionRollingRestartExplained:
+      "Sets spec.forceRedeploymentReason to a new value. The operator restarts the members one at a time, highest ordinal first, rack by rack, each waiting for the previous to be ready.",
+    rollingRestartConfirm:
+      "Sets spec.forceRedeploymentReason on {cluster}. The operator then restarts the {members} members one at a time, highest ordinal first, rack by rack; each waits for the previous to be ready. Nothing here can be cancelled once a member is down.",
+    actionScaleRack: "Scale",
+    actionScaleRackExplained:
+      "Sets racks[].members for this rack. Scaling down decommissions the highest ordinals first, which streams their data away and takes as long as the data is big.",
+    actionUpgrade: "Upgrade",
+    actionUpgradeExplained:
+      "Sets spec.version. The operator upgrades rack by rack, member by member, taking system and data snapshots first; the progress lands in status.upgrade.",
+    membersInput: "Members in {rack}",
+    versionInput: "ScyllaDB version, e.g. 2025.2.1",
+    refusedPatchScylla:
+      "the cluster refuses patch on scyllaclusters.scylla.scylladb.com for you",
+    notDuringUpgrade: "not during an upgrade",
+    nodeConfigsUnknown: "The NodeConfig objects could not be read",
+    noNodeConfigs:
+      "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
+    nodeStatusesNotWritten:
+      "the operator has written no node statuses, so how many nodes it tuned is unknown",
+    nodesSetUp: "{tuned} of {nodes} nodes set up",
+  },
   tell: {
     askRollout: "Tell me when the rollout finishes",
     askPod: "Tell me when it is ready, or falls over",
@@ -1445,6 +1967,12 @@ export const en = {
     saysForwardDied: "Forward to {name} died",
     saysGone: "{name} is gone",
     saysLostSight: "Lost sight of {name}",
+    saysTimedOut: "{name}: no answer within two minutes",
+    afterRestart: "after restart",
+    afterScale: "after scale to {n}",
+    afterApply: "after apply",
+    afterImage: "after image change",
+    withinDeadline: "an answer within two minutes, or none is the answer",
     askRolloutShort: "rollout",
     askPodShort: "ready or falls over",
     askJobShort: "how it ends",
@@ -1476,9 +2004,65 @@ export const en = {
   // What each extension gets the reader, in the words of the thing they get.
   // Here rather than in the vendor module because a vendor module is a plain
   // table with no hook to call: it names the key, and the row translates it.
+  slow: {
+    panel: "Why slow",
+    title: "Why slow",
+    hint: "What the app measured in the last minute, without the recorder.",
+    stalls: {
+      one: "{n} stall",
+      other: "{n} stalls",
+    },
+    stallsLabel: "Stalls",
+    stallsValue: {
+      one: "{n} stall, the longest {longest} ms",
+      other: "{n} stalls, the longest {longest} ms",
+    },
+    sourceLongTask:
+      "A stall is the main thread blocked for 50 ms or more, from the webview's own long-task observer.",
+    sourceFrameGap:
+      "A stall is a frame that came 50 ms or more late; this webview has no long-task observer, so late frames stand in.",
+    listsLabel: "Big lists on screen",
+    listRows: {
+      one: "{n} row of {label}",
+      other: "{n} rows of {label}",
+    },
+    // For a table that wears no label: the kind's plural goes out
+    // untranslated, and there is no word here to put in its place.
+    listRowsPlain: {
+      one: "{n} row",
+      other: "{n} rows",
+    },
+    // Not "none": these two facts are fed by the table and by the command
+    // wrapper, and nothing else. A log buffer or a watch batch can block
+    // the thread without reaching either, so an empty answer here is the
+    // app saying it did not look, not that there was nothing to see.
+    noBigList: "Nothing over a thousand rows on a table this counts.",
+    listsWhy:
+      "Every watch batch is filtered and sorted over the whole list, and a search re-reads every row.",
+    answerLabel: "Largest answer",
+    answerRows: {
+      one: "{n} row from {command}",
+      other: "{n} rows from {command}",
+    },
+    noBigAnswer: "Nothing over a thousand rows from a command this counts.",
+    answerWhy:
+      "A big answer is parsed on the main thread before anything can be drawn.",
+    whatToDo:
+      "Narrow the namespace scope or the search: the list and its answers shrink with them. For timings per command and per render, turn on the recorder.",
+    notCounted:
+      "Log lines and watch batches are not counted above, so a stall on the Logs tab or during a resync will leave both rows empty.",
+    openRecorder: "Open Settings › Diagnostics",
+  },
+
   vendor: {
+    ciliumGives:
+      "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
+    scyllaGives:
+      "every ScyllaDB cluster as racks and members with Scylla's three conditions, upgrade progress and Manager tasks, with the operator's real knobs",
+    cloudnativepgGives:
+      "every Postgres cluster in CloudNativePG's own words: phase, primary, instances, WAL archiving and backups from the Backup objects, with the operator's real knobs",
     awsGives:
       "the real ALB target group behind a Service, and what the controller could not apply",
     azureGives:
@@ -1507,6 +2091,53 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyJob: "Ran within {span}: {created}, {completed} completed.",
+    storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
+    storyCrash:
+      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}: {detail}",
+    storyStartFailed:
+      "The container could not be started, {times} within {span}: {detail}",
+    storyPull: "Cannot pull the image, {times} within {span}: {detail}",
+    storySchedulingSame:
+      "Cannot be scheduled, the same answer {times} within {span}: {detail}",
+    storySchedulingVaried:
+      "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
+    storyProbe: "Probes failed {times} within {span}: {detail}",
+    storyPressure: "Under pressure, {times} within {span}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {times} within {span}: {detail}",
+    storyJobTrouble: "Job trouble, {times} within {span}: {detail}",
+    storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
+    storyNode: "Node trouble, {times} within {span}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
+    storyTrouble: "{reason} ×{n} within {span}: {detail}",
+    storyStillHappening: "still happening",
+    storySettled: "settled",
+    storyStateUnknown: "cannot say",
+    podStatusNotAsked: {
+      one: "1 more pod's exits are not on this clock — it was not asked.",
+      other:
+        "{n} more pods' exits are not on this clock — they were not asked.",
+    },
+    timesSeen: { one: "once", other: "{n} times" },
+    jobsCreated: { one: "1 job created", other: "{n} jobs created" },
+    storyDone: "done",
+    podsOf: "pods of {name}",
+    groupedByName:
+      "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
+    fromPodStatus: "from the pod status, not an event",
+    lastSeen: "last {ago}",
+    podStatusUnread: {
+      one: "The status of {n} pod could not be read; its exits are not on this clock.",
+      other:
+        "The status of {n} pods could not be read; their exits are not on this clock.",
+    },
+    containerExited: "{container} exited with code {code}",
+    lastSeenStrip: "When each event was last seen across the window.",
+    storiesExplained:
+      "A story is one object's events in this window, ranked with warnings first and summed up from counts and times. Nothing is inferred beyond the events themselves.",
+    membersFolded: { one: "{n} object", other: "{n} objects" },
     twoWord: "Two",
     threeWord: "Three",
     warnUndoThis: "{count} things will undo this.",
@@ -1811,6 +2442,10 @@ export const en = {
       one: "{n} prohibited target",
       other: "{n} prohibited targets",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      other: "{n} AzureIdentities",
+    },
     azureNoIdentityNamed: {
       one: "no AzureIdentity named {name}",
       other: "no AzureIdentity named {name}",
@@ -1868,6 +2503,18 @@ export const en = {
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
+    factUpgrading: {
+      one: "{n} cluster upgrading",
+      other: "{n} clusters upgrading",
+    },
+    factClustersInTrouble: {
+      one: "{n} cluster in trouble",
+      other: "{n} clusters in trouble",
+    },
+    factArchivingFailing: {
+      one: "WAL archiving failing on {n} cluster",
+      other: "WAL archiving failing on {n} clusters",
+    },
     factShowIt: "Show it",
     factNoIngressClass: "claims no IngressClass",
     factNotReady: "not ready",
@@ -1923,6 +2570,22 @@ export const en = {
       few: "{n} not ready",
       many: "{n} not ready",
       other: "{n} not ready",
+    },
+    factCiliumPolicies: {
+      one: "{n} network policy",
+      other: "{n} network policies",
+    },
+    factCiliumClusterwide: {
+      one: "{n} cluster-wide",
+      other: "{n} cluster-wide",
+    },
+    factCiliumRejected: {
+      one: "{n} policy Cilium rejected — it enforces nothing",
+      other: "{n} policies Cilium rejected — they enforce nothing",
+    },
+    factCiliumUnanswered: {
+      one: "{n} policy the agent has not answered about",
+      other: "{n} policies the agent has not answered about",
     },
     drainingCount: {
       one: "{n} draining",
@@ -2276,13 +2939,58 @@ export const en = {
     nginxRawSnippet:
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
+    // What a rollout last looked like, carried by a verdict. `revision` is
+    // the Deployment's own annotation and goes out as the cluster wrote it.
+    rolloutSeen: "{ready} of {desired} ready",
+    rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
+    ciliumSelectsAll: "every endpoint in scope",
+    ciliumCovered: "covered",
+    ciliumUnrestricted: "nothing selects it",
+    ciliumOnlyRejected: "only rejected policies",
+    ciliumCannotSay: "cannot say",
+    ciliumNothingSelects:
+      "No policy in this cluster selects this endpoint. Whatever it may reach, it may reach.",
+    ciliumEnforcesNothing: "rejected — enforces nothing",
+    ciliumUnreadablePolicies: {
+      one: "{n} more policy names endpoints somewhere this window cannot read",
+      other:
+        "{n} more policies name endpoints somewhere this window cannot read",
+    },
+    ciliumFindingRejected: {
+      one: "{n} policy the operator rejected — it enforces nothing",
+      other: "{n} policies the operator rejected — they enforce nothing",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} endpoint is selected only by policies that were rejected — it reads as covered and is not",
+      other:
+        "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} endpoint no policy selects",
+      other: "{n} endpoints no policy selects",
+    },
+    ciliumNotOnTheWire: "written where this window cannot read it",
+    ciliumAndExpressions: {
+      one: "and {n} expression",
+      other: "and {n} expressions",
+    },
+    ciliumSelectsByExpression: {
+      one: "by {n} expression",
+      other: "by {n} expressions",
+    },
+    ciliumIngressRules: { one: "{n} in", other: "{n} in" },
+    ciliumEgressRules: { one: "{n} out", other: "{n} out" },
+    ciliumDenies: { one: "{n} deny", other: "{n} deny" },
+    ciliumLeavesCluster: "outside the cluster",
   },
   cluster: {
     integrationsHint:
       "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
     configuredGroup: "Configured — an address per cluster",
     detectedGroup: "Detected in this cluster",
+    operatorsGroup:
+      "Operators — a controller in the cluster running a database for you",
     refusalNotNow: "Refused for now",
     refusalNothingWouldReplaceIt: "Nothing would replace it",
     refusalHoldsLocalData: "Holds local data",
@@ -2338,6 +3046,9 @@ export const en = {
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at it live.",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
@@ -2367,7 +3078,29 @@ export const en = {
     credentialsRefusedAgo:
       "The cluster refused this window's credentials {since} ago. ",
     credentialsExpiredBody:
-      "Nothing here renews them on its own, so every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+      "Every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+    renewalWasScheduled:
+      "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
+    renewalNoDeadline:
+      "The credential plugin named no expiry, so there was no moment to renew them before — nothing here could act early. ",
+    renewalPassed:
+      "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
+    renewalFailed:
+      "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
+    renewalRanOut:
+      "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalLastChance:
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire — some plugins mint nothing until the old ones are actually gone. ",
+    renewalNeedsYouBody:
+      "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
+    renewalDelegated:
+      "kubectl holds the credentials for this session and renews them itself, so this refusal came from its side. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "sign-in needed",
+    renewalNeedsYouHint:
+      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet — the current credentials still work, and you will be asked to sign in when they expire.",
+    renewalRanOutHint:
+      "The credential plugin kept handing back the credentials already in use, so there was nothing newer to put in place before they expire. Nothing is wrong yet, and you will be asked to sign in when they do.",
     stillRefusedHint:
       "Still refused? The credential plugin this context uses may need a sign-in of its own first — for GKE that is",
     healthy: "Healthy",
@@ -2436,6 +3169,13 @@ export const en = {
   settings: {
     installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
@@ -2627,6 +3367,24 @@ export const en = {
     perfRetryStop: "Try stopping again",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
+    sectionHandoff: "Search and hand-off",
+    sectionHandoffHint: "Where a search goes, and what a hand-off includes.",
+    searchEngine: "Search engine",
+    searchEngineHint:
+      "The query is the reason and what the app recognised in the failure — never a raw log line — and utm_source=rubick.tech so the site can tell where people come from.",
+    searchEngineCustom: "Custom, any URL with {q}",
+    searchCustomUrl: "Custom search URL",
+    stripNames: "Strip names from the search query",
+    stripNamesHint:
+      "Pod, namespace, image and host names are replaced with … before the query leaves the app. Turn off if your names are not sensitive.",
+    handoffLogLines: "«Copy for agent» includes log lines",
+    handoffLogLinesHint:
+      "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too — passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
+    showMostLikely: "Show the «Most likely» panel",
+    showMostLikelyHint:
+      "Only on pods with a problem the app can read a chain for. Off hides the panel, not the facts.",
+    searchHandoffWords:
+      "google duckduckgo search agent copy hand-off most likely",
     nothingHereMatches: "nothing here matches “{query}”",
     searchSettings: "Search settings",
     clearSearch: "Clear search",
@@ -2664,6 +3422,8 @@ export const en = {
     checkForUpdates: "Check for updates",
     autoUpdates: "Automatic updates",
     autoUpdatesHint: "Check on startup and every 30 minutes.",
+    managedUpdates:
+      "This build updates through the package manager it was installed with.",
     diagnosticsCopied: "Diagnostics copied",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
@@ -2715,6 +3475,9 @@ export const en = {
     pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
+    logsNowhere:
+      "No log file this run — nothing on disk to send. This window could not create the folder it writes to.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",
@@ -2805,6 +3568,43 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "says nothing",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    everyPodThere: "every pod",
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
+    exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
+    podsUnread:
+      "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
+    noPodsToStream: "No pods to read from yet.",
+    everyLaneHidden: "Every pod is hidden.",
+    noStoriesInWindow:
+      "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
+    noStoriesInWindowCapped:
+      "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    eventsRefused: "Could not read the events in {scope}:",
+    noStoriesMatch: "No story in {scope} matches “{query}”.",
     noEventsMatchInWindow:
       "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
     kindMayBeGone:
@@ -3499,6 +4299,9 @@ export const en = {
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
+    diffComputing: "Comparing…",
+    diffUnavailable:
+      "Could not compare these two. What Apply would do is unchanged; the comparison is what failed.",
     noChangesDetected: "No changes detected",
     addRepositoryThenSearch: "Add a repository, then search it for charts.",
     manifestsAreAt: "The manifests are at",
@@ -3654,6 +4457,8 @@ export const en = {
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+    ciliumPageDescription:
+      "Every endpoint with the policies that select it, and the ones nothing selects at all",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
@@ -3923,7 +4728,15 @@ export const en = {
       "Could not read what this Service publishes:",
     noAnswer: "no answer",
     registeredByHand: "registered by hand",
+    stillReading: "Still reading {label} in {scope}",
+    narrowerIsFaster:
+      "A large cluster answers a narrower question faster: one namespace is one list instead of several.",
+    readDeadline:
+      "Reading {label} in {scope} did not finish within {seconds} s.",
+    readDeadlineHint:
+      "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
+    readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
@@ -3934,6 +4747,8 @@ export const en = {
     addResourcesFirst: "Add resources or paste a manifest first.",
     dragResourcesHere: "Drag resources here, or click one in the palette.",
     selectResourceToEdit: "Select a resource to edit its configuration.",
+    logNotKept:
+      "The node no longer has that log of {container} — the runtime dropped it. Nothing here can fetch it back: the same node would answer again.",
     noPreviousRunOf: "No previous run of {container} — it has not restarted.",
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
@@ -3944,8 +4759,28 @@ export const en = {
     intakeStillSet:
       "Intake is still set — reconnecting resumes from now, and what the stream missed is not fetched back.",
     nothingToReconnectTo: "Nothing left to reconnect to",
+    // Beside the status on every page and peek: what the object's own Helm
+    // annotation says, which is a claim and not a read.
+    installedByRelease: "Installed by the Helm release {name}",
+    // Both values are the cluster's own words; only "is" was ours.
+    conditionIs: "{type} is {status}",
+    releaseNotRead: "could not be read",
+    gwRowControllerConfigured: "answered by its controller's own settings",
+    gwControllerConfiguredSay:
+      "No backendRefs — this route's own controller answers",
+    gwControllerConfiguredTitle: "Configuration this app does not read",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
+    // Said instead of the three above whenever an interval is frozen. The
+    // eviction steps over the frozen lines and takes what is around them,
+    // so the loss is a hole beside the kept block and not a head the log
+    // begins after.
+    bufferHoldsKeptAndNewest:
+      "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
+    linesDroppedAroundKeptAxis:
+      "Lines have been dropped around the frozen interval — the log is not continuous from here.",
+    linesDroppedAroundKeptSummary:
+      "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
     nothingHasMatched: "Nothing has matched",
@@ -3968,10 +4803,19 @@ export const en = {
     itFinished: "It finished",
     soLogIsComplete: ", so this log is complete and will not grow.",
     noEarlierRunOf: "No earlier run of",
+    chipLogNotKept: "log not kept",
+    chipNoEarlierRun: "no earlier run",
+    chipEnded: "ended",
+    chipNotStarted: "not started",
+    chipLost: "lost",
     noneHasRestarted:
       "— none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
     noLineMatchesQuery: "No line matches the query.",
+    filteringLines: {
+      one: "Filtering {count} line…",
+      other: "Filtering {count} lines…",
+    },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
     streamAttachedNothingWritten:
@@ -4343,7 +5187,76 @@ export const en = {
     gwProbeTimedOut:
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
+  shortcuts: {
+    title: "Keyboard",
+    lede: "Every key the app answers to. Unmodified keys stay quiet inside a field or a terminal.",
+    then: "then",
+    sectionGlobal: "Everywhere",
+    filterClusters: "Find a cluster by name",
+    downloadFile: "Download the file you are looking at",
+    upADirectory: "Up a directory",
+    selectLogs: "Select the lines on screen",
+    connectCluster: "Connect to the cluster under the caret",
+    scopeAnother: "Add another namespace to the scope",
+    sectionNavigate: "Go to",
+    sectionPage: "On an object's page",
+    sectionTabs: "Tabs",
+    sectionTable: "In a list",
+    sectionLogs: "In the log viewer",
+    sectionBuilder: "In the infrastructure builder",
+    palette: "Search and commands",
+    settings: "Settings",
+    copyLink: "Copy a link to this place",
+    help: "This list",
+    escape: "Close what is open",
+    goOverview: "Overview",
+    goPods: "Pods",
+    goDeployments: "Deployments",
+    goServices: "Services",
+    goIngresses: "Ingresses",
+    goNodes: "Nodes",
+    goEvents: "Events",
+    goJobs: "Jobs",
+    goConfigMaps: "ConfigMaps",
+    tabOverview: "Overview tab",
+    tabLogs: "Logs tab",
+    tabYaml: "YAML tab",
+    tabEvents: "Events tab",
+    nextTab: "Next tab",
+    previousTab: "Previous tab",
+    newTab: "New tab",
+    closeTab: "Close tab",
+    nthTab: "Tab by number, 9 is the last",
+    rowMove: "Move between rows",
+    rowOpen: "Open the row",
+    soloContainer: "Only this container, by legend position",
+    allContainers: "Every container",
+    deleteSelection: "Delete the selection",
+    selectAll: "Select everything",
+    invertSelection: "Invert the selection",
+  },
   count: {
+    secondsShort: "{n} s",
+    pods: { one: "{n} pod", other: "{n} pods" },
+    notReadList: "Not read: {list}",
+    podsStreaming: {
+      one: "{streaming} of {n} pod streaming",
+      other: "{streaming} of {n} pods streaming",
+    },
+    podsPaused: {
+      one: "{n} pod, paused",
+      other: "{n} pods, paused",
+    },
+    podsUnreadable: {
+      one: "{n} pod could not be read",
+      other: "{n} pods could not be read",
+    },
+    podsGoneKept: {
+      one: "{n} gone, lines kept",
+      other: "{n} gone, lines kept",
+    },
+    stories: { one: "{n} story", other: "{n} stories" },
+    eventsSeen: { one: "{n} event", other: "{n} events" },
     namespacesHidden: {
       one: "{n} namespace hidden — no access",
       other: "{n} namespaces hidden — no access",
@@ -4615,6 +5528,10 @@ export const en = {
     arrivingBefore: "{rate}/s arriving before it was set",
     shown: "{n} shown",
     hiddenByFilter: "{n} hidden by filter and grouping",
+    frozenLines: {
+      one: "{count} frozen line",
+      other: "{count} frozen lines",
+    },
     spanInSlices: "{span} in {step} slices",
     densitySummary:
       "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
@@ -4679,6 +5596,25 @@ export const en = {
       other: "{vendor}'s own proxy — the {n} hosts it serves are on",
     },
     nOfTotal: "{n} of {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} tells this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever that says, and this app does not read it.",
+      other:
+        "{keys} tell this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever those say, and this app does not read them.",
+    },
+    // Tab and group marks, which were built by concatenation — no whole
+    // string for a scanner to find, which is how they stayed English.
+    podsFailing: {
+      one: "{n} of {total} failing · {name} is {status}",
+      other: "{n} of {total} failing · {name} is {status}",
+    },
+    someSpot: "{n} of {total} spot",
+    // A pool caption names its values until there are too many, then counts
+    // them. Both halves were English, and the node count was the
+    // `n === 1 ? "node" : "nodes"` shape this catalogue forbids by name.
+    machineTypes: { one: "{n} machine type", other: "{n} machine types" },
+    zonesCount: { one: "{n} zone", other: "{n} zones" },
+    nodesCount: { one: "{n} node", other: "{n} nodes" },
+    allSpot: "spot",
     nReady: "{n} ready",
     nNotReady: "{n} not ready",
     nPublished: "{n} published",
@@ -4757,6 +5693,10 @@ export const en = {
       one: "{count} older line has been dropped.",
       other: "{count} older lines have been dropped.",
     },
+    linesDroppedAroundKept: {
+      one: "{count} line has been dropped around the frozen interval.",
+      other: "{count} lines have been dropped around the frozen interval.",
+    },
     rowsStandFor: { one: "This row stands", other: "These {n} rows stand" },
     forLines: { one: "for {count} line.", other: "for {count} lines." },
     linesCopied: { one: "{count} line copied", other: "{count} lines copied" },
@@ -4778,6 +5718,12 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    // `n` is the total, not the number shown: "1 of 42 context" is what
+    // happens when the count that picks the form is the filtered one.
+    contextsMatching: {
+      one: "{shown} of {n} context",
+      other: "{shown} of {n} contexts",
+    },
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },

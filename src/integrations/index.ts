@@ -46,9 +46,12 @@ import {
 import { integrationPagePath, integrationSettingsPath } from "./paths";
 import { pageDecision } from "./page-state";
 import argocd from "./argocd";
+import cloudnativepg from "./cloudnativepg";
+import scylla from "./scylla";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
+import cilium from "./cilium";
 import flux, { helmReleasePath } from "./flux";
 import googleCloud, { gkeIngress } from "./google-cloud";
 import ingressNginx from "./ingress-nginx";
@@ -67,6 +70,7 @@ import type {
   Capabilities,
   ClusterProvider,
   Connect,
+  Gate,
   ConnectionDraft,
   CrdView,
   EdgeConfig,
@@ -150,6 +154,7 @@ export type {
   Delivery,
   DeliveryOwner,
   DeliveryQuery,
+  DeliveryRevision,
   DeliverySource,
   GitLink,
 } from "./gitops";
@@ -170,6 +175,9 @@ const VENDORS: Vendor[] = [
   argocd,
   flux,
   istio,
+  cilium,
+  cloudnativepg,
+  scylla,
   prometheus,
   loki,
   k3s,
@@ -783,6 +791,8 @@ export interface IntegrationPageEntry {
    * about the query string rather than about the path.
    */
   own: boolean;
+  /** Drawn under Operators rather than Integrations; see `Extension.operator`. */
+  operator: boolean;
   /**
    * Configured, and its connection is not up.
    *
@@ -899,9 +909,13 @@ export function useIntegrationPages(): {
   // cluster's own authorizer once and draw the row disabled where it is
   // refused — a screen that only errors is worse than one the reader was
   // told not to open. Only detected vendors that declare a `gate` are asked.
+  // `!= null`: `gate: null` is a page that works without its custom resources.
   const gated = here.filter(
-    (vendor): vendor is (typeof here)[number] & { page: VendorPage } =>
-      vendor.page?.gate !== undefined
+    (
+      vendor
+    ): vendor is (typeof here)[number] & {
+      page: VendorPage & { gate: Gate };
+    } => vendor.page?.gate != null
   );
   // A gated vendor's page reads its CRs by first resolving the CRD — a
   // cluster-scoped get on `customresourcedefinitions`. A token refused that
@@ -912,7 +926,7 @@ export function useIntegrationPages(): {
   // question. A mark, never a lock.
   const crdDenied = useCrdReadDenied();
   const gateIds = (vendor: (typeof gated)[number]): string[] => {
-    const crd = vendor.page.gate!.crd;
+    const crd = vendor.page.gate.crd;
     return typeof crd === "string" ? [crd] : [...crd];
   };
   const gateQueries = gated.flatMap((vendor) =>
@@ -921,7 +935,7 @@ export function useIntegrationPages(): {
       return {
         group: id.slice(dot + 1),
         resource: id.slice(0, dot),
-        namespaced: vendor.page.gate!.namespaced,
+        namespaced: vendor.page.gate.namespaced,
       };
     })
   );
@@ -983,6 +997,7 @@ export function useIntegrationPages(): {
       count: measured?.count ?? null,
       tone: measured?.tone ?? null,
       own: index !== -1,
+      operator: vendor.extension.operator === true,
       forbidden: forbidden.has(vendor.id),
     };
   });

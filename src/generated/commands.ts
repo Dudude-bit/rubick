@@ -3,6 +3,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccessAnswer,
+  AccessQuery,
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -20,6 +22,7 @@ import type {
   ContextBinding,
   ContextBindingInfo,
   ContextInfo,
+  ControllerRevisionInfo,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -39,6 +42,7 @@ import type {
   EndpointsInfo,
   EventFilters,
   EventInfo,
+  FileRead,
   FrontendLogEntry,
   GatewayApiDetection,
   GatewayClassInfo,
@@ -67,6 +71,7 @@ import type {
   ManifestResult,
   NamespaceAccess,
   NamespaceInfo,
+  NetworkPolicyInfo,
   NodeBudget,
   NodeFilters,
   NodeInfo,
@@ -89,6 +94,7 @@ import type {
   RegistryImageResult,
   RegistryImportEntry,
   RegistrySearchRequest,
+  Renewal,
   ReplicaSetInfo,
   ResolveProbe,
   ResourceConnections,
@@ -110,6 +116,7 @@ import type {
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
+  Via,
   YamlHistoryEntryDto,
 } from "./types";
 
@@ -238,6 +245,12 @@ export async function getTlsCertificates(
     namespace,
     secretNames,
   });
+}
+
+export async function checkAccess(
+  queries: AccessQuery[]
+): Promise<AccessAnswer[]> {
+  return invoke<AccessAnswer[]>("check_access", { queries });
 }
 
 export async function checkListAccess(
@@ -421,6 +434,10 @@ export async function saveUpdaterSettings(
   return invoke<void>("save_updater_settings", { settings });
 }
 
+export async function updaterCanInstall(): Promise<boolean> {
+  return invoke<boolean>("updater_can_install");
+}
+
 export async function getClusterPreferences(): Promise<ClusterPreferences> {
   return invoke<ClusterPreferences>("get_cluster_preferences");
 }
@@ -477,6 +494,34 @@ export async function getCustomResourceYaml(
   });
 }
 
+export async function patchCustomResource(
+  crdName: string,
+  name: string,
+  namespace: string | null,
+  patch: unknown
+): Promise<void> {
+  return invoke<void>("patch_custom_resource", {
+    crdName,
+    name,
+    namespace,
+    patch,
+  });
+}
+
+export async function patchCustomResourceJson(
+  crdName: string,
+  name: string,
+  namespace: string | null,
+  operations: unknown
+): Promise<void> {
+  return invoke<void>("patch_custom_resource_json", {
+    crdName,
+    name,
+    namespace,
+    operations,
+  });
+}
+
 export async function deleteCustomResource(
   crdName: string,
   name: string,
@@ -522,6 +567,13 @@ export async function scaleStatefulset(
   return invoke<void>("scale_statefulset", { name, replicas, namespace });
 }
 
+export async function restartStatefulset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_statefulset", { name, namespace });
+}
+
 export async function deleteStatefulset(
   name: string,
   namespace: string | null
@@ -540,6 +592,13 @@ export async function getDaemonset(
   namespace: string | null
 ): Promise<DaemonSetDetailInfo> {
   return invoke<DaemonSetDetailInfo>("get_daemonset", { name, namespace });
+}
+
+export async function restartDaemonset(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("restart_daemonset", { name, namespace });
 }
 
 export async function deleteDaemonset(
@@ -668,6 +727,18 @@ export async function getResourceConnections(
     name,
     namespace,
     gateway,
+  });
+}
+
+export async function getControllerRevisions(
+  kind: string,
+  name: string,
+  namespace: string | null
+): Promise<ControllerRevisionInfo[]> {
+  return invoke<ControllerRevisionInfo[]>("get_controller_revisions", {
+    kind,
+    name,
+    namespace,
   });
 }
 
@@ -880,6 +951,64 @@ export async function probeTcpConnect(
   return invoke<TcpProbe>("probe_tcp_connect", { address, port });
 }
 
+export async function listContainerFiles(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null
+): Promise<string> {
+  return invoke<string>("list_container_files", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+  });
+}
+
+export async function filesSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("files_subscribed", { streamId });
+}
+
+export async function stopFilesListing(streamId: string): Promise<void> {
+  return invoke<void>("stop_files_listing", { streamId });
+}
+
+export async function readContainerFile(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null
+): Promise<FileRead> {
+  return invoke<FileRead>("read_container_file", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+  });
+}
+
+export async function downloadContainerFile(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  path: string,
+  via: Via | null,
+  destination: string
+): Promise<FileRead> {
+  return invoke<FileRead>("download_container_file", {
+    pod,
+    namespace,
+    container,
+    path,
+    via,
+    destination,
+  });
+}
+
 export async function getPodsMetrics(
   namespace: string | null
 ): Promise<PodMetricsResponse> {
@@ -892,6 +1021,18 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
 
 export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("list_pods", { filters });
+}
+
+export async function listPodRows(namespace: string | null): Promise<string> {
+  return invoke<string>("list_pod_rows", { namespace });
+}
+
+export async function podRowsSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("pod_rows_subscribed", { streamId });
+}
+
+export async function stopPodRows(streamId: string): Promise<void> {
+  return invoke<void>("stop_pod_rows", { streamId });
 }
 
 export async function getPod(
@@ -1180,6 +1321,26 @@ export async function listIngresses(
   return invoke<IngressInfo[]>("list_ingresses", { filters });
 }
 
+export async function listNetworkPolicies(
+  namespace: string | null
+): Promise<NetworkPolicyInfo[]> {
+  return invoke<NetworkPolicyInfo[]>("list_network_policies", { namespace });
+}
+
+export async function getNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<NetworkPolicyInfo> {
+  return invoke<NetworkPolicyInfo>("get_network_policy", { name, namespace });
+}
+
+export async function deleteNetworkPolicy(
+  name: string,
+  namespace: string | null
+): Promise<void> {
+  return invoke<void>("delete_network_policy", { name, namespace });
+}
+
 export async function listEndpoints(
   filters: ResourceFilters | null
 ): Promise<EndpointsInfo[]> {
@@ -1395,6 +1556,10 @@ export async function disconnectCluster(context: string): Promise<void> {
   return invoke<void>("disconnect_cluster", { context });
 }
 
+export async function credentialRenewal(context: string): Promise<Renewal> {
+  return invoke<Renewal>("credential_renewal", { context });
+}
+
 export async function getClusterInfo(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("get_cluster_info", { context });
 }
@@ -1532,6 +1697,12 @@ export async function subscribePodWatch(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("subscribe_pod_watch", { namespace });
+}
+
+export async function subscribePodRowWatch(
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_pod_row_watch", { namespace });
 }
 
 export async function subscribeDeploymentWatch(

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { forceParsing } from "@codemirror/language";
 import { yaml as yamlLanguage } from "@codemirror/lang-yaml";
 import { EditorState } from "@codemirror/state";
+
+import { SPEC } from "./editor-theme";
 import { EditorView } from "@codemirror/view";
 
 import { editorTheme, SYNTAX_HUES } from "./editor-theme";
@@ -168,4 +170,36 @@ describe("plain scalars the core schema calls constants", () => {
     "",
     "truthy",
   ])("leaves %s alone", (text) => expect(isYamlConstant(text)).toBe(false));
+});
+
+describe("the editor's own scrollbar", () => {
+  /**
+   * CodeMirror builds `.cm-scroller` itself, so `scrollbar-thin` never
+   * reaches it and the manifest was the one pane with a platform-default bar
+   * where those are laid out rather than overlaid. Fails if the rules go or
+   * stop using role tokens.
+   */
+  it("is styled like every other scroller in the window", () => {
+    const rules = Object.entries(SPEC).filter(([selector]) =>
+      selector.startsWith(".cm-scroller")
+    );
+    const bySelector = Object.fromEntries(rules);
+    expect(bySelector[".cm-scroller"]).toMatchObject({
+      scrollbarWidth: "thin",
+      scrollbarColor: "hsl(var(--sel)) transparent",
+    });
+    expect(bySelector[".cm-scroller::-webkit-scrollbar"]).toMatchObject({
+      width: "8px",
+    });
+    expect(bySelector[".cm-scroller::-webkit-scrollbar-thumb"]).toMatchObject({
+      background: "hsl(var(--sel))",
+    });
+    // Role tokens, never a raw colour — the same rule as everywhere else.
+    for (const [, declarations] of rules) {
+      for (const value of Object.values(declarations as object)) {
+        if (typeof value !== "string") continue;
+        expect(value).not.toMatch(/#[0-9a-f]{3,8}\b|\brgb\(/i);
+      }
+    }
+  });
 });

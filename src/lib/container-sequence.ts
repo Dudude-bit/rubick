@@ -75,6 +75,12 @@ export interface ContainerLists<T extends Phased> {
 }
 
 export type PodContainerLists = ContainerLists<ContainerInfo>;
+/** What readiness is decided from; a `ContainerInfo` and a list row's container both carry it. */
+export type ReadinessContainer = Pick<
+  ContainerInfo,
+  "ready" | "started" | "phase" | "state"
+>;
+export type ReadinessLists = ContainerLists<ReadinessContainer>;
 /** A Deployment, StatefulSet, DaemonSet, Job or CronJob's pod template. */
 export type TemplateContainerLists = ContainerLists<DeploymentContainerInfo>;
 
@@ -99,7 +105,7 @@ function splitByPhase<T extends Phased>(containers: readonly T[]) {
 }
 
 /** Terminated cleanly — the only outcome that lets the sequence advance. */
-export function containerSucceeded(container: ContainerInfo): boolean {
+export function containerSucceeded(container: ReadinessContainer): boolean {
   const { state } = container;
   return (
     state.type === "terminated" &&
@@ -131,6 +137,19 @@ export function podContainers(pod: PodContainerLists): ContainerInfo[] {
 }
 
 /**
+ * Every container the pod ran, in the order a reader is asked to pick one.
+ *
+ * Run order and pick order are different questions and this is the second.
+ * A surface that offers all of them — including the stopped ones, which is
+ * the point of offering them — still must not lead with the mesh proxy: a
+ * strip built on run order defaulted to `istio-proxy`, because a sidecar is
+ * an init container and init containers run first.
+ */
+export function offeredContainers(pod: PodContainerLists): ContainerInfo[] {
+  return podContainers(pod).sort(byPhase);
+}
+
+/**
  * App containers first, then sidecars, then the rest.
  *
  * Run order answers "what happened"; this order answers "which one do you
@@ -158,7 +177,9 @@ function byPhase(a: ContainerInfo, b: ContainerInfo): number {
  * forwarding to a port it declared, or offering it as a debug target all
  * describe a process that is not there.
  */
-export function lifetimeContainers(pod: PodContainerLists): ContainerInfo[] {
+export function lifetimeContainers<T extends ReadinessContainer>(
+  pod: ContainerLists<T>
+): T[] {
   return [
     ...pod.containers,
     ...(pod.initContainers ?? []).filter((c) => c.phase === "sidecar"),
@@ -193,7 +214,7 @@ export interface PodReadiness {
  * and its own field, which is why the walk below reads it rather than
  * standing a running state in for it.
  */
-export function podReadiness(pod: PodContainerLists): PodReadiness {
+export function podReadiness(pod: ReadinessLists): PodReadiness {
   const total = lifetimeContainers(pod).length;
   const ready =
     pod.containers.filter((c) => c.ready && c.state.type === "running").length +
@@ -211,8 +232,10 @@ export function podReadiness(pod: PodContainerLists): PodReadiness {
  * container itself says that; it is the position, exactly as it is in the
  * sequence UI.
  */
-function startedSidecars(pod: PodContainerLists): ContainerInfo[] {
-  const reached: ContainerInfo[] = [];
+function startedSidecars<T extends ReadinessContainer>(
+  pod: ContainerLists<T>
+): T[] {
+  const reached: T[] = [];
   for (const container of pod.initContainers ?? []) {
     if (containerSucceeded(container)) continue;
     if (container.phase !== "sidecar" || !container.started) break;
@@ -295,9 +318,7 @@ export function shellTargets(pod: PodContainerLists): ContainerInfo[] {
   // The reason is discarded — only its absence decides membership — so this
   // asks in no language rather than making every caller supply one.
   const noWords: T = () => "";
-  return podContainers(pod)
-    .filter((c) => whyNoShell(c, noWords) === null)
-    .sort(byPhase);
+  return offeredContainers(pod).filter((c) => whyNoShell(c, noWords) === null);
 }
 
 /** "4s", from the two stamps the kubelet writes on a finished run. */

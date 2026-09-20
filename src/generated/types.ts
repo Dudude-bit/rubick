@@ -174,6 +174,7 @@ export interface HelmRelease {
   source: string;
   suspended: boolean | null;
   sourceRef: string | null;
+  unreadable: string | null;
 }
 
 export interface ClusterOverview {
@@ -188,6 +189,7 @@ export interface ClusterOverview {
   pods: PodComposition;
   jobs: JobComposition | null;
   metricsAvailable: boolean;
+  servedFrom: OverviewSource;
 }
 
 export interface JobComposition {
@@ -423,6 +425,46 @@ export interface EndpointTargetRef {
   namespace: string;
 }
 
+export interface NetworkPolicyInfo {
+  name: string;
+  namespace: string;
+  selects: PolicySelects;
+  selected: number | null;
+  ingress: PolicyDirection;
+  egress: PolicyDirection;
+  labels: Record<string, string>;
+  createdAt: string | null;
+}
+
+export interface PolicyDirection {
+  governed: boolean;
+  rules: PolicyRule[];
+  opensToEverything: boolean;
+  deniesEverything: boolean;
+}
+
+export interface PolicyRule {
+  peers: PolicyPeer[];
+  ports: PolicyPort[];
+}
+
+export interface PolicyPort {
+  protocol: string;
+  port: string | null;
+  endPort: number | null;
+}
+
+export interface PolicyPeer {
+  pods: PolicySelects;
+  namespaces: PolicySelects;
+  ipBlock: PolicyIpBlock | null;
+}
+
+export interface PolicyIpBlock {
+  cidr: string;
+  except: string[];
+}
+
 export interface IngressInfo {
   name: string;
   namespace: string;
@@ -490,6 +532,9 @@ export interface DeploymentInfo {
   podResources: DeploymentContainerResources;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
@@ -776,6 +821,20 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface FilePreview {
+  bytesRead: number;
+  truncated: boolean;
+  binary: boolean;
+  nonTextShare: number;
+  lossy: boolean;
+  text: string | null;
+}
+
+export interface Via {
+  container: string;
+  root: string;
+}
+
 export interface TcpProbe {
   ms: number | null;
   error: string | null;
@@ -1023,6 +1082,7 @@ export interface ReplicaSetInfo {
   serviceAccountName: string | null;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  templateAnnotations: Record<string, string>;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
   createdAt: string | null;
@@ -1086,6 +1146,18 @@ export interface ManifestResult {
   stdout: string;
   stderr: string;
   exit_code: number;
+}
+
+export interface ControllerRevisionInfo {
+  name: string;
+  revision: number;
+  current: boolean;
+  changeCause: string | null;
+  templateRead: boolean;
+  containers: DeploymentContainerInfo[];
+  initContainers: DeploymentContainerInfo[];
+  templateAnnotations: Record<string, string>;
+  createdAt: string | null;
 }
 
 export interface ResourceConnections {
@@ -1218,7 +1290,7 @@ export interface InstallationInfo {
   version: string;
   os: string;
   configPath: string | null;
-  logDestination: string;
+  logDestination: string | null;
 }
 
 export interface KubeconfigInfo {
@@ -1340,6 +1412,8 @@ export interface DaemonSetDetailInfo {
   selector: string;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
@@ -1349,7 +1423,17 @@ export interface DaemonSetInfo {
   desired: number;
   current: number;
   ready: number;
+  updated: number;
+  containerImages: ContainerImage[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
+}
+
+export interface ContainerImage {
+  name: string;
+  image: string | null;
 }
 
 export interface StatefulSetDetailInfo {
@@ -1368,6 +1452,8 @@ export interface StatefulSetDetailInfo {
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
@@ -1375,12 +1461,17 @@ export interface StatefulSetReplicaInfo {
   desired: number;
   ready: number;
   current: number;
+  updated: number;
 }
 
 export interface StatefulSetInfo {
   name: string;
   namespace: string;
   replicas: StatefulSetReplicaInfo;
+  containerImages: ContainerImage[];
+  templateAnnotations: Record<string, string>;
+  generation: number | null;
+  observedGeneration: number | null;
   createdAt: string | null;
 }
 
@@ -1474,6 +1565,7 @@ export interface CustomResourceDetailInfo {
   ownerReferences: OwnerReferenceInfo[];
   finalizers: string[];
   resourceVersion: string | null;
+  generation: number | null;
 }
 
 export interface OwnerReferenceInfo {
@@ -1496,6 +1588,7 @@ export interface CustomResourceInfo {
   annotations: Record<string, string>;
   createdAt: string | null;
   ownerReferences: OwnerReferenceInfo[];
+  generation: number | null;
 }
 
 export interface ClusterPreferences {
@@ -1616,6 +1709,19 @@ export interface ListQuery {
   group: string;
   resource: string;
   namespaced: boolean;
+}
+
+export interface AccessAnswer {
+  verb: string;
+  resource: string;
+  allowed: boolean | null;
+}
+
+export interface AccessQuery {
+  group: string;
+  resource: string;
+  verb: string;
+  namespace: string | null;
 }
 
 export interface TlsCertificate {
@@ -1748,6 +1854,17 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type Renewal =
+  | "scheduled"
+  | "noDeadline"
+  | "passed"
+  | "needsYou"
+  | "failed"
+  | "ranOut"
+  | "lastChance"
+  | "delegated"
+  | "unknown";
+
 export type ProxyOutcome =
   | { state: "notTried" }
   | { state: "noKubectl" }
@@ -1771,6 +1888,8 @@ export type ContextAuth =
   | { kind: "basic"; username: string | null }
   | { kind: "authProvider"; name: string }
   | { kind: "unrecognised" };
+
+export type OverviewSource = "watch" | "list";
 
 export type ProblemDetail =
   | { says: "said"; text: string }
@@ -1837,6 +1956,11 @@ export type ObjectFacts =
 
 export type Existence = "present" | "missing" | "notChecked";
 
+export type PolicySelects =
+  | { kind: "everything" }
+  | { kind: "written"; query: string }
+  | { kind: "notSaid" };
+
 export type EnvVarSourceType =
   "configMapKeyRef" | "secretKeyRef" | "fieldRef" | "resourceFieldRef";
 
@@ -1857,6 +1981,12 @@ export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
   "available" | "notInstalled" | "forbidden" | "error";
+
+export type FileRead =
+  | { state: "preview"; preview: FilePreview }
+  | { state: "written"; bytes: number }
+  | { state: "noTools" }
+  | { state: "failed"; exit_code: number | null; message: string };
 
 export type TcpProbeReason = "refused" | "timedOut";
 

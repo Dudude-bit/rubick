@@ -206,6 +206,8 @@ export function PodList() {
     dataUpdatedAt,
     watchLive,
     resyncing,
+    waitingSince,
+    refetch,
   } = usePodsWithMetrics();
 
   const quickActions = useMemo<
@@ -253,6 +255,8 @@ export function PodList() {
       title="Pods"
       data={podsWithMetrics}
       isLoading={isLoading}
+      waitingSince={waitingSince}
+      onRetry={() => void refetch()}
       error={error}
       dataUpdatedAt={dataUpdatedAt}
       live={watchLive}
@@ -275,7 +279,7 @@ export function PodList() {
       deleteConfig={{
         mutationFn: (item) =>
           commands.deletePod(item.name, item.namespace, false),
-        invalidateQueryKeys: [queryKeys.pods()],
+        invalidateQueryKeys: [queryKeys.podRows()],
         resourceType: ResourceType.Pod,
       }}
     />

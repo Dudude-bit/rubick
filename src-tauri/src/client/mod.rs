@@ -140,6 +140,46 @@ fn without_client_retries(mut config: Config) -> Config {
     config
 }
 
+/// How long one request may take before the app stops waiting and says so.
+///
+/// Applied as a layer on every client, and it bounds the wait **for the
+/// response head only**: `tower::timeout` races the future that yields
+/// `Response<Body>`, and kube collects the body outside that call
+/// (`request_text`: `self.send(..).await?` is timed, `into_body().collect()`
+/// is not). For a LIST the expensive part — the apiserver reading etcd and
+/// assembling — happens before it writes anything, so that is covered. What
+/// is not covered is a transfer that stalls part-way through a body already
+/// begun; nothing here bounds that, and the 8 s "still reading" block is what
+/// a reader sees if it happens. Deliberately not kube's socket-level
+/// `read_timeout`, which would cut every idle watch.
+///
+/// For a watch, a log follow or an exec this is the first byte, so the
+/// streams this app lives on are untouched. The number is also the one the
+/// frontend says in its sentence, so it lives in `shared/read-deadlines.json`
+/// and a test on each side holds the two equal.
+// Seconds on purpose: the number is `listDeadlineSeconds` from the shared
+// file, and a test holds the two equal. `from_mins(1)` would read tidier and
+// hide which number this is.
+#[allow(clippy::duration_suboptimal_units)]
+pub const READ_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The one place a client is built, so every client carries the deadline.
+fn build_client(config: Config) -> Result<Client> {
+    client_with_deadline(config, READ_DEADLINE)
+}
+
+/// The deadline is a parameter so a test can use one it can wait out. The
+/// layer itself is the whole of the behaviour; without this seam the only
+/// way to reach it was a sixty-second test, so it had none and deleting the
+/// layer left every Rust test green.
+fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result<Client> {
+    let builder = kube::client::ClientBuilder::try_from(config)
+        .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+    Ok(builder
+        .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
+        .build())
+}
+
 impl K8sClientManager {
     /// Create a new client manager
     #[must_use]
@@ -408,8 +448,7 @@ impl K8sClientManager {
         }
 
         let config = self.create_config(context).await?;
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
 
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
@@ -425,9 +464,8 @@ impl K8sClientManager {
         context: &str,
         kubeconfig: Kubeconfig,
     ) -> Result<Arc<Client>> {
-        self.clients.remove(context);
-        self.configs.remove(context);
-
+        // Built before the old one is let go: a failure between the two
+        // used to leave the context with no client at all.
         let options = KubeConfigOptions {
             context: Some(context.to_string()),
             ..Default::default()
@@ -441,12 +479,11 @@ impl K8sClientManager {
                     "Failed to create config for context {context}: {e}"
                 ))
             })?;
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
         self.configs.insert(context.to_string(), config);
-
+        self.proxies.remove(context);
         self.paths
             .insert(context.to_string(), ConnectionPath::Direct);
         tracing::info!("Connected to cluster with prepared config: {}", context);
@@ -456,15 +493,12 @@ impl K8sClientManager {
     /// Connect through a proxy the caller already brought up. The client
     /// carries no credentials: the proxy has them, and refreshes them.
     pub fn connect_through_proxy(&self, context: &str, proxy: KubectlProxy) -> Result<Arc<Client>> {
-        self.clients.remove(context);
-        self.configs.remove(context);
         let url: http::Uri = proxy
             .url()
             .parse()
             .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
         let config = without_client_retries(Config::new(url));
-        let client = Client::try_from(config.clone())
-            .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
+        let client = build_client(config.clone())?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
         self.configs.insert(context.to_string(), config);
@@ -584,6 +618,12 @@ impl K8sClientManager {
         }
     }
 
+    /// When this context's credentials stop working, if anything said.
+    #[must_use]
+    pub fn credential_deadline(&self, context: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.credential_deadlines.get(context).map(|at| *at)
+    }
+
     /// Test connection to a cluster
     pub async fn test_connection(&self, context: &str) -> Result<ClusterInfo> {
         let client = self.connect(context).await?;
@@ -625,10 +665,10 @@ pub struct ClusterInfo {
     ///
     /// `None` where the credential plugin named no deadline, or where the
     /// context does not use one at all — a client certificate does not expire
-    /// on the hour. Nothing renews what the plugin gave: the `exec` block that
-    /// could is stripped when the session is prepared, so this is the moment
-    /// every request in the window starts failing, and a surface that has it
-    /// can say so before that happens rather than after.
+    /// on the hour. The `exec` block that could renew it is stripped when the
+    /// session is prepared, so this is the moment every request in the window
+    /// would start failing — and it is what `auth::renew` schedules against,
+    /// which is why a context that names none is not covered.
     pub credentials_expire_at: Option<String>,
     /// Which way this session reaches the cluster. Through a proxy, kubectl
     /// holds the credentials and `credentials_expire_at` is nothing.
@@ -1088,5 +1128,69 @@ users:
             }
             other => panic!("expected Kubeconfig auth error, got {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod read_deadline_tests {
+    use super::*;
+
+    /// The frontend says this number in a sentence, and neither side can see
+    /// the other's constant. `shared/read-deadlines.json` holds them equal;
+    /// this test and its twin in `src/lib/read-deadline.test.ts` enforce it.
+    #[test]
+    fn the_read_deadline_is_the_number_the_shared_file_states() {
+        const SHARED: &str = include_str!("../../../shared/read-deadlines.json");
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Deadlines {
+            list_deadline_seconds: u64,
+        }
+
+        let shared: Deadlines = serde_json::from_str(SHARED).expect("shared deadlines parse");
+        assert_eq!(READ_DEADLINE.as_secs(), shared.list_deadline_seconds);
+    }
+
+    /// The deadline itself, against a server that accepts the connection and
+    /// then says nothing — which is the shape this exists for. Deleting the
+    /// layer from `client_with_deadline` leaves this hanging until the test
+    /// harness kills it; nothing else in the suite notices it is gone.
+    #[tokio::test]
+    async fn a_server_that_accepts_and_never_answers_ends_in_a_deadline() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        // Accepted and then held: the client gets a connection and no bytes.
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+
+        let config = Config::new(
+            format!("http://127.0.0.1:{port}")
+                .parse()
+                .expect("cluster url"),
+        );
+        let client = client_with_deadline(config, std::time::Duration::from_millis(200))
+            .expect("client");
+
+        let request = http::Request::get("/api/v1/namespaces")
+            .body(Vec::new())
+            .expect("request");
+        let answer = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            client.request_text(request),
+        )
+        .await;
+
+        let answer = answer.expect("the deadline has to end the wait, not the test harness");
+        assert!(
+            answer.is_err(),
+            "a server that never answers cannot produce a body"
+        );
     }
 }

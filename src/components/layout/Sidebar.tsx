@@ -10,6 +10,7 @@ import {
   Route,
   Settings,
   type LucideIcon,
+  History,
 } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
@@ -48,6 +49,7 @@ import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
+import { withCarriedSearch } from "@/lib/carried-search";
 
 type NavKey = keyof typeof en.nav;
 
@@ -105,6 +107,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
     items: [
       { labelKey: "overview", path: "/", icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
+      { labelKey: "changes", path: "/changes", icon: History },
     ],
   },
   {
@@ -137,6 +140,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // No count: `ResourceCounts` has no endpoints field to read.
       resource(ResourceType.Endpoints),
       resource(ResourceType.Ingress, "ingresses"),
+      resource(ResourceType.NetworkPolicy),
     ],
   },
   {
@@ -554,41 +558,48 @@ function IntegrationsGroup() {
       .finally(() => setWaking(null));
   };
 
+  const row = (page: (typeof pages)[number]) => (
+    <NavRow
+      key={page.path}
+      item={{ label: page.name, path: page.path, icon: page.icon }}
+      overview={undefined}
+      value={page.count}
+      mark={page.tone ?? undefined}
+      // Detected but refused: the row is drawn disabled with a vendor
+      // reason instead of linking to a page that only errors.
+      denied={page.forbidden}
+      deniedReason={
+        page.forbidden
+          ? t("nav", "noVendorAccess", { vendor: page.name })
+          : undefined
+      }
+      // A tunnel that is down is not a count and not a fault: it is a
+      // thing this row can do something about, and says so.
+      note={
+        page.asleep
+          ? waking === page.id
+            ? t("cluster", "tunnelWaking")
+            : t("cluster", "tunnelAsleep")
+          : undefined
+      }
+      onPress={page.asleep ? () => press(page.id) : undefined}
+      active={
+        page.own
+          ? undefined
+          : pathname === "/integrations" && vendor === page.id
+      }
+    />
+  );
+  const operators = pages.filter((page) => page.operator);
+
   return (
     <div>
       <GroupCaption k="integrations" busy={reading} />
-      {pages.map((page) => (
-        <NavRow
-          key={page.path}
-          item={{ label: page.name, path: page.path, icon: page.icon }}
-          overview={undefined}
-          value={page.count}
-          mark={page.tone ?? undefined}
-          // Detected but refused: the row is drawn disabled with a vendor
-          // reason instead of linking to a page that only errors.
-          denied={page.forbidden}
-          deniedReason={
-            page.forbidden
-              ? t("nav", "noVendorAccess", { vendor: page.name })
-              : undefined
-          }
-          // A tunnel that is down is not a count and not a fault: it is a
-          // thing this row can do something about, and says so.
-          note={
-            page.asleep
-              ? waking === page.id
-                ? t("cluster", "tunnelWaking")
-                : t("cluster", "tunnelAsleep")
-              : undefined
-          }
-          onPress={page.asleep ? () => press(page.id) : undefined}
-          active={
-            page.own
-              ? undefined
-              : pathname === "/integrations" && vendor === page.id
-          }
-        />
-      ))}
+      {pages.filter((page) => !page.operator).map(row)}
+      {/* Operators are integrations too, one folder like the rest, but a
+          reader looking for their database looks for that word. */}
+      {operators.length > 0 && <GroupCaption k="operators" />}
+      {operators.map(row)}
       {failed && (
         <p className="px-2 pb-1 text-[10px] leading-snug text-err">{failed}</p>
       )}
@@ -756,12 +767,13 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
+  const { pathname, search } = useLocation();
 
   const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
 
   return (
     <NavLink
-      to={item.path}
+      to={withCarriedSearch(item.path, item.kind, search, pathname)}
       end={item.path === "/"}
       onClick={onPress}
       className={({ isActive }) =>

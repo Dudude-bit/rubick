@@ -86,6 +86,7 @@ function ingressRoute(
     annotations: {},
     createdAt: null,
     ownerReferences: [],
+    generation: null,
   };
 }
 

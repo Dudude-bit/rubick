@@ -15,7 +15,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { NO_STATUS, matchMultiple } from "../kit";
+import { matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
 import {
   backendConfigSummary,
@@ -91,13 +91,9 @@ const managedCertificateColumns: CrdColumn[] = [
 ];
 
 /**
- * Both of GKE's Ingress groups, and no status for two of the three kinds.
- *
- * {@link NO_STATUS} on the view is the honest answer rather than a stub:
- * `BackendConfig` and `FrontendConfig` genuinely do not report health, and a
- * status derived from their spec would be this app inventing a verdict for
- * an object that has never had one. Only `ManagedCertificate` has one to
- * report, and it is in its own column above.
+ * Both of GKE's Ingress groups. Only `ManagedCertificate` reports health, and
+ * it has its own column above; a verdict derived from the other two kinds'
+ * specs would be this app inventing one.
  */
 export const crd: CrdView = {
   matches: matchMultiple([
@@ -115,5 +111,4 @@ export const crd: CrdView = {
         return backendConfigColumns;
     }
   },
-  status: NO_STATUS,
 };

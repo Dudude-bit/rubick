@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 
 /** What the authorizer answers about each namespace, per test. */
 const nsAccess = vi.hoisted(() => ({
@@ -482,5 +483,32 @@ describe("a tab with no cluster", () => {
   it("offers no close on the only tab, which has nothing to fall back to", () => {
     mount();
     expect(screen.queryByLabelText("Close tab")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * A list that ran out of time offers "Pick one namespace", and the picker it
+ * means lives here. The two halves are a dispatch and a listener with a
+ * string between them, and only the dispatch was tested: the list's own test
+ * registers a listener of its own and would pass with nothing in the app
+ * listening at all. Deleting the effect here left every test green.
+ */
+describe("the namespace picker a timed-out list asks for", () => {
+  it("opens on the active tab when a list asks for it", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: "/workloads/pods" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+    mount();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(SCOPE_PICKER_OPEN));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
   });
 });

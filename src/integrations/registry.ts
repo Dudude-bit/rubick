@@ -55,8 +55,13 @@ import type {
   StyledSegment,
 } from "@/generated/types";
 import type { UsageSample } from "@/lib/usage-history";
-import type { Delivery, DeliveryQuery } from "./gitops";
-import type { CrdColumn, CrdStatus } from "./kit";
+import type {
+  Delivery,
+  DeliveryOwner,
+  DeliveryQuery,
+  DeliveryRevision,
+} from "./gitops";
+import type { CrdColumn } from "./kit";
 import type { InClusterHint } from "./forwarded";
 
 /**
@@ -467,6 +472,18 @@ export interface Capabilities {
     objects: DeliveryQuery[]
   ) => Promise<Array<Delivery | null>>;
   /**
+   * What a delivery owner has applied over time, newest first, in the
+   * owner's own record of it.
+   *
+   * `null` for an owner kind the vendor does not own, the same rule as
+   * `object.related`; an empty list is an owner that keeps no history, which
+   * a Kustomization really does not. A read that fails throws, so a page
+   * never draws "nothing was ever applied" over a 403.
+   */
+  "delivery.history": (
+    owner: DeliveryOwner
+  ) => Promise<DeliveryRevision[] | null>;
+  /**
    * Usage over a window longer than this app has been open.
    *
    * Absent means the chart draws the window it watched itself, which is a
@@ -835,6 +852,12 @@ export interface Extension {
    * objects it would count do not exist.
    */
   facts?: () => Promise<VendorFact[]>;
+  /**
+   * A controller that runs a workload for the reader: a database operator.
+   * Drawn under "Operators" in the rail and the catalog, and nothing else
+   * changes: it is detected, it has a page, it is one folder like the rest.
+   */
+  operator?: boolean;
 }
 
 /**
@@ -931,13 +954,21 @@ export interface VendorPage {
   load: () => Promise<{ default: ComponentType }>;
   /**
    * The one list this page cannot do without — the custom resource whose 403
-   * makes the screen useless. When the authorizer refuses the reader this
-   * list, the sidebar row is drawn disabled with a reason rather than linking
-   * to a page that only errors. The id is the CRD's `<plural>.<group>`; an
-   * array is alternative spellings of one kind across a group rename, refused
-   * only when every spelling is.
+   * makes the screen useless. The sidebar row is then drawn disabled with a
+   * reason rather than linking to a page that only errors. The id is the
+   * CRD's `<plural>.<group>`; an array is alternative spellings of one kind
+   * across a group rename, refused only when every spelling is. `null` is a
+   * page that shows something without them, and {@link defineVendor} refuses
+   * silence — which is what a vendor added after the lock says by default,
+   * and how #138 kept coming back.
    */
-  gate?: { crd: string | readonly string[]; namespaced: boolean };
+  gate?: Gate | null;
+}
+
+/** What to ask the cluster's authorizer before offering a vendor's page. */
+export interface Gate {
+  crd: string | readonly string[];
+  namespaced: boolean;
 }
 
 /**
@@ -948,12 +979,13 @@ export interface VendorPage {
 export interface CrdView {
   /** Does this vendor own that API group? Kind narrows it where a group is shared. */
   matches: (group: string, kind: string) => boolean;
+  // No `status` here on purpose: there was one, and no surface read it. A
+  // verdict belongs in a column, which without a `cell` is drawn as a badge.
   /**
    * The columns for one of its kinds. Every vendor has a default for a kind
    * it does not recognise, because a CRD group grows faster than this file.
    */
   columnsFor: (kind: string) => CrdColumn[];
-  status: CrdStatus;
 }
 
 /**
@@ -1059,6 +1091,13 @@ export interface Vendor {
  * Declare a vendor. Only a type-check today, and that is the point: the
  * registry is a list, not a framework.
  */
-export function defineVendor(vendor: Vendor): Vendor {
+/** A page backed by custom resources states its {@link VendorPage.gate}. */
+export function defineVendor<const V extends Vendor>(
+  vendor: V & GateStated<V>
+): Vendor {
   return vendor;
 }
+
+type GateStated<V> = V extends { crd: CrdView; page: VendorPage }
+  ? { page: { gate: Gate | null } }
+  : unknown;

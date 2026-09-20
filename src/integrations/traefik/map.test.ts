@@ -176,6 +176,7 @@ describe("the routing map", () => {
           annotations: {},
           createdAt: null,
           ownerReferences: [],
+          generation: null,
         },
       ],
     });
