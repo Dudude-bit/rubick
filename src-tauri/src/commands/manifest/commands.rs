@@ -478,7 +478,10 @@ mod dry_run_tests {
         // And the refusals that really are ones, which must still block.
         for code in [403, 409, 422] {
             let refused = kube::Error::Api(Box::new(status_with(code, "denied")));
-            assert!(!super::session_over(&refused), "{code} is about the request");
+            assert!(
+                !super::session_over(&refused),
+                "{code} is about the request"
+            );
             assert!(matches!(
                 super::no_answer(refused),
                 super::NoAnswer::Refused(_)
@@ -511,9 +514,16 @@ mod dry_run_tests {
     #[test]
     fn an_unread_object_is_not_one_that_would_be_created() {
         let accepted: std::result::Result<String, NoAnswer> = Ok("kind: Deployment\n".to_string());
-        assert_eq!(classify(&Live::Absent, &accepted, false), DryRunOutcome::Created);
         assert_eq!(
-            classify(&Live::Unread("deployments is forbidden".into()), &accepted, false),
+            classify(&Live::Absent, &accepted, false),
+            DryRunOutcome::Created
+        );
+        assert_eq!(
+            classify(
+                &Live::Unread("deployments is forbidden".into()),
+                &accepted,
+                false
+            ),
             DryRunOutcome::LiveUnread {
                 said: "deployments is forbidden".into()
             }
