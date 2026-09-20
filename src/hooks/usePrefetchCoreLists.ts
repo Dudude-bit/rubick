@@ -25,6 +25,7 @@ export function usePrefetchCoreLists(): void {
   const context = useClusterStore((state) => state.currentContext);
   const queryClient = useQueryClient();
   const warmed = useRef<string | null>(null);
+  const lastContext = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isConnected || context === null) {
@@ -40,11 +41,25 @@ export function usePrefetchCoreLists(): void {
     if (warmed.current === scope) return;
     warmed.current = scope;
 
-    // Everything asked before this connection stood was answered by nothing
-    // — a restored route fires its list the moment it mounts, caches the
-    // error, and sat on "No cluster connected" over a connected cluster.
-    // A connection landing is the one moment every cached answer is stale.
-    void queryClient.invalidateQueries();
+    const switched =
+      lastContext.current !== null && lastContext.current !== context;
+    lastContext.current = context;
+
+    if (switched) {
+      // A resource key does not carry the context — `["pods","default"]` is
+      // the same entry in every cluster — so an invalidation leaves the
+      // cluster just left on screen until the refetch answers, and where the
+      // new one refuses the read it never answers. Same trade as
+      // `useScopeTabs` makes for a parked tab.
+      queryClient.removeQueries();
+    } else {
+      // Everything asked before this connection stood was answered by
+      // nothing — a restored route fires its list the moment it mounts,
+      // caches the error, and sat on "No cluster connected" over a
+      // connected cluster. A connection landing is the one moment every
+      // cached answer is stale.
+      void queryClient.invalidateQueries();
+    }
 
     const namespace = currentNamespace || null;
     const base = { labelSelector: null, fieldSelector: null, limit: null };

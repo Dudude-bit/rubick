@@ -13,7 +13,40 @@
 //! emit-once latch, so a recovered stream is free to fail again later
 //! and trigger another `Failed` event after another full streak.
 
+use kube::runtime::watcher::Event;
+use std::time::Duration;
+
 const ERROR_THRESHOLD: u32 = 3;
+
+/// Whether a watcher event is the cluster answering, or only a marker that
+/// another attempt has begun.
+///
+/// kube emits `Event::Init` *before* it attempts the initial list, so a
+/// refused stream yields `Init, Err, Init, Err` for ever. Counting `Init` as
+/// a success reset the streak between every pair of errors: `rubick.log`
+/// held 7598 `error (1 in a row)` lines under a 403 and not one `(2 in a
+/// row)`, so the refusal never left this process.
+pub(crate) fn answered<K>(event: &Event<K>) -> bool {
+    !matches!(event, Event::Init)
+}
+
+/// First wait after an error, doubled per error in the streak.
+const BACKOFF_BASE: Duration = Duration::from_secs(1);
+
+/// Longest wait between attempts. kube's own default stops here too.
+const BACKOFF_CAP: Duration = Duration::from_secs(30);
+
+/// How long to wait before re-listing, after `errors` failures in a row.
+///
+/// kube's own `StreamBackoff` resets on any non-error item and `Event::Init`
+/// is one, so a refused stream kept its ramp on the first rung — about one
+/// re-list a second, for ever. The streak this takes survives the marker.
+pub(crate) fn backoff_for(errors: u32) -> Duration {
+    let doublings = errors.saturating_sub(1).min(16);
+    BACKOFF_BASE
+        .saturating_mul(1u32 << doublings)
+        .min(BACKOFF_CAP)
+}
 
 /// State machine for the watcher's "should we emit Failed yet?" decision.
 pub(super) struct FailureLatch {
@@ -60,6 +93,60 @@ impl FailureLatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use k8s_openapi::api::core::v1::Pod;
+
+    /// Deleting this rule is how a permanent refusal stays inside the
+    /// process: `Init` precedes every failed list, so counting it resets
+    /// the streak the threshold is measured on.
+    #[test]
+    fn the_init_marker_is_not_the_cluster_answering() {
+        assert!(!answered::<Pod>(&Event::Init));
+    }
+
+    /// The events that carry an object, and the one that says the list
+    /// drained, are the cluster answering — a rule that called them
+    /// markers would leave a healthy stream permanently in a streak.
+    #[test]
+    fn an_object_or_a_drained_list_is_an_answer() {
+        assert!(answered(&Event::InitApply(Pod::default())));
+        assert!(answered::<Pod>(&Event::InitDone));
+        assert!(answered(&Event::Apply(Pod::default())));
+        assert!(answered(&Event::Delete(Pod::default())));
+    }
+
+    /// Deleting the growth leaves a fixed wait, which is what the refused
+    /// stream already had from kube's own backoff — about one re-list a
+    /// second, for ever.
+    #[test]
+    fn the_wait_doubles_with_the_streak_and_stops_at_the_cap() {
+        assert_eq!(backoff_for(1), Duration::from_secs(1));
+        assert_eq!(backoff_for(2), Duration::from_secs(2));
+        assert_eq!(backoff_for(3), Duration::from_secs(4));
+        assert_eq!(backoff_for(6), Duration::from_secs(30), "capped");
+        assert_eq!(backoff_for(99), Duration::from_secs(30), "stays capped");
+    }
+
+    /// A streak of zero is not a case the loop produces, and it must not
+    /// panic or shift the first wait if it ever does.
+    #[test]
+    fn a_streak_of_none_waits_the_base() {
+        assert_eq!(backoff_for(0), Duration::from_secs(1));
+    }
+
+    /// The pattern the log showed: a refused list is preceded by `Init`
+    /// every time, and the latch must still reach its threshold.
+    #[test]
+    fn a_refused_stream_reaches_the_threshold_despite_its_markers() {
+        let mut latch = FailureLatch::new();
+        let mut emitted = false;
+        for _ in 0..3 {
+            if answered::<Pod>(&Event::Init) {
+                latch.record_success();
+            }
+            emitted |= latch.record_error();
+        }
+        assert!(emitted, "three refused lists must emit Failed");
+    }
 
     #[test]
     fn does_not_emit_below_threshold() {
