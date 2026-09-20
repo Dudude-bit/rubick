@@ -110,9 +110,8 @@ describe("listPodRows", () => {
    * looking merely broken.
    */
   it("notices an expired session in a failure that came as an event", async () => {
-    const { readExpiredCredentials, credentialsRestored } = await import(
-      "./credentials"
-    );
+    const { readExpiredCredentials, credentialsRestored } =
+      await import("./credentials");
     credentialsRestored();
 
     const answer = listPodRows("shop");
@@ -122,9 +121,7 @@ describe("listPodRows", () => {
       message: "CREDENTIALS_EXPIRED: the token expired at 12:00",
     });
     await expect(answer).rejects.toThrow(/CREDENTIALS_EXPIRED/);
-    expect(readExpiredCredentials()?.reason).toBe(
-      "the token expired at 12:00"
-    );
+    expect(readExpiredCredentials()?.reason).toBe("the token expired at 12:00");
     credentialsRestored();
   });
 
