@@ -1154,6 +1154,7 @@ export interface CheckOutcome {
   answeredWith: string | null;
   ok: boolean;
   toolMissing: boolean;
+  unknown: boolean;
   exitCode: number | null;
   stdout: string;
   stderr: string;

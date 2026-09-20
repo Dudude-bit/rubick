@@ -57,18 +57,34 @@ export type Verdict =
   | { says: "notResolved" }
   | { says: "connected" }
   | { says: "refused" }
-  | { says: "noTool"; tried: string[] };
+  | { says: "noTool"; tried: string[] }
+  /**
+   * Nobody got an answer: the exec ended without ever reporting how, or the
+   * tool answered in a way that says nothing either way. Not the same as a
+   * name that does not resolve or a port that refuses — those are findings
+   * about the cluster, this is a finding about the attempt.
+   */
+  | { says: "unanswered"; tool: string | null };
 
 /** What the outcome means, as a key the catalogue turns into words. */
 export function verdictOf(kind: "dns" | "tcp", outcome: CheckOutcome): Verdict {
   if (outcome.toolMissing) return { says: "noTool", tried: outcome.tried };
+  // An exec that never reported how it ended has not answered the question.
+  // Saying "does not resolve" there states a fact about the name from a run
+  // that produced no fact at all.
+  if (outcome.unknown)
+    return { says: "unanswered", tool: outcome.answeredWith ?? null };
   if (kind === "dns") {
     const addresses = addressesIn(outcome.stdout);
     // `nslookup` exits 0 with "can't resolve" in its output on busybox, so
     // the exit code alone is not the answer; an address is.
-    return outcome.ok && addresses.length > 0
-      ? { says: "resolved", addresses }
-      : { says: "notResolved" };
+    if (outcome.ok && addresses.length > 0)
+      return { says: "resolved", addresses };
+    // And the other way round: a resolver that could not be reached exits
+    // non-zero with nothing in stdout, which is not the name being absent.
+    return outcome.ok || outcome.stdout.trim().length > 0
+      ? { says: "notResolved" }
+      : { says: "unanswered", tool: outcome.answeredWith ?? null };
   }
   return outcome.ok ? { says: "connected" } : { says: "refused" };
 }

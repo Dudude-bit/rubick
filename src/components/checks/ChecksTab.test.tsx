@@ -33,6 +33,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   answeredWith: "nc",
   ok: true,
   toolMissing: false,
+  unknown: false,
   exitCode: 0,
   stdout: "",
   stderr: "",
@@ -77,6 +78,67 @@ describe("testing a hypothesis from the pod", () => {
       await screen.findByText(/accepts a connection from here/)
     ).toBeVisible();
     expect(screen.getByText(/in the pod's own container/)).toBeVisible();
+  });
+
+  /**
+   * The two verdicts this tab exists to deliver, and neither was rendered by
+   * any test: I rewrote `sentence()` so `notResolved` returned the words of
+   * `resolved` and the whole suite stayed green. A tab that says a name
+   * resolves when it does not is worse than no tab.
+   */
+  it("says a name does not resolve, in the words for that and not another", async () => {
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({
+        tried: ["getent"],
+        answeredWith: "getent",
+        ok: false,
+        exitCode: 2,
+        stdout: "** server can't find db.shop: NXDOMAIN",
+      })
+    );
+    mount();
+    await userEvent.type(screen.getByLabelText(/Resolve/), "db.shop");
+    await userEvent.click(screen.getAllByRole("button", { name: /Run/ })[0]);
+
+    expect(await screen.findByText(/does not resolve from here/)).toBeVisible();
+    expect(screen.queryByText(/resolves to/)).toBeNull();
+  });
+
+  it("says a port does not answer, and not that it accepted", async () => {
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({ ok: false, exitCode: 7 })
+    );
+    mount();
+    await userEvent.type(screen.getByLabelText(/Connect to/), "db:5432");
+    await userEvent.click(screen.getAllByRole("button", { name: /Run/ })[1]);
+
+    expect(await screen.findByText(/does not answer from here/)).toBeVisible();
+    expect(screen.queryByText(/accepts a connection/)).toBeNull();
+  });
+
+  /**
+   * `CopyReport.deleted` is documented as "confirmed gone, not merely asked
+   * to go", and its false case has its own words. Nothing fed `false`, so
+   * an escaped copy was reported as cleaned up — about a pod still running
+   * in the reader's namespace.
+   */
+  it("does not report a copy as deleted when the delete was not confirmed", async () => {
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({
+        ranIn: "copy",
+        copy: {
+          pod: "k8s-gui-check-payments-abc",
+          image: "busybox",
+          deleted: false,
+        } as CheckOutcome["copy"],
+      })
+    );
+    mount();
+    await userEvent.type(screen.getByLabelText(/Connect to/), "db:5432");
+    await userEvent.click(screen.getAllByRole("button", { name: /Run/ })[1]);
+
+    expect(await screen.findByText(/not confirmed deleted/)).toBeVisible();
+    expect(screen.queryByText(/deleted afterwards/)).toBeNull();
   });
 
   /**

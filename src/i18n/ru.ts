@@ -1481,6 +1481,9 @@ export const ru: Catalogue = {
     ranInCopy: "в копии пода на {image}, {deleted} ({pod})",
     copyDeleted: "после удалена",
     copyNotDeleted: "удаление не подтверждено",
+    unanswered: "Проверка закончилась, не сказав чем",
+    unansweredBy:
+      "{tool} закончил, не сказав чем, — это не ответ про кластер",
     answeredWith: "ответил {tool}",
     runFromCopy: "Запустить из копии",
     copyImage: "Образ для копии",

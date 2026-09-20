@@ -1478,6 +1478,10 @@ export const en = {
     ranInCopy: "in a copy of the pod running {image}, {deleted} ({pod})",
     copyDeleted: "deleted afterwards",
     copyNotDeleted: "not confirmed deleted",
+    unanswered: "The check ended without saying how it went",
+    unansweredBy:
+      "{tool} ended without saying how it went, so this is not an answer about the cluster",
+
     answeredWith: "answered by {tool}",
     runFromCopy: "Run from a copy",
     copyImage: "Image for the copy",

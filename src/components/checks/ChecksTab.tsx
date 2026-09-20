@@ -233,8 +233,7 @@ function Answer({
               image: run.outcome.copy.image,
               pod: run.outcome.copy.pod,
               deleted: run.outcome.copy.deleted
-                ? t("checks", "copyDeleted")
-                : t("checks", "copyNotDeleted"),
+                ? t("checks", "copyDeleted") : t("checks", "copyNotDeleted"),
             })
           : t("checks", "ranInContainer")}
         {run.outcome.answeredWith
@@ -288,5 +287,9 @@ function sentence(verdict: Verdict, subject: string, t: T): string {
       return t("checks", "refused", { address: subject });
     case "noTool":
       return t("checks", "noTool", { tried: verdict.tried.join(", ") });
+    case "unanswered":
+      return verdict.tool
+        ? t("checks", "unansweredBy", { tool: verdict.tool })
+        : t("checks", "unanswered");
   }
 }

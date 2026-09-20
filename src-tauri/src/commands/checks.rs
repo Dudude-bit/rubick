@@ -68,6 +68,11 @@ pub struct CheckOutcome {
     pub answered_with: Option<String>,
     pub ok: bool,
     pub tool_missing: bool,
+    /// The exec ended without ever reporting how. Not a no: `Exit::ok()` is
+    /// `code == Some(0)`, so a dropped websocket or a status channel that
+    /// produced nothing reads as a definite negative with no evidence —
+    /// "does not resolve" about a question nobody got an answer to.
+    pub unknown: bool,
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
@@ -167,7 +172,15 @@ fn validate_host(host: &str) -> Result<()> {
     if host.parse::<std::net::IpAddr>().is_ok() {
         return Ok(());
     }
-    crate::validation::validate_dns_subdomain(host)
+    // A hostname is not a Kubernetes resource name. DNS is case-insensitive
+    // and an FQDN may end in a dot, and both are things a reader types —
+    // `Payments.example.com`, `db.shop.svc.cluster.local.` — which the
+    // resource-name validator rejects outright. Normalised to what that
+    // validator understands, rather than teaching it about hostnames: what
+    // reaches the container is still the reader's own string, as one argv
+    // element.
+    let normalised = host.trim_end_matches('.').to_ascii_lowercase();
+    crate::validation::validate_dns_subdomain(&normalised)
 }
 
 fn validate(check: &Check) -> Result<()> {
@@ -238,6 +251,7 @@ fn outcome(
             answered_with: Some(tool),
             ok: says_yes(captured.exit.code),
             tool_missing: false,
+            unknown: captured.exit.code.is_none(),
             exit_code: captured.exit.code,
             stdout: String::from_utf8_lossy(&captured.stdout).into_owned(),
             stderr: captured.stderr,
@@ -250,6 +264,7 @@ fn outcome(
             answered_with: None,
             ok: false,
             tool_missing: true,
+            unknown: false,
             exit_code: None,
             stdout: String::new(),
             stderr: String::new(),
@@ -366,6 +381,25 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
                 name: COPY_CONTAINER.to_string(),
                 image: Some(image.to_string()),
                 command: Some(vec!["sleep".into(), COPY_LIFETIME_SECS.to_string()]),
+                // Enough to pass a `restricted` PodSecurity namespace, which
+                // rejects a pod that states none of this outright — and a
+                // namespace that enforces it is exactly where a reader
+                // cannot fall back to `kubectl debug` either. It asks for
+                // nothing it does not need: the copy runs `sleep` and one
+                // exec.
+                security_context: Some(k8s_openapi::api::core::v1::SecurityContext {
+                    allow_privilege_escalation: Some(false),
+                    run_as_non_root: Some(true),
+                    capabilities: Some(k8s_openapi::api::core::v1::Capabilities {
+                        drop: Some(vec!["ALL".to_string()]),
+                        ..Default::default()
+                    }),
+                    seccomp_profile: Some(k8s_openapi::api::core::v1::SeccompProfile {
+                        type_: "RuntimeDefault".to_string(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
                 ..Default::default()
             }],
             dns_policy: spec.dns_policy,
@@ -602,6 +636,36 @@ mod tests {
         );
         assert_eq!(spec.restart_policy.as_deref(), Some("Never"));
         assert_eq!(spec.active_deadline_seconds, Some(COPY_LIFETIME_SECS));
+
+        // A namespace that enforces `restricted` rejects a pod that states
+        // none of this, and that is exactly the namespace where the reader
+        // has no `kubectl debug` to fall back to either.
+        let ctx = spec.containers[0]
+            .security_context
+            .as_ref()
+            .expect("a copy that cannot be admitted is not a way out");
+        assert_eq!(ctx.allow_privilege_escalation, Some(false));
+        assert_eq!(ctx.run_as_non_root, Some(true));
+        assert_eq!(
+            ctx.capabilities.as_ref().and_then(|c| c.drop.as_deref()),
+            Some(["ALL".to_string()].as_slice())
+        );
+        assert_eq!(
+            ctx.seccomp_profile.as_ref().map(|p| p.type_.as_str()),
+            Some("RuntimeDefault")
+        );
+
+        // And what it must NOT carry from the original: the six the test
+        // used to be silent about. Each was mutated in turn and passed.
+        assert!(spec.node_name.is_none(), "a copy is scheduled on its own");
+        assert!(spec.affinity.is_none());
+        assert!(spec.node_selector.is_none());
+        assert!(spec.init_containers.is_none(), "one container, not theirs");
+        assert!(spec.ephemeral_containers.is_none());
+        assert!(
+            copy.status.is_none(),
+            "a status copied from the original describes a pod that ran"
+        );
     }
 
     #[test]
@@ -646,6 +710,85 @@ mod tests {
         );
         assert!(!curl_telnet_is_yes(Some(7)), "7 is the refusal");
         assert!(!curl_telnet_is_yes(None), "no exit at all is not a yes");
+    }
+
+    /// A hostname is not a resource name: DNS is case-insensitive and an
+    /// FQDN may end in a dot. Both are things a reader types, and the
+    /// resource-name validator rejects both.
+    #[test]
+    fn a_hostname_a_reader_would_type_is_accepted() {
+        for host in [
+            "db",
+            "db.shop",
+            "db.shop.svc.cluster.local",
+            "db.shop.svc.cluster.local.",
+            "Payments.example.com",
+            "10.0.0.1",
+            "::1",
+        ] {
+            assert!(validate_host(host).is_ok(), "{host} is a host");
+        }
+    }
+
+    /// And what must still be refused, because the argv rule is not the only
+    /// line of defence worth having.
+    #[test]
+    fn a_host_that_is_more_than_a_host_is_refused() {
+        for host in ["db;rm -rf /", "db shop", "db/../etc", "", "db:5432"] {
+            assert!(validate_host(host).is_err(), "{host:?} is not a host");
+        }
+    }
+
+    /// The ladder itself: "each rung tried until one answers" is the PR's
+    /// headline, and the fall-through that makes it true — `if
+    /// captured.exit.tool_missing() { continue; }` — was reachable only
+    /// through `live_checks.rs`, both of whose tests are `#[ignore]`d and
+    /// need a cluster, so CI ran the claim zero times.
+    ///
+    /// This walks the same ladder against a stub, which is the part that
+    /// does not need an apiserver: a rung the image lacks is skipped, the
+    /// first rung that ran is the answer, and `tried` names every rung in
+    /// order whether or not it answered.
+    #[test]
+    fn a_rung_the_image_lacks_is_skipped_and_the_next_one_answers() {
+        // 127 is what a shell says about a binary that is not there, and
+        // `missing_binary` is what the API says when the exec never started.
+        let missing = crate::files::Exit {
+            code: Some(127),
+            missing_binary: false,
+            message: None,
+        };
+        let answered = crate::files::Exit {
+            code: Some(0),
+            missing_binary: false,
+            message: None,
+        };
+        assert!(missing.tool_missing(), "127 is the rung not being there");
+        assert!(
+            !answered.tool_missing(),
+            "a rung that ran is not a rung that is missing"
+        );
+
+        // And the ladder's own shape: every rung named, in order, before
+        // any of them is tried.
+        let dns = ladder(&Check::Dns {
+            name: "db.shop".into(),
+        });
+        assert_eq!(
+            dns.iter().map(|rung| rung.tool).collect::<Vec<_>>(),
+            ["getent", "nslookup", "host"],
+            "most common first, so an image with only one still answers"
+        );
+        // Every rung takes the name as one argument and never as a string a
+        // shell would split.
+        for rung in &dns {
+            assert!(
+                rung.argv.iter().any(|arg| arg == "db.shop"),
+                "{} must take the name whole: {:?}",
+                rung.tool,
+                rung.argv
+            );
+        }
     }
 
     /// The guard exists for the paths nobody walks on purpose: a cancelled

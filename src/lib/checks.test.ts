@@ -9,6 +9,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   answeredWith: "getent",
   ok: true,
   toolMissing: false,
+  unknown: false,
   exitCode: 0,
   stdout: "",
   stderr: "",
@@ -84,5 +85,56 @@ describe("reading what the resolver said", () => {
       verdictOf("tcp", outcome({ answeredWith: "nc", ok: false, exitCode: 1 }))
         .says
     ).toBe("refused");
+  });
+});
+
+describe("a check that produced no answer at all", () => {
+  /**
+   * `Exit::ok()` is `code == Some(0)`, and an exec whose status channel
+   * never produced one has `code: None` — a dropped websocket, an
+   * apiserver that went away mid-exec. Folding that into the negative told
+   * the reader "the name does not resolve", a stated fact about the
+   * cluster, from a run that produced no fact at all.
+   */
+  it("does not call a dropped exec a name that does not resolve", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({ ok: false, unknown: true, exitCode: null, stdout: "" })
+    );
+    expect(verdict.says).toBe("unanswered");
+  });
+
+  it("does not call a dropped exec a port that refuses", () => {
+    const verdict = verdictOf(
+      "tcp",
+      outcome({ ok: false, unknown: true, exitCode: null })
+    );
+    expect(verdict.says).toBe("unanswered");
+  });
+
+  /**
+   * And the other half, or the third state would swallow the findings: a
+   * resolver that answered and said the name is not there, and a port that
+   * answered with a refusal, are both real answers worth stating.
+   */
+  it("still says a name does not resolve when the resolver said so", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({
+        ok: false,
+        unknown: false,
+        exitCode: 1,
+        stdout: "** server can't find db.shop: NXDOMAIN",
+      })
+    );
+    expect(verdict.says).toBe("notResolved");
+  });
+
+  it("still says a port refuses when the tool said so", () => {
+    const verdict = verdictOf(
+      "tcp",
+      outcome({ ok: false, unknown: false, exitCode: 7 })
+    );
+    expect(verdict.says).toBe("refused");
   });
 });
