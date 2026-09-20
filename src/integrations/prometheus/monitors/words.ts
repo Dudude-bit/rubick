@@ -1,4 +1,5 @@
 import type { T } from "@/i18n/useT";
+import type { Picture } from "./data";
 import type { MonitorRow } from "./model";
 
 /** The tone a row is drawn in, as one word so every reader of it agrees. */
@@ -69,4 +70,21 @@ export function rowWords(row: MonitorRow, t: T): string {
   }
   if (row.scrape.state !== "read") return t("monitors", "rowNotChecked");
   return t("monitors", "rowUp", { n: row.scrape.up });
+}
+
+/** The one line above the list, as a key so each branch is distinguishable. */
+export type Headline =
+  "someUnread" | "needAttention" | "allScraped" | "scrapeUnchecked";
+
+export function headlineKey(picture: Picture, rows: MonitorRow[]): Headline {
+  const unread = [picture.serviceMonitors, picture.podMonitors].some(
+    (kind) => kind.state === "unread"
+  );
+  // A refused kind is not missing from `rows` — it is invisible in it, so
+  // the count alone would read as the whole picture.
+  if (unread) return "someUnread";
+  if (rows.some((row) => row.worst !== null)) return "needAttention";
+  // Without targets nothing is known about scraping: every row says so, and
+  // this line used to say "all scraped" over them.
+  return picture.targets.state === "read" ? "allScraped" : "scrapeUnchecked";
 }

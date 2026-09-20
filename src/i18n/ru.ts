@@ -2092,6 +2092,12 @@ export const ru: Catalogue = {
       many: "{n} мониторов, все скрейпятся",
       other: "{n} мониторов, все скрейпятся",
     },
+    scrapeUnchecked: {
+      one: "{n} монитор, скрейпится ли — не проверено",
+      few: "{n} монитора, скрейпятся ли — не проверено",
+      many: "{n} мониторов, скрейпятся ли — не проверено",
+      other: "{n} мониторов, скрейпятся ли — не проверено",
+    },
     filterMonitors: "Фильтр по имени или namespace",
     filterMonitorsLabel: "Фильтровать мониторы по имени или namespace",
     none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",

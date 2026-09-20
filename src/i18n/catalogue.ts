@@ -2032,10 +2032,15 @@ export const en = {
     },
     ofTotal: "of {total}",
     needAttention: "{n} of {total} need attention",
-    someUnread: "Some monitors could not be read, so this is not the whole picture",
+    someUnread:
+      "Some monitors could not be read, so this is not the whole picture",
     allScraped: {
       one: "{n} monitor, scraped",
       other: "{n} monitors, all scraped",
+    },
+    scrapeUnchecked: {
+      one: "{n} monitor; whether it is scraped is unchecked",
+      other: "{n} monitors; whether they are scraped is unchecked",
     },
     filterMonitors: "Filter by name or namespace",
     filterMonitorsLabel: "Filter monitors by name or namespace",

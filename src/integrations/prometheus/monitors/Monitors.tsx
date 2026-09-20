@@ -14,7 +14,15 @@ import { useHeartbeat } from "./heartbeat";
 import { Strip } from "./Strip";
 import { useNow } from "@/hooks/useNow";
 import { rowsOfPicture, usePicture, type Picture } from "./data";
-import { DOT, RING, SELECTED, WORDS, rowTone, rowWords } from "./words";
+import {
+  DOT,
+  RING,
+  SELECTED,
+  WORDS,
+  headlineKey,
+  rowTone,
+  rowWords,
+} from "./words";
 import {
   POD_MONITORS_CRD,
   SERVICE_MONITORS_CRD,
@@ -141,25 +149,19 @@ export default function Monitors() {
 function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
   const t = useT();
   const attention = rows.filter((row) => row.worst !== null).length;
-  // `rows` is built from the kinds that answered, so a refused list is not
-  // absent from it — it is invisible in it. "0 monitors, all scraped" over
-  // a 403 is the cache's own third state collapsing in the one line the
-  // reader looks at first.
-  const unread = [picture.serviceMonitors, picture.podMonitors].some(
-    (kind) => kind.state === "unread"
-  );
+  const says = headlineKey(picture, rows);
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
       <div className="min-w-0 max-w-[60ch]">
         <p className="text-[13px] font-semibold tracking-tight text-fg">
-          {unread
+          {says === "someUnread"
             ? t("monitors", "someUnread")
-            : attention > 0
+            : says === "needAttention"
               ? t("monitors", "needAttention", {
                   n: attention,
                   total: rows.length,
                 })
-              : t("monitors", "allScraped", { n: rows.length })}
+              : t("monitors", says, { n: rows.length })}
         </p>
         <p className="mt-0.5 text-xs text-fg-mut">
           {t("monitors", "pageHint")}
