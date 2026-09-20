@@ -7,7 +7,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { NO_STATUS, getValueByPath, matchMultiple } from "../kit";
+import { getValueByPath, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingIdentity,
@@ -125,5 +125,4 @@ export const crd: CrdView = {
   // Only one of these four kinds reports anything at all, and it reports it
   // in a column above. A shared status here would have to answer for the
   // three that have none, which it could only do by making something up.
-  status: NO_STATUS,
 };

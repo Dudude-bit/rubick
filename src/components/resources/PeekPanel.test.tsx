@@ -96,6 +96,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { pageTab } from "@/hooks/usePeek";
 
 function buildPod(overrides: Partial<PodInfo> = {}): PodInfo {
   return {
@@ -381,6 +382,25 @@ describe("PeekPanel", () => {
     expect(screen.getByTestId("peek-skeleton")).toBeInTheDocument();
   });
 
+  /**
+   * The panel is named by its title, and the name has to be the object:
+   * the kind from `ResourceName`'s hidden span, then the name, and nothing
+   * else. A label that leaks in from a control beside it is the identity
+   * said twice with a verb in the middle.
+   *
+   * What this does *not* catch: re-nesting `CopyName` inside `SheetTitle`.
+   * Checked by moving it — the computed name is byte-identical either way
+   * here, so the arrangement the comment in PeekPanel.tsx defends is not
+   * observable in this environment and is not guarded by anything.
+   */
+  it("announces itself as the object and nothing else", () => {
+    vi.mocked(commands.getPod).mockReturnValue(new Promise(() => {}));
+    wrap(POD_PEEK);
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(
+      "Pod crash-demo-56588f6b8c-8bj9v"
+    );
+  });
+
   /** The badge says what the kubelet last wrote. Once that kubelet stops
    *  answering, the word is a memory: the pods list and the pod page both
    *  drop the colour for it, and this panel drew the same pod confident
@@ -468,6 +488,18 @@ describe("PeekPanel", () => {
       await screen.findByRole("button", { name: /Open full page/ })
     );
     expect(location()).toBe("/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v");
+  });
+
+  /** Issue #178: leaving Logs for the page landed on Overview. Would break if the tab stopped travelling. */
+  it("takes the open tab along to the full page", async () => {
+    wrap(POD_PEEK);
+    await openTab("Logs");
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open full page/ })
+    );
+    expect(location()).toBe(
+      "/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v?tab=logs"
+    );
   });
 
   // Radix owns Escape; a second listener here would close it twice.
@@ -1452,5 +1484,31 @@ describe("restarting a managed workload from the peek on critical infrastructure
         "k8s-gui-test"
       )
     );
+  });
+});
+
+/**
+ * The half of "carry the tab along" that the `logs` case cannot see: both
+ * sides spell `logs` the same, so a test on a Pod passes whatever the
+ * mapping does. The peek has one `children` tab for a workload's pods and a
+ * CronJob's jobs, and each page names that tab after the kind it lists — so
+ * `?tab=children` matched nothing, the page opened on Overview, and the
+ * address kept a parameter the scope tab then recorded as its route.
+ */
+describe("the peek tab as the detail page spells it", () => {
+  it("names a workload's children after the kind that page lists", () => {
+    expect(pageTab("children", "Deployment")).toBe("pods");
+    expect(pageTab("children", "StatefulSet")).toBe("pods");
+    expect(pageTab("children", "CronJob")).toBe("jobs");
+  });
+
+  it("passes through the tabs both sides spell alike", () => {
+    for (const tab of ["logs", "containers", "connections", "yaml", "data"])
+      expect(pageTab(tab, "Pod")).toBe(tab);
+  });
+
+  /** Overview is where a page opens anyway; saying so in the URL is noise. */
+  it("says nothing for the tab a page opens on", () => {
+    expect(pageTab("overview", "Pod")).toBeNull();
   });
 });

@@ -69,7 +69,8 @@ pub(super) enum AfterFailure {
 
 /// Whether the API server's answer can change by asking again.
 ///
-/// 401 and 403 can — this app does not renew credentials, so the recovery is
+/// 401 and 403 can — a background renewal only covers a context whose plugin
+/// named a deadline and answered without a person, so the recovery is
 /// the user reconnecting, and `current_client` picks that up on the next
 /// attempt. What cannot change on its own is a 404: the pod named at session
 /// start is gone, and a Deployment's replacement has a different name.
@@ -111,12 +112,11 @@ pub(super) fn after_failure(err: &kube::Error, attempt: u32, auto_reconnect: boo
 /// The client to forward through, looked up fresh.
 ///
 /// Not the client the session started with. A `kube::Client` carries the
-/// credentials it was built with, and this app does not renew them — a GKE
-/// token lasts about an hour. Held across a session, it goes on failing every
-/// call after that hour and keeps failing after the user reconnects the
-/// cluster, because the reconnect replaces the manager's client while this
-/// task still holds its own copy. Asked for per attempt, a reconnect heals
-/// the forward instead of leaving it to retry a dead credential forever.
+/// credentials it was built with — a GKE token lasts about an hour. Held
+/// across a session, it goes on failing every call after that hour and keeps
+/// failing after the client is replaced, by a reconnect or by `auth::renew`,
+/// because this task still holds its own copy. Asked for per attempt, either
+/// one heals the forward instead of leaving it to retry a dead credential.
 fn current_client(
     manager: &crate::client::K8sClientManager,
     context: &str,

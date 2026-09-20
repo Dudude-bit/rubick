@@ -13,6 +13,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { listPodRows } from "@/lib/pod-rows";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
@@ -60,15 +61,8 @@ export function usePrefetchCoreLists(): void {
     });
 
     void queryClient.prefetchQuery({
-      queryKey: queryKeys.pods(namespace),
-      queryFn: () =>
-        commands.listPods({
-          namespace,
-          statusFilter: null,
-          selector: null,
-          nodeName: null,
-          ...base,
-        }),
+      queryKey: queryKeys.podRows(namespace),
+      queryFn: ({ signal }) => listPodRows(namespace, signal),
       staleTime: STALE_TIMES.resourceList,
     });
     void queryClient.prefetchQuery({

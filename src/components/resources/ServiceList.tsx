@@ -73,7 +73,13 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   {
     // Two `80:30080/TCP` mappings and a "+3" after them.
     size: 180,
-    accessorKey: "ports",
+    id: "ports",
+    accessorFn: (row) =>
+      row.ports
+        .map((port) =>
+          [port.name, port.port, port.protocol].filter(Boolean).join(" ")
+        )
+        .join(" "),
     header: () => <T section="columns" k="ports" />,
     cell: ({ row }) => (
       <PortsDisplay ports={row.original.ports} maxDisplay={2} />

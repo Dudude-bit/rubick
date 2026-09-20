@@ -9,7 +9,7 @@
  */
 
 import type { CrdColumn } from "./kit";
-import { conditionStatus, getValueByPath, matchByGroup } from "./kit";
+import { getValueByPath, matchByGroup } from "./kit";
 import type { CrdView } from "./registry";
 
 function names(value: unknown): string {
@@ -199,5 +199,4 @@ export const gatewayCrd: CrdView = {
   },
   // Every kind in the group writes Accepted — for a GatewayClass it is the
   // claim itself, for a Gateway and a route it is the controller's consent.
-  status: conditionStatus("Accepted"),
 };

@@ -1,0 +1,4 @@
+{
+  "listDeadlineSeconds": 60,
+  "slowReadSeconds": 8
+}

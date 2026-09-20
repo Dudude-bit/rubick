@@ -24,6 +24,7 @@ function clock(tickMs: number): (live: boolean) => number {
 }
 
 const halfMinute = clock(30_000);
+const second = clock(1_000);
 const tenth = clock(100);
 
 /**
@@ -47,4 +48,16 @@ export function useNow(): number {
  */
 export function useNowTenths(live = true): number {
   return tenth(live);
+}
+
+/**
+ * The wall clock to the second, for a wait somebody is sitting through.
+ *
+ * Between the two above on purpose: a skeleton that has been one for
+ * fourteen seconds should say fourteen, and a tenth-of-a-second clock would
+ * wake every list on the page for a number nobody reads that finely. Pass
+ * `live: false` the moment there is nothing to wait for.
+ */
+export function useNowSeconds(live = true): number {
+  return second(live);
 }

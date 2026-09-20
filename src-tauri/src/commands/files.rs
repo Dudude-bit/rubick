@@ -1,9 +1,7 @@
 //! Files inside a container: list, preview, download. Read-only by design.
 
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
 use tauri::State;
 use tokio::sync::oneshot;
 
@@ -13,21 +11,10 @@ use crate::error::{Error, Result};
 /// node never ends on its own.
 const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 use crate::files::{self, Exit, FilePreview, Listing, Via};
-use crate::state::{AppEvent, AppState, LogStream};
+use crate::state::{AppEvent, AppState, LogStream, RemoveOnDrop};
 use crate::utils::normalize_optional_namespace;
 
 const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
-
-struct StreamCleanup {
-    map: Arc<DashMap<String, LogStream>>,
-    key: String,
-}
-
-impl Drop for StreamCleanup {
-    fn drop(&mut self) {
-        self.map.remove(&self.key);
-    }
-}
 
 fn check_path(path: &str) -> Result<()> {
     if !path.starts_with('/') || path.contains('\0') {
@@ -108,7 +95,7 @@ pub async fn list_container_files(
 
     let id = stream_id.clone();
     tokio::spawn(async move {
-        let _cleanup = StreamCleanup {
+        let _cleanup = RemoveOnDrop {
             map: streams,
             key: id.clone(),
         };

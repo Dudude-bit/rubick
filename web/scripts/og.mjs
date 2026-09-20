@@ -20,14 +20,14 @@ const CARDS = [
   },
   {
     file: "og/running.png",
-    eyebrow: "Lie #1 of 3",
+    eyebrow: "Lie #1 of 4",
     title: "“Running”, says the pod.",
     reported: "Running",
     observed: "CrashLoopBackOff",
   },
   {
     file: "og/all-green.png",
-    eyebrow: "Lie #2 of 3",
+    eyebrow: "Lie #2 of 4",
     title: "“All green”, says the Service.",
     reported: "3 endpoints",
     observed: "no port published",
@@ -48,10 +48,17 @@ const CARDS = [
   },
   {
     file: "og/no-route.png",
-    eyebrow: "Lie #3 of 3",
+    eyebrow: "Lie #3 of 4",
     title: "“No route to host”, says nobody at all.",
     reported: "Ingress accepted",
     observed: "Service api-v2 not found",
+  },
+  {
+    file: "og/protected.png",
+    eyebrow: "Lie #4 of 4",
+    title: "\u201cProtected\u201d, says the namespace.",
+    reported: "4 policies",
+    observed: "1 thrown away for a typo",
   },
 ];
 

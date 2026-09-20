@@ -18,7 +18,8 @@
  *   already there, in the same component every other warning is drawn with.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useDeferredValue } from "react";
+import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
 import {
   Dialog,
@@ -43,6 +44,8 @@ import { deliveryApplyIntercept, deliveryOfManifest } from "@/lib/delivery";
 import { applyWarnings, changesReplicaCount } from "@/lib/governance";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
+import { useAsk } from "@/hooks/useAsk";
+import { askableKind } from "@/lib/tell-me-when";
 import { AlertTriangle, Play, FileCheck, FileJson } from "lucide-react";
 import { errorToShow } from "@/lib/error-utils";
 
@@ -59,6 +62,7 @@ interface YamlEditorActionProps {
   fetchYaml: () => Promise<string>;
   menuLabel?: string;
   readOnly?: boolean;
+  className?: string;
 }
 
 /** Open it, and say why if it will not open. Shared by both affordances. */
@@ -99,6 +103,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
       label={editorLabel(t, props)}
       icon={FileJson}
       onClick={open}
+      className={props.className}
     />
   );
 }
@@ -106,6 +111,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 // DropdownMenuItem-based action for use in action menus
 // Main Dialog Component
 export function YamlEditorDialog() {
+  const asking = useAsk();
   const t = useT();
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
@@ -166,10 +172,17 @@ export function YamlEditorDialog() {
   // the sentence is already there when the reader gets to it; the query key
   // is the detail page's, so a page that has read its connections pays
   // nothing.
-  const replicasMoved =
-    !readOnly &&
-    hasChanges &&
-    changesReplicaCount(originalContent, editedContent);
+  // Two whole-document parses per keystroke on a long manifest, and the
+  // answer is only needed by the time the confirmation opens: deferred, so
+  // typing is never behind them, and memoised on what was actually parsed.
+  const settledContent = useDeferredValue(editedContent);
+  const replicasMoved = useMemo(
+    () =>
+      !readOnly &&
+      originalContent !== settledContent &&
+      changesReplicaCount(originalContent, settledContent),
+    [readOnly, originalContent, settledContent]
+  );
   const governance = useConnections(
     resourceKey?.kind ?? "",
     resourceKey?.name,
@@ -239,6 +252,17 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         addHistoryEntry(editedContent, "Applied");
+        const askable = resourceKey ? askableKind(resourceKey.kind) : null;
+        if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
+          asking.ask(
+            {
+              kind: askable,
+              namespace: resourceKey.namespace ?? currentNamespace ?? null,
+              name: resourceKey.name,
+            },
+            { action: "apply", replicas: null, generationBefore: null }
+          );
+        }
 
         toast({
           title: t("action", "applySucceeded"),
@@ -253,22 +277,31 @@ export function YamlEditorDialog() {
       }
     } catch (error) {
       const errorMessage = errorToShow(error);
+      // A deadline is not a refusal. The layer that fires it drops our
+      // request; it does not undo what the apiserver may already have
+      // committed — a chain of admission webhooks can outlast the wait.
+      // "Apply failed" there is a verdict about something nobody looked at,
+      // and it invites a second apply on top of a first that may have run.
+      const ranOut = isReadDeadline(error);
       const errorResult = {
         success: false,
         stdout: "",
-        stderr: errorMessage,
+        stderr: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
         exit_code: 1,
       };
       setApplyResult(errorResult);
       toast({
-        title: t("action", "applyFailed"),
-        description: errorMessage,
-        variant: "destructive",
+        title: ranOut
+          ? t("action", "applyUnanswered")
+          : t("action", "applyFailed"),
+        description: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
+        variant: ranOut ? "default" : "destructive",
       });
     } finally {
       setIsApplying(false);
     }
   }, [
+    asking,
     editedContent,
     resourceKey,
     currentNamespace,
@@ -491,6 +524,7 @@ export function YamlEditorDialog() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {asking.dialog}
     </>
   );
 }

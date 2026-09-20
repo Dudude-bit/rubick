@@ -318,6 +318,60 @@ describe("FilesTab", () => {
   });
 
   /**
+   * Issue #178: a file over the old 100 MiB cap was refused outright. It is
+   * asked about now, and the file dialog opens only after the answer. Would
+   * break if the confirmation went away, or if the cap fell back under it.
+   */
+  it("asks before a download that will take minutes, and not before a small one", async () => {
+    listing.mockReturnValue(
+      done([
+        {
+          name: "core.1842",
+          kind: "file",
+          mode: "600",
+          size: 300 * 1024 * 1024,
+          modified: null,
+          owner: "app",
+          group: "app",
+          target: null,
+        },
+      ])
+    );
+    readContainerFile.mockResolvedValue({
+      state: "preview",
+      preview: {
+        bytesRead: 1024,
+        truncated: true,
+        binary: true,
+        nonTextShare: 0.5,
+        lossy: false,
+        text: null,
+      },
+    });
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(screen.getByText("core.1842"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Download" })
+    );
+    expect(
+      await screen.findByText(/Download core.1842 \(300.0 MB\)\?/)
+    ).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Download" }).at(-1)!
+    );
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  });
+
+  /**
    * "Reading, and nothing has arrived yet" and "the tool finished and found
    * nothing" are two different answers. Only the second one is emptiness, and
    * a listing that streams its rows in spends every read in the first.

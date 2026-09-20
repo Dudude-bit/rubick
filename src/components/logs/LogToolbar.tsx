@@ -27,7 +27,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import type { FieldIndex } from "./hooks/log-buffer";
+import type { FieldIndex, Frozen } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
 import { formatCount, type QueryTerm, type ViewMode } from "./types";
@@ -83,6 +83,8 @@ interface LogToolbarProps {
   /** Labels of the terms kept at the source rather than over the buffer. */
   intake: ReadonlySet<string>;
   onToggleIntake: (term: QueryTerm) => void;
+  frozen: Frozen | null;
+  onToggleFreeze: (term: QueryTerm) => void;
   /** What the buffer can be filtered by, offered when the query is focused. */
   fields: FieldIndex;
   /** Backfill and retention in one number — see `DEFAULT_LOG_LIMIT`. */
@@ -137,6 +139,8 @@ export function LogToolbar({
   onRemoveTerm,
   intake,
   onToggleIntake,
+  frozen,
+  onToggleFreeze,
   fields,
   limit,
   onLimitChange,
@@ -179,6 +183,8 @@ export function LogToolbar({
         onRemoveTerm={onRemoveTerm}
         intake={intake}
         onToggleIntake={onToggleIntake}
+        frozen={frozen}
+        onToggleFreeze={onToggleFreeze}
         fields={fields}
       />
 

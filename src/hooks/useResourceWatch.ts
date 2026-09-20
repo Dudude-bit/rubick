@@ -3,6 +3,7 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useT } from "@/i18n/useT";
 
 /** Operation tag — mirrors backend `WatchOp`. */
@@ -84,6 +85,7 @@ export function useResourceWatch<
 }: UseResourceWatchOptions): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
+  const renewals = useRenewals();
   const [resyncing, setResyncing] = useState(false);
   // Latest callbacks captured via refs so flipping a useState in
   // either callback doesn't tear down the subscription.
@@ -260,7 +262,9 @@ export function useResourceWatch<
     // memoised key (`queryKeys.resources(...)` inside a useMemo); when the
     // namespace or kind changes the reference changes too, and re-subscribing
     // is correct — the watch belongs to that key.
-  }, [enabled, subscribe, queryClient, queryKey]);
+    // `renewals`: a watch is handed a `kube::Client` once and holds it, so a
+    // background renewal leaves this one on credentials about to be refused.
+  }, [enabled, subscribe, queryClient, queryKey, renewals]);
 
   return { resyncing };
 }

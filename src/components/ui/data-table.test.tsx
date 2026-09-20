@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
@@ -18,6 +18,7 @@ import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 vi.mock("./data-table-rows", async (importOriginal) => {
@@ -55,8 +56,8 @@ const columns: ColumnDef<Item>[] = [
 ];
 
 function LocationProbe() {
-  const { pathname } = useLocation();
-  return <span data-testid="location">{pathname}</span>;
+  const { pathname, search } = useLocation();
+  return <span data-testid="location">{`${pathname}${search}`}</span>;
 }
 
 const wrap = (ui: ReactNode) =>
@@ -191,14 +192,78 @@ describe("DataTable rows", () => {
       />
     );
 
-  // A list is the page you are already browsing, so opening a row from it is
-  // a drill-down, not a look-without-leaving. If this starts peeking, Back
-  // stops being the way home from a list.
-  it("navigates on a plain click anywhere in the row", () => {
+  /**
+   * Issue #178: the name in a row peeked and the whitespace beside it went
+   * to the page, and nobody could tell which they would get. Now both peek,
+   * and the page is a double click. Would break if the row went back to
+   * navigating on a plain click, or if the double click stopped opening it.
+   */
+  it("peeks on a plain click anywhere in the row, and opens the page on a double click", () => {
     renderTable();
     fireEvent.click(whitespace());
-    expect(location()).toBe("/pods/ns/a-1");
+    expect(location()).toBe("/pods?peek=pods%2Fns%2Fa-1");
     expect(tabs()).toHaveLength(1);
+    fireEvent.doubleClick(whitespace());
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The name is where the eye goes when told "double click the row", and it
+   * is the one spot a `target.closest("a")` guard turned into nothing at
+   * all: the whitespace opened the page and the name only peeked. A link
+   * that points somewhere else — a row's node, its owner — keeps its own
+   * meaning, because the reader aimed at that link rather than at the row.
+   */
+  it("opens the page on a double click on the row's own name, and not on a link elsewhere", () => {
+    renderTable();
+    fireEvent.doubleClick(screen.getByText("a-1"));
+    expect(location()).toBe("/pods/ns/a-1");
+  });
+
+  /**
+   * The gutter the quick actions live in belongs to them: a single click
+   * there is deliberately inert, and a double click navigated, so the same
+   * spot answered two ways depending on how fast the reader clicked.
+   */
+  it("leaves the quick-actions gutter to the quick actions", () => {
+    const onClick = vi.fn();
+    renderTable({ quickAction: onClick });
+    const gutter = row().querySelector("[data-quick-actions]") as HTMLElement;
+    fireEvent.click(gutter);
+    expect(location()).toBe("/pods");
+    fireEvent.doubleClick(gutter);
+    expect(location()).toBe("/pods");
+  });
+
+  it("leaves a double click on a link to somewhere else alone", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: () => <RouteLink to="/nodes/worker-1">worker-1</RouteLink>,
+          },
+        ]}
+        data={[DATA[0]]}
+        getRowHref={href}
+      />
+    );
+    fireEvent.doubleClick(screen.getByText("worker-1"));
+    expect(location()).toBe("/pods");
+  });
+
+  // A row whose route has no peek behind it is a plain link, as it always was.
+  it("navigates on a plain click where the route is not an object", () => {
+    wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={(row) => `/helm/${row.namespace}/${row.name}`}
+      />
+    );
+    fireEvent.click(whitespace());
+    expect(location()).toBe("/helm/ns/a-1");
   });
 
   // This is the regression the whole change exists for: the row used to call
@@ -476,6 +541,328 @@ describe("column widths", () => {
   });
 
   /**
+   * A drag moves width from one column to the next; it does not add width.
+   *
+   * These tables are laid out in shares of their own width, and a dragged
+   * column sits in its own denominator — so a drag that *added* pixels moved
+   * the rendered edge by only a fraction of the travel, and the fraction
+   * shrank as the drag went on. Holding the total still is what makes a
+   * share move one-for-one with the pointer. Asserted on the shares, which
+   * is the part jsdom can see; that the grip lands under the finger follows
+   * from the total being constant.
+   */
+  it("takes the width a column gains from the one beside it", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="items"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    expect(grip).not.toBeNull();
+
+    const before = Number.parseFloat(widthOf("Name"));
+    // Driven through `act` because the drag lives on `window`, outside
+    // React's own event plumbing: without it the state update is scheduled
+    // and the assertion reads the DOM before it lands.
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeGreaterThan(before);
+    });
+    // Percentages always add up to 100, so summing them proves nothing. What
+    // the drag has to do is take from the neighbour: Name up by 40 of a 400
+    // total is Status down by exactly the same 10 points.
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      ((300 + 40) / 500) * 100,
+      5
+    );
+    expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(
+      ((200 - 40) / 500) * 100,
+      5
+    );
+  });
+
+  /**
+   * A column cannot be squeezed past the width of its own header word. Below
+   * that it is a sliver whose label is cut — and before the floor existed,
+   * the vendor's default of 20 let a drag paint one header over the next.
+   */
+  it("stops the neighbour at the narrowest a column may be", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="clamped"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 9999 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    // Everything it could take, and not the last 80 of it.
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      ((500 - 80) / 500) * 100,
+      5
+    );
+  });
+
+  /**
+   * The conversion the whole rewrite exists for. A table is laid out in
+   * shares, so one screen pixel is `total / width` of size — and jsdom
+   * reports every clientWidth as 0, which sends the drag down the `: 1`
+   * fallback. Every other test here therefore asserts raw pixel arithmetic
+   * and stays green with the conversion deleted or inverted; this one stubs
+   * the port's width so the arithmetic is the real one.
+   */
+  it("converts the pointer's travel through the width the table is drawn at", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="converted"
+      />
+    );
+    const port = document.querySelector("table")!.parentElement!;
+    Object.defineProperty(port, "clientWidth", {
+      value: 1000,
+      configurable: true,
+    });
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    // 500 units drawn across 1000px, so 40px of travel is 20 units — not 40.
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((300 + 20) / 500) * 100,
+        5
+      );
+    });
+    expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(
+      ((200 - 20) / 500) * 100,
+      5
+    );
+  });
+
+  /**
+   * The live drag has to win over what is stored, or the header freezes
+   * mid-drag and jumps on release. Every other test here drags once on a
+   * table with nothing stored, so swapping the precedence to
+   * `storedWidths ?? dragging` left them all green — while in the app every
+   * drag after the first, on every list the reader has ever resized, gave no
+   * feedback at all. The second drag is the whole point of this one.
+   */
+  it("follows the pointer on a second drag, after the first is stored", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="twice"
+      />
+    );
+    const grip = () =>
+      document.querySelector<HTMLElement>('[role="presentation"][title]')!;
+
+    act(() => {
+      fireEvent.pointerDown(grip(), { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((300 + 40) / 500) * 100,
+        5
+      );
+    });
+
+    // Asserted mid-drag, before the pointer is released: this is where the
+    // stored width would win and the header would sit still.
+    act(() => {
+      fireEvent.pointerDown(grip(), { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 30 } as MouseEventInit)
+      );
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+        ((340 + 30) / 500) * 100,
+        5
+      );
+    });
+    act(() => {
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+  });
+
+  /**
+   * A column narrower than the floor is narrow on purpose — the generated
+   * actions strip is 64 units for two icons. Clamping it up to 80 made the
+   * first pixel of any drag inflate it and narrow its neighbour, in a
+   * direction nobody dragged and which could never be given back.
+   */
+  it("leaves a column already narrower than the floor where it was", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 64 },
+        ]}
+        data={DATA}
+        rowLabel="narrow"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const before = Number.parseFloat(widthOf("Status"));
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 0 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(Number.parseFloat(widthOf("Status"))).toBeCloseTo(before, 5);
+    });
+    expect(Number.parseFloat(widthOf("Name"))).toBeCloseTo(
+      (300 / 364) * 100,
+      5
+    );
+  });
+
+  /**
+   * A right-click on the grip used to start a drag, and the context menu
+   * then ate the pointerup that would have ended it — so the table went on
+   * resizing itself under a pointer nobody was holding down.
+   */
+  it("does not start a drag on any button but the first", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="right-clicked"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const before = widthOf("Name");
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0, button: 2 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 120 } as MouseEventInit)
+      );
+    });
+    expect(widthOf("Name")).toBe(before);
+  });
+
+  /**
+   * Double-click is the only way back to the declared widths, and the store
+   * keeps what a drag wrote — so without it a table dragged once is dragged
+   * for good, on every visit, with nothing in the UI saying so.
+   */
+  it("puts both columns back to their declared widths on a double click", async () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 200 },
+        ]}
+        data={DATA}
+        rowLabel="reset"
+      />
+    );
+    const grip = document.querySelector<HTMLElement>(
+      '[role="presentation"][title]'
+    );
+    const declared = widthOf("Name");
+    act(() => {
+      fireEvent.pointerDown(grip!, { clientX: 0 });
+      fireEvent(
+        window,
+        new MouseEvent("pointermove", { clientX: 40 } as MouseEventInit)
+      );
+      fireEvent(window, new MouseEvent("pointerup", {}));
+    });
+    await waitFor(() => {
+      expect(widthOf("Name")).not.toBe(declared);
+    });
+    act(() => {
+      fireEvent.doubleClick(grip!);
+    });
+    await waitFor(() => {
+      expect(widthOf("Name")).toBe(declared);
+    });
+  });
+
+  /**
+   * The last column's right edge is the table's own, and there is nothing to
+   * its right to take width from. A grip there could not move anything — and
+   * the one that used to be there straddled the edge, giving every list in
+   * the app a few pixels of horizontal scroll it never had.
+   */
+  it("puts no grip on the last column", () => {
+    wrap(
+      <DataTable<Item>
+        columns={[
+          { ...columns[0], size: 300 },
+          { ...columns[1], size: 100 },
+        ]}
+        data={DATA}
+      />
+    );
+    const grips = document.querySelectorAll('[role="presentation"][title]');
+    expect(grips).toHaveLength(headers().length - 1);
+  });
+
+  /**
    * The actions column is generated, so nobody was ever going to notice it
    * taking a name column's share of the table for two 20px icons — which is
    * what the default did, on every list that has quick actions at all.
@@ -538,6 +925,25 @@ describe("the row's quick actions", () => {
     const name = screen.getByText("a-1").closest("td");
 
     expect(name?.className).toContain("overflow-hidden");
+    expect(actions?.className).not.toContain("overflow-hidden");
+  });
+
+  /**
+   * Clipping is about the layout being fixed, not about the density. It was
+   * written as `isCompact && ...`, so on comfortable — a real setting — a
+   * column dragged to its floor painted its text straight over the column
+   * beside it, which is the one thing fixed layout was chosen to prevent.
+   */
+  it("clips a text cell in comfortable density too", () => {
+    act(() =>
+      useDisplaySettingsStore.setState({ tableDensity: "comfortable" })
+    );
+    withActions();
+    const name = screen.getByText("a-1").closest("td");
+    const actions = screen.getAllByLabelText("View")[0].closest("td");
+
+    expect(name?.className).toContain("overflow-hidden");
+    // Still not the actions cell: clipping it clips the buttons' hit area.
     expect(actions?.className).not.toContain("overflow-hidden");
   });
 
@@ -767,6 +1173,69 @@ describe("a list past the virtualisation threshold", () => {
    * a search had left. End then aimed at row 499 of a list showing eleven,
    * found nothing to focus, and did nothing — silently.
    */
+  /**
+   * The box reaches every column a reader can see, not only the name.
+   *
+   * Ten lists used to aim it at one column, and searching an Ingress by the
+   * hostname it serves — or a StorageClass by its provisioner — found
+   * nothing. Fails if a second road back to a single column returns.
+   */
+  /**
+   * A column holding a structure is searched by the text it shows.
+   *
+   * An accessor over an array of objects stringifies to `[object Object]`,
+   * so the box matched nothing on it and "object" matched every row. The
+   * Ingress hosts column, which is the one people open that page to read,
+   * was one. Fails if such a column goes back to a bare `accessorKey`.
+   */
+  it("matches a column whose value is a structure by what it shows", async () => {
+    wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          {
+            id: "hosts",
+            accessorFn: (row: Item & { hosts?: string[] }) =>
+              (row.hosts ?? []).join(" "),
+            header: "Hosts",
+          },
+        ]}
+        data={[
+          { name: "a-1", namespace: "ns", hosts: ["legacy.nginx.test"] },
+          { name: "b-2", namespace: "ns", hosts: ["checkout.test"] },
+        ]}
+        getRowHref={href}
+      />
+    );
+
+    fireEvent.change(search(), { target: { value: "legacy.nginx" } });
+    await waitFor(() => expect(screen.queryByText("b-2")).toBeNull());
+    expect(screen.getByText("a-1")).toBeInTheDocument();
+  });
+
+  it("matches on a column other than the first", async () => {
+    wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          { accessorKey: "namespace", header: "Namespace" },
+        ]}
+        data={[
+          { name: "orders-api", namespace: "payments" },
+          { name: "billing-worker", namespace: "shop" },
+        ]}
+        getRowHref={href}
+      />
+    );
+    expect(screen.getByText("billing-worker")).toBeInTheDocument();
+
+    fireEvent.change(search(), { target: { value: "payments" } });
+    await waitFor(() =>
+      expect(screen.queryByText("billing-worker")).toBeNull()
+    );
+    expect(screen.getByText("orders-api")).toBeInTheDocument();
+  });
+
   it("sends End to the end of what the search left", async () => {
     long();
     fireEvent.change(search(), { target: { value: "pod-19" } });
@@ -964,5 +1433,82 @@ describe("a table given the page's height", () => {
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
     expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
+  });
+});
+
+describe("the namespace column", () => {
+  const withNamespace: ColumnDef<Item>[] = [
+    ...columns,
+    { accessorKey: "namespace", header: "Namespace" },
+  ];
+
+  /** Issue #178: with one namespace chosen the column repeated the scope bar on every row. */
+  it("is hidden while one namespace is chosen, and back for all or several", () => {
+    useClusterStore.setState({ namespaceScope: ["ns"] });
+    const { unmount } = wrap(
+      <DataTable<Item> columns={withNamespace} data={DATA} />
+    );
+    expect(screen.queryByText("Namespace")).toBeNull();
+    unmount();
+    useClusterStore.setState({ namespaceScope: [] });
+    wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
+    expect(screen.getByText("Namespace")).toBeInTheDocument();
+  });
+});
+
+describe("the search box", () => {
+  /**
+   * Issue #178: the search was component state, so leaving the tab and
+   * coming back remounted the table with an empty box. It lives in the
+   * query string now, which is what a tab records. Would break if the box
+   * stopped reading the parameter, or stopped writing it.
+   */
+  it("reads its value from the query string and writes it back", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    await waitFor(() => expect(screen.queryByText("a-1")).toBeNull());
+    fireEvent.change(search(), { target: { value: "a-1" } });
+    expect(location()).toBe("/pods?q=a-1");
+    fireEvent.change(search(), { target: { value: "" } });
+    expect(location()).toBe("/pods");
+  });
+
+  /**
+   * The half the seed-once version could not do. The address changes under
+   * a table that stays mounted whenever the reader clicks the sidebar row
+   * for the list they are already on, follows a deep link, or jumps from
+   * the palette — and the box kept the old text and the old rows while the
+   * tab recorded the new address, so the filter was silently gone on the
+   * way back. Fails if the box stops following the parameter.
+   */
+  it("follows the query string when the address changes underneath it", async () => {
+    function Elsewhere() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/pods")}>
+          drop it
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
+        <TooltipProvider>
+          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+          <Elsewhere />
+        </TooltipProvider>
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    expect(search()).toHaveValue("b-2");
+    fireEvent.click(screen.getByRole("button", { name: "drop it" }));
+    await waitFor(() => expect(search()).toHaveValue(""));
+    expect(screen.getByText("a-1")).toBeInTheDocument();
   });
 });

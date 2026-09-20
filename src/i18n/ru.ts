@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    changes: "Изменения",
     selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все неймспейсы",
     dataTable: "Таблица данных",
@@ -160,6 +161,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
     racks: "Стойки",
@@ -489,9 +491,35 @@ export const ru: Catalogue = {
     serves: "Обслуживает",
     parents: "Родители",
     verdicts: "Вердикты",
+    ciliumSelects: "Выбирает",
+    ciliumClusterwide: "Общекластерная",
+    ciliumNamespaced: "В этом неймспейсе",
+    ciliumInForce: "Действует",
+    ciliumRules: "Правила",
+    ciliumReach: "Куда",
+    ciliumSecurityLabels: "Метки безопасности",
     programmed: "Запрограммирован",
   },
   action: {
+    laneLabelColour: "Цвет дорожки",
+    laneLabelShort: "Короткий префикс",
+    laneLabelFull: "Полное имя",
+    filterOn: "Фильтр по {key}={value}",
+    showAllLanes: "Показать все поды",
+    laneLabelHint:
+      "Как строка называет свою дорожку: только цветом, последними символами имени или полным именем.",
+    laneRulePod: "дорожка = под",
+    laneRuleOrdinal: "дорожка = порядковый номер",
+    laneRuleNode: "дорожка = нода",
+    laneRuleRun: "дорожка = запуск",
+    legendGone: "· ушёл",
+    eventsStories: "Истории",
+    eventsAll: "Все события",
+    warningsFirst: "Сначала предупреждения",
+    newestFirst: "Сначала новые",
+    showTimeline: "Таймлайн",
+    hideTimeline: "Скрыть таймлайн",
+    storyWindow: "Окно",
     showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "{site} — по адресу {url}",
@@ -817,6 +845,7 @@ export const ru: Catalogue = {
     nameCopied: "Скопировано: {name}",
     copyContextName: "Копировать имя контекста",
     openInNewTab: "Открыть в новой вкладке",
+    copyLink: "Копировать ссылку",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
@@ -903,6 +932,16 @@ export const ru: Catalogue = {
     chipQueryTitle: "{label} — запрос по строкам в буфере",
     chipQueryTimeTitle:
       "{label} — запрос по строкам в буфере. Диапазон времени не может быть приёмом: он заканчивается в прошлом, поэтому отбросил бы все строки, которые ещё придут.",
+    chipFrozenTitle:
+      "{label}: заморожено, эти строки остаются в буфере, пока поток идёт, и не считаются в «Держать»",
+    startFreezeLabel:
+      "Заморозить {label}: держать эти строки, пока поток идёт; в «Держать» они не считаются",
+    stopFreezeLabel: "Разморозить {label}: эти строки снова могут вытесняться",
+    startFreezeTitle: "Заморозить этот интервал",
+    stopFreezeTitle: "Разморозить этот интервал",
+    thawFrozen: "разморозить",
+    frozenNote:
+      "Строки с {range} остаются в буфере, пока поток идёт, и не считаются в «Держать». Нажмите, чтобы разморозить.",
     stopIntakeLabel:
       "Перестать отбрасывать строки, не подходящие под {label} — новые строки будут сохраняться, а уже отброшенные не вернутся",
     startIntakeLabel:
@@ -953,6 +992,8 @@ export const ru: Catalogue = {
     closeNamed: "Закрыть {name}",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
+    filterClusters: "Фильтр кластеров",
+    filterClustersPlaceholder: "Фильтр кластеров…",
     change: "Изменить…",
     reload: "Перечитать",
     useTheDefault: "По умолчанию",
@@ -1081,6 +1122,9 @@ export const ru: Catalogue = {
     validationCompleted: "Проверка завершена.",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
+    applyUnanswered: "Кластер не ответил",
+    applyUnansweredHint:
+      "Мы перестали ждать. Применилось или нет — неизвестно: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
     applyCompleted: "Применение завершено.",
     clearCanvasQuestion: "Очистить холст?",
     clearCanvasConfirm: "С холста будут удалены все ресурсы и связи.",
@@ -1152,6 +1196,7 @@ export const ru: Catalogue = {
     connecting: "Подключение",
     streamLive: "Онлайн",
     streamPaused: "Пауза",
+    filtering: "фильтрую…",
     streamStopped: "Остановлен",
     moreLogActions: "Другие действия с логом",
     densityStrip: "Полоса плотности",
@@ -1167,6 +1212,7 @@ export const ru: Catalogue = {
     openActions: "Открыть действия",
     openFullPage: "Открыть страницу",
     copyName: "Копировать имя",
+    dragToResize: "Потяните, чтобы изменить ширину · двойной клик — вернуть",
     more: "Ещё",
     moreActions: "Другие действия",
     goBack: "Вернуться",
@@ -1283,6 +1329,7 @@ export const ru: Catalogue = {
     close: "Закрыть",
     save: "Сохранить",
     delete: "Удалить",
+    pickOneNamespace: "Выбрать один namespace",
     retry: "Повторить",
     download: "Скачать",
     refresh: "Обновить",
@@ -1441,6 +1488,174 @@ export const ru: Catalogue = {
       "Копия разделяет namespace, лейблы, DNS-политику и service account. Это не сам под, и она удаляется, как только ответ получен.",
     whatItSaid: "Что напечатало",
   },
+  changes: {
+    title: "Изменения",
+    last24h: "Последние 24 часа",
+    explained:
+      "Четыре записи на одной шкале: ревизии контроллера, история владельца доставки, история Helm и то, что приложение видело, пока было подключено. Где оно не смотрело, на шкале дыра.",
+    clusterExplained:
+      "Что приложение видело в рабочих нагрузках кластера, пока было подключено, в том порядке, в каком видело. Дыра это отрезок, когда оно не смотрело; о нём ничего не известно.",
+    notObserved: "Не наблюдали с {from} по {to}",
+    notObservedStill: "Не наблюдаем с {from}",
+    revisionNumber: "ревизия {n}",
+    revisionCurrent: "текущая",
+    revisionOldest: "самая старая из известных; сравнивать не с чем",
+    unchangedTemplate:
+      "в сравниваемом ничего не изменилось: image, env, envFrom, ports, resources, аннотации с контрольной суммой",
+    templateUnread:
+      "шаблон этой ревизии или предыдущей не прочитан; что изменилось — неизвестно",
+    revisionsMissing: {
+      one: "{n} ревизии между ними на кластере больше нет",
+      few: "{n} ревизий между ними на кластере больше нет",
+      many: "{n} ревизий между ними на кластере больше нет",
+      other: "{n} ревизий между ними на кластере больше нет",
+    },
+    readopted:
+      "снова взята откатом: на шкале момент, когда объект создан, а не когда стал текущим",
+    changeCause: "kubernetes.io/change-cause",
+    fieldContainer: "контейнер",
+    added: "добавлен",
+    removed: "убран",
+    delivered: "{owner} применил {revision}",
+    deliveredFrom: "из {from}",
+    helmRevision: "Ревизия Helm {n}: {chart}",
+    journalCreated: "{kind} появился",
+    journalDeleted: "{kind} исчез",
+    journalGeneration: "generation spec {from} → {to}",
+    journalImage: "{container}: образ {from} → {to}",
+    journalReplicas: "реплики {from} → {to}",
+    journalAnnotation: "{key} {from} → {to}",
+    journalSeenAtRelist:
+      "Замечено при перечитывании после разрыва: изменилось где-то в дыре перед этим.",
+    sinceMarker: "с момента, когда сделали ссылку",
+    sinceNothing: "На этой шкале ничего с {when}.",
+    revisionsUnread: "Ревизии не прочитаны: {reason}",
+    historyUnread: "История {owner} не прочитана: {reason}",
+    helmUnread: "История Helm для {release} не прочитана: {reason}",
+    nothingInWindow: "На этой шкале в окне ничего нет.",
+    notWatchingNow: "Сейчас за нагрузками этого кластера не следим.",
+    watchingNow: "Наблюдаем с {since}",
+    window24h: "24ч",
+    window7d: "7д",
+    deliveriesUnread: "Кто это доставляет — не прочитано: {reason}",
+    claimedOwner:
+      "{owner} не перечисляет этот объект; на объекте только метка с его именем",
+    moreRows: {
+      one: "ещё {n} строка не нарисована",
+      few: "ещё {n} строки не нарисованы",
+      many: "ещё {n} строк не нарисовано",
+      other: "ещё {n} строк не нарисовано",
+    },
+  },
+  hints: {
+    mostLikely: "Скорее всего",
+    notTested:
+      "«Скорее всего» это слова приложения о цепочке, которую оно прочитало до конца, но не проверило: ни один пакет отсюда не отправлялся.",
+    googleIt: "Найти в поиске",
+    copyForAgent: "Скопировать для агента",
+    copiedForAgent:
+      "Скопировано {n} символов. Прочитайте перед тем, как вставлять: строки лога — это то, что напечатал контейнер.",
+    searchNoEngine: "Поисковика нет: свой URL в настройках — не адрес.",
+    searchOpens: "откроется {site}; движок меняется в настройках",
+    guessCrashLoop:
+      "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
+    guessCrashRefusedSidecar:
+      "Скорее всего: на {host}:{port} внутри этого пода никто не отвечает. Этот адрес у сайдкара {sidecar}, который сейчас {state}; само приложение, скорее всего, в порядке и ждёт его.",
+    guessCrashRefusedServiceEmpty:
+      "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
+    guessCrashRefusedServiceReady:
+      "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что отказ, скорее всего, идёт от процесса за ним, а не от кластера.",
+    guessCrashTimeoutServiceEmpty:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
+    guessCrashTimeoutServiceReady:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что пакеты, скорее всего, теряются по дороге — обычно это NetworkPolicy, а их приложение не читало.",
+    guessCrashServiceUncounted:
+      "Скорее всего: приложение не может достучаться до {host}:{port}. Этот адрес у Service {service}, а что стоит за ним — прочитать не удалось: с этого, скорее всего, и стоит начать, но сказать отсюда нечего.",
+    guessCrashInClusterUnread:
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера. Services этого namespace прочитать не удалось, так что кто на него отвечает, скорее всего, стоит посмотреть руками — отсюда не видно.",
+    guessCrashLoopback:
+      "Скорее всего: {host}:{port} отказал в соединении, и этот адрес — сам этот под: обычно это не поднявшийся сайдкар или тот, который на этом порту не слушает. Ни один контейнер этого пода его не объявляет.",
+    guessCrashUnreachableOutside:
+      "Скорее всего: до {host}:{port} не достучаться, и строка не говорит, ответил ли кто-нибудь — обычно это маршрут или имя, которое из этого кластера ведёт в никуда. Приложение видит дорогу, не то, что в её конце.",
+    guessCrashInClusterUnknown:
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера, на который не отвечает ни один Service в этом namespace. Скорее всего, адрес неверный или Service в другом namespace.",
+    guessCrashTimeoutOutside:
+      "Скорее всего: {host} снаружи кластера, и пакеты теряются по дороге, обычно из-за egress-политики, файрвола или allow-list без адреса этого кластера. Приложение видит только дорогу, не то, что в её конце.",
+    guessCrashRefusedOutside:
+      "Скорее всего: {host}:{port} ответил и отказал. Что-то снаружи кластера отклонило соединение, обычно сам сервис или прокси перед ним; файрвол дал бы таймаут.",
+    guessOom:
+      "Скорее всего: {container} убивают за память сверх лимита. Скорее всего, ему нужен лимит выше, или в нём утечка.",
+    guessOomWithLimit:
+      "Скорее всего: {container} убивают за память сверх лимита. Лимиты этого пода в сумме — {limit}; скорее всего, ему нужен выше, или в нём утечка.",
+    guessImagePull:
+      "Скорее всего: образ {image} не скачивается, обычно неверный тег, приватный registry без pull secret или registry с лимитом запросов.",
+    guessFailedMount:
+      "Скорее всего: том{volume} не монтируется, уже {attempts}, обычно Secret или ConfigMap, которых ещё нет, или несвязанный PersistentVolumeClaim.",
+    guessPendingSame:
+      "Скорее всего: ни одна нода не подходит. Планировщик дал один и тот же ответ {times}, так что, скорее всего, с нодами ничего не менялось с первого вопроса.",
+    guessPendingVaried:
+      "Скорее всего: ни одна нода не подходит, и ответ планировщика менялся за {attempts}, так что ноды, скорее всего, меняются у него под руками.",
+    guessUnknownUnread:
+      "События пода прочитать не удалось, так что сказать, что скорее всего не так, отсюда нельзя — состояния контейнеров ниже это всё, на что приложение смогло посмотреть.",
+    guessProbeUnnamed:
+      "Скорее всего: проба падает, и kubelet на это реагирует, уже {times} — событие не говорит, какая именно. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
+    guessProbe:
+      "Скорее всего: проба {probe} падает, и kubelet на это реагирует, уже {times}. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
+    factLastLineSaid: "Последняя строка перед выходом: {line}",
+    factExited: "{container} завершился с кодом {code}, уже {restarts}.",
+    factRestarts: "{container} перезапускался {times}.",
+    countRestarts: {
+      one: "{n} перезапуск",
+      few: "{n} перезапуска",
+      many: "{n} перезапусков",
+      other: "{n} перезапуска",
+    },
+    countAttempts: {
+      one: "{n} попытка",
+      few: "{n} попытки",
+      many: "{n} попыток",
+      other: "{n} попытки",
+    },
+    countTimes: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    factKubeletSaid: "Kubelet сказал: {message}",
+    factSchedulerSaid: "Планировщик сказал: {message}",
+    checkLastLinesUnnamed:
+      "Посмотрите последние строки перед выходом — событие не говорит, какого контейнера",
+    stateWaiting: "ждёт",
+    stateWaitingReason: "{reason}",
+    stateExited: "вышел с кодом {code}",
+    stateRunning: "работает",
+    stateRunningNotReady: "работает, не готов",
+    checkLastLines: "Прочитать последние строки {container} перед выходом",
+    checkSidecarLines: "Прочитать последние строки {sidecar}",
+    checkService: "Проверить Service {service}: эндпоинты и что за ними",
+    checkConfig:
+      "Посмотреть {kind} {name}, если адрес неверный, а не недоступный",
+    checkLimits: "Сравнить лимит памяти с тем, сколько контейнер потребляет",
+    checkNode: "Посмотреть ноду {node}: давление памяти и что ещё там работает",
+    checkImageRef:
+      "Проверить ссылку на образ {image}: тег, registry, pull secret",
+    checkMountedSecret:
+      "Secret {name}: его под монтирует — pull-секрет это другое поле, которое приложение не читает",
+    checkPullSecret: "Secret {name}: pull secret, который монтирует под",
+    checkVolumeRef: "{kind} {name}: существует ли, связан ли",
+    checkRequests: "Сравнить requests с тем, сколько свободно на нодах",
+    checkNodes: "Посмотреть ноды: taints, ёмкость, что уже размещено",
+    checkProbe:
+      "Прочитать пробу: порт, путь, начальная задержка, против того, что слушает контейнер",
+    notReadService: "Service в {namespace} ({reason})",
+    notReadEndpoints: "эндпоинты Service {service} ({reason})",
+    notReadLogs: "последние строки {container} ({reason})",
+    notReadEvents: "события этого пода ({reason})",
+    notReadOtherNamespace:
+      "Services в {namespace}, где живёт этот адрес — приложение перечислило только namespace самого пода",
+    notReadPolicies: "NetworkPolicy: у приложения пока нет для них читателя",
+  },
   files: {
     noContainers: "У этого пода не объявлено контейнеров.",
     viaDebug:
@@ -1561,6 +1776,9 @@ export const ru: Catalogue = {
     pathCopied: "Путь скопирован",
     copyPath: "Копировать путь",
     tooBigToDownload: "Скачивание больше {cap} в этой версии отклоняется",
+    bigDownloadTitle: "Скачать {name} ({size})?",
+    bigDownloadBody:
+      "Файл идёт через exec-канал, а он медленный: такой размер это минуты, и после 30 секунд тишины скачивание прекращается. В ваш файл ничего не пишется, пока не придёт всё целиком.",
     noHeadInImage: "В образе нет head, чтобы прочитать файл.",
     readFailed: "Не удалось прочитать файл (exit {code}):",
     noPreviewBinary:
@@ -1830,6 +2048,12 @@ export const ru: Catalogue = {
     saysForwardDied: "Проброс к {name} оборвался",
     saysGone: "{name} исчез",
     saysLostSight: "{name} потерян из виду",
+    saysTimedOut: "{name}: нет ответа за две минуты",
+    afterRestart: "после рестарта",
+    afterScale: "после масштабирования до {n}",
+    afterApply: "после apply",
+    afterImage: "после смены образа",
+    withinDeadline: "ответ за две минуты, иначе ответ это его отсутствие",
     askRolloutShort: "раскатка",
     askPodShort: "готов или упадёт",
     askJobShort: "чем кончится",
@@ -1855,7 +2079,65 @@ export const ru: Catalogue = {
     cancelled: "Вход отменён",
     cancelledFor: "Отменено: {context}.",
   },
+  slow: {
+    panel: "Почему медленно",
+    title: "Почему медленно",
+    hint: "Что приложение измерило за последнюю минуту, без рекордера.",
+    stalls: {
+      one: "{n} стоп",
+      few: "{n} стопа",
+      many: "{n} стопов",
+      other: "{n} стопов",
+    },
+    stallsLabel: "Стопы",
+    stallsValue: {
+      one: "{n} стоп, самый долгий {longest} мс",
+      few: "{n} стопа, самый долгий {longest} мс",
+      many: "{n} стопов, самый долгий {longest} мс",
+      other: "{n} стопов, самый долгий {longest} мс",
+    },
+    sourceLongTask:
+      "Стоп это главный поток, занятый 50 мс и дольше, по наблюдателю long task самого webview.",
+    sourceFrameGap:
+      "Стоп это кадр, опоздавший на 50 мс и больше; у этого webview нет наблюдателя long task, поэтому считаются опоздавшие кадры.",
+    listsLabel: "Большие списки на экране",
+    listRows: {
+      one: "{n} строка {label}",
+      few: "{n} строки {label}",
+      many: "{n} строк {label}",
+      other: "{n} строк {label}",
+    },
+    listRowsPlain: {
+      one: "{n} строка",
+      few: "{n} строки",
+      many: "{n} строк",
+      other: "{n} строк",
+    },
+    noBigList:
+      "Ни одной таблицы из тех, что здесь считаются, длиннее тысячи строк.",
+    listsWhy:
+      "Каждая пачка watch фильтруется и сортируется по всему списку, а поиск перечитывает каждую строку.",
+    answerLabel: "Самый большой ответ",
+    answerRows: {
+      one: "{n} строка от {command}",
+      few: "{n} строки от {command}",
+      many: "{n} строк от {command}",
+      other: "{n} строк от {command}",
+    },
+    noBigAnswer:
+      "Ни одного ответа из тех, что здесь считаются, длиннее тысячи строк.",
+    answerWhy:
+      "Большой ответ разбирается в главном потоке до того, как что-то можно нарисовать.",
+    whatToDo:
+      "Сузь область namespace или поиск: список и его ответы уменьшаются вместе с ними. Для времени по командам и рендерам включи рекордер.",
+    notCounted:
+      "Строки логов и пачки watch выше не учитываются, поэтому при подвисании на вкладке логов или во время ресинка обе строки останутся пустыми.",
+    openRecorder: "Открыть Настройки › Диагностика",
+  },
+
   vendor: {
+    ciliumGives:
+      "все сетевые политики Cilium и то, принял ли их агент: отвергнутая политика ничего не применяет и выглядит точно так же, как рабочая",
     argocdGives:
       "каждое Application с тем, что у него не применяется, и какие объекты разошлись с git",
     scyllaGives:
@@ -1891,6 +2173,71 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    storyRollout:
+      "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
+    storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
+    storyCrash:
+      "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
+    storyStartFailed:
+      "Контейнер не удалось запустить, {times} за {span}: {detail}",
+    storyPull: "Не скачать образ, {times} за {span}: {detail}",
+    storySchedulingSame:
+      "Не планируется, один и тот же ответ {times} за {span}: {detail}",
+    storySchedulingVaried:
+      "Не планируется, {k} разных ответов за {span}, последний: {detail}",
+    storyProbe: "Пробы упали {times} за {span}: {detail}",
+    storyPressure: "Под давлением, {times} за {span}: {detail}",
+    storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
+    storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
+    storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
+    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
+    storyTrouble: "{reason} ×{n} за {span}: {detail}",
+    storyStillHappening: "продолжается",
+    storySettled: "утихло",
+    storyStateUnknown: "не сказать",
+    podStatusNotAsked: {
+      one: "Выходы ещё {n} пода не на этой шкале — его не спрашивали.",
+      few: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      many: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+      other: "Выходы ещё {n} подов не на этой шкале — их не спрашивали.",
+    },
+    timesSeen: {
+      one: "{n} раз",
+      few: "{n} раза",
+      many: "{n} раз",
+      other: "{n} раза",
+    },
+    jobsCreated: {
+      one: "создан {n} job",
+      few: "создано {n} job",
+      many: "создано {n} job",
+      other: "создано {n} job",
+    },
+    storyDone: "закончено",
+    podsOf: "поды {name}",
+    groupedByName:
+      "Сгруппированы по сгенерированному суффиксу имён подов. Ни одно событие контроллера в этом окне не говорит, чьи они.",
+    fromPodStatus: "из статуса пода, не событие",
+    lastSeen: "последнее {ago}",
+    podStatusUnread: {
+      one: "Статус {n} пода не прочитан; его завершения на этой шкале нет.",
+      few: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      many: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
+      other: "Статус {n} пода не прочитан; их завершений на этой шкале нет.",
+    },
+    containerExited: "{container} завершился с кодом {code}",
+    lastSeenStrip:
+      "Когда каждое событие видели в последний раз, по всему окну.",
+    storiesExplained:
+      "История это события одного объекта в этом окне: предупреждения первыми, предложение собрано из счётчиков и времён. Сверх самих событий ничего не додумывается.",
+    membersFolded: {
+      one: "{n} объект",
+      few: "{n} объекта",
+      many: "{n} объектов",
+      other: "{n} объекта",
+    },
     twoWord: "Две",
     threeWord: "Три",
     warnUndoThis: "{count} вещи отменят это.",
@@ -2259,6 +2606,12 @@ export const ru: Catalogue = {
       many: "{n} привязок",
       other: "{n} привязки",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      few: "{n} AzureIdentity",
+      many: "{n} AzureIdentity",
+      other: "{n} AzureIdentity",
+    },
     azureProhibited: {
       one: "{n} запрещённая цель",
       few: "{n} запрещённые цели",
@@ -2455,6 +2808,30 @@ export const ru: Catalogue = {
       few: "{n} хоста маршрутизируются",
       many: "{n} хостов маршрутизируются",
       other: "{n} хоста маршрутизируются",
+    },
+    factCiliumPolicies: {
+      one: "{n} сетевая политика",
+      few: "{n} сетевые политики",
+      many: "{n} сетевых политик",
+      other: "{n} сетевой политики",
+    },
+    factCiliumClusterwide: {
+      one: "{n} общекластерная",
+      few: "{n} общекластерные",
+      many: "{n} общекластерных",
+      other: "{n} общекластерной",
+    },
+    factCiliumRejected: {
+      one: "{n} политику Cilium отверг — она ничего не применяет",
+      few: "{n} политики Cilium отверг — они ничего не применяют",
+      many: "{n} политик Cilium отверг — они ничего не применяют",
+      other: "{n} политики Cilium отверг — они ничего не применяют",
+    },
+    factCiliumUnanswered: {
+      one: "про {n} политику агент ещё не ответил",
+      few: "про {n} политики агент ещё не ответил",
+      many: "про {n} политик агент ещё не ответил",
+      other: "про {n} политики агент ещё не ответил",
     },
     istioOrJoin: " или ",
     istioAndMoreBelow: "{said}, и ещё ниже",
@@ -2836,7 +3213,75 @@ export const ru: Catalogue = {
     nginxRawSnippet:
       "Сырая конфигурация nginx, вставляемая в блок server дословно. Показана ровно как написана: приложение её не пересказывает, потому что она может переписать, перенаправить или запретить что угодно на этом маршруте.",
     revisionCurrent: "{said}, текущая",
+    rolloutSeen: "готово {ready} из {desired}",
+    rolloutSeenRevision: "готово {ready} из {desired}, ревизия {revision}",
     nodeCordonedWord: "закрыт для планирования",
+    ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumCovered: "под политикой",
+    ciliumUnrestricted: "ничего не выбирает",
+    ciliumOnlyRejected: "только отвергнутые",
+    ciliumCannotSay: "нельзя сказать",
+    ciliumNothingSelects:
+      "Ни одна политика в кластере не выбирает этот эндпоинт. Куда он может дойти — туда и дойдёт.",
+    ciliumEnforcesNothing: "отвергнута — ничего не применяет",
+    ciliumUnreadablePolicies: {
+      one: "ещё {n} политика называет эндпоинты там, куда это окно не смотрит",
+      few: "ещё {n} политики называют эндпоинты там, куда это окно не смотрит",
+      many: "ещё {n} политик называют эндпоинты там, куда это окно не смотрит",
+      other:
+        "ещё {n} политики называют эндпоинты там, куда это окно не смотрит",
+    },
+    ciliumFindingRejected: {
+      one: "{n} политику оператор отверг — она ничего не применяет",
+      few: "{n} политики оператор отверг — они ничего не применяют",
+      many: "{n} политик оператор отверг — они ничего не применяют",
+      other: "{n} политики оператор отверг — они ничего не применяют",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} эндпоинт выбирают только отвергнутые политики — он выглядит закрытым и не закрыт",
+      few: "{n} эндпоинта выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+      many: "{n} эндпоинтов выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+      other:
+        "{n} эндпоинта выбирают только отвергнутые политики — они выглядят закрытыми и не закрыты",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} эндпоинт, который не выбирает ни одна политика",
+      few: "{n} эндпоинта, которых не выбирает ни одна политика",
+      many: "{n} эндпоинтов, которых не выбирает ни одна политика",
+      other: "{n} эндпоинта, которых не выбирает ни одна политика",
+    },
+    ciliumNotOnTheWire: "записано там, куда это окно не смотрит",
+    ciliumAndExpressions: {
+      one: "и {n} выражение",
+      few: "и {n} выражения",
+      many: "и {n} выражений",
+      other: "и {n} выражения",
+    },
+    ciliumSelectsByExpression: {
+      one: "по {n} выражению",
+      few: "по {n} выражениям",
+      many: "по {n} выражениям",
+      other: "по {n} выражения",
+    },
+    ciliumIngressRules: {
+      one: "{n} входящее",
+      few: "{n} входящих",
+      many: "{n} входящих",
+      other: "{n} входящих",
+    },
+    ciliumEgressRules: {
+      one: "{n} исходящее",
+      few: "{n} исходящих",
+      many: "{n} исходящих",
+      other: "{n} исходящих",
+    },
+    ciliumDenies: {
+      one: "{n} запрещающее",
+      few: "{n} запрещающих",
+      many: "{n} запрещающих",
+      other: "{n} запрещающих",
+    },
+    ciliumLeavesCluster: "за пределы кластера",
   },
   cluster: {
     integrationsHint:
@@ -2899,6 +3344,7 @@ export const ru: Catalogue = {
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
+    objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на живое состояние.",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на живое состояние, а не на то, что было тогда.",
@@ -2928,7 +3374,29 @@ export const ru: Catalogue = {
     credentialsRefusedAgo:
       "Кластер отклонил учётные данные этого окна {since} назад. ",
     credentialsExpiredBody:
-      "Здесь ничто не обновляет их само, поэтому в тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+      "В тот момент каждый список, счётчик и график в этом окне перестали быть достоверными — потому здесь эта страница, а не экран пустых.",
+    renewalWasScheduled:
+      "Окно собиралось обновить их тихо до истечения, и кластер всё равно их отклонил. ",
+    renewalNoDeadline:
+      "Плагин учётных данных не назвал срока, поэтому не было момента, до которого их можно было обновить — заранее сделать было нечего. ",
+    renewalPassed:
+      "К моменту, когда окно посмотрело, срок уже прошёл — обновлять заранее было уже не перед чем. ",
+    renewalFailed:
+      "Тихое обновление пробовали, и оно не вернулось — это сбой чтения, а не что-то про вас. ",
+    renewalRanOut:
+      "Тихое обновление пробовали во все моменты, на которые оставалось место, и плагин каждый раз отдавал те же учётные данные — подставить было нечего. ",
+    renewalLastChance:
+      "Тихое обновление пробовали, пока данные ещё принимали, и плагин отдал те же самые — ещё одна попытка назначена сразу после истечения: некоторые плагины не выпускают новые, пока старые живы. ",
+    renewalNeedsYouBody:
+      "Окно пробовало обновить их тихо; плагину понадобился человек — это и есть этот экран. ",
+    renewalDelegated:
+      "Учётные данные этой сессии держит и обновляет kubectl, так что отказ пришёл с его стороны. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "нужен вход",
+    renewalNeedsYouHint:
+      "Фоновое обновление этой сессии потребовало человека и остановилось. Пока всё работает — текущие учётные данные ещё принимают, а войти попросят, когда они истекут.",
+    renewalRanOutHint:
+      "Плагин учётных данных каждый раз отдавал те же данные, что уже используются, — подставить до истечения было нечего. Пока всё работает, а войти попросят, когда они истекут.",
     stillRefusedHint:
       "Всё ещё отказ? Возможно, плагину учётных данных этого контекста нужен свой вход — для GKE это",
     healthy: "В порядке",
@@ -3006,6 +3474,13 @@ export const ru: Catalogue = {
   settings: {
     installationFailed: "Установка не удалась",
     updateAvailableTitle: "Доступно обновление",
+    whatsNew: "Что нового",
+    whatsNewHint:
+      "Заметки к этой версии, те, что открываются один раз после обновления.",
+    searchWhatsNewWords: "release notes changelog что нового заметки к выпуску",
+    showWhatsNew: "Показать",
+    whatsNewIn: "Что нового в {version}",
+    whatsNewSince: "Всё с версии {version}",
     updateAvailableToast:
       "Доступна версия {version}. Загрузить её можно в настройках.",
     notOnPathPlain: "{label} нет в PATH. Укажите путь ниже.",
@@ -3208,6 +3683,24 @@ export const ru: Catalogue = {
     perfRetryStop: "Попробовать остановить ещё раз",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",
+    sectionHandoff: "Поиск и передача",
+    sectionHandoffHint: "Куда уходит поиск и что попадает в передачу.",
+    searchEngine: "Поисковик",
+    searchEngineHint:
+      "Запрос — это причина и то, что приложение распознало в отказе, никогда не сырая строка лога, плюс utm_source=rubick.tech, чтобы сайт видел, откуда приходят люди.",
+    searchEngineCustom: "Свой, любой URL с {q}",
+    searchCustomUrl: "Свой URL поиска",
+    stripNames: "Вырезать имена из поискового запроса",
+    stripNamesHint:
+      "Имена подов, namespace, образов и хостов заменяются на … до того, как запрос покинет приложение. Выключите, если ваши имена не чувствительны.",
+    handoffLogLines: "«Скопировать для агента» включает строки лога",
+    handoffLogLinesHint:
+      "До 40 строк перед последним выходом, как их написал контейнер. Секреты приложение не читает, но если их напечатал сам контейнер — они будут и здесь: пароли, токены и строки подключения вырезаются там, где их видно, и полной эта чистка быть не может.",
+    showMostLikely: "Показывать панель «Скорее всего»",
+    showMostLikelyHint:
+      "Только на подах с проблемой, по которой приложение может прочитать цепочку. Выключение прячет панель, не факты.",
+    searchHandoffWords:
+      "google duckduckgo search agent copy hand-off most likely поиск агент копировать передача скорее всего",
     nothingHereMatches: "здесь ничего не найдено по «{query}»",
     searchSettings: "Поиск по настройкам",
     clearSearch: "Очистить поиск",
@@ -3246,6 +3739,8 @@ export const ru: Catalogue = {
     checkForUpdates: "Проверить обновления",
     autoUpdates: "Автообновление",
     autoUpdatesHint: "Проверять при запуске и каждые 30 минут.",
+    managedUpdates:
+      "Эта сборка обновляется через пакетный менеджер, которым её поставили.",
     diagnosticsCopied: "Диагностика скопирована",
     copyDiagnostics: "Копировать диагностику",
     redactNamesAndPaths: "Скрывать имена и пути",
@@ -3306,6 +3801,9 @@ export const ru: Catalogue = {
     pathNoKubectl: "kubectl нет в пути поиска",
     appVersion: "Версия {version}",
     logsTo: "Логи: {destination}",
+    logsNowhere:
+      "В этот запуск файла логов нет — отправить нечего. Окно не смогло создать папку, в которую пишет.",
+    logsMoreDetail: "Запустите с RUST_LOG=debug, чтобы логи стали подробнее.",
     readingFile: "Чтение файла…",
     contexts: "Контексты",
     searchFiltersList: "{n} — поиск фильтрует этот список",
@@ -3396,6 +3894,33 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    saysNothing: "ничего не говорит",
+    deniesAll: "запрещает всё",
+    allowsAll: "разрешает всё",
+    podsNotRead: "поды не прочитаны",
+    selectsNoPods: "ни одного пода",
+    everyPodHere: "каждый под здесь",
+    noSelectorOnPolicy: "селектора нет",
+    everyPodThere: "любой под",
+    fromAnywhere: "откуда угодно",
+    toAnywhere: "куда угодно",
+    podsInNamespaces: "{pods} в {namespaces}",
+    inThisNamespace: "этом неймспейсе",
+    inEveryNamespace: "любом неймспейсе",
+    exceptRanges: "кроме {ranges}",
+    everyPortOf: "любой порт {protocol}",
+    governsNeither:
+      "Политика не называет ни одного направления, поэтому ни на что не действует.",
+    podsUnread:
+      "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
+    noPodsToStream: "Пока нет подов, которые можно читать.",
+    everyLaneHidden: "Все поды скрыты.",
+    noStoriesInWindow:
+      "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
+    noStoriesInWindowCapped:
+      "Ни одной истории в {scope} за последние {range} — из последних {n} прочитанных событий. Всё, что старше, в этот ответ не попало.",
+    eventsRefused: "Не удалось прочитать события в {scope}:",
+    noStoriesMatch: "Ни одна история в {scope} не подходит под «{query}».",
     noEventsMatchInWindow:
       "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались — увеличьте лимит, чтобы искать глубже.",
     kindMayBeGone:
@@ -4145,6 +4670,9 @@ export const ru: Catalogue = {
     integrationsNoCluster:
       "Подключите кластер, и здесь будет видно, что у него есть. Каждое расширение определяется запросом CRD к API-серверу, а спрашивать сейчас некого.",
     yamlNoteDefault: "объект в том виде, в каком его хранит API-сервер",
+    diffComputing: "Сравниваю…",
+    diffUnavailable:
+      "Не удалось сравнить. На то, что сделает «Применить», это не влияет — не получилось именно сравнение.",
     noChangesDetected: "Изменений нет",
     addRepositoryThenSearch: "Добавьте репозиторий, затем ищите в нём чарты.",
     manifestsAreAt: "Манифесты лежат в",
@@ -4304,6 +4832,8 @@ export const ru: Catalogue = {
     couldNotReadIngresses: "Не удалось прочитать Ingress этого кластера",
     albPageDescription:
       "Строка на ALB, а не на Ingress — потому что именно этот контроллер сажает несколько Ingress из разных пространств имён на один балансировщик.",
+    ciliumPageDescription:
+      "Каждый эндпоинт с политиками, которые его выбирают, и те, которых не выбирает ничего",
     crdCouldNotBeListed: "Не удалось перечислить {crd}",
     albUnreadNote:
       "Группы всё равно строятся по самим Ingress; не хватает того, что настроил для них класс.",
@@ -4575,7 +5105,14 @@ export const ru: Catalogue = {
       "Не удалось прочитать, что публикует этот Service:",
     noAnswer: "нет ответа",
     registeredByHand: "добавлен вручную",
+    stillReading: "Всё ещё читаю {label} в {scope}",
+    narrowerIsFaster:
+      "Большой кластер быстрее отвечает на узкий вопрос: один namespace это один список вместо нескольких.",
+    readDeadline: "Чтение {label} в {scope} не уложилось в {seconds} с.",
+    readDeadlineHint:
+      "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
+    readDeadlineShort: "Чтение {label} не уложилось в {seconds} с.",
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
@@ -4586,6 +5123,8 @@ export const ru: Catalogue = {
     addResourcesFirst: "Сначала добавьте ресурсы или вставьте манифест.",
     dragResourcesHere: "Перетащите ресурсы сюда или нажмите на один в палитре.",
     selectResourceToEdit: "Выберите ресурс, чтобы изменить его настройки.",
+    logNotKept:
+      "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
     noPreviousRunOf:
       "Предыдущего запуска {container} нет — он не перезапускался.",
     containerNotStarted:
@@ -4597,8 +5136,21 @@ export const ru: Catalogue = {
     intakeStillSet:
       "Приём всё ещё включён — переподключение продолжит с этого момента, и пропущенное потоком назад не подтянется.",
     nothingToReconnectTo: "Переподключаться уже не к чему",
+    installedByRelease: "Установлено релизом Helm {name}",
+    conditionIs: "{type} — {status}",
+    releaseNotRead: "не удалось прочитать",
+    gwRowControllerConfigured: "отвечает по настройкам своего контроллера",
+    gwControllerConfiguredSay:
+      "backendRefs нет — отвечает контроллер этого маршрута",
+    gwControllerConfiguredTitle: "Настройки, которые это приложение не читает",
     bufferHoldsNewest:
       "Буфер хранит последние {count}; того, что было раньше, здесь больше нет.",
+    bufferHoldsKeptAndNewest:
+      "Буфер хранит замороженный интервал и последние {count} вокруг него; остального здесь больше нет.",
+    linesDroppedAroundKeptAxis:
+      "Строки удалены вокруг замороженного интервала — лог отсюда идёт с разрывом.",
+    linesDroppedAroundKeptSummary:
+      "Строки удалены вокруг замороженного интервала, поэтому рядом с ним у полосы разрыв.",
     repeatsOnNote:
       "Включены «Повторы»: строка, повторяющая предыдущую, сворачивается в неё.",
     nothingHasMatched: "Ничего не совпало с",
@@ -4620,10 +5172,21 @@ export const ru: Catalogue = {
     itFinished: "Он завершился",
     soLogIsComplete: ", поэтому этот лог полон и больше не вырастет.",
     noEarlierRunOf: "Более раннего запуска нет у",
+    chipLogNotKept: "лога нет",
+    chipNoEarlierRun: "раньше не запускался",
+    chipEnded: "закончился",
+    chipNotStarted: "не стартовал",
+    chipLost: "потерян",
     noneHasRestarted:
       "— ни один из них не перезапускался, значит до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",
     noLineMatchesQuery: "Ни одна строка не подходит под запрос.",
+    filteringLines: {
+      one: "Фильтрую {count} строку…",
+      few: "Фильтрую {count} строки…",
+      many: "Фильтрую {count} строк…",
+      other: "Фильтрую {count} строк…",
+    },
     nothingLeftToShow: "Показывать больше нечего.",
     noOutputYet: "Вывода пока нет.",
     streamAttachedNothingWritten:
@@ -4997,7 +5560,99 @@ export const ru: Catalogue = {
     gwProbeTimedOut:
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
+  shortcuts: {
+    title: "Клавиатура",
+    lede: "Все клавиши, на которые отвечает приложение. Клавиши без модификаторов молчат в поле ввода и в терминале.",
+    then: "затем",
+    sectionGlobal: "Везде",
+    filterClusters: "Найти кластер по имени",
+    downloadFile: "Скачать открытый файл",
+    upADirectory: "На каталог вверх",
+    selectLogs: "Выделить строки на экране",
+    connectCluster: "Подключиться к кластеру под кареткой",
+    scopeAnother: "Добавить ещё неймспейс в область",
+    sectionNavigate: "Перейти",
+    sectionPage: "На странице объекта",
+    sectionTabs: "Вкладки",
+    sectionTable: "В списке",
+    sectionLogs: "В просмотре логов",
+    sectionBuilder: "В конструкторе инфраструктуры",
+    palette: "Поиск и команды",
+    settings: "Настройки",
+    copyLink: "Скопировать ссылку на это место",
+    help: "Этот список",
+    escape: "Закрыть открытое",
+    goOverview: "Обзор",
+    goPods: "Поды",
+    goDeployments: "Deployments",
+    goServices: "Services",
+    goIngresses: "Ingresses",
+    goNodes: "Ноды",
+    goEvents: "События",
+    goJobs: "Jobs",
+    goConfigMaps: "ConfigMaps",
+    tabOverview: "Вкладка «Обзор»",
+    tabLogs: "Вкладка «Логи»",
+    tabYaml: "Вкладка YAML",
+    tabEvents: "Вкладка «События»",
+    nextTab: "Следующая вкладка",
+    previousTab: "Предыдущая вкладка",
+    newTab: "Новая вкладка",
+    closeTab: "Закрыть вкладку",
+    nthTab: "Вкладка по номеру, 9 это последняя",
+    rowMove: "Переход между строками",
+    rowOpen: "Открыть строку",
+    soloContainer: "Только этот контейнер, по позиции в легенде",
+    allContainers: "Все контейнеры",
+    deleteSelection: "Удалить выделенное",
+    selectAll: "Выделить всё",
+    invertSelection: "Инвертировать выделение",
+  },
   count: {
+    secondsShort: "{n} с",
+    pods: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
+    notReadList: "Не прочитано: {list}",
+    podsStreaming: {
+      one: "{streaming} из {n} пода стримится",
+      few: "{streaming} из {n} подов стримится",
+      many: "{streaming} из {n} подов стримится",
+      other: "{streaming} из {n} пода стримится",
+    },
+    podsPaused: {
+      one: "{n} под, на паузе",
+      few: "{n} пода, на паузе",
+      many: "{n} подов, на паузе",
+      other: "{n} пода, на паузе",
+    },
+    podsUnreadable: {
+      one: "{n} под не прочитан",
+      few: "{n} пода не прочитаны",
+      many: "{n} подов не прочитано",
+      other: "{n} пода не прочитано",
+    },
+    podsGoneKept: {
+      one: "{n} ушёл, строки сохранены",
+      few: "{n} ушли, строки сохранены",
+      many: "{n} ушли, строки сохранены",
+      other: "{n} ушли, строки сохранены",
+    },
+    stories: {
+      one: "{n} история",
+      few: "{n} истории",
+      many: "{n} историй",
+      other: "{n} истории",
+    },
+    eventsSeen: {
+      one: "{n} событие",
+      few: "{n} события",
+      many: "{n} событий",
+      other: "{n} события",
+    },
     namespacesHidden: {
       one: "{n} пространство скрыто — нет доступа",
       few: "{n} пространства скрыто — нет доступа",
@@ -5482,6 +6137,12 @@ export const ru: Catalogue = {
     arrivingBefore: "{rate}/с приходило до включения",
     shown: "{n} показано",
     hiddenByFilter: "{n} скрыто фильтром и группировкой",
+    frozenLines: {
+      one: "{count} замороженная строка",
+      few: "{count} замороженные строки",
+      many: "{count} замороженных строк",
+      other: "{count} замороженных строк",
+    },
     spanInSlices: "{span}, срезы по {step}",
     densitySummary:
       "Плотность лога во времени: {n} срезов по {step}, с {from} до {to}.",
@@ -5571,6 +6232,39 @@ export const ru: Catalogue = {
         "собственный прокси {vendor} — обслуживаемые им хосты ({n}) описаны на",
     },
     nOfTotal: "{n} из {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} говорит контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      few: "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      many: "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+      other:
+        "{keys} говорят контроллеру этого маршрута, что отвечать. По спеке правило без backendRefs получило бы 500; здесь оно получит то, что сказано там, а это приложение не читает.",
+    },
+    podsFailing: {
+      one: "{n} из {total} упал · {name} — {status}",
+      few: "{n} из {total} упали · {name} — {status}",
+      many: "{n} из {total} упало · {name} — {status}",
+      other: "{n} из {total} упало · {name} — {status}",
+    },
+    someSpot: "{n} из {total} прерываемых",
+    machineTypes: {
+      one: "{n} тип машин",
+      few: "{n} типа машин",
+      many: "{n} типов машин",
+      other: "{n} типов машин",
+    },
+    zonesCount: {
+      one: "{n} зона",
+      few: "{n} зоны",
+      many: "{n} зон",
+      other: "{n} зон",
+    },
+    nodesCount: {
+      one: "{n} узел",
+      few: "{n} узла",
+      many: "{n} узлов",
+      other: "{n} узлов",
+    },
+    allSpot: "прерываемые",
     nReady: "готово {n}",
     nNotReady: "не готово {n}",
     nPublished: "опубликовано {n}",
@@ -5730,6 +6424,12 @@ export const ru: Catalogue = {
       many: "Отброшено {count} старых строк.",
       other: "Отброшено {count} старые строки.",
     },
+    linesDroppedAroundKept: {
+      one: "Вокруг замороженного интервала отброшена {count} строка.",
+      few: "Вокруг замороженного интервала отброшено {count} строки.",
+      many: "Вокруг замороженного интервала отброшено {count} строк.",
+      other: "Вокруг замороженного интервала отброшено {count} строк.",
+    },
     rowsStandFor: {
       one: "{n} строка представляет",
       few: "{n} строки представляют",
@@ -5819,6 +6519,12 @@ export const ru: Catalogue = {
       few: "{n} контекста",
       many: "{n} контекстов",
       other: "{n} контекста",
+    },
+    contextsMatching: {
+      one: "{shown} из {n} контекста",
+      few: "{shown} из {n} контекстов",
+      many: "{shown} из {n} контекстов",
+      other: "{shown} из {n} контекстов",
     },
     contextsFromFile: {
       one: "{n} контекст",

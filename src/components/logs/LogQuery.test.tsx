@@ -57,6 +57,8 @@ function Harness({
       onRemoveTerm={() => {}}
       intake={new Set()}
       onToggleIntake={() => {}}
+      frozen={null}
+      onToggleFreeze={() => {}}
       fields={fields}
     />
   );
@@ -68,11 +70,15 @@ function Chips({
   intake = new Set<string>(),
   onToggleIntake = () => {},
   onRemoveTerm = () => {},
+  frozen = null,
+  onToggleFreeze = () => {},
 }: {
   terms: QueryTerm[];
   intake?: ReadonlySet<string>;
   onToggleIntake?: (term: QueryTerm) => void;
   onRemoveTerm?: (term: QueryTerm) => void;
+  frozen?: { from: number; to: number } | null;
+  onToggleFreeze?: (term: QueryTerm) => void;
 }) {
   return (
     <LogQuery
@@ -83,6 +89,8 @@ function Chips({
       onRemoveTerm={onRemoveTerm}
       intake={intake}
       onToggleIntake={onToggleIntake}
+      frozen={frozen}
+      onToggleFreeze={onToggleFreeze}
       fields={STRUCTURED}
     />
   );
@@ -318,5 +326,37 @@ describe("a chip's mode", () => {
     expect(
       screen.getByTitle(/A time range cannot be intake/)
     ).toBeInTheDocument();
+  });
+
+  /** A range can be held instead: the toggle says what freezing keeps and what it costs, in words. */
+  it("offers to freeze a time range, and says what that keeps", async () => {
+    const user = userEvent.setup();
+    const onToggleFreeze = vi.fn();
+    render(<Chips terms={[RANGE]} onToggleFreeze={onToggleFreeze} />);
+
+    const toggle = screen.getByRole("button", { name: /^Freeze time=/ });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.getAttribute("aria-label")).toMatch(
+      /not counted against Keep/
+    );
+    await user.click(toggle);
+    expect(onToggleFreeze).toHaveBeenCalledWith(RANGE);
+  });
+
+  /** Once frozen the chip says so itself, and the toggle names the other direction. */
+  it("says thaw once the range is frozen", () => {
+    render(<Chips terms={[RANGE]} frozen={{ from: 1, to: 2 }} />);
+
+    const toggle = screen.getByRole("button", { name: /^Thaw time=/ });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTitle(/frozen: these lines stay/)).toBeInTheDocument();
+  });
+
+  /** A different frozen range is not this chip's: the chip must not claim a freeze it does not hold. */
+  it("does not mark a chip whose range is not the frozen one", () => {
+    render(<Chips terms={[RANGE]} frozen={{ from: 7, to: 9 }} />);
+    expect(
+      screen.getByRole("button", { name: /^Freeze time=/ })
+    ).toHaveAttribute("aria-pressed", "false");
   });
 });
