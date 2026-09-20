@@ -1209,6 +1209,7 @@ export const en = {
     connecting: "Connecting",
     streamLive: "Live",
     streamPaused: "Paused",
+    filtering: "filtering…",
     streamStopped: "Stopped",
     moreLogActions: "More log actions",
     densityStrip: "Density strip",
@@ -4290,6 +4291,9 @@ export const en = {
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
+    diffComputing: "Comparing…",
+    diffUnavailable:
+      "Could not compare these two. What Apply would do is unchanged; the comparison is what failed.",
     noChangesDetected: "No changes detected",
     addRepositoryThenSearch: "Add a repository, then search it for charts.",
     manifestsAreAt: "The manifests are at",
@@ -4792,6 +4796,10 @@ export const en = {
       "— none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
     noLineMatchesQuery: "No line matches the query.",
+    filteringLines: {
+      one: "Filtering {count} line…",
+      other: "Filtering {count} lines…",
+    },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
     streamAttachedNothingWritten:

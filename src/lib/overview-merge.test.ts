@@ -88,6 +88,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
     },
     jobs: null,
     metricsAvailable: true,
+    servedFrom: "watch",
     ...over,
   };
 }
@@ -430,5 +431,20 @@ describe("the cap both halves of the Overview agree on", () => {
 
   it("is the number the shared file states", () => {
     expect(MAX_PROBLEMS).toBe(shared.maxProblems);
+  });
+  /** A total with one listed part is not a watched total: the reader cannot tell which namespace's numbers are the old ones. */
+  it("is served from the watch only when every part was", () => {
+    expect(
+      mergeOverviews([
+        overview({ servedFrom: "watch" }),
+        overview({ servedFrom: "watch" }),
+      ]).servedFrom
+    ).toBe("watch");
+    expect(
+      mergeOverviews([
+        overview({ servedFrom: "watch" }),
+        overview({ servedFrom: "list" }),
+      ]).servedFrom
+    ).toBe("list");
   });
 });

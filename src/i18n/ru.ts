@@ -1193,6 +1193,7 @@ export const ru: Catalogue = {
     connecting: "Подключение",
     streamLive: "Онлайн",
     streamPaused: "Пауза",
+    filtering: "фильтрую…",
     streamStopped: "Остановлен",
     moreLogActions: "Другие действия с логом",
     densityStrip: "Полоса плотности",
@@ -4638,6 +4639,9 @@ export const ru: Catalogue = {
     integrationsNoCluster:
       "Подключите кластер, и здесь будет видно, что у него есть. Каждое расширение определяется запросом CRD к API-серверу, а спрашивать сейчас некого.",
     yamlNoteDefault: "объект в том виде, в каком его хранит API-сервер",
+    diffComputing: "Сравниваю…",
+    diffUnavailable:
+      "Не удалось сравнить. На то, что сделает «Применить», это не влияет — не получилось именно сравнение.",
     noChangesDetected: "Изменений нет",
     addRepositoryThenSearch: "Добавьте репозиторий, затем ищите в нём чарты.",
     manifestsAreAt: "Манифесты лежат в",
@@ -5139,6 +5143,12 @@ export const ru: Catalogue = {
       "— ни один из них не перезапускался, значит до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",
     noLineMatchesQuery: "Ни одна строка не подходит под запрос.",
+    filteringLines: {
+      one: "Фильтрую {count} строку…",
+      few: "Фильтрую {count} строки…",
+      many: "Фильтрую {count} строк…",
+      other: "Фильтрую {count} строк…",
+    },
     nothingLeftToShow: "Показывать больше нечего.",
     noOutputYet: "Вывода пока нет.",
     streamAttachedNothingWritten:

@@ -26,13 +26,18 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
 const applyManifest = vi.fn();
+/** The neighbourhood the dialog asks about, per test. */
+let connections: () => { object: null; edges: unknown[] } = () => ({
+  object: null,
+  edges: [],
+});
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     detectInClusterExtensions: () => detectInClusterExtensions(),
     listCustomResources: (...args: unknown[]) => listCustomResources(...args),
     applyManifest: (...args: unknown[]) => applyManifest(...args),
-    getResourceConnections: async () => ({ object: null, edges: [] }),
+    getResourceConnections: async () => connections(),
     getYamlHistory: async () => [],
     addYamlHistoryEntry: async () => {},
   },
@@ -127,6 +132,7 @@ async function openWith(yamlText: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  connections = () => ({ object: null, edges: [] });
   useYamlEditorStore.getState().closeEditor();
   applyManifest.mockResolvedValue({
     success: true,
@@ -223,6 +229,41 @@ describe("applying on critical infrastructure", () => {
    * confirmations do. Without it the apply's own confirmation, which delivery
    * had already taught the reader to click through, was the way past.
    */
+  /**
+   * The whole reason the replica comparison exists. It was moved behind
+   * `useDeferredValue` here and nothing asserted it still reaches the
+   * confirmation: hardwiring `replicasMoved` to `false` left the entire
+   * frontend suite green, and with it an Apply that silently loses to the
+   * autoscaler seconds later.
+   */
+  it("warns that an autoscaler will put the replica count back", async () => {
+    connections = () => ({
+      object: null,
+      edges: [
+        {
+          relation: { verb: "governs" },
+          from: {
+            kind: "HorizontalPodAutoscaler",
+            name: "api",
+            namespace: "shop",
+            facts: {
+              kind: "autoscaler",
+              minReplicas: 2,
+              maxReplicas: 10,
+              conditions: [],
+            },
+          },
+          to: { kind: "Deployment", name: "api", namespace: "shop" },
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    expect(
+      await screen.findAllByText(/will put this number back/)
+    ).not.toHaveLength(0);
+  });
+
   it("holds Apply until the cluster's name is typed", async () => {
     const user = await openWith(PLAIN);
 
