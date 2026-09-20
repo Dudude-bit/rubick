@@ -75,10 +75,36 @@ pub struct CheckOutcome {
     pub copy: Option<CopyReport>,
 }
 
-/// One rung: a tool and the argv it takes for this check.
+/// Whether a rung's exit code says the question was answered yes.
+type SaysYes = fn(Option<i32>) -> bool;
+
+/// The rung that answered, what it printed, and how to read its exit.
+type Answer = (String, Captured, SaysYes);
+
+/// One rung: a tool, the argv it takes, and what its exit code means.
 struct Rung {
     tool: &'static str,
     argv: Vec<String>,
+    /// Whether this rung's exit says the question was answered **yes**.
+    ///
+    /// Not every tool spells that as 0. `curl telnet://` connects and then
+    /// waits for bytes that a plain TCP service never sends, so `-m` kills
+    /// it and it exits 28 — on a port that is open. Reading 0 as yes for
+    /// every rung reported every healthy service as refusing connections.
+    says_yes: SaysYes,
+}
+
+/// The ordinary meaning: the tool succeeded.
+fn zero_is_yes(code: Option<i32>) -> bool {
+    code == Some(0)
+}
+
+/// `curl telnet://<host>:<port>`, whose exit is about the transfer and not
+/// about the port. 0 is a peer that connected and hung up at once; 28 is our
+/// own `-m` timer firing on a connection that was made and stayed open,
+/// which is what an ordinary service looks like. 7 is the refusal.
+fn curl_telnet_is_yes(code: Option<i32>) -> bool {
+    matches!(code, Some(0 | 28))
 }
 
 /// The tools that can answer, most common first.
@@ -91,14 +117,17 @@ fn ladder(check: &Check) -> Vec<Rung> {
             Rung {
                 tool: "getent",
                 argv: vec!["getent".into(), "hosts".into(), name.clone()],
+                says_yes: zero_is_yes,
             },
             Rung {
                 tool: "nslookup",
                 argv: vec!["nslookup".into(), name.clone()],
+                says_yes: zero_is_yes,
             },
             Rung {
                 tool: "host",
                 argv: vec!["host".into(), name.clone()],
+                says_yes: zero_is_yes,
             },
         ],
         Check::Tcp { host, port } => vec![
@@ -112,6 +141,7 @@ fn ladder(check: &Check) -> Vec<Rung> {
                     host.clone(),
                     port.to_string(),
                 ],
+                says_yes: zero_is_yes,
             },
             Rung {
                 tool: "curl",
@@ -124,6 +154,7 @@ fn ladder(check: &Check) -> Vec<Rung> {
                     "/dev/null".into(),
                     format!("telnet://{host}:{port}"),
                 ],
+                says_yes: curl_telnet_is_yes,
             },
         ],
     }
@@ -170,7 +201,7 @@ async fn climb(
     pod: &str,
     container: &str,
     check: &Check,
-) -> Result<(Vec<String>, Option<(String, Captured)>)> {
+) -> Result<(Vec<String>, Option<Answer>)> {
     let mut tried = Vec::new();
     for rung in ladder(check) {
         tried.push(rung.tool.to_string());
@@ -187,7 +218,7 @@ async fn climb(
         if captured.exit.tool_missing() {
             continue;
         }
-        return Ok((tried, Some((rung.tool.to_string(), captured))));
+        return Ok((tried, Some((rung.tool.to_string(), captured, rung.says_yes))));
     }
     Ok((tried, None))
 }
@@ -196,16 +227,16 @@ fn outcome(
     ran_in: &str,
     started: Instant,
     tried: Vec<String>,
-    answer: Option<(String, Captured)>,
+    answer: Option<Answer>,
     copy: Option<CopyReport>,
 ) -> CheckOutcome {
     let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     match answer {
-        Some((tool, captured)) => CheckOutcome {
+        Some((tool, captured, says_yes)) => CheckOutcome {
             ran_in: ran_in.to_string(),
             tried,
             answered_with: Some(tool),
-            ok: captured.exit.ok(),
+            ok: says_yes(captured.exit.code),
             tool_missing: false,
             exit_code: captured.exit.code,
             stdout: String::from_utf8_lossy(&captured.stdout).into_owned(),
@@ -248,7 +279,12 @@ impl CopyGuard {
             .delete(&self.name, &DeleteParams::default().grace_period(0))
             .await
             .is_ok();
-        self.done.store(true, Ordering::SeqCst);
+        // Only a delete that worked disarms the fallback. Storing `true`
+        // whatever happened skipped `Drop`'s retry in exactly the case it
+        // exists for — a copy left running because the explicit delete
+        // failed — and `activeDeadlineSeconds` would then be the only thing
+        // between the reader and a pod nobody asked to keep.
+        self.done.store(gone, Ordering::SeqCst);
         gone
     }
 }
@@ -590,5 +626,77 @@ mod tests {
         assert!(!out.ok);
         assert_eq!(out.answered_with, None);
         assert_eq!(out.tried, vec!["getent", "nslookup"]);
+    }
+
+    /// `curl telnet://` exits about the transfer, not about the port, and
+    /// the two are opposite here. Measured against a local listener that
+    /// accepts and stays silent — which is what an ordinary TCP service
+    /// does: curl connects, waits for bytes nobody sends, and `-m 3` kills
+    /// it with **28**. A refused port is **7**. Reading 0 as the only yes
+    /// reported every healthy service as "does not answer from here".
+    #[test]
+    fn the_curl_rung_reads_its_own_timeout_as_a_port_that_answered() {
+        assert!(
+            curl_telnet_is_yes(Some(28)),
+            "28 is our -m firing on a connection that was made"
+        );
+        assert!(
+            curl_telnet_is_yes(Some(0)),
+            "0 is a peer that connected and hung up at once"
+        );
+        assert!(!curl_telnet_is_yes(Some(7)), "7 is the refusal");
+        assert!(!curl_telnet_is_yes(None), "no exit at all is not a yes");
+    }
+
+    /// The guard exists for the paths nobody walks on purpose: a cancelled
+    /// future, an early `?`, a panic. Storing `done` whatever the delete
+    /// returned skipped the retry in exactly the case it is for — the
+    /// explicit delete having failed — leaving a pod running in the
+    /// reader's namespace with only `activeDeadlineSeconds` behind it.
+    #[tokio::test]
+    async fn a_delete_that_failed_leaves_the_fallback_armed() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        // A cluster that is not there, so the delete cannot succeed.
+        let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
+        let client = kube::Client::try_from(config).expect("a client");
+        let guard = CopyGuard {
+            api: Api::namespaced(client, "shop"),
+            name: "k8s-gui-check-abc".to_string(),
+            done: Arc::new(AtomicBool::new(false)),
+        };
+
+        let gone = guard.delete().await;
+
+        assert!(!gone, "a delete against nothing cannot have worked");
+        assert!(
+            !guard.done.load(Ordering::SeqCst),
+            "a failed delete must leave Drop something to do"
+        );
+        // Disarm it: the Drop below would otherwise spawn onto a runtime
+        // this test is about to drop.
+        guard.done.store(true, Ordering::SeqCst);
+    }
+
+    /// And the rung that does mean it: `nc -z` exits 0 only when the port
+    /// accepted, so a blanket rule would be right for it and wrong for curl.
+    /// The ladder therefore carries the meaning per rung.
+    #[test]
+    fn every_rung_states_what_its_exit_means() {
+        let tcp = ladder(&Check::Tcp {
+            host: "db".into(),
+            port: 5432,
+        });
+        let curl = tcp
+            .iter()
+            .find(|rung| rung.tool == "curl")
+            .expect("curl is the fallback rung");
+        let nc = tcp
+            .iter()
+            .find(|rung| rung.tool == "nc")
+            .expect("nc is the first rung");
+
+        assert!((curl.says_yes)(Some(28)), "curl's timeout is a yes");
+        assert!(!(nc.says_yes)(Some(28)), "nc's is not");
+        assert!((nc.says_yes)(Some(0)));
     }
 }
