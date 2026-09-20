@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ----- Mocks -----
@@ -479,6 +479,32 @@ describe("the density strip", () => {
           /errors/.test(slice.getAttribute("aria-label") ?? "")
         ).length
     ).toBeGreaterThan(0);
+  });
+
+  /**
+   * The strip and the list are not asking the same question: the list is
+   * narrowed to the selected range, the strip keeps its full extent so
+   * there is somewhere to drag back to. Both halves of that split survived
+   * mutation with every logs test green — `visibleLogs = scoped` stopped
+   * the range narrowing the list at all, and filtering the strip by its own
+   * selection leaves four minutes of map and no way out of it.
+   */
+  it("narrows the list to the selected range and leaves the map whole", async () => {
+    const strip = await renderWithShape();
+    const slices = within(strip).getAllByRole("option").length;
+    const shown = () =>
+      Number(/(\d[\d\s]*) shown/.exec(document.body.textContent ?? "")?.[1]);
+    const before = shown();
+
+    // Shift with the arrows builds the same range the pointer drags out.
+    strip.focus();
+    fireEvent.keyDown(strip, { key: "Home" });
+    fireEvent.keyDown(strip, { key: "ArrowRight", shiftKey: true });
+
+    await waitFor(() => {
+      expect(shown()).toBeLessThan(before);
+    });
+    expect(within(strip).getAllByRole("option")).toHaveLength(slices);
   });
 
   it("keeps the map when it is collapsed to a band", async () => {

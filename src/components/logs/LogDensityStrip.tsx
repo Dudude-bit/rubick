@@ -117,6 +117,12 @@ interface LogDensityStripProps {
   scope: string;
   /** Lines held in total, to tell "nothing yet" from "nothing matches". */
   retained: number;
+  /**
+   * The filter has not finished walking the buffer. What arrived so far is
+   * not a verdict: "no line matches" here, over a walk still running, is
+   * the third state drawn as the second.
+   */
+  settling?: boolean;
   /** The cap has evicted: the left edge is not the start of the log. */
   lost: LostLines;
   /**
@@ -144,6 +150,7 @@ export function LogDensityStrip({
   logs,
   scope,
   retained,
+  settling = false,
   lost,
   intake,
   selection,
@@ -362,8 +369,13 @@ export function LogDensityStrip({
   const quiet =
     retained === 0
       ? t("empty", "nothingToMapYet")
-      : count === 0
-        ? t("empty", "noLineMatchesInBuffer")
+      : settling
+        ? t("empty", "filteringLines", {
+            n: retained,
+            count: formatCount(retained),
+          })
+        : count === 0
+          ? t("empty", "noLineMatchesInBuffer")
         : density.lines === 1
           ? t("empty", "oneLineSoFar", { clock: sliceClock(density.from) })
           : t("empty", "allLinesWithinSpan", {

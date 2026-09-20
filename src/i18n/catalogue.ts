@@ -1209,6 +1209,7 @@ export const en = {
     connecting: "Connecting",
     streamLive: "Live",
     streamPaused: "Paused",
+    filtering: "filtering…",
     streamStopped: "Stopped",
     moreLogActions: "More log actions",
     densityStrip: "Density strip",
@@ -4795,6 +4796,10 @@ export const en = {
       "— none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
     noLineMatchesQuery: "No line matches the query.",
+    filteringLines: {
+      one: "Filtering {count} line…",
+      other: "Filtering {count} lines…",
+    },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
     streamAttachedNothingWritten:

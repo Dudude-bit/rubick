@@ -33,6 +33,8 @@ interface LogStatusBarProps {
   onThaw: () => void;
   /** Rows drawn after filtering and grouping. */
   shownCount: number;
+  /** The query is still being walked over the buffer; `shownCount` is so far. */
+  settling: boolean;
   /** Lines the filter removed and lines standing behind a collapsed run. */
   hiddenCount: number;
   /** The terms being kept at the source, as the stream is running them. */
@@ -59,6 +61,7 @@ export function LogStatusBar({
   frozenLines,
   onThaw,
   shownCount,
+  settling,
   hiddenCount,
   intake,
   intakeFrom,
@@ -181,6 +184,7 @@ export function LogStatusBar({
       )}
       <span className="ml-auto whitespace-nowrap text-fg-fnt">
         {t("count", "shown", { n: formatCount(shownCount) })}
+        {settling && ` · ${t("action", "filtering")}`}
         {hiddenCount > 0 &&
           ` · ${t("count", "hiddenByFilter", { n: formatCount(hiddenCount) })}`}
       </span>
