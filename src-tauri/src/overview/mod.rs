@@ -361,7 +361,16 @@ impl WatchConfigs {
                     next = events.next() => next,
                 };
                 match next {
-                    Some(Ok(_)) => health.lock().recovered(kind),
+                    // Same rule as the resource watches: `Event::Init` is
+                    // emitted before the list it precedes is attempted, so a
+                    // refused stream alternates marker and error for ever.
+                    // Counting the marker kept this ladder on its first rung,
+                    // and neither `broken` nor `given up` was reachable
+                    // under a 403.
+                    Some(Ok(event)) if crate::watch::answered(&event) => {
+                        health.lock().recovered(kind);
+                    }
+                    Some(Ok(_)) => {}
                     Some(Err(error)) => {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {
