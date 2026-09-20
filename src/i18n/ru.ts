@@ -1122,6 +1122,9 @@ export const ru: Catalogue = {
     validationCompleted: "Проверка завершена.",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
+    applyUnanswered: "Кластер не ответил",
+    applyUnansweredHint:
+      "Мы перестали ждать. Применилось или нет — неизвестно: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
     applyCompleted: "Применение завершено.",
     clearCanvasQuestion: "Очистить холст?",
     clearCanvasConfirm: "С холста будут удалены все ресурсы и связи.",

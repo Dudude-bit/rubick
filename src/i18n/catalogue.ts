@@ -1138,6 +1138,10 @@ export const en = {
     validationCompleted: "Validation completed.",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
+    applyUnanswered: "The cluster did not answer",
+    applyUnansweredHint:
+      "We stopped waiting. Whether the change was applied is unknown — admission can outlast the wait — so check the object before applying again.",
+
     applyCompleted: "Apply completed.",
     clearCanvasQuestion: "Clear canvas?",
     clearCanvasConfirm:

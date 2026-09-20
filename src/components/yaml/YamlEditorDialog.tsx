@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
+import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
 import {
   Dialog,
@@ -276,17 +277,25 @@ export function YamlEditorDialog() {
       }
     } catch (error) {
       const errorMessage = errorToShow(error);
+      // A deadline is not a refusal. The layer that fires it drops our
+      // request; it does not undo what the apiserver may already have
+      // committed — a chain of admission webhooks can outlast the wait.
+      // "Apply failed" there is a verdict about something nobody looked at,
+      // and it invites a second apply on top of a first that may have run.
+      const ranOut = isReadDeadline(error);
       const errorResult = {
         success: false,
         stdout: "",
-        stderr: errorMessage,
+        stderr: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
         exit_code: 1,
       };
       setApplyResult(errorResult);
       toast({
-        title: t("action", "applyFailed"),
-        description: errorMessage,
-        variant: "destructive",
+        title: ranOut
+          ? t("action", "applyUnanswered")
+          : t("action", "applyFailed"),
+        description: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
+        variant: ranOut ? "default" : "destructive",
       });
     } finally {
       setIsApplying(false);
