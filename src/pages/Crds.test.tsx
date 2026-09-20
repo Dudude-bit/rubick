@@ -62,7 +62,9 @@ describe("the CRD list when the read did not answer", () => {
     );
     draw();
     await waitFor(() => {
-      expect(screen.getByText(/do not have permission to list/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/do not have permission to list/i)
+      ).toBeInTheDocument();
     });
     expect(
       screen.queryByText(/has no custom resource definitions/i)

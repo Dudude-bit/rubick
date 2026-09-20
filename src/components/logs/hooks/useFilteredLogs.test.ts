@@ -47,7 +47,9 @@ describe("useFilteredLogs", () => {
   /** A small buffer answers in the render, as it always did: nothing to settle. */
   it("filters a buffer under one slice in the same render", () => {
     const logs = lines(0, 100);
-    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER));
+    const { result } = renderHook(() =>
+      useFilteredLogs(logs, NONE, HIT, BY_CONTAINER)
+    );
     expect(result.current.settling).toBe(false);
     expect(result.current.scoped.map((l) => l.id)).toEqual(
       logs.filter((l) => l.raw.startsWith("hit")).map((l) => l.id)
@@ -76,7 +78,9 @@ describe("useFilteredLogs", () => {
   /** A big buffer is walked in slices with the event loop between them, so the input keeps answering; the caller is told the walk is on. */
   it("walks a new query over a big buffer in slices and says so", () => {
     const logs = lines(0, SLICE_LINES * 3);
-    const { result } = renderHook(() => useFilteredLogs(logs, NONE, HIT, BY_CONTAINER));
+    const { result } = renderHook(() =>
+      useFilteredLogs(logs, NONE, HIT, BY_CONTAINER)
+    );
     expect(result.current.settling).toBe(true);
     expect(reads).toBe(SLICE_LINES);
     expect(result.current.scoped.length).toBe(SLICE_LINES / 10);
