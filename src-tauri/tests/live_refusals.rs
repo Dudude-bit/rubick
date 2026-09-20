@@ -41,8 +41,12 @@ fn namespace() -> String {
     std::env::var("K8S_GUI_INIT_NAMESPACE").unwrap_or_else(|_| "k8s-gui-test".to_string())
 }
 
+/// A pod that **mounts a claim**: without one the loop below runs zero times
+/// and passes. `shell-demo` is a bare pod, so its name is stable, and it
+/// mounts `pvc-demo`. The old default `log-demo` is a Deployment, so the read
+/// returned `not found` and the harness panicked.
 fn pod_name() -> String {
-    std::env::var("K8S_GUI_REFUSED_POD").unwrap_or_else(|_| "log-demo".to_string())
+    std::env::var("K8S_GUI_REFUSED_POD").unwrap_or_else(|_| "shell-demo".to_string())
 }
 
 /// The neighbourhood of a pod read by an identity allowed to see pods and
@@ -92,6 +96,12 @@ async fn a_refused_neighbourhood_says_so_instead_of_drawing_an_empty_one() {
             .iter()
             .any(|unread| unread.kind == "PersistentVolumeClaim"),
         "the refused claim list has to be named among them"
+    );
+    assert!(
+        !claims.is_empty(),
+        "{pod} mounts no PersistentVolumeClaim, so nothing here tests what a \
+         refused claim list does to a claim edge; point K8S_GUI_REFUSED_POD at \
+         a pod that mounts one"
     );
     for edge in &claims {
         assert_eq!(

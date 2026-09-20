@@ -515,6 +515,15 @@ fn note_reach(
     };
 
     if selected.is_empty() {
+        // Empty because nothing matched, or empty because nobody could read
+        // the pods? `SelectsNothing` is the first: it renders in red as "No
+        // pod carries <selector>" beside "there is simply nothing behind
+        // it". Saying that about a list the cluster refused is the defect
+        // this whole change exists to remove, told about the reader's own
+        // Service. The refusal is named in `not_looked_at` instead.
+        if snapshot.pods.is_err() {
+            return;
+        }
         out.stops.push(ChainStop::SelectsNothing {
             service: svc_ref.clone(),
             selector: text,
@@ -1870,6 +1879,11 @@ async fn service_connections(
         out,
     );
     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+    // The same as the pod and workload pages. Without it a refusal on this
+    // page is invisible: an empty `not_looked_at` is the wire contract for
+    // "every kind was read", so the "Not looked at" group never renders and
+    // the frontend's own guards have nothing to fire on.
+    out.not_looked_at = unanswered(&snapshot);
 
     Ok(())
 }
@@ -1940,14 +1954,25 @@ async fn ingress_connections(
                     note_reach(svc, &svc_ref, &snapshot, out, false);
                     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
                 } else {
+                    // A list nobody read holds nothing either, and the two
+                    // are opposite answers: `Missing` renders as "routes to
+                    // a backend that was never created". Unchecked when the
+                    // Services list was refused, and named in `not_looked_at`.
                     let missing = ObjectRef::new(
                         "Service",
                         &service,
                         Some(ns.to_string()),
-                        Existence::Missing,
+                        if snapshot.services.is_err() {
+                            Existence::NotChecked
+                        } else {
+                            Existence::Missing
+                        },
                     );
                     out.edge(subject.clone(), missing.clone(), relation);
-                    if reached.insert(service.clone()) {
+                    // No stop for a list nobody read: the stop is what paints
+                    // the hop red and says the controller has nothing to send
+                    // the request to.
+                    if reached.insert(service.clone()) && snapshot.services.is_ok() {
                         out.stops.push(ChainStop::BackendMissing {
                             ingress: subject.clone(),
                             service: missing,
@@ -1967,6 +1992,9 @@ async fn ingress_connections(
             }
         }
     }
+    // As on the pod and workload pages: a refusal here has to be named, or
+    // it is a gap the wire contract reads as "every kind was read".
+    out.not_looked_at = unanswered(&snapshot);
 
     Ok(())
 }
@@ -2797,6 +2825,89 @@ mod refused_list_tests {
             }
             other => panic!("a refusal is not {other:?}"),
         }
+    }
+
+    /// The whole neighbourhood, with every list refused, for the verdict
+    /// tests below. Only the subject's own read has to succeed.
+    fn all_refused() -> Snapshot {
+        Snapshot {
+            pods: Err(REFUSED.to_string()),
+            services: Err(REFUSED.to_string()),
+            ingresses: Err(REFUSED.to_string()),
+            claims: Err(REFUSED.to_string()),
+            autoscalers: Err(REFUSED.to_string()),
+            budgets: Err(REFUSED.to_string()),
+            slices: Err(REFUSED.to_string()),
+            legacy: Err(REFUSED.to_string()),
+            gateways: None,
+            gateway_routes: Vec::new(),
+        }
+    }
+
+    fn selecting(name: &str, selector: &[(&str, &str)]) -> Service {
+        let mut svc = Service::default();
+        svc.metadata.name = Some(name.to_string());
+        svc.metadata.namespace = Some("shop".to_string());
+        svc.spec = Some(k8s_openapi::api::core::v1::ServiceSpec {
+            selector: Some(
+                selector
+                    .iter()
+                    .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                    .collect(),
+            ),
+            ..Default::default()
+        });
+        svc
+    }
+
+    /// The defect this PR exists to remove, found on the page it did not
+    /// cover: `snapshot.pods()` is `unwrap_or_default()`, so a refused pod
+    /// list is an empty slice and the Service page said "No pod carries
+    /// app=shop" — in red, beside "there is simply nothing behind it" —
+    /// about a Service whose pods nobody was allowed to look at.
+    ///
+    /// Deleting the `pods.is_err()` guard in `note_reach` puts that back.
+    #[test]
+    fn a_service_whose_pods_were_refused_does_not_claim_it_selects_nothing() {
+        let svc = selecting("shop", &[("app", "shop")]);
+        let svc_ref = service_ref(&svc, "shop");
+        let mut out = Neighbourhood::new();
+
+        note_reach(&svc, &svc_ref, &all_refused(), &mut out, true);
+
+        assert!(
+            !out.stops.iter().any(|stop| matches!(
+                stop,
+                ChainStop::SelectsNothing { .. }
+            )),
+            "a list nobody read is not a selector that matched nothing: {:?}",
+            out.stops
+        );
+    }
+
+    /// And the other half: a pod list that really answered and really holds
+    /// nothing matching is a Service selecting nothing, which is worth
+    /// saying plainly and in red.
+    #[test]
+    fn a_service_whose_pods_answered_and_matched_nothing_still_says_so() {
+        let svc = selecting("shop", &[("app", "shop")]);
+        let svc_ref = service_ref(&svc, "shop");
+        let mut out = Neighbourhood::new();
+        let answered = Snapshot {
+            pods: Ok(Vec::new()),
+            ..all_refused()
+        };
+
+        note_reach(&svc, &svc_ref, &answered, &mut out, true);
+
+        assert!(
+            out.stops.iter().any(|stop| matches!(
+                stop,
+                ChainStop::SelectsNothing { .. }
+            )),
+            "an answered, empty list is a real finding: {:?}",
+            out.stops
+        );
     }
 
     /// The other half, and why the first is not "always say unknown": a list
