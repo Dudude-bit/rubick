@@ -496,16 +496,21 @@ pub async fn check_pod(
     let api: Api<Pod> = Api::namespaced(client.clone(), namespace);
     let original = api.get(pod).await?;
     let name = copy_name(pod);
-    api.create(
-        &PostParams::default(),
-        &copy_of(&original, &name, &copy.image),
-    )
-    .await?;
+    // Armed before the create, not after it. The apiserver can accept the
+    // pod and the answer never come back — a reset connection, a proxy
+    // dropping the call, a client-side timeout — and the `?` below would
+    // then leave a pod running that nothing in this process knows about.
+    // Deleting a copy that was never created is a 404 and costs nothing.
     let guard = CopyGuard {
         api: api.clone(),
         name: name.clone(),
         done: Arc::new(AtomicBool::new(false)),
     };
+    api.create(
+        &PostParams::default(),
+        &copy_of(&original, &name, &copy.image),
+    )
+    .await?;
 
     let ran = async {
         wait_running(&api, &name).await?;
@@ -710,6 +715,34 @@ mod tests {
         );
         assert!(!curl_telnet_is_yes(Some(7)), "7 is the refusal");
         assert!(!curl_telnet_is_yes(None), "no exit at all is not a yes");
+    }
+
+    /// "This pod is a throwaway this app made" is one fact with two
+    /// readers, and the copy carried a label neither knew: the delete
+    /// command refused it as "not created by k8s-gui", and the pod page
+    /// never offered to remove it. Both labels answer the question now, and
+    /// this holds the copy still carrying the one they were taught.
+    #[test]
+    fn a_check_copy_is_labelled_as_this_apps_own() {
+        let mut original = Pod::default();
+        original.metadata.name = Some("payments".into());
+        original.metadata.namespace = Some("shop".into());
+        original.metadata.uid = Some("uid-1".into());
+        original.spec = Some(PodSpec {
+            containers: vec![Container {
+                name: "payments".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        let copy = copy_of(&original, "payments-check-1", "busybox");
+        let labels = copy.metadata.labels.expect("a copy carries labels");
+        assert_eq!(
+            labels.get("k8s-gui/check-pod").map(String::as_str),
+            Some("true"),
+            "the label both readers were taught"
+        );
     }
 
     /// A hostname is not a resource name: DNS is case-insensitive and an

@@ -443,7 +443,11 @@ export function PodDetail() {
 
   // Debug pods (created by copy/node debug) get a delete-now reminder
   // when the terminal closes — they keep running otherwise.
-  const isDebugPod = pod?.labels?.["k8s-gui/debug-pod"] === "true";
+  // Both labels: the debug toolbox and the Checks tab's copy are both pods
+  // this app made and both worth offering to remove when the reader is done.
+  const isDebugPod =
+    pod?.labels?.["k8s-gui/debug-pod"] === "true" ||
+    pod?.labels?.["k8s-gui/check-pod"] === "true";
 
   const handleTerminalClose = useCallback(() => {
     setShellChoice({ pod: podKey, container: null });
