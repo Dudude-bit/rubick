@@ -1175,8 +1175,8 @@ mod read_deadline_tests {
                 .parse()
                 .expect("cluster url"),
         );
-        let client = client_with_deadline(config, std::time::Duration::from_millis(200))
-            .expect("client");
+        let client =
+            client_with_deadline(config, std::time::Duration::from_millis(200)).expect("client");
 
         let request = http::Request::get("/api/v1/namespaces")
             .body(Vec::new())

@@ -361,7 +361,14 @@ impl WatchConfigs {
                     next = events.next() => next,
                 };
                 match next {
-                    Some(Ok(_)) => health.lock().recovered(kind),
+                    // Counting `Event::Init` — the marker before the list
+                    // that fails — kept this ladder on its first rung, so
+                    // neither `broken` nor `given up` was reachable under a
+                    // 403. See `watch::answered`.
+                    Some(Ok(event)) if crate::watch::answered(&event) => {
+                        health.lock().recovered(kind);
+                    }
+                    Some(Ok(_)) => {}
                     Some(Err(error)) => {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {

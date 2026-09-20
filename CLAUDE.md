@@ -73,13 +73,12 @@ Claims here are settled by running things, not by reasoning about them.
 - **Sabotage your own test.** Break the code and confirm it fails _for the right
   reason_. A test that passes against broken code is worse than none.
 - **There is no pre-push hook.** Run `bun run test` and `bunx tsc --noEmit`
-  yourself. Prettier and rustfmt run in the pre-commit hook, and prettier runs
-  again in `ci.yml`; rustfmt runs in no CI job at all. The hook is the only
-  thing holding either, and a squash merge never runs it — which is how main
-  arrived at 4.18.0 red on prettier for eight files and unformatted for three
-  more that only rustfmt reads. The hook also stashes what is not staged, so
-  formatting a file after `git add` leaves the old bytes staged and the hook
-  fails on content the working tree no longer has.
+  yourself. Prettier and rustfmt run in the pre-commit hook and again in
+  `ci.yml`, as the `Frontend formatting` and `Rust formatting` steps of
+  Lint + Test — a squash merge runs neither hook, so main arrived at 4.18.0
+  red on both, and every open PR inherited the failure. The hook also stashes
+  what is not staged, so formatting a file after `git add` leaves the old
+  bytes staged and the hook fails on content the working tree no longer has.
 - **Open the application** when the change is about what a person sees.
   `make apply-test-manifests` puts one of everything into the current context;
   `make dev` runs it. Before drawing a conclusion from a screenshot, check
