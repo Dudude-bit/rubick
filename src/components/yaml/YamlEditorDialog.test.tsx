@@ -264,6 +264,34 @@ describe("applying on critical infrastructure", () => {
     ).not.toHaveLength(0);
   });
 
+  /**
+   * The read deadline is on every request, writes included, and the layer
+   * that fires it only drops our side — it does not undo what the apiserver
+   * may already have committed, and a chain of admission webhooks can
+   * outlast the wait. Saying "Apply failed" there is a verdict about
+   * something nobody looked at, and it invites a second apply.
+   */
+  it("does not call a timed-out apply a failed one", async () => {
+    applyManifest.mockRejectedValue(
+      new Error("READ_DEADLINE: the cluster did not answer within 60 s")
+    );
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    // The cluster is marked critical in this harness, so the gate comes first.
+    await user.type(screen.getByPlaceholderText("test"), "test");
+    const confirm = screen
+      .getAllByRole("button", { name: /^Apply$/ })
+      .at(-1) as HTMLElement;
+    await user.click(confirm);
+
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(screen.getByText(/We stopped waiting/i)).toBeInTheDocument();
+    });
+    // Not the wire marker, and not a verdict on something nobody looked at.
+    expect(document.body.textContent).not.toContain("READ_DEADLINE:");
+  });
+
   it("holds Apply until the cluster's name is typed", async () => {
     const user = await openWith(PLAIN);
 
