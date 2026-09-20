@@ -44,12 +44,9 @@ export function useClusterOverview(namespace: string | null, enabled = true) {
     queryFn: () => read(namespace),
     enabled: isConnected && enabled,
     staleTime: STALE_TIMES.overview,
-    // Previous, but only of this cluster. The key carries the context, so a
-    // switch asks a new question — and `keepPreviousData` answered it with
-    // the old cluster's totals, which is how the rail kept `Pods 51` and
-    // `Namespaces 19` beside the name of a cluster that refuses to list
-    // either. Within one cluster it is what stops a namespace change
-    // flickering through a skeleton, so it stays for that.
+    // Previous, but only of this cluster: `keepPreviousData` answered the
+    // new context's key with the old context's totals, which is how the rail
+    // kept `Pods 51` beside a cluster that refuses to list pods.
     placeholderData: ofSameCluster<ClusterOverview>(currentContext),
     refresh: "overview",
   });

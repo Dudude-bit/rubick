@@ -48,12 +48,9 @@ export function usePrefetchCoreLists(): void {
     if (switched) {
       // A resource key does not carry the context — `["pods","default"]` is
       // the same entry in every cluster — so an invalidation leaves the
-      // cluster the reader just left on screen, with its ages still
-      // counting up, until the refetch answers. Where the new cluster
-      // refuses the read, the refetch never answers and those rows stay for
-      // good. Dropping the lot costs a refetch and buys the guarantee that
-      // what is on screen came from the cluster the window names; the same
-      // trade `useScopeTabs` makes when a parked tab is brought forward.
+      // cluster just left on screen until the refetch answers, and where the
+      // new one refuses the read it never answers. Same trade as
+      // `useScopeTabs` makes for a parked tab.
       queryClient.removeQueries();
     } else {
       // Everything asked before this connection stood was answered by

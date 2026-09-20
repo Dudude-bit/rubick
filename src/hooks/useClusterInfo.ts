@@ -29,10 +29,8 @@ export function useClusterInfo() {
       }
     },
     enabled: isConnected && !!currentContext,
-    // Previous, but only of this cluster: the key is the context, and
-    // keeping the last one's answer across a switch printed the cluster the
-    // reader left — its version, its endpoint — beside the name of the one
-    // they went to. See `lib/previous-answer.ts`.
+    // Previous, but only of this cluster: keeping the last one's answer
+    // across a switch printed the version of the cluster left behind.
     placeholderData: ofSameCluster<ClusterInfo | null>(currentContext),
     staleTime: STALE_TIMES.overview,
     // No rate, because there is no question to re-ask: this is the

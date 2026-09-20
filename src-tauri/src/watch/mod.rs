@@ -362,15 +362,8 @@ impl WatchManager {
                                     batch.flush(&event_tx);
                                     emit_failure(&event_tx, &stream_id_clone, e.to_string());
                                 }
-                                // Wait before the next attempt. A stream the
-                                // cluster refuses is answered as fast as the
-                                // apiserver can say no: measured on kind
-                                // under a 403, about 8000 re-lists a second,
-                                // which filled the 10 MB cap on `rubick.log`
-                                // in two seconds — so the file the reader is
-                                // asked to send held the storm and nothing
-                                // else. Cancel still wins, or a closing
-                                // window waits out the whole sleep.
+                                // Cancel still wins, or a closing window
+                                // waits out the whole sleep.
                                 let wait = backoff_for(latch.consecutive_errors());
                                 tokio::select! {
                                     biased;

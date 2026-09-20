@@ -21,12 +21,11 @@ const ERROR_THRESHOLD: u32 = 3;
 /// Whether a watcher event is the cluster answering, or only a marker that
 /// another attempt has begun.
 ///
-/// kube leaves `State::Empty` by emitting `Event::Init` *before* it attempts
-/// the initial list, so a stream the cluster refuses yields `Init, Err,
-/// Init, Err` for as long as it runs. Counting `Init` as a success reset the
-/// streak between every pair of errors and the threshold was never reached:
-/// `rubick.log` held 7598 consecutive `error (1 in a row)` lines under a 403
-/// and not one `(2 in a row)`, so the refusal never left this process.
+/// kube emits `Event::Init` *before* it attempts the initial list, so a
+/// refused stream yields `Init, Err, Init, Err` for ever. Counting `Init` as
+/// a success reset the streak between every pair of errors: `rubick.log`
+/// held 7598 `error (1 in a row)` lines under a 403 and not one `(2 in a
+/// row)`, so the refusal never left this process.
 pub(crate) fn answered<K>(event: &Event<K>) -> bool {
     !matches!(event, Event::Init)
 }
@@ -39,11 +38,9 @@ const BACKOFF_CAP: Duration = Duration::from_secs(30);
 
 /// How long to wait before re-listing, after `errors` failures in a row.
 ///
-/// kube ships `StreamBackoff` and we cannot use it for this: it resets on
-/// any non-error item, and `Event::Init` is one — a refused stream hands it
-/// a marker between every pair of errors, so the ramp never leaves its first
-/// rung and the watch re-lists about once a second for as long as the window
-/// is open. The streak this takes is the one that survives the marker.
+/// kube's own `StreamBackoff` resets on any non-error item and `Event::Init`
+/// is one, so a refused stream kept its ramp on the first rung — about one
+/// re-list a second, for ever. The streak this takes survives the marker.
 pub(crate) fn backoff_for(errors: u32) -> Duration {
     let doublings = errors.saturating_sub(1).min(16);
     BACKOFF_BASE
