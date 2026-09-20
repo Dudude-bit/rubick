@@ -1148,6 +1148,30 @@ export interface ManifestResult {
   exit_code: number;
 }
 
+export interface CheckOutcome {
+  ranIn: string;
+  tried: string[];
+  answeredWith: string | null;
+  ok: boolean;
+  toolMissing: boolean;
+  unknown: boolean;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  elapsedMs: number;
+  copy: CopyReport | null;
+}
+
+export interface CopyReport {
+  pod: string;
+  image: string;
+  deleted: boolean;
+}
+
+export interface CopyWith {
+  image: string;
+}
+
 export interface ControllerRevisionInfo {
   name: string;
   revision: number;
@@ -1995,6 +2019,9 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
+
+export type Check =
+  { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };
 
 export type Unread =
   | { says: "unanswered"; version: string; said: string }
