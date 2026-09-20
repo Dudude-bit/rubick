@@ -274,13 +274,23 @@ fn outcome(
     }
 }
 
-/// The copy, and the promise that it goes.
+/// The copy, and what actually removes it.
 ///
-/// `Drop` is what makes the cleanup unconditional: a cancelled future, an
-/// early `?` and a panic all run it, and each spawns the delete rather than
-/// awaiting it, because a destructor cannot. The explicit `delete` at the end
-/// of the happy path is what lets the report say *deleted* rather than
+/// `Drop` covers everything that unwinds inside this process: a cancelled
+/// future, an early `?`, a panic. Each spawns the delete rather than
+/// awaiting it, because a destructor cannot. The explicit `delete` at the
+/// end of the happy path is what lets the report say *deleted* rather than
 /// *asked to delete*.
+///
+/// It is not unconditional, and saying so would be the same overclaim this
+/// file exists to avoid. A destructor does not run when the process goes
+/// away — quit the app mid-check and nothing here deletes anything. Two
+/// things outside this process cover that: `activeDeadlineSeconds` stops
+/// the container after five minutes, and the owner reference to the pod it
+/// copies (with `controller: true`) has Kubernetes collect the object when
+/// that pod goes. What is left in between is a Failed pod in the reader's
+/// namespace, which carries `k8s-gui/check-pod` so the app's own delete
+/// offers to remove it.
 struct CopyGuard {
     api: Api<Pod>,
     name: String,

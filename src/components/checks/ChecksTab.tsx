@@ -19,7 +19,7 @@ import {
   verdictOf,
   type Verdict,
 } from "@/lib/checks";
-import { offeredContainers } from "@/lib/container-sequence";
+import { offeredContainers, whyNoShell } from "@/lib/container-sequence";
 import { normalizeTauriError } from "@/lib/error-utils";
 import type { Check, CheckOutcome, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
@@ -48,7 +48,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   const containers = offeredContainers(pod);
   const [container, setContainer] = useState(
     () =>
-      containers.find((c) => c.state.type === "running")?.name ??
+      containers.find((c) => whyNoShell(c, t) === null)?.name ??
       containers[0]?.name ??
       ""
   );
@@ -98,11 +98,24 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {containers.map((c) => (
-                    <SelectItem key={c.name} value={c.name}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                  {containers.map((c) => {
+                    // The same judgement the shell chooser and the peek
+                    // both read. A container that cannot take an exec
+                    // cannot answer a check either, and offering it
+                    // silently sends the reader at a run that will fail
+                    // with the runtime's words instead of ours.
+                    const why = whyNoShell(c, t);
+                    return (
+                      <SelectItem
+                        key={c.name}
+                        value={c.name}
+                        disabled={!!why}
+                        title={why ?? undefined}
+                      >
+                        {why ? `${c.name} — ${why}` : c.name}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             ) : null
