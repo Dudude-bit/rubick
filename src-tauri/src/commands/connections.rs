@@ -1523,7 +1523,9 @@ async fn pod_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, gateway).await?;
-    let pod = found(&snapshot.pods, "Pod", ns, name, |pod| pod.name_any() == name)?;
+    let pod = found(&snapshot.pods, "Pod", ns, name, |pod| {
+        pod.name_any() == name
+    })?;
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
@@ -2877,8 +2879,10 @@ mod refused_list_tests {
     #[test]
     fn a_subject_whose_list_was_refused_is_unknown_rather_than_gone() {
         let refused: Read<Service> = Err(REFUSED.to_string());
-        let err = found(&refused, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
-            .expect_err("a refused list cannot answer");
+        let err = found(&refused, "Service", "shop", "shop", |svc| {
+            svc.name_any() == "shop"
+        })
+        .expect_err("a refused list cannot answer");
 
         match err {
             Error::ListUnread { kind, name, said } => {
@@ -3035,10 +3039,9 @@ mod refused_list_tests {
         note_reach(&svc, &svc_ref, &all_refused(), &mut out, true);
 
         assert!(
-            !out.stops.iter().any(|stop| matches!(
-                stop,
-                ChainStop::SelectsNothing { .. }
-            )),
+            !out.stops
+                .iter()
+                .any(|stop| matches!(stop, ChainStop::SelectsNothing { .. })),
             "a list nobody read is not a selector that matched nothing: {:?}",
             out.stops
         );
@@ -3060,10 +3063,9 @@ mod refused_list_tests {
         note_reach(&svc, &svc_ref, &answered, &mut out, true);
 
         assert!(
-            out.stops.iter().any(|stop| matches!(
-                stop,
-                ChainStop::SelectsNothing { .. }
-            )),
+            out.stops
+                .iter()
+                .any(|stop| matches!(stop, ChainStop::SelectsNothing { .. })),
             "an answered, empty list is a real finding: {:?}",
             out.stops
         );
@@ -3075,8 +3077,10 @@ mod refused_list_tests {
     #[test]
     fn a_subject_absent_from_a_list_that_answered_is_still_not_found() {
         let answered: Read<Service> = Ok(vec![named("carts")]);
-        let err = found(&answered, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
-            .expect_err("the list answered and does not hold it");
+        let err = found(&answered, "Service", "shop", "shop", |svc| {
+            svc.name_any() == "shop"
+        })
+        .expect_err("the list answered and does not hold it");
 
         assert!(
             matches!(err, Error::NotFound { .. }),
@@ -3087,8 +3091,10 @@ mod refused_list_tests {
     #[test]
     fn a_subject_a_list_holds_is_returned() {
         let answered: Read<Service> = Ok(vec![named("shop")]);
-        let svc = found(&answered, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
-            .expect("it is right there");
+        let svc = found(&answered, "Service", "shop", "shop", |svc| {
+            svc.name_any() == "shop"
+        })
+        .expect("it is right there");
         assert_eq!(svc.name_any(), "shop");
     }
 
