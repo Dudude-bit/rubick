@@ -231,7 +231,10 @@ async fn climb(
         if captured.exit.tool_missing() {
             continue;
         }
-        return Ok((tried, Some((rung.tool.to_string(), captured, rung.says_yes))));
+        return Ok((
+            tried,
+            Some((rung.tool.to_string(), captured, rung.says_yes)),
+        ));
     }
     Ok((tried, None))
 }
