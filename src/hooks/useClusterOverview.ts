@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { mergeOverviews } from "@/lib/overview-merge";
+import { ofSameCluster } from "@/lib/previous-answer";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -44,7 +44,10 @@ export function useClusterOverview(namespace: string | null, enabled = true) {
     queryFn: () => read(namespace),
     enabled: isConnected && enabled,
     staleTime: STALE_TIMES.overview,
-    placeholderData: keepPreviousData,
+    // Previous, but only of this cluster: `keepPreviousData` answered the
+    // new context's key with the old context's totals, which is how the rail
+    // kept `Pods 51` beside a cluster that refuses to list pods.
+    placeholderData: ofSameCluster<ClusterOverview>(currentContext),
     refresh: "overview",
   });
 }

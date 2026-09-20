@@ -119,9 +119,9 @@ pub async fn list_pod_rows(
     // Built once here so a bad scope is refused before a stream id exists,
     // and thrown away: the one the task uses is taken after the gate.
     let _ = ResourceContext::for_list(&state, namespace.clone())?;
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let context = state.get_current_context().ok_or_else(|| {
+        crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+    })?;
     let clients = state.client_manager.clone();
 
     let stream_id = generate_id("pods");
