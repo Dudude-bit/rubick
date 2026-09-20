@@ -1298,7 +1298,14 @@ struct Snapshot {
 type Read<K> = std::result::Result<Vec<K>, String>;
 
 fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Read<K> {
-    list.map(|list| list.items).map_err(|err| err.to_string())
+    // Through the app's own `Error`, not `kube::Error`'s Display. That is
+    // the one place a 401 gets its `CREDENTIALS_EXPIRED:` prefix and a
+    // timed-out read its `READ_DEADLINE:` one — the wire formats the
+    // frontend matches on — and the only place an API failure is turned
+    // into the cluster's own sentence rather than kube 4's `Status` struct
+    // printed at the reader.
+    list.map(|list| list.items)
+        .map_err(|err| Error::from(err).to_string())
 }
 
 /// The subject, out of the list it would be in.
@@ -1311,6 +1318,7 @@ fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Read<K> {
 fn found<'a, K>(
     list: &'a Read<K>,
     kind: &str,
+    namespace: &str,
     name: &str,
     is_it: impl Fn(&K) -> bool,
 ) -> Result<&'a K> {
@@ -1322,7 +1330,7 @@ fn found<'a, K>(
     items
         .iter()
         .find(|item| is_it(item))
-        .ok_or_else(|| Error::not_found(kind, name, ""))
+        .ok_or_else(|| Error::not_found(kind, name, namespace))
 }
 
 impl Snapshot {
@@ -1515,7 +1523,7 @@ async fn pod_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, gateway).await?;
-    let pod = found(&snapshot.pods, "Pod", name, |pod| pod.name_any() == name)?;
+    let pod = found(&snapshot.pods, "Pod", ns, name, |pod| pod.name_any() == name)?;
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
@@ -1862,7 +1870,7 @@ async fn service_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, gateway).await?;
-    let svc = found(&snapshot.services, "Service", name, |svc| {
+    let svc = found(&snapshot.services, "Service", ns, name, |svc| {
         svc.name_any() == name
     })?;
 
@@ -1919,7 +1927,7 @@ async fn ingress_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let snapshot = Snapshot::of(ctx, None).await?;
-    let ing = found(&snapshot.ingresses, "Ingress", name, |ing| {
+    let ing = found(&snapshot.ingresses, "Ingress", ns, name, |ing| {
         ing.name_any() == name
     })?;
 
@@ -2814,7 +2822,7 @@ mod refused_list_tests {
     #[test]
     fn a_subject_whose_list_was_refused_is_unknown_rather_than_gone() {
         let refused: Read<Service> = Err(REFUSED.to_string());
-        let err = found(&refused, "Service", "shop", |svc| svc.name_any() == "shop")
+        let err = found(&refused, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
             .expect_err("a refused list cannot answer");
 
         match err {
@@ -2825,6 +2833,74 @@ mod refused_list_tests {
             }
             other => panic!("a refusal is not {other:?}"),
         }
+    }
+
+    /// The panel prints this message, and "shop is not there" without the
+    /// namespace is a different claim from "shop is not there **in shop**"
+    /// on a cluster where the same name exists elsewhere. The test asserted
+    /// only the variant, which is how the empty string survived.
+    #[test]
+    fn the_not_found_message_says_where_it_looked() {
+        let answered: Read<Service> = Ok(Vec::new());
+        let err = found(&answered, "Service", "shop", "web", |svc: &Service| {
+            svc.name_any() == "web"
+        })
+        .expect_err("a list that answered and lacks the name");
+
+        match err {
+            Error::NotFound {
+                kind,
+                name,
+                namespace,
+            } => {
+                assert_eq!((kind.as_str(), name.as_str()), ("Service", "web"));
+                assert_eq!(
+                    namespace, "shop",
+                    "the panel says where it looked, or the claim is about the cluster"
+                );
+            }
+            other => panic!("a list that answered gives NotFound, not {other:?}"),
+        }
+    }
+
+    /// Every list this reads goes through `read`, and that is where an
+    /// error keeps or loses its identity. `kube::Error`'s own Display is
+    /// neither the cluster's sentence nor a marker the frontend can match:
+    /// a 401 carried no `CREDENTIALS_EXPIRED:` so the session-expiry screen
+    /// never came up, a timed-out read carried no `READ_DEADLINE:`, and an
+    /// API failure printed kube 4's `Status` struct at the reader.
+    #[test]
+    fn a_refused_list_keeps_the_words_the_rest_of_the_app_matches_on() {
+        let status = |code: u16, message: &str| {
+            kube::Error::Api(Box::new(kube::core::Status {
+                code,
+                message: message.to_string(),
+                reason: message.to_string(),
+                status: None,
+                details: None,
+                metadata: Option::default(),
+            }))
+        };
+
+        let expired: Read<Pod> = read(Err(status(401, "Unauthorized")));
+        assert!(
+            expired
+                .as_ref()
+                .expect_err("401 is a failure")
+                .starts_with("CREDENTIALS_EXPIRED:"),
+            "the wire marker is how the app notices a session is over: {expired:?}"
+        );
+
+        let refused: Read<Pod> = read(Err(status(403, "pods is forbidden")));
+        let said = refused.expect_err("403 is a failure");
+        assert!(
+            said.contains("pods is forbidden"),
+            "the cluster's own words, not a struct dump: {said}"
+        );
+        assert!(
+            !said.contains("Status {"),
+            "kube's Debug output is not a sentence: {said}"
+        );
     }
 
     /// The whole neighbourhood, with every list refused, for the verdict
@@ -2916,7 +2992,7 @@ mod refused_list_tests {
     #[test]
     fn a_subject_absent_from_a_list_that_answered_is_still_not_found() {
         let answered: Read<Service> = Ok(vec![named("carts")]);
-        let err = found(&answered, "Service", "shop", |svc| svc.name_any() == "shop")
+        let err = found(&answered, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
             .expect_err("the list answered and does not hold it");
 
         assert!(
@@ -2928,7 +3004,7 @@ mod refused_list_tests {
     #[test]
     fn a_subject_a_list_holds_is_returned() {
         let answered: Read<Service> = Ok(vec![named("shop")]);
-        let svc = found(&answered, "Service", "shop", |svc| svc.name_any() == "shop")
+        let svc = found(&answered, "Service", "shop", "shop", |svc| svc.name_any() == "shop")
             .expect("it is right there");
         assert_eq!(svc.name_any(), "shop");
     }
