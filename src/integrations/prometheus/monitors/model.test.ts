@@ -18,6 +18,7 @@ import {
   readPrometheus,
   rowsOf,
   scrapeOf,
+  selectorIsEmpty,
   selectedServices,
   selectorMatches,
   sharedPrefix,
@@ -75,6 +76,43 @@ const monitor = (
     cr("ServiceMonitor", name, namespace, spec, labels),
     "ServiceMonitor"
   );
+
+describe("the rules that decide which targets are a monitor's", () => {
+  /**
+   * The pool name is the only tie between a monitor and its targets, and
+   * the kind is half of it. Collapsing `poolPrefix` to always say
+   * `serviceMonitor/` passed every test in both files: a PodMonitor named
+   * `web` in the same namespace would take a ServiceMonitor's targets and
+   * report its health as its own.
+   */
+  it("keeps a PodMonitor's pool apart from a ServiceMonitor of the same name", () => {
+    const asService = readMonitor(
+      cr("ServiceMonitor", "web", "shop", { selector: {} }),
+      "ServiceMonitor"
+    );
+    const asPod = readMonitor(
+      cr("PodMonitor", "web", "shop", { selector: {} }),
+      "PodMonitor"
+    );
+    expect(poolPrefix(asService)).toBe("serviceMonitor/shop/web/");
+    expect(poolPrefix(asPod)).toBe("podMonitor/shop/web/");
+    expect(poolPrefix(asService)).not.toBe(poolPrefix(asPod));
+  });
+
+  /**
+   * The operator's own asymmetry, and the reason `selectorIsEmpty` exists:
+   * a Prometheus with an empty `ruleNamespaceSelector` watches every
+   * namespace, while one with none watches only its own. Making it always
+   * return false passed both files — every cross-namespace pick-up would
+   * then read as "nobody picks this up".
+   */
+  it("tells an empty namespace selector from a missing one", () => {
+    expect(selectorIsEmpty({})).toBe(true);
+    expect(selectorIsEmpty({ matchLabels: {} })).toBe(true);
+    expect(selectorIsEmpty({ matchLabels: { team: "shop" } })).toBe(false);
+    expect(selectorIsEmpty(null)).toBe(false);
+  });
+});
 
 describe("selectorMatches", () => {
   /** The operator's own asymmetry: a missing selector selects nothing, an empty one everything. */
@@ -657,6 +695,105 @@ describe("the heartbeat", () => {
     expect(lanes[0].job).toBe("");
     expect(lanes[1].cells).toEqual(["up", "down", "none", "up"]);
     expect(lanes[0].cells).toEqual(["none", "none", "down", "none"]);
+  });
+
+  /**
+   * The two `noTargets` hints are opposite advice — a PodMonitor points at
+   * a container port, a ServiceMonitor at a Service's endpoints — and
+   * swapping them passed both test files. Sending a reader to check the
+   * wrong object is worse than saying nothing.
+   */
+  it("gives each monitor kind the hint that fits it", () => {
+    const withPort = (kind: "ServiceMonitor" | "PodMonitor") =>
+      readMonitor(
+        cr(kind, "web", "shop", {
+          selector: {},
+          endpoints: [{ port: "metrics" }],
+          podMetricsEndpoints: [{ port: "metrics" }],
+        }),
+        kind
+      );
+    const row = (kind: "ServiceMonitor" | "PodMonitor") => ({
+      monitor: withPort(kind),
+      findings: [{ kind: "noTargets" as const, severity: "warn" as const }],
+    });
+
+    expect(hintFor(row("PodMonitor") as never)?.key).toBe("podPort");
+    expect(hintFor(row("ServiceMonitor") as never)?.key).toBe("noEndpoints");
+  });
+
+  /**
+   * "The first error" is in the test's title and was not in its
+   * assertions: making it keep the *last* error instead passed everything.
+   * Which one the panel shows decides what a reader chases first.
+   */
+  it("keeps the first error of the pool, not whichever came last", () => {
+    const web = readMonitor(
+      cr("ServiceMonitor", "web", "shop", { selector: {} }),
+      "ServiceMonitor"
+    );
+    const two: TargetsRead = {
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://a",
+          health: "down",
+          lastError: "connection refused",
+          lastScrape: "2026-09-12T08:00:00Z",
+          labels: {},
+        },
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://b",
+          health: "down",
+          lastError: "context deadline exceeded",
+          lastScrape: "2026-09-12T08:00:05Z",
+          labels: {},
+        },
+      ],
+    };
+    const scrape = scrapeOf(web, two);
+    expect(scrape.state).toBe("read");
+    if (scrape.state === "read")
+      expect(scrape.lastError).toBe("connection refused");
+  });
+
+  /**
+   * The four rules `downSince` actually has, three of which survived every
+   * mutation: one gap-free lane of [up,down,down] exercises the walk back
+   * and nothing else.
+   */
+  it("reads the lane back past trailing gaps, and says nothing if it ends up", () => {
+    const from = 1_000_000;
+    const step = 60_000;
+    const lane = (cells: ("up" | "down" | "none")[]) => [
+      { instance: "a", job: "web", cells },
+    ];
+
+    // Trailing gaps are not the end of the lane: the last real cell is.
+    expect(downSince(lane(["up", "down", "none"]), from, step)).toBe(
+      from + step
+    );
+    // A lane whose last real cell is up is not an outage at all.
+    expect(downSince(lane(["down", "up", "none"]), from, step)).toBeNull();
+    // Nothing but gaps says nothing.
+    expect(downSince(lane(["none", "none"]), from, step)).toBeNull();
+    // The walk back stops at the last up, not at the start of the lane.
+    expect(
+      downSince(lane(["down", "up", "down", "down"]), from, step)
+    ).toBe(from + 2 * step);
+    // The earliest across lanes wins, because the outage is the pool's.
+    expect(
+      downSince(
+        [
+          { instance: "a", job: "web", cells: ["up", "up", "down"] },
+          { instance: "b", job: "web", cells: ["up", "down", "down"] },
+        ],
+        from,
+        step
+      )
+    ).toBe(from + step);
   });
 
   it("dates a current outage from the first down cell after the last up", () => {

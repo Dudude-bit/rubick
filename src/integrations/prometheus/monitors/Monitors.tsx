@@ -141,16 +141,25 @@ export default function Monitors() {
 function Header({ picture, rows }: { picture: Picture; rows: MonitorRow[] }) {
   const t = useT();
   const attention = rows.filter((row) => row.worst !== null).length;
+  // `rows` is built from the kinds that answered, so a refused list is not
+  // absent from it — it is invisible in it. "0 monitors, all scraped" over
+  // a 403 is the cache's own third state collapsing in the one line the
+  // reader looks at first.
+  const unread = [picture.serviceMonitors, picture.podMonitors].some(
+    (kind) => kind.state === "unread"
+  );
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
       <div className="min-w-0 max-w-[60ch]">
         <p className="text-[13px] font-semibold tracking-tight text-fg">
-          {attention > 0
-            ? t("monitors", "needAttention", {
-                n: attention,
-                total: rows.length,
-              })
-            : t("monitors", "allScraped", { n: rows.length })}
+          {unread
+            ? t("monitors", "someUnread")
+            : attention > 0
+              ? t("monitors", "needAttention", {
+                  n: attention,
+                  total: rows.length,
+                })
+              : t("monitors", "allScraped", { n: rows.length })}
         </p>
         <p className="mt-0.5 text-xs text-fg-mut">
           {t("monitors", "pageHint")}

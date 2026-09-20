@@ -2085,6 +2085,7 @@ export const ru: Catalogue = {
     },
     ofTotal: "из {total}",
     needAttention: "{n} из {total} требуют внимания",
+    someUnread: "Часть мониторов прочитать не удалось — это не вся картина",
     allScraped: {
       one: "{n} монитор, скрейпится",
       few: "{n} монитора, все скрейпятся",
