@@ -504,6 +504,12 @@ async fn renew_once(
         .test_connection(context)
         .await
         .map_err(|e| crate::error::Error::Connection(e.to_string()))?;
+    // The overview's watches are the one holder that cannot hear the event:
+    // they are Rust tasks that baked the old client into five `Api` handles
+    // when they started. Dropped here so the next request starts them on the
+    // client that now exists — otherwise they run to their first failure on
+    // an expired token and the overview quietly falls back to listing.
+    state.overview_cache.forget(context);
     // Only now: telling the holders of the old client any earlier would have
     // them rebuild onto it.
     state.emit(crate::state::AppEvent::CredentialsRenewed {
