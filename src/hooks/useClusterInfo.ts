@@ -7,11 +7,12 @@
  * @module hooks/useClusterInfo
  */
 
-import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { normalizeTauriError } from "@/lib/error-utils";
+import { ofSameCluster } from "@/lib/previous-answer";
 import { STALE_TIMES } from "@/lib/refresh";
+import type { ClusterInfo } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 export function useClusterInfo() {
@@ -28,7 +29,11 @@ export function useClusterInfo() {
       }
     },
     enabled: isConnected && !!currentContext,
-    placeholderData: keepPreviousData,
+    // Previous, but only of this cluster: the key is the context, and
+    // keeping the last one's answer across a switch printed the cluster the
+    // reader left — its version, its endpoint — beside the name of the one
+    // they went to. See `lib/previous-answer.ts`.
+    placeholderData: ofSameCluster<ClusterInfo | null>(currentContext),
     staleTime: STALE_TIMES.overview,
     // No rate, because there is no question to re-ask: this is the
     // apiserver's own `/version`, and it cannot change under a live

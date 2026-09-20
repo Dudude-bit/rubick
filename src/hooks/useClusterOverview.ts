@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { mergeOverviews } from "@/lib/overview-merge";
+import { ofSameCluster } from "@/lib/previous-answer";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -44,7 +44,13 @@ export function useClusterOverview(namespace: string | null, enabled = true) {
     queryFn: () => read(namespace),
     enabled: isConnected && enabled,
     staleTime: STALE_TIMES.overview,
-    placeholderData: keepPreviousData,
+    // Previous, but only of this cluster. The key carries the context, so a
+    // switch asks a new question — and `keepPreviousData` answered it with
+    // the old cluster's totals, which is how the rail kept `Pods 51` and
+    // `Namespaces 19` beside the name of a cluster that refuses to list
+    // either. Within one cluster it is what stops a namespace change
+    // flickering through a skeleton, so it stays for that.
+    placeholderData: ofSameCluster<ClusterOverview>(currentContext),
     refresh: "overview",
   });
 }
