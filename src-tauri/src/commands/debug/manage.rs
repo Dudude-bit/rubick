@@ -30,13 +30,16 @@ pub async fn delete_debug_pod(
     let pod = api.get(&pod_name).await?;
     let labels = pod.metadata.labels.unwrap_or_default();
 
-    if labels
-        .get("k8s-gui/debug-pod")
-        .map(std::string::String::as_str)
-        != Some("true")
-    {
+    // Either label: this app makes throwaway pods two ways now — the debug
+    // toolbox and the Checks tab's copy — and "is this one of ours" is one
+    // question. Knowing only the older label left the newer pods deletable
+    // by nothing here.
+    let ours = ["k8s-gui/debug-pod", "k8s-gui/check-pod"]
+        .iter()
+        .any(|label| labels.get(*label).map(String::as_str) == Some("true"));
+    if !ours {
         return Err(Error::InvalidInput(format!(
-            "Pod '{pod_name}' is not a debug pod created by k8s-gui"
+            "Pod '{pod_name}' is not a throwaway pod created by k8s-gui"
         )));
     }
 

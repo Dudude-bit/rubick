@@ -200,6 +200,8 @@ fn main() {
             commands::pods::get_pod,
             commands::pods::delete_pod,
             commands::pods::restart_pod,
+            // Checks: a hypothesis tested from the pod
+            commands::checks::run_pod_check,
             // Debug commands
             commands::debug::debug_pod_ephemeral,
             commands::debug::debug_pod_copy,
@@ -261,6 +263,7 @@ fn main() {
             integrations::prometheus::probe_prometheus,
             integrations::prometheus::prometheus_query,
             integrations::prometheus::prometheus_query_range,
+            integrations::prometheus::prometheus_targets,
             integrations::loki::get_loki_connection,
             integrations::loki::save_loki_connection,
             integrations::loki::forget_loki_connection,

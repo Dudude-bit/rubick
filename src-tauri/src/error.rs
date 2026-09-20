@@ -105,6 +105,19 @@ pub enum Error {
     #[error("No previous run: {container} has not restarted, so there is no earlier log")]
     NoPreviousRun { container: String },
 
+    /// The list an object would have been found in could not be read, so
+    /// whether it exists is unknown.
+    ///
+    /// Deliberately not `NotFound`, which asserts the cluster does not have
+    /// it. A token refused `services` used to be told the Service it was
+    /// looking at did not exist, which sends a person to rebuild something
+    /// that is running.
+    #[error("Could not read the {kind} list, so whether {name} is there is unknown: {said}")]
+    ListUnread {
+        kind: String,
+        name: String,
+        said: String,
+    },
     /// The run happened and the node dropped its log: not `NoPreviousRun`,
     /// and the kubelet says it with a 200, so only the body tells.
     #[error("The node no longer has the log of {container}: {said}")]

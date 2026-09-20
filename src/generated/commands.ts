@@ -11,6 +11,8 @@ import type {
   BackendTlsPolicyInfo,
   BatchLogResult,
   BinaryLocation,
+  Check,
+  CheckOutcome,
   CliAvailability,
   CliPathsConfig,
   ClusterInfo,
@@ -23,6 +25,7 @@ import type {
   ContextBindingInfo,
   ContextInfo,
   ControllerRevisionInfo,
+  CopyWith,
   CrdDetailInfo,
   CrdGroup,
   CronJobDetailInfo,
@@ -102,6 +105,7 @@ import type {
   ResourceFilters,
   RolloutStatus,
   RouteInfo,
+  ScrapeTarget,
   SearchHandle,
   SearchRequest,
   SecretFilters,
@@ -236,6 +240,10 @@ export async function prometheusQueryRange(
     end,
     step,
   });
+}
+
+export async function prometheusTargets(): Promise<ScrapeTarget[]> {
+  return invoke<ScrapeTarget[]>("prometheus_targets");
 }
 
 export async function getTlsCertificates(
@@ -740,6 +748,22 @@ export async function getControllerRevisions(
     kind,
     name,
     namespace,
+  });
+}
+
+export async function runPodCheck(
+  pod: string,
+  namespace: string | null,
+  container: string,
+  check: Check,
+  copy: CopyWith | null
+): Promise<CheckOutcome> {
+  return invoke<CheckOutcome>("run_pod_check", {
+    pod,
+    namespace,
+    container,
+    check,
+    copy,
   });
 }
 

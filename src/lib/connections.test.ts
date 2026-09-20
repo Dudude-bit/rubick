@@ -735,6 +735,40 @@ describe("the traffic chain", () => {
     expect(trafficChains(conns, t)).toEqual([]);
     expect(chainSilence(conns, t)).toContain("example.com");
   });
+
+  /**
+   * Every sentence this returns states a negative, and a negative is only
+   * ours to state about a list that answered. The guard was tested for a
+   * Pod subject alone, so narrowing it to Pods — leaving a Deployment page
+   * to say "No Service in this namespace" about Services nobody read —
+   * survived the whole suite.
+   */
+  it("says nothing about Services on any subject when that list went unread", () => {
+    const unread = [
+      {
+        kind: "Service",
+        why: { says: "unanswered", version: "v1", said: "forbidden" },
+      },
+    ] as unknown as ResourceConnections["notLookedAt"];
+
+    const deployment = ref("Deployment", "quiet-demo");
+    const withDeployment = connections(
+      deployment,
+      [
+        {
+          from: deployment,
+          to: pod("quiet-demo-a", true),
+          relation: { verb: "selects", selector: "app=quiet-demo" },
+        },
+      ],
+      [],
+      unread
+    );
+    expect(chainSilence(withDeployment, t)).toBeNull();
+
+    const p = pod("quiet-demo-a", true);
+    expect(chainSilence(connections(p, [], [], unread), t)).toBeNull();
+  });
 });
 
 describe("the groups", () => {
@@ -1211,5 +1245,46 @@ describe("where a pod's replica count is really set", () => {
     const rows = ownerRows(pod, [owns(ds, pod)]);
 
     expect(rows[0].detail ?? "").not.toContain("replica count");
+  });
+});
+
+describe("a list the cluster refused", () => {
+  const pod = (): ResourceConnections => ({
+    subject: {
+      kind: "Pod",
+      name: "shell-demo",
+      namespace: "shop",
+      existence: "present",
+      facts: null,
+    },
+    edges: [],
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  });
+
+  /**
+   * "No Service selects this pod" is a statement about the cluster, and it is
+   * only ours to make about a list that answered. With Services unread it is
+   * the app reporting its own blind spot as a fact, which is the failure this
+   * whole module is organised against.
+   */
+  it("says nothing about Services nobody was allowed to read", () => {
+    const conns = pod();
+    conns.notLookedAt = [
+      {
+        kind: "Service",
+        why: {
+          says: "unanswered",
+          version: "v1",
+          said: "services is forbidden: User cannot list resource",
+        },
+      },
+    ];
+    expect(chainSilence(conns, t)).toBeNull();
+  });
+
+  it("still says so when the Services really were read", () => {
+    expect(chainSilence(pod(), t)).not.toBeNull();
   });
 });
