@@ -145,13 +145,20 @@ export function rowsOfPicture(picture: Picture): MonitorRow[] {
   );
 }
 
-/** `null` where neither monitor kind exists: the row then has no number to carry. */
+/**
+ * How many monitors there are, or `null` when that is not known.
+ *
+ * Two different `null`s, deliberately one: neither kind exists on the
+ * cluster, and a list the cluster refused. The second used to fall through
+ * to `rowsOfPicture(picture).length`, which drops an `unread` kind — so a
+ * 403 on ServiceMonitors put a confident **0** in the sidebar next to a
+ * page saying it could not look. A row with no number says less and is
+ * true.
+ */
 export function monitorCount(picture: Picture): number | null {
-  if (
-    picture.serviceMonitors.state === "absent" &&
-    picture.podMonitors.state === "absent"
-  )
-    return null;
+  const states = [picture.serviceMonitors.state, picture.podMonitors.state];
+  if (states.every((state) => state === "absent")) return null;
+  if (states.some((state) => state === "unread")) return null;
   return rowsOfPicture(picture).length;
 }
 

@@ -2109,6 +2109,7 @@ export const ru: Catalogue = {
     rowSelectsNothing: "ничего не выбирает",
     rowNotPickedUp: "не подхвачен",
     rowDownOf: "{down} из {total} down",
+    rowUnscraped: "{n} из {total} обнаружено, ещё не опрошены",
     rowNoTargets: "target'а ещё нет",
     rowUnknown: "неизвестно",
     rowNotChecked: "не проверено",

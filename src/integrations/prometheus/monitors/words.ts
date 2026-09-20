@@ -58,6 +58,11 @@ export function rowWords(row: MonitorRow, t: T): string {
       });
     case "noTargets":
       return t("monitors", "rowNoTargets");
+    case "targetsUnscraped":
+      return t("monitors", "rowUnscraped", {
+        n: worst.unknown,
+        total: worst.total,
+      });
     case "selectionUnread":
     case "pickedUpUnknown":
       return t("monitors", "rowUnknown");

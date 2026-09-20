@@ -428,8 +428,12 @@ export function scrapeOf(monitor: Monitor, targets: TargetsRead): Scrape {
     else unknown++;
     if (target.lastError !== "" && lastError === null)
       lastError = target.lastError;
+    // Prometheus writes the zero time for a target it has discovered and
+    // never scraped — a truthy string that wins every comparison and is
+    // then printed as an age: "739878d ago".
     if (
       target.lastScrape &&
+      !target.lastScrape.startsWith("0001-01-01") &&
       (lastScrape === null || target.lastScrape > lastScrape)
     )
       lastScrape = target.lastScrape;
@@ -456,11 +460,22 @@ export function upQuery(targets: ScrapeTarget[]): string | null {
     ...new Set(targets.map((t) => t.labels.instance).filter(Boolean)),
   ];
   if (instances.length === 0) return null;
+  // Two escapings, in this order and both needed. `escapeRegex` makes the
+  // value literal *to the matcher* — an instance is `10.0.0.1:9090` and
+  // those dots would otherwise match any character. Then the result goes
+  // inside a double-quoted PromQL string, where a lone backslash is not a
+  // legal escape at all: `"10\.0\.0\.1"` is a parse error, and every real
+  // instance has a dot in it, so the heartbeat asked nothing on any cluster.
   const alternatives = (values: string[]) =>
-    values.map((v) => escapeRegex(v)).join("|");
+    values.map((v) => forPromQlString(escapeRegex(v))).join("|");
   return jobs.length === 0
     ? `up{instance=~"${alternatives(instances)}"}`
     : `up{job=~"${alternatives(jobs)}",instance=~"${alternatives(instances)}"}`;
+}
+
+/** A string on its way into a double-quoted PromQL literal. */
+function forPromQlString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 export type Beat = "up" | "down" | "none";
@@ -533,7 +548,13 @@ export type MonitorFinding =
       total: number;
       lastError: string | null;
     }
-  | { kind: "noTargets"; severity: "warn" };
+  | { kind: "noTargets"; severity: "warn" }
+  | {
+      kind: "targetsUnscraped";
+      severity: "warn";
+      unknown: number;
+      total: number;
+    };
 
 export interface MonitorRow {
   monitor: Monitor;
@@ -586,6 +607,19 @@ function findingsOf(
     // the same as down, and not raised on top of "nobody picks it up".
     else if (total === 0 && !knownUnpicked && selectsSomething)
       findings.push({ kind: "noTargets", severity: "warn" });
+    // A target Prometheus has discovered and not yet scraped reports
+    // health "unknown", which is neither up nor down. It was counted only
+    // into `total`, so a pool where every target is unknown raised nothing
+    // and the row drew green — "scraped" — about targets nobody has
+    // scraped yet. Warn, not err: it is usually a pool that has just
+    // appeared, and it settles on its own.
+    else if (scrape.unknown > 0 && scrape.up === 0)
+      findings.push({
+        kind: "targetsUnscraped",
+        severity: "warn",
+        unknown: scrape.unknown,
+        total,
+      });
   }
   return findings.sort((a, b) => rank(a.severity) - rank(b.severity));
 }

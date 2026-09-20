@@ -461,6 +461,75 @@ describe("a partial install", () => {
     expect(row.worst).toBeNull();
   });
 
+  /**
+   * A target Prometheus has discovered but not yet scraped reports health
+   * "unknown" — neither up nor down. It was counted only into `total`, so a
+   * pool where every target is unknown raised nothing at all and the row
+   * drew green, "scraped", about targets nobody has scraped.
+   */
+  it("does not call a pool of unscraped targets a scraped one", () => {
+    const discovered: TargetsRead = {
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://a",
+          health: "unknown",
+          lastError: "",
+          lastScrape: null,
+          labels: {},
+        },
+      ],
+    };
+    const [row] = rowsOf([fine], kind([prom]), services, ok([]), discovered);
+    expect(row.findings.map((f) => f.kind)).toEqual(["targetsUnscraped"]);
+    expect(row.worst).toBe("warn");
+  });
+
+  /**
+   * Prometheus writes `0001-01-01T00:00:00Z` for a target it has discovered
+   * and never scraped. It is a truthy string, so it won the `>` comparison
+   * and became the pool's "last scrape", printed as an elapsed age:
+   * "739878d ago" beside a monitor that is working.
+   */
+  it("does not take the zero time for a scrape that happened", () => {
+    const never: TargetsRead = {
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://a",
+          health: "unknown",
+          lastError: "",
+          lastScrape: "0001-01-01T00:00:00Z",
+          labels: {},
+        },
+      ],
+    };
+    const scrape = scrapeOf(fine, never);
+    expect(scrape.state).toBe("read");
+    if (scrape.state === "read") expect(scrape.lastScrape).toBeNull();
+  });
+
+  /** And a pool that really is up raises nothing, or the finding is noise. */
+  it("says nothing about a pool whose targets are up", () => {
+    const up: TargetsRead = {
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://a",
+          health: "up",
+          lastError: "",
+          lastScrape: "2026-09-12T08:00:00Z",
+          labels: {},
+        },
+      ],
+    };
+    const [row] = rowsOf([fine], kind([prom]), services, ok([]), up);
+    expect(row.findings).toEqual([]);
+  });
+
   /** The same monitor with the kind present and nobody matching is a real finding. */
   it("still calls a monitor unpicked when the objects were read and none matches", () => {
     const [row] = rowsOf([fine], kind([]), services, ok([]), {
@@ -543,11 +612,30 @@ describe("the heartbeat", () => {
     labels: { job, instance },
   });
 
-  /** The pool is not a label on the series, so `up` is asked by the labels Prometheus put on the targets. */
-  it("asks for up by job and instance, escaped, and asks nothing for no target", () => {
-    expect(
-      upQuery([target("web", "10.0.0.1:80"), target("web", "10.0.0.2:80")])
-    ).toBe('up{job=~"web",instance=~"10\\.0\\.0\\.1:80|10\\.0\\.0\\.2:80"}');
+  /**
+   * The pool is not a label on the series, so `up` is asked by the labels
+   * Prometheus put on the targets.
+   *
+   * Escaped twice, and both are needed: once so the matcher reads the dots
+   * of `10.0.0.1:80` literally, and once more because the result then sits
+   * inside a double-quoted PromQL string, where a lone backslash is not a
+   * legal escape. This asserted the single-escaped form, which is a parse
+   * error on every instance that has a dot in it — that is, all of them.
+   */
+  it("asks for up by job and instance, escaped for both the string and the matcher", () => {
+    const query = upQuery([
+      target("web", "10.0.0.1:80"),
+      target("web", "10.0.0.2:80"),
+    ]);
+    expect(query).toBe(
+      'up{job=~"web",instance=~"10\\\\.0\\\\.0\\\\.1:80|10\\\\.0\\\\.0\\\\.2:80"}'
+    );
+    // What Prometheus sees after it unquotes the literal: a regex whose
+    // dots are escaped, which is the point.
+    const literal = /instance=~"(.*)"\}$/.exec(query ?? "")?.[1] ?? "";
+    expect(JSON.parse(`"${literal}"`)).toBe(
+      "10\\.0\\.0\\.1:80|10\\.0\\.0\\.2:80"
+    );
     expect(upQuery([])).toBeNull();
   });
 

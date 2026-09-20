@@ -17,7 +17,6 @@ import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { integrationSettingsPath } from "../paths";
-import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import { useClusterStore } from "@/stores/clusterStore";
 import { Cell, Chain, Column, Finding } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
@@ -28,9 +27,9 @@ import { useT } from "@/i18n/useT";
 export default function Connection() {
   const context = useClusterStore((state) => state.currentContext);
   const t = useT();
-  // The tunnel died with the last app instance; opening this page is as
-  // deliberate as pressing the sidebar row, so it wakes the saved forward.
-  useWakeOnVisit("prometheus");
+  // The wake belongs to the page, not to this tab: `page.tsx` already calls
+  // it, and this is its child, so two wakes raced to start the same saved
+  // forward on every visit.
 
   const found = useQuery({
     queryKey: [context, "prometheus", "coverage"],

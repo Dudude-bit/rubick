@@ -2054,6 +2054,7 @@ export const en = {
     rowSelectsNothing: "selects nothing",
     rowNotPickedUp: "not picked up",
     rowDownOf: "{down} of {total} down",
+    rowUnscraped: "{n} of {total} discovered, not scraped yet",
     rowNoTargets: "no target yet",
     rowUnknown: "unknown",
     rowNotChecked: "not checked",
