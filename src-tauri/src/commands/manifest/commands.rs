@@ -113,6 +113,31 @@ enum NoAnswer {
     Unanswered(String),
 }
 
+/// What a failed read of the current object means.
+///
+/// The one place the third state is actually built, and until now it was
+/// reachable only through a live cluster: every unit test made `Absent` and
+/// `Unread` by hand, so swapping the two arms changed nothing anybody ran.
+/// A 404 is the object not being there; anything else is nobody having
+/// looked, and the two are opposite answers.
+fn live_failure(err: kube::Error) -> Live {
+    match err {
+        kube::Error::Api(status) if status.code == 404 => Live::Absent,
+        other => {
+            let said = Error::from(other);
+            // The marker is a wire format, not a sentence: this string is
+            // rendered as prose beside the reader's own language, and
+            // `READ_DEADLINE: …` there is the app's plumbing on screen.
+            let text = said.to_string();
+            Live::Unread(
+                text.strip_prefix("READ_DEADLINE: ")
+                    .unwrap_or(&text)
+                    .to_string(),
+            )
+        }
+    }
+}
+
 /// A 401 is the session being over, not the server refusing this manifest.
 ///
 /// It reaches every document and every other command equally, the app has
@@ -207,6 +232,11 @@ pub async fn dry_run_manifest(
         .client_manager
         .get_client(&context)
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    // One client for the whole manifest, unlike `apply_manifest` which
+    // re-reads it per document. The loop here is bounded by the documents
+    // in one buffer and two requests each, and a token that expires inside
+    // it does not go unnoticed: `session_over` turns the 401 into a failed
+    // command, which is what puts the sign-in screen up.
     dry_run_of((*client).clone(), &manifest, namespace.as_deref()).await
 }
 
@@ -251,9 +281,8 @@ pub async fn dry_run_of(
                 live_raw = Some(object);
                 Live::Present(yaml)
             }
-            Err(kube::Error::Api(status)) if status.code == 404 => Live::Absent,
             Err(e) if session_over(&e) => return Err(Error::from(e)),
-            Err(e) => Live::Unread(Error::from(e).to_string()),
+            Err(e) => live_failure(e),
         };
         let mut would_raw = None;
         let would = match api
@@ -331,6 +360,46 @@ pub async fn get_manifest(
 
 #[cfg(test)]
 mod dry_run_tests {
+
+    /// The one place the third state is actually built, and until now
+    /// reachable only through a live cluster: every unit test made `Absent`
+    /// and `Unread` by hand, so swapping the two arms changed nothing
+    /// anybody ran. They are opposite answers — "there is no such object"
+    /// versus "nobody could look" — and the second must not wear the
+    /// first's face.
+    #[test]
+    fn a_404_is_the_object_missing_and_anything_else_is_nobody_looking() {
+        let status = |code: u16, message: &str| {
+            kube::Error::Api(Box::new(kube::core::Status {
+                code,
+                message: message.to_string(),
+                reason: message.to_string(),
+                status: None,
+                details: None,
+                metadata: Option::default(),
+            }))
+        };
+
+        assert!(matches!(
+            live_failure(status(404, "not found")),
+            Live::Absent
+        ));
+        assert!(matches!(
+            live_failure(status(403, "deployments is forbidden")),
+            Live::Unread(_)
+        ));
+
+        // And the marker never reaches the prose: this string is rendered
+        // beside the reader's own language.
+        let elapsed: tower::BoxError = Box::new(tower::timeout::error::Elapsed::new());
+        match live_failure(kube::Error::Service(elapsed)) {
+            Live::Unread(said) => assert!(
+                !said.starts_with("READ_DEADLINE:"),
+                "a wire marker is not a sentence: {said}"
+            ),
+            _ => panic!("a timed-out read is unread"),
+        }
+    }
 
     /// The equality that decides "would not change" must not be made on the
     /// text the reader sees: `editor_yaml` replaces every private key with
