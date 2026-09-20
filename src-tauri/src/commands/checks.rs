@@ -616,6 +616,23 @@ mod tests {
             service_account_name: Some("payments".into()),
             dns_policy: Some("ClusterFirst".into()),
             volumes: Some(vec![k8s_openapi::api::core::v1::Volume::default()]),
+            // Set so the assertions below can fail: a fixture that leaves
+            // these empty proves nothing about what the copy drops.
+            node_name: Some("node-1".into()),
+            node_selector: Some(
+                [("disk".to_string(), "ssd".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            init_containers: Some(vec![Container {
+                name: "migrate".into(),
+                ..Default::default()
+            }]),
+            affinity: Some(k8s_openapi::api::core::v1::Affinity::default()),
+            ..Default::default()
+        });
+        original.status = Some(k8s_openapi::api::core::v1::PodStatus {
+            phase: Some("Running".into()),
             ..Default::default()
         });
 
