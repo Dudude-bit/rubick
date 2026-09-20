@@ -104,6 +104,7 @@ import type {
   ResourceFilters,
   RolloutStatus,
   RouteInfo,
+  ScrapeTarget,
   SearchHandle,
   SearchRequest,
   SecretFilters,
@@ -238,6 +239,10 @@ export async function prometheusQueryRange(
     end,
     step,
   });
+}
+
+export async function prometheusTargets(): Promise<ScrapeTarget[]> {
+  return invoke<ScrapeTarget[]>("prometheus_targets");
 }
 
 export async function getTlsCertificates(

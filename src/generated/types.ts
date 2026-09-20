@@ -1765,6 +1765,15 @@ export interface CertificateFacts {
   chainLength: number;
 }
 
+export interface ScrapeTarget {
+  scrapePool: string;
+  scrapeUrl: string;
+  health: string;
+  lastError: string;
+  lastScrape: string | null;
+  labels: Record<string, string>;
+}
+
 export interface PromSeries {
   labels: Record<string, string>;
   points: PromPoint[];
