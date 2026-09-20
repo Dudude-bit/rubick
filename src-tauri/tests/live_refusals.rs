@@ -1,19 +1,19 @@
-//! What the app says when the cluster refuses it — against a real 403, which
-//! no `*Known` flag, `Existence::NotChecked` or `not_looked_at` had ever been
-//! tested against before this file.
+//! What the app says when the cluster refuses it.
 //!
-//! Ignored by default; it needs an identity narrow enough to be refused. The
-//! role must allow **pods, services and ingresses**: `Snapshot::of` takes
-//! those three with `?`, so refusing any of them makes `connections_of`
-//! return `Err` and this file panics before a single assertion. What it must
-//! refuse is the claim list.
+//! Every `*Known` flag, every `Existence::NotChecked` and every
+//! `not_looked_at` in this codebase exists for one moment: a read the cluster
+//! declined. All of them are unit-tested against a hand-made refusal, and
+//! none had ever been tested against a real 403 until this file.
+//!
+//! Ignored by default. It needs a cluster and an identity narrow enough to be
+//! refused, which is two objects and an impersonating context:
 //!
 //! ```text
 //! kubectl create serviceaccount narrow -n k8s-gui-test
-//! kubectl create role no-claims -n k8s-gui-test \
-//!   --verb=get,list,watch --resource=pods,services,ingresses
-//! kubectl create rolebinding narrow-no-claims -n k8s-gui-test \
-//!   --role=no-claims --serviceaccount=k8s-gui-test:narrow
+//! kubectl create role pods-only -n k8s-gui-test \
+//!   --verb=get,list,watch --resource=pods
+//! kubectl create rolebinding narrow-pods-only -n k8s-gui-test \
+//!   --role=pods-only --serviceaccount=k8s-gui-test:narrow
 //! # then a kubeconfig context whose user carries
 //! #   as: system:serviceaccount:k8s-gui-test:narrow
 //! K8S_GUI_REFUSED_CONTEXT=narrow cargo test --test live_refusals -- --ignored --nocapture
