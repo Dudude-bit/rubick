@@ -19,7 +19,10 @@ self.onmessage = (event: MessageEvent<DiffRequest>) => {
   // Always an answer, even a failed one: a throw here posts nothing, and the
   // caller cannot tell silence from still-working. It would wait forever.
   try {
-    const answer: DiffAnswer = { id, lines: computeLineDiff(original, modified) };
+    const answer: DiffAnswer = {
+      id,
+      lines: computeLineDiff(original, modified),
+    };
     self.postMessage(answer);
   } catch (err) {
     const failed: DiffAnswer = {

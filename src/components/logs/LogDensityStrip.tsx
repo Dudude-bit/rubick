@@ -376,12 +376,12 @@ export function LogDensityStrip({
           })
         : count === 0
           ? t("empty", "noLineMatchesInBuffer")
-        : density.lines === 1
-          ? t("empty", "oneLineSoFar", { clock: sliceClock(density.from) })
-          : t("empty", "allLinesWithinSpan", {
-              count: formatCount(density.lines),
-              span: formatSpan(spanMs),
-            });
+          : density.lines === 1
+            ? t("empty", "oneLineSoFar", { clock: sliceClock(density.from) })
+            : t("empty", "allLinesWithinSpan", {
+                count: formatCount(density.lines),
+                span: formatSpan(spanMs),
+              });
 
   // One bar over everything is not a map, and drawing it anyway would be
   // a chart pretending to be one.
