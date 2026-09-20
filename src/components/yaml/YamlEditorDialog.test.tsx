@@ -467,6 +467,30 @@ describe("what the dry run is asked, and what it draws", () => {
     expect(screen.queryByTestId("diff")).toBeNull();
   });
 
+  /**
+   * The sentence for an unanswered document promises "this is the editor's
+   * own diff", and `would` is null there — so the block drew nothing and
+   * the promise was empty on the one screen that exists to show a change
+   * before it is made.
+   */
+  it("shows the editor's own diff when the server said nothing", async () => {
+    dryRunManifest.mockResolvedValue({
+      documents: [
+        {
+          id: "deployment/shop api",
+          outcome: { says: "unanswered", said: "502 Bad Gateway" },
+          live: "spec:\n  replicas: 2\n",
+          would: null,
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+
+    expect(await screen.findByText(/502 Bad Gateway/)).toBeInTheDocument();
+    expect(screen.getByTestId("diff")).toBeInTheDocument();
+  });
+
   /** And the case it must still draw: an object that really is not there. */
   it("still draws the diff for an object that would be created", async () => {
     dryRunManifest.mockResolvedValue({

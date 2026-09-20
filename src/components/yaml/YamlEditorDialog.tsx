@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
 import type { DryRunDocument } from "@/generated/types";
@@ -115,6 +115,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
+  const queryClient = useQueryClient();
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
   // and the field is bound to the notice so neither can appear without the other.
@@ -279,6 +280,13 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         addHistoryEntry(editedContent, "Applied");
+        // The preview describes the cluster as it was before this apply,
+        // and its key changes only with the buffer — so opening the
+        // confirmation again for a second apply showed the first apply's
+        // answer: "would be created" about an object that now exists.
+        void queryClient.invalidateQueries({
+          queryKey: ["dry-run", resourceKey?.kind ?? ""],
+        });
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
           asking.ask(
@@ -329,6 +337,7 @@ export function YamlEditorDialog() {
     }
   }, [
     asking,
+    queryClient,
     editedContent,
     resourceKey,
     currentNamespace,
@@ -513,7 +522,11 @@ export function YamlEditorDialog() {
               </p>
               <div className="flex flex-col gap-3">
                 {dryRun.data.documents.map((doc) => (
-                  <DryRunSection key={doc.id} doc={doc} />
+                  <DryRunSection
+                    key={doc.id}
+                    doc={doc}
+                    edited={editedContent}
+                  />
                 ))}
               </div>
             </div>
@@ -589,7 +602,14 @@ export function YamlEditorDialog() {
  * current object, and each gets its own sentence; a refusal shows the
  * server's own words and nothing to diff, because there is nothing to diff.
  */
-function DryRunSection({ doc }: { doc: DryRunDocument }) {
+function DryRunSection({
+  doc,
+  edited,
+}: {
+  doc: DryRunDocument;
+  /** The buffer, for the one case where the server said nothing. */
+  edited: string;
+}) {
   const t = useT();
   const outcome = doc.outcome;
   const tone =
@@ -622,6 +642,18 @@ function DryRunSection({ doc }: { doc: DryRunDocument }) {
         <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
           {outcome.said}
         </p>
+      ) : null}
+      {/* The sentence for an unanswered document promises the editor's own
+          diff, and `would` is null there, so the block below drew nothing
+          at all and the promise was empty. This is that diff. */}
+      {outcome.says === "unanswered" && doc.live !== null ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live}
+            modified={edited}
+            height="200px"
+          />
+        </ScrollArea>
       ) : null}
       {/* No diff where there is nothing honest to diff against. `live` is
           null both for an object that is not there and for one the read
