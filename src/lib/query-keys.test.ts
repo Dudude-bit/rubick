@@ -12,6 +12,7 @@ import { ResourceType } from "./resource-registry";
 describe("every namespace, however it is spelled", () => {
   const bothSpellings: Array<[string, (ns: string | null) => string[]]> = [
     ["pods", (ns) => queryKeys.pods(ns)],
+    ["podRows", (ns) => queryKeys.podRows(ns)],
     ["events", (ns) => queryKeys.events(ns)],
     ["metrics.pods", (ns) => queryKeys.metrics.pods(ns)],
     ["helm.releases", (ns) => queryKeys.helm.releases(ns)],

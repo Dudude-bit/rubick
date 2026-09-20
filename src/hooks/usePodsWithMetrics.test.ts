@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import type { PodInfo, PodMetrics } from "@/generated/types";
+import type { PodMetrics } from "@/generated/types";
+import type { PodRow } from "@/lib/pod-rows";
 import type { NodeSilence } from "@/lib/node-reporting";
 import * as metricsModule from "@/lib/metrics";
 import { usePodsWithMetrics } from "./usePodsWithMetrics";
@@ -12,7 +13,7 @@ interface ClusterState {
 }
 
 const state = vi.hoisted(() => ({
-  pods: [] as PodInfo[],
+  pods: [] as PodRow[],
   metrics: [] as PodMetrics[],
   silent: new Map<string, NodeSilence>(),
   cluster: {
@@ -44,7 +45,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 
 beforeEach(() => {
   state.pods = ["a", "b"].map(
-    (name) => ({ name, namespace: "default", nodeName: "gone" }) as PodInfo
+    (name) => ({ name, namespace: "default", nodeName: "gone" }) as PodRow
   );
   state.metrics = state.pods.map(({ name, namespace }) => ({
     name,

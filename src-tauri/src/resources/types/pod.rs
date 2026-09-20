@@ -209,6 +209,102 @@ fn pod_volumes(spec: &PodSpec) -> Vec<PodVolumeInfo> {
         .collect()
 }
 
+/// The pod's requests and limits, summed over its containers, as the
+/// list and the detail both print them.
+#[derive(Debug, Default)]
+pub struct ResourceTotals {
+    pub cpu_requests: Option<String>,
+    pub cpu_limits: Option<String>,
+    pub memory_requests: Option<String>,
+    pub memory_limits: Option<String>,
+}
+
+#[must_use]
+pub fn resource_totals(spec: &PodSpec) -> ResourceTotals {
+    let mut total_cpu_requests_millicores = 0.0f64;
+    let mut total_cpu_limits_millicores = 0.0f64;
+    let mut total_memory_requests_bytes = 0u64;
+    let mut total_memory_limits_bytes = 0u64;
+
+    for container in &spec.containers {
+        if let Some(resources) = &container.resources {
+            if let Some(requests) = &resources.requests {
+                if let Some(cpu) = requests.get("cpu") {
+                    total_cpu_requests_millicores += parse_cpu(&cpu.0);
+                }
+                if let Some(memory) = requests.get("memory") {
+                    total_memory_requests_bytes += parse_memory(&memory.0);
+                }
+            }
+            if let Some(limits) = &resources.limits {
+                if let Some(cpu) = limits.get("cpu") {
+                    total_cpu_limits_millicores += parse_cpu(&cpu.0);
+                }
+                if let Some(memory) = limits.get("memory") {
+                    total_memory_limits_bytes += parse_memory(&memory.0);
+                }
+            }
+        }
+    }
+
+    let mut cpu_requests = if total_cpu_requests_millicores > 0.0 {
+        Some(format_cpu(total_cpu_requests_millicores))
+    } else {
+        None
+    };
+    let mut cpu_limits = if total_cpu_limits_millicores > 0.0 {
+        Some(format_cpu(total_cpu_limits_millicores))
+    } else {
+        None
+    };
+    let mut memory_requests = if total_memory_requests_bytes > 0 {
+        Some(format!("{total_memory_requests_bytes}"))
+    } else {
+        None
+    };
+    let mut memory_limits = if total_memory_limits_bytes > 0 {
+        Some(format!("{total_memory_limits_bytes}"))
+    } else {
+        None
+    };
+
+    // KEP-2837: a pod-level request or limit, where set, is the
+    // pod's own — the scheduler reserves it in place of the
+    // container sum, per resource, so the display follows. Parsed
+    // through the same formatters, so a pod-level `1`/`1Gi` reads
+    // exactly as a summed one. `overview::pod_requests` does the
+    // same for the cluster totals — both readers of one fact.
+    if let Some(pod_level) = &spec.resources {
+        if let Some(cpu) = pod_level.requests.as_ref().and_then(|m| m.get("cpu")) {
+            cpu_requests = Some(format_cpu(parse_cpu(&cpu.0)));
+        }
+        if let Some(mem) = pod_level.requests.as_ref().and_then(|m| m.get("memory")) {
+            memory_requests = Some(format!("{}", parse_memory(&mem.0)));
+        }
+        if let Some(cpu) = pod_level.limits.as_ref().and_then(|m| m.get("cpu")) {
+            cpu_limits = Some(format_cpu(parse_cpu(&cpu.0)));
+        }
+        if let Some(mem) = pod_level.limits.as_ref().and_then(|m| m.get("memory")) {
+            memory_limits = Some(format!("{}", parse_memory(&mem.0)));
+        }
+    }
+    ResourceTotals {
+        cpu_requests,
+        cpu_limits,
+        memory_requests,
+        memory_limits,
+    }
+}
+
+/// `.status.phase`, or `Unknown` where the cluster wrote none.
+#[must_use]
+pub fn phase_of(pod: &Pod) -> String {
+    pod.status
+        .as_ref()
+        .and_then(|s| s.phase.clone())
+        .unwrap_or_else(|| "Unknown".to_string())
+}
+
 impl From<&Pod> for PodInfo {
     fn from(pod: &Pod) -> Self {
         let status = pod.status.as_ref();
@@ -234,79 +330,7 @@ impl From<&Pod> for PodInfo {
 
         let (restart_count, last_restart_at) = restarts(pod);
 
-        // Aggregate resource requests and limits from all containers
-        let (cpu_requests, cpu_limits, memory_requests, memory_limits) =
-            spec.map_or((None, None, None, None), |s| {
-                let mut total_cpu_requests_millicores = 0.0f64;
-                let mut total_cpu_limits_millicores = 0.0f64;
-                let mut total_memory_requests_bytes = 0u64;
-                let mut total_memory_limits_bytes = 0u64;
-
-                for container in &s.containers {
-                    if let Some(resources) = &container.resources {
-                        if let Some(requests) = &resources.requests {
-                            if let Some(cpu) = requests.get("cpu") {
-                                total_cpu_requests_millicores += parse_cpu(&cpu.0);
-                            }
-                            if let Some(memory) = requests.get("memory") {
-                                total_memory_requests_bytes += parse_memory(&memory.0);
-                            }
-                        }
-                        if let Some(limits) = &resources.limits {
-                            if let Some(cpu) = limits.get("cpu") {
-                                total_cpu_limits_millicores += parse_cpu(&cpu.0);
-                            }
-                            if let Some(memory) = limits.get("memory") {
-                                total_memory_limits_bytes += parse_memory(&memory.0);
-                            }
-                        }
-                    }
-                }
-
-                let mut cpu_requests = if total_cpu_requests_millicores > 0.0 {
-                    Some(format_cpu(total_cpu_requests_millicores))
-                } else {
-                    None
-                };
-                let mut cpu_limits = if total_cpu_limits_millicores > 0.0 {
-                    Some(format_cpu(total_cpu_limits_millicores))
-                } else {
-                    None
-                };
-                let mut memory_requests = if total_memory_requests_bytes > 0 {
-                    Some(format!("{total_memory_requests_bytes}"))
-                } else {
-                    None
-                };
-                let mut memory_limits = if total_memory_limits_bytes > 0 {
-                    Some(format!("{total_memory_limits_bytes}"))
-                } else {
-                    None
-                };
-
-                // KEP-2837: a pod-level request or limit, where set, is the
-                // pod's own — the scheduler reserves it in place of the
-                // container sum, per resource, so the display follows. Parsed
-                // through the same formatters, so a pod-level `1`/`1Gi` reads
-                // exactly as a summed one. `overview::pod_requests` does the
-                // same for the cluster totals — both readers of one fact.
-                if let Some(pod_level) = &s.resources {
-                    if let Some(cpu) = pod_level.requests.as_ref().and_then(|m| m.get("cpu")) {
-                        cpu_requests = Some(format_cpu(parse_cpu(&cpu.0)));
-                    }
-                    if let Some(mem) = pod_level.requests.as_ref().and_then(|m| m.get("memory")) {
-                        memory_requests = Some(format!("{}", parse_memory(&mem.0)));
-                    }
-                    if let Some(cpu) = pod_level.limits.as_ref().and_then(|m| m.get("cpu")) {
-                        cpu_limits = Some(format_cpu(parse_cpu(&cpu.0)));
-                    }
-                    if let Some(mem) = pod_level.limits.as_ref().and_then(|m| m.get("memory")) {
-                        memory_limits = Some(format!("{}", parse_memory(&mem.0)));
-                    }
-                }
-
-                (cpu_requests, cpu_limits, memory_requests, memory_limits)
-            });
+        let totals = spec.map(resource_totals).unwrap_or_default();
 
         Self {
             name: pod.name_any(),
@@ -323,10 +347,10 @@ impl From<&Pod> for PodInfo {
             created_at: pod.creation_timestamp().map(|t| t.moment()),
             restart_count,
             last_restart_at,
-            cpu_requests,
-            cpu_limits,
-            memory_requests,
-            memory_limits,
+            cpu_requests: totals.cpu_requests,
+            cpu_limits: totals.cpu_limits,
+            memory_requests: totals.memory_requests,
+            memory_limits: totals.memory_limits,
             owner_references: extract_owner_references(pod.metadata.owner_references.as_ref()),
             volumes: spec.map(pod_volumes).unwrap_or_default(),
             service_account_name: spec.and_then(|s| s.service_account_name.clone()),
@@ -377,10 +401,7 @@ impl PodStatusInfo {
             .unwrap_or_default();
 
         Self {
-            phase: status
-                .phase
-                .clone()
-                .unwrap_or_else(|| "Unknown".to_string()),
+            phase: phase_of(pod),
             display,
             ready,
             conditions,
