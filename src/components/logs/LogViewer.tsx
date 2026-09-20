@@ -30,6 +30,7 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import { useFilteredLogs } from "./hooks/useFilteredLogs";
 import {
   containerEntries,
   laneColors,
@@ -65,7 +66,6 @@ import {
   formatCount,
   formatSpan,
   logsToText,
-  matchesQuery,
   termLabel,
   type QueryTerm,
   type StreamedLogLine,
@@ -981,21 +981,23 @@ export function LogViewer({
    * the strip by its own selection and dragging out four minutes leaves a
    * strip of four minutes, with nowhere left to drag back to.
    */
-  const { scoped, visibleLogs } = useMemo(() => {
+  const { time, rest } = useMemo(() => {
     const time = effectiveTerms.find((term) => term.kind === "time");
-    const rest = time
-      ? effectiveTerms.filter((term) => term.kind !== "time")
-      : effectiveTerms;
-    const scoped = logs.filter(
-      (log) => !hidden.has(laneOf(log)) && matchesQuery(log, rest)
-    );
     return {
-      scoped,
-      visibleLogs: time
+      time,
+      rest: time
+        ? effectiveTerms.filter((term) => term.kind !== "time")
+        : effectiveTerms,
+    };
+  }, [effectiveTerms]);
+  const { scoped, settling } = useFilteredLogs(logs, hidden, rest, laneOf);
+  const visibleLogs = useMemo(
+    () =>
+      time
         ? scoped.filter((log) => log.epoch >= time.from && log.epoch <= time.to)
         : scoped,
-    };
-  }, [logs, hidden, effectiveTerms, laneOf]);
+    [scoped, time]
+  );
 
   const timeRange = useMemo(() => {
     const term = terms.find((entry) => entry.kind === "time");
@@ -1193,6 +1195,9 @@ export function LogViewer({
 
   const handleCopyLogs = useCallback(() => {
     if (visibleLogs.length === 0) return;
+    // Not while the filter is still walking: what is here is how far it got,
+    // and copying it would hand over a subset with a count stated as fact.
+    if (settling) return;
     copyToClipboard(
       logsToText(visibleLogs),
       t("count", "linesCopied", {
@@ -1200,7 +1205,7 @@ export function LogViewer({
         count: formatCount(visibleLogs.length),
       })
     );
-  }, [copyToClipboard, visibleLogs, t]);
+  }, [copyToClipboard, visibleLogs, settling, t]);
 
   const shownContainers = useMemo(
     () => (lanes ? containers : containers.filter((name) => !hidden.has(name))),
@@ -1282,8 +1287,12 @@ export function LogViewer({
   ]);
 
   // What the reader is not being shown: dropped by the query or by the
-  // legend, plus the lines standing behind a collapsed run.
-  const hiddenByView = retained - visibleLogs.length + collapsedCount;
+  // legend, plus the lines standing behind a collapsed run. Nothing while
+  // the walk is on — every line it has not reached yet would be counted as
+  // one the filter rejected, which is a number about work not yet done.
+  const hiddenByView = settling
+    ? 0
+    : retained - visibleLogs.length + collapsedCount;
 
   // Offered where it can answer. The kubelet sets `lastTerminated` for
   // exactly the container instances whose logs `--previous` still
@@ -1472,6 +1481,7 @@ export function LogViewer({
           logs={scoped}
           scope={scopeKey}
           retained={retained}
+          settling={settling}
           lost={lost}
           intake={intake.length > 0}
           selection={timeRange}
@@ -1673,6 +1683,7 @@ export function LogViewer({
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
+          settling={settling}
           intake={intake.length > 0}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
@@ -1694,6 +1705,7 @@ export function LogViewer({
         onThaw={handleThaw}
         limit={limit}
         shownCount={rows.length}
+        settling={settling}
         hiddenCount={hiddenByView}
         intake={intake}
         intakeFrom={intakeFrom}
@@ -1793,6 +1805,7 @@ function EmptyState({
   streaming,
   retained,
   filtered,
+  settling,
   intake,
   allHidden,
   noPods = false,
@@ -1806,6 +1819,8 @@ function EmptyState({
   streaming: boolean;
   retained: number;
   filtered: boolean;
+  /** The query is still being walked over the buffer: no verdict yet. */
+  settling: boolean;
   /** Set, so "received" and "kept" are no longer the same number. */
   intake: boolean;
   allHidden: boolean;
@@ -1858,6 +1873,19 @@ function EmptyState({
             ? t("action", "showAllLanes")
             : t("action", "showAllContainers")}
         </Action>
+      </Note>
+    );
+  }
+
+  // An empty view mid-walk is "not looked yet", and drawing it as "no line
+  // matches" would be the verdict before the evidence.
+  if (settling && retained > 0) {
+    return (
+      <Note>
+        {t("empty", "filteringLines", {
+          n: retained,
+          count: formatCount(retained),
+        })}
       </Note>
     );
   }

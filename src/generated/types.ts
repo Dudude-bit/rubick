@@ -189,6 +189,7 @@ export interface ClusterOverview {
   pods: PodComposition;
   jobs: JobComposition | null;
   metricsAvailable: boolean;
+  servedFrom: OverviewSource;
 }
 
 export interface JobComposition {
@@ -1887,6 +1888,8 @@ export type ContextAuth =
   | { kind: "basic"; username: string | null }
   | { kind: "authProvider"; name: string }
   | { kind: "unrecognised" };
+
+export type OverviewSource = "watch" | "list";
 
 export type ProblemDetail =
   | { says: "said"; text: string }

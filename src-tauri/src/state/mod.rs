@@ -15,7 +15,9 @@ pub use events::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, AuthOutcome,
     LogLineEvent, StreamFailureKind, WatchChange, WatchOp,
 };
-pub use sessions::{AuthSessionControl, LogStream, PortForwardSession, Session};
+pub use sessions::{
+    AuthSessionControl, ListStream, LogStream, PortForwardSession, RemoveOnDrop, Session,
+};
 
 use crate::client::K8sClientManager;
 use crate::config::AppConfig;
@@ -76,6 +78,9 @@ pub struct AppState {
     /// Active log streams
     pub log_streams: Arc<DashMap<String, LogStream>>,
 
+    /// Lists arriving in chunks
+    pub list_streams: Arc<DashMap<String, ListStream>>,
+
     /// Event broadcaster
     pub event_tx: broadcast::Sender<AppEvent>,
 
@@ -90,6 +95,9 @@ pub struct AppState {
 
     /// What went over the IPC bridge while Diagnostics recorded.
     pub perf: Arc<perf::PerfCounters>,
+
+    /// The overview's inputs, watched rather than listed per round.
+    pub overview_cache: Arc<crate::overview::OverviewCache>,
 }
 
 impl AppState {
@@ -123,11 +131,13 @@ impl AppState {
             port_forward_sessions: Arc::new(DashMap::new()),
             port_forward_controls: Arc::new(DashMap::new()),
             log_streams: Arc::new(DashMap::new()),
+            list_streams: Arc::new(DashMap::new()),
             event_tx,
             auth_sessions: DashMap::new(),
             connect_generation: AtomicU64::new(0),
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
+            overview_cache: Arc::new(crate::overview::OverviewCache::default()),
         })
     }
 

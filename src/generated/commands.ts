@@ -1023,6 +1023,18 @@ export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("list_pods", { filters });
 }
 
+export async function listPodRows(namespace: string | null): Promise<string> {
+  return invoke<string>("list_pod_rows", { namespace });
+}
+
+export async function podRowsSubscribed(streamId: string): Promise<void> {
+  return invoke<void>("pod_rows_subscribed", { streamId });
+}
+
+export async function stopPodRows(streamId: string): Promise<void> {
+  return invoke<void>("stop_pod_rows", { streamId });
+}
+
 export async function getPod(
   name: string,
   namespace: string | null
@@ -1685,6 +1697,12 @@ export async function subscribePodWatch(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("subscribe_pod_watch", { namespace });
+}
+
+export async function subscribePodRowWatch(
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("subscribe_pod_row_watch", { namespace });
 }
 
 export async function subscribeDeploymentWatch(
