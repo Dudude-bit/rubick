@@ -533,6 +533,26 @@ export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
  * present because somebody gave it an address, and its facts come from the
  * probe rather than from a query it would have to make twice.
  */
+/**
+ * Whether this vendor is here, or `null` when nobody could tell.
+ *
+ * Three-valued on purpose. `found` is `null` for a detection scan that
+ * could not look — a refused CRD list — and folding that into "not
+ * installed" told a reader the operator is absent on exactly the cluster
+ * where nobody checked, while the vendor's own page says the opposite two
+ * clicks away. An answering address is the one thing that settles it
+ * either way.
+ */
+export function isInstalled(
+  found: boolean | null,
+  connected: boolean,
+  hasAddress: boolean
+): boolean | null {
+  if (hasAddress && connected) return true;
+  return found;
+}
+
+
 export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
   statuses: IntegrationStatus[];
   isPending: boolean;
@@ -556,7 +576,7 @@ export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
     return {
       vendor,
       connection,
-      installed: connection ? connected || found === true : found,
+      installed: isInstalled(found, connected, connection !== null),
       version: connected
         ? connection.probe.ok
           ? connection.probe.version

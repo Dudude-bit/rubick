@@ -388,12 +388,21 @@ pub fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
             .unwrap_or_default()
             .to_string()
     };
-    Ok(body
+    // A body that says success and carries no `activeTargets` array is not
+    // a Prometheus with no targets — it is not the answer this asked for.
+    // Read as an empty list it becomes "nothing is being scraped", stated
+    // about a server that never said so.
+    let Some(active) = body
         .get("data")
         .and_then(|d| d.get("activeTargets"))
         .and_then(|t| t.as_array())
-        .into_iter()
-        .flatten()
+    else {
+        return Err(unreachable(
+            "Prometheus answered without a target list".to_string(),
+        ));
+    };
+    Ok(active
+        .iter()
         .map(|target| ScrapeTarget {
             scrape_pool: text(target, "scrapePool"),
             scrape_url: text(target, "scrapeUrl"),
@@ -479,6 +488,31 @@ fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
+
+    /// A body that says success and carries no target list is not a server
+    /// with nothing to scrape. Read as an empty list it became "no targets"
+    /// — a fact about the cluster, from an answer that stated none — and
+    /// every monitor on the page then read as unpicked.
+    #[test]
+    fn an_answer_without_a_target_list_is_not_an_answer_of_no_targets() {
+        for body in [
+            serde_json::json!({ "status": "success" }),
+            serde_json::json!({ "status": "success", "data": {} }),
+            serde_json::json!({ "status": "success", "data": { "activeTargets": null } }),
+        ] {
+            assert!(
+                parse_targets(&body).is_err(),
+                "a body with no target list has not answered: {body}"
+            );
+        }
+
+        // And the real empty answer, which is a fact and must still be one.
+        let none = serde_json::json!({
+            "status": "success",
+            "data": { "activeTargets": [] }
+        });
+        assert_eq!(parse_targets(&none).expect("an answer").len(), 0);
+    }
 
     /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.
     #[test]

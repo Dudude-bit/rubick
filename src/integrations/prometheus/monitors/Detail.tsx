@@ -128,7 +128,14 @@ export function Detail({
           </Link>
           {base !== null && scrape.state === "read" && (
             <OutLink
-              href={`${base}/targets?scrapePool=${encodeURIComponent(poolPrefix(monitor) + "0")}`}
+              // The pool of the targets actually shown, not index 0. A
+              // monitor with several endpoints has one pool per endpoint,
+              // and the panel beside this button counts all of them — so
+              // the link landed on a subset of what it was labelled with,
+              // and on nothing at all when endpoint 0 was removed.
+              href={`${base}/targets?scrapePool=${encodeURIComponent(
+                scrape.targets[0]?.scrapePool ?? poolPrefix(monitor) + "0"
+              )}`}
               site="Prometheus"
               className="h-7 rounded-[5px] border border-hair px-2.5 text-xs text-fg-mid hover:bg-hover hover:no-underline"
             >
