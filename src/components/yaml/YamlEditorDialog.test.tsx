@@ -506,8 +506,6 @@ describe("what the dry run is asked, and what it draws", () => {
     const user = await openWith(PLAIN);
     await user.click(screen.getByRole("button", { name: /^Apply$/ }));
 
-    await waitFor(() =>
-      expect(screen.getByTestId("diff")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByTestId("diff")).toBeInTheDocument());
   });
 });
