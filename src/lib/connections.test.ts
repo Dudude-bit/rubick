@@ -745,7 +745,10 @@ describe("the traffic chain", () => {
    */
   it("says nothing about Services on any subject when that list went unread", () => {
     const unread = [
-      { kind: "Service", why: { says: "unanswered", version: "v1", said: "forbidden" } },
+      {
+        kind: "Service",
+        why: { says: "unanswered", version: "v1", said: "forbidden" },
+      },
     ] as unknown as ResourceConnections["notLookedAt"];
 
     const deployment = ref("Deployment", "quiet-demo");
