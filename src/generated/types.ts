@@ -1141,6 +1141,17 @@ export interface BinaryLocation {
   path: string | null;
 }
 
+export interface DryRun {
+  documents: DryRunDocument[];
+}
+
+export interface DryRunDocument {
+  id: string;
+  outcome: DryRunOutcome;
+  live: string | null;
+  would: string | null;
+}
+
 export interface ManifestResult {
   success: boolean;
   stdout: string;
@@ -2028,6 +2039,14 @@ export type ContainerState =
   | { type: "waiting"; reason: string | null }
   | { type: "terminated"; termination: TerminationInfo }
   | { type: "unknown" };
+
+export type DryRunOutcome =
+  | { says: "created" }
+  | { says: "configured" }
+  | { says: "unchanged" }
+  | { says: "liveUnread"; said: string }
+  | { says: "refused"; said: string }
+  | { says: "unanswered"; said: string };
 
 export type Check =
   { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };

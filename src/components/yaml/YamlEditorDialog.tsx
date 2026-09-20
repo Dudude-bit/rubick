@@ -19,8 +19,10 @@
  */
 
 import { useCallback, useMemo, useState, useDeferredValue } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isReadDeadline } from "@/lib/read-deadline";
 import { commands } from "@/lib/commands";
+import type { DryRunDocument } from "@/generated/types";
 import {
   Dialog,
   DialogContent,
@@ -113,6 +115,7 @@ export function YamlEditorAction(props: YamlEditorActionProps) {
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
+  const queryClient = useQueryClient();
   // Applying an edited manifest replaces the whole object — the most powerful
   // write here — so on a critical cluster it takes the same typed-name gate,
   // and the field is bound to the notice so neither can appear without the other.
@@ -192,6 +195,31 @@ export function YamlEditorDialog() {
 
   const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
 
+  // What the server would store against what it holds now. Asked only once
+  // the confirmation is open, of the buffer as it is at that moment; the
+  // editor's own diff stands in while the answer is on its way, and says so.
+  const dryRun = useQuery({
+    queryKey: [
+      "dry-run",
+      resourceKey?.kind ?? "",
+      resourceKey?.namespace ?? "",
+      resourceKey?.name ?? "",
+      editedContent,
+    ],
+    queryFn: () =>
+      commands.dryRunManifest(
+        editedContent,
+        resourceKey?.namespace || currentNamespace || null
+      ),
+    enabled: showApplyConfirm && hasChanges,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+  const refused =
+    dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
+    null;
+
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(editedContent);
     toast({
@@ -252,6 +280,13 @@ export function YamlEditorDialog() {
 
       if (result.success) {
         addHistoryEntry(editedContent, "Applied");
+        // The preview describes the cluster as it was before this apply,
+        // and its key changes only with the buffer — so opening the
+        // confirmation again for a second apply showed the first apply's
+        // answer: "would be created" about an object that now exists.
+        void queryClient.invalidateQueries({
+          queryKey: ["dry-run", resourceKey?.kind ?? ""],
+        });
         const askable = resourceKey ? askableKind(resourceKey.kind) : null;
         if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
           asking.ask(
@@ -302,6 +337,7 @@ export function YamlEditorDialog() {
     }
   }, [
     asking,
+    queryClient,
     editedContent,
     resourceKey,
     currentNamespace,
@@ -479,7 +515,22 @@ export function YamlEditorDialog() {
               owner, which the lead sentence carries anyway. */}
           <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
 
-          {hasChanges && (
+          {hasChanges && dryRun.data ? (
+            <div className="min-w-0 py-4" data-testid="dry-run">
+              <p className="mb-2 text-xs text-fg-mut">
+                {t("action", "dryRunFromServer")}
+              </p>
+              <div className="flex flex-col gap-3">
+                {dryRun.data.documents.map((doc) => (
+                  <DryRunSection
+                    key={doc.id}
+                    doc={doc}
+                    edited={editedContent}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : hasChanges ? (
             // The diff is arbitrarily wide and this dialog is a grid, whose
             // items default to `min-width: auto` — without this the longest
             // line of the manifest sets the column width and everything above
@@ -495,8 +546,19 @@ export function YamlEditorDialog() {
                   height="200px"
                 />
               </ScrollArea>
+              <p
+                className="mt-2 text-[11px] text-fg-fnt"
+                role="status"
+                data-testid="dry-run-standing"
+              >
+                {dryRun.isError
+                  ? t("action", "dryRunFailed", {
+                      error: errorToShow(dryRun.error),
+                    })
+                  : t("action", "dryRunAsking")}
+              </p>
             </div>
-          )}
+          ) : null}
 
           {gate.input}
 
@@ -510,7 +572,10 @@ export function YamlEditorDialog() {
             >
               {t("action", "cancel")}
             </Button>
-            <Button onClick={handleApply} disabled={gate.blocked}>
+            <Button
+              onClick={handleApply}
+              disabled={gate.blocked || refused !== null}
+            >
               <Play className="mr-2 h-4 w-4" />
               {/* The intercept decides its own word where it has one — a
                   disowned label confirms with a plain "Apply", because there
@@ -526,5 +591,87 @@ export function YamlEditorDialog() {
       </Dialog>
       {asking.dialog}
     </>
+  );
+}
+
+/**
+ * One document of the dry run: what the server said it would do, and the
+ * object it would store against the one it holds.
+ *
+ * "Would be created" and "could not read what is there" both arrive with no
+ * current object, and each gets its own sentence; a refusal shows the
+ * server's own words and nothing to diff, because there is nothing to diff.
+ */
+function DryRunSection({
+  doc,
+  edited,
+}: {
+  doc: DryRunDocument;
+  /** The buffer, for the one case where the server said nothing. */
+  edited: string;
+}) {
+  const t = useT();
+  const outcome = doc.outcome;
+  const tone =
+    outcome.says === "refused"
+      ? "text-err"
+      : outcome.says === "liveUnread" || outcome.says === "unanswered"
+        ? "text-warn"
+        : outcome.says === "unchanged"
+          ? "text-fg-fnt"
+          : "text-fg";
+  return (
+    <section className="min-w-0" data-testid="dry-run-document">
+      <p className={`text-xs ${tone}`}>
+        <span className="font-mono">{doc.id}</span>{" "}
+        {outcome.says === "created"
+          ? t("action", "dryRunCreated")
+          : outcome.says === "configured"
+            ? t("action", "dryRunConfigured")
+            : outcome.says === "unchanged"
+              ? t("action", "dryRunUnchanged")
+              : outcome.says === "liveUnread"
+                ? t("action", "dryRunLiveUnread")
+                : outcome.says === "unanswered"
+                  ? t("action", "dryRunUnanswered")
+                  : t("action", "dryRunRefused")}
+      </p>
+      {outcome.says === "refused" ||
+      outcome.says === "liveUnread" ||
+      outcome.says === "unanswered" ? (
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {outcome.said}
+        </p>
+      ) : null}
+      {/* The sentence for an unanswered document promises the editor's own
+          diff, and `would` is null there, so the block below drew nothing
+          at all and the promise was empty. This is that diff. */}
+      {outcome.says === "unanswered" && doc.live !== null ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live}
+            modified={edited}
+            height="200px"
+          />
+        </ScrollArea>
+      ) : null}
+      {/* No diff where there is nothing honest to diff against. `live` is
+          null both for an object that is not there and for one the read
+          failed on, and against "" the whole document draws green — "this
+          would all be created" — about an object that may well exist and
+          be about to be overwritten. The sentence above says which case it
+          is; a diff cannot. */}
+      {doc.would !== null &&
+      outcome.says !== "unchanged" &&
+      outcome.says !== "liveUnread" ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live ?? ""}
+            modified={doc.would}
+            height="200px"
+          />
+        </ScrollArea>
+      ) : null}
+    </section>
   );
 }

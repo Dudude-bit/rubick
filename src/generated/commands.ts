@@ -42,6 +42,7 @@ import type {
   Diagnostics,
   DrainHandle,
   DrainOptions,
+  DryRun,
   EndpointsInfo,
   EventFilters,
   EventInfo,
@@ -810,6 +811,13 @@ export async function applyManifest(
   namespace: string | null
 ): Promise<ManifestResult> {
   return invoke<ManifestResult>("apply_manifest", { manifest, namespace });
+}
+
+export async function dryRunManifest(
+  manifest: string,
+  namespace: string | null
+): Promise<DryRun> {
+  return invoke<DryRun>("dry_run_manifest", { manifest, namespace });
 }
 
 export async function getManifest(
