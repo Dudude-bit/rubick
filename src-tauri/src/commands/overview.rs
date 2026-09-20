@@ -2096,7 +2096,10 @@ mod tests {
             whole.nodes.len(),
             "a namespace does not have fewer nodes than its cluster"
         );
-        assert!(scoped.nodes_known, "the stores serve only while every watch is healthy");
+        assert!(
+            scoped.nodes_known,
+            "the stores serve only while every watch is healthy"
+        );
     }
 
     /// The stores hold objects with their bulk stripped; every fact the
@@ -2236,9 +2239,7 @@ mod tests {
         let mut node = Node {
             metadata: ObjectMeta {
                 name: Some("n1".to_string()),
-                annotations: Some(
-                    [("csi".to_string(), "x".repeat(400))].into_iter().collect(),
-                ),
+                annotations: Some([("csi".to_string(), "x".repeat(400))].into_iter().collect()),
                 ..Default::default()
             },
             status: Some(NodeStatus {
@@ -2252,7 +2253,10 @@ mod tests {
                         .into_iter()
                         .collect(),
                 ),
-                images: Some(vec![k8s_openapi::api::core::v1::ContainerImage::default(); 50]),
+                images: Some(vec![
+                    k8s_openapi::api::core::v1::ContainerImage::default();
+                    50
+                ]),
                 ..Default::default()
             }),
             ..Default::default()
@@ -2273,7 +2277,10 @@ mod tests {
             "the capacity view is derived from what the strip has to keep"
         );
         assert!(
-            node.status.as_ref().and_then(|s| s.images.as_ref()).is_none(),
+            node.status
+                .as_ref()
+                .and_then(|s| s.images.as_ref())
+                .is_none(),
             "a strip that keeps the image list proves nothing"
         );
     }

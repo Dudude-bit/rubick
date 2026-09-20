@@ -37,8 +37,10 @@ use tokio::sync::{broadcast, oneshot};
 use tokio::time::{interval, MissedTickBehavior};
 
 use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
-use failure::FailureLatch;
+use failure::{backoff_for, FailureLatch};
 use session::WatchCleanup;
+
+pub(crate) use failure::answered;
 
 /// Manages all active resource watches.
 pub struct WatchManager {
@@ -334,7 +336,12 @@ impl WatchManager {
                     next = stream.next() => {
                         match next {
                             Some(Ok(event)) => {
-                                latch.record_success();
+                                // `Init` is the marker that says an attempt
+                                // has begun, and it arrives before the list
+                                // that fails; only an answer clears a streak.
+                                if answered(&event) {
+                                    latch.record_success();
+                                }
                                 if batch.push(event, &transform) {
                                     batch.flush(&event_tx);
                                 }
@@ -354,6 +361,20 @@ impl WatchManager {
                                     // on is not needlessly behind.
                                     batch.flush(&event_tx);
                                     emit_failure(&event_tx, &stream_id_clone, e.to_string());
+                                }
+                                // Cancel still wins, or a closing window
+                                // waits out the whole sleep.
+                                let wait = backoff_for(latch.consecutive_errors());
+                                tokio::select! {
+                                    biased;
+                                    _ = &mut cancel_rx => {
+                                        tracing::debug!(
+                                            "Resource watch {} cancelled while backing off",
+                                            stream_id_clone
+                                        );
+                                        break;
+                                    }
+                                    () = tokio::time::sleep(wait) => {}
                                 }
                             }
                             None => {

@@ -13,6 +13,7 @@ vi.mock("@/lib/pod-rows", () => ({
   listPodRows: vi.fn(async () => []),
 }));
 
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePrefetchCoreLists } from "./usePrefetchCoreLists";
 
@@ -58,6 +59,47 @@ describe("usePrefetchCoreLists", () => {
     act(() => useClusterStore.setState({ isConnected: false }));
     act(() => useClusterStore.setState({ isConnected: true }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * A resource key carries no context, so an invalidation leaves the cluster
+   * the reader just left on screen until the refetch answers — and where the
+   * new cluster refuses the read, it never answers and those rows stay. The
+   * pods of one cluster were drawn under another cluster's name, ages
+   * ticking, for as long as the window was open.
+   */
+  it("drops the answers of the cluster left behind, rather than marking them stale", async () => {
+    // Nothing observes this entry, and the harness collects those at once —
+    // which would empty it whatever the hook did, and the assertion would
+    // hold over the bug it is written to catch.
+    client.setQueryDefaults(queryKeys.pods(null), { gcTime: Infinity });
+    client.setQueryData(queryKeys.pods(null), [{ name: "shop-db-1" }]);
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+
+    act(() => useClusterStore.setState({ currentContext: "staging-eu" }));
+    await waitFor(() =>
+      expect(client.getQueryData(queryKeys.pods(null))).toBeUndefined()
+    );
+  });
+
+  /**
+   * The same cluster reconnecting is the case the flush exists for, and it
+   * must stay a flush: dropping every answer there would send every open
+   * screen back to its skeleton on a session that merely renewed.
+   */
+  it("keeps what it has when the landing is the same cluster again", async () => {
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+
+    client.setQueryDefaults(queryKeys.pods(null), { gcTime: Infinity });
+    client.setQueryData(queryKeys.pods(null), [{ name: "shop-db-1" }]);
+    act(() => useClusterStore.setState({ isConnected: false }));
+    act(() => useClusterStore.setState({ isConnected: true }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    expect(client.getQueryData(queryKeys.pods(null))).toEqual([
+      { name: "shop-db-1" },
+    ]);
   });
 
   it("does not flush again for a mere re-render of the same landing", async () => {
