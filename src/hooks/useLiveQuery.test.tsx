@@ -417,3 +417,38 @@ describe("one question asked of several namespaces", () => {
     expect(screen.getByText("polling")).toBeInTheDocument();
   });
 });
+
+describe("a read with nothing yet to show", () => {
+  function Waiting({ answer }: { answer: Promise<string> }) {
+    const { freshness } = useLiveQuery<string>({
+      queryKey: ["waiting"],
+      queryFn: () => answer,
+      refresh: "resourceList",
+    });
+    return (
+      <span data-testid="since">
+        {freshness.waitingSince === null ? "none" : "waiting"}
+      </span>
+    );
+  }
+
+  /**
+   * The moment a skeleton became one is what lets a surface say how long it
+   * has been, and it has to clear the instant there is something to show:
+   * a "still reading" over rows that arrived is the lie in the other
+   * direction.
+   */
+  it("records when the wait began and forgets it once something arrived", async () => {
+    let resolve: (value: string) => void = () => {};
+    const answer = new Promise<string>((done) => {
+      resolve = done;
+    });
+    wrap(<Waiting answer={answer} />);
+    await settle();
+    expect(screen.getByTestId("since")).toHaveTextContent("waiting");
+
+    resolve("here");
+    await settle();
+    expect(screen.getByTestId("since")).toHaveTextContent("none");
+  });
+});

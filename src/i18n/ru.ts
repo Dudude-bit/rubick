@@ -1326,6 +1326,7 @@ export const ru: Catalogue = {
     close: "Закрыть",
     save: "Сохранить",
     delete: "Удалить",
+    pickOneNamespace: "Выбрать один namespace",
     retry: "Повторить",
     download: "Скачать",
     refresh: "Обновить",
@@ -5074,7 +5075,14 @@ export const ru: Catalogue = {
       "Не удалось прочитать, что публикует этот Service:",
     noAnswer: "нет ответа",
     registeredByHand: "добавлен вручную",
+    stillReading: "Всё ещё читаю {label} в {scope}",
+    narrowerIsFaster:
+      "Большой кластер быстрее отвечает на узкий вопрос: один namespace это один список вместо нескольких.",
+    readDeadline: "Чтение {label} в {scope} не уложилось в {seconds} с.",
+    readDeadlineHint:
+      "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
+    readDeadlineShort: "Чтение {label} не уложилось в {seconds} с.",
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
@@ -5571,6 +5579,7 @@ export const ru: Catalogue = {
     invertSelection: "Инвертировать выделение",
   },
   count: {
+    secondsShort: "{n} с",
     pods: {
       one: "{n} под",
       few: "{n} пода",

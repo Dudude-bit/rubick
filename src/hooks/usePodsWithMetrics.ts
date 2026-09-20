@@ -73,6 +73,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
+    freshness,
+    refetch,
   } = useLiveQuery({
     queryKey,
     // Rows, streamed in chunks, rather than `listPods` in one answer: the
@@ -142,5 +144,9 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     watchLive: !watchFailed,
     /** It is re-listing: the pods here are the ones from before it started. */
     resyncing,
+    /** When a read with nothing to show began, for the list to say so. */
+    waitingSince: freshness.waitingSince,
+    /** Ask again — the list's own Retry, which does not own this read. */
+    refetch,
   };
 }

@@ -33,6 +33,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Kubernetes
+tower = { version = "0.5", features = ["timeout"] }
 kube = { version = "4.2", default-features = false, features = ["client", "config", "runtime", "ws", "oauth", "oidc", "rustls-tls", "aws-lc-rs", "gzip", "jsonpatch"] }
 # For `Patch::Json`; the same version kube itself resolves.
 json-patch = "4.2"  # must match the version `kube` resolves, or `Patch::Json` sees a different type

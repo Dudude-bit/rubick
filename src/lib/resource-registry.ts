@@ -350,6 +350,18 @@ export function listQueryFor(resourceKind: ResourceKind): {
   };
 }
 
+/**
+ * Whether choosing one namespace narrows a read of this kind at all.
+ *
+ * Nodes, PersistentVolumes, StorageClasses and the other cluster-scoped
+ * kinds are one list however the namespace picker is set, so offering "pick
+ * one namespace" against a slow read of them sends a reader to a control
+ * that cannot change the answer.
+ */
+export function narrowingHelps(resourceKind: ResourceKind): boolean {
+  return RESOURCE_BY_KIND.get(resourceKind)?.scope !== "cluster";
+}
+
 export function toPlural(resourceKind: ResourceKind): string {
   return (
     RESOURCE_BY_KIND.get(resourceKind)?.plural ?? resourceKind.toLowerCase()
