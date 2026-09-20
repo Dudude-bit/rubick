@@ -26,13 +26,18 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
 const applyManifest = vi.fn();
+/** The neighbourhood the dialog asks about, per test. */
+let connections: () => { object: null; edges: unknown[] } = () => ({
+  object: null,
+  edges: [],
+});
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     detectInClusterExtensions: () => detectInClusterExtensions(),
     listCustomResources: (...args: unknown[]) => listCustomResources(...args),
     applyManifest: (...args: unknown[]) => applyManifest(...args),
-    getResourceConnections: async () => ({ object: null, edges: [] }),
+    getResourceConnections: async () => connections(),
     getYamlHistory: async () => [],
     addYamlHistoryEntry: async () => {},
   },
@@ -127,6 +132,7 @@ async function openWith(yamlText: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  connections = () => ({ object: null, edges: [] });
   useYamlEditorStore.getState().closeEditor();
   applyManifest.mockResolvedValue({
     success: true,
@@ -223,6 +229,69 @@ describe("applying on critical infrastructure", () => {
    * confirmations do. Without it the apply's own confirmation, which delivery
    * had already taught the reader to click through, was the way past.
    */
+  /**
+   * The whole reason the replica comparison exists. It was moved behind
+   * `useDeferredValue` here and nothing asserted it still reaches the
+   * confirmation: hardwiring `replicasMoved` to `false` left the entire
+   * frontend suite green, and with it an Apply that silently loses to the
+   * autoscaler seconds later.
+   */
+  it("warns that an autoscaler will put the replica count back", async () => {
+    connections = () => ({
+      object: null,
+      edges: [
+        {
+          relation: { verb: "governs" },
+          from: {
+            kind: "HorizontalPodAutoscaler",
+            name: "api",
+            namespace: "shop",
+            facts: {
+              kind: "autoscaler",
+              minReplicas: 2,
+              maxReplicas: 10,
+              conditions: [],
+            },
+          },
+          to: { kind: "Deployment", name: "api", namespace: "shop" },
+        },
+      ],
+    });
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    expect(
+      await screen.findAllByText(/will put this number back/)
+    ).not.toHaveLength(0);
+  });
+
+  /**
+   * The read deadline is on every request, writes included, and the layer
+   * that fires it only drops our side — it does not undo what the apiserver
+   * may already have committed, and a chain of admission webhooks can
+   * outlast the wait. Saying "Apply failed" there is a verdict about
+   * something nobody looked at, and it invites a second apply.
+   */
+  it("does not call a timed-out apply a failed one", async () => {
+    applyManifest.mockRejectedValue(
+      new Error("READ_DEADLINE: the cluster did not answer within 60 s")
+    );
+    const user = await openWith(PLAIN);
+    await user.click(screen.getByRole("button", { name: /^Apply$/ }));
+    // The cluster is marked critical in this harness, so the gate comes first.
+    await user.type(screen.getByPlaceholderText("test"), "test");
+    const confirm = screen
+      .getAllByRole("button", { name: /^Apply$/ })
+      .at(-1) as HTMLElement;
+    await user.click(confirm);
+
+    await waitFor(() => expect(applyManifest).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(screen.getByText(/We stopped waiting/i)).toBeInTheDocument();
+    });
+    // Not the wire marker, and not a verdict on something nobody looked at.
+    expect(document.body.textContent).not.toContain("READ_DEADLINE:");
+  });
+
   it("holds Apply until the cluster's name is typed", async () => {
     const user = await openWith(PLAIN);
 

@@ -49,3 +49,13 @@ __pycache__/
 
 # Worktrees
 .worktrees/
+# What the Flatpak workflow writes, and writes at the repo root: its download
+# step's `cd packaging/flatpak` dies with that step, so every later step runs
+# from here. Reproducing the workflow locally otherwise leaves an ostree repo,
+# a builder cache and a ~100 MB bundle one `git add -A` away from a commit.
+builddir/
+repo/
+.flatpak-builder/
+*.flatpak
+ldd.txt
+run.log

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   appendCapped,
+  historyRoom,
+  lostLines,
   backfillPerContainer,
   emptyBuffer,
   fieldSuggestions,
@@ -111,6 +113,70 @@ const fielded = (
   container: string,
   fields: Record<string, string>
 ) => ({ ...line(id), container, fields }) as StreamedLogLine;
+
+describe("a frozen interval", () => {
+  const frozen = { from: 5, to: 9 };
+
+  /** The point of freezing: the stream goes on and the held lines stay put. */
+  it("keeps the frozen lines through eviction and evicts around them", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    expect(buffer.frozenLines).toBe(5);
+    buffer = appendCapped(buffer, lines(20, 30), 20, frozen);
+    const ids = buffer.lines.map((line) => line.id);
+    expect(ids.slice(0, 5)).toEqual([5, 6, 7, 8, 9]);
+    expect(ids).toHaveLength(25);
+    expect(ids.slice(5)).toEqual(lines(30, 20).map((line) => line.id));
+    expect(buffer.dropped).toBe(25);
+    expect(buffer.frozenLines).toBe(5);
+  });
+
+  /** The cap is a budget for the live lines; the frozen ones sit outside it, never above it. */
+  it("holds at most the cap of live lines beside the frozen ones", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    for (let n = 20; n < 200; n += 7) {
+      buffer = appendCapped(buffer, lines(n, 7), 20, frozen);
+      expect(buffer.lines.length - buffer.frozenLines).toBeLessThanOrEqual(20);
+      expect(
+        buffer.lines.filter((line) => line.epoch >= 5 && line.epoch <= 9)
+      ).toHaveLength(5);
+    }
+  });
+
+  /** A line arriving inside the interval is inside it, however late it came. */
+  it("counts a late line inside the interval as frozen", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 10), 10, frozen);
+    buffer = appendCapped(buffer, [line(100, 7)], 10, frozen);
+    expect(buffer.frozenLines).toBe(6);
+    expect(buffer.lines.length).toBe(11);
+  });
+
+  /** Thawing hands the lines back to the cap, which takes them on the spot. */
+  it("evicts down to the cap the moment the interval is thawed", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, lines(20, 20), 20, frozen);
+    expect(buffer.lines).toHaveLength(25);
+    buffer = appendCapped(buffer, [], 20, null);
+    expect(buffer.lines).toHaveLength(20);
+    expect(buffer.frozenLines).toBe(0);
+    expect(buffer.lines[0].id).toBe(20);
+    expect(buffer.dropped).toBe(20);
+  });
+
+  /** Moving the interval recounts what is held, so the status bar's number is never the old interval's. */
+  it("recounts when the interval moves", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, [], 20, { from: 0, to: 2 });
+    expect(buffer.frozenLines).toBe(3);
+    expect(buffer.frozen).toEqual({ from: 0, to: 2 });
+  });
+
+  /** The index describes what is retained, frozen lines included, and not what the cap alone would keep. */
+  it("keeps frozen lines in the field index", () => {
+    let buffer = appendCapped(emptyBuffer(), lines(0, 20), 20, frozen);
+    buffer = appendCapped(buffer, lines(20, 40), 20, frozen);
+    expect(buffer.fields.keys.get("container")).toBe(25);
+  });
+});
 
 describe("the field index", () => {
   it("offers level and container first, then the loudest parsed keys", () => {
@@ -264,5 +330,41 @@ describe("backfillPerContainer", () => {
   it("always asks for at least one line", () => {
     expect(backfillPerContainer(1, 40)).toBe(1);
     expect(backfillPerContainer(0, 0)).toBe(1);
+  });
+});
+
+describe("how much room history gets beside the live lines", () => {
+  /**
+   * The cap counts what it may evict. Frozen lines are what it may not, and
+   * the status bar already says so — counting them twice made freezing an
+   * interval wipe the history the reader had just fetched, with the bar
+   * blaming the live stream for filling the buffer.
+   */
+  it("measures the cap against the lines the cap can evict", () => {
+    expect(historyRoom(20_000, 17_000, 0)).toBe(3_000);
+    expect(historyRoom(20_000, 22_000, 5_000)).toBe(3_000);
+  });
+
+  /** A buffer genuinely full of evictable lines leaves no room, as before. */
+  it("leaves none when the evictable lines fill the cap", () => {
+    expect(historyRoom(5_000, 5_000, 0)).toBe(0);
+    expect(historyRoom(5_000, 9_000, 1_000)).toBe(0);
+  });
+});
+
+describe("where the buffer lost lines", () => {
+  /**
+   * Three readers said "older lines have been dropped" off `dropped > 0`
+   * alone — the notice, the strip's axis and its spoken summary. With an
+   * interval frozen that is the wrong end: eviction steps over the frozen
+   * lines and takes what is around them, so the reader looking before the
+   * left edge for the missing lines finds the frozen block instead.
+   */
+  it("calls the loss a head only while nothing is frozen", () => {
+    const frozen = { from: 1_000, to: 2_000 };
+    expect(lostLines(0, null)).toBe("none");
+    expect(lostLines(0, frozen)).toBe("none");
+    expect(lostLines(40, null)).toBe("head");
+    expect(lostLines(40, frozen)).toBe("aroundKept");
   });
 });

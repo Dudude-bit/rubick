@@ -20,6 +20,7 @@ import {
   parentCarriesTraffic,
   redirectOnly,
   routeTraces,
+  answeredByItsController,
   selfAnswered,
   type RouteTrace,
   type TraceSources,
@@ -402,7 +403,10 @@ export function routesBoard(
         ? t("empty", "gwRowRedirects")
         : selfAnswered(route)
           ? t("empty", "gwRowFilterNamed")
-          : null,
+          : answeredByItsController(route, route.parents[0]?.controllerName)
+                .length > 0
+            ? t("empty", "gwRowControllerConfigured")
+            : null,
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),

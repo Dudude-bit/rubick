@@ -1,5 +1,5 @@
 import type { CrdColumn } from "../../kit";
-import { conditionStatus, getValueByPath, matchByGroup } from "../../kit";
+import { getValueByPath, matchByGroup } from "../../kit";
 import type { CrdView } from "../../registry";
 import { GROUP } from "./model";
 
@@ -87,7 +87,4 @@ export const crd: CrdView = {
         return [];
     }
   },
-  // Only a Prometheus carries a condition; a monitor is configuration and
-  // has no state of its own to colour.
-  status: conditionStatus("Available"),
 };

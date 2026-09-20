@@ -23,6 +23,9 @@ pub struct DaemonSetInfo {
     pub desired: i32,
     pub current: i32,
     pub ready: i32,
+    /// Nodes already on the current template. See `StatefulSetReplicaInfo`:
+    /// without it a restart looks finished the instant it is requested.
+    pub updated: i32,
     /// What the template runs, so a watch on the list can see a rollout.
     pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
@@ -43,6 +46,7 @@ impl From<&DaemonSet> for DaemonSetInfo {
             desired: status.map_or(0, |s| s.desired_number_scheduled),
             current: status.map_or(0, |s| s.current_number_scheduled),
             ready: status.map_or(0, |s| s.number_ready),
+            updated: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
             container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
@@ -84,6 +88,8 @@ pub struct DaemonSetDetailInfo {
     pub selector: String,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
 }
 
@@ -124,6 +130,8 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             selector,
             conditions,
             owner_references: extract_owner_references(ds.metadata.owner_references.as_ref()),
+            generation: ds.metadata.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: ds.creation_timestamp().to_rfc3339_opt(),
         }
     }

@@ -191,6 +191,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    selects: "Selects",
     files: "Files",
     members: "Members",
     racks: "Racks",
@@ -524,6 +525,13 @@ export const en = {
     serves: "Serves",
     parents: "Parents",
     verdicts: "Verdicts",
+    ciliumSelects: "Selects",
+    ciliumClusterwide: "Cluster-wide",
+    ciliumNamespaced: "In this namespace",
+    ciliumInForce: "In force",
+    ciliumRules: "Rules",
+    ciliumReach: "Reach",
+    ciliumSecurityLabels: "Security labels",
     programmed: "Programmed",
   },
   action: {
@@ -862,6 +870,7 @@ export const en = {
     nameCopied: "{name} copied",
     copyContextName: "Copy context name",
     openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
@@ -946,6 +955,16 @@ export const en = {
     chipQueryTitle: "{label} — a query over the buffered lines",
     chipQueryTimeTitle:
       "{label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+    chipFrozenTitle:
+      "{label} — frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+    startFreezeLabel:
+      "Freeze {label} — keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label} — these lines can be evicted again",
+    startFreezeTitle: "Freeze this interval",
+    stopFreezeTitle: "Thaw this interval",
+    thawFrozen: "thaw",
+    frozenNote:
+      "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
     stopIntakeLabel:
       "Stop discarding lines that do not match {label} — new lines are kept from now on, the ones already discarded do not come back",
     startIntakeLabel:
@@ -993,6 +1012,8 @@ export const en = {
     closeNamed: "Close {name}",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
+    filterClusters: "Filter clusters",
+    filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
     reload: "Reload",
     useTheDefault: "Use the default",
@@ -1119,6 +1140,10 @@ export const en = {
     validationCompleted: "Validation completed.",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
+    applyUnanswered: "The cluster did not answer",
+    applyUnansweredHint:
+      "We stopped waiting. Whether the change was applied is unknown — admission can outlast the wait — so check the object before applying again.",
+
     applyCompleted: "Apply completed.",
     clearCanvasQuestion: "Clear canvas?",
     clearCanvasConfirm:
@@ -1190,6 +1215,7 @@ export const en = {
     connecting: "Connecting",
     streamLive: "Live",
     streamPaused: "Paused",
+    filtering: "filtering…",
     streamStopped: "Stopped",
     moreLogActions: "More log actions",
     densityStrip: "Density strip",
@@ -1205,6 +1231,7 @@ export const en = {
     openActions: "Open actions",
     openFullPage: "Open full page",
     copyName: "Copy name",
+    dragToResize: "Drag to resize · double-click to reset",
     more: "More",
     moreActions: "More actions",
     goBack: "Go back",
@@ -1321,6 +1348,7 @@ export const en = {
     close: "Close",
     save: "Save",
     delete: "Delete",
+    pickOneNamespace: "Pick one namespace",
     retry: "Retry",
     download: "Download",
     refresh: "Refresh",
@@ -1677,6 +1705,9 @@ export const en = {
     pathCopied: "Path copied",
     copyPath: "Copy path",
     tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
     noHeadInImage: "No head in this image to read the file with.",
     readFailed: "Could not read the file (exit {code}):",
     noPreviewBinary:
@@ -2143,8 +2174,59 @@ export const en = {
     bearerToken: "bearer token",
     editInSettings: "Edit in Settings",
   },
+  slow: {
+    panel: "Why slow",
+    title: "Why slow",
+    hint: "What the app measured in the last minute, without the recorder.",
+    stalls: {
+      one: "{n} stall",
+      other: "{n} stalls",
+    },
+    stallsLabel: "Stalls",
+    stallsValue: {
+      one: "{n} stall, the longest {longest} ms",
+      other: "{n} stalls, the longest {longest} ms",
+    },
+    sourceLongTask:
+      "A stall is the main thread blocked for 50 ms or more, from the webview's own long-task observer.",
+    sourceFrameGap:
+      "A stall is a frame that came 50 ms or more late; this webview has no long-task observer, so late frames stand in.",
+    listsLabel: "Big lists on screen",
+    listRows: {
+      one: "{n} row of {label}",
+      other: "{n} rows of {label}",
+    },
+    // For a table that wears no label: the kind's plural goes out
+    // untranslated, and there is no word here to put in its place.
+    listRowsPlain: {
+      one: "{n} row",
+      other: "{n} rows",
+    },
+    // Not "none": these two facts are fed by the table and by the command
+    // wrapper, and nothing else. A log buffer or a watch batch can block
+    // the thread without reaching either, so an empty answer here is the
+    // app saying it did not look, not that there was nothing to see.
+    noBigList: "Nothing over a thousand rows on a table this counts.",
+    listsWhy:
+      "Every watch batch is filtered and sorted over the whole list, and a search re-reads every row.",
+    answerLabel: "Largest answer",
+    answerRows: {
+      one: "{n} row from {command}",
+      other: "{n} rows from {command}",
+    },
+    noBigAnswer: "Nothing over a thousand rows from a command this counts.",
+    answerWhy:
+      "A big answer is parsed on the main thread before anything can be drawn.",
+    whatToDo:
+      "Narrow the namespace scope or the search: the list and its answers shrink with them. For timings per command and per render, turn on the recorder.",
+    notCounted:
+      "Log lines and watch batches are not counted above, so a stall on the Logs tab or during a resync will leave both rows empty.",
+    openRecorder: "Open Settings › Diagnostics",
+  },
 
   vendor: {
+    ciliumGives:
+      "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
     scyllaGives:
@@ -2530,6 +2612,10 @@ export const en = {
       one: "{n} prohibited target",
       other: "{n} prohibited targets",
     },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      other: "{n} AzureIdentities",
+    },
     azureNoIdentityNamed: {
       one: "no AzureIdentity named {name}",
       other: "no AzureIdentity named {name}",
@@ -2654,6 +2740,22 @@ export const en = {
       few: "{n} not ready",
       many: "{n} not ready",
       other: "{n} not ready",
+    },
+    factCiliumPolicies: {
+      one: "{n} network policy",
+      other: "{n} network policies",
+    },
+    factCiliumClusterwide: {
+      one: "{n} cluster-wide",
+      other: "{n} cluster-wide",
+    },
+    factCiliumRejected: {
+      one: "{n} policy Cilium rejected — it enforces nothing",
+      other: "{n} policies Cilium rejected — they enforce nothing",
+    },
+    factCiliumUnanswered: {
+      one: "{n} policy the agent has not answered about",
+      other: "{n} policies the agent has not answered about",
     },
     drainingCount: {
       one: "{n} draining",
@@ -3007,7 +3109,50 @@ export const en = {
     nginxRawSnippet:
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
+    // What a rollout last looked like, carried by a verdict. `revision` is
+    // the Deployment's own annotation and goes out as the cluster wrote it.
+    rolloutSeen: "{ready} of {desired} ready",
+    rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
+    ciliumSelectsAll: "every endpoint in scope",
+    ciliumCovered: "covered",
+    ciliumUnrestricted: "nothing selects it",
+    ciliumOnlyRejected: "only rejected policies",
+    ciliumCannotSay: "cannot say",
+    ciliumNothingSelects:
+      "No policy in this cluster selects this endpoint. Whatever it may reach, it may reach.",
+    ciliumEnforcesNothing: "rejected — enforces nothing",
+    ciliumUnreadablePolicies: {
+      one: "{n} more policy names endpoints somewhere this window cannot read",
+      other:
+        "{n} more policies name endpoints somewhere this window cannot read",
+    },
+    ciliumFindingRejected: {
+      one: "{n} policy the operator rejected — it enforces nothing",
+      other: "{n} policies the operator rejected — they enforce nothing",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} endpoint is selected only by policies that were rejected — it reads as covered and is not",
+      other:
+        "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} endpoint no policy selects",
+      other: "{n} endpoints no policy selects",
+    },
+    ciliumNotOnTheWire: "written where this window cannot read it",
+    ciliumAndExpressions: {
+      one: "and {n} expression",
+      other: "and {n} expressions",
+    },
+    ciliumSelectsByExpression: {
+      one: "by {n} expression",
+      other: "by {n} expressions",
+    },
+    ciliumIngressRules: { one: "{n} in", other: "{n} in" },
+    ciliumEgressRules: { one: "{n} out", other: "{n} out" },
+    ciliumDenies: { one: "{n} deny", other: "{n} deny" },
+    ciliumLeavesCluster: "outside the cluster",
   },
   cluster: {
     integrationsHint:
@@ -3071,6 +3216,9 @@ export const en = {
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at it live.",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
@@ -3110,7 +3258,9 @@ export const en = {
     renewalFailed:
       "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
     renewalRanOut:
-      "Renewing them quietly was tried twice and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+      "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalLastChance:
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire — some plugins mint nothing until the old ones are actually gone. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:
@@ -3189,6 +3339,13 @@ export const en = {
   settings: {
     installationFailed: "Installation failed",
     updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
     updateAvailableToast:
       "Version {version} is available. Go to Settings to download it.",
     notOnPathPlain: "{label} is not on PATH. Set the path below.",
@@ -3435,6 +3592,8 @@ export const en = {
     checkForUpdates: "Check for updates",
     autoUpdates: "Automatic updates",
     autoUpdatesHint: "Check on startup and every 30 minutes.",
+    managedUpdates:
+      "This build updates through the package manager it was installed with.",
     diagnosticsCopied: "Diagnostics copied",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
@@ -3486,6 +3645,9 @@ export const en = {
     pathNoKubectl: "no kubectl on the search path",
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
+    logsNowhere:
+      "No log file this run — nothing on disk to send. This window could not create the folder it writes to.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
     searchFiltersList: "{n} — search filters this list",
@@ -3576,6 +3738,33 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "says nothing",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    everyPodThere: "every pod",
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
+    exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
@@ -4280,6 +4469,9 @@ export const en = {
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
+    diffComputing: "Comparing…",
+    diffUnavailable:
+      "Could not compare these two. What Apply would do is unchanged; the comparison is what failed.",
     noChangesDetected: "No changes detected",
     addRepositoryThenSearch: "Add a repository, then search it for charts.",
     manifestsAreAt: "The manifests are at",
@@ -4435,6 +4627,8 @@ export const en = {
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+    ciliumPageDescription:
+      "Every endpoint with the policies that select it, and the ones nothing selects at all",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
@@ -4704,7 +4898,15 @@ export const en = {
       "Could not read what this Service publishes:",
     noAnswer: "no answer",
     registeredByHand: "registered by hand",
+    stillReading: "Still reading {label} in {scope}",
+    narrowerIsFaster:
+      "A large cluster answers a narrower question faster: one namespace is one list instead of several.",
+    readDeadline:
+      "Reading {label} in {scope} did not finish within {seconds} s.",
+    readDeadlineHint:
+      "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
+    readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
@@ -4727,8 +4929,28 @@ export const en = {
     intakeStillSet:
       "Intake is still set — reconnecting resumes from now, and what the stream missed is not fetched back.",
     nothingToReconnectTo: "Nothing left to reconnect to",
+    // Beside the status on every page and peek: what the object's own Helm
+    // annotation says, which is a claim and not a read.
+    installedByRelease: "Installed by the Helm release {name}",
+    // Both values are the cluster's own words; only "is" was ours.
+    conditionIs: "{type} is {status}",
+    releaseNotRead: "could not be read",
+    gwRowControllerConfigured: "answered by its controller's own settings",
+    gwControllerConfiguredSay:
+      "No backendRefs — this route's own controller answers",
+    gwControllerConfiguredTitle: "Configuration this app does not read",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
+    // Said instead of the three above whenever an interval is frozen. The
+    // eviction steps over the frozen lines and takes what is around them,
+    // so the loss is a hole beside the kept block and not a head the log
+    // begins after.
+    bufferHoldsKeptAndNewest:
+      "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
+    linesDroppedAroundKeptAxis:
+      "Lines have been dropped around the frozen interval — the log is not continuous from here.",
+    linesDroppedAroundKeptSummary:
+      "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
     nothingHasMatched: "Nothing has matched",
@@ -4760,6 +4982,10 @@ export const en = {
       "— none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
     noLineMatchesQuery: "No line matches the query.",
+    filteringLines: {
+      one: "Filtering {count} line…",
+      other: "Filtering {count} lines…",
+    },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
     streamAttachedNothingWritten:
@@ -5131,7 +5357,57 @@ export const en = {
     gwProbeTimedOut:
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
+  shortcuts: {
+    title: "Keyboard",
+    lede: "Every key the app answers to. Unmodified keys stay quiet inside a field or a terminal.",
+    then: "then",
+    sectionGlobal: "Everywhere",
+    filterClusters: "Find a cluster by name",
+    downloadFile: "Download the file you are looking at",
+    upADirectory: "Up a directory",
+    selectLogs: "Select the lines on screen",
+    connectCluster: "Connect to the cluster under the caret",
+    scopeAnother: "Add another namespace to the scope",
+    sectionNavigate: "Go to",
+    sectionPage: "On an object's page",
+    sectionTabs: "Tabs",
+    sectionTable: "In a list",
+    sectionLogs: "In the log viewer",
+    sectionBuilder: "In the infrastructure builder",
+    palette: "Search and commands",
+    settings: "Settings",
+    copyLink: "Copy a link to this place",
+    help: "This list",
+    escape: "Close what is open",
+    goOverview: "Overview",
+    goPods: "Pods",
+    goDeployments: "Deployments",
+    goServices: "Services",
+    goIngresses: "Ingresses",
+    goNodes: "Nodes",
+    goEvents: "Events",
+    goJobs: "Jobs",
+    goConfigMaps: "ConfigMaps",
+    tabOverview: "Overview tab",
+    tabLogs: "Logs tab",
+    tabYaml: "YAML tab",
+    tabEvents: "Events tab",
+    nextTab: "Next tab",
+    previousTab: "Previous tab",
+    newTab: "New tab",
+    closeTab: "Close tab",
+    nthTab: "Tab by number, 9 is the last",
+    rowMove: "Move between rows",
+    rowOpen: "Open the row",
+    soloContainer: "Only this container, by legend position",
+    allContainers: "Every container",
+    deleteSelection: "Delete the selection",
+    selectAll: "Select everything",
+    invertSelection: "Invert the selection",
+  },
   count: {
+    secondsShort: "{n} s",
+    pods: { one: "{n} pod", other: "{n} pods" },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",
@@ -5422,6 +5698,10 @@ export const en = {
     arrivingBefore: "{rate}/s arriving before it was set",
     shown: "{n} shown",
     hiddenByFilter: "{n} hidden by filter and grouping",
+    frozenLines: {
+      one: "{count} frozen line",
+      other: "{count} frozen lines",
+    },
     spanInSlices: "{span} in {step} slices",
     densitySummary:
       "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
@@ -5486,6 +5766,25 @@ export const en = {
       other: "{vendor}'s own proxy — the {n} hosts it serves are on",
     },
     nOfTotal: "{n} of {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} tells this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever that says, and this app does not read it.",
+      other:
+        "{keys} tell this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever those say, and this app does not read them.",
+    },
+    // Tab and group marks, which were built by concatenation — no whole
+    // string for a scanner to find, which is how they stayed English.
+    podsFailing: {
+      one: "{n} of {total} failing · {name} is {status}",
+      other: "{n} of {total} failing · {name} is {status}",
+    },
+    someSpot: "{n} of {total} spot",
+    // A pool caption names its values until there are too many, then counts
+    // them. Both halves were English, and the node count was the
+    // `n === 1 ? "node" : "nodes"` shape this catalogue forbids by name.
+    machineTypes: { one: "{n} machine type", other: "{n} machine types" },
+    zonesCount: { one: "{n} zone", other: "{n} zones" },
+    nodesCount: { one: "{n} node", other: "{n} nodes" },
+    allSpot: "spot",
     nReady: "{n} ready",
     nNotReady: "{n} not ready",
     nPublished: "{n} published",
@@ -5564,6 +5863,10 @@ export const en = {
       one: "{count} older line has been dropped.",
       other: "{count} older lines have been dropped.",
     },
+    linesDroppedAroundKept: {
+      one: "{count} line has been dropped around the frozen interval.",
+      other: "{count} lines have been dropped around the frozen interval.",
+    },
     rowsStandFor: { one: "This row stands", other: "These {n} rows stand" },
     forLines: { one: "for {count} line.", other: "for {count} lines." },
     linesCopied: { one: "{count} line copied", other: "{count} lines copied" },
@@ -5585,6 +5888,12 @@ export const en = {
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
     contexts: { one: "{n} context", other: "{n} contexts" },
+    // `n` is the total, not the number shown: "1 of 42 context" is what
+    // happens when the count that picks the form is the filtered one.
+    contextsMatching: {
+      one: "{shown} of {n} context",
+      other: "{shown} of {n} contexts",
+    },
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },

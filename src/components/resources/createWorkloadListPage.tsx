@@ -190,6 +190,7 @@ export function createWorkloadListPage<T extends Workload>(
         dataUpdatedAt={listQuery.dataUpdatedAt}
         live={watchEnabled && !watchFailed}
         slowed={listQuery.freshness.slowed}
+        waitingSince={listQuery.freshness.waitingSince}
         getRowId={getResourceRowId}
         delivery={deliveryScopeOf(config.resourceType)}
         columns={columns}

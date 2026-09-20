@@ -234,7 +234,7 @@ export function ReplicaSetDetail() {
       id: toPlural(ResourceType.Pod),
       label: "Pods",
       glyph: kindGlyph(ResourceType.Pod),
-      mark: podsMark(pods),
+      mark: podsMark(pods, t),
       content: (
         <PodListCard
           pods={pods}
@@ -268,7 +268,7 @@ export function ReplicaSetDetail() {
       id: "conditions",
       label: t("nav", "conditions"),
       glyph: viewGlyph(BadgeCheck),
-      mark: conditionsMark(replicaSet?.conditions),
+      mark: conditionsMark(replicaSet?.conditions, t),
       content: (
         <Section>
           <SectionHeader

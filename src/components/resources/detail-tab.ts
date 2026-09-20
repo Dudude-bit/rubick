@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { failingCondition } from "@/lib/condition-health";
+import type { T } from "@/i18n/useT";
 import { statusRole } from "@/lib/status-role";
 import type { ConditionInfo, PodInfo } from "@/generated/types";
 
@@ -110,11 +111,18 @@ export const liveMark = (says: string): DetailTabMark => ({
  * a signpost to the rest of the story, not the story.
  */
 export function conditionsMark(
-  conditions: readonly ConditionInfo[] | undefined
+  conditions: readonly ConditionInfo[] | undefined,
+  t: T
 ): DetailTabMark | undefined {
   const failing = failingCondition(conditions ?? []);
   return failing
-    ? severityMark("warn", `${failing.type} is ${failing.status}`)
+    ? severityMark(
+        "warn",
+        t("empty", "conditionIs", {
+          type: failing.type,
+          status: failing.status,
+        })
+      )
     : undefined;
 }
 
@@ -124,14 +132,19 @@ export function conditionsMark(
  * A controller reports `2/3 ready` in its header and says nothing about
  * *which* pod, so the tab that holds the answer is where the fault belongs.
  */
-export function podsMark(pods: readonly PodInfo[]): DetailTabMark {
+export function podsMark(pods: readonly PodInfo[], t: T): DetailTabMark {
   const failing = pods.filter(
     (pod) => statusRole(pod.status.display) === "err"
   );
   return failing.length > 0
     ? severityMark(
         "err",
-        `${failing.length} of ${pods.length} failing · ${failing[0].name} is ${failing[0].status.display}`
+        t("count", "podsFailing", {
+          n: failing.length,
+          total: pods.length,
+          name: failing[0].name,
+          status: failing[0].status.display,
+        })
       )
     : countMark(pods.length);
 }

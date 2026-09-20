@@ -7,11 +7,13 @@ import {
   History,
   Info,
   Layers2,
+  RefreshCw,
   Scale,
   Trash2,
 } from "lucide-react";
 
 import { LogViewer } from "@/components/logs/LogViewer";
+import { useAsk } from "@/hooks/useAsk";
 import { lanePodOf } from "@/components/logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -128,6 +130,41 @@ export function StatefulSetDetail() {
   const intercept = useDeliveryIntercept(deliveryQuery);
 
   const [scaleOpen, setScaleOpen] = useState(false);
+  const asking = useAsk();
+
+  const restartMutation = useResourceMutation(
+    async () => {
+      if (!name) return;
+      await commands.restartStatefulset(name, namespace || null);
+    },
+    {
+      toast: {
+        successTitle: t("action", "kindRestarted", {
+          kind: ResourceType.StatefulSet,
+        }),
+        successDescription: t("action", "kindRestartingDetail", {
+          kind: ResourceType.StatefulSet,
+          name: name ?? "",
+        }),
+        errorPrefix: t("action", "restartKindFailed", {
+          kind: ResourceType.StatefulSet,
+        }),
+      },
+      invalidateQueryKeys:
+        namespace && name ? [["statefulset", namespace, name]] : [],
+      onSuccess: () => {
+        if (!name) return;
+        asking.ask(
+          { kind: "StatefulSet", namespace: namespace || null, name },
+          {
+            action: "restart",
+            replicas: null,
+            generationBefore: statefulSet?.generation ?? null,
+          }
+        );
+      },
+    }
+  );
 
   const scaleMutation = useResourceMutation(
     async (replicas: number) => {
@@ -151,7 +188,19 @@ export function StatefulSetDetail() {
       },
       invalidateQueryKeys:
         namespace && name ? [["statefulset", namespace, name]] : [],
-      onSuccess: () => setScaleOpen(false),
+      onSuccess: (_data, replicas) => {
+        setScaleOpen(false);
+        if (name) {
+          asking.ask(
+            { kind: "StatefulSet", namespace: namespace || null, name },
+            {
+              action: "scale",
+              replicas,
+              generationBefore: statefulSet?.generation ?? null,
+            }
+          );
+        }
+      },
     }
   );
 
@@ -290,7 +339,7 @@ export function StatefulSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods),
+        mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,
       },
       {
@@ -319,7 +368,7 @@ export function StatefulSetDetail() {
         id: "conditions",
         label: t("columns", "conditions"),
         glyph: viewGlyph(BadgeCheck),
-        mark: conditionsMark(statefulSet?.conditions),
+        mark: conditionsMark(statefulSet?.conditions, t),
         content: (
           <Section>
             <SectionHeader
@@ -394,6 +443,13 @@ export function StatefulSetDetail() {
               onClick={() => statefulSet && setScaleOpen(true)}
             />
             <InterceptedAction
+              intercept={intercept("Restart")}
+              label={t("action", "restart")}
+              icon={RefreshCw}
+              onClick={() => restartMutation.mutate(undefined)}
+              busy={restartMutation.isPending}
+            />
+            <InterceptedAction
               intercept={intercept("Delete")}
               label={t("action", "delete")}
               icon={Trash2}
@@ -421,6 +477,7 @@ export function StatefulSetDetail() {
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />
+      {asking.dialog}
     </>
   );
 }

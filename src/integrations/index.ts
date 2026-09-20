@@ -51,6 +51,7 @@ import scylla from "./scylla";
 import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
+import cilium from "./cilium";
 import flux, { helmReleasePath } from "./flux";
 import googleCloud, { gkeIngress } from "./google-cloud";
 import ingressNginx from "./ingress-nginx";
@@ -174,6 +175,7 @@ const VENDORS: Vendor[] = [
   argocd,
   flux,
   istio,
+  cilium,
   cloudnativepg,
   scylla,
   prometheus,

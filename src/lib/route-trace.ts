@@ -265,6 +265,52 @@ export function selfAnswered(route: RouteInfo): boolean {
   );
 }
 
+/**
+ * Annotations on this route addressed to the controller that owns it.
+ *
+ * A rule with no backendRefs and no terminating filter answers 500 by the
+ * spec, and this app said so outright — "the route matches traffic and drops
+ * it". But a controller can be configured by annotation in its own domain,
+ * and that is configuration this app does not read. A Cloudflare Tunnel
+ * route carrying `gateway.cloudflare-tunnel.io/http-status: 404` answers
+ * every matched request with a 404 on purpose, to keep a path off the
+ * internet — reported as broken on a cluster where it was working exactly
+ * as written.
+ *
+ * Matched on the controller's own domain rather than a list of vendors:
+ * what makes an annotation load-bearing here is that it is addressed to the
+ * component whose behaviour is in question, and a list would be a new table
+ * keyed by vendor that goes quiet for the next one.
+ */
+export function addressedToController(
+  route: RouteInfo,
+  controllerName: string | undefined
+): string[] {
+  const domain = controllerName?.split("/")[0];
+  if (!domain) return [];
+  return Object.keys(route.annotations)
+    .filter((key) => key.split("/")[0] === domain)
+    .sort();
+}
+
+/**
+ * The route names no backend at all, and carries settings its own controller
+ * reads. One predicate for the trace, the list row and the peek, so the three
+ * cannot answer differently about the same route.
+ *
+ * `namesNoBackend`, not "no Service": a route with a backendRef of some other
+ * kind — an implementation's own `Backend` — does name somewhere to go, and
+ * "no backendRefs" about it would be false. `selfAnswered` draws the same
+ * line for the same reason.
+ */
+export function answeredByItsController(
+  route: RouteInfo,
+  controllerName: string | undefined
+): string[] {
+  if (!namesNoBackend(route)) return [];
+  return addressedToController(route, controllerName);
+}
+
 const said = (c: ConditionInfo): string =>
   [c.reason, c.message].filter(Boolean).join(" — ") || `${c.type}: ${c.status}`;
 
@@ -861,6 +907,7 @@ interface BackendVerdict {
 function backendSteps(
   route: RouteInfo,
   backing: BackingSources,
+  controllerName: string | undefined,
   t: T
 ): [TraceStep, TraceStep] {
   const serviceRefs = route.rules.flatMap((rule) =>
@@ -883,6 +930,24 @@ function backendSteps(
     const say = t("empty", "gwFilterNamed");
     return [
       { id: "backend", state: "blind", say, who: "yours" },
+      { id: "endpoints", state: "blind", say, who: "yours" },
+    ];
+  }
+  // Configuration this app cannot read, addressed to the controller that
+  // owns this route. Blind rather than err: the spec's 500 is what happens
+  // when nobody said otherwise, and somebody here plainly did.
+  const addressed = answeredByItsController(route, controllerName);
+  if (addressed.length > 0) {
+    const say = t("empty", "gwControllerConfiguredSay");
+    const detail = {
+      title: t("empty", "gwControllerConfiguredTitle"),
+      body: t("count", "gwControllerConfiguredBody", {
+        n: addressed.length,
+        keys: addressed.join(", "),
+      }),
+    };
+    return [
+      { id: "backend", state: "blind", say, who: "yours", detail },
       { id: "endpoints", state: "blind", say, who: "yours" },
     ];
   }
@@ -1123,7 +1188,12 @@ function traceFor(
     entries,
     t
   );
-  const [backend, endpoints] = backendSteps(route, sources.backing, t);
+  const [backend, endpoints] = backendSteps(
+    route,
+    sources.backing,
+    entries[0]?.controllerName,
+    t
+  );
   const probe = probeOf(route, gateway, parent);
 
   const steps: TraceStep[] = [

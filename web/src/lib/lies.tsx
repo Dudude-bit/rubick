@@ -14,6 +14,17 @@ export type Lie = {
   evidence: ReactNode;
   visual?: "chain";
   correction?: true;
+  /**
+   * Its own reproduce block, for a lie the shared throwaway cluster cannot
+   * show. The first three live in plain objects and need no CNI; this one
+   * needs a cluster that actually enforces policy.
+   */
+  reproduce?: {
+    heading: string;
+    blurb: string;
+    commands: string[];
+    note: string;
+  };
   img: (typeof IMG)[keyof typeof IMG];
   alt: string;
 };
@@ -86,7 +97,51 @@ export const LIES: Lie[] = [
     img: IMG.chain,
     alt: "A traffic chain that stops, with the reason named at the broken link",
   },
+  {
+    slug: "protected",
+    short: "Protected",
+    lie: '"Protected", says the namespace.',
+    bust: "Four network policies in the list, three of them enforced. The fourth has an In operator inside an ingress rule with no values under it, which the Cilium operator cannot parse, so it throws the rule away and keeps the object. The name is the same, the age is the same, and the selector at the top still reads as if it covers those pods, which are now open. The only record is a condition inside the policy's status, and no ordinary list of custom resources shows it. Rubick puts that answer first in the row and names the pods left uncovered.",
+    description:
+      "A CiliumNetworkPolicy its operator rejects stays in the cluster looking like one that works. Rubick reads the Valid condition and shows which pods are left open.",
+    reported: "4 policies",
+    observed: "1 thrown away for a typo",
+    evidence: (
+      <div className="flex flex-col gap-2">
+        <TruthSwap
+          reported="4 policies"
+          observed="3 enforcing · 1 thrown away for a typo"
+        />
+        <p className="font-mono text-sm text-neutral-500">
+          Valid: False · invalid label selector: matchExpressions[0].values:
+          Required value: must be specified when `operator` is 'In' or 'NotIn'
+        </p>
+        <p className="font-mono text-sm text-neutral-500">
+          kubectl get cnp prints a VALID column, so the CLI is not fooled.
+        </p>
+      </div>
+    ),
+    reproduce: {
+      heading: "One cluster, one typo.",
+      blurb:
+        "This one needs a CNI that actually enforces policy, so the throwaway cluster is a little larger than the others: kind without its default network plugin, then Cilium on top. The typo is an In operator with no values under it, four lines deep in an ingress rule, which is easy to write and hard to spot again afterwards.",
+      commands: [
+        "kind create cluster --config https://rubick.tech/lies/cilium-kind.yaml",
+        "helm repo add cilium https://helm.cilium.io/ && helm install cilium cilium/cilium -n kube-system --set ipam.mode=kubernetes",
+        "kubectl apply -f https://rubick.tech/lies/protected.yaml",
+        "kubectl -n rubick-lies get cnp",
+      ],
+      note: "# kubectl prints a VALID column, so the CLI is not fooled. A list of custom resources shows four rows and stops there.",
+    },
+    img: IMG.cilium,
+    alt: "Endpoints with the policies that select them, and the ones nothing covers",
+  },
 ];
+
+/** The count as a word, so a fifth lie does not leave the heading wrong. */
+export const LIES_COUNT_SAID =
+  ["no", "one", "two", "three", "four", "five", "six", "seven"][LIES.length] ??
+  String(LIES.length);
 
 export function lieNumber(l: Lie) {
   return LIES.indexOf(l) + 1;

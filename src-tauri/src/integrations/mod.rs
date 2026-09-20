@@ -68,6 +68,12 @@ const MARKERS: &[(&str, &[&str])] = &[
     ("flux", &["kustomizations.kustomize.toolkit.fluxcd.io"]),
     ("istio", &["virtualservices.networking.istio.io"]),
     ("argocd", &["applications.argoproj.io"]),
+    // The CNI, detected by the policy kind rather than by the agent's
+    // DaemonSet: the DaemonSet is named by whoever installed it, and a
+    // cluster can perfectly well run Cilium without anyone having written a
+    // policy — so the kind's existence is the install and a count of the
+    // objects is not.
+    ("cilium", &["ciliumnetworkpolicies.cilium.io"]),
     // Operators: a controller that runs a database for you. Detected by the
     // kind a person creates, because the operator's own Deployment is named
     // by whoever installed it and its CRD is not.
@@ -228,11 +234,12 @@ mod tests {
     /// stopped being detected — `traefik.containo.us` is the whole of what a
     /// v2 cluster serves, and reporting it absent would tell the reader the
     /// proxy in front of their cluster is not there.
-    /// A vendor drawn under Operators that no marker names is permanently
-    /// "not installed": the frontend can only draw what detection reports.
+    /// A vendor the frontend draws as detected and no marker names is
+    /// permanently "not installed": the frontend can only draw what detection
+    /// reports, and the id has to be the same string on both sides.
     #[test]
     fn every_operator_the_frontend_draws_has_a_marker() {
-        for id in ["cloudnativepg", "scylla"] {
+        for id in ["cloudnativepg", "scylla", "cilium"] {
             assert!(
                 MARKERS.iter().any(|(marker, _)| *marker == id),
                 "{id} has no marker"

@@ -60,28 +60,8 @@ pub async fn restart_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    let ctx = ResourceContext::for_command(&state, namespace)?;
-
-    let api: kube::Api<Deployment> = ctx.namespaced_api();
-
-    // Trigger a rolling restart by updating an annotation
-    let now = chrono::Utc::now().to_rfc3339();
-    let patch = serde_json::json!({
-        "spec": {
-            "template": {
-                "metadata": {
-                    "annotations": {
-                        "kubectl.kubernetes.io/restartedAt": now
-                    }
-                }
-            }
-        }
-    });
-
-    api.patch(&name, &PatchParams::default(), &Patch::Strategic(&patch))
-        .await?;
-
-    Ok(())
+    crate::validation::validate_dns_label(&name)?;
+    crate::commands::helpers::restart_resource::<Deployment>(name, namespace, state).await
 }
 
 /// Update deployment image

@@ -21,6 +21,12 @@ pub struct StatefulSetReplicaInfo {
     pub desired: i32,
     pub ready: i32,
     pub current: i32,
+    /// Pods already on the current template. Without it `ready == desired`
+    /// is true both before a rollout starts and after it finishes, so a
+    /// watch following a restart answered "rolled out" on the first status
+    /// the controller wrote — or forever, under `OnDelete`, where nothing
+    /// rolls at all. A Deployment has carried the same count all along.
+    pub updated: i32,
 }
 
 /// Basic `StatefulSet` info for list views
@@ -51,6 +57,7 @@ impl From<&StatefulSet> for StatefulSetInfo {
                 desired: spec.and_then(|s| s.replicas).unwrap_or(0),
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 current: status.and_then(|s| s.current_replicas).unwrap_or(0),
+                updated: status.and_then(|s| s.updated_replicas).unwrap_or(0),
             },
             container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
@@ -86,6 +93,8 @@ pub struct StatefulSetDetailInfo {
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
+    pub generation: Option<i64>,
+    pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
 }
 
@@ -109,6 +118,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
                 desired: spec.and_then(|s| s.replicas).unwrap_or(0),
                 ready: status.and_then(|s| s.ready_replicas).unwrap_or(0),
                 current: status.and_then(|s| s.current_replicas).unwrap_or(0),
+                updated: status.and_then(|s| s.updated_replicas).unwrap_or(0),
             },
             // `serviceName` became optional upstream: a StatefulSet may now
             // be created without a governing Service.
@@ -125,6 +135,8 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             annotations: ss.annotations().clone(),
             conditions,
             owner_references: extract_owner_references(ss.metadata.owner_references.as_ref()),
+            generation: ss.metadata.generation,
+            observed_generation: status.and_then(|s| s.observed_generation),
             created_at: ss.creation_timestamp().to_rfc3339_opt(),
         }
     }

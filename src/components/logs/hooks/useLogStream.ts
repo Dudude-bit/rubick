@@ -23,6 +23,7 @@ import {
   orderByTimestamp,
   REORDER_WINDOW_MS,
   type FieldIndex,
+  type Frozen,
   type LogBuffer,
 } from "./log-buffer";
 
@@ -128,6 +129,19 @@ interface UseLogStreamOptions {
    * is not a destructive act and has nothing to confirm.
    */
   intake?: QueryTerm[];
+  /**
+   * A stretch of clock whose lines the cap may not evict. See `Frozen`.
+   * Changing it neither restarts the stream nor touches the lines outside
+   * it; thawing lets the next batch evict as if it had never been set.
+   */
+  frozen?: Frozen | null;
+  /**
+   * Called whenever the buffer is emptied — a Keep change, Clear, a switch
+   * of pod or run. Whoever owns a freeze has to hear it: the interval's
+   * lines are gone and cannot come back, and a chip still offering to thaw
+   * them is the pane promising something it no longer holds.
+   */
+  onWiped?: () => void;
 }
 
 /** Not a character any pod, namespace or container name may carry. */
@@ -137,6 +151,8 @@ interface UseLogStreamResult {
   logs: StreamedLogLine[];
   /** `logs.length`, named so a status bar does not have to explain itself. */
   retained: number;
+  /** Lines held inside the frozen interval, over and above the cap. */
+  frozenLines: number;
   limit: number;
   /**
    * What the retained lines can be filtered by, counted as they arrived.
@@ -254,8 +270,19 @@ export function useLogStream({
   limit,
   previous = false,
   intake = NO_INTAKE,
+  frozen = null,
+  onWiped,
 }: UseLogStreamOptions): UseLogStreamResult {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer);
+  // Read by the release closure below, which the stream effect owns: a
+  // freeze must reach the next batch without restarting the stream.
+  const frozenRef = useRef(frozen);
+  frozenRef.current = frozen;
+  const frozenKey = frozen ? `${frozen.from}-${frozen.to}` : "";
+  useEffect(() => {
+    const interval = frozenRef.current;
+    setBuffer((prev) => appendCapped(prev, [], limit, interval));
+  }, [frozenKey, limit]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [failures, setFailures] = useState<ContainerFailure[]>([]);
@@ -330,8 +357,12 @@ export function useLogStream({
 
   const session = useRef<Session | null>(null);
 
+  const wiped = useRef(onWiped);
+  wiped.current = onWiped;
+
   const clearLogs = useCallback(() => {
     setBuffer(emptyBuffer());
+    wiped.current?.();
   }, []);
 
   const togglePause = useCallback(() => {
@@ -540,7 +571,7 @@ export function useLogStream({
       if (pending.length === 0 || !s.active) return;
       const window = orderByTimestamp(pending);
       pending = [];
-      setBuffer((prev) => appendCapped(prev, window, limit));
+      setBuffer((prev) => appendCapped(prev, window, limit, frozenRef.current));
       setLastBatchAt(Date.now());
     };
 
@@ -599,7 +630,10 @@ export function useLogStream({
 
       setIsConnecting(true);
       setFailures([]);
-      if (!resuming) setBuffer(emptyBuffer());
+      if (!resuming) {
+        setBuffer(emptyBuffer());
+        wiped.current?.();
+      }
       // The next line to arrive is the first one under whatever this
       // restart changed, so the boundaries move on the transitions and
       // not on every restart: an intake edited while it is already on
@@ -736,6 +770,7 @@ export function useLogStream({
   return {
     logs: buffer.lines,
     retained: buffer.lines.length,
+    frozenLines: buffer.frozenLines,
     limit,
     fields: buffer.fields,
     dropped: buffer.dropped,

@@ -11,6 +11,7 @@ import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { isRefusal, verbatim } from "@/lib/error-utils";
+import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -90,7 +91,12 @@ export function ChildRows({
               invites a retry that will be refused the same way. */}
           {isRefusal(error)
             ? t("nav", "noListAccess")
-            : t("empty", "couldNotReadInScope", { label: label ?? "" })}
+            : isReadDeadline(error)
+              ? t("empty", "readDeadlineShort", {
+                  label: label ?? "",
+                  seconds: LIST_DEADLINE_SECONDS,
+                })
+              : t("empty", "couldNotReadInScope", { label: label ?? "" })}
         </p>
         <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
           {verbatim(error.message)}

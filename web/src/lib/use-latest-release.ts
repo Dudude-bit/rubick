@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 const API = "https://api.github.com/repos/Dudude-bit/rubick/releases/latest";
 
 export type AssetKey =
-  "dmgArm" | "dmgIntel" | "exe" | "deb" | "rpm" | "appimage";
+  "dmgArm" | "dmgIntel" | "exe" | "deb" | "rpm" | "appimage" | "flatpak";
 
 const PATTERNS: Record<AssetKey, RegExp> = {
   dmgArm: /aarch64\.dmg$/,
@@ -12,6 +12,7 @@ const PATTERNS: Record<AssetKey, RegExp> = {
   deb: /amd64\.deb$/,
   rpm: /x86_64\.rpm$/,
   appimage: /amd64\.AppImage$/,
+  flatpak: /\.flatpak$/,
 };
 
 export type Asset = { url: string; name: string; size: number };

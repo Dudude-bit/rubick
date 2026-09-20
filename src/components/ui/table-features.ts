@@ -15,6 +15,7 @@ import {
   columnVisibilityFeature,
   createFilteredRowModel,
   createSortedRowModel,
+  filterFn_includesString,
   globalFilteringFeature,
   rowSortingFeature,
   tableFeatures,
@@ -27,20 +28,26 @@ import {
 
 /**
  * Sorting, per-column filtering, one search box over every column, hiding
- * columns, and column widths — what `DataTable` actually offers. Row selection,
- * pinning, pagination and resizing are deliberately absent: the app does none
- * of them, and in v9 leaving them out is what keeps them out of the bundle.
+ * columns and column widths — what `DataTable` actually offers. Row
+ * selection, pinning and pagination are deliberately absent: the app does
+ * none of them, and in v9 leaving them out is what keeps them out of the
+ * bundle.
+ *
+ * `columnResizingFeature` is absent on purpose even though the tables *do*
+ * resize: its handler commits pixel deltas against a layout written in
+ * shares, so `DataTable` owns the drag and writes `columnSizing` itself.
  *
  * Grouping is absent for a different reason. The lists *do* group — the
  * namespace captions on a Pods list — but by `RowGrouping`, which draws caption
  * rows between the table's own rows and hides the column it took over: a
  * rendering concern, not a row model.
  *
- * No `sortFns`/`filterFns` registries: those name the *extra* functions a
- * column may ask for by string, and no column here asks for one. Every column
- * resolves through `auto`, which reaches the built-ins regardless — registering
- * the full sets only puts every one of them in the bundle. Pinned by
- * "reverses the rows when its header is toggled twice" in data-table.test.tsx.
+ * No `sortFns` registry: no column names one, and sorting's `auto` reaches
+ * the built-ins. A filter's `auto` does *not* — it resolves through the slot
+ * below, and left empty a column filter matches nothing while nothing fails
+ * (#185). No column filters one today; the entry stays so the first that
+ * does works, and `columnFilteringFeature` is here because the vendor makes
+ * global filtering depend on it.
  */
 export const tableStack = tableFeatures({
   rowSortingFeature,
@@ -50,6 +57,7 @@ export const tableStack = tableFeatures({
   columnVisibilityFeature,
   sortedRowModel: createSortedRowModel(),
   filteredRowModel: createFilteredRowModel(),
+  filterFns: { includesString: filterFn_includesString },
 });
 
 /**

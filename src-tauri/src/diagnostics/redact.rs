@@ -101,6 +101,14 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         kc.parse_error = kc.parse_error.as_deref().map(&scrub);
     }
     d.app.config_path = d.app.config_path.as_deref().map(&scrub);
+    // The home directory only. `scrub` also replaces context names as bare
+    // substrings, and a context called `logs` or `app` would rewrite the
+    // constant part of this path into one that does not exist — hiding
+    // nothing, since that part names nobody.
+    d.app.log_destination = d.app.log_destination.as_deref().map(|path| match &home {
+        Some(home) => path.replace(home.as_str(), "~"),
+        None => path.to_string(),
+    });
 
     d
 }
@@ -145,7 +153,9 @@ mod tests {
                 version: "4.0.1".into(),
                 os: "macos aarch64".into(),
                 config_path: Some("/Users/someone/Library/Application Support/k8s-gui".into()),
-                log_destination: "stdout".into(),
+                log_destination: Some(
+                    "/Users/someone/Library/Logs/com.k8s-gui.app/rubick.log".into(),
+                ),
             },
             findings: vec![Finding {
                 severity: Severity::Blocking,
@@ -216,6 +226,9 @@ mod tests {
 
         let mut d = sample();
         d.app.config_path = Some(format!("{home}/Library/Application Support/k8s-gui"));
+        // The log file lives under the home directory on every platform, and
+        // it is the field a reader is most likely to be asked to paste.
+        d.app.log_destination = Some(format!("{home}/Library/Logs/com.k8s-gui.app/rubick.log"));
         d.contexts[0].command_path = Some(format!("{home}/bin/kubectl"));
         d.shell = ShellEnvReport::CouldNotStart {
             shell: format!("{home}/.nix-profile/bin/zsh"),

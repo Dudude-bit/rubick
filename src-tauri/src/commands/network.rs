@@ -6,12 +6,13 @@ use std::collections::HashMap;
 
 use crate::error::Result;
 use crate::resources::{
-    published, EndpointsInfo, Existence, IngressInfo, ObjectRef, ServicePublished,
+    published, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo, ObjectRef, Selector,
+    ServicePublished,
 };
 use crate::state::AppState;
-use k8s_openapi::api::core::v1::{Endpoints, Service};
+use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
-use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
 use kube::ResourceExt;
 use tauri::State;
@@ -26,6 +27,85 @@ pub async fn list_ingresses(
     state: State<'_, AppState>,
 ) -> Result<Vec<IngressInfo>> {
     list_resource_infos::<Ingress, IngressInfo>(filters, state).await
+}
+
+/// Every `NetworkPolicy` in scope, with how many pods each one actually picks.
+///
+/// The count is the whole reason this is not `list_resource_infos`. A policy
+/// whose `podSelector` matches nothing is accepted, listed, and protects
+/// nothing, and no other screen in this app can say so: the selector is in
+/// one object and the labels are in another. One pod list for the scope
+/// answers it for every policy at once, the same arithmetic
+/// `list_service_endpoints` does above.
+///
+/// **A refused pod list leaves the count `None`, never zero.** Zero is the
+/// finding this page exists for; a reader without `list pods` must not be
+/// handed it.
+#[tauri::command]
+pub async fn list_network_policies(
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<NetworkPolicyInfo>> {
+    let ctx = ResourceContext::for_list(&state, namespace)?;
+    let params = ListParams::default();
+    let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
+    let pods_api = ctx.namespaced_or_cluster_api::<Pod>();
+    // Metadata only: the question is which labels a pod carries, and the
+    // bodies are the whole weight of a pod list on a cluster with ten
+    // thousand of them — pulled on every poll of this page.
+    let (policies, pods) =
+        tokio::join!(policies_api.list(&params), pods_api.list_metadata(&params));
+    let policies = policies?.items;
+    let pods = pods.ok().map(|list| list.items);
+
+    Ok(crate::resources::joined_to_pods(&policies, pods.as_deref()))
+}
+
+/// One `NetworkPolicy`, with the same pod count the list carries.
+///
+/// The count is read here too rather than carried over from the list: the
+/// detail page is reachable by a pasted link, and a page that could only
+/// count when the list had been opened first would show a blank where the
+/// list showed a number.
+#[tauri::command]
+pub async fn get_network_policy(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<NetworkPolicyInfo> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let ctx = ResourceContext::for_command(&state, namespace)?;
+    let policy = ctx.namespaced_api::<NetworkPolicy>().get(&name).await?;
+    let mut info = NetworkPolicyInfo::from(&policy);
+
+    let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
+    // A refused pod list leaves the count `None`, never zero. Zero is the
+    // finding this page exists for; a reader without `list pods` must not be
+    // handed it.
+    if let Ok(pods) = ctx
+        .namespaced_api::<Pod>()
+        .list_metadata(&ListParams::default())
+        .await
+    {
+        info.selected = Some(
+            pods.items
+                .iter()
+                .filter(|pod| Selector::Query(selector).matches(pod.labels()))
+                .count(),
+        );
+    }
+    Ok(info)
+}
+
+/// Delete a `NetworkPolicy`
+#[tauri::command]
+pub async fn delete_network_policy(
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    crate::commands::helpers::delete_resource::<NetworkPolicy>(name, namespace, state, None).await
 }
 
 /// List Endpoints

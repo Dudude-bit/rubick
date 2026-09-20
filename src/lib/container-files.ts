@@ -80,6 +80,23 @@ export function mountFor(
   return best?.tag ?? null;
 }
 
+/**
+ * Where the browser opens for a container: its first mount, because that
+ * is what the reader came to look at. A mount with a `subPath` is often a
+ * single file (a ConfigMap key over `/etc/app/app.conf`), and a file cannot
+ * be listed; the mount's parent can, and shows the file as a row.
+ */
+export function startPath(
+  volumes: readonly PodVolumeInfo[],
+  container: string
+): string {
+  const mount = volumes
+    .flatMap((volume) => volume.mounts)
+    .find((m) => m.container === container);
+  if (!mount) return "/";
+  return mount.subPath ? parentOf(mount.path) : mount.path;
+}
+
 export function joinPath(dir: string, name: string): string {
   return dir === "/" ? `/${name}` : `${dir}/${name}`;
 }
@@ -156,6 +173,8 @@ export function matches(entry: FileEntry, filter: string): boolean {
  * into the catalogue copy — which is exactly the drift the shared-constant
  * rule exists to stop.
  */
-export const DOWNLOAD_MAX_BYTES = 104_857_600;
+export const DOWNLOAD_MAX_BYTES = 2_147_483_648;
+/** Past this a download is asked about first: minutes over exec, not a click. */
+export const DOWNLOAD_CONFIRM_BYTES = 104_857_600;
 export const PREVIEW_MAX_BYTES = 524_288;
 export const MAX_ENTRIES = 20_000;

@@ -48,6 +48,7 @@ const WHY: Record<Renewal, keyof typeof en.cluster> = {
   needsYou: "renewalNeedsYouBody",
   failed: "renewalFailed",
   ranOut: "renewalRanOut",
+  lastChance: "renewalLastChance",
   delegated: "renewalDelegated",
   unknown: "renewalUnknown",
 };

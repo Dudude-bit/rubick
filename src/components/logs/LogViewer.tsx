@@ -30,6 +30,7 @@ import {
   DEFAULT_LOG_LIMIT,
   type ContainerFailure,
 } from "./hooks/useLogStream";
+import { useFilteredLogs } from "./hooks/useFilteredLogs";
 import {
   containerEntries,
   laneColors,
@@ -44,6 +45,7 @@ import {
 } from "./lanes";
 import { useLogHistory } from "./hooks/useLogHistory";
 import { useIntake } from "./hooks/useIntake";
+import { historyRoom, lostLines } from "./hooks/log-buffer";
 import { LogHistoryBar } from "./LogHistoryBar";
 import { LogToolbar } from "./LogToolbar";
 import { LogLegend, type LegendEntry } from "./LogLegend";
@@ -52,6 +54,7 @@ import { LogDensityStrip } from "./LogDensityStrip";
 import { LogStatusBar } from "./LogStatusBar";
 import { containerColors as buildContainerColors } from "./container-colors";
 import { useT } from "@/i18n/useT";
+import type { Frozen, LostLines } from "./hooks/log-buffer";
 import {
   countCollapsed,
   expandRuns,
@@ -63,7 +66,6 @@ import {
   formatCount,
   formatSpan,
   logsToText,
-  matchesQuery,
   termLabel,
   type QueryTerm,
   type StreamedLogLine,
@@ -259,10 +261,12 @@ function StreamFailureNotice({
 function DroppedNotice({
   dropped,
   limit,
+  lost,
   onDownload,
 }: {
   dropped: number;
   limit: number;
+  lost: LostLines;
   onDownload: () => void;
 }) {
   const t = useT();
@@ -274,13 +278,18 @@ function DroppedNotice({
       className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-hair px-3 py-1.5 text-[11px]"
     >
       <p className="text-warn">
-        {t("count", "olderLinesDropped", {
-          n: dropped,
-          count: formatCount(dropped),
-        })}
+        {t(
+          "count",
+          lost === "head" ? "olderLinesDropped" : "linesDroppedAroundKept",
+          { n: dropped, count: formatCount(dropped) }
+        )}
         <span className="text-fg-mut">
           {" "}
-          {t("empty", "bufferHoldsNewest", { count: formatCount(limit) })}
+          {t(
+            "empty",
+            lost === "head" ? "bufferHoldsNewest" : "bufferHoldsKeptAndNewest",
+            { count: formatCount(limit) }
+          )}
         </span>
       </p>
       <Button variant="outline" size="sm" onClick={onDownload}>
@@ -728,6 +737,7 @@ export function LogViewer({
   );
   const [draft, setDraft] = useState("");
   const [limit, setLimit] = useState(DEFAULT_LOG_LIMIT);
+  const [frozen, setFrozen] = useState<Frozen | null>(null);
   const [collapseRepeats, setCollapseRepeats] = useState(true);
   const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<number>>(
     () => new Set()
@@ -769,6 +779,7 @@ export function LogViewer({
     logs: live,
     fields,
     dropped,
+    frozenLines,
     isStreaming,
     isConnecting,
     isPaused,
@@ -789,7 +800,17 @@ export function LogViewer({
     limit,
     previous: previousRun,
     intake,
+    frozen,
+    // The lines an interval was holding are gone with the buffer, so the
+    // freeze goes with them rather than sitting in the toolbar offering to
+    // thaw a window that can never refill.
+    onWiped: useCallback(() => setFrozen(null), []),
   });
+
+  // Not `dropped > 0`: with an interval frozen, eviction steps over it and
+  // takes what is around it, so the missing lines are a hole beside the
+  // kept block and not a head the log starts after.
+  const lost = lostLines(dropped, frozen);
 
   /**
    * Every lane the pane has seen: the pods on the list, and the pods no
@@ -917,13 +938,13 @@ export function LogViewer({
    */
   const { logs, historyHeld } = useMemo(() => {
     if (history.lines.length === 0) return { logs: live, historyHeld: 0 };
-    const room = Math.max(0, limit - live.length);
+    const room = historyRoom(limit, live.length, frozenLines);
     const kept =
       room >= history.lines.length
         ? history.lines
         : history.lines.slice(history.lines.length - room);
     return { logs: [...kept, ...live], historyHeld: kept.length };
-  }, [history.lines, live, limit]);
+  }, [history.lines, live, limit, frozenLines]);
 
   // Everything the pane is holding, history included — the status bar's fill
   // and the "N lines received" sentences are about the buffer on screen and
@@ -960,21 +981,23 @@ export function LogViewer({
    * the strip by its own selection and dragging out four minutes leaves a
    * strip of four minutes, with nowhere left to drag back to.
    */
-  const { scoped, visibleLogs } = useMemo(() => {
+  const { time, rest } = useMemo(() => {
     const time = effectiveTerms.find((term) => term.kind === "time");
-    const rest = time
-      ? effectiveTerms.filter((term) => term.kind !== "time")
-      : effectiveTerms;
-    const scoped = logs.filter(
-      (log) => !hidden.has(laneOf(log)) && matchesQuery(log, rest)
-    );
     return {
-      scoped,
-      visibleLogs: time
+      time,
+      rest: time
+        ? effectiveTerms.filter((term) => term.kind !== "time")
+        : effectiveTerms,
+    };
+  }, [effectiveTerms]);
+  const { scoped, settling } = useFilteredLogs(logs, hidden, rest, laneOf);
+  const visibleLogs = useMemo(
+    () =>
+      time
         ? scoped.filter((log) => log.epoch >= time.from && log.epoch <= time.to)
         : scoped,
-    };
-  }, [logs, hidden, effectiveTerms, laneOf]);
+    [scoped, time]
+  );
 
   const timeRange = useMemo(() => {
     const term = terms.find((entry) => entry.kind === "time");
@@ -1124,6 +1147,21 @@ export function LogViewer({
     setIntakeLabels((prev) => toggled(prev, termLabel(term)));
   }, []);
 
+  // The freeze outlives the chip on purpose: the chip is a question about
+  // what to show, the freeze is about what to keep, and taking the filter
+  // off to watch the tail must not throw the held lines away. The status
+  // bar keeps the handle that thaws it.
+  const handleToggleFreeze = useCallback((term: QueryTerm) => {
+    if (term.kind !== "time") return;
+    setFrozen((prev) =>
+      prev !== null && prev.from === term.from && prev.to === term.to
+        ? null
+        : { from: term.from, to: term.to }
+    );
+  }, []);
+
+  const handleThaw = useCallback(() => setFrozen(null), []);
+
   const handleClearQuery = useCallback(() => {
     setTerms([]);
     setIntakeLabels(new Set());
@@ -1157,6 +1195,9 @@ export function LogViewer({
 
   const handleCopyLogs = useCallback(() => {
     if (visibleLogs.length === 0) return;
+    // Not while the filter is still walking: what is here is how far it got,
+    // and copying it would hand over a subset with a count stated as fact.
+    if (settling) return;
     copyToClipboard(
       logsToText(visibleLogs),
       t("count", "linesCopied", {
@@ -1164,7 +1205,7 @@ export function LogViewer({
         count: formatCount(visibleLogs.length),
       })
     );
-  }, [copyToClipboard, visibleLogs, t]);
+  }, [copyToClipboard, visibleLogs, settling, t]);
 
   const shownContainers = useMemo(
     () => (lanes ? containers : containers.filter((name) => !hidden.has(name))),
@@ -1246,8 +1287,12 @@ export function LogViewer({
   ]);
 
   // What the reader is not being shown: dropped by the query or by the
-  // legend, plus the lines standing behind a collapsed run.
-  const hiddenByView = retained - visibleLogs.length + collapsedCount;
+  // legend, plus the lines standing behind a collapsed run. Nothing while
+  // the walk is on — every line it has not reached yet would be counted as
+  // one the filter rejected, which is a number about work not yet done.
+  const hiddenByView = settling
+    ? 0
+    : retained - visibleLogs.length + collapsedCount;
 
   // Offered where it can answer. The kubelet sets `lastTerminated` for
   // exactly the container instances whose logs `--previous` still
@@ -1436,9 +1481,11 @@ export function LogViewer({
           logs={scoped}
           scope={scopeKey}
           retained={retained}
-          headDropped={dropped > 0}
+          settling={settling}
+          lost={lost}
           intake={intake.length > 0}
           selection={timeRange}
+          frozen={frozen}
           viewportFrom={viewportFrom}
           viewportTo={viewportTo}
           onJump={handleJumpToTime}
@@ -1457,6 +1504,8 @@ export function LogViewer({
         onRemoveTerm={handleRemoveTerm}
         intake={intakeLabels}
         onToggleIntake={handleToggleIntake}
+        frozen={frozen}
+        onToggleFreeze={handleToggleFreeze}
         fields={fields}
         limit={limit}
         onLimitChange={setLimit}
@@ -1532,10 +1581,11 @@ export function LogViewer({
         />
       )}
 
-      {dropped > 0 && (
+      {lost !== "none" && (
         <DroppedNotice
           dropped={dropped}
           limit={limit}
+          lost={lost}
           onDownload={handleDownloadLogs}
         />
       )}
@@ -1633,6 +1683,7 @@ export function LogViewer({
           streaming={isStreaming}
           retained={retained}
           filtered={effectiveTerms.length > 0}
+          settling={settling}
           intake={intake.length > 0}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
@@ -1649,8 +1700,12 @@ export function LogViewer({
       <LogStatusBar
         logs={logs}
         retained={retained}
+        frozen={frozen}
+        frozenLines={frozenLines}
+        onThaw={handleThaw}
         limit={limit}
         shownCount={rows.length}
+        settling={settling}
         hiddenCount={hiddenByView}
         intake={intake}
         intakeFrom={intakeFrom}
@@ -1750,6 +1805,7 @@ function EmptyState({
   streaming,
   retained,
   filtered,
+  settling,
   intake,
   allHidden,
   noPods = false,
@@ -1763,6 +1819,8 @@ function EmptyState({
   streaming: boolean;
   retained: number;
   filtered: boolean;
+  /** The query is still being walked over the buffer: no verdict yet. */
+  settling: boolean;
   /** Set, so "received" and "kept" are no longer the same number. */
   intake: boolean;
   allHidden: boolean;
@@ -1815,6 +1873,19 @@ function EmptyState({
             ? t("action", "showAllLanes")
             : t("action", "showAllContainers")}
         </Action>
+      </Note>
+    );
+  }
+
+  // An empty view mid-walk is "not looked yet", and drawing it as "no line
+  // matches" would be the verdict before the evidence.
+  if (settling && retained > 0) {
+    return (
+      <Note>
+        {t("empty", "filteringLines", {
+          n: retained,
+          count: formatCount(retained),
+        })}
       </Note>
     );
   }
