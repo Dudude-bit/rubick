@@ -1482,8 +1482,7 @@ export const ru: Catalogue = {
     copyDeleted: "после удалена",
     copyNotDeleted: "удаление не подтверждено",
     unanswered: "Проверка закончилась, не сказав чем",
-    unansweredBy:
-      "{tool} закончил, не сказав чем, — это не ответ про кластер",
+    unansweredBy: "{tool} закончил, не сказав чем, — это не ответ про кластер",
     answeredWith: "ответил {tool}",
     runFromCopy: "Запустить из копии",
     copyImage: "Образ для копии",

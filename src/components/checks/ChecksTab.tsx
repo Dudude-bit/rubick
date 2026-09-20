@@ -246,7 +246,8 @@ function Answer({
               image: run.outcome.copy.image,
               pod: run.outcome.copy.pod,
               deleted: run.outcome.copy.deleted
-                ? t("checks", "copyDeleted") : t("checks", "copyNotDeleted"),
+                ? t("checks", "copyDeleted")
+                : t("checks", "copyNotDeleted"),
             })
           : t("checks", "ranInContainer")}
         {run.outcome.answeredWith
