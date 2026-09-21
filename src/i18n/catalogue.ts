@@ -2202,6 +2202,7 @@ export const en = {
     filterMonitors: "Filter by name or namespace",
     filterMonitorsLabel: "Filter monitors by name or namespace",
     none: "No ServiceMonitor or PodMonitor in this cluster.",
+    pickOne: "Choose a monitor on the left.",
     noneMatch: "No monitor matches the filter.",
     chipAll: "all",
     chipBroken: "broken",
@@ -2398,6 +2399,7 @@ export const en = {
     couldNotRead: "Could not read the rules",
     kindUnread: "PrometheusRule objects could not be read: {reason}",
     none: "No PrometheusRule in this cluster.",
+    pickOne: "Choose a rule object on the left.",
     noneMatch: "No rule object matches the filter.",
     objects: {
       one: "{n} rule object",

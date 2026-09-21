@@ -2266,6 +2266,7 @@ export const ru: Catalogue = {
     filterMonitors: "Фильтр по имени или namespace",
     filterMonitorsLabel: "Фильтровать мониторы по имени или namespace",
     none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",
+    pickOne: "Выберите монитор слева.",
     noneMatch: "Ни один монитор не подходит под фильтр.",
     chipAll: "все",
     chipBroken: "сломано",
@@ -2476,6 +2477,7 @@ export const ru: Catalogue = {
     couldNotRead: "Не удалось прочитать правила",
     kindUnread: "Объекты PrometheusRule не удалось прочитать: {reason}",
     none: "В кластере нет ни одного PrometheusRule.",
+    pickOne: "Выберите объект правил слева.",
     noneMatch: "Ни один объект правил не подходит под фильтр.",
     objects: {
       one: "{n} объект правил",

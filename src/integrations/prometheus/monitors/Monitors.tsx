@@ -138,10 +138,10 @@ export default function Monitors() {
         {selected ? (
           <Detail key={keyOf(selected)} row={selected} picture={picture.data} />
         ) : (
+          // The list beside this already says why it is empty. Saying it
+          // again here put the same sentence on the screen twice.
           <p className="text-[11.5px] text-fg-mut">
-            {rows.length === 0
-              ? t("monitors", "none")
-              : t("monitors", "noneMatch")}
+            {rows.length === 0 ? null : t("monitors", "pickOne")}
           </p>
         )}
       </div>
