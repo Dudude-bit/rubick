@@ -22,6 +22,8 @@ import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
+import { AlertBanner } from "@/components/alerts/AlertBanner";
+import { errorToShow } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailTabs } from "./DetailTabs";
@@ -227,19 +229,44 @@ export function ResourceDetailLayout({
     return () => window.removeEventListener(DETAIL_TAB_OPEN, onOpen);
   }, [tabs, onTabChange]);
 
+  // The banner belongs above these returns, not below them. An alert that
+  // names an object this cluster does not have lands on exactly the error
+  // page — the case the feature was built for — and the banner was mounted
+  // underneath, so it never appeared there; `error` reaching it could only
+  // ever be `undefined`, and its own "could not read" branch was dead code.
+  const banner = (
+    <AlertBanner
+      kind={resourceKind}
+      name={title}
+      namespace={namespace ?? null}
+      now={resource && !error ? statusBadge : undefined}
+      readAt={freshness?.dataUpdatedAt}
+      error={error ? errorToShow(error) : undefined}
+      reading={isLoading}
+    />
+  );
+
   if (isLoading) {
-    return <DetailSkeleton />;
+    return (
+      <>
+        {banner}
+        <DetailSkeleton />
+      </>
+    );
   }
 
   if (error || !resource) {
     return (
-      <DetailError
-        error={error}
-        resourceKind={resourceKind}
-        onBack={onBack}
-        onFindReplacement={onFindReplacement}
-        isSearching={isSearchingReplacement}
-      />
+      <>
+        {banner}
+        <DetailError
+          error={error}
+          resourceKind={resourceKind}
+          onBack={onBack}
+          onFindReplacement={onFindReplacement}
+          isSearching={isSearchingReplacement}
+        />
+      </>
     );
   }
 
@@ -287,6 +314,11 @@ export function ResourceDetailLayout({
             all — the delivery line is earned per object, never per managed
             object, and a summary is what a healthy object does not have. */}
         <DeliveryBanner deliveries={deliveries} />
+        {/* One mount for every kind that has a page. An alert names objects
+            this app draws through six different components, and a banner
+            copied into each is how five of them come to say something the
+            sixth does not. */}
+        {banner}
         {summary}
 
         <DetailTabs

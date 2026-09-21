@@ -18,6 +18,8 @@ import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
  */
 const client = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
+import { parseAlert } from "@/lib/alerts";
+import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import {
   countMark,
   kindGlyph,
@@ -764,5 +766,58 @@ describe("DetailError does not stack the same sentence twice", () => {
       1
     );
     expect(screen.getByText(/what is this deployment/i)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The alert the reader arrived from is drawn beside what the app read
+ * itself — including on the two states that are the whole reason the
+ * feature exists: an object this cluster does not have, and one it has not
+ * finished reading. The banner was mounted below both early returns, so on
+ * exactly those pages it showed nothing.
+ */
+describe("the alert a reader arrived from survives the states below it", () => {
+  const ALERT = `[FIRING:1] KubePodCrashLooping (shop critical)
+Labels:
+ - alertname = KubePodCrashLooping
+ - namespace = shop
+ - pod = payments-7b6d9c5f4-x8k2p
+Started: 2026-09-10 03:14:22 UTC`;
+
+  beforeEach(() => {
+    useAlertArrivalStore.setState({
+      reading: parseAlert(ALERT),
+      at: {
+        context: null,
+        kind: "Pod",
+        name: "payments-7b6d9c5f4-x8k2p",
+        namespace: "shop",
+      },
+    });
+  });
+
+  const props = {
+    ...base,
+    resourceKind: "Pod",
+    title: "payments-7b6d9c5f4-x8k2p",
+    namespace: "shop",
+    tabs: [],
+    activeTab: "overview",
+  };
+
+  it("shows it on the page that could not read the object", () => {
+    wrap(
+      <ResourceDetailLayout
+        {...props}
+        resource={null}
+        error={new Error("pods is forbidden")}
+      />
+    );
+    expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
+  });
+
+  it("shows it while the object is still being read", () => {
+    wrap(<ResourceDetailLayout {...props} resource={null} isLoading />);
+    expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
   });
 });

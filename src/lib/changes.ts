@@ -21,6 +21,26 @@ import type {
 } from "@/generated/types";
 import type { DeliveryRevision } from "@/integrations";
 
+/**
+ * The kinds whose history the Changes tab can draw, as a value as well as a
+ * type.
+ *
+ * A link may carry `?tab=changes&since=…`, and a tab id the page does not
+ * have leaves the reader on a detail page with no panel open at all — so
+ * whoever builds such a link asks here rather than keeping its own list of
+ * three kinds.
+ */
+export const CHANGES_KINDS = [
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+] as const;
+
+/** Whether `?tab=changes` means anything on this kind's page. */
+export function hasChangesTab(kind: string): boolean {
+  return (CHANGES_KINDS as readonly string[]).includes(kind);
+}
+
 export const HELM_RELEASE_NAME = "meta.helm.sh/release-name";
 export const HELM_RELEASE_NAMESPACE = "meta.helm.sh/release-namespace";
 const CHANGE_CAUSE = "kubernetes.io/change-cause";
