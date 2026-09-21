@@ -149,6 +149,8 @@ export type RuleFinding =
   | { kind: "notLoaded"; severity: "err" }
   | { kind: "partlyLoaded"; severity: "err"; missing: string[] }
   | { kind: "evalError"; severity: "err"; rule: string; lastError: string }
+  /** Loaded, and Prometheus has not evaluated it once: health `unknown`. */
+  | { kind: "notEvaluated"; severity: "warn"; rule: string }
   | { kind: "firing"; severity: "err"; alerts: number; rules: number }
   | { kind: "pending"; severity: "warn"; alerts: number; rules: number };
 
@@ -169,6 +171,7 @@ const RANK: Record<RuleFinding["kind"], number> = {
   notLoaded: 1,
   partlyLoaded: 1,
   evalError: 1,
+  notEvaluated: 2,
   pending: 2,
   pickedUpUnknown: 3,
 };
@@ -190,16 +193,35 @@ export function findingsOf(
   if (loaded.state === "read") {
     const knownUnpicked =
       pickedUp.state === "judged" && pickedUp.by.length === 0;
+    // Whether anything picks this up is the question "has it been loaded"
+    // depends on: with the pick-up unknown, "picked up, but not loaded" is
+    // a claim about a Prometheus nobody identified.
+    const pickUpUnknown = pickedUp.state !== "judged";
     const missing = loaded.rules
       .filter((r) => r.loaded === null)
       .map((r) => r.spec.alert);
     // Not loaded while nothing is known to pick it up is the same fact
     // said twice; the pick-up finding already names it.
-    if (loaded.files.length === 0 && object.rules.length > 0 && !knownUnpicked)
+    if (
+      loaded.files.length === 0 &&
+      object.rules.length > 0 &&
+      !knownUnpicked &&
+      !pickUpUnknown
+    )
       findings.push({ kind: "notLoaded", severity: "err" });
     else if (missing.length > 0 && loaded.files.length > 0)
       findings.push({ kind: "partlyLoaded", severity: "err", missing });
     for (const { spec, loaded: entry } of loaded.rules) {
+      // Prometheus writes three healths and the app read one. A rule it has
+      // loaded and never evaluated answers `unknown`, which fell through to
+      // the green "loaded and evaluating" — a claim about a rule that has
+      // never run.
+      if (entry && entry.health === "unknown")
+        findings.push({
+          kind: "notEvaluated",
+          severity: "warn",
+          rule: spec.alert,
+        });
       if (entry && entry.health === "err")
         findings.push({
           kind: "evalError",
@@ -252,6 +274,13 @@ export function groupOf(findings: RuleFinding[], loaded: Loaded): RuleGroup {
   )
     return "broken";
   if (findings.some((f) => f.kind === "pending")) return "pending";
+  // A verdict nobody could reach is not a quiet one. `pickedUpUnknown` and
+  // `notEvaluated` were in no branch at all, so they were filed under Quiet
+  // in green with the word "unknown" printed beside a check mark.
+  if (
+    findings.some((f) => ["pickedUpUnknown", "notEvaluated"].includes(f.kind))
+  )
+    return "unchecked";
   return loaded.state === "read" ? "quiet" : "unchecked";
 }
 

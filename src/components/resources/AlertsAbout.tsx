@@ -1,6 +1,7 @@
 import { Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { normalizeTauriError } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
@@ -37,6 +38,23 @@ export function AlertsAbout({
     enabled: use !== null,
     staleTime: 30_000,
   });
+  // A read that failed is not a workload with nothing firing about it. The
+  // block drew byte-identical nothing for both, on the page where "no alert"
+  // is the fact a reader leans on.
+  if (alerts.error)
+    return (
+      <p className="text-[11.5px] text-warn">
+        {t("alerts", "aboutUnread", {
+          reason: normalizeTauriError(alerts.error),
+        })}
+      </p>
+    );
+  if (power.state === "unreachable")
+    return (
+      <p className="text-[11.5px] text-fg-fnt">
+        {t("alerts", "aboutUnreachable", { reason: power.reason })}
+      </p>
+    );
   if (!ready || !alerts.data || alerts.data.length === 0) return null;
   const firing = alerts.data.filter((a) => a.state === "firing");
   const pending = alerts.data.filter((a) => a.state === "pending");

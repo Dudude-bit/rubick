@@ -2326,6 +2326,10 @@ export const en = {
     rowPending: "{n} pending",
     rowNotLoaded: "not loaded",
     rowPartlyLoaded: "{n} not loaded",
+    aboutUnread:
+      "Whether anything is firing about this could not be read: {reason}",
+    aboutUnreachable: "The connected Prometheus did not answer: {reason}",
+    rowNotEvaluated: "loaded, never evaluated",
     rowEvalError: "evaluation error",
     rowQuiet: "quiet",
     rowRecordingOnly: "recording rules only",
@@ -2364,6 +2368,9 @@ export const en = {
       other:
         "{n} rules of this object are missing from the connected Prometheus.",
     },
+    verdictNotEvaluated: "{rule} is loaded and has never been evaluated.",
+    notEvaluated:
+      "Prometheus reports this rule's health as unknown, which is what it says about a rule it has loaded and not yet run.",
     verdictEvalError: "{rule} fails to evaluate.",
     verdictPending: {
       one: "{n} alert pending from {rules} rules, not yet past its for clause.",

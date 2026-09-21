@@ -294,6 +294,56 @@ describe("rowsOf", () => {
       )
     ).toBe("unchecked");
   });
+  /**
+   * Prometheus writes three healths and the app read one. A rule it has
+   * loaded and never evaluated answers `unknown`, which fell through to the
+   * green "loaded and evaluating" — a claim about a rule that has never run.
+   */
+  it("does not call a rule it has never evaluated an evaluating one", () => {
+    const [row] = rowsOf([object], kind([prom]), namespaces, {
+      state: "read",
+      rules: [
+        apiRule({
+          file: "/rules/monitoring-apps.yaml",
+          health: "unknown",
+        }),
+      ],
+    });
+
+    expect(row.findings.map((f) => f.kind)).toContain("notEvaluated");
+    expect(row.group).not.toBe("quiet");
+  });
+
+  /**
+   * A verdict nobody could reach is not a quiet one: with the Prometheus
+   * list refused, `pickedUpUnknown` was in no group at all and the row was
+   * filed under Quiet, in green, with the word "unknown" beside a check.
+   */
+  it("does not file an unknown pick-up under quiet", () => {
+    const [row] = rowsOf(
+      [object],
+      { state: "unread", reason: "prometheuses is forbidden" },
+      namespaces,
+      { state: "read", rules: [apiRule({ file: "/rules/x.yaml" })] }
+    );
+
+    expect(row.group).toBe("unchecked");
+  });
+
+  /**
+   * And "picked up, but the connected Prometheus has not loaded it" is a
+   * claim about a Prometheus nobody identified, when the pick-up is unknown.
+   */
+  it("does not assert not-loaded while the pick-up is unknown", () => {
+    const [row] = rowsOf(
+      [object],
+      { state: "unread", reason: "prometheuses is forbidden" },
+      namespaces,
+      { state: "read", rules: [] }
+    );
+
+    expect(row.findings.map((f) => f.kind)).not.toContain("notLoaded");
+  });
 });
 
 describe("alertsAbout", () => {

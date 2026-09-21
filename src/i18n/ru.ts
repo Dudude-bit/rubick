@@ -2404,6 +2404,10 @@ export const ru: Catalogue = {
     rowPending: "{n} ждёт",
     rowNotLoaded: "не загружен",
     rowPartlyLoaded: "{n} не загружено",
+    aboutUnread:
+      "Не удалось прочитать, горит ли что-то про этот объект: {reason}",
+    aboutUnreachable: "Подключённый Prometheus не ответил: {reason}",
+    rowNotEvaluated: "загружено, ни разу не считано",
     rowEvalError: "ошибка вычисления",
     rowQuiet: "тихо",
     rowRecordingOnly: "только recording-правила",
@@ -2448,6 +2452,9 @@ export const ru: Catalogue = {
       many: "{n} правил этого объекта нет в подключённом Prometheus.",
       other: "{n} правил этого объекта нет в подключённом Prometheus.",
     },
+    verdictNotEvaluated: "{rule} загружено и ни разу не считано.",
+    notEvaluated:
+      "Prometheus сообщает здоровье этого правила как unknown — так он отвечает о правиле, которое загрузил и ещё ни разу не выполнил.",
     verdictEvalError: "{rule} не вычисляется.",
     verdictPending: {
       one: "{n} алерт ждёт из {rules} правил, ещё не прошёл свой for.",

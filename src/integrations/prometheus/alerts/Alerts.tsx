@@ -756,6 +756,11 @@ function verdictOf(
         head: t("alerts", "verdictEvalError", { rule: worst.rule }),
         body: worst.lastError,
       };
+    case "notEvaluated":
+      return {
+        head: t("alerts", "verdictNotEvaluated", { rule: worst.rule }),
+        body: t("alerts", "notEvaluated"),
+      };
     case "pending":
       return {
         head: t("alerts", "verdictPending", {

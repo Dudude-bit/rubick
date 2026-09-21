@@ -15,6 +15,8 @@ export function rowWords(row: RuleRow, t: T): string {
       return t("alerts", "rowPartlyLoaded", { n: worst.missing.length });
     case "evalError":
       return t("alerts", "rowEvalError");
+    case "notEvaluated":
+      return t("alerts", "rowNotEvaluated");
     case "pending":
       return t("alerts", "rowPending", { n: worst.alerts });
     case "pickedUpUnknown":
