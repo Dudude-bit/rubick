@@ -149,6 +149,46 @@ fn session_over(err: &kube::Error) -> bool {
     matches!(err, kube::Error::Api(status) if status.code == 401)
 }
 
+/// What the live read means, or the one failure that is not about the
+/// document at all.
+///
+/// The 401 arm is the point: filed with the 4xx refusals it blocks Apply as
+/// though the cluster had rejected the YAML and puts the
+/// `CREDENTIALS_EXPIRED:` wire marker on screen as the server's own words.
+/// It lives here rather than inline in the loop because there it was one
+/// `if` guard that could be deleted with the whole suite green — the loop
+/// runs only against a cluster.
+fn live_of(
+    read: std::result::Result<kube::core::DynamicObject, kube::Error>,
+) -> Result<(Live, Option<kube::core::DynamicObject>)> {
+    match read {
+        Ok(object) => {
+            let yaml = editor_yaml(&object)?;
+            Ok((Live::Present(yaml), Some(object)))
+        }
+        Err(e) if session_over(&e) => Err(Error::from(e)),
+        Err(e) => Ok((live_failure(e), None)),
+    }
+}
+
+/// The same door for the dry-run apply itself.
+#[allow(clippy::type_complexity)]
+fn would_of(
+    applied: std::result::Result<kube::core::DynamicObject, kube::Error>,
+) -> Result<(
+    std::result::Result<String, NoAnswer>,
+    Option<kube::core::DynamicObject>,
+)> {
+    match applied {
+        Ok(object) => {
+            let yaml = editor_yaml(&object)?;
+            Ok((Ok(yaml), Some(object)))
+        }
+        Err(e) if session_over(&e) => Err(Error::from(e)),
+        Err(e) => Ok((Err(no_answer(e)), None)),
+    }
+}
+
 fn no_answer(err: kube::Error) -> NoAnswer {
     let said = Error::from(err_ref_clone(&err)).to_string();
     match err {
@@ -274,29 +314,11 @@ pub async fn dry_run_of(
         // text: "did anything change" is decided on these, because the text
         // has every private key replaced by one constant and a rotated
         // `tls.key` would compare equal to the old one.
-        let mut live_raw = None;
-        let live = match api.get(&name).await {
-            Ok(object) => {
-                let yaml = editor_yaml(&object)?;
-                live_raw = Some(object);
-                Live::Present(yaml)
-            }
-            Err(e) if session_over(&e) => return Err(Error::from(e)),
-            Err(e) => live_failure(e),
-        };
-        let mut would_raw = None;
-        let would = match api
-            .patch(&name, &patch_params, &Patch::Apply(&parsed.object))
-            .await
-        {
-            Ok(object) => {
-                let yaml = editor_yaml(&object)?;
-                would_raw = Some(object);
-                Ok(yaml)
-            }
-            Err(e) if session_over(&e) => return Err(Error::from(e)),
-            Err(e) => Err(no_answer(e)),
-        };
+        let (live, live_raw) = live_of(api.get(&name).await)?;
+        let (would, would_raw) = would_of(
+            api.patch(&name, &patch_params, &Patch::Apply(&parsed.object))
+                .await,
+        )?;
 
         let same = match (&live_raw, &would_raw) {
             (Some(now), Some(after)) => unchanged(now, after),
@@ -360,6 +382,46 @@ pub async fn get_manifest(
 
 #[cfg(test)]
 mod dry_run_tests {
+
+    /// An expired session is not the cluster rejecting the document.
+    ///
+    /// A 401 filed with the 4xx refusals blocks Apply as though the YAML
+    /// were wrong and prints `CREDENTIALS_EXPIRED: …` — the app's own wire
+    /// marker — as the server's words. Both doors out were single `if`
+    /// guards inside a loop that only runs against a cluster, so both could
+    /// be deleted with the whole Rust suite green.
+    #[test]
+    fn an_expired_session_leaves_by_its_own_door_on_both_reads() {
+        let status = |code: u16, message: &str| {
+            kube::Error::Api(Box::new(kube::core::Status {
+                code,
+                message: message.to_string(),
+                reason: message.to_string(),
+                status: None,
+                details: None,
+                metadata: Option::default(),
+            }))
+        };
+
+        let live = live_of(Err(status(401, "Unauthorized")));
+        assert!(
+            matches!(live, Err(crate::error::Error::CredentialsExpired(_))),
+            "a 401 on the live read is the session, not the document"
+        );
+        let would = would_of(Err(status(401, "Unauthorized")));
+        assert!(
+            matches!(would, Err(crate::error::Error::CredentialsExpired(_))),
+            "and the same on the dry-run apply"
+        );
+
+        // And the refusal that IS about the document still arrives as one.
+        let (live, _) = live_of(Err(status(403, "deployments is forbidden")))
+            .expect("a 403 is answered, not escaped");
+        assert!(matches!(live, Live::Unread(_)));
+        let (would, _) =
+            would_of(Err(status(422, "Invalid"))).expect("a 422 is answered, not escaped");
+        assert!(matches!(would, Err(NoAnswer::Refused(_))));
+    }
 
     /// The one place the third state is actually built, and until now
     /// reachable only through a live cluster: every unit test made `Absent`

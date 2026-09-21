@@ -974,6 +974,74 @@ mod tests {
         assert!((nc.says_yes)(Some(0)));
     }
 
+    /// The third state, built where the wire carries it.
+    ///
+    /// `Exit::ok()` is `code == Some(0)`, so an exec whose status channel
+    /// never produced one — a dropped websocket, an apiserver that went away
+    /// mid-exec — is not ok and is not a no either. Four TypeScript tests
+    /// guard the half that consumes `unknown`; nothing guarded the half that
+    /// produces it, so `unknown: captured.exit.code.is_none()` could be
+    /// dropped or inverted here with the whole Rust suite green and the
+    /// screen would state "does not resolve" about a run that produced no
+    /// answer at all.
+    #[test]
+    fn an_exec_that_never_reported_how_it_ended_is_not_a_no() {
+        let silent = Captured {
+            stdout: Vec::new(),
+            stderr: String::new(),
+            exit: crate::files::Exit {
+                code: None,
+                missing_binary: false,
+                message: None,
+            },
+        };
+        let said = outcome(
+            "container",
+            Instant::now(),
+            vec!["getent".to_string()],
+            Some((
+                "getent".to_string(),
+                silent,
+                zero_is_yes,
+                getent_key_not_found,
+            )),
+            None,
+        );
+        assert!(said.unknown, "no exit code is the third state");
+        assert!(!said.ok, "and it is not a yes");
+        assert!(!said.said_no, "nor a no");
+        assert!(!said.tool_missing, "the tool was there and ran");
+    }
+
+    /// And the ordinary negative still says no, so the state above is a
+    /// state and not a way of never answering.
+    #[test]
+    fn a_rung_that_answered_no_says_no() {
+        let refused = Captured {
+            stdout: Vec::new(),
+            stderr: String::new(),
+            exit: crate::files::Exit {
+                code: Some(2),
+                missing_binary: false,
+                message: None,
+            },
+        };
+        let said = outcome(
+            "container",
+            Instant::now(),
+            vec!["getent".to_string()],
+            Some((
+                "getent".to_string(),
+                refused,
+                zero_is_yes,
+                getent_key_not_found,
+            )),
+            None,
+        );
+        assert!(said.said_no);
+        assert!(!said.unknown);
+    }
+
     /// The other half of the sentence, and the one that was missing: a rung
     /// has to say which of its failing exits is the tool answering "no".
     /// With none of them marked, the screen could never say "does not
