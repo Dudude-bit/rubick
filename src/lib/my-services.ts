@@ -135,9 +135,24 @@ export function stateOf(
     // cluster answering. "Client not found" and "Plugin not found" are this
     // app failing, and calling those a deleted workload sends somebody to
     // rebuild something that is still running.
+    // The kind as well as the name. A chain walks into the objects around
+    // this one, so "Resource not found: Service/payments" is about the
+    // Service — and marking the pinned Deployment of that name deleted
+    // sends somebody to recreate what is still running.
+    const quoted = (text: string) =>
+      text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const gone =
       /resource not found/i.test(error.message) &&
-      (!pin || error.message.includes(pin.name));
+      (!pin ||
+        // Escaped, because a name is data: `payments.v1` matched
+        // `paymentsXv1`, and a value with a bracket in it threw.
+        new RegExp(`\\b${quoted(pin.kind)}/${quoted(pin.name)}\\b`).test(
+          error.message
+        ) ||
+        // Some refusals name only the object, with no kind in front of it.
+        new RegExp(`not found:\\s*${quoted(pin.name)}\\b`, "i").test(
+          error.message
+        ));
     return gone ? { state: "gone" } : { state: "unread", why: error.message };
   }
   // A read that has not answered yet is not a read that failed: the card

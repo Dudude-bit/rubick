@@ -133,3 +133,26 @@ describe("what the alert said, on the object's own page", () => {
     expect(screen.queryByText(/KubePodCrashLooping/)).toBeNull();
   });
 });
+
+describe("the tone the banner wears", () => {
+  /**
+   * Amber for everything made a `critical` look like something that can
+   * wait and an `info` look like something that cannot. The banner and the
+   * panel now read the same table.
+   */
+  it("takes its colour from the alert's own severity", () => {
+    useAlertArrivalStore.setState({
+      reading: parseAlert(
+        ALERT.replace("Labels:", "Labels:\n - severity = critical")
+      )!,
+      at,
+    });
+
+    const { container } = render(
+      <AlertBanner {...at} namespace="shop" now={<span>Running</span>} />
+    );
+
+    expect(container.firstElementChild?.className).toContain("border-err");
+    expect(container.firstElementChild?.className).not.toContain("border-warn");
+  });
+});

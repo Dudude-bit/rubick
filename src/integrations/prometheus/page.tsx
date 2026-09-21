@@ -45,9 +45,14 @@ export default function PrometheusPage() {
               ? t("alerts", "rowFiring", { n: alerts.firing })
               : t("alerts", "markBroken", { n: alerts.broken }),
         }
-      : alerts?.shows === "count"
-        ? { shows: "count", of: alerts.of }
-        : null;
+      : alerts?.shows === "unchecked"
+        ? {
+            shows: "unchecked",
+            says: t("alerts", "markUnchecked", { n: alerts.of }),
+          }
+        : alerts?.shows === "count"
+          ? { shows: "count", of: alerts.of }
+          : null;
 
   const tabs: DetailTab[] = [
     ...(picture.data === undefined || operatorHere

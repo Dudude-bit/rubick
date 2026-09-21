@@ -37,6 +37,7 @@ import {
   RULES_CRD,
   readRule,
   rowsOf,
+  ruleKey,
   type RuleGroup,
   type RuleRow,
   type RuleState,
@@ -50,7 +51,7 @@ const GROUPS: readonly RuleGroup[] = [
   "unchecked",
 ];
 
-const keyOf = (row: RuleRow) => `${row.object.namespace}/${row.object.name}`;
+const keyOf = ruleKey;
 
 const TONE: Record<RuleGroup, RowTone> = {
   firing: "err",
@@ -168,8 +169,10 @@ export default function Alerts() {
         {selected ? (
           <Detail key={keyOf(selected)} row={selected} picture={picture.data} />
         ) : (
+          // The list beside this already says why it is empty. Saying it
+          // again here put the same sentence on the screen twice.
           <p className="text-[11.5px] text-fg-mut">
-            {rows.length === 0 ? t("alerts", "none") : t("alerts", "noneMatch")}
+            {rows.length === 0 ? null : t("alerts", "pickOne")}
           </p>
         )}
       </div>
@@ -339,9 +342,15 @@ function Ladder({
           </button>
         ))}
       </div>
+      {/*
+        The focus stays on the box and the arrows move `selected`, so the row
+        a screen reader announces is whatever `aria-activedescendant` points
+        at. Without it the highlight moved and the reader heard nothing.
+      */}
       <div
         role="listbox"
         aria-label={t("alerts", "filterLabel")}
+        aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         className="flex flex-col rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
@@ -385,6 +394,11 @@ function Ladder({
   );
 }
 
+/** One row's id, which is how the listbox names what it has selected. */
+function rowDomId(row: RuleRow): string {
+  return `alert-rule-${keyOf(row)}`;
+}
+
 function Row({
   row,
   prefix,
@@ -405,6 +419,7 @@ function Row({
     : row.object.name;
   return (
     <div
+      id={rowDomId(row)}
       role="option"
       aria-selected={on}
       onClick={() => onSelect(row)}

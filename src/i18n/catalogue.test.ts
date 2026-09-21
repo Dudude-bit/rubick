@@ -69,3 +69,30 @@ describe("the words the settings search matches on", () => {
     expect(String(ru.settings[key])).toMatch(/[а-яё]/i);
   });
 });
+
+describe("counting in a language with more than two forms", () => {
+  /**
+   * A number followed by a noun has to be a `Plural`, or the translation
+   * cannot say "1 алерт / 2 алерта / 5 алертов" — the key accepts one
+   * string and Russian gets whichever form the writer happened to pick.
+   * Seven of these shipped: "2 горит", "1 объектов", "названо 1".
+   *
+   * The scan looks for `{n}` followed by a word, which is the shape that
+   * needs agreement. `{n} of {total}` and a bare `{n}` beside a label do
+   * not, and are not flagged.
+   */
+  it("keeps a counted noun out of a flat string", () => {
+    const flat: string[] = [];
+    for (const [section, keys] of Object.entries(en)) {
+      for (const [key, value] of Object.entries(
+        keys as Record<string, unknown>
+      )) {
+        if (typeof value !== "string") continue;
+        if (value.includes("{total}")) continue;
+        if (/\{n\}\s+[a-zA-Zа-яА-Я]+s\b/.test(value))
+          flat.push(`${section}.${key}: ${value}`);
+      }
+    }
+    expect(flat).toEqual([]);
+  });
+});

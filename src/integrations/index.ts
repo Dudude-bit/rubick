@@ -829,7 +829,7 @@ export interface IntegrationPageEntry {
    * nothing. `null` wherever {@link count} is, and for a vendor whose page
    * declares no opinion.
    */
-  tone: "warn" | "err" | null;
+  tone: "warn" | "err" | "unchecked" | null;
   /**
    * Whether {@link path} is the vendor's own screen or its Settings row.
    * The caller needs it because the second kind shares one route between
@@ -948,7 +948,7 @@ export function useIntegrationPages(): {
       } as UseQueryOptions<
         unknown,
         Error,
-        { count: number | null; tone: "warn" | "err" | null }
+        { count: number | null; tone: "warn" | "err" | "unchecked" | null }
       >;
     }),
   });

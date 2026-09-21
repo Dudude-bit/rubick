@@ -840,6 +840,7 @@ export interface ShareTargetInput {
   kind: string;
   public: boolean;
   apiKey: string | null;
+  importKey: boolean;
 }
 
 export interface ShareTargetInfo {

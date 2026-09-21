@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Plus, Trash2 } from "lucide-react";
 
@@ -32,6 +32,8 @@ interface Draft {
   apiKey: string;
   /** A stored key stays stored while the field is empty. */
   hasKey: boolean;
+  /** Save with the key this machine's CLI holds, which never crosses IPC. */
+  importKey: boolean;
 }
 
 const BLANK: Draft = {
@@ -42,6 +44,7 @@ const BLANK: Draft = {
   public: true,
   apiKey: "",
   hasKey: false,
+  importKey: false,
 };
 
 export function SharingSettings() {
@@ -49,6 +52,15 @@ export function SharingSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Which form is open, counted rather than compared: the import is answered
+  // a moment later, and by then the reader may have pressed Cancel or opened
+  // another target. Applying that answer to whatever form is open by then
+  // wrote one target's key into another target's row.
+  const formSeq = useRef(0);
+  const openForm = (next: Draft | null) => {
+    formSeq.current += 1;
+    setDraft(next);
+  };
 
   const targets = useQuery({
     queryKey: TARGETS_KEY,
@@ -64,7 +76,7 @@ export function SharingSettings() {
 
   const saved = () => {
     void queryClient.invalidateQueries({ queryKey: TARGETS_KEY });
-    setDraft(null);
+    openForm(null);
   };
 
   const save = useMutation({
@@ -77,15 +89,16 @@ export function SharingSettings() {
         public: value.public,
         // Empty means "keep whatever is stored", which is why it is not sent.
         apiKey: value.apiKey.trim() === "" ? null : value.apiKey.trim(),
+        importKey: value.importKey,
       }),
     onSuccess: saved,
-    onError: failed(t("share", "publishFailed")),
+    onError: failed(t("share", "saveTargetFailed")),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => commands.removeShareTarget(id),
     onSuccess: saved,
-    onError: failed(t("share", "publishFailed")),
+    onError: failed(t("share", "removeTargetFailed")),
   });
 
   const verify = useMutation({
@@ -101,16 +114,28 @@ export function SharingSettings() {
   });
 
   const importKey = useMutation({
-    mutationFn: () => commands.importPostplanKey(),
-    onSuccess: (key) => {
-      if (!key) {
+    mutationFn: async () => ({
+      at: formSeq.current,
+      tail: await commands.importPostplanKey(),
+    }),
+    onSuccess: ({ at, tail }) => {
+      // The form it was asked from has been closed or replaced since.
+      if (at !== formSeq.current) return;
+      if (!tail) {
         toast({ title: t("share", "noPostplanKey") });
         return;
       }
-      setDraft((previous) => ({ ...(previous ?? BLANK), apiKey: key }));
-      toast({ title: t("share", "importedPostplan") });
+      // The key itself stays in the backend: what arrives is its last few
+      // characters, enough to recognise, and the save says "use that one".
+      setDraft((previous) => ({
+        ...(previous ?? BLANK),
+        apiKey: "",
+        hasKey: true,
+        importKey: true,
+      }));
+      toast({ title: t("share", "importedPostplan", { key: tail }) });
     },
-    onError: failed(t("share", "verifyFailed")),
+    onError: failed(t("share", "importFailed")),
   });
 
   return (
@@ -139,7 +164,7 @@ export function SharingSettings() {
               key={target.id}
               target={target}
               onEdit={() =>
-                setDraft({
+                openForm({
                   id: target.id,
                   label: target.label,
                   apiUrl: target.apiUrl,
@@ -147,6 +172,7 @@ export function SharingSettings() {
                   public: target.public,
                   apiKey: "",
                   hasKey: target.hasKey,
+                  importKey: false,
                 })
               }
               onVerify={() => verify.mutate(target.id)}
@@ -217,7 +243,14 @@ export function SharingSettings() {
                 }
                 value={draft.apiKey}
                 onChange={(event) =>
-                  setDraft({ ...draft, apiKey: event.target.value })
+                  // Typing a key means this key: the save prefers the CLI's
+                  // when `importKey` stands, so leaving it set here ignored
+                  // what the reader just typed.
+                  setDraft({
+                    ...draft,
+                    apiKey: event.target.value,
+                    importKey: false,
+                  })
                 }
                 className="h-7 font-mono text-xs"
               />
@@ -240,7 +273,7 @@ export function SharingSettings() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setDraft(null)}
+                  onClick={() => openForm(null)}
                 >
                   {t("action", "cancel")}
                 </Button>
@@ -251,7 +284,7 @@ export function SharingSettings() {
               size="sm"
               variant="outline"
               className="self-start"
-              onClick={() => setDraft(BLANK)}
+              onClick={() => openForm(BLANK)}
             >
               <Plus aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
               {t("share", "addTarget")}
@@ -290,7 +323,7 @@ function TargetRow({
       <button
         type="button"
         onClick={onEdit}
-        className="min-w-0 flex-1 text-left hover:underline"
+        className="min-w-0 flex-1 rounded px-0.5 text-left hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
       >
         <span className="text-fg">{target.label}</span>{" "}
         <span className="font-mono text-[11px] text-fg-fnt">{target.host}</span>

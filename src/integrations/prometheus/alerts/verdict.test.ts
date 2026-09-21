@@ -117,6 +117,23 @@ describe("the sentence the Alerts card leads with", () => {
     );
     expect(quiet.body).toBe(translate("en", "monitors", "nothingToDo"));
   });
+  /**
+   * A rule object whose pick-up could not be judged — the Prometheus list
+   * was refused — is not a quiet one. Deleting that arm left "nothing to
+   * do here" over a page that had not read who loads these rules.
+   */
+  it("does not give the quiet verdict when nobody could say who picks it up", () => {
+    const unknown = rowsOf(
+      [object],
+      { state: "unread", reason: "prometheuses is forbidden" },
+      namespaces,
+      { state: "read", rules: [] }
+    )[0];
+
+    expect(verdictOf(unknown, 1, t).head).not.toBe(
+      translate("en", "alerts", "verdictQuiet", { n: 1 })
+    );
+  });
 });
 
 describe("the row's own few words", () => {

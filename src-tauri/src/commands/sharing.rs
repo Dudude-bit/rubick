@@ -87,10 +87,27 @@ pub struct ShareTargetInput {
     pub public: bool,
     /// Absent leaves whatever key is stored; empty clears it.
     pub api_key: Option<String>,
+    /// Take the key from this machine's `postplan` CLI instead of sending it.
+    ///
+    /// The import used to hand the bearer key to the renderer, which then
+    /// sent it straight back: two crossings of a boundary the key has no
+    /// business on, for a value the window only ever showed as dots.
+    #[serde(default)]
+    pub import_key: bool,
 }
 
 fn read_sharing() -> Result<SharingConfig> {
-    Ok(AppConfig::load()?.sharing)
+    // `toml` renders the line it failed on, and in this file that line is as
+    // likely as any to be the bearer key these targets hold. The reader is
+    // told the file did not parse; the text of it stays out of the IPC answer
+    // the way it already stays out of the log.
+    match AppConfig::load() {
+        Ok(config) => Ok(config.sharing),
+        Err(why) => Err(Error::Config(format!(
+            "config.toml did not parse: {}",
+            crate::auth::for_the_log(&why.to_string())
+        ))),
+    }
 }
 
 fn write_sharing(sharing: SharingConfig) -> Result<()> {
@@ -137,16 +154,25 @@ pub async fn save_share_target(input: ShareTargetInput) -> Result<ShareTargetInf
     let drafts = existing
         .map(|index| sharing.targets[index].drafts.clone())
         .unwrap_or_default();
+    let imported = if input.import_key {
+        Some(postplan_key()?.ok_or_else(|| {
+            Error::InvalidInput("this machine's postplan CLI has no key".to_string())
+        })?)
+    } else {
+        None
+    };
     let target = ShareTarget {
         id: id.clone(),
         label: input.label,
         api_url: input.api_url,
         kind: input.kind,
         public: input.public,
-        api_key: input
-            .api_key
-            .filter(|key| !key.trim().is_empty())
-            .or(kept_key),
+        api_key: imported.or_else(|| {
+            input
+                .api_key
+                .filter(|key| !key.trim().is_empty())
+                .or(kept_key)
+        }),
         drafts,
     };
     let info = ShareTargetInfo::from(&target);
@@ -257,7 +283,11 @@ pub async fn publish_report(
         .await
         .map_err(|e| Error::InvalidInput(format!("{}: {e}", host_of(&target.api_url))))?;
     let status = response.status();
-    let answer: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
+    let body = response.json::<serde_json::Value>().await;
+    // Only where the answer is the failure's own words: a success that did
+    // not parse is handled below, because "published" with no link is a
+    // claim about somebody's report that nothing answered for.
+    let answer = body.as_ref().cloned().unwrap_or(serde_json::Value::Null);
     if !status.is_success() {
         // A draft the target no longer has is the one failure worth retrying
         // on its own: the reader's next share should open a new link rather
@@ -277,11 +307,22 @@ pub async fn publish_report(
         )));
     }
 
+    // The publish this app offers is a link somebody can open. A 2xx with a
+    // body that is not JSON, or one that names no `publicUrl`, left the
+    // dialog saying "Published, version 1" over nothing to click.
+    let link = answer
+        .get("publicUrl")
+        .and_then(|v| v.as_str())
+        .filter(|url| !url.trim().is_empty());
+    if body.is_err() || link.is_none() {
+        return Err(Error::InvalidInput(format!(
+            "{} accepted the report but returned no link to it",
+            host_of(&target.api_url)
+        )));
+    }
+
     let published = Published {
-        url: answer
-            .get("publicUrl")
-            .and_then(|v| v.as_str())
-            .map(str::to_owned),
+        url: link.map(str::to_owned),
         raw_url: answer
             .get("rawUrl")
             .and_then(|v| v.as_str())
@@ -315,15 +356,47 @@ fn forget_draft(sharing: &mut SharingConfig, target_id: &str, object: &str) {
 /// find their key again, and one who has not gets told there is nothing here.
 #[tauri::command]
 pub async fn import_postplan_key() -> Result<Option<String>> {
+    // The last few characters, which is enough for a reader to recognise the
+    // key they already know and useless to anybody who does not have it.
+    Ok(postplan_key()?.map(|key| tail_of(&key)))
+}
+
+/// What a reader is shown of a key they already have.
+fn tail_of(key: &str) -> String {
+    let tail: String = key
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("…{tail}")
+}
+
+/// The bearer key this machine's `postplan` CLI stores, read in the backend.
+fn postplan_key() -> Result<Option<String>> {
     let Some(home) = dirs::home_dir() else {
         return Ok(None);
     };
     let path = home.join(".postplan").join("credentials.json");
-    let Ok(raw) = std::fs::read_to_string(&path) else {
-        return Ok(None);
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        // Only "there is no such file" is an answer of no key. A file this
+        // user may not read is a refusal, and saying "nothing here" about it
+        // sends them to look for a key they already have.
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        // The reason, not the absolute path: `~/.postplan/credentials.json`
+        // is what the reader was told to put there, and their home directory
+        // has no business crossing the IPC boundary to say "denied".
+        Err(why) => {
+            return Err(Error::InvalidInput(format!(
+                "~/.postplan/credentials.json: {why}"
+            )));
+        }
     };
     let parsed: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| Error::InvalidInput(format!("{}: {e}", path.display())))?;
+        .map_err(|e| Error::InvalidInput(format!("~/.postplan/credentials.json: {e}")))?;
     Ok(parsed
         .get("apiKey")
         .and_then(|v| v.as_str())
@@ -355,6 +428,51 @@ mod tests {
         let json = serde_json::to_string(&info).expect("serialise");
         assert!(!json.contains("secret-key"), "{json}");
         assert!(json.contains("\"hasKey\":true"));
+    }
+
+    /// The import used to hand the bearer key to the window, which sent it
+    /// straight back on save: two crossings for a value the window only
+    /// ever drew as dots. What crosses now is the last four characters.
+    #[test]
+    fn the_imported_key_is_named_by_its_tail_and_not_by_itself() {
+        let answer = super::tail_of("pp_live_7f3a19bc4d2e");
+        assert_eq!(answer, "…4d2e");
+        assert!(!answer.contains("pp_live"), "{answer}");
+    }
+
+    /// A target that answers 200 with an empty `publicUrl` has published
+    /// nothing a reader can open, and the dialog said "Published, version 1"
+    /// over a link that goes nowhere.
+    #[test]
+    fn a_link_that_is_an_empty_string_is_not_a_link() {
+        let answer = serde_json::json!({ "publicUrl": "   " });
+        let link = answer
+            .get("publicUrl")
+            .and_then(|v| v.as_str())
+            .filter(|url| !url.trim().is_empty());
+        assert!(link.is_none());
+
+        let real = serde_json::json!({ "publicUrl": "https://plans.example.com/r/1" });
+        assert!(real
+            .get("publicUrl")
+            .and_then(|v| v.as_str())
+            .is_some_and(|url| !url.trim().is_empty()));
+    }
+
+    /// And the save has a way to ask for that key without carrying it.
+    #[test]
+    fn a_target_may_be_saved_against_the_cli_key_it_never_saw() {
+        let json = serde_json::json!({
+            "label": "internal",
+            "apiUrl": "https://plans.example.com",
+            "kind": "postplan",
+            "public": false,
+            "apiKey": null,
+            "importKey": true
+        });
+        let input: ShareTargetInput = serde_json::from_value(json).expect("parse");
+        assert!(input.import_key);
+        assert!(input.api_key.is_none());
     }
 
     #[test]

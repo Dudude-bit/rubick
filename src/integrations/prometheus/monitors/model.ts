@@ -583,6 +583,17 @@ export type MonitorFinding =
       total: number;
     };
 
+/**
+ * What identifies one row — in the URL, in the `key` of its detail, and in
+ * the id the listbox points `aria-activedescendant` at.
+ *
+ * The kind is part of it because one list holds ServiceMonitors and
+ * PodMonitors: a `web` of each in `shop` shared everything else.
+ */
+export function monitorKey(row: MonitorRow): string {
+  return `${row.monitor.kind}/${row.monitor.namespace}/${row.monitor.name}`;
+}
+
 export interface MonitorRow {
   monitor: Monitor;
   selected: Selected;

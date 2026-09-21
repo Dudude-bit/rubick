@@ -127,7 +127,67 @@ describe("the file the reader hands to somebody else", () => {
     );
 
     await waitFor(() => expect(result.current.report).not.toBeNull());
-    expect(result.current.report!.chain.length).toBeGreaterThan(0);
+    const chain = result.current.report!.chain;
+    expect(chain.length).toBeGreaterThan(0);
+    // The stop is a fact the graph established, not a hole in it: the row
+    // says so, and `known: false` would file it under "could not look".
+    expect(chain.at(-1)!.known).toBe(true);
+  });
+
+  /**
+   * A Gateway API stop carries a `route` and a `gateway` and neither of the
+   * field names the old guess looked for, so the sharpest row in the file
+   * named an object with no kind and no name.
+   */
+  it("names the object a Gateway API stop is about", async () => {
+    const { result } = build(
+      read({
+        stops: [
+          {
+            reason: "routeNotAccepted",
+            route: {
+              kind: "HTTPRoute",
+              name: "shop",
+              namespace: "shop",
+              existence: "present",
+              facts: null,
+            },
+            gateway: {
+              kind: "Gateway",
+              name: "public",
+              namespace: "infra",
+              existence: "present",
+              facts: null,
+            },
+            conditionReason: "NotAllowedByListeners",
+            message: null,
+          },
+        ] as never,
+      })
+    );
+
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    const stop = result.current.report!.chain.at(-1)!;
+    expect(stop.from).toContain("shop");
+    expect(stop.from).not.toBe("");
+  });
+
+  /**
+   * A read still running is not a read that failed. Both arrive as no chain
+   * at all, and the file said "could not be read" about a request that was
+   * still in flight when the report was built.
+   */
+  it("tells a chain still being read from one that was refused", async () => {
+    const { result } = build({
+      data: undefined,
+      error: null,
+      isPending: true,
+    });
+
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    const unread = result.current.report!.chainUnread;
+    expect(unread).not.toBeNull();
+    expect(unread).not.toContain("forbidden");
   });
 
   /**

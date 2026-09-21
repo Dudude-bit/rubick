@@ -931,6 +931,10 @@ export function CommandPalette() {
       setScope({ kind: "current" });
       setWake(null);
       setSelectedId(null);
+      // The alert too: a reader who pasted one, closed the palette and
+      // pressed ⌘K again got the same alert's panel back instead of the
+      // search box, and the field no longer answered to typing.
+      setAlert(null);
     }
   }, [open]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -981,10 +985,13 @@ export function CommandPalette() {
             autoFocus
             aria-label={t("action", "searchResourcesActionsPages")}
             role="combobox"
-            aria-expanded
-            aria-controls={listId}
+            // While an alert is being read there is no listbox under this
+            // box at all — the panel has its own controls — so the box
+            // pointed a screen reader at elements that are not in the DOM.
+            aria-expanded={alert === null}
+            aria-controls={alert === null ? listId : undefined}
             aria-activedescendant={
-              activeId ? `${listId}-${activeId}` : undefined
+              alert === null && activeId ? `${listId}-${activeId}` : undefined
             }
             placeholder={
               scopeLabel
@@ -1018,7 +1025,16 @@ export function CommandPalette() {
 
         {alert !== null ? (
           <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
-            <AlertReadingPanel reading={alert} onOpen={openFromAlert} />
+            {/*
+              Keyed by the alert itself: the panel holds which cluster,
+              object and namespace the reader picked, and a second paste
+              into the same panel kept the first alert's answers.
+            */}
+            <AlertReadingPanel
+              key={alertKey(alert)}
+              reading={alert}
+              onOpen={openFromAlert}
+            />
           </div>
         ) : (
           <div
@@ -1087,6 +1103,21 @@ export function CommandPalette() {
       </DialogContent>
     </Dialog>
   );
+}
+
+/** What makes one pasted alert a different alert from the last one. */
+function alertKey(reading: AlertReading): string {
+  // Encoded rather than joined: a label's value may itself hold the
+  // separator, and two different alerts would then share a key — which is
+  // the panel keeping the first one's picks for the second.
+  return JSON.stringify([
+    reading.alertName,
+    reading.firedAt?.value ?? null,
+    reading.cluster?.value ?? null,
+    reading.namespace?.value ?? null,
+    reading.objects.map((o) => [o.kind, o.name]),
+    reading.unkeyed,
+  ]);
 }
 
 function FootKey({

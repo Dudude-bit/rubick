@@ -732,7 +732,7 @@ function NavRow({
    * The count itself stays quiet — inventory is not allowed to borrow a
    * colour — so this one pixel is the row's whole opinion.
    */
-  mark?: "warn" | "err";
+  mark?: "warn" | "err" | "unchecked";
   /**
    * The authorizer says this reader may not list what the row leads to.
    *
@@ -808,15 +808,27 @@ function NavRow({
             value !== null && (
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
                 {mark && (
+                  // A hollow ring for "could not be checked", the same shape
+                  // the tab strip wears: a page that says nobody looked had
+                  // a plain number beside it here.
                   <span
+                    // A label on a plain span is announced by nothing: the
+                    // dot is the whole message here, so it says what it is.
+                    role="img"
                     aria-label={
                       mark === "err"
                         ? t("cluster", "markBroken")
-                        : t("cluster", "markWorthALook")
+                        : mark === "warn"
+                          ? t("cluster", "markWorthALook")
+                          : t("cluster", "markUnchecked")
                     }
                     className={cn(
                       "h-1.5 w-1.5 flex-none rounded-full",
-                      mark === "err" ? "bg-err" : "bg-warn"
+                      mark === "err"
+                        ? "bg-err"
+                        : mark === "warn"
+                          ? "bg-warn"
+                          : "border border-fg-fnt"
                     )}
                   />
                 )}

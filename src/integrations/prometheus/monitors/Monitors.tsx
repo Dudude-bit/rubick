@@ -27,6 +27,7 @@ import {
   POD_MONITORS_CRD,
   SERVICE_MONITORS_CRD,
   groupOf,
+  monitorKey,
   sharedPrefix,
   type Group,
   type Kind,
@@ -36,8 +37,10 @@ import {
 
 const GROUPS: readonly Group[] = ["broken", "waiting", "scraped", "unchecked"];
 
-const keyOf = (row: MonitorRow) =>
-  `${row.monitor.namespace}/${row.monitor.name}`;
+/** One row's id, which is how the listbox names what it has selected. */
+const rowDomId = (row: MonitorRow) => `monitor-${keyOf(row)}`;
+
+const keyOf = monitorKey;
 
 export default function Monitors() {
   const t = useT();
@@ -135,10 +138,10 @@ export default function Monitors() {
         {selected ? (
           <Detail key={keyOf(selected)} row={selected} picture={picture.data} />
         ) : (
+          // The list beside this already says why it is empty. Saying it
+          // again here put the same sentence on the screen twice.
           <p className="text-[11.5px] text-fg-mut">
-            {rows.length === 0
-              ? t("monitors", "none")
-              : t("monitors", "noneMatch")}
+            {rows.length === 0 ? null : t("monitors", "pickOne")}
           </p>
         )}
       </div>
@@ -422,6 +425,9 @@ function Ladder({
       <div
         role="listbox"
         aria-label={t("monitors", "filterMonitorsLabel")}
+        // The arrows move the highlight while focus stays here, so this is
+        // the only thing that tells a screen reader which row is on.
+        aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         className="flex flex-col outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
@@ -524,6 +530,7 @@ function Row({
       : null;
   return (
     <div
+      id={rowDomId(row)}
       role="option"
       aria-selected={on}
       onClick={() => onSelect(row)}

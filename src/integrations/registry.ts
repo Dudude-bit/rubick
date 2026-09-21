@@ -948,7 +948,7 @@ export interface PageCount {
    * count itself. Read from the same payload `select` reads, so the dot
    * never costs a query the row was not already paying for.
    */
-  tone?: (data: never) => "warn" | "err" | null;
+  tone?: (data: never) => "warn" | "err" | "unchecked" | null;
   staleTime: number;
 }
 
@@ -962,7 +962,7 @@ export function pageCount<T>(count: {
   queryKey: readonly unknown[];
   queryFn: () => Promise<T>;
   select: (data: T) => number | null;
-  tone?: (data: T) => "warn" | "err" | null;
+  tone?: (data: T) => "warn" | "err" | "unchecked" | null;
   staleTime: number;
 }): PageCount {
   return count as PageCount;

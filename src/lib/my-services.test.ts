@@ -180,6 +180,68 @@ describe("stateOf", () => {
   });
 
   /**
+   * A neighbourhood read walks into the objects around this one, so its
+   * 404 may be about any of them. Matching the name alone marked a pinned
+   * `Deployment/payments` deleted because a `Service/payments` beside it
+   * was — and sent somebody to recreate what was still running.
+   */
+  it("does not call this workload gone because a namesake of another kind is", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Service/payments in namespace shop" },
+        pin
+      ).state
+    ).toBe("unread");
+
+    expect(
+      stateOf(
+        undefined,
+        {
+          message: "Resource not found: Deployment/payments in namespace shop",
+        },
+        pin
+      ).state
+    ).toBe("gone");
+  });
+
+  /**
+   * A name is data, not a pattern. `payments.v1` matched `paymentsXv1`
+   * because the dot went into a `RegExp` unescaped, and a value carrying a
+   * bracket threw where it was built.
+   */
+  it("reads a name with a dot in it as that name and no other", () => {
+    const pin = { kind: "Deployment", name: "payments.v1" };
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/paymentsXv1 in shop" },
+        pin
+      ).state
+    ).toBe("unread");
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/payments.v1 in shop" },
+        pin
+      ).state
+    ).toBe("gone");
+
+    // And a name no regex would survive is read, not thrown on.
+    expect(() =>
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/weird[ in shop" },
+        { kind: "Deployment", name: "weird[" }
+      )
+    ).not.toThrow();
+  });
+
+  /**
    * Either half alone is enough: the pin says what was pinned, the read says
    * what the cluster answered about, and a card whose read has not caught up
    * with the other must not go green on nothing.
@@ -278,6 +340,10 @@ describe("entryPointsOf", () => {
       "payments",
     ]);
     expect(entries[0].url).toBe("https://shop.example.com");
+    // An address is an address. Whether anything answers on it is the
+    // published hop's answer, and claiming to know here draws "nothing
+    // behind it" in warning colours over a question nobody asked.
+    expect(entries[0].servingKnown).toBe(false);
   });
 
   it("says whether anything is behind the service, and whether that was read", () => {

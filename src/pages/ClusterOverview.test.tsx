@@ -21,6 +21,7 @@ vi.mock("@/lib/commands", () => ({
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
+import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { ClusterOverview } from "./ClusterOverview";
 
 const getClusterOverview = vi.mocked(commands.getClusterOverview);
@@ -91,5 +92,42 @@ describe("what the overview does when the read is refused", () => {
     expect(
       screen.queryByText(/do not have permission to read the whole cluster/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("what stands when the cluster-wide read does not", () => {
+  /**
+   * The pinned list is read per object and owes nothing to the cluster-wide
+   * answer. It sat behind the refusal branch, so the reader it exists for —
+   * the one whose token reads their own workloads and not the cluster —
+   * opened a home page with the refusal on it and nothing else.
+   */
+  it("keeps the pinned services on screen when the overview is refused", async () => {
+    usePinnedServicesStore.setState({
+      pins: [
+        {
+          context: "prod",
+          kind: "Deployment",
+          namespace: "shop",
+          name: "payments",
+          pinnedAt: 1,
+        },
+      ],
+    });
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    getClusterOverview.mockRejectedValue(
+      'pods is forbidden: User "kc" cannot list resource "pods" (code: 403)'
+    );
+
+    mount();
+
+    // The refusal first, so this asserts about the refused screen and not
+    // about the skeleton that precedes it.
+    await waitFor(() =>
+      expect(
+        screen.getByText(/do not have permission to read the whole cluster/i)
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByText("payments")).toBeVisible();
   });
 });

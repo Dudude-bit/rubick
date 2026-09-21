@@ -16,6 +16,9 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import type { PodInfo } from "@/generated/types";
 
+/** One array, so "no lines yet" is the same value on every render. */
+const EMPTY_LINES: string[] = [];
+
 const LOG_LINES = 40;
 const STALE = 15_000;
 
@@ -216,5 +219,9 @@ export function useHintChain(
     t,
   ]);
 
-  return { chain, logLines: logs.data ?? [], logContainer, previous };
+  // A fresh `[]` every call is a new dependency every render, and the report
+  // it feeds is rebuilt each time — see `usePodReport`, whose memo lists it.
+  const logLines = useMemo(() => logs.data ?? EMPTY_LINES, [logs.data]);
+
+  return { chain, logLines, logContainer, previous };
 }
