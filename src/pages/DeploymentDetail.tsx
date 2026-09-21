@@ -76,6 +76,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
+import { PinAction } from "@/components/services/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -558,6 +559,7 @@ export function DeploymentDetail() {
         onBack={goBack}
         actions={
           <>
+            <PinAction kind="Deployment" namespace={namespace} name={name} />
             <DetailAction
               label={t("action", "scale")}
               icon={Scale}

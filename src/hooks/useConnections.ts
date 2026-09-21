@@ -10,7 +10,7 @@
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { STALE_TIMES } from "@/lib/refresh";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import type { ResourceConnections } from "@/generated/types";
@@ -29,7 +29,15 @@ export function useConnections(
    * per keystroke. The query key is unchanged, so a page that has already
    * asked answers the peek from the cache.
    */
-  enabled = true
+  enabled = true,
+  /**
+   * How often to ask again.
+   *
+   * A page reading one neighbourhood follows the detail pages. A screen
+   * holding a dozen of them at once is a different bill for the same query,
+   * and says so here rather than polling the cluster a dozen times over.
+   */
+  refresh: RefreshRate = "slow"
 ) {
   // The cluster's cached Gateway API scan rides along so the backend can
   // draw route hops without a CRD list of its own. It joins the query key:
@@ -51,7 +59,7 @@ export function useConnections(
     // the list pages rather than sitting on a stale answer.
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceDetail,
-    refresh: "slow",
+    refresh,
     retry: false,
   });
 }
