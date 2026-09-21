@@ -22,6 +22,7 @@ import { describeTermination, lastTermination } from "@/lib/pod-status";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT, type T } from "@/i18n/useT";
+import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import { useLocale } from "@/stores/localeStore";
 import type {
   EventInfo,
@@ -237,10 +238,17 @@ export function usePodReport(
     () => (pod ? troubleOf(pod, events) : null),
     [pod, events]
   );
+  // The same two settings the panel reads. The report used to ask for logs
+  // on every pod page whatever they said, so turning «Most likely» off
+  // stopped the panel and not the reading behind it.
+  const showPanel = useHintSettingsStore((state) => state.showPanel);
+  const includeLogLines = useHintSettingsStore(
+    (state) => state.includeLogLines
+  );
   const { chain, logLines, logContainer, previous } = useHintChain(
     pod ?? EMPTY_POD,
     trouble,
-    pod !== undefined
+    pod !== undefined && showPanel
   );
   const version = useQuery({
     queryKey: ["app-info"],
@@ -302,15 +310,18 @@ export function usePodReport(
       chain: chainOf(connections.data, t),
       chainUnread,
       changes: changesOf(journal, context, pod, t),
-      logs: logContainer
-        ? [
-            {
-              source: `${pod.name}/${logContainer}`,
-              lines: logLines,
-              previous,
-            },
-          ]
-        : [],
+      // A source with no lines under it is a heading over nothing: the
+      // reader turned the lines off, or the app never read them.
+      logs:
+        logContainer && includeLogLines && logLines.length > 0
+          ? [
+              {
+                source: `${pod.name}/${logContainer}`,
+                lines: logLines,
+                previous,
+              },
+            ]
+          : [],
       notRead,
       link: buildDeepLink(context, path),
       words: words(t, locale),
@@ -328,6 +339,7 @@ export function usePodReport(
     silence,
     logContainer,
     logLines,
+    includeLogLines,
     previous,
     version.data,
     path,

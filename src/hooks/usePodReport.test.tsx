@@ -6,11 +6,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 const listNodes = vi.fn<(namespace: string | null) => Promise<unknown[]>>(
   async () => []
 );
+const getPodLogs = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
+  async () => [{ raw: "connecting to db", message: "connecting to db" }]
+);
 vi.mock("@/lib/commands", () => ({
   commands: {
     getAppInfo: vi.fn(async () => ({ version: "4.18.0" })),
     listNodes: (namespace: string | null) => listNodes(namespace),
-    getPodLogs: vi.fn(async () => []),
+    getPodLogs: (...args: unknown[]) => getPodLogs(...args),
     listServices: vi.fn(async () => []),
     getEndpoints: vi.fn(async () => null),
     listNetworkPolicies: vi.fn(async () => []),
@@ -19,6 +22,7 @@ vi.mock("@/lib/commands", () => ({
 
 import type { PodInfo, ResourceConnections } from "@/generated/types";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
+import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePodReport } from "./usePodReport";
 
@@ -29,7 +33,23 @@ const pod = {
   nodeName: "node-a",
   podIp: "10.244.0.9",
   status: { display: "CrashLoopBackOff", ready: false },
-  containers: [],
+  volumes: [],
+  containers: [
+    {
+      name: "app",
+      image: "shop/payments:2.14.1",
+      ready: false,
+      restartCount: 7,
+      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      lastTerminated: {
+        exitCode: 1,
+        signal: null,
+        reason: "Error",
+        startedAt: null,
+        finishedAt: null,
+      },
+    },
+  ],
   initContainers: [],
 } as unknown as PodInfo;
 
@@ -65,6 +85,7 @@ describe("the file the reader hands to somebody else", () => {
     listNodes.mockResolvedValue([]);
     useClusterStore.setState({ currentContext: "prod-eu" });
     useChangeJournalStore.setState({ entries: [] });
+    useHintSettingsStore.setState({ showPanel: true, includeLogLines: true });
   });
 
   /**
@@ -201,5 +222,27 @@ describe("the file the reader hands to somebody else", () => {
     rerender();
 
     expect(result.current.report!.capturedAt).toBe(first);
+  });
+
+  /**
+   * Turning «Most likely» off stops the reading behind it, not only the
+   * panel. The report asked for the previous run's logs on every pod page
+   * whatever the setting said — the read the setting exists to prevent.
+   */
+  it("does not read logs when the reader turned the panel off", async () => {
+    // With the panel on, the lines are there — so the assertion below is
+    // about the setting and not about an empty mock.
+    const on = build(read());
+    await waitFor(() =>
+      expect(on.result.current.report?.logs[0]?.lines.length).toBeGreaterThan(0)
+    );
+    on.unmount();
+    getPodLogs.mockClear();
+
+    useHintSettingsStore.setState({ showPanel: false });
+    const { result } = build(read());
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    expect(result.current.report!.logs).toHaveLength(0);
+    expect(getPodLogs).not.toHaveBeenCalled();
   });
 });
