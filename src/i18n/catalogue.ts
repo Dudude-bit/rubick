@@ -3670,7 +3670,7 @@ export const en = {
     sectionSharing: "Sharing",
     sectionSharingHint:
       "Where a report may be published, and the key that lets it.",
-    sharingWords: "publish postplan target endpoint key report share",
+    searchSharingWords: "publish postplan target endpoint key report share",
     sectionAbout: "About",
     sectionAboutHint: "What this build is, and how it replaces itself.",
     sectionHandoff: "Search and hand-off",

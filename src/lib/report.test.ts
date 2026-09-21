@@ -152,24 +152,29 @@ describe("renderReport", () => {
   });
 
   /**
-   * The file is passed to whoever is next on the incident, and a Secret's
-   * value in it outlives the incident. Nothing in the report's shape can
-   * carry one: this hands the builder an object with values anyway.
+   * The claim in the file's own footer, asserted where it can actually
+   * fail.
+   *
+   * The test this replaces pushed a `secret` field onto the report object
+   * and checked it did not render — a field `renderReport` never reads, so
+   * it passed against any builder at all. The shape carrying no Secret
+   * value is a fact about the type, which the compiler holds; what is left
+   * at runtime is what a container printed, and that is the path above.
    */
-  it("cannot carry a Secret value, whatever is pushed at it", () => {
-    const leaky = report({
-      facts: [
-        {
-          label: "Secret payments-db-credentials",
-          value: "2 keys, values not included",
-        },
-      ],
-    }) as Report & { secret?: unknown };
-    leaky.secret = { password: "hunter2", token: "s3cr3t" };
-    const html = renderReport(leaky);
+  it("keeps the promise where the promise can be broken", () => {
+    const html = renderReport(
+      report({
+        logs: [
+          {
+            source: "payments/app",
+            previous: false,
+            lines: ["connecting with password=hunter2"],
+          },
+        ],
+      })
+    );
+
     expect(html).not.toContain("hunter2");
-    expect(html).not.toContain("s3cr3t");
-    expect(html).toContain("2 keys, values not included");
     expect(html).toContain("No Secret value is ever written into this file.");
   });
 });

@@ -3975,7 +3975,7 @@ export const ru: Catalogue = {
     perfRetryStop: "Попробовать остановить ещё раз",
     sectionSharing: "Публикация",
     sectionSharingHint: "Куда можно опубликовать отчёт и каким ключом.",
-    sharingWords:
+    searchSharingWords:
       "publish postplan target endpoint key report share публикация цель ключ отчёт",
     sectionAbout: "О программе",
     sectionAboutHint: "Что это за сборка и как она себя обновляет.",

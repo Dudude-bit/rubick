@@ -268,6 +268,10 @@ export function usePodReport(
 
   const report = useMemo<Report | null>(() => {
     if (!pod) return null;
+    // Without the version the file's footer says it was made by an app with
+    // no name for itself, and the reader has no way back to the build that
+    // wrote it. It is one local call; the report waits for it.
+    if (version.data === undefined) return null;
     const notRead = [...chain.notRead];
     if (eventsError)
       notRead.push(t("hints", "notReadEvents", { reason: eventsError }));
@@ -292,7 +296,7 @@ export function usePodReport(
         context,
       },
       capturedAt,
-      appVersion: version.data?.version ?? "",
+      appVersion: version.data.version,
       verdict: trouble ? sayHint(trouble, pod, chain, t) : null,
       facts: factsOf(pod, silence, t),
       chain: chainOf(connections.data, t),

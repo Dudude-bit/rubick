@@ -6,13 +6,15 @@
  * hash never assigns, for a target anyone with the link can read.
  */
 
-import { clusterColor, DANGER_CLUSTER_COLOR } from "@/lib/cluster-identity";
+import { DANGER_CLUSTER_COLOR, hashedColor } from "@/lib/cluster-identity";
 import type { ShareTargetInfo } from "@/generated/types";
 
 export function targetColor(target: { host: string; public: boolean }): string {
   // Public is the one colour a hash must never land on, exactly as a
   // production cluster's is: it means "anyone with the link", not "this one".
-  return target.public ? DANGER_CLUSTER_COLOR : clusterColor(target.host);
+  // The ring alone, not `clusterColor`: its production rule would hand the
+  // reserved red to a private target hosted on anything called "prod".
+  return target.public ? DANGER_CLUSTER_COLOR : hashedColor(target.host);
 }
 
 /** What a target must have before anything can be sent to it. */

@@ -120,11 +120,23 @@ export function clusterColor(
   if (!context) return "hsl(var(--fg-fnt))";
   if (context.toLowerCase().includes("prod")) return DANGER_CLUSTER_COLOR;
 
+  return hashedColor(context);
+}
+
+/**
+ * A colour from the ring alone, with no rule about the name.
+ *
+ * `clusterColor` hands anything containing "prod" the reserved red, which is
+ * right for a cluster and wrong for anything else that borrows the ring: a
+ * private publishing target hosted at `reports.prod.example.com` wore the
+ * colour this app uses for "anyone with the link can read it".
+ */
+export function hashedColor(seed: string): string {
   // djb2: tiny, dependency-free, and spreads short similar names
   // ("dev-1"/"dev-2") across different buckets.
   let hash = 5381;
-  for (let i = 0; i < context.length; i++) {
-    hash = ((hash << 5) + hash + context.charCodeAt(i)) | 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) + hash + seed.charCodeAt(i)) | 0;
   }
   return IDENTITY_PALETTE[Math.abs(hash) % IDENTITY_PALETTE.length];
 }
