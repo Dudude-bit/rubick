@@ -3889,6 +3889,7 @@ export const ru: Catalogue = {
     metricsErrorBody: "Не удалось получить метрики из кластера.",
     metricsDetails: "Подробности: {details}",
     markBroken: "сломано",
+    markUnchecked: "не проверено",
     markWorthALook: "стоит взглянуть",
     connectToImport:
       "Подключитесь к кластеру, чтобы импортировать из него ресурсы.",

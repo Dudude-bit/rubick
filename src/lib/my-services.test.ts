@@ -180,6 +180,34 @@ describe("stateOf", () => {
   });
 
   /**
+   * A neighbourhood read walks into the objects around this one, so its
+   * 404 may be about any of them. Matching the name alone marked a pinned
+   * `Deployment/payments` deleted because a `Service/payments` beside it
+   * was — and sent somebody to recreate what was still running.
+   */
+  it("does not call this workload gone because a namesake of another kind is", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Service/payments in namespace shop" },
+        pin
+      ).state
+    ).toBe("unread");
+
+    expect(
+      stateOf(
+        undefined,
+        {
+          message: "Resource not found: Deployment/payments in namespace shop",
+        },
+        pin
+      ).state
+    ).toBe("gone");
+  });
+
+  /**
    * Either half alone is enough: the pin says what was pinned, the read says
    * what the cluster answered about, and a card whose read has not caught up
    * with the other must not go green on nothing.

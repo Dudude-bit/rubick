@@ -8,7 +8,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { alertsMark, monitorCount, monitorMark, type Picture } from "./data";
+import {
+  alertsMark,
+  monitorCount,
+  monitorMark,
+  worstTone,
+  type Picture,
+} from "./data";
 
 const empty = {
   services: { ok: true, items: [] },
@@ -163,6 +169,48 @@ describe("what the Alerts tab and the sidebar dot carry", () => {
     );
 
     expect(mark).toEqual({ shows: "unchecked", of: 1 });
+  });
+
+  /**
+   * The tab grew a "not checked" mark and the dot beside the sidebar row
+   * did not, so the same page answered two ways: a hollow ring on the tab
+   * and a plain number in the rail.
+   */
+  it("carries the unchecked answer to the sidebar as well as the tab", () => {
+    const object = {
+      name: "app-rules",
+      namespace: "shop",
+      uid: "shop/PrometheusRule/app-rules",
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "PrometheusRule",
+      labels: { release: "kps" },
+      annotations: {},
+      creationTimestamp: null,
+      spec: {
+        groups: [{ name: "app", rules: [{ alert: "TooSlow", expr: "up" }] }],
+      },
+    };
+    const prometheus = {
+      name: "k8s",
+      namespace: "monitoring",
+      uid: "monitoring/Prometheus/k8s",
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "Prometheus",
+      labels: {},
+      annotations: {},
+      creationTimestamp: null,
+      spec: {
+        ruleSelector: { matchLabels: { release: "kps" } },
+        ruleNamespaceSelector: {},
+      },
+    };
+    const picture = withRules({
+      rules: { state: "read", items: [object] },
+      prometheuses: { state: "read", items: [prometheus] },
+      alertRules: { state: "notConnected" },
+    } as never);
+
+    expect(worstTone(picture)).toBe("unchecked");
   });
 
   it("has no mark at all while the rule objects have not been read", () => {

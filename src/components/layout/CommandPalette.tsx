@@ -985,10 +985,13 @@ export function CommandPalette() {
             autoFocus
             aria-label={t("action", "searchResourcesActionsPages")}
             role="combobox"
-            aria-expanded
-            aria-controls={listId}
+            // While an alert is being read there is no listbox under this
+            // box at all — the panel has its own controls — so the box
+            // pointed a screen reader at elements that are not in the DOM.
+            aria-expanded={alert === null}
+            aria-controls={alert === null ? listId : undefined}
             aria-activedescendant={
-              activeId ? `${listId}-${activeId}` : undefined
+              alert === null && activeId ? `${listId}-${activeId}` : undefined
             }
             placeholder={
               scopeLabel

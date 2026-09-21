@@ -278,7 +278,9 @@ export function alertsMark(
   return { shows: "count", of: picture.rules.items.length };
 }
 
-export function worstTone(picture: Picture): "warn" | "err" | null {
+export function worstTone(
+  picture: Picture
+): "warn" | "err" | "unchecked" | null {
   const rows = rowsOfPicture(picture);
   // The dot is the worst thing on the page, and the page grew an Alerts tab:
   // a rule object nothing picks up was worse than anything the monitors had
@@ -288,6 +290,10 @@ export function worstTone(picture: Picture): "warn" | "err" | null {
   if (alerts?.shows === "severity" && alerts.tone === "err") return "err";
   if (rows.some((row) => row.worst === "warn")) return "warn";
   if (alerts?.shows === "severity") return "warn";
+  // Neither good nor bad: a rule object whose loading nobody could read.
+  // The tab says so and the dot stayed empty, which is the same page
+  // answering two ways.
+  if (alerts?.shows === "unchecked") return "unchecked";
   return null;
 }
 

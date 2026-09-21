@@ -3552,6 +3552,7 @@ export const en = {
     // whoever can act on them.
     metricsDetails: "Details: {details}",
     markBroken: "broken",
+    markUnchecked: "not checked",
     markWorthALook: "worth a look",
     connectToImport: "Connect to a cluster to import live resources.",
     spotNodeWarning:

@@ -519,12 +519,15 @@ pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
     for group in groups {
         let group_name = text(group, "name");
         let file = text(group, "file");
-        for rule in group
-            .get("rules")
-            .and_then(|r| r.as_array())
-            .into_iter()
-            .flatten()
-        {
+        // The same rule one level down: a group whose `rules` is missing or
+        // is not an array has not said it holds none, and reading it as
+        // empty makes every PrometheusRule behind it look unloaded.
+        let Some(members) = group.get("rules").and_then(|r| r.as_array()) else {
+            return Err(unreachable(format!(
+                "Prometheus answered with no rule list for group {group_name}"
+            )));
+        };
+        for rule in members {
             // `type=alert` is asked for; a recording rule that came anyway
             // has no state and is not an alert.
             if rule.get("type").and_then(|t| t.as_str()) == Some("recording") {
@@ -676,6 +679,21 @@ mod tests {
             "data": { "groups": [] }
         });
         assert_eq!(parse_rules(&none).expect("an answer").len(), 0);
+
+        // And one level down: a group that names no rule list has not said
+        // it holds none either.
+        let headless = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [ { "name": "apps", "file": "/x.yaml" } ] }
+        });
+        assert!(parse_rules(&headless).is_err());
+
+        // A group that really is empty is still an answer.
+        let empty_group = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [ { "name": "apps", "file": "/x.yaml", "rules": [] } ] }
+        });
+        assert_eq!(parse_rules(&empty_group).expect("an answer").len(), 0);
     }
 
     /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.

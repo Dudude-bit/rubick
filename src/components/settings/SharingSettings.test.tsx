@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -43,6 +43,36 @@ beforeEach(() => {
 });
 
 describe("giving a publishing target its key", () => {
+  /**
+   * The import is answered a moment later, and the reader may have pressed
+   * Cancel by then. Applying that answer to whatever form is open next put
+   * one target's key into another target's row — or opened a form nobody
+   * asked for.
+   */
+  it("does not land an import in the form the reader moved to", async () => {
+    const user = userEvent.setup();
+    let answer: (tail: string) => void = () => {};
+    vi.mocked(commands.importPostplanKey).mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve as (tail: string) => void;
+      })
+    );
+    wrap();
+
+    await user.click(await screen.findByRole("button", { name: /add|добав/i }));
+    await user.click(screen.getByRole("button", { name: /postplan|import/i }));
+    await user.click(screen.getByRole("button", { name: /cancel|отмен/i }));
+
+    // Inside `act`, so the late answer is applied before this asserts —
+    // otherwise the assertion passes whether the guard is there or not.
+    await act(async () => {
+      answer("…4d2e");
+    });
+
+    // No form reopened by an answer to a form that is gone.
+    expect(screen.queryByLabelText(/key|ключ/i)).toBeNull();
+  });
+
   /**
    * The import asks the backend to use the key it already holds, and the
    * save prefers that key over anything sent with it. So a reader who

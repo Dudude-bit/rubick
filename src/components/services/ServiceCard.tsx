@@ -123,7 +123,17 @@ export function ServiceCard({
                   {way.detail ? (
                     <span className="truncate text-fg-fnt">{way.detail}</span>
                   ) : null}
-                  {way.servingKnown && !way.serving ? (
+                  {/*
+                    Three answers, not two. A way in whose backing nobody
+                    read — every URL entry, until a published hop matches it
+                    — drew exactly like one confirmed to be serving, on the
+                    card whose whole job is to say what is known.
+                  */}
+                  {!way.servingKnown ? (
+                    <span className="flex-none text-fg-fnt">
+                      {t("services", "notReadYet")}
+                    </span>
+                  ) : !way.serving ? (
                     <span className="flex-none text-warn">
                       {t("services", "nothingBehind")}
                     </span>
