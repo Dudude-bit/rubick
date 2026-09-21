@@ -121,7 +121,15 @@ export function SharingSettings() {
         keywords={t("settings", "sharingWords")}
       >
         <div className="flex flex-col gap-2">
-          {(targets.data ?? []).length === 0 && !draft ? (
+          {targets.error ? (
+            // The same distinction the dialog makes: a list nobody could
+            // read is not a list with nothing in it.
+            <p className="text-[11px] text-warn">
+              {t("share", "targetsUnread", {
+                reason: normalizeTauriError(targets.error),
+              })}
+            </p>
+          ) : (targets.data ?? []).length === 0 && !draft ? (
             <p className="text-[11px] text-fg-fnt">
               {t("share", "targetsEmpty")}
             </p>

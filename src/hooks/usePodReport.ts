@@ -22,6 +22,7 @@ import { describeTermination, lastTermination } from "@/lib/pod-status";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT, type T } from "@/i18n/useT";
+import { useLocale } from "@/stores/localeStore";
 import type {
   EventInfo,
   PodInfo,
@@ -31,8 +32,9 @@ import type {
 /** As many journal entries as a reader scrolls; older ones are in the app. */
 const MAX_CHANGES = 20;
 
-function words(t: T): ReportWords {
+function words(t: T, lang: string): ReportWords {
   return {
+    lang,
     title: t("share", "reportTitle"),
     captured: t("share", "captured"),
     openInRubick: t("share", "openInRubick"),
@@ -229,6 +231,7 @@ export function usePodReport(
   path: string
 ): PodReport {
   const t = useT();
+  const locale = useLocale();
   const context = useClusterStore((s) => s.currentContext) ?? "";
   const trouble = useMemo(
     () => (pod ? troubleOf(pod, events) : null),
@@ -249,6 +252,19 @@ export function usePodReport(
   // stopped answering, everything the kubelet wrote is the last thing it
   // said and not the state now.
   const silence = silenceOf(pod?.nodeName, useSilentNodes(pod !== undefined));
+
+  // When the reader pressed Share, not when React last re-rendered. The
+  // stamp was taken inside the memo, so every watch tick and every log poll
+  // minted a new one — which is also the identity the dialog keys the
+  // public-target acknowledgement and the published link on, so both erased
+  // themselves a second later.
+  const subjectKey = pod ? `${context}/${pod.namespace}/${pod.name}` : "";
+  const capturedAt = useMemo(() => {
+    // The subject is read so the dependency is a real one: the stamp is
+    // minted per object, and a watch tick on the same pod keeps it.
+    void subjectKey;
+    return new Date().toISOString();
+  }, [subjectKey]);
 
   const report = useMemo<Report | null>(() => {
     if (!pod) return null;
@@ -275,7 +291,7 @@ export function usePodReport(
         namespace: pod.namespace,
         context,
       },
-      capturedAt: new Date().toISOString(),
+      capturedAt,
       appVersion: version.data?.version ?? "",
       verdict: trouble ? sayHint(trouble, pod, chain, t) : null,
       facts: factsOf(pod, silence, t),
@@ -293,16 +309,18 @@ export function usePodReport(
         : [],
       notRead,
       link: buildDeepLink(context, path),
-      words: words(t),
+      words: words(t, locale),
     };
   }, [
     pod,
+    capturedAt,
     trouble,
     chain,
     connections,
     context,
     eventsError,
     journal,
+    locale,
     silence,
     logContainer,
     logLines,

@@ -27,6 +27,7 @@ import { renderReport, reportFileName, type Report } from "@/lib/report";
 import {
   needsAcknowledgement,
   objectKey,
+  readyToPublish,
   targetColor,
 } from "@/lib/share-targets";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -195,7 +196,16 @@ export function ShareDialog({
         )}
         {report ? (
           <div className="flex flex-col gap-2 border-t border-hair pt-3 text-xs">
-            {(targets.data ?? []).length === 0 ? (
+            {targets.error ? (
+              // A list the app could not read is not a list with nothing in
+              // it: "you have not added one yet" sends the reader to add a
+              // target they already have.
+              <p className="text-warn">
+                {t("share", "targetsUnread", {
+                  reason: normalizeTauriError(targets.error),
+                })}
+              </p>
+            ) : (targets.data ?? []).length === 0 ? (
               <p className="text-fg-fnt">{t("share", "noTargets")}</p>
             ) : (
               <>
@@ -228,7 +238,7 @@ export function ShareDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  {target && !target.hasKey ? (
+                  {target && !readyToPublish(target) ? (
                     <span className="text-warn">
                       {t("share", "targetNoKey")}
                     </span>
@@ -283,7 +293,7 @@ export function ShareDialog({
               variant="outline"
               onClick={() => publish.mutate()}
               disabled={
-                !target.hasKey ||
+                !readyToPublish(target) ||
                 publish.isPending ||
                 (needsAcknowledgement(target) && !acknowledged)
               }

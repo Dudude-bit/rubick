@@ -55,6 +55,7 @@ const report: Report = {
   notRead: ["NetworkPolicy in shop (403)"],
   link: "rubick://open/prod-eu-1/pods/shop/payments-7b6d9c5f4-x8k2p",
   words: {
+    lang: "en",
     title: "Investigation",
     captured: "captured",
     openInRubick: "Open in Rubick",

@@ -184,4 +184,22 @@ describe("the file the reader hands to somebody else", () => {
       status.value.replace("CrashLoopBackOff", "").trim().length
     ).toBeGreaterThan(3);
   });
+
+  /**
+   * The stamp is the identity the dialog keys the public-target
+   * acknowledgement and the published link on. Taken inside the memo, every
+   * watch tick and every log poll minted a new one, so the tick a second
+   * later unticked the box and erased the link.
+   */
+  it("keeps one capture stamp while the reader is on the same pod", async () => {
+    const { result, rerender } = build(read());
+    await waitFor(() => expect(result.current.report).not.toBeNull());
+    const first = result.current.report!.capturedAt;
+
+    rerender();
+    useChangeJournalStore.setState({ entries: [] });
+    rerender();
+
+    expect(result.current.report!.capturedAt).toBe(first);
+  });
 });

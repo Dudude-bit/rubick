@@ -80,6 +80,12 @@ export interface Report {
 
 /** Every string the file shows, resolved before it is written. */
 export interface ReportWords {
+  /**
+   * The language every string below is written in, as the file's own `lang`
+   * attribute. It said `en` whatever the words were, so a screen reader and
+   * a translator both read Russian prose as English.
+   */
+  lang: string;
   title: string;
   captured: string;
   openInRubick: string;
@@ -270,7 +276,7 @@ export function renderReport(report: Report): string {
     `<footer>${escapeHtml(`${w.madeBy} ${report.appVersion}`)} · ${escapeHtml(w.noSecrets)}</footer>`,
   ].join("");
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(report.words.lang)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

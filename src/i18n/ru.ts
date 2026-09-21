@@ -1725,6 +1725,7 @@ export const ru: Catalogue = {
     sectionChanges: "Что изменилось",
     sectionLogs: "Строки лога",
     sectionNotRead: "Не прочитано",
+    targetsUnread: "Список адресатов не прочитан: {reason}",
     stopHere: "здесь останавливается",
     chainStillReading:
       "На момент снимка приложение ещё не дочитало, что с этим связано.",
@@ -1743,7 +1744,12 @@ export const ru: Catalogue = {
     preview: "Что попадёт в файл",
     whatItCarries:
       "Один самодостаточный HTML: вердикт, факты, цепочка на этот момент, что изменилось, строки лога и то, что прочитать не удалось. Ни скриптов, ни запросов при открытии.",
-    charactersLong: "{n} символов",
+    charactersLong: {
+      one: "{n} символ",
+      few: "{n} символа",
+      many: "{n} символов",
+      other: "{n} символа",
+    },
     nothingToShare: "Пока нечего положить в отчёт.",
   },
   files: {

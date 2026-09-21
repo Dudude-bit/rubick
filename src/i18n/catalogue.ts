@@ -1706,6 +1706,7 @@ export const en = {
     sectionChanges: "What changed",
     sectionLogs: "Log lines",
     sectionNotRead: "Not read",
+    targetsUnread: "The list of targets could not be read: {reason}",
     stopHere: "stops here",
     chainStillReading:
       "The app had not finished reading what connects to this when the file was made.",
@@ -1724,7 +1725,10 @@ export const en = {
     preview: "What goes in the file",
     whatItCarries:
       "One self-contained HTML file: the verdict, the facts, the chain as it stands right now, what changed, the log lines and what could not be read. No script, no request when it is opened.",
-    charactersLong: "{n} characters",
+    charactersLong: {
+      one: "{n} character",
+      other: "{n} characters",
+    },
     nothingToShare: "There is nothing to put in a report yet.",
   },
   files: {

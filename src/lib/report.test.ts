@@ -8,6 +8,7 @@ import {
 } from "./report";
 
 const WORDS: ReportWords = {
+  lang: "en",
   title: "Investigation",
   captured: "captured",
   openInRubick: "Open in Rubick",

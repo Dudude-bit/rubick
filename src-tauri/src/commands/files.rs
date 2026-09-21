@@ -280,8 +280,6 @@ pub async fn read_container_file(
     Ok(read_outcome(result))
 }
 
-/// Copy one file to a path the person chose. Nothing is written into the
-/// container; nothing over the cap is written anywhere.
 /// Writes a report the frontend composed to a path the reader picked.
 ///
 /// The path came back from the save dialog, so it is the reader's own
@@ -302,6 +300,8 @@ pub async fn write_text_file(destination: String, contents: String) -> Result<()
     Ok(())
 }
 
+/// Copy one file to a path the person chose. Nothing is written into the
+/// container; nothing over the cap is written anywhere.
 #[tauri::command]
 pub async fn download_container_file(
     pod: String,
