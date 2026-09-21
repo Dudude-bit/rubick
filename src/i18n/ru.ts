@@ -2189,6 +2189,9 @@ export const ru: Catalogue = {
       other: "{n} target'ов up, скрейп {ago} назад.",
     },
     nothingToDo: "Делать здесь нечего.",
+    verdictUnscraped: "Подхвачен. {n} из {total} обнаружено, ещё не опрошены.",
+    unscrapedSettles:
+      "Prometheus видит target'ы и ещё не закончил по ним круг. Только что появившийся пул выправляется сам.",
     verdictNotChecked: "Выбран и подхвачен. Скрейпится ли, не проверено.",
     verdictNoKind:
       "Выбран. Подхватить его здесь некому: CRD Prometheus оператора не установлен.",

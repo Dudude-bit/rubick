@@ -7,7 +7,7 @@ import { useT } from "@/i18n/useT";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import Connection from "./connection";
 import Monitors from "./monitors/Monitors";
-import { rowsOfPicture, usePicture } from "./monitors/data";
+import { monitorMark, usePicture } from "./monitors/data";
 
 /**
  * One row, two questions: what the operator was told to scrape, and what
@@ -27,15 +27,7 @@ export default function PrometheusPage() {
     picture.data !== undefined &&
     (picture.data.serviceMonitors.state !== "absent" ||
       picture.data.podMonitors.state !== "absent");
-  const rows = picture.data ? rowsOfPicture(picture.data) : null;
-  const attention = rows?.filter((row) => row.worst !== null) ?? [];
-  const worst: "err" | "warn" | null = attention.some(
-    (row) => row.worst === "err"
-  )
-    ? "err"
-    : attention.length > 0
-      ? "warn"
-      : null;
+  const mark = picture.data ? monitorMark(picture.data) : null;
 
   const tabs: DetailTab[] = [
     ...(picture.data === undefined || operatorHere
@@ -45,17 +37,17 @@ export default function PrometheusPage() {
             label: t("monitors", "tabMonitors"),
             glyph: viewGlyph(Activity),
             mark:
-              worst !== null
+              mark?.shows === "severity"
                 ? {
                     shows: "severity" as const,
-                    tone: worst,
+                    tone: mark.tone,
                     says: t("monitors", "needAttention", {
-                      n: attention.length,
-                      total: rows?.length ?? 0,
+                      n: mark.n,
+                      total: mark.total,
                     }),
                   }
-                : rows
-                  ? { shows: "count" as const, of: rows.length }
+                : mark?.shows === "count"
+                  ? { shows: "count" as const, of: mark.of }
                   : null,
             content: <Monitors />,
           },
