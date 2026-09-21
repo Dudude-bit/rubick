@@ -179,4 +179,35 @@ describe("reportFileName", () => {
     );
     expect(reportFileName(report())).not.toMatch(/[:*?"<>|]/);
   });
+
+  /**
+   * The file says in its own footer that no Secret value is written into it,
+   * and the feature exists to publish that file to a URL a colleague opens.
+   * The log lines went in raw: a container that echoed its resolved config
+   * put the database password in the report, in a line the app's two other
+   * hand-offs — the clipboard and the search query — write redacted.
+   */
+  it("takes the secrets out of the log lines it publishes", () => {
+    const html = renderReport(
+      report({
+        logs: [
+          {
+            source: "shop-db-1/app",
+            previous: false,
+            lines: [
+              'level=error msg="dial failed" dsn=postgres://app:hunter2@db.shop:5432/app',
+              "Authorization: Bearer abcdefghijklmnopqrstuvwxyz",
+              "password=s3cr3t",
+            ],
+          },
+        ],
+      })
+    );
+
+    expect(html).not.toContain("hunter2");
+    expect(html).not.toContain("s3cr3t");
+    expect(html).not.toContain("abcdefghijklmnopqrstuvwxyz");
+    // And the line is still there, so the reader still has the shape of it.
+    expect(html).toContain("dial failed");
+  });
 });

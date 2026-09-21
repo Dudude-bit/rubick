@@ -12,6 +12,8 @@
  * carrying values anyway and reads the output for them.
  */
 
+import { redact } from "./hints";
+
 export interface ReportSubject {
   kind: string;
   name: string;
@@ -199,6 +201,15 @@ function changesHtml(changes: ReportChange[], words: ReportWords): string {
     .join("")}</ul>`;
 }
 
+/**
+ * The log lines, with what a container printed that nobody should publish
+ * taken out.
+ *
+ * Here rather than at the call site, because the file's own footer says no
+ * Secret value is written into it and the whole feature exists to hand that
+ * file to somebody else: a caller that forgot would publish a password to a
+ * URL. The same redactor the clipboard hand-off and the search query use.
+ */
 function logsHtml(logs: ReportLog[], words: ReportWords): string {
   const withLines = logs.filter((log) => log.lines.length > 0);
   if (withLines.length === 0)
@@ -208,7 +219,7 @@ function logsHtml(logs: ReportLog[], words: ReportWords): string {
       (log) =>
         `<div class="log"><h3>${escapeHtml(log.source)}${
           log.previous ? ` · ${escapeHtml(words.previousRun)}` : ""
-        }</h3><pre>${escapeHtml(log.lines.join("\n"))}</pre></div>`
+        }</h3><pre>${escapeHtml(log.lines.map(redact).join("\n"))}</pre></div>`
     )
     .join("");
 }
