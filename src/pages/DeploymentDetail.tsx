@@ -60,6 +60,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -350,6 +351,13 @@ export function DeploymentDetail() {
           )}
 
           <WorkloadOverview
+            alerts={
+              <AlertsAbout
+                kind={ResourceType.Deployment}
+                name={name ?? ""}
+                namespace={namespace ?? null}
+              />
+            }
             count={
               <CountBlock
                 title={t("columns", "replicas")}

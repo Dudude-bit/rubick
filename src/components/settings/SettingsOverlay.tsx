@@ -27,6 +27,7 @@ import { useT, type T } from "@/i18n/useT";
 import { AboutSettings } from "./AboutSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { HandoffSettings } from "./HandoffSettings";
+import { SharingSettings } from "./SharingSettings";
 import { ClustersSettings } from "./ClustersSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { SettingsNav } from "./SettingsNav";
@@ -54,6 +55,8 @@ function sectionContent(id: string, t: T) {
       );
     case "diagnostics":
       return <DiagnosticsSettings />;
+    case "sharing":
+      return <SharingSettings />;
     case "handoff":
       return <HandoffSettings />;
     case "about":

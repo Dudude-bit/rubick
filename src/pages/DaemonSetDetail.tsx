@@ -39,6 +39,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import {
@@ -174,6 +175,13 @@ export function DaemonSetDetail() {
         content: (
           <>
             <WorkloadOverview
+              alerts={
+                <AlertsAbout
+                  kind={ResourceType.DaemonSet}
+                  name={name ?? ""}
+                  namespace={namespace ?? null}
+                />
+              }
               count={
                 <CountBlock
                   title={t("columns", "rollout")}

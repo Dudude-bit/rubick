@@ -19,6 +19,7 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
+import { AlertsAbout } from "./AlertsAbout";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
@@ -451,6 +452,18 @@ function PeekOverview({
           </div>
         ))
       )}
+      {/*
+       * The same objects as the detail pages, and the same question: the
+       * page showed what was firing about a workload while the peek at the
+       * same workload showed nothing. The block draws itself only where an
+       * evaluator can name the kind.
+       */}
+      <AlertsAbout
+        className="mt-3"
+        kind={target.kind}
+        name={target.name}
+        namespace={target.namespace ?? null}
+      />
       {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
       {target.kind === "Service" && target.namespace && (
         <BackendPolicies

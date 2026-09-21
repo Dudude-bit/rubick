@@ -11,6 +11,7 @@ import {
   Info,
   Network,
   RefreshCw,
+  Share2,
   SquareTerminal,
   Trash2,
 } from "lucide-react";
@@ -45,6 +46,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import {
   ConditionRows,
   DetailAction,
@@ -55,6 +57,8 @@ import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MostLikelyPanel } from "@/components/pod/MostLikelyPanel";
+import { ShareDialog } from "@/components/share/ShareDialog";
+import { usePodReport } from "@/hooks/usePodReport";
 import { VolumeRows } from "@/components/resources/volume-rows";
 import {
   KeyValueSection,
@@ -330,6 +334,7 @@ export function PodDetail() {
   });
 
   const connections = useConnections(ResourceType.Pod, name, namespace);
+  const [shareOpen, setShareOpen] = useState(false);
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
   const podEvents = useLiveQuery({
@@ -347,6 +352,16 @@ export function PodDetail() {
     refresh: "slow",
     retry: false,
   });
+
+  // The report is built from what this page already read, so it says exactly
+  // what the reader is looking at — including the tab they are on.
+  const { report } = usePodReport(
+    pod,
+    podEvents.data ?? [],
+    podEvents.error ? normalizeTauriError(podEvents.error) : null,
+    connections,
+    `${window.location.hash.replace(/^#/, "") || `/pods/${namespace}/${name}`}`
+  );
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
   // The kubelet on this pod's node writes its status. If the node stopped
   // answering, everything below is the last thing it said, not the state now.
@@ -700,6 +715,12 @@ export function PodDetail() {
         actions={
           <>
             <DetailAction
+              label={t("share", "share")}
+              icon={Share2}
+              onClick={() => setShareOpen(true)}
+              disabled={!pod}
+            />
+            <DetailAction
               label={t("action", "debug")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
@@ -769,6 +790,13 @@ export function PodDetail() {
                   takes the first slot is the question a Pod does have in the
                   same place: where the one is. */}
                 <WorkloadOverview
+                  alerts={
+                    <AlertsAbout
+                      kind={ResourceType.Pod}
+                      name={name ?? ""}
+                      namespace={namespace ?? null}
+                    />
+                  }
                   count={
                     <FactBlock
                       title={t("columns", "placement")}
@@ -991,6 +1019,11 @@ export function PodDetail() {
           onDebugStart={handleDebugStart}
         />
       )}
+      <ShareDialog
+        report={report}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
     </>
   );
 }
