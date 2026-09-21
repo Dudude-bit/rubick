@@ -76,18 +76,32 @@ export type ServiceState =
 
 export function stateOf(
   connections: ResourceConnections | undefined,
-  error: { message: string } | null
+  error: { message: string } | null,
+  /** The pinned object, for telling its own 404 from the app's other ones. */
+  pin?: { kind: string; name: string }
 ): ServiceState {
-  if (!connections) {
-    if (!error) return { state: "unread", why: "" };
-    // "Not found" is the cluster answering, not failing: the object is gone.
-    return /\bnot found\b/i.test(error.message)
-      ? { state: "gone" }
-      : { state: "unread", why: error.message };
+  // The error first, and not only when there is nothing in hand: the read is
+  // kept across refreshes, so a workload deleted or refused after the first
+  // answer left the last good one on screen — green — with the failure
+  // sitting beside it unread.
+  if (error) {
+    // "Resource not found: Deployment/payments in namespace shop" is the
+    // cluster answering. "Client not found" and "Plugin not found" are this
+    // app failing, and calling those a deleted workload sends somebody to
+    // rebuild something that is still running.
+    const gone =
+      /resource not found/i.test(error.message) &&
+      (!pin || error.message.includes(pin.name));
+    return gone ? { state: "gone" } : { state: "unread", why: error.message };
   }
+  if (!connections) return { state: "unread", why: "" };
   if (connections.subject.existence === "missing") return { state: "gone" };
   const facts = connections.subject.facts;
   if (facts?.kind !== "workload") return { state: "unread", why: "" };
+  // A CronJob has no replicas to be ready: the backend reports 0 of 0, which
+  // read as "all ready" and drew green about a schedule nobody has checked.
+  if (pin?.kind === "CronJob" || connections.subject.kind === "CronJob")
+    return { state: "unread", why: "" };
   return facts.readyReplicas >= facts.replicas
     ? { state: "ready", ready: facts.readyReplicas, total: facts.replicas }
     : { state: "short", ready: facts.readyReplicas, total: facts.replicas };
@@ -122,16 +136,27 @@ export function entryPointsOf(
   known: boolean;
 } {
   if (!connections) return { entries: [], known: false };
-  const entries: EntryPoint[] = [];
+  // A Services or Ingresses list the cluster refused is named here, and
+  // without it "nothing publishes this" is stated over a list nobody read.
+  const unread = connections.notLookedAt.some(
+    (kind) => kind.kind === "Service" || kind.kind === "Ingress"
+  );
+  const byKey = new Map<string, EntryPoint>();
   for (const chain of chains) {
     for (const hop of chain.hops) {
       const entry = entryOf(hop);
-      if (entry && !entries.some((seen) => seen.key === entry.key)) {
-        entries.push(entry);
+      if (!entry) continue;
+      const seen = byKey.get(entry.key);
+      // The object hop and the published hop are the same Service under the
+      // same key, and only the published one knows whether anything is
+      // behind it. First-one-wins dropped that answer every time, so
+      // "nothing behind it" could never be drawn.
+      if (!seen || (!seen.servingKnown && entry.servingKnown)) {
+        byKey.set(entry.key, seen ? { ...seen, ...entry } : entry);
       }
     }
   }
-  return { entries, known: true };
+  return { entries: [...byKey.values()], known: !unread };
 }
 
 function entryOf(hop: ChainHop): EntryPoint | null {

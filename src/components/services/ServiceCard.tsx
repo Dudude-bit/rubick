@@ -45,7 +45,8 @@ export function ServiceCard({
 
   const state = stateOf(
     connections.data,
-    connections.error ? { message: connections.error.message } : null
+    connections.error ? { message: connections.error.message } : null,
+    pin
   );
   const chains = useMemo(
     () => (connections.data ? trafficChains(connections.data, t) : []),

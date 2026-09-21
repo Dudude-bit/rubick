@@ -93,6 +93,70 @@ describe("stateOf", () => {
     });
   });
 
+  /**
+   * The read is kept across refreshes, so a workload deleted or refused
+   * after the first good answer left that answer on screen — green, with
+   * the failure sitting beside it unread.
+   */
+  it("does not keep the last good answer when the next read failed", () => {
+    expect(
+      stateOf(
+        conns(),
+        { message: "services is forbidden" },
+        {
+          kind: "Deployment",
+          name: "payments",
+        }
+      ).state
+    ).toBe("unread");
+  });
+
+  /**
+   * "Client not found" and "Plugin not found" are this app failing, not the
+   * cluster answering. Reading them as a deleted workload sends somebody to
+   * rebuild something that is still running.
+   */
+  it("calls a workload gone only when the cluster said so about it", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+    expect(stateOf(undefined, { message: "Client not found" }, pin).state).toBe(
+      "unread"
+    );
+    expect(
+      stateOf(
+        undefined,
+        {
+          message: "Resource not found: Deployment/payments in namespace shop",
+        },
+        pin
+      ).state
+    ).toBe("gone");
+  });
+
+  /**
+   * A CronJob has no replicas to be ready. The backend reports 0 of 0, which
+   * read as "all ready" and drew green about a schedule nobody had checked.
+   */
+  it("does not call a CronJob ready because it has no replicas", () => {
+    const cron = conns({
+      subject: {
+        kind: "CronJob",
+        name: "nightly",
+        namespace: "shop",
+        existence: "present",
+        facts: {
+          kind: "workload",
+          replicas: 0,
+          readyReplicas: 0,
+          revision: null,
+          current: null,
+        },
+      } as never,
+    });
+    expect(
+      stateOf(cron, null, { kind: "CronJob", name: "nightly" }).state
+    ).not.toBe("ready");
+  });
+
   it("carries a subject the read found missing", () => {
     const missing = conns({
       subject: { ...conns().subject, existence: "missing", facts: null },
@@ -179,6 +243,59 @@ describe("entryPointsOf", () => {
   it("marks the answer unknown while no neighbourhood has been read", () => {
     expect(entryPointsOf(undefined, [])).toEqual({ entries: [], known: false });
     expect(entryPointsOf(conns(), [])).toEqual({ entries: [], known: true });
+  });
+  /**
+   * The object hop and the published hop are the same Service under the same
+   * key, and only the published one knows whether anything is behind it.
+   * First-one-wins dropped that answer every time, so "nothing behind it"
+   * could never be drawn.
+   */
+  it("keeps the hop that knows whether anything is behind the service", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        {
+          at: "object",
+          object: ref("Service", "payments"),
+          self: false,
+          detail: "80/TCP",
+          via: null,
+          urls: [],
+          publishedAt: null,
+        },
+        {
+          at: "published",
+          published: {
+            service: ref("Service", "payments"),
+            ports: [{ name: "http", port: 80 }],
+            ready: 0,
+            whole: true,
+          },
+          tone: "warn",
+        } as never,
+      ])
+    );
+
+    const payments = entries.find((entry) => entry.label === "payments");
+    expect(payments?.servingKnown).toBe(true);
+    expect(payments?.serving).toBe(false);
+  });
+
+  /**
+   * A Services or Ingresses list the cluster refused is named in
+   * `notLookedAt`, and without reading it the page states "nothing publishes
+   * this" over a list nobody read.
+   */
+  it("does not claim to know the ways in when a list was refused", () => {
+    const { known } = entryPointsOf(
+      conns({
+        notLookedAt: [
+          { kind: "Service", version: "v1", reason: "forbidden" },
+        ] as never,
+      }),
+      []
+    );
+    expect(known).toBe(false);
   });
 });
 
