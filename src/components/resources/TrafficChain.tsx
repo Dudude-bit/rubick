@@ -24,7 +24,12 @@ import {
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
 import { expiryOf } from "@/lib/certificates";
-import { chainSilence, trafficChains, type ChainHop } from "@/lib/connections";
+import {
+  chainSilence,
+  describeExistence,
+  trafficChains,
+  type ChainHop,
+} from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import {
@@ -122,6 +127,13 @@ export function Rail({
 
 function toneOf(hop: ChainHop): HopTone {
   if (hop.at === "stop") return "bad";
+  // A hop the app could not look up is not a hop it found. The Services
+  // list being refused hands the chain a backend with `notChecked`, and
+  // drawing it in the ordinary tone made it indistinguishable from a
+  // Service that exists and is healthy — on the one view that exists to
+  // show where traffic stops.
+  if (hop.at === "object" && hop.object.existence === "notChecked")
+    return "warn";
   if (hop.at === "published") return hop.tone;
   if (hop.at === "controller") return hop.binding.resolved ? "on" : "bad";
   if (hop.at === "certificate") {
@@ -382,6 +394,11 @@ function Hop({
               {hop.detail && (
                 <span className="font-mono text-xs text-fg-mid">
                   {hop.detail}
+                </span>
+              )}
+              {hop.object.existence === "notChecked" && !hop.self && (
+                <span className="text-[11px] text-warn">
+                  {describeExistence(hop.object, t)}
                 </span>
               )}
               {hop.self && (

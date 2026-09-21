@@ -199,7 +199,20 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
   const total = targets.targets.length;
   const unknown = total - up - down;
   const share = total === 0 ? 0 : up / total;
-  const tone = share >= 0.9 ? "ok" : share >= 0.5 ? "warn" : "err";
+  // A target Prometheus has discovered and not scraped yet is a third
+  // state, not a failure. It counted in the denominator and nowhere else,
+  // so a pool that had just appeared — every target unknown — drew the ring
+  // full red, the loudest thing on the page, beside counts reading 0 up and
+  // 0 down. The tone now follows what has actually been judged.
+  const judged = up + down;
+  const tone =
+    judged === 0
+      ? "none"
+      : up / judged >= 0.9
+        ? "ok"
+        : up / judged >= 0.5
+          ? "warn"
+          : "err";
   const r = 23;
   const c = 2 * Math.PI * r;
   return (
@@ -224,7 +237,9 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
                 ? "stroke-ok"
                 : tone === "warn"
                   ? "stroke-warn"
-                  : "stroke-err"
+                  : tone === "err"
+                    ? "stroke-err"
+                    : "stroke-fg-fnt"
             )}
             strokeWidth="5"
             strokeLinecap="round"

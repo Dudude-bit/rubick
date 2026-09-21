@@ -61,6 +61,23 @@ const answered = (stops: ChainStop[]): ResourceConnections => ({
 const query = (data: ResourceConnections | undefined, isPending = false) =>
   ({ data, error: null, isPending }) as ConnectionsQuery;
 
+const ingress: ObjectRef = {
+  kind: "Ingress",
+  name: "shop",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: null,
+} as unknown as ObjectRef;
+
+/** The backend of an Ingress on a cluster that refused the Services list. */
+const unreadBackend: ObjectRef = {
+  kind: "Service",
+  name: "checkout",
+  namespace: "k8s-gui-test",
+  existence: "notChecked",
+  facts: null,
+} as unknown as ObjectRef;
+
 describe("TrafficChain", () => {
   it("gives each stop its own answer", () => {
     /** A view that draws all three the same way is a red dot. Each of these
@@ -586,5 +603,42 @@ describe("TrafficChain", () => {
     expect(
       screen.getByRole("button", { name: /try the read again/i })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A refused Services list now reaches the chain as `notChecked` with no
+   * stop — the fix that stopped the app calling those Services missing. The
+   * chain drew the hop as an ordinary working link in the ordinary tone, so
+   * a backend nobody looked at was indistinguishable from one that is there
+   * and healthy, on the one view whose whole job is where traffic stops.
+   */
+  it("does not draw a backend nobody looked at as a backend that is there", () => {
+    wrap(
+      <TrafficChain
+        query={query({
+          subject: ingress,
+          edges: [
+            {
+              from: ingress,
+              to: unreadBackend,
+              relation: {
+                verb: "routes",
+                host: "shop.example.com",
+                path: "/",
+                pathType: "Prefix",
+                port: "http",
+                tls: false,
+              },
+            },
+          ],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        } as unknown as ResourceConnections)}
+      />
+    );
+
+    expect(screen.getByText("checkout")).toBeInTheDocument();
+    expect(screen.getByText("not checked")).toBeInTheDocument();
   });
 });

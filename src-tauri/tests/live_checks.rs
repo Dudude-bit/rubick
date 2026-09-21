@@ -7,7 +7,7 @@
 //! K8S_GUI_BARE_POD=legacy-rc-xxx cargo test --test live_checks -- --ignored --nocapture
 //! ```
 
-use k8s_gui_lib::commands::checks::{check_pod, Check, CopyWith};
+use k8s_gui_lib::commands::checks::{check_pod, Check, CheckAnswer, CopyWith};
 use k8s_gui_lib::state::AppState;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::{Api, ListParams};
@@ -54,11 +54,15 @@ async fn a_pod_with_tools_answers_from_its_own_container() {
     println!("dns: {dns:?}");
     assert_eq!(dns.ran_in, "container");
     assert!(
-        !dns.tool_missing,
+        dns.answer != CheckAnswer::NoTool,
         "the image has a resolver: tried {:?}",
         dns.tried
     );
-    assert!(dns.ok, "kubernetes.default resolves in every cluster");
+    assert_eq!(
+        dns.answer,
+        CheckAnswer::Yes,
+        "kubernetes.default resolves in every cluster"
+    );
 
     let tcp = check_pod(
         client,
@@ -75,11 +79,15 @@ async fn a_pod_with_tools_answers_from_its_own_container() {
     .expect("tcp check runs");
     println!("tcp: {tcp:?}");
     assert!(
-        !tcp.tool_missing,
+        tcp.answer != CheckAnswer::NoTool,
         "the image has nc or curl: tried {:?}",
         tcp.tried
     );
-    assert!(tcp.ok, "the apiserver accepts a connection from every pod");
+    assert_eq!(
+        tcp.answer,
+        CheckAnswer::Yes,
+        "the apiserver accepts a connection from every pod"
+    );
 }
 
 /// A pause image has nothing on the ladder. The answer says so, the same
@@ -98,7 +106,12 @@ async fn a_bare_image_is_said_so_and_a_copy_answers_and_leaves() {
         .await
         .expect("the exec itself runs");
     println!("bare: {bare:?}");
-    assert!(bare.tool_missing, "pause has no resolver: {:?}", bare.tried);
+    assert_eq!(
+        bare.answer,
+        CheckAnswer::NoTool,
+        "pause has no resolver: {:?}",
+        bare.tried
+    );
     assert_eq!(bare.answered_with, None);
 
     let copied = check_pod(
@@ -115,7 +128,7 @@ async fn a_bare_image_is_said_so_and_a_copy_answers_and_leaves() {
     .expect("the copy runs");
     println!("copy: {copied:?}");
     assert_eq!(copied.ran_in, "copy");
-    assert!(copied.ok, "busybox resolves it");
+    assert_eq!(copied.answer, CheckAnswer::Yes, "busybox resolves it");
     let report = copied.copy.expect("a copy is reported");
     assert!(report.deleted, "deleted, not merely asked");
 

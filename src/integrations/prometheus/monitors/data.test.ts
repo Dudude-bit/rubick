@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { monitorCount, type Picture } from "./data";
+import { monitorCount, monitorMark, type Picture } from "./data";
 
 const empty = {
   services: { ok: true, items: [] },
@@ -48,5 +48,49 @@ describe("the number the sidebar row carries", () => {
         picture({ state: "read", items: [] }, { state: "read", items: [] })
       )
     ).toBe(0);
+  });
+});
+
+/**
+ * The third reader of the same number. The sidebar row and the page header
+ * both learned that a refused list is not an empty one; the tab mark kept
+ * counting the rows that survived, so a 403 on ServiceMonitors drew a
+ * confident number beside a header saying some lists could not be read.
+ */
+describe("the mark the Monitors tab carries", () => {
+  it("carries nothing when a monitor list was refused", () => {
+    expect(
+      monitorMark(
+        picture(
+          { state: "unread", reason: "servicemonitors is forbidden" },
+          { state: "read", items: [] }
+        )
+      )
+    ).toBeNull();
+  });
+
+  it("carries a count when both lists answered", () => {
+    expect(
+      monitorMark(
+        picture({ state: "read", items: [] }, { state: "read", items: [] })
+      )
+    ).toEqual({ shows: "count", of: 0 });
+  });
+
+  /**
+   * And the same number in the other sentence: a row that needs attention
+   * came from the list that answered, so "1 of 1" over a refused list is
+   * the confident total again, one word further along.
+   */
+  it("claims no total when one of the lists was refused", () => {
+    const mark = monitorMark(
+      picture(
+        { state: "unread", reason: "servicemonitors is forbidden" },
+        { state: "read", items: [] }
+      )
+    );
+    expect(
+      mark === null || mark.shows !== "severity" || mark.total === null
+    ).toBe(true);
   });
 });

@@ -1964,28 +1964,12 @@ async fn ingress_connections(
                     note_reach(svc, &svc_ref, &snapshot, out, false);
                     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
                 } else {
-                    // A list nobody read holds nothing either, and the two
-                    // are opposite answers: `Missing` renders as "routes to
-                    // a backend that was never created". Unchecked when the
-                    // Services list was refused, and named in `not_looked_at`.
-                    let missing = ObjectRef::new(
-                        "Service",
-                        &service,
-                        Some(ns.to_string()),
-                        if snapshot.services.is_err() {
-                            Existence::NotChecked
-                        } else {
-                            Existence::Missing
-                        },
-                    );
-                    out.edge(subject.clone(), missing.clone(), relation);
-                    // No stop for a list nobody read: the stop is what paints
-                    // the hop red and says the controller has nothing to send
-                    // the request to.
-                    if reached.insert(service.clone()) && snapshot.services.is_ok() {
+                    let (backend, stops) = absent_backend(&service, ns, snapshot.services.is_ok());
+                    out.edge(subject.clone(), backend.clone(), relation);
+                    if reached.insert(service.clone()) && stops {
                         out.stops.push(ChainStop::BackendMissing {
                             ingress: subject.clone(),
-                            service: missing,
+                            service: backend,
                         });
                     }
                 }
@@ -2007,6 +1991,25 @@ async fn ingress_connections(
     out.not_looked_at = unanswered(&snapshot);
 
     Ok(())
+}
+
+/// The backend an Ingress names and no Service answers for.
+///
+/// A list nobody read holds nothing either, and the two are opposite
+/// answers: `Missing` renders as "routes to a backend that was never
+/// created" and earns a stop that paints the hop red, while a refused list
+/// earns neither — it is named in `not_looked_at` instead. In the loop this
+/// was two conditions nothing could reach without a cluster.
+fn absent_backend(service: &str, ns: &str, list_answered: bool) -> (ObjectRef, bool) {
+    let existence = if list_answered {
+        Existence::Missing
+    } else {
+        Existence::NotChecked
+    };
+    (
+        ObjectRef::new("Service", service, Some(ns.to_string()), existence),
+        list_answered,
+    )
 }
 
 async fn claim_connections(
@@ -3123,5 +3126,23 @@ mod refused_list_tests {
                 "{kind} was refused and is not named"
             );
         }
+    }
+
+    /// The fix this file exists for, on the page it was added to last.
+    ///
+    /// An Ingress whose backend Service is not in a list the cluster
+    /// refused must not be called missing: `Missing` renders as "routes to a
+    /// backend that was never created" and brings a stop that paints the hop
+    /// red. Both conditions sat in a loop that runs only against a cluster,
+    /// so either could be inverted with the whole suite green.
+    #[test]
+    fn a_backend_in_a_refused_list_is_not_a_backend_that_was_never_created() {
+        let (refused, stops) = absent_backend("checkout", "shop", false);
+        assert_eq!(refused.existence, Existence::NotChecked);
+        assert!(!stops, "a list nobody read does not stop the path");
+
+        let (answered, stops) = absent_backend("checkout", "shop", true);
+        assert_eq!(answered.existence, Existence::Missing);
+        assert!(stops, "a list that answered and lacks it does");
     }
 }

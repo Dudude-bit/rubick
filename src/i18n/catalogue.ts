@@ -1506,6 +1506,8 @@ export const en = {
     copyNote:
       "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
     whatItSaid: "What it printed",
+    containerCannotAnswer:
+      "{container} cannot take an exec: {why}. The check runs from a copy of the pod.",
   },
   changes: {
     title: "Changes",
@@ -2079,6 +2081,8 @@ export const en = {
     },
     ofTotal: "of {total}",
     needAttention: "{n} of {total} need attention",
+    needAttentionSomeUnread:
+      "{n} need attention, of a number this account cannot count",
     someUnread:
       "Some monitors could not be read, so this is not the whole picture",
     allScraped: {
@@ -2131,6 +2135,9 @@ export const en = {
       other: "{n} targets up, scraped {ago} ago.",
     },
     nothingToDo: "Nothing to do here.",
+    verdictUnscraped: "Picked up. {n} of {total} discovered, not scraped yet.",
+    unscrapedSettles:
+      "Prometheus has the targets and has not finished a round for them. A pool that has just appeared settles on its own.",
     verdictNotChecked:
       "Selected and picked up. Whether it is scraped is not checked.",
     verdictNoKind:

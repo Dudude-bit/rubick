@@ -162,6 +162,38 @@ export function monitorCount(picture: Picture): number | null {
   return rowsOfPicture(picture).length;
 }
 
+/**
+ * What the Monitors tab shows beside its label: how many need attention,
+ * how many there are, or nothing.
+ *
+ * The third reader of "how many monitors", and the one that used to answer
+ * it with `rowsOfPicture(...).length` — which drops a kind the cluster
+ * refused, so a 403 on ServiceMonitors put a confident number on the tab
+ * beside a header saying some lists could not be read. It asks
+ * {@link monitorCount} now, as the sidebar does.
+ */
+export function monitorMark(
+  picture: Picture
+):
+  | { shows: "severity"; tone: "err" | "warn"; n: number; total: number | null }
+  | { shows: "count"; of: number }
+  | null {
+  const rows = rowsOfPicture(picture);
+  const attention = rows.filter((row) => row.worst !== null);
+  const counted = monitorCount(picture);
+  if (attention.length > 0)
+    return {
+      shows: "severity",
+      tone: attention.some((row) => row.worst === "err") ? "err" : "warn",
+      n: attention.length,
+      // Not `attention.length`: the rows that need attention are the ones
+      // that were read, and saying "1 of 1" over a list the cluster refused
+      // is the same confident number in another sentence.
+      total: counted,
+    };
+  return counted === null ? null : { shows: "count", of: counted };
+}
+
 export function worstTone(picture: Picture): "warn" | "err" | null {
   const rows = rowsOfPicture(picture);
   if (rows.some((row) => row.worst === "err")) return "err";

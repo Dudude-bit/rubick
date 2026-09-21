@@ -1507,6 +1507,8 @@ export const ru: Catalogue = {
     copyNote:
       "Копия разделяет namespace, лейблы, DNS-политику и service account. Это не сам под, и она удаляется, как только ответ получен.",
     whatItSaid: "Что напечатало",
+    containerCannotAnswer:
+      "{container} не может принять exec: {why}. Проверка пойдёт из копии пода.",
   },
   changes: {
     title: "Изменения",
@@ -2130,6 +2132,8 @@ export const ru: Catalogue = {
     },
     ofTotal: "из {total}",
     needAttention: "{n} из {total} требуют внимания",
+    needAttentionSomeUnread:
+      "{n} требуют внимания, а скольких всего — этой учётной записи не сосчитать",
     someUnread: "Часть мониторов прочитать не удалось — это не вся картина",
     allScraped: {
       one: "{n} монитор, скрейпится",
@@ -2189,6 +2193,9 @@ export const ru: Catalogue = {
       other: "{n} target'ов up, скрейп {ago} назад.",
     },
     nothingToDo: "Делать здесь нечего.",
+    verdictUnscraped: "Подхвачен. {n} из {total} обнаружено, ещё не опрошены.",
+    unscrapedSettles:
+      "Prometheus видит target'ы и ещё не закончил по ним круг. Только что появившийся пул выправляется сам.",
     verdictNotChecked: "Выбран и подхвачен. Скрейпится ли, не проверено.",
     verdictNoKind:
       "Выбран. Подхватить его здесь некому: CRD Prometheus оператора не установлен.",
@@ -3429,7 +3436,7 @@ export const ru: Catalogue = {
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
     ciliumCovered: "под политикой",
-    ciliumUnrestricted: "ничего не выбирает",
+    ciliumUnrestricted: "его не выбирает ни одна политика",
     ciliumOnlyRejected: "только отвергнутые",
     ciliumCannotSay: "нельзя сказать",
     ciliumNothingSelects:

@@ -163,7 +163,21 @@ export function useResourceWatch<
               return;
             }
             if (payload.changes.length === 0) return;
-            if (inFailedState) {
+            // A `restarted` marker says the watcher is trying again; it is
+            // not the cluster answering. kube emits one before every list
+            // attempt, so a refused watch sends a marker between every pair
+            // of failures — and recovering on it put the list back on
+            // "live", stopped the polling that was standing in for the
+            // watch, and drew a resync that never syncs. The same rule the
+            // other side of the boundary applies in `watch::answered`.
+            const answered = payload.changes.some(
+              (change) => change.op !== "restarted"
+            );
+            // The marker still does its work — it opens the staging map the
+            // resync is collected into, and skipping that left the objects
+            // deleted while the watch was down in the cache for good. What
+            // it must not do is end the failure.
+            if (inFailedState && answered) {
               inFailedState = false;
               onRecoveredRef.current?.();
             }
@@ -174,7 +188,10 @@ export function useResourceWatch<
             for (const change of payload.changes) {
               if (change.op === "restarted") {
                 staged = new Map();
-                setResyncing(true);
+                // A watch that is failing announces every attempt; saying
+                // "resyncing" each time claims progress on a stream that is
+                // not making any. The failure is what the reader is shown.
+                setResyncing(!inFailedState);
                 // The resync's list is the whole truth; anything from
                 // before it is about to be superseded.
                 live = [];

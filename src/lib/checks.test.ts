@@ -7,9 +7,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   ranIn: "container",
   tried: ["getent"],
   answeredWith: "getent",
-  ok: true,
-  toolMissing: false,
-  unknown: false,
+  answer: "yes",
   exitCode: 0,
   stdout: "",
   stderr: "",
@@ -56,7 +54,7 @@ describe("reading what the resolver said", () => {
       "dns",
       outcome({
         answeredWith: "nslookup",
-        ok: true,
+        answer: "yes",
         stdout:
           "Server:\t\t10.96.0.10\n\n** server can't find nowhere.shop: NXDOMAIN\n",
       })
@@ -68,9 +66,8 @@ describe("reading what the resolver said", () => {
     const said = verdictOf(
       "tcp",
       outcome({
-        toolMissing: true,
+        answer: "noTool",
         answeredWith: null,
-        ok: false,
         tried: ["nc", "curl"],
       })
     );
@@ -82,9 +79,24 @@ describe("reading what the resolver said", () => {
       "connected"
     );
     expect(
-      verdictOf("tcp", outcome({ answeredWith: "nc", ok: false, exitCode: 1 }))
-        .says
+      verdictOf(
+        "tcp",
+        outcome({ answeredWith: "nc", answer: "no", exitCode: 1 })
+      ).says
     ).toBe("refused");
+  });
+
+  /**
+   * `curl telnet://` exits 6 for a name it could not resolve. That is a fact
+   * about the name, not about the port, and it was drawn as "does not answer
+   * from here" — a refusal the cluster never made.
+   */
+  it("does not call a port refused when the tool failed for its own reasons", () => {
+    const verdict = verdictOf(
+      "tcp",
+      outcome({ answeredWith: "curl", answer: "unanswered", exitCode: 6 })
+    );
+    expect(verdict.says).toBe("unanswered");
   });
 });
 
@@ -99,7 +111,7 @@ describe("a check that produced no answer at all", () => {
   it("does not call a dropped exec a name that does not resolve", () => {
     const verdict = verdictOf(
       "dns",
-      outcome({ ok: false, unknown: true, exitCode: null, stdout: "" })
+      outcome({ answer: "unanswered", exitCode: null, stdout: "" })
     );
     expect(verdict.says).toBe("unanswered");
   });
@@ -107,7 +119,7 @@ describe("a check that produced no answer at all", () => {
   it("does not call a dropped exec a port that refuses", () => {
     const verdict = verdictOf(
       "tcp",
-      outcome({ ok: false, unknown: true, exitCode: null })
+      outcome({ answer: "unanswered", exitCode: null })
     );
     expect(verdict.says).toBe("unanswered");
   });
@@ -121,8 +133,7 @@ describe("a check that produced no answer at all", () => {
     const verdict = verdictOf(
       "dns",
       outcome({
-        ok: false,
-        unknown: false,
+        answer: "no",
         exitCode: 1,
         stdout: "** server can't find db.shop: NXDOMAIN",
       })
@@ -131,10 +142,43 @@ describe("a check that produced no answer at all", () => {
   });
 
   it("still says a port refuses when the tool said so", () => {
-    const verdict = verdictOf(
-      "tcp",
-      outcome({ ok: false, unknown: false, exitCode: 7 })
-    );
+    const verdict = verdictOf("tcp", outcome({ answer: "no", exitCode: 7 }));
     expect(verdict.says).toBe("refused");
+  });
+
+  /**
+   * The case that could not be reached at all: `getent hosts` exits 2 with
+   * an empty stdout for a name its resolver does not have, and the rule that
+   * read an empty stdout as "nobody answered" made that the verdict on every
+   * glibc image — so the panel could say "resolves" and never the opposite.
+   */
+  it("says a name does not resolve when the rung's own exit said so", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({
+        answeredWith: "getent",
+        answer: "no",
+        exitCode: 2,
+        stdout: "",
+      })
+    );
+    expect(verdict.says).toBe("notResolved");
+  });
+
+  /**
+   * And the rule it replaces still holds where the tool said nothing: a
+   * getent that fell over for its own reasons is not a name that is absent.
+   */
+  it("keeps saying nothing when the tool failed for its own reasons", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({
+        answeredWith: "getent",
+        answer: "unanswered",
+        exitCode: 1,
+        stdout: "",
+      })
+    );
+    expect(verdict.says).toBe("unanswered");
   });
 });

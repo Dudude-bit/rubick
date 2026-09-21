@@ -62,10 +62,21 @@ impl FailureLatch {
         }
     }
 
+    /// Record one watcher event.
+    ///
+    /// The rule lives here rather than at the call site so the loop cannot
+    /// forget it: only an answer clears a streak, and `Event::Init` — the
+    /// marker kube sends before every list attempt — is not one.
+    pub fn saw<K>(&mut self, event: &Event<K>) {
+        if answered(event) {
+            self.record_success();
+        }
+    }
+
     /// Record a successful watch event. Resets the counter and clears
     /// the emit-once latch so a future failure streak can trigger a
     /// fresh `Failed`.
-    pub fn record_success(&mut self) {
+    fn record_success(&mut self) {
         self.consecutive_errors = 0;
         self.emitted = false;
     }
@@ -133,19 +144,30 @@ mod tests {
         assert_eq!(backoff_for(0), Duration::from_secs(1));
     }
 
-    /// The pattern the log showed: a refused list is preceded by `Init`
-    /// every time, and the latch must still reach its threshold.
+    /// The pattern the log showed, driven exactly as the loop drives it: a
+    /// refused list is preceded by `Init` every time, and the latch must
+    /// still reach its threshold. Deleting the rule inside `saw` — the one
+    /// the loop calls — fails here.
     #[test]
     fn a_refused_stream_reaches_the_threshold_despite_its_markers() {
         let mut latch = FailureLatch::new();
         let mut emitted = false;
         for _ in 0..3 {
-            if answered::<Pod>(&Event::Init) {
-                latch.record_success();
-            }
+            latch.saw::<Pod>(&Event::Init);
             emitted |= latch.record_error();
         }
         assert!(emitted, "three refused lists must emit Failed");
+    }
+
+    /// And the other half: an answer still clears the streak, so a stream
+    /// that recovers is free to fail again later.
+    #[test]
+    fn an_answer_clears_the_streak() {
+        let mut latch = FailureLatch::new();
+        latch.record_error();
+        latch.record_error();
+        latch.saw(&Event::Apply(Pod::default()));
+        assert_eq!(latch.consecutive_errors(), 0);
     }
 
     #[test]
@@ -180,7 +202,7 @@ mod tests {
         latch.record_error();
         assert!(latch.record_error(), "first streak emits");
 
-        latch.record_success();
+        latch.saw(&Event::Apply(Pod::default()));
 
         assert!(!latch.record_error(), "1 error after recovery");
         assert!(!latch.record_error(), "2 errors after recovery");
@@ -196,7 +218,7 @@ mod tests {
         latch.record_error();
         latch.record_error();
         // One success right before threshold should reset.
-        latch.record_success();
+        latch.saw(&Event::Apply(Pod::default()));
         assert!(!latch.record_error(), "1 error after intermediate success");
         assert!(!latch.record_error(), "2 errors after intermediate success");
         assert!(latch.record_error(), "3rd must emit on fresh streak");
@@ -210,7 +232,7 @@ mod tests {
         assert_eq!(latch.consecutive_errors(), 1);
         latch.record_error();
         assert_eq!(latch.consecutive_errors(), 2);
-        latch.record_success();
+        latch.saw(&Event::Apply(Pod::default()));
         assert_eq!(latch.consecutive_errors(), 0);
     }
 }

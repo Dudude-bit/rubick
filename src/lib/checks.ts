@@ -68,23 +68,27 @@ export type Verdict =
 
 /** What the outcome means, as a key the catalogue turns into words. */
 export function verdictOf(kind: "dns" | "tcp", outcome: CheckOutcome): Verdict {
-  if (outcome.toolMissing) return { says: "noTool", tried: outcome.tried };
-  // An exec that never reported how it ended has not answered the question.
-  // Saying "does not resolve" there states a fact about the name from a run
-  // that produced no fact at all.
-  if (outcome.unknown)
-    return { says: "unanswered", tool: outcome.answeredWith ?? null };
+  const unanswered: Verdict = {
+    says: "unanswered",
+    tool: outcome.answeredWith ?? null,
+  };
+  if (outcome.answer === "noTool")
+    return { says: "noTool", tried: outcome.tried };
+  // An exec that never reported how it ended, or a rung whose exit says
+  // nothing either way, has not answered the question. Saying "does not
+  // resolve" there states a fact about the name from a run that produced
+  // no fact at all.
+  if (outcome.answer === "unanswered") return unanswered;
   if (kind === "dns") {
     const addresses = addressesIn(outcome.stdout);
     // `nslookup` exits 0 with "can't resolve" in its output on busybox, so
     // the exit code alone is not the answer; an address is.
-    if (outcome.ok && addresses.length > 0)
+    if (outcome.answer === "yes" && addresses.length > 0)
       return { says: "resolved", addresses };
-    // And the other way round: a resolver that could not be reached exits
-    // non-zero with nothing in stdout, which is not the name being absent.
-    return outcome.ok || outcome.stdout.trim().length > 0
-      ? { says: "notResolved" }
-      : { says: "unanswered", tool: outcome.answeredWith ?? null };
+    // Otherwise the rung has said no with its own exit — `getent hosts`
+    // exits 2 for a name its resolver does not have, silently — or said yes
+    // with words that mean the opposite, which busybox does.
+    return { says: "notResolved" };
   }
-  return outcome.ok ? { says: "connected" } : { says: "refused" };
+  return outcome.answer === "yes" ? { says: "connected" } : { says: "refused" };
 }
