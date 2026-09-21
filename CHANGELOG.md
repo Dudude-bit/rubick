@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.0] - 2026-09-22
+
+### Added
+
+- **Paste the alert that woke you, and open what it is about.** An alert
+  arrives as a wall of labels in a phone notification, and the object it
+  names has to be found by hand at four in the morning. Paste it into the
+  command palette: the app reads Alertmanager, Grafana, Datadog and the
+  wrappers PagerDuty and Slack put around them, shows what it recognised and
+  where each value came from — a `deployment =` line, the alert's own name, a
+  guess from the `Source:` host — and opens the object in the cluster the
+  alert meant. Nothing is assumed: a cluster it cannot match in your
+  kubeconfig is offered as a choice rather than picked, a value recognised by
+  shape says so, and the alert's own words stay quoted on the page beside
+  what this app read itself.
+
+- **A home page of the services you said were yours.** Pin a Deployment,
+  StatefulSet, DaemonSet or CronJob and it appears at the top of the
+  overview with the five things you would otherwise open four screens for:
+  what state it is in, how traffic reaches it, what changed last, what this
+  app is waiting on, and what nobody looked at. Membership is never inferred
+  — nothing arrives here because it was opened recently or carries a label —
+  and the block stands even when the cluster-wide read is refused, which is
+  the reader it is most for.
+
+- **An Alerts tab for Prometheus.** Every PrometheusRule in the cluster with
+  the three things that decide whether it will ever fire: which Prometheus
+  picks it up, whether that Prometheus actually loaded it, and what is
+  burning right now. A rule object nobody loaded is not a quiet one, and the
+  tab says which of the two it is looking at. Workload pages carry the
+  alerts firing about the object itself, in the peek as well as the page.
+
+- **An investigation as one file.** What you worked out about a pod —
+  the verdict, the facts, the traffic chain as it stood, what changed, the
+  log lines and what could not be read — saved as a single self-contained
+  HTML file with no Secret values in it and no request made when it opens.
+  Publishing targets are optional: with one configured the same report goes
+  up as a link that updates in place when you share the same object again.
+
+- **Before applying, ask the server what would change.** The YAML editor
+  sends the document as a dry run first and shows the diff the cluster itself
+  computes, so an apply is confirmed against what it would do rather than
+  against what it looks like it would do.
+
+- **Test a hypothesis from inside the pod, without kubectl.** DNS, a port, an
+  address: run the check from the pod's own network and read the answer in
+  the app. A check that produced no answer says so rather than reporting a
+  "no".
+
+### Changed
+
+- **Large clusters.** The pod list arrives as compact rows in chunks that fit
+  the IPC budget, the overview is answered from the watch-fed stores instead
+  of a full pod list, the YAML diff runs off the main thread, and a log batch
+  costs its own lines rather than the whole buffer.
+
+- **Every read ends in words.** A read that runs long says so and says what
+  would shorten it, rather than leaving a spinner to mean whatever the reader
+  guesses.
+
+### Fixed
+
+- **A refused list is not an empty one.** A 403 on Services or Ingresses used
+  to arrive as "there are none", which then became "this backend was never
+  created", in red. The refusal is carried to the screen now, on the pages
+  where it was invisible.
+
+- **A cluster that refuses to answer does not borrow the last one's.** A
+  watch whose first list was refused kept resetting the failure counter on
+  the event that arrives before it, so the app retried forever at full speed
+  and the log file burned through in seconds — and the previous cluster's
+  cache outlived the switch.
+
+- **A write that ran out of time is not a write that failed.** An apply whose
+  answer did not arrive in the deadline said the write failed; it says what
+  it actually knows, which is that it does not know.
+
+- **Counting in a language with more than two forms.** Eighteen strings put a
+  number in front of a noun with one form for every count, so Russian read
+  "2 горит" and "1 объектов". A test now refuses the next one.
+
+- **The Flatpak.** The web process is found from `/app` and the menu entry
+  runs the launcher, so the icon opens a window rather than nothing.
+
 ## [4.18.0] - 2026-09-19
 
 ### Added

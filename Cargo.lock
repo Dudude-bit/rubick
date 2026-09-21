@@ -2873,7 +2873,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui"
-version = "4.18.0"
+version = "4.19.0"
 dependencies = [
  "async-trait",
  "azure_core",
@@ -2928,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "k8s-gui-common"
-version = "4.18.0"
+version = "4.19.0"
 dependencies = [
  "dirs 7.0.0",
  "tracing",
