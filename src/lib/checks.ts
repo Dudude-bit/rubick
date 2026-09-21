@@ -80,11 +80,21 @@ export function verdictOf(kind: "dns" | "tcp", outcome: CheckOutcome): Verdict {
     // the exit code alone is not the answer; an address is.
     if (outcome.ok && addresses.length > 0)
       return { says: "resolved", addresses };
-    // And the other way round: a resolver that could not be reached exits
+    // The rung's own exit, where it has one: `getent hosts` exits 2 for a
+    // name its resolver does not have, silently. Guessing from an empty
+    // stdout instead read that as "nobody answered" on every glibc image —
+    // so the panel could say "resolves" and never "does not resolve".
+    if (outcome.saidNo) return { says: "notResolved" };
+    // And the other way round: a tool that failed for its own reasons exits
     // non-zero with nothing in stdout, which is not the name being absent.
     return outcome.ok || outcome.stdout.trim().length > 0
       ? { says: "notResolved" }
       : { says: "unanswered", tool: outcome.answeredWith ?? null };
   }
-  return outcome.ok ? { says: "connected" } : { says: "refused" };
+  if (outcome.ok) return { says: "connected" };
+  // A port that refused is a fact about the cluster; `curl` exit 6 — a name
+  // it could not resolve — is not, and was drawn as one.
+  return outcome.saidNo
+    ? { says: "refused" }
+    : { says: "unanswered", tool: outcome.answeredWith ?? null };
 }

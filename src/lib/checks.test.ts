@@ -8,6 +8,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   tried: ["getent"],
   answeredWith: "getent",
   ok: true,
+  saidNo: false,
   toolMissing: false,
   unknown: false,
   exitCode: 0,
@@ -82,9 +83,24 @@ describe("reading what the resolver said", () => {
       "connected"
     );
     expect(
-      verdictOf("tcp", outcome({ answeredWith: "nc", ok: false, exitCode: 1 }))
-        .says
+      verdictOf(
+        "tcp",
+        outcome({ answeredWith: "nc", ok: false, saidNo: true, exitCode: 1 })
+      ).says
     ).toBe("refused");
+  });
+
+  /**
+   * `curl telnet://` exits 6 for a name it could not resolve. That is a fact
+   * about the name, not about the port, and it was drawn as "does not answer
+   * from here" — a refusal the cluster never made.
+   */
+  it("does not call a port refused when the tool failed for its own reasons", () => {
+    const verdict = verdictOf(
+      "tcp",
+      outcome({ answeredWith: "curl", ok: false, saidNo: false, exitCode: 6 })
+    );
+    expect(verdict.says).toBe("unanswered");
   });
 });
 
@@ -133,8 +149,46 @@ describe("a check that produced no answer at all", () => {
   it("still says a port refuses when the tool said so", () => {
     const verdict = verdictOf(
       "tcp",
-      outcome({ ok: false, unknown: false, exitCode: 7 })
+      outcome({ ok: false, saidNo: true, unknown: false, exitCode: 7 })
     );
     expect(verdict.says).toBe("refused");
+  });
+
+  /**
+   * The case that could not be reached at all: `getent hosts` exits 2 with
+   * an empty stdout for a name its resolver does not have, and the rule that
+   * read an empty stdout as "nobody answered" made that the verdict on every
+   * glibc image — so the panel could say "resolves" and never the opposite.
+   */
+  it("says a name does not resolve when the rung's own exit said so", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({
+        answeredWith: "getent",
+        ok: false,
+        saidNo: true,
+        exitCode: 2,
+        stdout: "",
+      })
+    );
+    expect(verdict.says).toBe("notResolved");
+  });
+
+  /**
+   * And the rule it replaces still holds where the tool said nothing: a
+   * getent that fell over for its own reasons is not a name that is absent.
+   */
+  it("keeps saying nothing when the tool failed for its own reasons", () => {
+    const verdict = verdictOf(
+      "dns",
+      outcome({
+        answeredWith: "getent",
+        ok: false,
+        saidNo: false,
+        exitCode: 1,
+        stdout: "",
+      })
+    );
+    expect(verdict.says).toBe("unanswered");
   });
 });

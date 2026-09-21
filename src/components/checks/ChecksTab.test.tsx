@@ -32,6 +32,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   tried: ["nc"],
   answeredWith: "nc",
   ok: true,
+  saidNo: false,
   toolMissing: false,
   unknown: false,
   exitCode: 0,
@@ -106,7 +107,7 @@ describe("testing a hypothesis from the pod", () => {
 
   it("says a port does not answer, and not that it accepted", async () => {
     vi.mocked(commands.runPodCheck).mockResolvedValue(
-      outcome({ ok: false, exitCode: 7 })
+      outcome({ ok: false, saidNo: true, exitCode: 7 })
     );
     mount();
     await userEvent.type(screen.getByLabelText(/Connect to/), "db:5432");

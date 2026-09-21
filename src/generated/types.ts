@@ -1164,6 +1164,7 @@ export interface CheckOutcome {
   tried: string[];
   answeredWith: string | null;
   ok: boolean;
+  saidNo: boolean;
   toolMissing: boolean;
   unknown: boolean;
   exitCode: number | null;

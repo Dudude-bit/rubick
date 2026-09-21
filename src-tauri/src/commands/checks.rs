@@ -67,6 +67,11 @@ pub struct CheckOutcome {
     /// The rung that answered, or `None` when the image had none of them.
     pub answered_with: Option<String>,
     pub ok: bool,
+    /// The rung that answered said **no** with its own exit code. Not the
+    /// same as "not ok": a tool that failed for its own reasons said
+    /// nothing, and the screen must not turn that into a fact about the
+    /// cluster.
+    pub said_no: bool,
     pub tool_missing: bool,
     /// The exec ended without ever reporting how. Not a no: `Exit::ok()` is
     /// `code == Some(0)`, so a dropped websocket or a status channel that
@@ -83,8 +88,11 @@ pub struct CheckOutcome {
 /// Whether a rung's exit code says the question was answered yes.
 type SaysYes = fn(Option<i32>) -> bool;
 
+/// Whether a rung's exit code says the question was answered no.
+type SaysNo = fn(Option<i32>) -> bool;
+
 /// The rung that answered, what it printed, and how to read its exit.
-type Answer = (String, Captured, SaysYes);
+type Answer = (String, Captured, SaysYes, SaysNo);
 
 /// One rung: a tool, the argv it takes, and what its exit code means.
 struct Rung {
@@ -97,11 +105,51 @@ struct Rung {
     /// it and it exits 28 — on a port that is open. Reading 0 as yes for
     /// every rung reported every healthy service as refusing connections.
     says_yes: SaysYes,
+    /// Whether this rung's exit says the question was answered **no**.
+    ///
+    /// The other half of the same sentence, and it is not "anything that is
+    /// not yes". `getent hosts` exits 2 for a key it did not find — that is
+    /// the tool saying the name is not there — while its other non-zero
+    /// exits say only that getent itself had a problem. Reading every
+    /// non-zero as no would state a fact about the cluster from a run that
+    /// produced none; reading none of them as no left the panel unable to
+    /// say "does not resolve" on any image that has getent, which is every
+    /// glibc image.
+    says_no: SaysNo,
 }
 
 /// The ordinary meaning: the tool succeeded.
 fn zero_is_yes(code: Option<i32>) -> bool {
     code == Some(0)
+}
+
+/// For a rung whose failing exits say nothing on their own — busybox
+/// `nslookup` exits 1 both for a name that is absent and for a resolver it
+/// could not reach, and prints which. The words are the answer there, not
+/// the number, and `verdictOf` reads them.
+fn nothing_is_no(_code: Option<i32>) -> bool {
+    false
+}
+
+/// `getent hosts` exits 2 for "key not found" — the name is not there as far
+/// as the pod's own resolver is concerned. 1 and 3 are getent's own troubles
+/// and say nothing about the name.
+fn getent_key_not_found(code: Option<i32>) -> bool {
+    code == Some(2)
+}
+
+/// `nc -z` exits 1 when the port did not accept — refused, filtered or timed
+/// out, which from inside the pod is one answer: nothing is listening for
+/// this pod. Its other exits are about nc.
+fn nc_one_is_no(code: Option<i32>) -> bool {
+    code == Some(1)
+}
+
+/// `curl telnet://` exits 7 for a connection it could not make. 6 is a name
+/// it could not resolve, which is a fact about the name and not about the
+/// port, so it is not a no here.
+fn curl_seven_is_no(code: Option<i32>) -> bool {
+    code == Some(7)
 }
 
 /// `curl telnet://<host>:<port>`, whose exit is about the transfer and not
@@ -123,16 +171,19 @@ fn ladder(check: &Check) -> Vec<Rung> {
                 tool: "getent",
                 argv: vec!["getent".into(), "hosts".into(), name.clone()],
                 says_yes: zero_is_yes,
+                says_no: getent_key_not_found,
             },
             Rung {
                 tool: "nslookup",
                 argv: vec!["nslookup".into(), name.clone()],
                 says_yes: zero_is_yes,
+                says_no: nothing_is_no,
             },
             Rung {
                 tool: "host",
                 argv: vec!["host".into(), name.clone()],
                 says_yes: zero_is_yes,
+                says_no: nothing_is_no,
             },
         ],
         Check::Tcp { host, port } => vec![
@@ -147,6 +198,7 @@ fn ladder(check: &Check) -> Vec<Rung> {
                     port.to_string(),
                 ],
                 says_yes: zero_is_yes,
+                says_no: nc_one_is_no,
             },
             Rung {
                 tool: "curl",
@@ -160,6 +212,7 @@ fn ladder(check: &Check) -> Vec<Rung> {
                     format!("telnet://{host}:{port}"),
                 ],
                 says_yes: curl_telnet_is_yes,
+                says_no: curl_seven_is_no,
             },
         ],
     }
@@ -233,7 +286,7 @@ async fn climb(
         }
         return Ok((
             tried,
-            Some((rung.tool.to_string(), captured, rung.says_yes)),
+            Some((rung.tool.to_string(), captured, rung.says_yes, rung.says_no)),
         ));
     }
     Ok((tried, None))
@@ -248,11 +301,12 @@ fn outcome(
 ) -> CheckOutcome {
     let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     match answer {
-        Some((tool, captured, says_yes)) => CheckOutcome {
+        Some((tool, captured, says_yes, says_no)) => CheckOutcome {
             ran_in: ran_in.to_string(),
             tried,
             answered_with: Some(tool),
             ok: says_yes(captured.exit.code),
+            said_no: says_no(captured.exit.code),
             tool_missing: false,
             unknown: captured.exit.code.is_none(),
             exit_code: captured.exit.code,
@@ -266,6 +320,7 @@ fn outcome(
             tried,
             answered_with: None,
             ok: false,
+            said_no: false,
             tool_missing: true,
             unknown: false,
             exit_code: None,
@@ -917,5 +972,54 @@ mod tests {
         assert!((curl.says_yes)(Some(28)), "curl's timeout is a yes");
         assert!(!(nc.says_yes)(Some(28)), "nc's is not");
         assert!((nc.says_yes)(Some(0)));
+    }
+
+    /// The other half of the sentence, and the one that was missing: a rung
+    /// has to say which of its failing exits is the tool answering "no".
+    /// With none of them marked, the screen could never say "does not
+    /// resolve" on an image that has getent — which is every glibc image —
+    /// and reported a name that is plainly absent as a check that produced
+    /// no answer.
+    #[test]
+    fn every_rung_states_which_exit_is_its_no() {
+        let dns = ladder(&Check::Dns {
+            name: "db.default.svc".into(),
+        });
+        let getent = dns
+            .iter()
+            .find(|rung| rung.tool == "getent")
+            .expect("getent is the first rung");
+        let nslookup = dns
+            .iter()
+            .find(|rung| rung.tool == "nslookup")
+            .expect("nslookup is the busybox rung");
+
+        assert!(
+            (getent.says_no)(Some(2)),
+            "getent exits 2 for a key it did not find"
+        );
+        assert!(
+            !(getent.says_no)(Some(1)),
+            "getent's other failures are about getent"
+        );
+        assert!(
+            !(nslookup.says_no)(Some(1)),
+            "busybox nslookup exits 1 both for an absent name and for a \
+             resolver it could not reach; its words are the answer"
+        );
+
+        let tcp = ladder(&Check::Tcp {
+            host: "db".into(),
+            port: 5432,
+        });
+        let curl = tcp
+            .iter()
+            .find(|rung| rung.tool == "curl")
+            .expect("curl is the fallback rung");
+        assert!((curl.says_no)(Some(7)), "7 is the connection refused");
+        assert!(
+            !(curl.says_no)(Some(6)),
+            "6 is a name curl could not resolve — nothing about the port"
+        );
     }
 }
