@@ -65,7 +65,12 @@ pub struct ShareIdentity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Published {
-    pub url: String,
+    /// The link the target gave back, when it gave one.
+    ///
+    /// It used to fall back to the target's own base URL, so a server that
+    /// answered without a link had the app hand the reader the service root
+    /// and call it the report — a link that opens somebody else's index.
+    pub url: Option<String>,
     pub raw_url: Option<String>,
     pub draft_id: Option<String>,
     /// 2 on the second share of the same object to the same target.
@@ -276,8 +281,7 @@ pub async fn publish_report(
         url: answer
             .get("publicUrl")
             .and_then(|v| v.as_str())
-            .unwrap_or(base)
-            .to_string(),
+            .map(str::to_owned),
         raw_url: answer
             .get("rawUrl")
             .and_then(|v| v.as_str())

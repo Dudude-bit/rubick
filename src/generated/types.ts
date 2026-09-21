@@ -822,7 +822,7 @@ export interface PodMetrics {
 }
 
 export interface Published {
-  url: string;
+  url: string | null;
   rawUrl: string | null;
   draftId: string | null;
   version: number | null;

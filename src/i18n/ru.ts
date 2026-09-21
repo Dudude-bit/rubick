@@ -1725,6 +1725,7 @@ export const ru: Catalogue = {
     sectionChanges: "Что изменилось",
     sectionLogs: "Строки лога",
     sectionNotRead: "Не прочитано",
+    publishedNoLink: "Адресат не сказал, куда положил.",
     targetsUnread: "Список адресатов не прочитан: {reason}",
     stopHere: "здесь останавливается",
     chainStillReading:

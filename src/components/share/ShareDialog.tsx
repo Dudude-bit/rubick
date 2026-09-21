@@ -62,7 +62,8 @@ export function ShareDialog({
   const [published, setPublished] = useState<{
     target: string;
     report: string;
-    url: string;
+    /** `null` when the target published it and named no link. */
+    url: string | null;
   } | null>(null);
 
   const html = report ? renderReport(report) : "";
@@ -100,7 +101,9 @@ export function ShareDialog({
       });
       toast({
         title: t("share", "published", { n: result.version ?? 1 }),
-        description: result.url,
+        // The target's own address is not the report's link, and printing it
+        // as one sent the reader to somebody else's index page.
+        description: result.url ?? t("share", "publishedNoLink"),
       });
     },
     onError: (error) =>

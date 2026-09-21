@@ -1706,6 +1706,7 @@ export const en = {
     sectionChanges: "What changed",
     sectionLogs: "Log lines",
     sectionNotRead: "Not read",
+    publishedNoLink: "The target did not say where it put it.",
     targetsUnread: "The list of targets could not be read: {reason}",
     stopHere: "stops here",
     chainStillReading:
