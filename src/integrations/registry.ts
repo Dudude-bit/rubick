@@ -652,12 +652,32 @@ export interface Capabilities {
    * evaluates alerting rules for this cluster. Absent means no such thing
    * is connected, and the page draws nothing where the list would be: an
    * empty list is a real answer here, and a missing evaluator is not.
+   *
+   * Two halves rather than one call, because one object's answer is a slice
+   * of a collection the evaluator only hands over whole. A call per object
+   * re-read every alerting rule in the cluster on every page, every peek and
+   * every poll; the surface reads once per cluster and asks for its slice.
    */
-  "alerts.about": (input: {
-    kind: string;
-    name: string;
-    namespace: string | null;
-  }) => Promise<AlertAbout[]>;
+  "alerts.about": {
+    /**
+     * What the evaluator has to say, whole. Opaque here and read only by
+     * the supplier: the surface keeps it and hands it back.
+     */
+    read: () => Promise<unknown>;
+    /**
+     * Whether the supplier can say anything about this kind at all.
+     *
+     * A kind it cannot name gets no block and no sentence — "the alerts
+     * could not be read" beside a ConfigMap is noise about a question
+     * nobody asked, and the surface must not keep its own list of kinds.
+     */
+    speaksOf: (kind: string) => boolean;
+    /** The alerts in that read which name this object. */
+    pick: (
+      read: unknown,
+      input: { kind: string; name: string; namespace: string | null }
+    ) => AlertAbout[];
+  };
 }
 
 /** One alert naming an object, and the label it named it by. */

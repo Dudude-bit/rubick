@@ -415,6 +415,20 @@ export function useCapabilityState<K extends CapabilityKey>(
 }
 
 /**
+ * Whether an alert could name this kind at all, whoever evaluates them.
+ *
+ * Registry knowledge rather than a connection, so the answer holds while
+ * the evaluator is unreachable: a kind no evaluator labels gets neither a
+ * block nor a sentence about a read that failed, and the surface keeps no
+ * list of kinds of its own.
+ */
+export function alertsCanBeAbout(kind: string): boolean {
+  return VENDORS.some(
+    (vendor) => vendor.provides?.["alerts.about"]?.speaksOf(kind) === true
+  );
+}
+
+/**
  * The link a surface offers beside a capability's short answer.
  *
  * `null` unless the vendor both owns a screen and said which part of it

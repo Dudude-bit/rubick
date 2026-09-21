@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -5,7 +6,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
-import { useCapabilityState } from "@/integrations";
+import { alertsCanBeAbout, useCapabilityState } from "@/integrations";
 import { cn, formatSince } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -18,10 +19,12 @@ export function AlertsAbout({
   kind,
   name,
   namespace,
+  className,
 }: {
   kind: string;
   name: string;
   namespace: string | null;
+  className?: string;
 }) {
   const t = useT();
   const now = useNow();
@@ -37,19 +40,34 @@ export function AlertsAbout({
   const page = ready
     ? (power as Extract<typeof power, { state: "ready" }>).page
     : null;
+  // A kind no evaluator labels is not a kind with nothing firing: no block,
+  // and no "could not be read" either.
+  const speaks = alertsCanBeAbout(kind);
+  // Keyed on the cluster and nothing else: the evaluator hands over every
+  // alerting rule it has, and one read answers every object a reader opens
+  // rather than one per page, per peek and per poll.
   const alerts = useLiveQuery({
     refresh: "resourceList",
-    queryKey: [context, "alerts-about", kind, namespace, name],
-    queryFn: () => use!({ kind, name, namespace }),
-    enabled: use !== null,
+    queryKey: [context, "alerts-about"],
+    queryFn: () => use!.read(),
+    enabled: speaks && use !== null,
     staleTime: 30_000,
   });
+  const read = alerts.data;
+  const about = useMemo(
+    () =>
+      use === null || read === undefined
+        ? null
+        : use.pick(read, { kind, name, namespace }),
+    [use, read, kind, name, namespace]
+  );
   // A read that failed is not a workload with nothing firing about it. The
   // block drew byte-identical nothing for both, on the page where "no alert"
   // is the fact a reader leans on.
+  if (!speaks) return null;
   if (alerts.error)
     return (
-      <p className="text-[11.5px] text-warn">
+      <p className={cn("text-[11.5px] text-warn", className)}>
         {t("alerts", "aboutUnread", {
           reason: normalizeTauriError(alerts.error),
         })}
@@ -57,17 +75,18 @@ export function AlertsAbout({
     );
   if (power.state === "unreachable")
     return (
-      <p className="text-[11.5px] text-fg-fnt">
+      <p className={cn("text-[11.5px] text-fg-fnt", className)}>
         {t("alerts", "aboutUnreachable", { reason: power.reason })}
       </p>
     );
-  if (!ready || !alerts.data || alerts.data.length === 0) return null;
-  const firing = alerts.data.filter((a) => a.state === "firing");
-  const pending = alerts.data.filter((a) => a.state === "pending");
+  if (!ready || about === null || about.length === 0) return null;
+  const firing = about.filter((a) => a.state === "firing");
+  const pending = about.filter((a) => a.state === "pending");
   return (
     <section
       className={cn(
         "rounded-lg border px-3.5 py-3",
+        className,
         firing.length > 0
           ? "border-err/45 bg-err/7"
           : "border-warn/45 bg-warn/7"
@@ -93,7 +112,7 @@ export function AlertsAbout({
         )}
       </p>
       <ul className="mt-2 flex flex-col gap-1.5">
-        {alerts.data.map((alert, index) => (
+        {about.map((alert, index) => (
           <li
             key={`${alert.rule}-${index}`}
             className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-xs"

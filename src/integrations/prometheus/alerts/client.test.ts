@@ -43,30 +43,47 @@ describe("what is firing about one object", () => {
   it("keeps the alerts whose labels name this object and no others", async () => {
     prometheusRules.mockResolvedValue([rule()]);
 
-    const mine = await alertsAboutObject({
-      kind: "Deployment",
-      name: "payments",
-      namespace: "shop",
-    });
-    expect(mine).toHaveLength(1);
+    const read = await alertsAboutObject.read();
 
-    const neighbour = await alertsAboutObject({
-      kind: "Deployment",
-      name: "checkout",
-      namespace: "shop",
-    });
-    expect(neighbour).toHaveLength(0);
+    expect(
+      alertsAboutObject.pick(read, {
+        kind: "Deployment",
+        name: "payments",
+        namespace: "shop",
+      })
+    ).toHaveLength(1);
+    expect(
+      alertsAboutObject.pick(read, {
+        kind: "Deployment",
+        name: "checkout",
+        namespace: "shop",
+      })
+    ).toHaveLength(0);
+  });
+
+  /**
+   * The read is the collection, not one object's slice — a second object
+   * asks the picking, not the evaluator. Reading per object put every
+   * alerting rule in the cluster on the wire for each page and each peek.
+   */
+  it("reads the evaluator once however many objects are asked about", async () => {
+    prometheusRules.mockResolvedValue([rule()]);
+
+    const read = await alertsAboutObject.read();
+    for (const name of ["payments", "checkout", "search"]) {
+      alertsAboutObject.pick(read, {
+        kind: "Deployment",
+        name,
+        namespace: "shop",
+      });
+    }
+
+    expect(prometheusRules).toHaveBeenCalledTimes(1);
   });
 
   /** A read that fails is not a workload with nothing firing about it. */
   it("lets a refused read reach the caller", async () => {
     prometheusRules.mockRejectedValue(new Error("prometheus refused"));
-    await expect(
-      alertsAboutObject({
-        kind: "Deployment",
-        name: "payments",
-        namespace: "shop",
-      })
-    ).rejects.toThrow(/refused/);
+    await expect(alertsAboutObject.read()).rejects.toThrow(/refused/);
   });
 });

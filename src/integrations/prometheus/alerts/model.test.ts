@@ -15,6 +15,7 @@ import {
   readRule,
   rowsOf,
   rulePickedUpBy,
+  speaksOf,
 } from "./model";
 
 const cr = (
@@ -343,6 +344,35 @@ describe("rowsOf", () => {
     );
 
     expect(row.findings.map((f) => f.kind)).not.toContain("notLoaded");
+  });
+});
+
+describe("speaksOf", () => {
+  /**
+   * The block draws itself wherever the peek is opened, so this is what
+   * keeps "the alerts could not be read" off a ConfigMap — and what keeps
+   * a workload's alerts from being suppressed as un-nameable.
+   */
+  it("names the kinds an alert can carry and no others", () => {
+    for (const kind of [
+      "Pod",
+      "Deployment",
+      "StatefulSet",
+      "DaemonSet",
+      "ReplicaSet",
+      "Job",
+      "CronJob",
+      "Node",
+      "Service",
+      "PersistentVolumeClaim",
+      "HorizontalPodAutoscaler",
+      "Namespace",
+    ]) {
+      expect(speaksOf(kind)).toBe(true);
+    }
+    for (const kind of ["ConfigMap", "Secret", "Role", "Ingress", "Lease"]) {
+      expect(speaksOf(kind)).toBe(false);
+    }
   });
 });
 

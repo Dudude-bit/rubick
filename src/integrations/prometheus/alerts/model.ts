@@ -352,6 +352,17 @@ function podsOf(kind: string, name: string): RegExp | null {
 }
 
 /**
+ * Whether an alert could name this kind at all.
+ *
+ * kube-state-metrics labels a dozen kinds and no more; for anything else
+ * the answer is not "nothing is firing" but "this is not a thing alerts
+ * are about", and the surface draws neither a block nor a failure.
+ */
+export function speaksOf(kind: string): boolean {
+  return OBJECT_LABEL[kind] !== undefined || podsOf(kind, "x") !== null;
+}
+
+/**
  * The active alerts that name this object, from the label kube-state-metrics
  * gives its kind, and for a workload also from the pods it runs. Named by
  * the label that matched, so a guess at a pod's owner is visible as one.

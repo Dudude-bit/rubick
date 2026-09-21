@@ -49,6 +49,12 @@ vi.mock("@/hooks/useServiceRoutes", () => ({
   useProxyBehind: () => null,
 }));
 
+vi.mock("./AlertsAbout", () => ({
+  AlertsAbout: ({ kind, name }: { kind: string; name: string }) => (
+    <p>{`alerts about ${kind} ${name}`}</p>
+  ),
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     getPod: vi.fn(),
@@ -431,6 +437,18 @@ describe("PeekPanel", () => {
     await waitFor(() =>
       expect(badge.className).not.toMatch(/text-err|text-ok/)
     );
+  });
+
+  /**
+   * The peek and the detail page draw the same object, and the page carried
+   * what was firing about it while the peek beside it showed nothing — the
+   * reader who peeks at a crashing pod is the one who most wants the alert.
+   */
+  it("carries what is firing about the peeked object", async () => {
+    wrap(POD_PEEK);
+    expect(
+      await screen.findByText("alerts about Pod crash-demo-56588f6b8c-8bj9v")
+    ).toBeVisible();
   });
 
   it("shows the summary and this object's events once they arrive", async () => {
