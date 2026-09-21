@@ -2329,6 +2329,7 @@ export const en = {
     aboutUnread:
       "Whether anything is firing about this could not be read: {reason}",
     aboutUnreachable: "The connected Prometheus did not answer: {reason}",
+    markBroken: "{n} rule objects need attention",
     rowNotEvaluated: "loaded, never evaluated",
     rowEvalError: "evaluation error",
     rowQuiet: "quiet",

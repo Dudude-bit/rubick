@@ -728,6 +728,15 @@ mod tests {
         );
         assert_eq!(rules[1].health, "err");
         assert!(rules[1].last_error.contains("duplicate"));
+        // The two fields both readers key on, and neither was asserted: the
+        // rule's own name is how a PrometheusRule's spec is matched to what
+        // Prometheus loaded, and an alert's state is the difference between
+        // "firing" and "pending" on the page. Blanking either left the whole
+        // suite green.
+        assert_eq!(rules[0].name, "KubePodCrashLooping");
+        assert_eq!(rules[1].name, "Broken");
+        assert_eq!(rules[0].alerts[0].state, "firing");
+        assert_eq!(rules[0].alerts[0].value, "1e+00");
     }
 
     #[test]

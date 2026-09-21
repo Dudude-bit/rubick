@@ -8,7 +8,7 @@ import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import Connection from "./connection";
 import Alerts from "./alerts/Alerts";
 import Monitors from "./monitors/Monitors";
-import { monitorMark, usePicture } from "./monitors/data";
+import { alertsMark, monitorMark, usePicture } from "./monitors/data";
 
 /**
  * One row, two questions: what the operator was told to scrape, and what
@@ -30,23 +30,23 @@ export default function PrometheusPage() {
       picture.data.podMonitors.state !== "absent");
   const mark = picture.data ? monitorMark(picture.data) : null;
 
-  const firing =
-    picture.data?.alertRules.state === "read"
-      ? picture.data.alertRules.rules.reduce(
-          (n, rule) =>
-            n + rule.alerts.filter((a) => a.state === "firing").length,
-          0
-        )
-      : null;
-  const alertsMark: DetailTab["mark"] =
-    firing !== null && firing > 0
+  // The same rows the page draws, so the tab says what the page says: the
+  // mark was built from the firing alerts alone, and a rule object nothing
+  // picks up — or one Prometheus cannot load — left a plain count on a tab
+  // whose page is all red.
+  const alerts = picture.data ? alertsMark(picture.data) : null;
+  const alertsTabMark: DetailTab["mark"] =
+    alerts?.shows === "severity"
       ? {
           shows: "severity",
-          tone: "err",
-          says: t("alerts", "rowFiring", { n: firing }),
+          tone: alerts.tone,
+          says:
+            alerts.firing > 0
+              ? t("alerts", "rowFiring", { n: alerts.firing })
+              : t("alerts", "markBroken", { n: alerts.broken }),
         }
-      : picture.data?.rules.state === "read"
-        ? { shows: "count", of: picture.data.rules.items.length }
+      : alerts?.shows === "count"
+        ? { shows: "count", of: alerts.of }
         : null;
 
   const tabs: DetailTab[] = [
@@ -84,7 +84,7 @@ export default function PrometheusPage() {
             id: "alerts",
             label: t("alerts", "tabAlerts"),
             glyph: viewGlyph(Bell),
-            mark: alertsMark,
+            mark: alertsTabMark,
             content: <Alerts />,
           },
         ]

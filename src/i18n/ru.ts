@@ -2407,6 +2407,7 @@ export const ru: Catalogue = {
     aboutUnread:
       "Не удалось прочитать, горит ли что-то про этот объект: {reason}",
     aboutUnreachable: "Подключённый Prometheus не ответил: {reason}",
+    markBroken: "{n} объектов правил требуют внимания",
     rowNotEvaluated: "загружено, ни разу не считано",
     rowEvalError: "ошибка вычисления",
     rowQuiet: "тихо",
