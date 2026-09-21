@@ -11,6 +11,7 @@ import {
   groupOf,
   hintFor,
   lanesOf,
+  loopbackFlag,
   monitorReaches,
   pickedUpBy,
   poolPrefix,
@@ -888,5 +889,24 @@ describe("the likely cause", () => {
       selector: "app=gone",
       namespace: "shop",
     });
+  });
+
+  /**
+   * The repair sentence names a flag, and the flag used to live in a table
+   * in the view keyed by the component name this one produces. A component
+   * added to one table and not the other rendered "set  in the static pod
+   * manifest" — advice with a hole where the flag goes.
+   */
+  it("has a flag for every component a loopback hint can name", () => {
+    for (const port of ["10257", "10259", "2381", "10249"]) {
+      const hint = hintFor(
+        down(
+          `Get "https://172.30.1.2:${port}/metrics": dial tcp 172.30.1.2:${port}: connect: connection refused`
+        )
+      );
+      expect(hint?.key).toBe("loopback");
+      if (hint?.key !== "loopback") continue;
+      expect(loopbackFlag(hint.component)).toBeTruthy();
+    }
   });
 });

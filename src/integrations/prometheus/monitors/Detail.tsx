@@ -34,6 +34,7 @@ import {
   poolPrefix,
   readPrometheus,
   selectorIsEmpty,
+  loopbackFlag,
   selectorWords,
   type Hint,
   type MonitorRow,
@@ -802,18 +803,11 @@ function hintWhy(hint: Hint, t: T): string {
   }
 }
 
-const LOOPBACK_FLAG: Record<string, string> = {
-  "kube-controller-manager": "--bind-address=0.0.0.0",
-  "kube-scheduler": "--bind-address=0.0.0.0",
-  etcd: "--listen-metrics-urls=http://0.0.0.0:2381",
-  "kube-proxy": "metricsBindAddress: 0.0.0.0:10249",
-};
-
 function hintHow(hint: Hint, t: T): string {
   switch (hint.key) {
     case "loopback":
       return t("monitors", "hintLoopbackHow", {
-        flag: LOOPBACK_FLAG[hint.component] ?? "",
+        flag: loopbackFlag(hint.component) ?? hint.component,
       });
     case "refused":
       return t("monitors", "hintRefusedHow");

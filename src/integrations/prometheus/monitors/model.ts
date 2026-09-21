@@ -705,12 +705,36 @@ export type Hint =
   | { key: "podPort"; port: string }
   | { key: "noEndpoints"; port: string };
 
-const LOOPBACK_PORTS: Record<string, string> = {
-  "10257": "kube-controller-manager",
-  "10259": "kube-scheduler",
-  "2381": "etcd",
-  "10249": "kube-proxy",
+/**
+ * The control-plane components that listen on loopback by default, by the
+ * port their metrics are on — and, in the same row, the flag that opens
+ * them. The two halves were a table here and a table in the view, joined by
+ * a lookup with an empty-string fallback: a component added to one and not
+ * the other rendered the repair sentence with a hole where the flag goes.
+ */
+const LOOPBACK: Record<string, { component: string; flag: string }> = {
+  "10257": {
+    component: "kube-controller-manager",
+    flag: "--bind-address=0.0.0.0",
+  },
+  "10259": { component: "kube-scheduler", flag: "--bind-address=0.0.0.0" },
+  "2381": {
+    component: "etcd",
+    flag: "--listen-metrics-urls=http://0.0.0.0:2381",
+  },
+  "10249": {
+    component: "kube-proxy",
+    flag: "metricsBindAddress: 0.0.0.0:10249",
+  },
 };
+
+/** What opens the port a loopback hint names. */
+export function loopbackFlag(component: string): string | null {
+  const found = Object.values(LOOPBACK).find(
+    (entry) => entry.component === component
+  );
+  return found ? found.flag : null;
+}
 
 export function hintFor(row: MonitorRow): Hint | null {
   const worst = row.findings[0];
@@ -731,9 +755,9 @@ export function hintFor(row: MonitorRow): Hint | null {
   const said = worst.lastError;
   const dialPort = /:(\d+)\/[^ ]*": dial tcp/.exec(said)?.[1] ?? null;
   if (/connection refused/.test(said)) {
-    const component = dialPort ? LOOPBACK_PORTS[dialPort] : undefined;
-    return component
-      ? { key: "loopback", port: dialPort!, component }
+    const entry = dialPort ? LOOPBACK[dialPort] : undefined;
+    return entry
+      ? { key: "loopback", port: dialPort!, component: entry.component }
       : { key: "refused", port: dialPort ?? port };
   }
   if (/HTTP status 404/.test(said))
