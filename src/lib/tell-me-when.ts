@@ -1,5 +1,6 @@
 import { sayWords, type Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
 import type {
   CustomResourceInfo,
   DaemonSetInfo,
@@ -199,6 +200,22 @@ export function detailWords(
   if (detail === null || detail === undefined) return null;
   return typeof detail === "string" ? detail : sayWords(detail, t);
 }
+
+/**
+ * The short name of each question, for a surface with one line to say it in.
+ *
+ * Beside the `Ask` union rather than in the panel that first needed it: two
+ * surfaces naming the same question differently is the drift this file exists
+ * to prevent, and a new ask fails to compile here.
+ */
+export const ASK_SHORT: Record<Ask, keyof typeof en.tell> = {
+  rollout: "askRolloutShort",
+  podReady: "askPodShort",
+  jobOutcome: "askJobShort",
+  drain: "askDrainShort",
+  renewed: "askRenewedShort",
+  forwardAlive: "askForwardShort",
+};
 
 export function isOpen(watch: Watch): boolean {
   return watch.status.state === "watching" || watch.status.state === "lost";
