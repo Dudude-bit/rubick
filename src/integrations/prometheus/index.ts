@@ -196,6 +196,7 @@ export default defineVendor({
     // The Connection tab stands without the operator's kinds, so a token
     // refused the monitors still has a page to open.
     gate: null,
+    answers: { "alerts.about": "?tab=alerts" },
   },
   crd,
   provides: {

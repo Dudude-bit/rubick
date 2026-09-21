@@ -696,6 +696,11 @@ export type CapabilityState<K extends CapabilityKey> =
       vendor: string;
       endpoint: string;
       use: Capabilities[K];
+      /**
+       * Where this capability is answered at length, or `null` where the
+       * supplier has no screen of its own. See {@link VendorPage.answers}.
+       */
+      page: string | null;
     };
 
 /**
@@ -986,6 +991,14 @@ export interface VendorPage {
    * and how #138 kept coming back.
    */
   gate?: Gate | null;
+  /**
+   * Where a capability's fuller answer sits on this page, as a suffix to the
+   * page's own path — `"?tab=alerts"`. A surface that offers "and the rest is
+   * over here" reads it off {@link CapabilityState}; spelling
+   * `/integrations/prometheus?tab=alerts` at the surface crosses the same
+   * seam an import would, and goes stale the day a second vendor answers.
+   */
+  answers?: Partial<Record<CapabilityKey, string>>;
 }
 
 /** What to ask the cluster's authorizer before offering a vendor's page. */

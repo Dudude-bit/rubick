@@ -128,6 +128,7 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
             state: "ready",
             vendor: "Prometheus",
             endpoint: "prometheus.monitoring:9090",
+            page: null,
             use: vi.fn().mockResolvedValue(window),
           }
         : ({ state: "absent" } as never)
@@ -205,6 +206,7 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
             state: "ready",
             vendor: "Prometheus",
             endpoint: "prometheus.monitoring:9090",
+            page: null,
             use: vi.fn().mockResolvedValue({ samples: [], resolution: "3m" }),
           }
         : ({ state: "absent" } as never)

@@ -31,6 +31,12 @@ export function AlertsAbout({
   const use = ready
     ? (power as Extract<typeof power, { state: "ready" }>).use
     : null;
+  // Where the supplier discusses alerts at length, in the supplier's own
+  // words. Spelling the route here would name a vendor from outside the
+  // seam, and would still point at Prometheus once a second one answers.
+  const page = ready
+    ? (power as Extract<typeof power, { state: "ready" }>).page
+    : null;
   const alerts = useLiveQuery({
     refresh: "resourceList",
     queryKey: [context, "alerts-about", kind, namespace, name],
@@ -77,12 +83,14 @@ export function AlertsAbout({
         {firing.length > 0
           ? t("alerts", "aboutFiring", { n: firing.length })
           : t("alerts", "aboutPending", { n: pending.length })}
-        <Link
-          to="/integrations/prometheus?tab=alerts"
-          className="ml-auto text-[11px] font-normal text-info hover:underline"
-        >
-          {t("alerts", "openAlerts")}
-        </Link>
+        {page !== null && (
+          <Link
+            to={page}
+            className="ml-auto text-[11px] font-normal text-info hover:underline"
+          >
+            {t("alerts", "openAlerts")}
+          </Link>
+        )}
       </p>
       <ul className="mt-2 flex flex-col gap-1.5">
         {alerts.data.map((alert, index) => (

@@ -50,6 +50,41 @@ describe("what is firing about this object", () => {
     expect(screen.getByText(/did not answer/i)).toBeVisible();
   });
 
+  /**
+   * The "open" link is the supplier's own route, and only where the supplier
+   * said it has one. Spelling `/integrations/prometheus?tab=alerts` here
+   * named a vendor from outside the seam, and pointed at Prometheus for
+   * whatever answers next.
+   */
+  it("sends the reader where the supplier says its alerts are", async () => {
+    capability.mockReturnValue({
+      state: "ready",
+      page: "/integrations/mimir?tab=alerts",
+      use: async () => [{ rule: "PodCrashLooping", state: "firing", via: {} }],
+    });
+
+    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+
+    const link = await screen.findByRole("link");
+    expect(link).toHaveAttribute("href", "/integrations/mimir?tab=alerts");
+  });
+
+  /** A supplier with no screen of its own offers no link at all. */
+  it("offers no link where the supplier has no page", async () => {
+    capability.mockReturnValue({
+      state: "ready",
+      page: null,
+      use: async () => [{ rule: "PodCrashLooping", state: "firing", via: {} }],
+    });
+
+    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+
+    await waitFor(() =>
+      expect(screen.getByText("PodCrashLooping")).toBeVisible()
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   /** Nothing firing and nothing to say is still nothing on the page. */
   it("draws nothing when nothing is firing", async () => {
     capability.mockReturnValue({ state: "ready", use: async () => [] });

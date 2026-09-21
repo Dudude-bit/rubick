@@ -2423,7 +2423,7 @@ export const en = {
       "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
     lokiGives: "logs from before the current pod existed",
     prometheusGives:
-      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped, from the operator's objects",
+      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped; every PrometheusRule with whether the connected Prometheus has loaded it and what is firing from it, and the alerts firing about an object on its own page",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
 
