@@ -32,6 +32,32 @@ export interface HintSaying {
 }
 
 /** A count as its own sentence, for a number inside another one. */
+/**
+ * A saying in words, inner sayings first.
+ *
+ * A value may itself be a {@link HintSaying} — no language can hand another
+ * a substring of its own plural — so this resolves the inside before the
+ * outside. It lives here because the panel says these sentences on screen
+ * and the report writes the same ones into a file: two readers of one rule,
+ * which is how they drift.
+ */
+export function sayingWords(
+  saying: HintSaying,
+  t: (
+    section: "hints",
+    key: HintKey,
+    values?: Record<string, string | number>
+  ) => string
+): string {
+  const values: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(saying.values ?? {}))
+    values[name] =
+      typeof value === "object" && value !== null
+        ? sayingWords(value, t)
+        : value;
+  return t("hints", saying.key, values);
+}
+
 export function counted(key: HintKey, n: number): HintSaying {
   return { key, values: { n } };
 }

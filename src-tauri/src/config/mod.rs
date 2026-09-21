@@ -21,6 +21,7 @@ mod connection;
 mod editor;
 mod integrations;
 pub mod private_file;
+mod sharing;
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,7 @@ pub use editor::{
     YamlEditorConfig, YamlHistoryEntry,
 };
 pub use integrations::{ConnectionEntry, IntegrationsConfig, LokiEntry, PrometheusEntry};
+pub use sharing::{ShareTarget, SharingConfig};
 
 /// Application configuration
 ///
@@ -83,6 +85,9 @@ pub struct AppConfig {
     /// Cluster preferences (last context, namespaces)
     #[serde(default)]
     pub cluster_preferences: ClusterPreferences,
+    /// Where a report may be published, and the key that lets it
+    #[serde(default)]
+    pub sharing: SharingConfig,
 }
 
 impl AppConfig {

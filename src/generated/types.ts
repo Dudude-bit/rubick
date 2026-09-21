@@ -821,6 +821,37 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface Published {
+  url: string | null;
+  rawUrl: string | null;
+  draftId: string | null;
+  version: number | null;
+}
+
+export interface ShareIdentity {
+  accountName: string | null;
+  apiKeyName: string | null;
+}
+
+export interface ShareTargetInput {
+  id: string | null;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  apiKey: string | null;
+}
+
+export interface ShareTargetInfo {
+  id: string;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  hasKey: boolean;
+  host: string;
+}
+
 export interface FilePreview {
   bytesRead: number;
   truncated: boolean;

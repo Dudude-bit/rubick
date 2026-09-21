@@ -93,6 +93,7 @@ import type {
   PromSeries,
   PrometheusConnection,
   PrometheusProbe,
+  Published,
   RecentItem,
   RegistryConfigInfo,
   RegistryImageResult,
@@ -113,6 +114,9 @@ import type {
   ServiceFilters,
   ServiceInfo,
   ServicePublished,
+  ShareIdentity,
+  ShareTargetInfo,
+  ShareTargetInput,
   StatefulSetDetailInfo,
   StatefulSetInfo,
   StorageClassInfo,
@@ -1023,6 +1027,13 @@ export async function readContainerFile(
   });
 }
 
+export async function writeTextFile(
+  destination: string,
+  contents: string
+): Promise<void> {
+  return invoke<void>("write_text_file", { destination, contents });
+}
+
 export async function downloadContainerFile(
   pod: string,
   namespace: string | null,
@@ -1039,6 +1050,44 @@ export async function downloadContainerFile(
     via,
     destination,
   });
+}
+
+export async function listShareTargets(): Promise<ShareTargetInfo[]> {
+  return invoke<ShareTargetInfo[]>("list_share_targets");
+}
+
+export async function saveShareTarget(
+  input: ShareTargetInput
+): Promise<ShareTargetInfo> {
+  return invoke<ShareTargetInfo>("save_share_target", { input });
+}
+
+export async function removeShareTarget(id: string): Promise<void> {
+  return invoke<void>("remove_share_target", { id });
+}
+
+export async function verifyShareTarget(id: string): Promise<ShareIdentity> {
+  return invoke<ShareIdentity>("verify_share_target", { id });
+}
+
+export async function publishReport(
+  targetId: string,
+  object: string,
+  filename: string,
+  description: string | null,
+  html: string
+): Promise<Published> {
+  return invoke<Published>("publish_report", {
+    targetId,
+    object,
+    filename,
+    description,
+    html,
+  });
+}
+
+export async function importPostplanKey(): Promise<string | null> {
+  return invoke<string | null>("import_postplan_key");
 }
 
 export async function getPodsMetrics(

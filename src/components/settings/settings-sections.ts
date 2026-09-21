@@ -4,6 +4,7 @@ import {
   Palette,
   Search,
   Server,
+  Share2,
   Stethoscope,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -68,6 +69,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     label: "sectionDiagnostics",
     icon: Stethoscope,
     description: "sectionDiagnosticsHint",
+  },
+  {
+    id: "sharing",
+    label: "sectionSharing",
+    icon: Share2,
+    description: "sectionSharingHint",
   },
   {
     id: "handoff",
