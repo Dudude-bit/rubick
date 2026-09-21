@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { pinKey } from "@/lib/my-services";
+import { pinKey, pinsOf } from "@/lib/my-services";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { useT } from "@/i18n/useT";
@@ -25,13 +25,7 @@ export function MyServices() {
   const context = useClusterStore((s) => s.currentContext);
   const pins = usePinnedServicesStore((s) => s.pins);
   const unpin = usePinnedServicesStore((s) => s.unpin);
-  const ordered = useMemo(
-    () =>
-      pins
-        .filter((pin) => pin.context === context)
-        .sort((a, b) => a.pinnedAt - b.pinnedAt),
-    [pins, context]
-  );
+  const ordered = useMemo(() => pinsOf(pins, context), [pins, context]);
 
   if (!context) return null;
 

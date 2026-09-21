@@ -7,6 +7,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { formatAge } from "@/lib/utils";
 import {
+  CARD_REFRESH,
   changesFor,
   entryPointsOf,
   openQuestionsOf,
@@ -39,7 +40,13 @@ export function ServiceCard({
   onUnpin: () => void;
 }) {
   const t = useT();
-  const connections = useConnections(pin.kind, pin.name, pin.namespace);
+  const connections = useConnections(
+    pin.kind,
+    pin.name,
+    pin.namespace,
+    true,
+    CARD_REFRESH
+  );
   const entries = useChangeJournalStore((s) => s.entries);
   const watches = useTellMeWhenStore((s) => s.watches);
 

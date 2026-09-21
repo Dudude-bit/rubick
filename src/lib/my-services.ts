@@ -20,6 +20,7 @@ import type {
 import type { ChainPath, ChainHop } from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
+import type { RefreshRate } from "@/lib/refresh";
 
 /**
  * How many one person may pin per cluster.
@@ -30,6 +31,18 @@ import { isOpen, type Watch } from "@/lib/tell-me-when";
  * chose to keep an eye on.
  */
 export const MAX_PINNED_PER_CONTEXT = 12;
+
+/**
+ * How often a card asks for its neighbourhood again.
+ *
+ * The page's bill is the cap times this rate, and a card's read is not one
+ * list but a whole neighbourhood — so at the detail pages' eight seconds a
+ * full home page asks the cluster ninety times a minute for a screen
+ * somebody glances at over coffee. Nothing a card shows turns over faster
+ * than this anyway: a rollout takes minutes and a card carries when the
+ * change it names happened.
+ */
+export const CARD_REFRESH: RefreshRate = "steady";
 
 /** The workload kinds a service can be. */
 export const PINNABLE_KINDS = [
@@ -55,6 +68,35 @@ export function pinKey(pin: {
   name: string;
 }): string {
   return `${pin.kind}/${pin.namespace}/${pin.name}`;
+}
+
+/**
+ * What is pinned in one cluster, oldest choice first.
+ *
+ * Here rather than on the store because a Zustand selector that derives a
+ * new array is a new snapshot every render; the screens memoise this one.
+ * It was written twice — the home page and the Pin button each did their
+ * own filtering — which is how the two disagree the day one is fixed.
+ */
+export function pinsOf(pins: readonly ServicePin[], context: string | null) {
+  return context === null
+    ? []
+    : pins
+        .filter((pin) => pin.context === context)
+        .sort((a, b) => a.pinnedAt - b.pinnedAt);
+}
+
+/** Whether this cluster's list already holds that object. */
+export function isPinned(
+  pins: readonly ServicePin[],
+  context: string | null,
+  key: string | null
+): boolean {
+  return (
+    key !== null &&
+    context !== null &&
+    pins.some((pin) => pin.context === context && pinKey(pin) === key)
+  );
 }
 
 export function isPinnable(kind: string): kind is PinnableKind {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { MAX_PINNED_PER_CONTEXT } from "@/lib/my-services";
+import { MAX_PINNED_PER_CONTEXT, pinsOf } from "@/lib/my-services";
 import { usePinnedServicesStore } from "./pinnedServicesStore";
 
 const pin = (name: string, context = "prod") => ({
@@ -26,15 +26,11 @@ describe("pinned services", () => {
     store.pin(pin("payments", "prod"));
     store.pin(pin("payments", "staging"));
 
-    expect(
-      usePinnedServicesStore
-        .getState()
-        .forContext("prod")
-        .map((entry) => entry.context)
-    ).toEqual(["prod"]);
-    expect(
-      usePinnedServicesStore.getState().forContext("staging")
-    ).toHaveLength(1);
+    const pins = usePinnedServicesStore.getState().pins;
+    expect(pinsOf(pins, "prod").map((entry) => entry.context)).toEqual([
+      "prod",
+    ]);
+    expect(pinsOf(pins, "staging")).toHaveLength(1);
   });
 
   it("pins the same service only once", () => {
@@ -76,9 +72,8 @@ describe("pinned services", () => {
     store.pin(pin("payments", "staging"));
     usePinnedServicesStore.getState().unpin("prod", "Deployment/shop/payments");
 
-    expect(usePinnedServicesStore.getState().forContext("prod")).toEqual([]);
-    expect(
-      usePinnedServicesStore.getState().forContext("staging")
-    ).toHaveLength(1);
+    const pins = usePinnedServicesStore.getState().pins;
+    expect(pinsOf(pins, "prod")).toEqual([]);
+    expect(pinsOf(pins, "staging")).toHaveLength(1);
   });
 });

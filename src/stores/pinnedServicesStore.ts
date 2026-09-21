@@ -14,9 +14,6 @@ interface PinnedServicesState {
   /** Refuses past the cap rather than dropping somebody's oldest choice. */
   pin: (pin: ServicePin) => PinOutcome;
   unpin: (context: string, key: string) => void;
-  /** Everything pinned in this cluster, in the order it was pinned. */
-  forContext: (context: string) => ServicePin[];
-  isPinned: (context: string, key: string) => boolean;
 }
 
 export const usePinnedServicesStore = create<PinnedServicesState>()(
@@ -39,14 +36,6 @@ export const usePinnedServicesStore = create<PinnedServicesState>()(
             (entry) => entry.context !== context || pinKey(entry) !== key
           ),
         })),
-      forContext: (context) =>
-        get()
-          .pins.filter((entry) => entry.context === context)
-          .sort((a, b) => a.pinnedAt - b.pinnedAt),
-      isPinned: (context, key) =>
-        get().pins.some(
-          (entry) => entry.context === context && pinKey(entry) === key
-        ),
     }),
     { name: "pinned-services" }
   )

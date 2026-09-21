@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CARD_REFRESH,
   changesFor,
   entryPointsOf,
   MAX_PINNED_PER_CONTEXT,
+  isPinned,
   openQuestionsOf,
   pinKey,
+  pinsOf,
   stateOf,
   waitingFor,
 } from "./my-services";
+import { REFRESH_INTERVALS } from "./refresh";
 import type { ChainPath } from "./connections";
 import type { JournalEntry } from "./changes";
 import type { Watch } from "./tell-me-when";
@@ -133,6 +137,24 @@ describe("stateOf", () => {
   });
 
   /**
+   * The name matters as much as the words: "Resource not found" about the
+   * neighbour a chain walked into is the cluster answering about something
+   * else, and drawing this card as deleted sends somebody to rebuild what
+   * is still running.
+   */
+  it("does not call this workload gone because another one is", () => {
+    expect(
+      stateOf(
+        undefined,
+        {
+          message: "Resource not found: Deployment/checkout in namespace shop",
+        },
+        { kind: "Deployment", name: "payments" }
+      ).state
+    ).toBe("unread");
+  });
+
+  /**
    * A CronJob has no replicas to be ready. The backend reports 0 of 0, which
    * read as "all ready" and drew green about a schedule nobody had checked.
    */
@@ -155,6 +177,55 @@ describe("stateOf", () => {
     expect(
       stateOf(cron, null, { kind: "CronJob", name: "nightly" }).state
     ).not.toBe("ready");
+  });
+
+  /**
+   * Either half alone is enough: the pin says what was pinned, the read says
+   * what the cluster answered about, and a card whose read has not caught up
+   * with the other must not go green on nothing.
+   */
+  it("holds the CronJob rule whichever half names the kind", () => {
+    const facts = {
+      kind: "workload",
+      replicas: 0,
+      readyReplicas: 0,
+      revision: null,
+      current: null,
+    };
+    const byRead = conns({
+      subject: {
+        kind: "CronJob",
+        name: "nightly",
+        namespace: "shop",
+        existence: "present",
+        facts,
+      } as never,
+    });
+    const byPin = conns({
+      subject: { ...conns().subject, name: "nightly", facts } as never,
+    });
+
+    expect(
+      stateOf(byRead, null, { kind: "Deployment", name: "nightly" }).state
+    ).toBe("unread");
+    expect(
+      stateOf(byPin, null, { kind: "CronJob", name: "nightly" }).state
+    ).toBe("unread");
+  });
+
+  /**
+   * A subject the read could not describe as a workload has no replicas to
+   * count; counting them anyway compared two undefined numbers and drew the
+   * card short of nothing.
+   */
+  it("says nothing about a subject the read did not describe as a workload", () => {
+    const other = conns({
+      subject: {
+        ...conns().subject,
+        facts: { kind: "service", clusterIp: "10.0.0.1" },
+      } as never,
+    });
+    expect(stateOf(other, null).state).toBe("unread");
   });
 
   it("carries a subject the read found missing", () => {
@@ -307,6 +378,79 @@ describe("entryPointsOf", () => {
   });
 });
 
+describe("more ways in", () => {
+  const chain = (hops: ChainPath["hops"]): ChainPath[] => [
+    { key: "c", hops, broken: false },
+  ];
+
+  /**
+   * A chain walks through the workload and its pods as well as the Services
+   * in front of it. Only a Service is a way in; listing the rest offered a
+   * Deployment as somewhere to send traffic.
+   */
+  it("offers only the objects traffic can actually arrive at", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        {
+          at: "object",
+          object: ref("Pod", "payments-7f4d9c6b5-abcde"),
+          self: true,
+          detail: null,
+          via: null,
+          urls: [],
+          publishedAt: null,
+        },
+        {
+          at: "object",
+          object: ref("Service", "payments"),
+          self: false,
+          detail: "80/TCP",
+          via: null,
+          urls: [],
+          publishedAt: null,
+        },
+      ])
+    );
+    expect(entries.map((entry) => entry.label)).toEqual(["payments"]);
+  });
+
+  /**
+   * `whole` is the endpoints read admitting it saw all of them. A partial
+   * read with nothing ready is not a Service with nothing behind it, and
+   * the card says "nothing behind it" in warning colours on that bit alone.
+   */
+  it("does not claim to know what is behind a service from a partial read", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([
+        {
+          at: "published",
+          published: {
+            service: ref("Service", "payments"),
+            source: "slices",
+            slices: 1,
+            ready: 0,
+            draining: 0,
+            notReady: 0,
+            unrouted: 0,
+            ports: [],
+            endpoints: [],
+            whole: false,
+            unpublished: [],
+          },
+          first: null,
+          address: null,
+          summary: "",
+          tone: "warn",
+        },
+      ])
+    );
+    expect(entries[0].serving).toBe(false);
+    expect(entries[0].servingKnown).toBe(false);
+  });
+});
+
 describe("what is still open", () => {
   it("passes on every kind the read admits it did not look at", () => {
     const unread = openQuestionsOf(
@@ -334,7 +478,14 @@ describe("what is still open", () => {
       to: "b",
     });
     const mine = changesFor(
-      [entry("payments", 1), entry("carts", 2), entry("payments", 3)],
+      [
+        entry("payments", 1),
+        entry("carts", 2),
+        entry("payments", 3),
+        // A Job of the same name in the same namespace is another object,
+        // and its image change is not this card's history.
+        { ...entry("payments", 4), kind: "Job" },
+      ],
       {
         context: "prod",
         kind: "Deployment",
@@ -357,11 +508,20 @@ describe("what is still open", () => {
       status,
       baseline: null,
     });
+    const answered = watch("payments", { state: "expired" });
     const open = waitingFor(
       [
-        watch("payments", { state: "watching" }),
+        { ...watch("payments", { state: "watching" }), id: "older" },
         watch("payments-old", { state: "watching" }),
-        watch("payments-done", { state: "expired" }),
+        // Same object, and the question already has an answer: a card
+        // that keeps listing it is waiting for something nobody is
+        // waiting for.
+        { ...answered, id: "answered" },
+        {
+          ...watch("payments", { state: "watching" }),
+          id: "newer",
+          startedAt: 9,
+        },
       ],
       {
         context: "prod",
@@ -370,8 +530,8 @@ describe("what is still open", () => {
         name: "payments",
       }
     );
-    expect(open).toHaveLength(1);
-    expect(open[0].status.state).toBe("watching");
+    // Newest question first, and the answered one gone.
+    expect(open.map((item) => item.id)).toEqual(["newer", "older"]);
   });
 
   /**
@@ -410,8 +570,58 @@ describe("pins", () => {
     ).toBe("Deployment/shop/payments");
   });
 
+  /**
+   * The home page and the Pin button each filtered the list themselves, so
+   * "is this pinned" had two answers the day one of them changed. Order is
+   * part of it: the page reads oldest first, and a person's first choice
+   * staying first is what makes the list theirs.
+   */
+  it("gives one cluster's pins, oldest choice first", () => {
+    const pins = [
+      {
+        context: "prod",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "b",
+        pinnedAt: 20,
+      },
+      {
+        context: "staging",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "c",
+        pinnedAt: 5,
+      },
+      {
+        context: "prod",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "a",
+        pinnedAt: 10,
+      },
+    ];
+
+    expect(pinsOf(pins, "prod").map((pin) => pin.name)).toEqual(["a", "b"]);
+    expect(pinsOf(pins, null)).toEqual([]);
+    expect(isPinned(pins, "prod", "Deployment/shop/a")).toBe(true);
+    expect(isPinned(pins, "staging", "Deployment/shop/a")).toBe(false);
+    expect(isPinned(pins, "prod", null)).toBe(false);
+  });
+
   it("budgets the cards, because each one is a neighbourhood read", () => {
     expect(MAX_PINNED_PER_CONTEXT).toBeGreaterThan(0);
     expect(MAX_PINNED_PER_CONTEXT).toBeLessThanOrEqual(20);
+  });
+
+  /**
+   * The bill is the cap times the rate, and a card's read is a whole
+   * neighbourhood rather than one list. At the detail pages' rate a full
+   * page asked the cluster ninety times a minute; this is what holds the
+   * two numbers against each other when either moves.
+   */
+  it("keeps a full page of cards under thirty reads a minute", () => {
+    const perMinute =
+      (MAX_PINNED_PER_CONTEXT * 60_000) / REFRESH_INTERVALS[CARD_REFRESH];
+    expect(perMinute).toBeLessThanOrEqual(30);
   });
 });

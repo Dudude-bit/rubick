@@ -2,7 +2,7 @@ import { Pin, PinOff } from "lucide-react";
 
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
-import { MAX_PINNED_PER_CONTEXT, pinKey } from "@/lib/my-services";
+import { isPinned, MAX_PINNED_PER_CONTEXT, pinKey } from "@/lib/my-services";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { useT } from "@/i18n/useT";
@@ -32,9 +32,7 @@ export function PinAction({
   const unpin = usePinnedServicesStore((s) => s.unpin);
 
   const key = namespace && name ? pinKey({ kind, namespace, name }) : null;
-  const pinned = pins.some(
-    (entry) => entry.context === context && pinKey(entry) === key
-  );
+  const pinned = isPinned(pins, context, key);
 
   if (!context || !namespace || !name || key === null) return null;
 
