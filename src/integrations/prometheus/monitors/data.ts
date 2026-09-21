@@ -57,7 +57,7 @@ async function readKind(
   }
 }
 
-async function readRules(): Promise<RulesRead> {
+export async function readRules(): Promise<RulesRead> {
   let configured: boolean;
   try {
     configured = (await commands.getPrometheusConnection()) !== null;

@@ -31,6 +31,7 @@ import {
 import { Chip, Chips, Step, Sub } from "../monitors/story";
 import { DOT, RING, SELECTED, WORDS, type RowTone } from "../monitors/words";
 import { rowWords } from "./words";
+import { verdictOf } from "./verdict";
 import {
   OBJECT_LABEL,
   RULES_CRD,
@@ -721,80 +722,6 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
       </div>
     </div>
   );
-}
-
-function verdictOf(
-  row: RuleRow,
-  instanceCount: number,
-  t: T
-): { head: string; body: string | null } {
-  const worst = row.findings[0];
-  switch (worst?.kind) {
-    case "firing":
-      return {
-        head: t("alerts", "verdictFiring", {
-          n: worst.alerts,
-          rules: worst.rules,
-        }),
-        body: null,
-      };
-    case "notPickedUp":
-      return instanceCount === 0
-        ? { head: t("monitors", "verdictNoInstances"), body: null }
-        : {
-            head: t("alerts", "verdictNotPickedUp"),
-            body: t("alerts", "notPickedUp"),
-          };
-    case "notLoaded":
-      return {
-        head: t("alerts", "verdictNotLoaded"),
-        body: t("alerts", "notLoaded"),
-      };
-    case "partlyLoaded":
-      return {
-        head: t("alerts", "verdictPartlyLoaded", { n: worst.missing.length }),
-        body: worst.missing.join(", "),
-      };
-    case "evalError":
-      return {
-        head: t("alerts", "verdictEvalError", { rule: worst.rule }),
-        body: worst.lastError,
-      };
-    case "notEvaluated":
-      return {
-        head: t("alerts", "verdictNotEvaluated", { rule: worst.rule }),
-        body: t("alerts", "notEvaluated"),
-      };
-    case "pending":
-      return {
-        head: t("alerts", "verdictPending", {
-          n: worst.alerts,
-          rules: worst.rules,
-        }),
-        body: null,
-      };
-    case "pickedUpUnknown":
-      return {
-        head: t("monitors", "verdictPickedUpUnknown"),
-        body: worst.reason,
-      };
-  }
-  if (row.pickedUp.state === "noKind")
-    return { head: t("monitors", "verdictNoKind"), body: null };
-  if (row.loaded.state === "notConnected")
-    return {
-      head: t("alerts", "verdictNotChecked"),
-      body: t("alerts", "notConnected"),
-    };
-  if (row.loaded.state === "unanswered")
-    return {
-      head: t("alerts", "verdictNotChecked"),
-      body: t("alerts", "unanswered", { reason: row.loaded.reason }),
-    };
-  return {
-    head: t("alerts", "verdictQuiet", { n: row.object.rules.length }),
-    body: t("monitors", "nothingToDo"),
-  };
 }
 
 const STATE_TONE: Record<string, string> = {
