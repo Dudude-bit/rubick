@@ -2440,6 +2440,10 @@ export const en = {
     aboutUnread:
       "Whether anything is firing about this could not be read: {reason}",
     aboutUnreachable: "The connected Prometheus did not answer: {reason}",
+    markUnchecked: {
+      one: "{n} rule object not checked",
+      other: "{n} rule objects not checked",
+    },
     markBroken: {
       one: "{n} rule object needs attention",
       other: "{n} rule objects need attention",

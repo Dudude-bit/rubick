@@ -36,6 +36,9 @@ import {
 
 const GROUPS: readonly Group[] = ["broken", "waiting", "scraped", "unchecked"];
 
+/** One row's id, which is how the listbox names what it has selected. */
+const rowDomId = (row: MonitorRow) => `monitor-${keyOf(row)}`;
+
 const keyOf = (row: MonitorRow) =>
   `${row.monitor.namespace}/${row.monitor.name}`;
 
@@ -422,6 +425,9 @@ function Ladder({
       <div
         role="listbox"
         aria-label={t("monitors", "filterMonitorsLabel")}
+        // The arrows move the highlight while focus stays here, so this is
+        // the only thing that tells a screen reader which row is on.
+        aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         className="flex flex-col outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
@@ -524,6 +530,7 @@ function Row({
       : null;
   return (
     <div
+      id={rowDomId(row)}
       role="option"
       aria-selected={on}
       onClick={() => onSelect(row)}

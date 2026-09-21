@@ -119,6 +119,52 @@ describe("what the Alerts tab and the sidebar dot carry", () => {
     expect(mark).toEqual({ shows: "count", of: 0 });
   });
 
+  /**
+   * A rule object whose loading nobody could check — no Prometheus
+   * connected — is not a quiet one. The tab wore a plain number over a page
+   * that says "not checked" on every row.
+   */
+  it("says the rule objects were not checked rather than counting them", () => {
+    const object = {
+      name: "app-rules",
+      namespace: "shop",
+      uid: "shop/PrometheusRule/app-rules",
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "PrometheusRule",
+      labels: { release: "kps" },
+      annotations: {},
+      creationTimestamp: null,
+      spec: {
+        groups: [{ name: "app", rules: [{ alert: "TooSlow", expr: "up" }] }],
+      },
+    };
+    // Picked up by a Prometheus, so it is not broken — and nobody could
+    // read whether that Prometheus loaded it, so it is not quiet either.
+    const prometheus = {
+      name: "k8s",
+      namespace: "monitoring",
+      uid: "monitoring/Prometheus/k8s",
+      apiVersion: "monitoring.coreos.com/v1",
+      kind: "Prometheus",
+      labels: {},
+      annotations: {},
+      creationTimestamp: null,
+      spec: {
+        ruleSelector: { matchLabels: { release: "kps" } },
+        ruleNamespaceSelector: {},
+      },
+    };
+    const mark = alertsMark(
+      withRules({
+        rules: { state: "read", items: [object] },
+        prometheuses: { state: "read", items: [prometheus] },
+        alertRules: { state: "notConnected" },
+      } as never)
+    );
+
+    expect(mark).toEqual({ shows: "unchecked", of: 1 });
+  });
+
   it("has no mark at all while the rule objects have not been read", () => {
     expect(
       alertsMark(

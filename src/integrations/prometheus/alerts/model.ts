@@ -346,6 +346,12 @@ function podsOf(kind: string, name: string): RegExp | null {
     case "ReplicaSet":
     case "Job":
       return new RegExp(`^${safe}-[a-z0-9]{5}$`);
+    // A CronJob reaches its pods through the Job it made, whose name is the
+    // CronJob plus the minute it started: `backup-28901234-vk2mn`. Without
+    // this the alert about the pod of a failing backup was on no page at
+    // all — the CronJob page is the one a reader opens.
+    case "CronJob":
+      return new RegExp(`^${safe}-\\d{8,12}-[a-z0-9]{5}$`);
     default:
       return null;
   }

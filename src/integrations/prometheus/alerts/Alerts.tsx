@@ -339,9 +339,15 @@ function Ladder({
           </button>
         ))}
       </div>
+      {/*
+        The focus stays on the box and the arrows move `selected`, so the row
+        a screen reader announces is whatever `aria-activedescendant` points
+        at. Without it the highlight moved and the reader heard nothing.
+      */}
       <div
         role="listbox"
         aria-label={t("alerts", "filterLabel")}
+        aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
         className="flex flex-col rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
@@ -385,6 +391,11 @@ function Ladder({
   );
 }
 
+/** One row's id, which is how the listbox names what it has selected. */
+function rowDomId(row: RuleRow): string {
+  return `alert-rule-${row.object.uid}`;
+}
+
 function Row({
   row,
   prefix,
@@ -405,6 +416,7 @@ function Row({
     : row.object.name;
   return (
     <div
+      id={rowDomId(row)}
       role="option"
       aria-selected={on}
       onClick={() => onSelect(row)}

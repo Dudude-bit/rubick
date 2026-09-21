@@ -501,14 +501,22 @@ pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
     let optional = |node: &serde_json::Value, key: &str| {
         node.get(key).and_then(|v| v.as_str()).map(str::to_string)
     };
-    let mut rules = Vec::new();
-    for group in body
+    // The same rule the target list is read by: a body that says success and
+    // carries no `groups` array is not a Prometheus with no rules. Read as an
+    // empty list it becomes "this PrometheusRule is not loaded" — in red, on
+    // every rule object the cluster has — from an answer that said nothing
+    // about rules at all.
+    let Some(groups) = body
         .get("data")
         .and_then(|d| d.get("groups"))
         .and_then(|g| g.as_array())
-        .into_iter()
-        .flatten()
-    {
+    else {
+        return Err(unreachable(
+            "Prometheus answered without a rule list".to_string(),
+        ));
+    };
+    let mut rules = Vec::new();
+    for group in groups {
         let group_name = text(group, "name");
         let file = text(group, "file");
         for rule in group
@@ -643,6 +651,31 @@ mod tests {
             "data": { "activeTargets": [] }
         });
         assert_eq!(parse_targets(&none).expect("an answer").len(), 0);
+    }
+
+    /// The rule list has the same shape and had none of the guard: a body
+    /// with no `groups` array read as "loaded nothing", which the Alerts tab
+    /// draws as every `PrometheusRule` in the cluster being unloaded — in red,
+    /// from an answer that said nothing about rules.
+    #[test]
+    fn an_answer_without_a_rule_list_is_not_an_answer_of_no_rules() {
+        for body in [
+            serde_json::json!({ "status": "success" }),
+            serde_json::json!({ "status": "success", "data": {} }),
+            serde_json::json!({ "status": "success", "data": { "groups": null } }),
+        ] {
+            assert!(
+                parse_rules(&body).is_err(),
+                "a body with no rule list has not answered: {body}"
+            );
+        }
+
+        // A Prometheus that really has loaded no rules still answers zero.
+        let none = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [] }
+        });
+        assert_eq!(parse_rules(&none).expect("an answer").len(), 0);
     }
 
     /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.

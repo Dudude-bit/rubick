@@ -48,6 +48,16 @@ export function TabMark({
       </span>
     );
   }
+  // A hollow ring rather than a disc, which is how "not checked" is drawn
+  // everywhere else in this app: present, uncoloured, clearly not an answer.
+  if (mark.shows === "unchecked") {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(DOT, "border border-fg-fnt bg-transparent")}
+      />
+    );
+  }
   if (mark.shows === "severity") {
     return (
       <span

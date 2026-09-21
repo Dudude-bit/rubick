@@ -254,6 +254,7 @@ export function alertsMark(
   picture: Picture
 ):
   | { shows: "severity"; tone: "err" | "warn"; firing: number; broken: number }
+  | { shows: "unchecked"; of: number }
   | { shows: "count"; of: number }
   | null {
   if (picture.rules.state !== "read") return null;
@@ -267,6 +268,13 @@ export function alertsMark(
       firing,
       broken,
     };
+  // A rule object nobody could read the loading of — no Prometheus
+  // connected, or one that did not answer — is not a rule object with
+  // nothing to say. The tab wore a plain count over a page of "not
+  // checked", which is this app's own third state going quiet on the way
+  // to the strip.
+  const unchecked = rows.filter((row) => row.group === "unchecked").length;
+  if (unchecked > 0) return { shows: "unchecked", of: unchecked };
   return { shows: "count", of: picture.rules.items.length };
 }
 

@@ -31,7 +31,7 @@ export type DetailTabGlyph =
 
 /**
  * Rule two: a tab earns a mark only when the mark changes which tab is
- * clicked. Three cases, and the union is what stops there being a fourth.
+ * clicked. Four cases, and the union is what stops there being a fifth.
  *
  * One at a time, deliberately: a pod whose containers are counted *and*
  * failing shows the failure, because `3` beside a red dot is two answers to
@@ -42,6 +42,12 @@ export type DetailTabMark =
   | { shows: "count"; of: number }
   /** Something inside is failing — `says` is what the tab tells a reader who cannot see the colour. */
   | { shows: "severity"; tone: "err" | "warn"; says: string }
+  /**
+   * Something inside could not be checked. Not a failure and not a clean
+   * count: a tab whose page says "nobody looked" wore a plain number, which
+   * is the page's third state collapsing into its second on the way out.
+   */
+  | { shows: "unchecked"; says: string }
   /** A session is attached inside. The only animated mark in the strip, so it means one thing. */
   | { shows: "live"; says: string };
 

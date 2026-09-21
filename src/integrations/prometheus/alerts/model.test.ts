@@ -347,6 +347,48 @@ describe("rowsOf", () => {
   });
 });
 
+describe("the pods a CronJob reaches", () => {
+  /**
+   * A CronJob's pods are named after the Job it made — `backup-28901234-vk2mn`
+   * — so a `pod=` alert about a failing backup matched nothing, and the page
+   * a reader actually opens showed no alert at all.
+   */
+  it("finds the alert about a pod of its own Job", () => {
+    const rule: AlertRule = apiRule({
+      state: "firing",
+      alerts: [
+        {
+          state: "firing",
+          activeAt: "2026-09-12T20:00:00Z",
+          value: "1",
+          labels: { namespace: "shop", pod: "backup-28901234-vk2mn" },
+          annotations: { summary: "backup is failing" },
+        },
+      ],
+    });
+
+    const mine = alertsAbout([rule], {
+      kind: "CronJob",
+      name: "backup",
+      namespace: "shop",
+    });
+    expect(mine).toHaveLength(1);
+    expect(mine[0].via).toEqual({
+      label: "pod",
+      value: "backup-28901234-vk2mn",
+    });
+
+    // And not a neighbour's pod that merely starts with the same word.
+    expect(
+      alertsAbout([rule], {
+        kind: "CronJob",
+        name: "back",
+        namespace: "shop",
+      })
+    ).toHaveLength(0);
+  });
+});
+
 describe("speaksOf", () => {
   /**
    * The block draws itself wherever the peek is opened, so this is what
