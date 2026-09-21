@@ -32,6 +32,8 @@ interface Draft {
   apiKey: string;
   /** A stored key stays stored while the field is empty. */
   hasKey: boolean;
+  /** Save with the key this machine's CLI holds, which never crosses IPC. */
+  importKey: boolean;
 }
 
 const BLANK: Draft = {
@@ -42,6 +44,7 @@ const BLANK: Draft = {
   public: true,
   apiKey: "",
   hasKey: false,
+  importKey: false,
 };
 
 export function SharingSettings() {
@@ -77,15 +80,16 @@ export function SharingSettings() {
         public: value.public,
         // Empty means "keep whatever is stored", which is why it is not sent.
         apiKey: value.apiKey.trim() === "" ? null : value.apiKey.trim(),
+        importKey: value.importKey,
       }),
     onSuccess: saved,
-    onError: failed(t("share", "publishFailed")),
+    onError: failed(t("share", "saveTargetFailed")),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => commands.removeShareTarget(id),
     onSuccess: saved,
-    onError: failed(t("share", "publishFailed")),
+    onError: failed(t("share", "removeTargetFailed")),
   });
 
   const verify = useMutation({
@@ -102,15 +106,22 @@ export function SharingSettings() {
 
   const importKey = useMutation({
     mutationFn: () => commands.importPostplanKey(),
-    onSuccess: (key) => {
-      if (!key) {
+    onSuccess: (tail) => {
+      if (!tail) {
         toast({ title: t("share", "noPostplanKey") });
         return;
       }
-      setDraft((previous) => ({ ...(previous ?? BLANK), apiKey: key }));
-      toast({ title: t("share", "importedPostplan") });
+      // The key itself stays in the backend: what arrives is its last few
+      // characters, enough to recognise, and the save says "use that one".
+      setDraft((previous) => ({
+        ...(previous ?? BLANK),
+        apiKey: "",
+        hasKey: true,
+        importKey: true,
+      }));
+      toast({ title: t("share", "importedPostplan", { key: tail }) });
     },
-    onError: failed(t("share", "verifyFailed")),
+    onError: failed(t("share", "importFailed")),
   });
 
   return (
@@ -147,6 +158,7 @@ export function SharingSettings() {
                   public: target.public,
                   apiKey: "",
                   hasKey: target.hasKey,
+                  importKey: false,
                 })
               }
               onVerify={() => verify.mutate(target.id)}

@@ -10,7 +10,7 @@ import { hintFor, sayingWords, troubleOf } from "@/lib/hints";
 import { silenceNote, silenceOf, type NodeSilence } from "@/lib/node-reporting";
 import { statusRole } from "@/lib/status-role";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
-import type { ChainStop, ObjectRef } from "@/generated/types";
+import type { ChainStop } from "@/generated/types";
 import type {
   Report,
   ReportChange,
@@ -148,15 +148,34 @@ function chainOf(
   return [...hops, ...stops];
 }
 
-/** The object a stop is about, whichever shape the stop has. */
+/**
+ * The object a stop is about, per reason rather than by guessing at field
+ * names.
+ *
+ * The Gateway API stops carry a `route` and a `gateway` and neither of the
+ * names the guess looked for, so a report of a route that was never accepted
+ * named an object with no kind and no name — an empty row where the reason
+ * the chain stops belongs.
+ */
 function stopSubject(stop: ChainStop): {
   kind: string;
   name: string;
   namespace: string | null;
 } {
-  const named = stop as unknown as Record<string, ObjectRef | undefined>;
-  const object = named.service ?? named.ingress ?? named.subject ?? named.pod;
-  return object ?? { kind: "", name: "", namespace: null };
+  switch (stop.reason) {
+    case "backendMissing":
+      return stop.service;
+    case "routeNotAccepted":
+    case "routeRefsUnresolved":
+      return stop.route;
+    case "gatewayMissing":
+      return stop.gateway;
+    case "selectsNothing":
+    case "publishesNothingYet":
+    case "noneReady":
+    case "publishesNothing":
+      return stop.service;
+  }
 }
 
 function changesOf(

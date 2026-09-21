@@ -1742,7 +1742,11 @@ export const ru: Catalogue = {
     targetKey: "Ключ API",
     targetKeyKept: "Ключ сохранён. Оставьте пустым, чтобы не менять.",
     importPostplan: "Импортировать ключ, который уже есть у postplan",
-    importedPostplan: "Ключ импортирован из ~/.postplan",
+    importedPostplan:
+      "Будет использован ключ из ~/.postplan, он оканчивается на {key}",
+    importFailed: "Не удалось прочитать ключ из ~/.postplan",
+    saveTargetFailed: "Не удалось сохранить цель",
+    removeTargetFailed: "Не удалось удалить цель",
     noPostplanKey: "Ключа postplan на этой машине нет.",
     verify: "Проверить ключ",
     verified: "{account} · ключ {key}",
