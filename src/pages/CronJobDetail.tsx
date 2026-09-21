@@ -37,6 +37,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "@/components/resources/workload-overview";
+import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { serviceAccountRow } from "@/components/resources/identity-rows";
 import { WorkloadUsage } from "@/components/resources/workload-usage";
 import {
@@ -255,6 +256,13 @@ export function CronJobDetail() {
             {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
 
             <WorkloadOverview
+              alerts={
+                <AlertsAbout
+                  kind={ResourceType.CronJob}
+                  name={name ?? ""}
+                  namespace={namespace ?? null}
+                />
+              }
               count={
                 <CountBlock
                   title={t("action", "runs")}

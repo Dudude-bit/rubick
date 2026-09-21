@@ -1,4 +1,4 @@
-import { Activity, Plug } from "lucide-react";
+import { Activity, Bell, Plug } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -6,8 +6,9 @@ import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
 import { useT } from "@/i18n/useT";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import Connection from "./connection";
+import Alerts from "./alerts/Alerts";
 import Monitors from "./monitors/Monitors";
-import { monitorMark, usePicture } from "./monitors/data";
+import { alertsMark, monitorMark, usePicture } from "./monitors/data";
 
 /**
  * One row, two questions: what the operator was told to scrape, and what
@@ -28,6 +29,25 @@ export default function PrometheusPage() {
     (picture.data.serviceMonitors.state !== "absent" ||
       picture.data.podMonitors.state !== "absent");
   const mark = picture.data ? monitorMark(picture.data) : null;
+
+  // The same rows the page draws, so the tab says what the page says: the
+  // mark was built from the firing alerts alone, and a rule object nothing
+  // picks up — or one Prometheus cannot load — left a plain count on a tab
+  // whose page is all red.
+  const alerts = picture.data ? alertsMark(picture.data) : null;
+  const alertsTabMark: DetailTab["mark"] =
+    alerts?.shows === "severity"
+      ? {
+          shows: "severity",
+          tone: alerts.tone,
+          says:
+            alerts.firing > 0
+              ? t("alerts", "rowFiring", { n: alerts.firing })
+              : t("alerts", "markBroken", { n: alerts.broken }),
+        }
+      : alerts?.shows === "count"
+        ? { shows: "count", of: alerts.of }
+        : null;
 
   const tabs: DetailTab[] = [
     ...(picture.data === undefined || operatorHere
@@ -55,6 +75,17 @@ export default function PrometheusPage() {
                   ? { shows: "count" as const, of: mark.of }
                   : null,
             content: <Monitors />,
+          },
+        ]
+      : []),
+    ...(picture.data !== undefined && picture.data.rules.state !== "absent"
+      ? [
+          {
+            id: "alerts",
+            label: t("alerts", "tabAlerts"),
+            glyph: viewGlyph(Bell),
+            mark: alertsTabMark,
+            content: <Alerts />,
           },
         ]
       : []),

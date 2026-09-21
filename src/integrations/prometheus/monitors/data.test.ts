@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { monitorCount, monitorMark, type Picture } from "./data";
+import { alertsMark, monitorCount, monitorMark, type Picture } from "./data";
 
 const empty = {
   services: { ok: true, items: [] },
@@ -92,5 +92,38 @@ describe("the mark the Monitors tab carries", () => {
     expect(
       mark === null || mark.shows !== "severity" || mark.total === null
     ).toBe(true);
+  });
+});
+
+/**
+ * The tab's mark and the rail's dot are the worst thing on the page, and the
+ * page grew an Alerts tab. Both were built from the firing alerts alone, so
+ * a rule object nothing picks up left a plain count on the tab and nothing
+ * at all on the dot.
+ */
+describe("what the Alerts tab and the sidebar dot carry", () => {
+  const withRules = (over: Partial<Picture>): Picture =>
+    ({
+      ...empty,
+      serviceMonitors: { state: "read", items: [] },
+      podMonitors: { state: "read", items: [] },
+      prometheuses: { state: "read", items: [] },
+      namespaces: { ok: true, items: [] },
+      rules: { state: "read", items: [] },
+      alertRules: { state: "read", rules: [] },
+      ...over,
+    }) as unknown as Picture;
+
+  it("says nothing louder than a count when every rule object is quiet", () => {
+    const mark = alertsMark(withRules({}));
+    expect(mark).toEqual({ shows: "count", of: 0 });
+  });
+
+  it("has no mark at all while the rule objects have not been read", () => {
+    expect(
+      alertsMark(
+        withRules({ rules: { state: "unread", reason: "403" } } as never)
+      )
+    ).toBeNull();
   });
 });

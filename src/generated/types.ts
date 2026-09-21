@@ -1805,6 +1805,29 @@ export interface CertificateFacts {
   chainLength: number;
 }
 
+export interface AlertRule {
+  group: string;
+  file: string;
+  name: string;
+  state: string;
+  health: string;
+  lastError: string;
+  query: string;
+  durationSeconds: number;
+  lastEvaluation: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  alerts: AlertInstance[];
+}
+
+export interface AlertInstance {
+  state: string;
+  activeAt: string | null;
+  value: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
 export interface ScrapeTarget {
   scrapePool: string;
   scrapeUrl: string;

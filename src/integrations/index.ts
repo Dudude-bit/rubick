@@ -385,6 +385,7 @@ export function useCapabilityState<K extends CapabilityKey>(
           vendor: vendor.name,
           endpoint: "",
           use: implementation as Capabilities[K],
+          page: answeredAt(vendor, key),
         };
       }
       continue;
@@ -406,10 +407,38 @@ export function useCapabilityState<K extends CapabilityKey>(
       vendor: vendor.name,
       endpoint: endpointOf(connection.saved.url),
       use: implementation as Capabilities[K],
+      page: answeredAt(vendor, key),
     };
   }
 
   return { state: "absent" };
+}
+
+/**
+ * Whether an alert could name this kind at all, whoever evaluates them.
+ *
+ * Registry knowledge rather than a connection, so the answer holds while
+ * the evaluator is unreachable: a kind no evaluator labels gets neither a
+ * block nor a sentence about a read that failed, and the surface keeps no
+ * list of kinds of its own.
+ */
+export function alertsCanBeAbout(kind: string): boolean {
+  return VENDORS.some(
+    (vendor) => vendor.provides?.["alerts.about"]?.speaksOf(kind) === true
+  );
+}
+
+/**
+ * The link a surface offers beside a capability's short answer.
+ *
+ * `null` unless the vendor both owns a screen and said which part of it
+ * answers this key: a link to a page that does not discuss the thing is
+ * worse than no link, and the vendor is the only one who knows.
+ */
+function answeredAt(vendor: Vendor, key: CapabilityKey): string | null {
+  const suffix = vendor.page?.answers?.[key];
+  if (suffix === undefined) return null;
+  return `${integrationPagePath(vendor.id)}${suffix}`;
 }
 
 /** The address as a chart label wants it — no scheme, no trailing slash. */

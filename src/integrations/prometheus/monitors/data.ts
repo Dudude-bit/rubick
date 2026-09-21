@@ -9,8 +9,15 @@ import type {
 } from "@/generated/types";
 
 import {
+  readRule,
+  rowsOf as alertRowsFrom,
+  type RuleRow,
+  type RulesRead,
+} from "../alerts/model";
+import {
   POD_MONITORS_CRD,
   PROMETHEUSES_CRD,
+  RULES_CRD,
   SERVICE_MONITORS_CRD,
   readMonitor,
   readPrometheus,
@@ -50,6 +57,21 @@ async function readKind(
   }
 }
 
+export async function readRules(): Promise<RulesRead> {
+  let configured: boolean;
+  try {
+    configured = (await commands.getPrometheusConnection()) !== null;
+  } catch (error) {
+    return { state: "unanswered", reason: normalizeTauriError(error) };
+  }
+  if (!configured) return { state: "notConnected" };
+  try {
+    return { state: "read", rules: await commands.prometheusRules() };
+  } catch (error) {
+    return { state: "unanswered", reason: normalizeTauriError(error) };
+  }
+}
+
 async function readTargets(): Promise<TargetsRead> {
   let configured: boolean;
   try {
@@ -75,9 +97,11 @@ export interface Picture {
   serviceMonitors: Kind<CustomResourceInfo>;
   podMonitors: Kind<CustomResourceInfo>;
   prometheuses: Kind<CustomResourceInfo>;
+  rules: Kind<CustomResourceInfo>;
   services: Read<ServiceInfo>;
   namespaces: Read<NamespaceInfo>;
   targets: TargetsRead;
+  alertRules: RulesRead;
 }
 
 export async function readPicture(): Promise<Picture> {
@@ -89,13 +113,16 @@ export async function readPicture(): Promise<Picture> {
     serviceMonitors,
     podMonitors,
     prometheuses,
+    rules,
     services,
     namespaces,
     targets,
+    alertRules,
   ] = await Promise.all([
     readKind(SERVICE_MONITORS_CRD, installed),
     readKind(POD_MONITORS_CRD, installed),
     readKind(PROMETHEUSES_CRD, installed),
+    readKind(RULES_CRD, installed),
     read(() =>
       commands.listServices({
         namespace: null,
@@ -107,14 +134,17 @@ export async function readPicture(): Promise<Picture> {
     ),
     read(() => commands.listNamespaces()),
     readTargets(),
+    readRules(),
   ]);
   return {
     serviceMonitors,
     podMonitors,
     prometheuses,
+    rules,
     services,
     namespaces,
     targets,
+    alertRules,
   };
 }
 
@@ -194,10 +224,62 @@ export function monitorMark(
   return counted === null ? null : { shows: "count", of: counted };
 }
 
+/**
+ * The rows of the Alerts tab, from the same picture the page reads.
+ *
+ * Here so the tab mark and the sidebar dot ask the same function the page
+ * does: both were built from the firing alerts alone, so a rule object
+ * nothing picks up, or one Prometheus cannot load, left the tab showing a
+ * plain count and the dot showing nothing at all.
+ */
+export function alertRowsOf(picture: Picture): RuleRow[] {
+  if (picture.rules.state !== "read") return [];
+  const instances =
+    picture.prometheuses.state === "read"
+      ? {
+          state: "read" as const,
+          items: picture.prometheuses.items.map(readPrometheus),
+        }
+      : picture.prometheuses;
+  return alertRowsFrom(
+    picture.rules.items.map(readRule),
+    instances,
+    picture.namespaces,
+    picture.alertRules
+  );
+}
+
+/** What the Alerts tab shows beside its label. */
+export function alertsMark(
+  picture: Picture
+):
+  | { shows: "severity"; tone: "err" | "warn"; firing: number; broken: number }
+  | { shows: "count"; of: number }
+  | null {
+  if (picture.rules.state !== "read") return null;
+  const rows = alertRowsOf(picture);
+  const firing = rows.filter((row) => row.group === "firing").length;
+  const broken = rows.filter((row) => row.group === "broken").length;
+  if (firing > 0 || broken > 0)
+    return {
+      shows: "severity",
+      tone: firing > 0 ? "err" : "warn",
+      firing,
+      broken,
+    };
+  return { shows: "count", of: picture.rules.items.length };
+}
+
 export function worstTone(picture: Picture): "warn" | "err" | null {
   const rows = rowsOfPicture(picture);
+  // The dot is the worst thing on the page, and the page grew an Alerts tab:
+  // a rule object nothing picks up was worse than anything the monitors had
+  // to say, and the rail showed nothing.
+  const alerts = alertsMark(picture);
   if (rows.some((row) => row.worst === "err")) return "err";
+  if (alerts?.shows === "severity" && alerts.tone === "err") return "err";
   if (rows.some((row) => row.worst === "warn")) return "warn";
+  if (alerts?.shows === "severity") return "warn";
   return null;
 }
 

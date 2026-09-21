@@ -2357,6 +2357,119 @@ export const en = {
     openRecorder: "Open Settings › Diagnostics",
   },
 
+  alerts: {
+    tabAlerts: "Alerts",
+    pageHint:
+      "Every PrometheusRule: which Prometheus picks it up, whether it loaded the rules, and what is firing right now.",
+    couldNotRead: "Could not read the rules",
+    kindUnread: "PrometheusRule objects could not be read: {reason}",
+    none: "No PrometheusRule in this cluster.",
+    noneMatch: "No rule object matches the filter.",
+    objects: {
+      one: "{n} rule object",
+      other: "{n} rule objects",
+    },
+    firingNow: {
+      one: "{n} alert firing across {rules} rule objects",
+      other: "{n} alerts firing across {rules} rule objects",
+    },
+    quietNow: {
+      one: "{n} rule object, nothing firing",
+      other: "{n} rule objects, nothing firing",
+    },
+    brokenCount: {
+      one: "{n} broken",
+      other: "{n} broken",
+    },
+    notConnected:
+      "No Prometheus is connected for this cluster. Pick-up is read from the objects; whether the rules are loaded and firing stays unchecked.",
+    unanswered:
+      "The connected Prometheus did not answer for its rules: {reason}. Firing is unknown, not empty.",
+    rulesLoaded: {
+      one: "{n} alerting rule loaded on the connected Prometheus",
+      other: "{n} alerting rules loaded on the connected Prometheus",
+    },
+    groupFiring: "Firing",
+    groupBroken: "Broken",
+    groupPending: "Pending",
+    groupQuiet: "Quiet",
+    groupUnchecked: "Not checked",
+    rowFiring: "{n} firing",
+    rowPending: "{n} pending",
+    rowNotLoaded: "not loaded",
+    rowPartlyLoaded: "{n} not loaded",
+    aboutUnread:
+      "Whether anything is firing about this could not be read: {reason}",
+    aboutUnreachable: "The connected Prometheus did not answer: {reason}",
+    markBroken: "{n} rule objects need attention",
+    rowNotEvaluated: "loaded, never evaluated",
+    rowEvalError: "evaluation error",
+    rowQuiet: "quiet",
+    rowRecordingOnly: "recording rules only",
+    recordingOnly:
+      "Recording rules only. Prometheus lists them apart from alerts, and nothing here fires.",
+    filter: "Filter by name, namespace or alert",
+    filterLabel: "Filter rule objects by name, namespace or alert",
+    ruleCount: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
+    recordingCount: {
+      one: "{n} recording rule",
+      other: "{n} recording rules",
+    },
+    inPrometheus: "Alerts in Prometheus",
+    notPickedUp:
+      "no ruleSelector matches it in a namespace that Prometheus is allowed to watch",
+    loaded: "Loaded",
+    notLoadedShort: "not loaded",
+    loadedOf: "{n} of {total}",
+    notLoaded:
+      "The connected Prometheus has no rule file named after this object: the operator has not written it, or wrote it for another Prometheus than the one connected.",
+    chipFile: "file",
+    rules: "Rules",
+    verdictFiring: {
+      one: "{n} alert firing from {rules} rules.",
+      other: "{n} alerts firing from {rules} rules.",
+    },
+    verdictNotPickedUp:
+      "No Prometheus picks it up, so none of its rules is evaluated.",
+    verdictNotLoaded:
+      "Picked up, but the connected Prometheus has not loaded it.",
+    verdictPartlyLoaded: {
+      one: "{n} rule of this object is missing from the connected Prometheus.",
+      other:
+        "{n} rules of this object are missing from the connected Prometheus.",
+    },
+    verdictNotEvaluated: "{rule} is loaded and has never been evaluated.",
+    notEvaluated:
+      "Prometheus reports this rule's health as unknown, which is what it says about a rule it has loaded and not yet run.",
+    verdictEvalError: "{rule} fails to evaluate.",
+    verdictPending: {
+      one: "{n} alert pending from {rules} rules, not yet past its for clause.",
+      other:
+        "{n} alerts pending from {rules} rules, not yet past their for clauses.",
+    },
+    verdictNotChecked:
+      "Picked up. Whether it is loaded and firing is not checked.",
+    verdictQuiet: {
+      one: "{n} rule loaded and evaluating, nothing firing.",
+      other: "{n} rules loaded and evaluating, nothing firing.",
+    },
+    notInPrometheus: "not in Prometheus",
+    since: "since {time} · {ago}",
+    moreAlerts: "+{n} more alerts",
+    aboutFiring: {
+      one: "{n} alert firing about this object",
+      other: "{n} alerts firing about this object",
+    },
+    aboutPending: {
+      one: "{n} alert pending about this object",
+      other: "{n} alerts pending about this object",
+    },
+    openAlerts: "All alerts",
+  },
+
   vendor: {
     ciliumGives:
       "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
@@ -2382,7 +2495,7 @@ export const en = {
       "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
     lokiGives: "logs from before the current pod existed",
     prometheusGives:
-      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped, from the operator's objects",
+      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped; every PrometheusRule with whether the connected Prometheus has loaded it and what is firing from it, and the alerts firing about an object on its own page",
     traefikGives: "every host this cluster serves, and where each one stops",
   },
 
