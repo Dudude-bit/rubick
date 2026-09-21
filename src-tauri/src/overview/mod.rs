@@ -97,6 +97,19 @@ impl Health {
         slot.1
     }
 
+    /// One watcher item for `kind`.
+    ///
+    /// The rule is here rather than at the call site so the loop cannot
+    /// forget it: `Event::Init` is the marker kube sends before every list
+    /// attempt, so a refused stream alternates marker and error for ever.
+    /// Counting the marker kept this ladder on its first rung and neither
+    /// `broken` nor `given up` was reachable under a 403.
+    fn saw<K>(&mut self, kind: &str, event: &kube::runtime::watcher::Event<K>) {
+        if crate::watch::answered(event) {
+            self.recovered(kind);
+        }
+    }
+
     fn recovered(&mut self, kind: &str) {
         self.slot(kind).1 = 0;
     }
@@ -361,14 +374,7 @@ impl WatchConfigs {
                     next = events.next() => next,
                 };
                 match next {
-                    // Counting `Event::Init` — the marker before the list
-                    // that fails — kept this ladder on its first rung, so
-                    // neither `broken` nor `given up` was reachable under a
-                    // 403. See `watch::answered`.
-                    Some(Ok(event)) if crate::watch::answered(&event) => {
-                        health.lock().recovered(kind);
-                    }
-                    Some(Ok(_)) => {}
+                    Some(Ok(event)) => health.lock().saw(kind, &event),
                     Some(Err(error)) => {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {
@@ -505,6 +511,32 @@ mod tests {
         assert!(!health.serves());
         assert_eq!(health.broken().into_iter().collect::<Vec<_>>(), ["Node"]);
         health.recovered("Node");
+        assert!(health.serves());
+    }
+
+    /// The ladder exists to give up on a watch the cluster refuses — and it
+    /// could not, because kube announces every list attempt with `Init` and
+    /// the loop counted that as the cluster answering. The streak never
+    /// passed one, so `broken` never came and neither did the cooldown.
+    #[test]
+    fn a_refused_watch_still_climbs_the_ladder() {
+        use k8s_openapi::api::core::v1::Pod;
+        use kube::runtime::watcher::Event;
+
+        let mut health = Health::new(["Pod", "Node", "Deployment", "Job", "Event"]);
+        for _ in 0..BROKEN_STREAK {
+            // What a refused stream actually sends: the marker, then the
+            // error, over and over.
+            health.saw::<Pod>("Pod", &Event::Init);
+            health.failed("Pod");
+        }
+        assert!(
+            !health.serves(),
+            "a watch refused three times over is a broken one"
+        );
+
+        // And an answer still ends the streak.
+        health.saw("Pod", &Event::Apply(Pod::default()));
         assert!(health.serves());
     }
 

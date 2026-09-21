@@ -472,3 +472,93 @@ fn main() {
             }
         });
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::Path;
+
+    /// Every `#[tauri::command]` in the tree, by the name the frontend calls.
+    fn commands_in(dir: &Path, found: &mut BTreeSet<String>) {
+        for entry in fs::read_dir(dir).expect("read the source tree") {
+            let path = entry.expect("a directory entry").path();
+            if path.is_dir() {
+                commands_in(&path, found);
+                continue;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let source = fs::read_to_string(&path).expect("read a source file");
+            let mut lines = source.lines().peekable();
+            while let Some(line) = lines.next() {
+                if line.trim() != "#[tauri::command]" {
+                    continue;
+                }
+                // The signature can be several lines down, past other
+                // attributes; the name is on the first `fn` after it.
+                for next in lines.by_ref() {
+                    if let Some(rest) = next.split(" fn ").nth(1) {
+                        let name: String = rest
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        if !name.is_empty() {
+                            found.insert(name);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Nothing else in this repository holds these two together.
+    ///
+    /// The TypeScript binding is generated from the attribute alone: the
+    /// generator was pointed at a two-command crate with one of them left
+    /// out of `generate_handler!` and emitted a binding for it anyway,
+    /// exiting 0. So a command that is written, registered in no handler
+    /// list, type-checks on both sides, builds green, and fails at runtime
+    /// with `__cmd__x not found` — which is how v2.1.0 shipped with ninety
+    /// of them. The list is edited by hand beside conflict-resolved hunks;
+    /// this is the thing that notices.
+    #[test]
+    fn every_command_is_registered_in_the_handler() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut written = BTreeSet::new();
+        commands_in(&root, &mut written);
+        assert!(
+            written.len() > 200,
+            "the scan found only {} commands; it is not reading the tree",
+            written.len()
+        );
+
+        let main = fs::read_to_string(root.join("main.rs")).expect("read main.rs");
+        let list = main
+            .split_once("generate_handler![")
+            .expect("the handler list")
+            .1
+            .split_once("])")
+            .expect("the end of the handler list")
+            .0;
+        let registered: BTreeSet<String> = list
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim().trim_end_matches(',');
+                if line.is_empty() || line.starts_with("//") {
+                    return None;
+                }
+                line.rsplit("::").next().map(str::to_string)
+            })
+            .collect();
+
+        let missing: Vec<&String> = written.difference(&registered).collect();
+        assert!(
+            missing.is_empty(),
+            "written as commands and never registered, so they exist only at \
+             build time: {missing:?}"
+        );
+    }
+}

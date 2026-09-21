@@ -237,14 +237,59 @@ mod tests {
     /// A vendor the frontend draws as detected and no marker names is
     /// permanently "not installed": the frontend can only draw what detection
     /// reports, and the id has to be the same string on both sides.
+    ///
+    /// The list is read from the frontend rather than written here. It was
+    /// three ids long against twelve vendors, so the one added with the
+    /// Prometheus work — the case it exists for — was never looked at, and a
+    /// vendor added tomorrow would not be either.
     #[test]
     fn every_operator_the_frontend_draws_has_a_marker() {
-        for id in ["cloudnativepg", "scylla", "cilium"] {
-            assert!(
-                MARKERS.iter().any(|(marker, _)| *marker == id),
-                "{id} has no marker"
-            );
+        let integrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("src")
+            .join("integrations");
+        let mut drawn: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&integrations).expect("read integrations") {
+            let dir = entry.expect("a directory entry").path();
+            let index = dir.join("index.ts");
+            if !index.is_file() {
+                continue;
+            }
+            let source = std::fs::read_to_string(&index).expect("read an index");
+            // A vendor whose page is backed by custom resources declares a
+            // `crd` view; that is exactly the set detection has to name.
+            if !source.lines().any(|line| line.trim() == "crd,") {
+                continue;
+            }
+            let id = source
+                .split_once("id: \"")
+                .and_then(|(_, rest)| rest.split_once('"'))
+                .map(|(id, _)| id.to_string())
+                .expect("a vendor declares an id");
+            drawn.push(id);
         }
+        assert!(
+            drawn.len() >= 12,
+            "found only {} vendors with a crd view: {drawn:?}",
+            drawn.len()
+        );
+
+        let unnamed: Vec<&String> = drawn
+            .iter()
+            .filter(|id| {
+                // cert-manager and ingress-nginx are detected by their own
+                // functions rather than by a marker row, and carry their id
+                // as a constant.
+                !MARKERS.iter().any(|(marker, _)| *marker == id.as_str())
+                    && id.as_str() != cert_manager::ID
+                    && id.as_str() != ingress_nginx::ID
+            })
+            .collect();
+        assert!(
+            unnamed.is_empty(),
+            "drawn by the frontend and named by no marker, so detection \
+             reports them not installed for ever: {unnamed:?}"
+        );
     }
 
     #[test]

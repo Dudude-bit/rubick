@@ -336,12 +336,9 @@ impl WatchManager {
                     next = stream.next() => {
                         match next {
                             Some(Ok(event)) => {
-                                // `Init` is the marker that says an attempt
-                                // has begun, and it arrives before the list
-                                // that fails; only an answer clears a streak.
-                                if answered(&event) {
-                                    latch.record_success();
-                                }
+                                // The rule is inside `saw`: a marker does not
+                                // clear a streak, an answer does.
+                                latch.saw(&event);
                                 if batch.push(event, &transform) {
                                     batch.flush(&event_tx);
                                 }
