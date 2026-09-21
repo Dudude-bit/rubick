@@ -302,7 +302,7 @@ function TargetRow({
       <button
         type="button"
         onClick={onEdit}
-        className="min-w-0 flex-1 text-left hover:underline"
+        className="min-w-0 flex-1 rounded px-0.5 text-left hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
       >
         <span className="text-fg">{target.label}</span>{" "}
         <span className="font-mono text-[11px] text-fg-fnt">{target.host}</span>

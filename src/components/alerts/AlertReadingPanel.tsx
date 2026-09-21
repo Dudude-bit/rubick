@@ -128,7 +128,7 @@ export function AlertReadingPanel({
         </p>
       ) : null}
 
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 text-[11.5px]">
+      <dl className="grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[11.5px]">
         <dt className={context === null ? "text-warn" : "text-fg-fnt"}>
           {t("alerts", "cluster")}
         </dt>
@@ -311,7 +311,7 @@ export function AlertReadingPanel({
           // ⌘K reopened it on the stale alert instead of the search.
           disabled={path === null || context === null}
           onClick={() => object && open(path, object.kind, object.name)}
-          className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-[11.5px] text-info disabled:pointer-events-none disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-[11.5px] text-info transition-colors hover:bg-info/20 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
           {object
@@ -331,7 +331,7 @@ export function AlertReadingPanel({
             onClick={() =>
               open(namespacePath, "Namespace", namespace as string)
             }
-            className="text-[11px] text-fg-fnt hover:text-fg-mut"
+            className="rounded px-1 text-[11px] text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >
             {t("alerts", "orTheNamespace", { namespace: namespace as string })}
           </button>
@@ -468,9 +468,10 @@ function Choices({
             aria-checked={item.key === picked}
             onClick={() => onPick(item.key, item.index)}
             onFocus={() => onPick(item.key, item.index)}
-            className={`flex min-w-0 items-baseline gap-2 rounded px-1.5 py-0.5 text-left ${
-              item.key === picked ? "bg-hover" : ""
-            }`}
+            className={cn(
+              "flex min-w-0 items-baseline gap-2 rounded px-1.5 py-0.5 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+              item.key === picked ? "bg-hover" : "hover:bg-hover/60"
+            )}
           >
             <span
               aria-hidden="true"

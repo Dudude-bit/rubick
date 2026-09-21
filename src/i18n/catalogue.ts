@@ -1734,6 +1734,7 @@ export const en = {
     openInRubick: "Open in Rubick",
     linkFallback: "No Rubick on this machine? Paste this into its search:",
     sectionVerdict: "Most likely",
+    noVerdict: "the app has nothing to put first",
     sectionFacts: "Facts",
     sectionChain: "Traffic chain at capture",
     sectionChanges: "What changed",

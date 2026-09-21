@@ -278,6 +278,10 @@ describe("entryPointsOf", () => {
       "payments",
     ]);
     expect(entries[0].url).toBe("https://shop.example.com");
+    // An address is an address. Whether anything answers on it is the
+    // published hop's answer, and claiming to know here draws "nothing
+    // behind it" in warning colours over a question nobody asked.
+    expect(entries[0].servingKnown).toBe(false);
   });
 
   it("says whether anything is behind the service, and whether that was read", () => {

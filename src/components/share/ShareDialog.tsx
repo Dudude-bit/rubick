@@ -153,24 +153,30 @@ export function ShareDialog({
               <li>
                 <span className="text-fg">{t("share", "sectionVerdict")}</span>{" "}
                 <span className="text-fg-fnt">
-                  {report.verdict ?? t("share", "nothingHere")}
+                  {report.verdict ?? t("share", "noVerdict")}
                 </span>
               </li>
               <li>
                 <span className="text-fg">{t("share", "sectionFacts")}</span>{" "}
-                <span className="text-fg-fnt">{report.facts.length}</span>
+                <span className="tabular-nums text-fg-fnt">
+                  {report.facts.length}
+                </span>
               </li>
               <li>
                 <span className="text-fg">{t("share", "sectionChain")}</span>{" "}
-                <span className="text-fg-fnt">{report.chain.length}</span>
+                <span className="tabular-nums text-fg-fnt">
+                  {report.chain.length}
+                </span>
               </li>
               <li>
                 <span className="text-fg">{t("share", "sectionChanges")}</span>{" "}
-                <span className="text-fg-fnt">{report.changes.length}</span>
+                <span className="tabular-nums text-fg-fnt">
+                  {report.changes.length}
+                </span>
               </li>
               <li>
                 <span className="text-fg">{t("share", "sectionLogs")}</span>{" "}
-                <span className="text-fg-fnt">
+                <span className="tabular-nums text-fg-fnt">
                   {report.logs.reduce((sum, log) => sum + log.lines.length, 0)}
                 </span>
               </li>
@@ -180,7 +186,9 @@ export function ShareDialog({
                 <span className={report.notRead.length > 0 ? "" : "text-fg"}>
                   {t("share", "sectionNotRead")}
                 </span>{" "}
-                <span className="text-fg-fnt">{report.notRead.length}</span>
+                <span className="tabular-nums text-fg-fnt">
+                  {report.notRead.length}
+                </span>
               </li>
             </ul>
             <p className="text-[11px] text-fg-fnt">

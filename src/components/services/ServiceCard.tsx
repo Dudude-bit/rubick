@@ -5,7 +5,7 @@ import { ObjectLink } from "@/components/resources/ResourceRef";
 import { Journal } from "@/components/changes/ChangesTimeline";
 import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
-import { formatAge } from "@/lib/utils";
+import { cn, formatAge } from "@/lib/utils";
 import {
   CARD_REFRESH,
   changesFor,
@@ -88,13 +88,16 @@ export function ServiceCard({
           type="button"
           aria-label={t("services", "unpin")}
           onClick={onUnpin}
-          className="ml-auto rounded p-0.5 text-fg-fnt hover:bg-hover hover:text-fg-mut"
+          className="ml-auto rounded p-0.5 text-fg-fnt transition-colors hover:bg-hover hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <PinOff aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[11px]">
+      {/* The same label track every other block in this app uses, so the
+          values line up with the page around the card rather than being
+          pushed out by the longest label in it. */}
+      <dl className="mt-1.5 grid grid-cols-[minmax(0,132px)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px]">
         <dt className="text-fg-fnt">{t("services", "wayIn")}</dt>
         <dd className="min-w-0 text-fg-mut">
           {!ways.known ? (
@@ -215,9 +218,10 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
   }
   return (
     <span
-      className={`flex-none font-mono text-[11px] ${
+      className={cn(
+        "flex-none font-mono text-[11px] tabular-nums",
         state.state === "ready" ? "text-ok" : "text-warn"
-      }`}
+      )}
     >
       {t("services", "readyOf", { ready: state.ready, total: state.total })}
     </span>

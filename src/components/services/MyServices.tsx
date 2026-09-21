@@ -36,9 +36,12 @@ export function MyServices() {
         count={ordered.length > 0 ? ordered.length : undefined}
       />
       {ordered.length === 0 ? (
-        <div className="rounded border border-dashed border-hair px-4 py-5 text-center">
+        // Plain words, not the dashed box: in this app a dashed border is
+        // what "could not be read" wears, and the home page opened with one
+        // over a list that is simply empty.
+        <div className="flex flex-col gap-0.5">
           <p className="text-xs text-fg-mut">{t("services", "noneYet")}</p>
-          <p className="mt-1 text-[11px] text-fg-fnt">
+          <p className="text-[11px] text-fg-fnt">
             {t("services", "noneYetHint")}
           </p>
         </div>

@@ -89,7 +89,7 @@ export function AlertBanner({
         <button
           type="button"
           onClick={dismiss}
-          className="ml-auto flex-none text-[11px] text-fg-fnt hover:text-fg-mut"
+          className="ml-auto flex-none rounded px-1 text-[11px] text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           {t("alerts", "dismiss")}
         </button>
