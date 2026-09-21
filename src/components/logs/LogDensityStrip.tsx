@@ -882,7 +882,10 @@ function describe(
     }),
     t("count", "busiestSlice", {
       clock: sliceClock(busiest.start),
-      n: formatCount(busiest.total),
+      // `n` picks the form, `lines` is what the reader sees: a formatted
+      // count is a string, and every form would fall back to `other`.
+      n: busiest.total,
+      lines: formatCount(busiest.total),
     }),
     bursts.length > 0 &&
       `${t("count", "errorsInSlices", { n: bursts.length, list: spoken })}${

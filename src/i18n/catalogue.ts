@@ -1570,8 +1570,11 @@ export const en = {
       "«Probably» is the app's word for a chain it read end to end but did not test: nothing here sent a packet.",
     googleIt: "Search it",
     copyForAgent: "Copy for agent",
-    copiedForAgent:
-      "Copied {n} characters. Read it before you paste it: the log lines are whatever the container printed.",
+    copiedForAgent: {
+      one: "Copied {n} character. Read it before you paste it: the log lines are whatever the container printed.",
+      other:
+        "Copied {n} characters. Read it before you paste it: the log lines are whatever the container printed.",
+    },
     searchNoEngine:
       "No search engine: the custom URL in Settings is not an address.",
     searchOpens: "opens {site}; change the engine in Settings",
@@ -1680,7 +1683,10 @@ export const en = {
     nothingSeen: "nothing seen while this app was watching",
     waitingOn: "Waiting on",
     notLookedAt: "Not looked at",
-    pinsFull: "Already {n} pinned in this cluster",
+    pinsFull: {
+      one: "Already {n} service pinned in this cluster",
+      other: "Already {n} services pinned in this cluster",
+    },
     pinsFullHint: "Unpin one on the home page to make room.",
     pinWords: "pin my services home page favourite",
   },
@@ -2418,14 +2424,26 @@ export const en = {
     groupPending: "Pending",
     groupQuiet: "Quiet",
     groupUnchecked: "Not checked",
-    rowFiring: "{n} firing",
-    rowPending: "{n} pending",
+    rowFiring: {
+      one: "{n} alert firing",
+      other: "{n} alerts firing",
+    },
+    rowPending: {
+      one: "{n} alert pending",
+      other: "{n} alerts pending",
+    },
     rowNotLoaded: "not loaded",
-    rowPartlyLoaded: "{n} not loaded",
+    rowPartlyLoaded: {
+      one: "{n} rule not loaded",
+      other: "{n} rules not loaded",
+    },
     aboutUnread:
       "Whether anything is firing about this could not be read: {reason}",
     aboutUnreachable: "The connected Prometheus did not answer: {reason}",
-    markBroken: "{n} rule objects need attention",
+    markBroken: {
+      one: "{n} rule object needs attention",
+      other: "{n} rule objects need attention",
+    },
     rowNotEvaluated: "loaded, never evaluated",
     rowEvalError: "evaluation error",
     rowQuiet: "quiet",
@@ -2482,7 +2500,10 @@ export const en = {
     },
     notInPrometheus: "not in Prometheus",
     since: "since {time} · {ago}",
-    moreAlerts: "+{n} more alerts",
+    moreAlerts: {
+      one: "+{n} more alert",
+      other: "+{n} more alerts",
+    },
     aboutFiring: {
       one: "{n} alert firing about this object",
       other: "{n} alerts firing about this object",
@@ -2516,7 +2537,10 @@ export const en = {
     whichIsTheNamespace:
       "this line carries no keys. Which of these is the namespace?",
     noKeysToReadItBy: "no key to read it by",
-    namesSeveral: "{n} are named. Which one did you want?",
+    namesSeveral: {
+      one: "{n} object is named. Is it the one you wanted?",
+      other: "{n} objects are named. Which one did you want?",
+    },
     theSubject: "the alert's subject",
     alsoNamed: "also named",
     whyNamedExactly: "named exactly",
@@ -2718,7 +2742,10 @@ export const en = {
     connAnsweredAgo: "answered {age}",
     connKeeps: "keeps {retention}",
     connRanges: "ranges {ranges}",
-    lokiPageLimit: "up to {n} lines a page",
+    lokiPageLimit: {
+      one: "up to {n} line a page",
+      other: "up to {n} lines a page",
+    },
     promResolutionOf: "{range} in {resolution}",
     argoMissing: "missing",
     argoFailedToApply: "failed to apply",
@@ -3234,8 +3261,14 @@ export const en = {
     pdbExactlyMet: "{name} allows no disruption right now",
     pdbExactlyMetDetail:
       "The budget is exactly met: {healthy} healthy against a floor of {required}. A node drain covering this workload will wait.",
-    hpaSeveralTitle: "{n} autoscalers",
-    hpaSeveralHead: "{n} autoscalers claim this workload.",
+    hpaSeveralTitle: {
+      one: "{n} autoscaler",
+      other: "{n} autoscalers",
+    },
+    hpaSeveralHead: {
+      one: "{n} autoscaler claims this workload.",
+      other: "{n} autoscalers claim this workload.",
+    },
     hpaSeveralDetail:
       "{names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives.",
     hpaCannotActNow: "it is not currently able to act",
@@ -3612,7 +3645,10 @@ export const en = {
     namespaces: "Namespaces",
     namespaceLimitRefused:
       "Cannot watch {namespace} as well — {limit} namespaces is the most one window reads at once. Open it on its own instead.",
-    namespaceLimitFull: "{n} namespaces — the most one window reads at once.",
+    namespaceLimitFull: {
+      one: "{n} namespace — the most one window reads at once.",
+      other: "{n} namespaces — the most one window reads at once.",
+    },
     namespaceScopeCount:
       "{n} of {limit} namespaces — every list is narrowed to them.",
     namespaceMultiHint:
@@ -4099,12 +4135,18 @@ export const en = {
     everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
-    noStoriesInWindowCapped:
-      "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    noStoriesInWindowCapped: {
+      one: "No story in {scope} in the last {range}, out of the latest {n} event read. Anything older than that is not in this answer.",
+      other:
+        "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    },
     eventsRefused: "Could not read the events in {scope}:",
     noStoriesMatch: "No story in {scope} matches “{query}”.",
-    noEventsMatchInWindow:
-      "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+    noEventsMatchInWindow: {
+      one: "Nothing in the latest {n} event of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+      other:
+        "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+    },
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",
@@ -4143,7 +4185,10 @@ export const en = {
       "No limit set — the scale is what it has used, and nothing stops it taking the node's.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
     noContainerToAttach: "No container is running to attach to",
-    whichFailedTimes: "which has failed {n} times",
+    whichFailedTimes: {
+      one: "which has failed {n} time",
+      other: "which has failed {n} times",
+    },
     whichExited: "which exited {code}",
     whichHasNotFinished: "which has not finished",
     shellAnswerIsInTheLog:
@@ -4766,8 +4811,11 @@ export const en = {
     promForeignNodes: "other clusters, or nodes this one has lost",
     nothingElse: "nothing else",
     promNotWatching: "This Prometheus is not watching this cluster",
-    promNotWatchingBody:
-      "Not one of this cluster’s {n} nodes appears in it. The address answers PromQL — which is all the connection test proved — and every history and volume figure the app draws from it is about somebody else’s cluster.",
+    promNotWatchingBody: {
+      one: "This cluster’s one node does not appear in it. The address answers PromQL — which is all the connection test proved — and every history and volume figure the app draws from it is about somebody else’s cluster.",
+      other:
+        "Not one of this cluster’s {n} nodes appears in it. The address answers PromQL — which is all the connection test proved — and every history and volume figure the app draws from it is about somebody else’s cluster.",
+    },
     promUnseenNodesBody:
       "are in the cluster and not in Prometheus, so a pod that happens to be scheduled on one of them draws an empty history — which looks exactly like a pod that used nothing.",
     promWhatAppAsks: "What the app asks it for",
@@ -6031,10 +6079,16 @@ export const en = {
       other: "{count} frozen lines",
     },
     spanInSlices: "{span} in {step} slices",
-    densitySummary:
-      "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
+    densitySummary: {
+      one: "Density of the log over time: {n} slice of {step}, from {from} to {to}.",
+      other:
+        "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
+    },
     densityTotals: "{lines} lines, {errors} errors, {warnings} warnings.",
-    busiestSlice: "Busiest slice {clock} with {n} lines.",
+    busiestSlice: {
+      one: "Busiest slice {clock} with {lines} line.",
+      other: "Busiest slice {clock} with {lines} lines.",
+    },
     andNMore: ", and {n} more",
     openOnOtherClusters: {
       one: "{n} open on another cluster. Open one here from any pod's detail page.",
