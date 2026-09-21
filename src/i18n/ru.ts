@@ -3434,7 +3434,7 @@ export const ru: Catalogue = {
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
     ciliumCovered: "под политикой",
-    ciliumUnrestricted: "ничего не выбирает",
+    ciliumUnrestricted: "его не выбирает ни одна политика",
     ciliumOnlyRejected: "только отвергнутые",
     ciliumCannotSay: "нельзя сказать",
     ciliumNothingSelects:
