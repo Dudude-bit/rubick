@@ -66,23 +66,31 @@ pub struct CheckOutcome {
     pub tried: Vec<String>,
     /// The rung that answered, or `None` when the image had none of them.
     pub answered_with: Option<String>,
-    pub ok: bool,
-    /// The rung that answered said **no** with its own exit code. Not the
-    /// same as "not ok": a tool that failed for its own reasons said
-    /// nothing, and the screen must not turn that into a fact about the
-    /// cluster.
-    pub said_no: bool,
-    pub tool_missing: bool,
-    /// The exec ended without ever reporting how. Not a no: `Exit::ok()` is
-    /// `code == Some(0)`, so a dropped websocket or a status channel that
-    /// produced nothing reads as a definite negative with no evidence —
-    /// "does not resolve" about a question nobody got an answer to.
-    pub unknown: bool,
+    /// What the run amounts to. One state rather than a handful of flags,
+    /// because they were never independent: a check answers yes, answers
+    /// no, ends without saying, or never finds a tool to ask with.
+    pub answer: CheckAnswer,
     pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
     pub elapsed_ms: u64,
     pub copy: Option<CopyReport>,
+}
+
+/// What a run amounts to.
+///
+/// `Unanswered` is the state the panel exists to keep: `Exit::ok()` is
+/// `code == Some(0)`, so an exec whose status channel produced nothing — a
+/// dropped websocket, an apiserver that went away mid-exec — is not a yes,
+/// and reading it as a no states a fact about the cluster from a run that
+/// produced none. `No` is only ever the rung's own exit saying so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CheckAnswer {
+    Yes,
+    No,
+    Unanswered,
+    NoTool,
 }
 
 /// Whether a rung's exit code says the question was answered yes.
@@ -305,10 +313,15 @@ fn outcome(
             ran_in: ran_in.to_string(),
             tried,
             answered_with: Some(tool),
-            ok: says_yes(captured.exit.code),
-            said_no: says_no(captured.exit.code),
-            tool_missing: false,
-            unknown: captured.exit.code.is_none(),
+            answer: if captured.exit.code.is_none() {
+                CheckAnswer::Unanswered
+            } else if says_yes(captured.exit.code) {
+                CheckAnswer::Yes
+            } else if says_no(captured.exit.code) {
+                CheckAnswer::No
+            } else {
+                CheckAnswer::Unanswered
+            },
             exit_code: captured.exit.code,
             stdout: String::from_utf8_lossy(&captured.stdout).into_owned(),
             stderr: captured.stderr,
@@ -319,10 +332,7 @@ fn outcome(
             ran_in: ran_in.to_string(),
             tried,
             answered_with: None,
-            ok: false,
-            said_no: false,
-            tool_missing: true,
-            unknown: false,
+            answer: CheckAnswer::NoTool,
             exit_code: None,
             stdout: String::new(),
             stderr: String::new(),
@@ -789,8 +799,7 @@ mod tests {
             None,
             None,
         );
-        assert!(out.tool_missing);
-        assert!(!out.ok);
+        assert_eq!(out.answer, CheckAnswer::NoTool);
         assert_eq!(out.answered_with, None);
         assert_eq!(out.tried, vec!["getent", "nslookup"]);
     }
@@ -1007,10 +1016,11 @@ mod tests {
             )),
             None,
         );
-        assert!(said.unknown, "no exit code is the third state");
-        assert!(!said.ok, "and it is not a yes");
-        assert!(!said.said_no, "nor a no");
-        assert!(!said.tool_missing, "the tool was there and ran");
+        assert_eq!(
+            said.answer,
+            CheckAnswer::Unanswered,
+            "no exit code is the third state, not a yes and not a no"
+        );
     }
 
     /// And the ordinary negative still says no, so the state above is a
@@ -1038,8 +1048,7 @@ mod tests {
             )),
             None,
         );
-        assert!(said.said_no);
-        assert!(!said.unknown);
+        assert_eq!(said.answer, CheckAnswer::No);
     }
 
     /// The other half of the sentence, and the one that was missing: a rung

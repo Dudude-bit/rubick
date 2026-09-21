@@ -1163,10 +1163,7 @@ export interface CheckOutcome {
   ranIn: string;
   tried: string[];
   answeredWith: string | null;
-  ok: boolean;
-  saidNo: boolean;
-  toolMissing: boolean;
-  unknown: boolean;
+  answer: CheckAnswer;
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -2048,6 +2045,8 @@ export type DryRunOutcome =
   | { says: "liveUnread"; said: string }
   | { says: "refused"; said: string }
   | { says: "unanswered"; said: string };
+
+export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
 
 export type Check =
   { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };

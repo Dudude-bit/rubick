@@ -31,10 +31,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   ranIn: "container",
   tried: ["nc"],
   answeredWith: "nc",
-  ok: true,
-  saidNo: false,
-  toolMissing: false,
-  unknown: false,
+  answer: "yes",
   exitCode: 0,
   stdout: "",
   stderr: "",
@@ -106,7 +103,7 @@ describe("testing a hypothesis from the pod", () => {
       outcome({
         tried: ["getent"],
         answeredWith: "getent",
-        ok: false,
+        answer: "no",
         exitCode: 2,
         stdout: "** server can't find db.shop: NXDOMAIN",
       })
@@ -121,7 +118,7 @@ describe("testing a hypothesis from the pod", () => {
 
   it("says a port does not answer, and not that it accepted", async () => {
     vi.mocked(commands.runPodCheck).mockResolvedValue(
-      outcome({ ok: false, saidNo: true, exitCode: 7 })
+      outcome({ answer: "no", exitCode: 7 })
     );
     mount();
     await userEvent.type(screen.getByLabelText(/Connect to/), "db:5432");
@@ -164,9 +161,8 @@ describe("testing a hypothesis from the pod", () => {
     vi.mocked(commands.runPodCheck)
       .mockResolvedValueOnce(
         outcome({
-          toolMissing: true,
+          answer: "noTool",
           answeredWith: null,
-          ok: false,
           tried: ["getent", "nslookup", "host"],
         })
       )
@@ -248,7 +244,7 @@ describe("testing a hypothesis from the pod", () => {
    */
   it("does not paint a check that produced no answer as a finding about the cluster", async () => {
     vi.mocked(commands.runPodCheck).mockResolvedValue(
-      outcome({ ok: false, unknown: true, exitCode: null })
+      outcome({ answer: "unanswered", exitCode: null })
     );
     mount();
     await userEvent.type(screen.getByLabelText(/Connect to/), "db:5432");

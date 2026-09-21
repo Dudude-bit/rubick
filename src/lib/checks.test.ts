@@ -7,10 +7,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
   ranIn: "container",
   tried: ["getent"],
   answeredWith: "getent",
-  ok: true,
-  saidNo: false,
-  toolMissing: false,
-  unknown: false,
+  answer: "yes",
   exitCode: 0,
   stdout: "",
   stderr: "",
@@ -57,7 +54,7 @@ describe("reading what the resolver said", () => {
       "dns",
       outcome({
         answeredWith: "nslookup",
-        ok: true,
+        answer: "yes",
         stdout:
           "Server:\t\t10.96.0.10\n\n** server can't find nowhere.shop: NXDOMAIN\n",
       })
@@ -69,9 +66,8 @@ describe("reading what the resolver said", () => {
     const said = verdictOf(
       "tcp",
       outcome({
-        toolMissing: true,
+        answer: "noTool",
         answeredWith: null,
-        ok: false,
         tried: ["nc", "curl"],
       })
     );
@@ -85,7 +81,7 @@ describe("reading what the resolver said", () => {
     expect(
       verdictOf(
         "tcp",
-        outcome({ answeredWith: "nc", ok: false, saidNo: true, exitCode: 1 })
+        outcome({ answeredWith: "nc", answer: "no", exitCode: 1 })
       ).says
     ).toBe("refused");
   });
@@ -98,7 +94,7 @@ describe("reading what the resolver said", () => {
   it("does not call a port refused when the tool failed for its own reasons", () => {
     const verdict = verdictOf(
       "tcp",
-      outcome({ answeredWith: "curl", ok: false, saidNo: false, exitCode: 6 })
+      outcome({ answeredWith: "curl", answer: "unanswered", exitCode: 6 })
     );
     expect(verdict.says).toBe("unanswered");
   });
@@ -115,7 +111,7 @@ describe("a check that produced no answer at all", () => {
   it("does not call a dropped exec a name that does not resolve", () => {
     const verdict = verdictOf(
       "dns",
-      outcome({ ok: false, unknown: true, exitCode: null, stdout: "" })
+      outcome({ answer: "unanswered", exitCode: null, stdout: "" })
     );
     expect(verdict.says).toBe("unanswered");
   });
@@ -123,7 +119,7 @@ describe("a check that produced no answer at all", () => {
   it("does not call a dropped exec a port that refuses", () => {
     const verdict = verdictOf(
       "tcp",
-      outcome({ ok: false, unknown: true, exitCode: null })
+      outcome({ answer: "unanswered", exitCode: null })
     );
     expect(verdict.says).toBe("unanswered");
   });
@@ -137,8 +133,7 @@ describe("a check that produced no answer at all", () => {
     const verdict = verdictOf(
       "dns",
       outcome({
-        ok: false,
-        unknown: false,
+        answer: "no",
         exitCode: 1,
         stdout: "** server can't find db.shop: NXDOMAIN",
       })
@@ -147,10 +142,7 @@ describe("a check that produced no answer at all", () => {
   });
 
   it("still says a port refuses when the tool said so", () => {
-    const verdict = verdictOf(
-      "tcp",
-      outcome({ ok: false, saidNo: true, unknown: false, exitCode: 7 })
-    );
+    const verdict = verdictOf("tcp", outcome({ answer: "no", exitCode: 7 }));
     expect(verdict.says).toBe("refused");
   });
 
@@ -165,8 +157,7 @@ describe("a check that produced no answer at all", () => {
       "dns",
       outcome({
         answeredWith: "getent",
-        ok: false,
-        saidNo: true,
+        answer: "no",
         exitCode: 2,
         stdout: "",
       })
@@ -183,8 +174,7 @@ describe("a check that produced no answer at all", () => {
       "dns",
       outcome({
         answeredWith: "getent",
-        ok: false,
-        saidNo: false,
+        answer: "unanswered",
         exitCode: 1,
         stdout: "",
       })
