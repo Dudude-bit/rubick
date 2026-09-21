@@ -50,8 +50,18 @@ describe("what the alert said, on the object's own page", () => {
    * unanswered.
    */
   it("says it has not read the object yet rather than leaving the claim unanswered", () => {
-    render(<AlertBanner {...at} namespace="shop" />);
+    render(<AlertBanner {...at} namespace="shop" reading />);
     expect(screen.getByText(/still reading/i)).toBeInTheDocument();
+  });
+
+  /**
+   * Ten of the detail pages have no status badge at all — a ConfigMap has no
+   * state to show — and "still reading" there was a claim about the app, not
+   * about the object, that never went away.
+   */
+  it("does not say it is still reading a page that has finished", () => {
+    render(<AlertBanner {...at} namespace="shop" readAt={Date.now()} />);
+    expect(screen.queryByText(/still reading/i)).toBeNull();
   });
 
   it("says the cluster refused instead of drawing the object as fine", () => {

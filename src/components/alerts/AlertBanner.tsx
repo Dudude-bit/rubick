@@ -97,11 +97,20 @@ export function AlertBanner({
           <span className="text-err">
             {t("alerts", "couldNotRead", { error })}
           </span>
-        ) : stillReading ||
-          now === undefined ||
-          now === null ||
-          now === false ? (
+        ) : stillReading ? (
           <span className="text-fg-fnt">{t("alerts", "stillReading")}</span>
+        ) : now === undefined || now === null || now === false ? (
+          // Ten of the detail pages have no status badge at all — a
+          // ConfigMap has no state to show — and saying "still reading"
+          // there was a claim about the app, not about the object, that
+          // never went away.
+          <span className="text-fg-fnt">
+            {readAt !== undefined
+              ? t("alerts", "readAgo", {
+                  ago: formatAge(new Date(readAt).toISOString(), t),
+                })
+              : t("alerts", "readNoStatus")}
+          </span>
         ) : (
           <span className="inline-flex items-baseline gap-2">
             {now}
