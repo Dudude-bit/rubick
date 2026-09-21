@@ -163,6 +163,14 @@ describe("stateOf", () => {
     });
     expect(stateOf(missing, null)).toEqual({ state: "gone" });
   });
+  /**
+   * The first second of every visit: nothing has answered yet, and the card
+   * said "could not read" about a read that was still running.
+   */
+  it("tells a read still in flight from one that failed", () => {
+    expect(stateOf(undefined, null, undefined, true).state).toBe("reading");
+    expect(stateOf(undefined, null, undefined, false).state).toBe("unread");
+  });
 });
 
 describe("entryPointsOf", () => {
@@ -364,6 +372,34 @@ describe("what is still open", () => {
     );
     expect(open).toHaveLength(1);
     expect(open[0].status.state).toBe("watching");
+  });
+
+  /**
+   * A Deployment and a Job of the same name in the same namespace are two
+   * objects. The match was on context, namespace and name alone, so one's
+   * wait was shown on the other's card — while both its neighbours,
+   * `changesFor` and `pinKey`, match on the kind too.
+   */
+  it("does not show one kind's wait on another kind's card", () => {
+    const job: Watch = {
+      id: "j",
+      context: "prod",
+      kind: "Job",
+      namespace: "shop",
+      name: "payments",
+      ask: "jobOutcome",
+      startedAt: 1,
+      status: { state: "watching" },
+      baseline: null,
+    };
+    expect(
+      waitingFor([job], {
+        context: "prod",
+        kind: "Deployment",
+        namespace: "shop",
+        name: "payments",
+      })
+    ).toHaveLength(0);
   });
 });
 

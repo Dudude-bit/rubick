@@ -46,7 +46,8 @@ export function ServiceCard({
   const state = stateOf(
     connections.data,
     connections.error ? { message: connections.error.message } : null,
-    pin
+    pin,
+    connections.isPending
   );
   const chains = useMemo(
     () => (connections.data ? trafficChains(connections.data, t) : []),
@@ -185,6 +186,13 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
     return (
       <span className="flex-none font-mono text-[11px] text-err">
         {t("services", "gone")}
+      </span>
+    );
+  }
+  if (state.state === "reading") {
+    return (
+      <span className="flex-none text-[11px] text-fg-fnt">
+        {t("services", "reading")}
       </span>
     );
   }

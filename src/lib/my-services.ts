@@ -72,13 +72,17 @@ export type ServiceState =
   | { state: "ready"; ready: number; total: number }
   | { state: "short"; ready: number; total: number }
   | { state: "gone" }
+  /** Still being read. Not an answer, and not a refusal either. */
+  | { state: "reading" }
   | { state: "unread"; why: string };
 
 export function stateOf(
   connections: ResourceConnections | undefined,
   error: { message: string } | null,
   /** The pinned object, for telling its own 404 from the app's other ones. */
-  pin?: { kind: string; name: string }
+  pin?: { kind: string; name: string },
+  /** Whether the read is still in flight. */
+  pending = false
 ): ServiceState {
   // The error first, and not only when there is nothing in hand: the read is
   // kept across refreshes, so a workload deleted or refused after the first
@@ -94,7 +98,10 @@ export function stateOf(
       (!pin || error.message.includes(pin.name));
     return gone ? { state: "gone" } : { state: "unread", why: error.message };
   }
-  if (!connections) return { state: "unread", why: "" };
+  // A read that has not answered yet is not a read that failed: the card
+  // said "could not read" for the first second of every visit.
+  if (!connections)
+    return pending ? { state: "reading" } : { state: "unread", why: "" };
   if (connections.subject.existence === "missing") return { state: "gone" };
   const facts = connections.subject.facts;
   if (facts?.kind !== "workload") return { state: "unread", why: "" };
@@ -234,6 +241,10 @@ export function waitingFor(
         watch.context === pin.context &&
         watch.namespace === pin.namespace &&
         watch.name === pin.name &&
+        // The kind too: a Deployment and a Job of the same name in the same
+        // namespace are two objects, and the card showed one's wait on the
+        // other's row. Its two neighbours already match on all three.
+        watch.kind === pin.kind &&
         isOpen(watch)
     )
     .sort((a, b) => b.startedAt - a.startedAt);
