@@ -34,6 +34,7 @@ function report(over: Partial<Report> = {}): Report {
       context: "prod-eu-1",
     },
     capturedAt: "2026-09-09T18:12:03.001Z",
+    chainUnread: null,
     appVersion: "4.10.0",
     verdict:
       "Most likely: 10.43.39.231:5432 refused the connection. That address is Service shop-db-rw, which has nothing ready behind it right now; the pod itself is probably fine.",

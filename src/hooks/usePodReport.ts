@@ -5,7 +5,12 @@ import { useHintChain } from "@/components/pod/useHintChain";
 import { commands } from "@/lib/commands";
 import { buildDeepLink } from "@/lib/deep-link";
 import { familyOf } from "@/lib/event-stories";
+import { describeStop } from "@/lib/connections";
 import { hintFor, sayingWords, troubleOf } from "@/lib/hints";
+import { silenceNote, silenceOf, type NodeSilence } from "@/lib/node-reporting";
+import { statusRole } from "@/lib/status-role";
+import { useSilentNodes } from "@/hooks/useSilentNodes";
+import type { ChainStop, ObjectRef } from "@/generated/types";
 import type {
   Report,
   ReportChange,
@@ -46,12 +51,31 @@ function words(t: T): ReportWords {
   };
 }
 
-function factsOf(pod: PodInfo, t: T): ReportFact[] {
+function factsOf(
+  pod: PodInfo,
+  silence: NodeSilence | null,
+  t: T
+): ReportFact[] {
+  // The same table the badge on the page reads. `ready` is not the status:
+  // a CrashLoopBackOff and a pod still pulling its image are both "not
+  // ready", and the file drew them the same amber.
+  const role = statusRole(pod.status.display);
   const facts: ReportFact[] = [
     {
       label: t("columns", "status"),
-      value: pod.status.display,
-      tone: pod.status.ready ? undefined : "warn",
+      // What the kubelet last wrote is not what is true now: when the node
+      // has stopped answering, the page says so beside the status and the
+      // file said nothing, so a colleague read a stale state as the state.
+      value: silence
+        ? `${pod.status.display} · ${silenceNote(silence, t)}`
+        : pod.status.display,
+      tone: silence
+        ? "warn"
+        : role === "err"
+          ? "err"
+          : role === "ok"
+            ? undefined
+            : "warn",
     },
   ];
   if (pod.nodeName)
@@ -95,7 +119,21 @@ function chainOf(
   t: T
 ): ReportHop[] {
   if (!connections) return [];
-  return connections.edges.map((edge) => ({
+  // Where the path stops, said in the app's own words. The file listed the
+  // edges and nothing else, so a Service that publishes no endpoint — the
+  // sharpest thing the graph knows — arrived as an ordinary working hop and
+  // the colleague read the chain as healthy.
+  const stops: ReportHop[] = connections.stops.map((stop) => {
+    const said = describeStop(stop, t);
+    return {
+      from: ref(stopSubject(stop)),
+      to: said.title,
+      relation: t("share", "stopHere"),
+      known: true,
+      note: said.note,
+    };
+  });
+  const hops: ReportHop[] = connections.edges.map((edge) => ({
     from: ref(edge.from),
     to: ref(edge.to),
     relation: edge.relation.verb,
@@ -104,6 +142,18 @@ function chainOf(
       edge.to.existence !== "notChecked",
     note: edge.to.existence === "missing" ? t("share", "hopMissing") : null,
   }));
+  return [...hops, ...stops];
+}
+
+/** The object a stop is about, whichever shape the stop has. */
+function stopSubject(stop: ChainStop): {
+  kind: string;
+  name: string;
+  namespace: string | null;
+} {
+  const named = stop as unknown as Record<string, ObjectRef | undefined>;
+  const object = named.service ?? named.ingress ?? named.subject ?? named.pod;
+  return object ?? { kind: "", name: "", namespace: null };
 }
 
 function changesOf(
@@ -138,7 +188,14 @@ function changesOf(
   // A journal with nothing in it about this pod is two different facts: the
   // app was watching and the pod held still, or the app was never watching
   // at all. The second one is said, so a reader does not take silence for calm.
-  if (mine.length === 0 && entries.length === 0) {
+  // Scoped to this cluster: the journal is global, so a session spent
+  // watching another cluster made `entries.length` non-zero and the hedge
+  // disappeared — "What changed: Nothing here." about a cluster this app
+  // never watched.
+  if (
+    mine.length === 0 &&
+    !entries.some((entry) => entry.context === context)
+  ) {
     return [{ at: null, text: t("share", "journalEmpty") }];
   }
   return mine;
@@ -158,7 +215,17 @@ export function usePodReport(
   pod: PodInfo | undefined,
   events: EventInfo[],
   eventsError: string | null,
-  connections: ResourceConnections | undefined,
+  /**
+   * The whole read, not its answer. A refused or still-running read hands
+   * back `undefined`, which the file used to print as "Nothing here." under
+   * the chain — the opposite answer, on the one page whose screen says in
+   * that state that it could not read what connects.
+   */
+  connections: {
+    data: ResourceConnections | undefined;
+    error: unknown;
+    isPending: boolean;
+  },
   path: string
 ): PodReport {
   const t = useT();
@@ -178,15 +245,29 @@ export function usePodReport(
     staleTime: Infinity,
   });
   const journal = useChangeJournalStore((s) => s.entries);
+  // The same fact the page reads beside the status badge: when the node has
+  // stopped answering, everything the kubelet wrote is the last thing it
+  // said and not the state now.
+  const silence = silenceOf(pod?.nodeName, useSilentNodes(pod !== undefined));
 
   const report = useMemo<Report | null>(() => {
     if (!pod) return null;
     const notRead = [...chain.notRead];
     if (eventsError)
       notRead.push(t("hints", "notReadEvents", { reason: eventsError }));
-    for (const unread of connections?.notLookedAt ?? []) {
+    for (const unread of connections.data?.notLookedAt ?? []) {
       notRead.push(t("share", "kindNotLookedAt", { kind: unread.kind }));
     }
+    // The same sentence the page shows in this state, in the file and in
+    // "Not read" both, rather than an empty chain that reads as "nothing is
+    // wired to this pod".
+    const chainUnread =
+      connections.error !== null && connections.error !== undefined
+        ? t("empty", "couldNotReadWhatConnects")
+        : connections.isPending || connections.data === undefined
+          ? t("share", "chainStillReading")
+          : null;
+    if (chainUnread) notRead.push(chainUnread);
     return {
       subject: {
         kind: "Pod",
@@ -197,8 +278,9 @@ export function usePodReport(
       capturedAt: new Date().toISOString(),
       appVersion: version.data?.version ?? "",
       verdict: trouble ? sayHint(trouble, pod, chain, t) : null,
-      facts: factsOf(pod, t),
-      chain: chainOf(connections, t),
+      facts: factsOf(pod, silence, t),
+      chain: chainOf(connections.data, t),
+      chainUnread,
       changes: changesOf(journal, context, pod, t),
       logs: logContainer
         ? [
@@ -221,6 +303,7 @@ export function usePodReport(
     context,
     eventsError,
     journal,
+    silence,
     logContainer,
     logLines,
     previous,

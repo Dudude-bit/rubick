@@ -1706,6 +1706,9 @@ export const en = {
     sectionChanges: "What changed",
     sectionLogs: "Log lines",
     sectionNotRead: "Not read",
+    stopHere: "stops here",
+    chainStillReading:
+      "The app had not finished reading what connects to this when the file was made.",
     nothingHere: "Nothing here.",
     previousRun: "previous run",
     notLookedAt: "not looked at",

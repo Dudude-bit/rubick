@@ -43,6 +43,7 @@ const report: Report = {
     namespace: "shop",
     context: "prod-eu-1",
   },
+  chainUnread: null,
   capturedAt: "2026-09-09T18:12:03.001Z",
   appVersion: "4.10.0",
   verdict:

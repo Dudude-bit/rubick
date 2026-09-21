@@ -358,7 +358,7 @@ export function PodDetail() {
     pod,
     podEvents.data ?? [],
     podEvents.error ? normalizeTauriError(podEvents.error) : null,
-    connections.data,
+    connections,
     `${window.location.hash.replace(/^#/, "") || `/pods/${namespace}/${name}`}`
   );
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;

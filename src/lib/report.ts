@@ -59,6 +59,15 @@ export interface Report {
   verdict: string | null;
   facts: ReportFact[];
   chain: ReportHop[];
+  /**
+   * Why the chain is empty, when it is empty because nobody could look.
+   *
+   * An empty list and a refused read are opposite answers, and the section
+   * printed "Nothing here." for both — a colleague opening the file read it
+   * as "nothing is wired to this pod" at the moment the sender's own screen
+   * said it could not read what connects.
+   */
+  chainUnread: string | null;
   changes: ReportChange[];
   logs: ReportLog[];
   /** Everything asked for and refused, or never asked. */
@@ -165,7 +174,12 @@ function factsHtml(facts: ReportFact[], words: ReportWords): string {
   return `<dl class="facts">${rows}</dl>`;
 }
 
-function chainHtml(hops: ReportHop[], words: ReportWords): string {
+function chainHtml(
+  hops: ReportHop[],
+  unread: string | null,
+  words: ReportWords
+): string {
+  if (unread !== null) return `<p class="warn">${escapeHtml(unread)}</p>`;
   if (hops.length === 0)
     return `<p class="none">${escapeHtml(words.nothingHere)}</p>`;
   return hops
@@ -249,7 +263,7 @@ export function renderReport(report: Report): string {
     head,
     verdict,
     section(w.facts, factsHtml(report.facts, w)),
-    section(w.chain, chainHtml(report.chain, w)),
+    section(w.chain, chainHtml(report.chain, report.chainUnread, w)),
     section(w.changes, changesHtml(report.changes, w)),
     section(w.logs, logsHtml(report.logs, w)),
     section(w.notRead, listHtml(report.notRead, w, "warn")),

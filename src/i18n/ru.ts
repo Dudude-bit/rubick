@@ -1725,6 +1725,9 @@ export const ru: Catalogue = {
     sectionChanges: "Что изменилось",
     sectionLogs: "Строки лога",
     sectionNotRead: "Не прочитано",
+    stopHere: "здесь останавливается",
+    chainStillReading:
+      "На момент снимка приложение ещё не дочитало, что с этим связано.",
     nothingHere: "Здесь пусто.",
     previousRun: "предыдущий запуск",
     notLookedAt: "не смотрели",
