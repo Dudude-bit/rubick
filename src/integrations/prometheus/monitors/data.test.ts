@@ -76,4 +76,21 @@ describe("the mark the Monitors tab carries", () => {
       )
     ).toEqual({ shows: "count", of: 0 });
   });
+
+  /**
+   * And the same number in the other sentence: a row that needs attention
+   * came from the list that answered, so "1 of 1" over a refused list is
+   * the confident total again, one word further along.
+   */
+  it("claims no total when one of the lists was refused", () => {
+    const mark = monitorMark(
+      picture(
+        { state: "unread", reason: "servicemonitors is forbidden" },
+        { state: "read", items: [] }
+      )
+    );
+    expect(
+      mark === null || mark.shows !== "severity" || mark.total === null
+    ).toBe(true);
+  });
 });

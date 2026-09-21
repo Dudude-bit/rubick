@@ -41,10 +41,15 @@ export default function PrometheusPage() {
                 ? {
                     shows: "severity" as const,
                     tone: mark.tone,
-                    says: t("monitors", "needAttention", {
-                      n: mark.n,
-                      total: mark.total,
-                    }),
+                    says:
+                      mark.total === null
+                        ? t("monitors", "needAttentionSomeUnread", {
+                            n: mark.n,
+                          })
+                        : t("monitors", "needAttention", {
+                            n: mark.n,
+                            total: mark.total,
+                          }),
                   }
                 : mark?.shows === "count"
                   ? { shows: "count" as const, of: mark.of }

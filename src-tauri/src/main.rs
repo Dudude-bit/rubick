@@ -493,7 +493,11 @@ mod tests {
             let source = fs::read_to_string(&path).expect("read a source file");
             let mut lines = source.lines().peekable();
             while let Some(line) = lines.next() {
-                if line.trim() != "#[tauri::command]" {
+                // Parameterised forms count too — `#[tauri::command(rename_all
+                // = "snake_case")]` is still a command, and matching the bare
+                // attribute alone left a hole in the very guard this is.
+                let attribute = line.trim();
+                if attribute != "#[tauri::command]" && !attribute.starts_with("#[tauri::command(") {
                     continue;
                 }
                 // The signature can be several lines down, past other

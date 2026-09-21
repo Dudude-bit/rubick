@@ -173,8 +173,11 @@ export function useResourceWatch<
             const answered = payload.changes.some(
               (change) => change.op !== "restarted"
             );
-            if (inFailedState && !answered) return;
-            if (inFailedState) {
+            // The marker still does its work — it opens the staging map the
+            // resync is collected into, and skipping that left the objects
+            // deleted while the watch was down in the cache for good. What
+            // it must not do is end the failure.
+            if (inFailedState && answered) {
               inFailedState = false;
               onRecoveredRef.current?.();
             }
@@ -185,7 +188,10 @@ export function useResourceWatch<
             for (const change of payload.changes) {
               if (change.op === "restarted") {
                 staged = new Map();
-                setResyncing(true);
+                // A watch that is failing announces every attempt; saying
+                // "resyncing" each time claims progress on a stream that is
+                // not making any. The failure is what the reader is shown.
+                setResyncing(!inFailedState);
                 // The resync's list is the whole truth; anything from
                 // before it is about to be superseded.
                 live = [];

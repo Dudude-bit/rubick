@@ -587,6 +587,50 @@ describe("useResourceWatch", () => {
     });
   });
 
+  /**
+   * The marker must not end the failure — and it must still do its work.
+   * Returning early on it skipped the staging map the resync is collected
+   * into, so the rows that went away while the watch was down stayed in the
+   * cache after it came back: `synced` had nothing to commit.
+   */
+  it("commits the resync that follows a failure, dropping what went away", async () => {
+    const client = new QueryClient();
+    client.setQueryData<Item[]>(KEY, [
+      { name: "gone", namespace: "default" },
+      { name: "stays", namespace: "default" },
+    ]);
+    const onRecovered = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "pods is forbidden");
+    // The watch comes back: the marker, the list it re-read, the commit.
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "stays", namespace: "default" });
+    emit("stream-cm-1", "synced", null);
+
+    await waitFor(() => {
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+    expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual([
+      "stays",
+    ]);
+  });
+
   it("calls onRecovered again on a second failure→recovery cycle", async () => {
     const client = new QueryClient();
     const onRecovered = vi.fn();

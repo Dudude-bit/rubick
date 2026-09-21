@@ -175,7 +175,7 @@ export function monitorCount(picture: Picture): number | null {
 export function monitorMark(
   picture: Picture
 ):
-  | { shows: "severity"; tone: "err" | "warn"; n: number; total: number }
+  | { shows: "severity"; tone: "err" | "warn"; n: number; total: number | null }
   | { shows: "count"; of: number }
   | null {
   const rows = rowsOfPicture(picture);
@@ -186,7 +186,10 @@ export function monitorMark(
       shows: "severity",
       tone: attention.some((row) => row.worst === "err") ? "err" : "warn",
       n: attention.length,
-      total: counted ?? attention.length,
+      // Not `attention.length`: the rows that need attention are the ones
+      // that were read, and saying "1 of 1" over a list the cluster refused
+      // is the same confident number in another sentence.
+      total: counted,
     };
   return counted === null ? null : { shows: "count", of: counted };
 }

@@ -2081,6 +2081,8 @@ export const en = {
     },
     ofTotal: "of {total}",
     needAttention: "{n} of {total} need attention",
+    needAttentionSomeUnread:
+      "{n} need attention, of a number this account cannot count",
     someUnread:
       "Some monitors could not be read, so this is not the whole picture",
     allScraped: {
