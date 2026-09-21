@@ -1507,6 +1507,8 @@ export const ru: Catalogue = {
     copyNote:
       "Копия разделяет namespace, лейблы, DNS-политику и service account. Это не сам под, и она удаляется, как только ответ получен.",
     whatItSaid: "Что напечатало",
+    containerCannotAnswer:
+      "{container} не может принять exec: {why}. Проверка пойдёт из копии пода.",
   },
   changes: {
     title: "Изменения",

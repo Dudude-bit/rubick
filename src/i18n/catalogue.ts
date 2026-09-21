@@ -1506,6 +1506,8 @@ export const en = {
     copyNote:
       "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
     whatItSaid: "What it printed",
+    containerCannotAnswer:
+      "{container} cannot take an exec: {why}. The check runs from a copy of the pod.",
   },
   changes: {
     title: "Changes",

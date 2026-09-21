@@ -81,6 +81,17 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
 
   const hostPort = parseHostPort(address);
   const busy = run.isPending;
+  // The judgement the chooser shows, asked about the container that is
+  // actually selected. The chooser only renders for a pod with more than one
+  // container, so on a one-container pod — the crash-looping one a reader is
+  // most likely to open this on — nothing said the exec could not land, and
+  // Run offered it anyway. A container that cannot take an exec cannot
+  // answer a check, and the copy is the route that still can.
+  const why = whyNoShell(
+    containers.find((c) => c.name === container) ?? containers[0],
+    t
+  );
+  const fromCopy = why !== null;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -129,7 +140,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             run.mutate({
               kind: "dns",
               check: { kind: "dns", name: name.trim() },
-              copy: false,
+              copy: fromCopy,
             });
           }}
         >
@@ -156,7 +167,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             run.mutate({
               kind: "tcp",
               check: { kind: "tcp", host: hostPort.host, port: hostPort.port },
-              copy: false,
+              copy: fromCopy,
             });
           }}
         >
@@ -175,6 +186,22 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             {t("checks", "run")}
           </Button>
         </form>
+        {why !== null ? (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-warn">
+              {t("checks", "containerCannotAnswer", {
+                container: container || "?",
+                why,
+              })}
+            </p>
+            <Input
+              aria-label={t("checks", "copyImage")}
+              value={image}
+              onChange={(event) => setImage(event.target.value)}
+              className="h-7 w-56 font-mono text-xs"
+            />
+          </div>
+        ) : null}
         {busy ? (
           <p className="text-xs text-fg-fnt" role="status">
             {t("checks", "running")}
@@ -230,16 +257,26 @@ function Answer({
   const t = useT();
   const verdict = verdictOf(run.kind, run.outcome);
   const subject = subjectOf(run.check);
-  const tone =
-    verdict.says === "resolved" || verdict.says === "connected"
-      ? "text-ok"
-      : verdict.says === "noTool"
-        ? "text-fg-mut"
-        : "text-warn";
+  // Three states, three tones. `notResolved` and `refused` are findings
+  // about the cluster and are worth the warning colour; `noTool` and
+  // `unanswered` are findings about the attempt — the file says so where
+  // the verdict is defined — and amber beside "the check ended without
+  // saying how it went" reads as the cluster having a problem, which is the
+  // opposite of what the sentence says.
+  const tone: Record<Verdict["says"], string> = {
+    resolved: "text-ok",
+    connected: "text-ok",
+    notResolved: "text-warn",
+    refused: "text-warn",
+    noTool: "text-fg-mut",
+    unanswered: "text-fg-mut",
+  };
 
   return (
     <li className="rounded border border-hair px-3 py-2 text-xs">
-      <p className={`font-medium ${tone}`}>{sentence(verdict, subject, t)}</p>
+      <p className={`font-medium ${tone[verdict.says]}`}>
+        {sentence(verdict, subject, t)}
+      </p>
       <p className="mt-0.5 text-[11px] text-fg-fnt">
         {run.outcome.ranIn === "copy" && run.outcome.copy
           ? t("checks", "ranInCopy", {
