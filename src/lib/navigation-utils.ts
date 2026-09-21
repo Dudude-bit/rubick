@@ -36,7 +36,7 @@ export function getResourceDetailUrl(
 }
 
 /** Whether the registry calls this kind cluster-scoped. Unknown kinds are not. */
-function isClusterScoped(kind: ResourceKind | string): boolean {
+export function isClusterScoped(kind: ResourceKind | string): boolean {
   const resolved = toKind(kind);
   return (
     resolved !== null && getResourceDefinition(resolved).scope === "cluster"

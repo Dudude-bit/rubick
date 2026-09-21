@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { formatAge } from "@/lib/utils";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { useT } from "@/i18n/useT";
+import { useClusterStore } from "@/stores/clusterStore";
 
 /**
  * What the alert said, on the page of the object it named.
@@ -25,6 +26,7 @@ export function AlertBanner({
   now,
   readAt,
   error,
+  reading: stillReading,
 }: {
   kind: string;
   name: string;
@@ -33,16 +35,26 @@ export function AlertBanner({
   /** When the page last heard from the cluster. */
   readAt?: number;
   error?: string;
+  /** The page has not finished its own read yet. */
+  reading?: boolean;
 }) {
   const t = useT();
+  const context = useClusterStore((s) => s.currentContext);
   const reading = useAlertArrivalStore((s) => s.reading);
   const at = useAlertArrivalStore((s) => s.at);
   const dismiss = useAlertArrivalStore((s) => s.dismiss);
 
   if (!reading || !at) return null;
-  if (at.kind !== kind || at.name !== name || at.namespace !== namespace) {
+  // The cluster too: the alert named an object in one, and its words were
+  // drawn on the object of the same name in whichever cluster the window
+  // happened to be showing.
+  if (at.context !== null && at.context !== context) return null;
+  if (at.kind !== kind || at.name !== name) return null;
+  // A page that has no namespace of its own — a Node, a Namespace, anything
+  // cluster-scoped — cannot match the label the alert carried, and the
+  // banner simply never appeared on exactly those pages.
+  if (namespace !== null && at.namespace !== null && at.namespace !== namespace)
     return null;
-  }
 
   const when = reading.firedAt;
 
@@ -85,7 +97,10 @@ export function AlertBanner({
           <span className="text-err">
             {t("alerts", "couldNotRead", { error })}
           </span>
-        ) : now === undefined || now === null || now === false ? (
+        ) : stillReading ||
+          now === undefined ||
+          now === null ||
+          now === false ? (
           <span className="text-fg-fnt">{t("alerts", "stillReading")}</span>
         ) : (
           <span className="inline-flex items-baseline gap-2">

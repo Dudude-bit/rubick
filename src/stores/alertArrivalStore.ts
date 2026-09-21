@@ -14,11 +14,28 @@ import type { AlertReading } from "@/lib/alerts";
  */
 interface AlertArrivalState {
   reading: AlertReading | null;
-  /** The object the reader chose to open, which is not always the subject. */
-  at: { kind: string; name: string; namespace: string | null } | null;
+  /**
+   * The object the reader chose to open, which is not always the subject —
+   * and the cluster they picked in the panel.
+   *
+   * The cluster was thrown away between the panel and the banner, so an
+   * alert about `payments` in one cluster was drawn on `payments` in
+   * another, beside that one's green "read just now".
+   */
+  at: {
+    context: string | null;
+    kind: string;
+    name: string;
+    namespace: string | null;
+  } | null;
   arrive: (
     reading: AlertReading,
-    at: { kind: string; name: string; namespace: string | null }
+    at: {
+      context: string | null;
+      kind: string;
+      name: string;
+      namespace: string | null;
+    }
   ) => void;
   dismiss: () => void;
 }

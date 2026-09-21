@@ -655,6 +655,10 @@ export function CommandPalette() {
   const openFromAlert = useCallback(
     (target: AlertTarget) => {
       arriveFromAlert(alert!, {
+        // The cluster the reader picked, which the banner needs: without it
+        // the alert's words followed the object's name into whichever
+        // cluster the window was showing.
+        context: target.context,
         kind: target.kind,
         name: target.name,
         namespace: target.namespace,

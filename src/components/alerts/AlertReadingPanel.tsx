@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { getResourceDetailUrl, isClusterScoped } from "@/lib/navigation-utils";
 import { isRoutableKind } from "@/components/resources/ResourceRef";
 import { formatAge } from "@/lib/utils";
 import {
@@ -74,7 +74,11 @@ export function AlertReadingPanel({
     onOpen({
       context,
       path: target,
-      namespace: namespace ?? null,
+      // The alert's namespace label belongs to the alert, not to every
+      // object it names: a Node, a Namespace, anything cluster-scoped has
+      // none, and the page then could not match what was stored — so the
+      // banner never appeared on exactly those arrivals.
+      namespace: isClusterScoped(kind) ? null : (namespace ?? null),
       kind,
       name,
     });
@@ -273,7 +277,10 @@ export function AlertReadingPanel({
       <div className="flex flex-wrap items-center gap-2 pt-0.5">
         <button
           type="button"
-          autoFocus
+          // No autoFocus: it took focus off the palette's input the instant
+          // the panel mounted, and the handler that puts `esc` back on the
+          // search box lives there — so `esc` closed the whole palette and
+          // ⌘K reopened it on the stale alert instead of the search.
           disabled={path === null || context === null}
           onClick={() => object && open(path, object.kind, object.name)}
           className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-[11.5px] text-info disabled:pointer-events-none disabled:opacity-40"

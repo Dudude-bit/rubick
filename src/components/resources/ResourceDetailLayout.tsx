@@ -229,19 +229,44 @@ export function ResourceDetailLayout({
     return () => window.removeEventListener(DETAIL_TAB_OPEN, onOpen);
   }, [tabs, onTabChange]);
 
+  // The banner belongs above these returns, not below them. An alert that
+  // names an object this cluster does not have lands on exactly the error
+  // page — the case the feature was built for — and the banner was mounted
+  // underneath, so it never appeared there; `error` reaching it could only
+  // ever be `undefined`, and its own "could not read" branch was dead code.
+  const banner = (
+    <AlertBanner
+      kind={resourceKind}
+      name={title}
+      namespace={namespace ?? null}
+      now={resource && !error ? statusBadge : undefined}
+      readAt={freshness?.dataUpdatedAt}
+      error={error ? errorToShow(error) : undefined}
+      reading={isLoading}
+    />
+  );
+
   if (isLoading) {
-    return <DetailSkeleton />;
+    return (
+      <>
+        {banner}
+        <DetailSkeleton />
+      </>
+    );
   }
 
   if (error || !resource) {
     return (
-      <DetailError
-        error={error}
-        resourceKind={resourceKind}
-        onBack={onBack}
-        onFindReplacement={onFindReplacement}
-        isSearching={isSearchingReplacement}
-      />
+      <>
+        {banner}
+        <DetailError
+          error={error}
+          resourceKind={resourceKind}
+          onBack={onBack}
+          onFindReplacement={onFindReplacement}
+          isSearching={isSearchingReplacement}
+        />
+      </>
     );
   }
 
@@ -293,14 +318,7 @@ export function ResourceDetailLayout({
             this app draws through six different components, and a banner
             copied into each is how five of them come to say something the
             sixth does not. */}
-        <AlertBanner
-          kind={resourceKind}
-          name={title}
-          namespace={namespace ?? null}
-          now={resource ? statusBadge : undefined}
-          readAt={freshness?.dataUpdatedAt}
-          error={error ? errorToShow(error) : undefined}
-        />
+        {banner}
         {summary}
 
         <DetailTabs

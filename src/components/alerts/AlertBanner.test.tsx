@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 
 import { parseAlert } from "@/lib/alerts";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { AlertBanner } from "./AlertBanner";
 
 const ALERT = `[FIRING:1] KubePodCrashLooping (shop critical)
@@ -15,6 +16,7 @@ Annotations:
 Started: 2026-09-10 03:14:22 UTC`;
 
 const at = {
+  context: null,
   kind: "Pod",
   name: "payments-7b6d9c5f4-x8k2p",
   namespace: "shop",
@@ -75,5 +77,49 @@ describe("what the alert said, on the object's own page", () => {
       />
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  /**
+   * The case the feature exists for: an alert naming an object this cluster
+   * does not have. That page is the layout's error branch, and the banner
+   * was mounted below it — so the one arrival that needed the words most
+   * showed none of them, and the banner's own "could not read" line was
+   * unreachable.
+   */
+  it("shows the alert on the page that could not read the object", () => {
+    render(
+      <AlertBanner
+        kind="Pod"
+        name="payments-7b6d9c5f4-x8k2p"
+        namespace="shop"
+        error="pods is forbidden"
+      />
+    );
+
+    expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
+    expect(screen.getByText(/pods is forbidden/)).toBeVisible();
+  });
+
+  /**
+   * And the cluster: the alert named an object in one, and its words were
+   * drawn on the object of the same name in whichever cluster the window
+   * happened to be showing.
+   */
+  it("does not follow the object's name into another cluster", () => {
+    useAlertArrivalStore.setState({
+      reading: parseAlert(ALERT),
+      at: { ...at, context: "staging-eu" },
+    });
+    useClusterStore.setState({ currentContext: "prod-eu" });
+
+    render(
+      <AlertBanner
+        kind="Pod"
+        name="payments-7b6d9c5f4-x8k2p"
+        namespace="shop"
+      />
+    );
+
+    expect(screen.queryByText(/KubePodCrashLooping/)).toBeNull();
   });
 });
