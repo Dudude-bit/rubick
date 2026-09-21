@@ -271,6 +271,43 @@ Labels:
   });
 });
 
+describe("the line right under the header", () => {
+  /**
+   * `\s` crosses a newline, so `Labels:` matched as a key whose value was
+   * the line under it — and that label was dropped for having spaces in it.
+   * It hid because the first label is almost always `alertname`, which the
+   * subject line names again; any message whose first label is something
+   * else lost it silently.
+   */
+  it("reads the first label rather than feeding it to `Labels:`", () => {
+    const read = parseAlert(`[FIRING:1] KubePodCrashLooping (shop critical)
+Labels:
+ - severity = critical
+ - alertname = KubePodCrashLooping
+ - namespace = shop
+ - pod = payments-7b6d9c5f4-x8k2p`)!;
+
+    expect(read.severity).toBe("critical");
+    expect(read.namespace?.value).toBe("shop");
+    expect(read.objects[0]).toMatchObject({ kind: "Pod", role: "subject" });
+  });
+
+  /** And a body with no `alertname` label still finds the rest of them. */
+  it("keeps a label that is first because there is no alertname", () => {
+    const read = parseAlert(`[Alerting] disk is filling up
+Labels:
+ - cluster = prod-eu-1
+ - persistentvolumeclaim = data-postgres-0
+ - severity = warning`)!;
+
+    expect(read.cluster?.value).toBe("prod-eu-1");
+    expect(read.objects[0]).toMatchObject({
+      kind: "PersistentVolumeClaim",
+      name: "data-postgres-0",
+    });
+  });
+});
+
 describe("a message that carried more than one alert", () => {
   /**
    * `[FIRING:5]` is Alertmanager saying it folded five alerts into one

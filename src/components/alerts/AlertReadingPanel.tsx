@@ -11,6 +11,7 @@ import {
   severityTone,
 } from "@/lib/alerts";
 import { hasChangesTab } from "@/lib/changes";
+import { SEVERITY_CHIP } from "./severity-tone";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT, type T } from "@/i18n/useT";
 
@@ -32,13 +33,6 @@ export interface AlertTarget {
  * what is true now.
  */
 /** The reserved red belongs to a failure, not to every label a rule carries. */
-const SEVERITY_CLASS: Record<ReturnType<typeof severityTone>, string> = {
-  err: "border-err/45 text-err",
-  warn: "border-warn/45 text-warn",
-  info: "border-info/45 text-info",
-  neutral: "border-hair text-fg-mut",
-};
-
 export function AlertReadingPanel({
   reading,
   onOpen,
@@ -49,6 +43,12 @@ export function AlertReadingPanel({
   const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
   const currentContext = useClusterStore((s) => s.currentContext);
+  // An empty list is three answers: a kubeconfig with no contexts, a read
+  // still running, and a read that failed. Offering "which of yours?" over
+  // nothing, with Open greyed out, is the app blaming the alert for its own
+  // unread kubeconfig.
+  const contextsReading = useClusterStore((s) => s.isLoading);
+  const contextsError = useClusterStore((s) => s.error);
   const names = useMemo(() => contexts.map((c) => c.name), [contexts]);
 
   const cluster = useMemo(
@@ -114,7 +114,7 @@ export function AlertReadingPanel({
           <span
             className={cn(
               "flex-none rounded border px-1 text-[10px] uppercase tracking-wide",
-              SEVERITY_CLASS[severityTone(reading.severity)]
+              SEVERITY_CHIP[severityTone(reading.severity)]
             )}
           >
             {reading.severity}
@@ -134,11 +134,20 @@ export function AlertReadingPanel({
         </dt>
         <dd className="min-w-0">
           {context !== null && cluster.settled !== null ? (
+            // The key the alert actually carried: Datadog writes
+            // `kube_cluster_name`, and naming `cluster` here pointed the
+            // reader at a line their message does not have.
             <Value
               value={context}
-              from={{ how: "key", key: "cluster" }}
+              from={reading.cluster?.from ?? { how: "key", key: "cluster" }}
               t={t}
             />
+          ) : contexts.length === 0 && (contextsReading || contextsError) ? (
+            <span className="text-warn">
+              {contextsError !== null
+                ? t("alerts", "clustersUnread", { reason: contextsError })
+                : t("alerts", "clustersReading")}
+            </span>
           ) : (
             <Choices
               note={t("alerts", clusterNote(reading.cluster))}

@@ -314,7 +314,12 @@ export function parseAlert(text: string): AlertReading | null {
 /** Every `name = value` in the text, with Datadog's spellings folded in. */
 function keyedValues(text: string): Map<string, string> {
   const found = new Map<string, string>();
-  const line = /^[\s\-*•]*([a-z_][a-z0-9_]*)\s*[=:]\s*(.+?)\s*$/gim;
+  // Horizontal space only, on both sides of the separator: `\s` crosses a
+  // newline, so `Labels:` took the line under it as its own value — and the
+  // first label of every message went unread. It was invisible because that
+  // label is usually `alertname`, which the subject line names again.
+  const line =
+    /^[^\S\n]*[-*•]?[^\S\n]*([a-z_][a-z0-9_]*)[^\S\n]*[=:][^\S\n]*(.+?)[^\S\n]*$/gim;
   for (const match of text.matchAll(line)) {
     const raw = match[1].toLowerCase();
     const value = match[2].replace(/^["']|["',]$/g, "").trim();

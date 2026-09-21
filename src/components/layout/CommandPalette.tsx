@@ -931,6 +931,10 @@ export function CommandPalette() {
       setScope({ kind: "current" });
       setWake(null);
       setSelectedId(null);
+      // The alert too: a reader who pasted one, closed the palette and
+      // pressed ⌘K again got the same alert's panel back instead of the
+      // search box, and the field no longer answered to typing.
+      setAlert(null);
     }
   }, [open]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1018,7 +1022,16 @@ export function CommandPalette() {
 
         {alert !== null ? (
           <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
-            <AlertReadingPanel reading={alert} onOpen={openFromAlert} />
+            {/*
+              Keyed by the alert itself: the panel holds which cluster,
+              object and namespace the reader picked, and a second paste
+              into the same panel kept the first alert's answers.
+            */}
+            <AlertReadingPanel
+              key={alertKey(alert)}
+              reading={alert}
+              onOpen={openFromAlert}
+            />
           </div>
         ) : (
           <div
@@ -1087,6 +1100,18 @@ export function CommandPalette() {
       </DialogContent>
     </Dialog>
   );
+}
+
+/** What makes one pasted alert a different alert from the last one. */
+function alertKey(reading: AlertReading): string {
+  return [
+    reading.alertName ?? "",
+    reading.firedAt?.value ?? "",
+    reading.cluster?.value ?? "",
+    reading.namespace?.value ?? "",
+    reading.objects.map((o) => `${o.kind}/${o.name}`).join(","),
+    reading.unkeyed.join(","),
+  ].join("|");
 }
 
 function FootKey({

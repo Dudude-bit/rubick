@@ -2532,6 +2532,8 @@ export const en = {
     namesTheMonitoring: "names the monitoring side, not the cluster",
     noClusterNamed: "nothing here names a cluster. Which of yours?",
     clusterNotYours: "no cluster of yours is called that. Which did it mean?",
+    clustersUnread: "your clusters could not be read: {reason}",
+    clustersReading: "still reading your clusters…",
     clusterOnlyInHost:
       "no label named a cluster; this is the Source host. Which of yours was it?",
     whichIsTheNamespace:

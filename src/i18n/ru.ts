@@ -2641,6 +2641,8 @@ export const ru: Catalogue = {
     namesTheMonitoring: "называет сторону мониторинга, а не кластер",
     noClusterNamed: "здесь не назван кластер. Какой из ваших?",
     clusterNotYours: "такого кластера у вас нет. Какой имелся в виду?",
+    clustersUnread: "не удалось прочитать ваши кластеры: {reason}",
+    clustersReading: "читаю ваши кластеры…",
     clusterOnlyInHost:
       "кластер не назван ни одной меткой; это хост из Source. Какой из ваших?",
     whichIsTheNamespace: "в этой строке нет ключей. Что из этого namespace?",

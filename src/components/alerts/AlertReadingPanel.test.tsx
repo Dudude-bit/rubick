@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { parseAlert } from "@/lib/alerts";
@@ -76,6 +76,59 @@ describe("reading an alert before anything opens", () => {
     expect(target.path).toBe(
       "/deployments/shop/checkout?tab=changes&since=2026-09-10T03%3A41%3A00.000Z"
     );
+  });
+
+  /**
+   * `critical`, `info` and a severity nobody has heard of were all drawn in
+   * the same amber, so the one that wakes somebody looked like the one that
+   * does not.
+   */
+  it("wears the severity the alert carried", () => {
+    mount(DEPLOYMENT.replace(/warning/g, "critical"));
+    expect(screen.getByText("critical").className).toContain("text-err");
+
+    cleanup();
+    mount(DEPLOYMENT);
+    expect(screen.getByText("warning").className).toContain("text-warn");
+  });
+
+  /**
+   * Nothing in the text named a kind, and the panel has to say so rather
+   * than draw an empty field: the reader is deciding whether to trust it.
+   */
+  it("says when nothing in the text names an object", () => {
+    mount(`[FIRING:1] SomethingIsWrong
+Labels:
+ - alertname = SomethingIsWrong
+ - cluster = prod-eu-1
+ - severity = warning`);
+    expect(screen.getByText(/nothing in this text says a kind/i)).toBeVisible();
+  });
+
+  /**
+   * A value recognised because it is shaped like a pod name is a guess, and
+   * the warning under it is the only thing that says so.
+   */
+  it("warns when the object was recognised by shape alone", () => {
+    mount(
+      "[FIRING:1] KubePodCrashLooping (payments-7b6d9c5f4-x8k2p shop critical)"
+    );
+    expect(screen.getByText(/recognised by shape/i)).toBeVisible();
+  });
+
+  /**
+   * An unread kubeconfig is not a kubeconfig with no clusters. The panel
+   * offered "which of yours?" over an empty list, with Open greyed out.
+   */
+  it("says the clusters could not be read rather than offering none", () => {
+    useClusterStore.setState({
+      contexts: [],
+      currentContext: null,
+      isLoading: false,
+      error: "kubeconfig is not readable",
+    });
+    mount(DEPLOYMENT);
+    expect(screen.getByText(/could not be read/i)).toBeVisible();
   });
 
   /**

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 
-import { formatAge } from "@/lib/utils";
+import { severityTone } from "@/lib/alerts";
+import { SEVERITY_BANNER, SEVERITY_QUOTE } from "./severity-tone";
+import { cn, formatAge } from "@/lib/utils";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { useT } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -57,10 +59,19 @@ export function AlertBanner({
     return null;
 
   const when = reading.firedAt;
+  // The alert's own severity, not one colour for all of them: amber over a
+  // `critical` reads as something that can wait, and amber over an `info`
+  // reads as something that cannot.
+  const tone = severityTone(reading.severity);
 
   return (
-    <div className="rounded border border-warn/40 bg-warn/[0.07] px-3 py-2">
-      <div className="flex items-baseline gap-2 text-[11.5px] text-warn">
+    <div className={cn("rounded border px-3 py-2", SEVERITY_BANNER[tone].box)}>
+      <div
+        className={cn(
+          "flex items-baseline gap-2 text-[11.5px]",
+          SEVERITY_BANNER[tone].head
+        )}
+      >
         <AlertTriangle
           aria-hidden="true"
           className="h-3.5 w-3.5 flex-none translate-y-0.5"
@@ -84,7 +95,12 @@ export function AlertBanner({
         </button>
       </div>
       {reading.claim ? (
-        <p className="mt-1.5 border-l-2 border-warn/40 pl-2.5 text-[11.5px] text-fg-mid">
+        <p
+          className={cn(
+            "mt-1.5 border-l-2 pl-2.5 text-[11.5px] text-fg-mid",
+            SEVERITY_QUOTE[tone]
+          )}
+        >
           {reading.claim}
         </p>
       ) : null}
