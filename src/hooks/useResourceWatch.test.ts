@@ -538,6 +538,55 @@ describe("useResourceWatch", () => {
     ]);
   });
 
+  /**
+   * The marker kube sends before every list attempt is not the cluster
+   * answering: a watch the cluster refuses emits one between every pair of
+   * failures. Recovering on it hands the list back to a watch that does not
+   * work, stops the polling that was standing in for it, and shows a resync
+   * that never syncs.
+   */
+  it("does not treat the restart marker of a refused watch as a recovery", async () => {
+    const client = new QueryClient();
+    client.setQueryData<Item[]>(KEY, []);
+    const onError = vi.fn();
+    const onRecovered = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(subscribedCalls).toHaveLength(1);
+    });
+
+    emitFailed("stream-cm-1", "pods is forbidden");
+    // Three more attempts, each announced and each refused.
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "restarted", null);
+
+    await waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+    expect(onRecovered).not.toHaveBeenCalled();
+    expect(result.current.resyncing).toBe(false);
+
+    // The list a reader would be shown is still the one polling fills, and
+    // the first real answer is what ends the failure.
+    emit("stream-cm-1", "applied", { name: "x", namespace: "default" });
+    await waitFor(() => {
+      expect(onRecovered).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("calls onRecovered again on a second failure→recovery cycle", async () => {
     const client = new QueryClient();
     const onRecovered = vi.fn();
