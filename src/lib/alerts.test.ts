@@ -189,7 +189,10 @@ describe("which object the alert is about", () => {
       kind: "Deployment",
       name: "checkout",
       role: "subject",
-      from: { how: "alertName" },
+      // The name only chose between the labels. "checkout" is on the
+      // `deployment =` line, and pointing at the alert's name instead
+      // pointed at a line the value is not on.
+      from: { how: "key", key: "deployment" },
     });
     expect(read.objects[1]).toMatchObject({
       kind: "Pod",
@@ -213,6 +216,47 @@ describe("which object the alert is about", () => {
     });
   });
 
+  /**
+   * Alertmanager sorts labels alphabetically, so `pod` comes before
+   * `statefulset` and `replicaset` in the map this reads into. Without the
+   * order below, an alert about a StatefulSet opened one of its pods —
+   * usually the one kube-state-metrics happens to name.
+   */
+  it("prefers the workload over the pod when the name settles nothing", () => {
+    const read = parseAlert(`[FIRING:1] TeamPostgresUnhappy (shop critical)
+Labels:
+ - alertname = TeamPostgresUnhappy
+ - namespace = shop
+ - pod = postgres-0
+ - severity = critical
+ - statefulset = postgres`)!;
+    expect(read.objects[0]).toMatchObject({
+      kind: "StatefulSet",
+      name: "postgres",
+      role: "subject",
+    });
+  });
+
+  /**
+   * And where the name does say a kind, it outranks that order: a
+   * `KubePodNotReady` carrying its owner's label is about the pod, and the
+   * workload-first rule would have opened the Deployment instead.
+   */
+  it("lets the alert's own name outrank the order", () => {
+    const read = parseAlert(`[FIRING:1] KubePodNotReady (shop critical)
+Labels:
+ - alertname = KubePodNotReady
+ - deployment = checkout
+ - namespace = shop
+ - pod = checkout-7b6d9c5f4-x8k2p
+ - severity = critical`)!;
+    expect(read.objects[0]).toMatchObject({
+      kind: "Pod",
+      name: "checkout-7b6d9c5f4-x8k2p",
+      role: "subject",
+    });
+  });
+
   it("reads the kind out of the names the mixin uses", () => {
     expect(kindInName("KubeletTooManyPods")).toBe("Node");
     expect(kindInName("KubePodNotReady")).toBe("Pod");
@@ -224,6 +268,24 @@ describe("which object the alert is about", () => {
     );
     expect(kindInName("KubeJobFailed")).toBe("Job");
     expect(kindInName("Search indexer lag")).toBeNull();
+  });
+});
+
+describe("a message that carried more than one alert", () => {
+  /**
+   * `[FIRING:5]` is Alertmanager saying it folded five alerts into one
+   * message, each with its own labels. Only the first one's are read, and
+   * saying nothing is how somebody opens one pod and believes they have
+   * seen the incident.
+   */
+  it("says how many alerts a grouped message carried", () => {
+    const grouped = parseAlert(
+      DEPLOYMENT_TEXT.replace("[FIRING:1]", "[FIRING:5]")
+    )!;
+    expect(grouped.grouped).toBe(5);
+    // One alert is not a group, and a count of one is noise.
+    expect(parseAlert(DEPLOYMENT_TEXT)!.grouped).toBeNull();
+    expect(parseAlert(SUBJECT_ONLY)!.grouped).toBeNull();
   });
 });
 
@@ -245,6 +307,25 @@ describe("a subject line on its own", () => {
       from: { how: "shape", says: "podName" },
       role: "subject",
     });
+  });
+
+  /**
+   * The values arrive in whatever order the template wrote them, with no
+   * keys at all. Taking the first one made the namespace into a pod the
+   * moment a template put it first, and the panel then offered to open an
+   * object with a namespace's name.
+   */
+  it("takes the value shaped like a pod, not the first one", () => {
+    const shuffled = parseAlert(
+      "[FIRING:1] KubePodCrashLooping (shop payments-7b6d9c5f4-x8k2p critical)"
+    )!;
+    expect(shuffled.objects[0]).toEqual({
+      kind: "Pod",
+      name: "payments-7b6d9c5f4-x8k2p",
+      from: { how: "shape", says: "podName" },
+      role: "subject",
+    });
+    expect(shuffled.unkeyed).toEqual(["shop"]);
   });
 
   it("leaves the values it cannot place as candidates rather than fields", () => {

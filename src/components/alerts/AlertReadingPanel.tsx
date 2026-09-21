@@ -10,11 +10,9 @@ import {
   type Provenance,
   severityTone,
 } from "@/lib/alerts";
+import { hasChangesTab } from "@/lib/changes";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT, type T } from "@/i18n/useT";
-
-/** How far either side of the alert the window reaches. */
-export const ALERT_WINDOW_MS = 20 * 60_000;
 
 export interface AlertTarget {
   context: string;
@@ -69,8 +67,12 @@ export function AlertReadingPanel({
     if (!object) return null;
     if (!isRoutableKind(object.kind, namespace)) return null;
     const url = getResourceDetailUrl(object.kind, object.name, namespace);
-    if (reading.firedAt === null) return url;
-    return `${url}?since=${new Date(reading.firedAt.value).toISOString()}`;
+    // `since` is read by the Changes tab and by nothing else, so it travels
+    // with the tab that reads it. Sent alone it marked a timeline nobody had
+    // opened; sent to a page with no such tab it would open no panel at all.
+    if (reading.firedAt === null || !hasChangesTab(object.kind)) return url;
+    const since = new Date(reading.firedAt.value).toISOString();
+    return `${url}?tab=changes&since=${encodeURIComponent(since)}`;
   }, [object, namespace, reading.firedAt]);
 
   const namespacePath =
@@ -120,6 +122,12 @@ export function AlertReadingPanel({
         ) : null}
       </div>
 
+      {reading.grouped !== null ? (
+        <p className="text-[11px] text-warn">
+          {t("alerts", "grouped", { n: reading.grouped })}
+        </p>
+      ) : null}
+
       <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1.5 text-[11.5px]">
         <dt className={context === null ? "text-warn" : "text-fg-fnt"}>
           {t("alerts", "cluster")}
@@ -133,10 +141,7 @@ export function AlertReadingPanel({
             />
           ) : (
             <Choices
-              note={t(
-                "alerts",
-                reading.cluster === null ? "noClusterNamed" : "clusterNotYours"
-              )}
+              note={t("alerts", clusterNote(reading.cluster))}
               items={cluster.choices.map((choice) => ({
                 key: choice.context,
                 label: choice.context,
@@ -304,6 +309,13 @@ export function AlertReadingPanel({
             ? t("alerts", "openThis", { kind: object.kind, name: object.name })
             : t("alerts", "openIt")}
         </button>
+        {object !== null && path === null ? (
+          <span className="text-[11px] text-warn">
+            {isRoutableKind(object.kind, "any")
+              ? t("alerts", "noNamespaceToOpenBy", { kind: object.kind })
+              : t("alerts", "noPageForKind", { kind: object.kind })}
+          </span>
+        ) : null}
         {namespacePath && context !== null ? (
           <button
             type="button"
@@ -318,6 +330,21 @@ export function AlertReadingPanel({
       </div>
     </div>
   );
+}
+
+/**
+ * What to say over the list of clusters to choose from.
+ *
+ * A host in a `Source:` URL is a guess this app made, not a cluster the
+ * alert named — saying "the cluster it names is not one of yours" over it
+ * credits the guess to the sender and sends the reader looking for a
+ * cluster nobody mentioned.
+ */
+function clusterNote(cluster: AlertReading["cluster"]) {
+  if (cluster === null) return "noClusterNamed";
+  return cluster.from.how === "sourceHost"
+    ? "clusterOnlyInHost"
+    : "clusterNotYours";
 }
 
 const FORMAT_KEY = {
@@ -365,13 +392,6 @@ function From({ from, t }: { from: Provenance; t: T }) {
   if (from.how === "key") {
     return (
       <span className="font-mono text-[10.5px] text-fg-fnt">{`${from.key} =`}</span>
-    );
-  }
-  if (from.how === "alertName") {
-    return (
-      <span className="text-[10.5px] text-fg-fnt">
-        {t("alerts", "fromTheAlertName")}
-      </span>
     );
   }
   if (from.how === "sourceHost") {

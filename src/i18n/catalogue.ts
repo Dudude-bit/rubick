@@ -1680,6 +1680,8 @@ export const en = {
     namesTheMonitoring: "names the monitoring side, not the cluster",
     noClusterNamed: "nothing here names a cluster. Which of yours?",
     clusterNotYours: "no cluster of yours is called that. Which did it mean?",
+    clusterOnlyInHost:
+      "no label named a cluster; this is the Source host. Which of yours was it?",
     whichIsTheNamespace:
       "this line carries no keys. Which of these is the namespace?",
     noKeysToReadItBy: "no key to read it by",
@@ -1690,12 +1692,18 @@ export const en = {
     whyNameAppears: "the alert's word is in this name",
     whyInSourceHost: "its name is in the Source host",
     whyYours: "yours",
-    fromTheAlertName: "the alert's name says so",
     fromTheSourceHost: "guessed from the Source host",
     byShape: "by shape",
     guessedFromShape:
       "Nothing in this line said which field is which. What is above was recognised by shape, and is worth a look before you open it.",
     theAlertsWords: "The alert's words. This app has not checked them.",
+    noPageForKind: "this app has no page for a {kind}",
+    noNamespaceToOpenBy: "nothing here names the namespace this {kind} is in",
+    grouped: {
+      one: "this message carries {n} alert; the fields below are its own",
+      other:
+        "this message groups {n} alerts, and the fields below are the first of them",
+    },
     openThis: "Open {kind} {name}",
     openIt: "Open",
     orTheNamespace: "or the namespace {namespace}",

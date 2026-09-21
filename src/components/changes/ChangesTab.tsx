@@ -11,6 +11,7 @@ import {
   revisionOfReplicaSet,
   timelineOf,
   type Revision,
+  CHANGES_KINDS,
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveries } from "@/hooks/useDelivery";
@@ -28,7 +29,7 @@ import { useT } from "@/i18n/useT";
 const WINDOW_MS = 7 * 24 * 60 * 60_000;
 
 export interface ChangesSubject {
-  kind: "Deployment" | "StatefulSet" | "DaemonSet";
+  kind: (typeof CHANGES_KINDS)[number];
   name: string;
   namespace: string;
   labels: Record<string, string>;

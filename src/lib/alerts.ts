@@ -22,8 +22,6 @@
 export type Provenance =
   /** A `name = value` line, the only unambiguous case. */
   | { how: "key"; key: string }
-  /** The alert's own name said which kind it is about. */
-  | { how: "alertName" }
   /** The `Source:` URL's host, where no label named the cluster. */
   | { how: "sourceHost"; host: string }
   /** No key anywhere; recognised by what the value looks like. */
@@ -97,6 +95,15 @@ export interface AlertReading {
   ignored: string[];
   /** Values from a subject line, which carries no keys to read them by. */
   unkeyed: string[];
+  /**
+   * How many alerts the message carried, where it said so.
+   *
+   * Alertmanager groups: `[FIRING:5]` is one message about five alerts, each
+   * with its own labels, and every field below is read from the first of
+   * them. Folding five into one reading silently is how somebody opens one
+   * pod and believes they have seen the incident.
+   */
+  grouped: number | null;
 }
 
 /**
@@ -246,6 +253,7 @@ export function parseAlert(text: string): AlertReading | null {
     claim: claimOf(text),
     ignored: [...labels.keys()].filter((key) => MONITORING_KEYS.has(key)),
     unkeyed: [],
+    grouped: groupedCount(text),
   };
 
   const cluster = labels.get("cluster");
@@ -379,7 +387,10 @@ function objectsOf(
     {
       kind: KIND_OF_KEY[first[0]],
       name: first[1],
-      from: preferred ? { how: "alertName" } : { how: "key", key: first[0] },
+      // The alert's name only chose which label to prefer: the value itself
+      // came from that label, and crediting it to the name was this app
+      // pointing at a line the value is not on.
+      from: { how: "key", key: first[0] },
       role: "subject",
     },
     ...rest.map((entry): AlertObject => ({
@@ -405,6 +416,20 @@ function subjectValues(text: string): string[] {
   );
   if (!match) return [];
   return match[1].split(/\s+/).filter(Boolean);
+}
+
+/**
+ * How many alerts a grouped notification carried, or `null`.
+ *
+ * `[FIRING:5]` is Alertmanager saying it folded five alerts into one
+ * message. Only the first one's labels are read below, and one is not a
+ * number worth mentioning.
+ */
+function groupedCount(text: string): number | null {
+  const match = /\[(?:FIRING|RESOLVED):(\d+)\]/i.exec(text);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 1 ? n : null;
 }
 
 /** `web-7b6d9c5f4-x8k2p`, the shape a controller gives a pod it made. */
