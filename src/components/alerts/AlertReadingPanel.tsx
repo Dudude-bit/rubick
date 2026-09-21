@@ -246,7 +246,7 @@ export function AlertReadingPanel({
           </>
         ) : null}
 
-        <dt className="text-fg-fnt">{t("alerts", "since")}</dt>
+        <dt className="text-fg-fnt">{t("alerts", "firedSince")}</dt>
         <dd className="min-w-0">
           {reading.firedAt === null ? (
             <span className="text-fg-fnt">{t("alerts", "notDated")}</span>

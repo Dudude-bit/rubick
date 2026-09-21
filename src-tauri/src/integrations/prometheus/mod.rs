@@ -425,6 +425,137 @@ pub fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
         .collect())
 }
 
+/// One alert of one rule, as `/api/v1/rules` lists it under the rule:
+/// the labels after templating are what name the object it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertInstance {
+    /// `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    pub active_at: Option<String>,
+    pub value: String,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+}
+
+/// One alerting rule as `/api/v1/rules?type=alert` lists it. The `file` is
+/// how a rule is traced back to the `PrometheusRule` the operator wrote it
+/// from: the operator names the file after the object's namespace and name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertRule {
+    pub group: String,
+    pub file: String,
+    pub name: String,
+    /// `inactive`, `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    /// `ok`, `err` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last evaluation worked.
+    pub last_error: String,
+    pub query: String,
+    /// The `for` clause, in seconds.
+    pub duration_seconds: f64,
+    pub last_evaluation: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+    pub alerts: Vec<AlertInstance>,
+}
+
+/// Every alerting rule the configured Prometheus has loaded, with the
+/// alerts each one has active.
+#[tauri::command]
+pub async fn prometheus_rules(state: State<'_, AppState>) -> Result<Vec<AlertRule>> {
+    let entry = configured(&state)?;
+    let value = get_json(&entry, "/api/v1/rules", &[("type", "alert".to_string())])
+        .await
+        .map_err(unreachable)?;
+    parse_rules(&value)
+}
+
+fn string_map(value: Option<&serde_json::Value>) -> HashMap<String, String> {
+    value
+        .and_then(|m| m.as_object())
+        .map(|map| {
+            map.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its rules");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |node: &serde_json::Value, key: &str| {
+        node.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let optional = |node: &serde_json::Value, key: &str| {
+        node.get(key).and_then(|v| v.as_str()).map(str::to_string)
+    };
+    let mut rules = Vec::new();
+    for group in body
+        .get("data")
+        .and_then(|d| d.get("groups"))
+        .and_then(|g| g.as_array())
+        .into_iter()
+        .flatten()
+    {
+        let group_name = text(group, "name");
+        let file = text(group, "file");
+        for rule in group
+            .get("rules")
+            .and_then(|r| r.as_array())
+            .into_iter()
+            .flatten()
+        {
+            // `type=alert` is asked for; a recording rule that came anyway
+            // has no state and is not an alert.
+            if rule.get("type").and_then(|t| t.as_str()) == Some("recording") {
+                continue;
+            }
+            rules.push(AlertRule {
+                group: group_name.clone(),
+                file: file.clone(),
+                name: text(rule, "name"),
+                state: text(rule, "state"),
+                health: text(rule, "health"),
+                last_error: text(rule, "lastError"),
+                query: text(rule, "query"),
+                duration_seconds: rule
+                    .get("duration")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
+                last_evaluation: optional(rule, "lastEvaluation"),
+                labels: string_map(rule.get("labels")),
+                annotations: string_map(rule.get("annotations")),
+                alerts: rule
+                    .get("alerts")
+                    .and_then(|a| a.as_array())
+                    .into_iter()
+                    .flatten()
+                    .map(|alert| AlertInstance {
+                        state: text(alert, "state"),
+                        active_at: optional(alert, "activeAt"),
+                        value: text(alert, "value"),
+                        labels: string_map(alert.get("labels")),
+                        annotations: string_map(alert.get("annotations")),
+                    })
+                    .collect(),
+            });
+        }
+    }
+    Ok(rules)
+}
+
 fn parse_result(body: &serde_json::Value) -> Result<Vec<PromSeries>> {
     if body.get("status").and_then(|s| s.as_str()) != Some("success") {
         let message = body
@@ -553,6 +684,67 @@ mod tests {
     }
 
     /// A Prometheus that refuses is a refusal, not an empty pool list.
+    /// Would break if a firing alert's labels or the rule's own error were
+    /// dropped on the way through, or a recording rule slipped in as an alert.
+    #[test]
+    fn rules_keep_the_file_the_state_the_alerts_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [{
+                "name": "kubernetes-apps",
+                "file": "/etc/prometheus/rules/prometheus-kps-rulefiles-0/monitoring-kps-kubernetes-apps-1a2b.yaml",
+                "rules": [
+                    {
+                        "type": "alerting", "name": "KubePodCrashLooping", "state": "firing",
+                        "health": "ok", "lastError": "", "query": "max_over_time(...) >= 1",
+                        "duration": 900, "labels": {"severity": "warning"},
+                        "annotations": {"summary": "Pod is crash looping."},
+                        "alerts": [{
+                            "state": "firing", "activeAt": "2026-09-12T20:00:00Z", "value": "1e+00",
+                            "labels": {"namespace": "shop", "pod": "web-1", "severity": "warning"},
+                            "annotations": {"summary": "Pod shop/web-1 is crash looping."}
+                        }]
+                    },
+                    { "type": "recording", "name": "cluster:cpu", "health": "ok", "query": "sum(...)" },
+                    {
+                        "type": "alerting", "name": "Broken", "state": "inactive", "health": "err",
+                        "lastError": "found duplicate series", "query": "up", "duration": 0,
+                        "labels": {}, "annotations": {}, "alerts": []
+                    }
+                ]
+            }]}
+        });
+        let rules = parse_rules(&body).unwrap();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].group, "kubernetes-apps");
+        assert!(rules[0]
+            .file
+            .ends_with("monitoring-kps-kubernetes-apps-1a2b.yaml"));
+        assert_eq!(rules[0].state, "firing");
+        assert_eq!(rules[0].duration_seconds, 900.0);
+        assert_eq!(
+            rules[0].alerts[0].labels.get("pod").map(String::as_str),
+            Some("web-1")
+        );
+        assert_eq!(rules[1].health, "err");
+        assert!(rules[1].last_error.contains("duplicate"));
+        // The two fields both readers key on, and neither was asserted: the
+        // rule's own name is how a PrometheusRule's spec is matched to what
+        // Prometheus loaded, and an alert's state is the difference between
+        // "firing" and "pending" on the page. Blanking either left the whole
+        // suite green.
+        assert_eq!(rules[0].name, "KubePodCrashLooping");
+        assert_eq!(rules[1].name, "Broken");
+        assert_eq!(rules[0].alerts[0].state, "firing");
+        assert_eq!(rules[0].alerts[0].value, "1e+00");
+    }
+
+    #[test]
+    fn a_refused_rule_list_is_an_error_not_no_rules() {
+        let body = serde_json::json!({"status": "error", "error": "forbidden"});
+        assert!(parse_rules(&body).is_err());
+    }
+
     #[test]
     fn a_refused_target_list_is_an_error_not_no_targets() {
         let body = serde_json::json!({ "status": "error", "error": "forbidden" });

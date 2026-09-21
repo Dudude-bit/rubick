@@ -95,7 +95,7 @@ export function AlertBanner({
         <span className="text-fg-fnt">{t("alerts", "readJustNow")}</span>{" "}
         {error !== undefined ? (
           <span className="text-err">
-            {t("alerts", "couldNotRead", { error })}
+            {t("alerts", "objectUnread", { error })}
           </span>
         ) : stillReading ? (
           <span className="text-fg-fnt">{t("alerts", "stillReading")}</span>

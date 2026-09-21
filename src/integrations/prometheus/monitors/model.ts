@@ -86,6 +86,8 @@ export interface PrometheusInstance {
   serviceMonitorNamespaceSelector: LabelSelector | null;
   podMonitorSelector: LabelSelector | null;
   podMonitorNamespaceSelector: LabelSelector | null;
+  ruleSelector: LabelSelector | null;
+  ruleNamespaceSelector: LabelSelector | null;
   availableCondition: Condition | null;
   reconciled: Condition | null;
 }
@@ -294,6 +296,10 @@ export function readPrometheus(
     podMonitorNamespaceSelector: labelSelector(
       getValueByPath(resource, "spec.podMonitorNamespaceSelector")
     ),
+    ruleSelector: labelSelector(getValueByPath(resource, "spec.ruleSelector")),
+    ruleNamespaceSelector: labelSelector(
+      getValueByPath(resource, "spec.ruleNamespaceSelector")
+    ),
     availableCondition: condition("Available"),
     reconciled: condition("Reconciled"),
   };
@@ -348,23 +354,45 @@ export function pickedUpBy(
   instances: Kind<PrometheusInstance>,
   namespaces: Read<NamespaceInfo>
 ): PickedUp {
+  return selectedBy(
+    monitor,
+    instances,
+    namespaces,
+    monitor.kind === "ServiceMonitor"
+      ? (instance) => [
+          instance.serviceMonitorSelector,
+          instance.serviceMonitorNamespaceSelector,
+        ]
+      : (instance) => [
+          instance.podMonitorSelector,
+          instance.podMonitorNamespaceSelector,
+        ]
+  );
+}
+
+/**
+ * The same two selectors, on whichever pair a Prometheus applies to the
+ * kind in hand: monitors have theirs, rules have `ruleSelector` and
+ * `ruleNamespaceSelector`, with the same absent-versus-empty reading.
+ */
+export function selectedBy(
+  object: { namespace: string; labels: Record<string, string> },
+  instances: Kind<PrometheusInstance>,
+  namespaces: Read<NamespaceInfo>,
+  selectors: (
+    instance: PrometheusInstance
+  ) => [objects: LabelSelector | null, scope: LabelSelector | null]
+): PickedUp {
   if (instances.state === "absent") return { state: "noKind" };
   if (instances.state === "unread")
     return { state: "unknown", by: [], reason: instances.reason };
   const by: string[] = [];
   let unknown: string | null = null;
   for (const instance of instances.items) {
-    const objects =
-      monitor.kind === "ServiceMonitor"
-        ? instance.serviceMonitorSelector
-        : instance.podMonitorSelector;
-    if (!selectorMatches(objects, monitor.labels)) continue;
-    const scope =
-      monitor.kind === "ServiceMonitor"
-        ? instance.serviceMonitorNamespaceSelector
-        : instance.podMonitorNamespaceSelector;
+    const [objects, scope] = selectors(instance);
+    if (!selectorMatches(objects, object.labels)) continue;
     if (scope === null) {
-      if (monitor.namespace === instance.namespace) by.push(instance.name);
+      if (object.namespace === instance.namespace) by.push(instance.name);
       continue;
     }
     if (selectorIsEmpty(scope)) {
@@ -376,8 +404,7 @@ export function pickedUpBy(
       continue;
     }
     const labels =
-      namespaces.items.find((ns) => ns.name === monitor.namespace)?.labels ??
-      {};
+      namespaces.items.find((ns) => ns.name === object.namespace)?.labels ?? {};
     if (selectorMatches(scope, labels)) by.push(instance.name);
   }
   return unknown === null

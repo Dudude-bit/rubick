@@ -647,6 +647,49 @@ export interface Capabilities {
     namespace: string | null;
     name: string;
   }) => Promise<RelatedObject[] | null>;
+  /**
+   * The alerts firing or pending about one object right now, from whatever
+   * evaluates alerting rules for this cluster. Absent means no such thing
+   * is connected, and the page draws nothing where the list would be: an
+   * empty list is a real answer here, and a missing evaluator is not.
+   *
+   * Two halves rather than one call, because one object's answer is a slice
+   * of a collection the evaluator only hands over whole. A call per object
+   * re-read every alerting rule in the cluster on every page, every peek and
+   * every poll; the surface reads once per cluster and asks for its slice.
+   */
+  "alerts.about": {
+    /**
+     * What the evaluator has to say, whole. Opaque here and read only by
+     * the supplier: the surface keeps it and hands it back.
+     */
+    read: () => Promise<unknown>;
+    /**
+     * Whether the supplier can say anything about this kind at all.
+     *
+     * A kind it cannot name gets no block and no sentence — "the alerts
+     * could not be read" beside a ConfigMap is noise about a question
+     * nobody asked, and the surface must not keep its own list of kinds.
+     */
+    speaksOf: (kind: string) => boolean;
+    /** The alerts in that read which name this object. */
+    pick: (
+      read: unknown,
+      input: { kind: string; name: string; namespace: string | null }
+    ) => AlertAbout[];
+  };
+}
+
+/** One alert naming an object, and the label it named it by. */
+export interface AlertAbout {
+  rule: string;
+  /** `firing` or `pending`, as the evaluator writes it. */
+  state: string;
+  activeAt: string | null;
+  severity: string | null;
+  summary: string | null;
+  /** A guess at a pod's owner is visible as one: the label shows what matched. */
+  via: { label: string; value: string };
 }
 
 export type CapabilityKey = keyof Capabilities;
@@ -673,6 +716,11 @@ export type CapabilityState<K extends CapabilityKey> =
       vendor: string;
       endpoint: string;
       use: Capabilities[K];
+      /**
+       * Where this capability is answered at length, or `null` where the
+       * supplier has no screen of its own. See {@link VendorPage.answers}.
+       */
+      page: string | null;
     };
 
 /**
@@ -963,6 +1011,14 @@ export interface VendorPage {
    * and how #138 kept coming back.
    */
   gate?: Gate | null;
+  /**
+   * Where a capability's fuller answer sits on this page, as a suffix to the
+   * page's own path — `"?tab=alerts"`. A surface that offers "and the rest is
+   * over here" reads it off {@link CapabilityState}; spelling
+   * `/integrations/prometheus?tab=alerts` at the surface crosses the same
+   * seam an import would, and goes stale the day a second vendor answers.
+   */
+  answers?: Partial<Record<CapabilityKey, string>>;
 }
 
 /** What to ask the cluster's authorizer before offering a vendor's page. */

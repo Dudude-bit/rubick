@@ -821,6 +821,37 @@ export interface PodMetrics {
   memoryBytes: number | null;
 }
 
+export interface Published {
+  url: string | null;
+  rawUrl: string | null;
+  draftId: string | null;
+  version: number | null;
+}
+
+export interface ShareIdentity {
+  accountName: string | null;
+  apiKeyName: string | null;
+}
+
+export interface ShareTargetInput {
+  id: string | null;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  apiKey: string | null;
+}
+
+export interface ShareTargetInfo {
+  id: string;
+  label: string;
+  apiUrl: string;
+  kind: string;
+  public: boolean;
+  hasKey: boolean;
+  host: string;
+}
+
 export interface FilePreview {
   bytesRead: number;
   truncated: boolean;
@@ -1772,6 +1803,29 @@ export interface CertificateFacts {
   serial: string;
   selfSigned: boolean;
   chainLength: number;
+}
+
+export interface AlertRule {
+  group: string;
+  file: string;
+  name: string;
+  state: string;
+  health: string;
+  lastError: string;
+  query: string;
+  durationSeconds: number;
+  lastEvaluation: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  alerts: AlertInstance[];
+}
+
+export interface AlertInstance {
+  state: string;
+  activeAt: string | null;
+  value: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
 }
 
 export interface ScrapeTarget {

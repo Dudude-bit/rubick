@@ -18,6 +18,7 @@ import {
   usageHistory,
   volumeFullness,
 } from "./client";
+import { alertsAboutObject } from "./alerts/client";
 import { crd } from "./monitors/crd";
 import {
   MONITORS_KEY,
@@ -195,9 +196,11 @@ export default defineVendor({
     // The Connection tab stands without the operator's kinds, so a token
     // refused the monitors still has a page to open.
     gate: null,
+    answers: { "alerts.about": "?tab=alerts" },
   },
   crd,
   provides: {
+    "alerts.about": alertsAboutObject,
     "usage.history": usageHistory,
     "usage.nodes": nodeUsage,
     "volume.fullness": volumeFullness,
