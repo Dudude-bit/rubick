@@ -72,7 +72,10 @@ export function ClusterOverview() {
     return (
       <div className="flex flex-col gap-[22px]">
         {pinned}
-        <Section>
+        {/* The section arrives after the first render, so a reader who
+            cannot see it is told; `status` rather than `alert`, which is
+            what `Unknown` wears for the same kind of news. */}
+        <Section role="status">
           <div className="flex items-center gap-2">
             {refused ? (
               <Lock className="h-4 w-4 text-fg-mut" aria-hidden="true" />

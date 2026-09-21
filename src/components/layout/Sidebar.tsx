@@ -812,6 +812,9 @@ function NavRow({
                   // the tab strip wears: a page that says nobody looked had
                   // a plain number beside it here.
                   <span
+                    // A label on a plain span is announced by nothing: the
+                    // dot is the whole message here, so it says what it is.
+                    role="img"
                     aria-label={
                       mark === "err"
                         ? t("cluster", "markBroken")

@@ -1107,14 +1107,17 @@ export function CommandPalette() {
 
 /** What makes one pasted alert a different alert from the last one. */
 function alertKey(reading: AlertReading): string {
-  return [
-    reading.alertName ?? "",
-    reading.firedAt?.value ?? "",
-    reading.cluster?.value ?? "",
-    reading.namespace?.value ?? "",
-    reading.objects.map((o) => `${o.kind}/${o.name}`).join(","),
-    reading.unkeyed.join(","),
-  ].join("|");
+  // Encoded rather than joined: a label's value may itself hold the
+  // separator, and two different alerts would then share a key — which is
+  // the panel keeping the first one's picks for the second.
+  return JSON.stringify([
+    reading.alertName,
+    reading.firedAt?.value ?? null,
+    reading.cluster?.value ?? null,
+    reading.namespace?.value ?? null,
+    reading.objects.map((o) => [o.kind, o.name]),
+    reading.unkeyed,
+  ]);
 }
 
 function FootKey({

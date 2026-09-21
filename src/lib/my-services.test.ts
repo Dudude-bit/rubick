@@ -208,6 +208,40 @@ describe("stateOf", () => {
   });
 
   /**
+   * A name is data, not a pattern. `payments.v1` matched `paymentsXv1`
+   * because the dot went into a `RegExp` unescaped, and a value carrying a
+   * bracket threw where it was built.
+   */
+  it("reads a name with a dot in it as that name and no other", () => {
+    const pin = { kind: "Deployment", name: "payments.v1" };
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/paymentsXv1 in shop" },
+        pin
+      ).state
+    ).toBe("unread");
+
+    expect(
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/payments.v1 in shop" },
+        pin
+      ).state
+    ).toBe("gone");
+
+    // And a name no regex would survive is read, not thrown on.
+    expect(() =>
+      stateOf(
+        undefined,
+        { message: "Resource not found: Deployment/weird[ in shop" },
+        { kind: "Deployment", name: "weird[" }
+      )
+    ).not.toThrow();
+  });
+
+  /**
    * Either half alone is enough: the pin says what was pinned, the read says
    * what the cluster answered about, and a card whose read has not caught up
    * with the other must not go green on nothing.
