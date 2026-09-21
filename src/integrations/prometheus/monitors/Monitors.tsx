@@ -27,6 +27,7 @@ import {
   POD_MONITORS_CRD,
   SERVICE_MONITORS_CRD,
   groupOf,
+  monitorKey,
   sharedPrefix,
   type Group,
   type Kind,
@@ -39,8 +40,7 @@ const GROUPS: readonly Group[] = ["broken", "waiting", "scraped", "unchecked"];
 /** One row's id, which is how the listbox names what it has selected. */
 const rowDomId = (row: MonitorRow) => `monitor-${keyOf(row)}`;
 
-const keyOf = (row: MonitorRow) =>
-  `${row.monitor.namespace}/${row.monitor.name}`;
+const keyOf = monitorKey;
 
 export default function Monitors() {
   const t = useT();

@@ -12,6 +12,7 @@ import {
   hintFor,
   lanesOf,
   loopbackFlag,
+  monitorKey,
   monitorReaches,
   pickedUpBy,
   poolPrefix,
@@ -908,5 +909,24 @@ describe("the likely cause", () => {
       if (hint?.key !== "loopback") continue;
       expect(loopbackFlag(hint.component)).toBeTruthy();
     }
+  });
+});
+
+describe("what identifies one row of the list", () => {
+  /**
+   * One list holds ServiceMonitors and PodMonitors, so a `web` of each in
+   * `shop` had the same key: the same `?monitor=` link, the same detail
+   * `key`, and the same DOM id for the row a screen reader is told about.
+   */
+  it("tells two monitors of different kinds with one name apart", () => {
+    const row = (kind: string) =>
+      ({
+        monitor: { kind, namespace: "shop", name: "web" },
+      }) as never;
+
+    expect(monitorKey(row("ServiceMonitor"))).not.toBe(
+      monitorKey(row("PodMonitor"))
+    );
+    expect(monitorKey(row("ServiceMonitor"))).toContain("shop/web");
   });
 });

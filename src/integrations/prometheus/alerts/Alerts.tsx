@@ -37,6 +37,7 @@ import {
   RULES_CRD,
   readRule,
   rowsOf,
+  ruleKey,
   type RuleGroup,
   type RuleRow,
   type RuleState,
@@ -50,7 +51,7 @@ const GROUPS: readonly RuleGroup[] = [
   "unchecked",
 ];
 
-const keyOf = (row: RuleRow) => `${row.object.namespace}/${row.object.name}`;
+const keyOf = ruleKey;
 
 const TONE: Record<RuleGroup, RowTone> = {
   firing: "err",
@@ -395,7 +396,7 @@ function Ladder({
 
 /** One row's id, which is how the listbox names what it has selected. */
 function rowDomId(row: RuleRow): string {
-  return `alert-rule-${row.object.uid}`;
+  return `alert-rule-${keyOf(row)}`;
 }
 
 function Row({

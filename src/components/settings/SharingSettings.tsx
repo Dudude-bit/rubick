@@ -229,7 +229,14 @@ export function SharingSettings() {
                 }
                 value={draft.apiKey}
                 onChange={(event) =>
-                  setDraft({ ...draft, apiKey: event.target.value })
+                  // Typing a key means this key: the save prefers the CLI's
+                  // when `importKey` stands, so leaving it set here ignored
+                  // what the reader just typed.
+                  setDraft({
+                    ...draft,
+                    apiKey: event.target.value,
+                    importKey: false,
+                  })
                 }
                 className="h-7 font-mono text-xs"
               />

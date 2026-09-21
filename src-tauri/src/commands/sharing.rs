@@ -310,7 +310,11 @@ pub async fn publish_report(
     // The publish this app offers is a link somebody can open. A 2xx with a
     // body that is not JSON, or one that names no `publicUrl`, left the
     // dialog saying "Published, version 1" over nothing to click.
-    if body.is_err() || answer.get("publicUrl").and_then(|v| v.as_str()).is_none() {
+    let link = answer
+        .get("publicUrl")
+        .and_then(|v| v.as_str())
+        .filter(|url| !url.trim().is_empty());
+    if body.is_err() || link.is_none() {
         return Err(Error::InvalidInput(format!(
             "{} accepted the report but returned no link to it",
             host_of(&target.api_url)
@@ -318,10 +322,7 @@ pub async fn publish_report(
     }
 
     let published = Published {
-        url: answer
-            .get("publicUrl")
-            .and_then(|v| v.as_str())
-            .map(str::to_owned),
+        url: link.map(str::to_owned),
         raw_url: answer
             .get("rawUrl")
             .and_then(|v| v.as_str())
@@ -385,12 +386,17 @@ fn postplan_key() -> Result<Option<String>> {
         // user may not read is a refusal, and saying "nothing here" about it
         // sends them to look for a key they already have.
         Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        // The reason, not the absolute path: `~/.postplan/credentials.json`
+        // is what the reader was told to put there, and their home directory
+        // has no business crossing the IPC boundary to say "denied".
         Err(why) => {
-            return Err(Error::InvalidInput(format!("{}: {why}", path.display())));
+            return Err(Error::InvalidInput(format!(
+                "~/.postplan/credentials.json: {why}"
+            )));
         }
     };
     let parsed: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| Error::InvalidInput(format!("{}: {e}", path.display())))?;
+        .map_err(|e| Error::InvalidInput(format!("~/.postplan/credentials.json: {e}")))?;
     Ok(parsed
         .get("apiKey")
         .and_then(|v| v.as_str())
@@ -432,6 +438,25 @@ mod tests {
         let answer = super::tail_of("pp_live_7f3a19bc4d2e");
         assert_eq!(answer, "…4d2e");
         assert!(!answer.contains("pp_live"), "{answer}");
+    }
+
+    /// A target that answers 200 with an empty `publicUrl` has published
+    /// nothing a reader can open, and the dialog said "Published, version 1"
+    /// over a link that goes nowhere.
+    #[test]
+    fn a_link_that_is_an_empty_string_is_not_a_link() {
+        let answer = serde_json::json!({ "publicUrl": "   " });
+        let link = answer
+            .get("publicUrl")
+            .and_then(|v| v.as_str())
+            .filter(|url| !url.trim().is_empty());
+        assert!(link.is_none());
+
+        let real = serde_json::json!({ "publicUrl": "https://plans.example.com/r/1" });
+        assert!(real
+            .get("publicUrl")
+            .and_then(|v| v.as_str())
+            .is_some_and(|url| !url.trim().is_empty()));
     }
 
     /// And the save has a way to ask for that key without carrying it.

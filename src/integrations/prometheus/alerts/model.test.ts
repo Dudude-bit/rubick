@@ -14,6 +14,7 @@ import {
   ownsFile,
   readRule,
   rowsOf,
+  ruleKey,
   rulePickedUpBy,
   speaksOf,
 } from "./model";
@@ -510,5 +511,20 @@ describe("alertsAbout", () => {
         namespace: "shop",
       })
     ).toEqual([]);
+  });
+});
+
+describe("what identifies one row of the list", () => {
+  /**
+   * Not the uid: the backend hands over an empty string for an object that
+   * carries none, and two of those would share the id the listbox points
+   * `aria-activedescendant` at.
+   */
+  it("names a row by where it is, not by a uid that may be empty", () => {
+    const row = (namespace: string) =>
+      ({ object: { uid: "", namespace, name: "apps" } }) as never;
+
+    expect(ruleKey(row("shop"))).not.toBe(ruleKey(row("monitoring")));
+    expect(ruleKey(row("shop"))).toBe("shop/apps");
   });
 });

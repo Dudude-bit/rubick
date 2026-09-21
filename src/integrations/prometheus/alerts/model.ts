@@ -156,6 +156,15 @@ export type RuleFinding =
 
 export type RuleGroup = "firing" | "pending" | "broken" | "quiet" | "unchecked";
 
+/**
+ * What identifies one row — in the URL, in the `key` of its detail, and in
+ * the id the listbox points `aria-activedescendant` at. Not `uid`: the
+ * backend hands over an empty string for an object that carries none.
+ */
+export function ruleKey(row: RuleRow): string {
+  return `${row.object.namespace}/${row.object.name}`;
+}
+
 export interface RuleRow {
   object: RuleObject;
   pickedUp: PickedUp;
