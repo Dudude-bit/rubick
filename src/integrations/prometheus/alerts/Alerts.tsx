@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
 import { Section } from "@/components/ui/section";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
@@ -181,13 +181,17 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
   const read = picture.alertRules;
   const firing = rows.filter((row) => row.group === "firing").length;
   const broken = rows.filter((row) => row.group === "broken").length;
+  // Counted over the rows, not over everything Prometheus has loaded: the
+  // sentence puts the two numbers side by side — "{n} alerts firing across
+  // {rules} rule objects" — and they were taken from different populations,
+  // so alerts belonging to no listed PrometheusRule were counted against a
+  // count of listed ones.
   const alerts =
     read.state === "read"
-      ? read.rules.reduce(
-          (n, rule) =>
-            n + rule.alerts.filter((a) => a.state === "firing").length,
-          0
-        )
+      ? rows.reduce((n, row) => {
+          const firingHere = row.findings.find((f) => f.kind === "firing");
+          return n + (firingHere ? firingHere.alerts : 0);
+        }, 0)
       : null;
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
@@ -911,7 +915,8 @@ function RuleCard({
                   {alert.state}
                 </span>
                 <span className="min-w-0 truncate">
-                  {subject ? (
+                  {subject &&
+                  isRoutableKind(subject.kind, subject.namespace) ? (
                     <ObjectLink
                       kind={subject.kind}
                       name={subject.name}
@@ -920,6 +925,16 @@ function RuleCard({
                       {subject.namespace ? `${subject.namespace}/` : ""}
                       {subject.name}
                     </ObjectLink>
+                  ) : subject ? (
+                    // Known, and this app has no page for it — a
+                    // HorizontalPodAutoscaler is in the label table and not
+                    // in the routable one, and the row branched on the
+                    // subject existing rather than on its being addressable.
+                    <span className="font-mono text-fg-mid">
+                      {subject.kind}{" "}
+                      {subject.namespace ? `${subject.namespace}/` : ""}
+                      {subject.name}
+                    </span>
                   ) : (
                     <span className="font-mono text-fg-mid">
                       {Object.entries(alert.labels)
