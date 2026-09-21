@@ -5,6 +5,7 @@ import {
   kindInName,
   looksLikeAlert,
   parseAlert,
+  severityTone,
 } from "./alerts";
 
 /**
@@ -382,5 +383,27 @@ describe("which of your clusters it meant", () => {
     ]);
     expect(settled).toBeNull();
     expect(choices.every((choice) => choice.why === "yoursToPick")).toBe(true);
+  });
+});
+
+/**
+ * Every severity was drawn in the red this app reserves for a failure, so an
+ * `info` alert arrived looking like a page — and a label the rule writer
+ * invented was given a meaning this app does not know.
+ */
+describe("the tone a severity earns", () => {
+  it("keeps the reserved red for the ones that mean it", () => {
+    expect(severityTone("critical")).toBe("err");
+    expect(severityTone("page")).toBe("err");
+  });
+
+  it("does not paint a warning or a notice as a failure", () => {
+    expect(severityTone("warning")).toBe("warn");
+    expect(severityTone("info")).toBe("info");
+  });
+
+  it("says nothing about a word it does not know", () => {
+    expect(severityTone("sev3")).toBe("neutral");
+    expect(severityTone(null)).toBe("neutral");
   });
 });

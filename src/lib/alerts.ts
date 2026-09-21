@@ -50,6 +50,34 @@ export interface AlertObject {
 export type AlertFormat =
   "alertmanagerText" | "alertmanagerSubject" | "grafana" | "datadog";
 
+/**
+ * The tone a severity label earns, as a total map rather than one colour for
+ * all of them.
+ *
+ * Every severity was drawn in the red this app reserves for a failure, so an
+ * `info` alert arrived looking like a page. Anything the rule writer invented
+ * is neutral: this app does not know what it means.
+ */
+export function severityTone(
+  severity: string | null
+): "err" | "warn" | "info" | "neutral" {
+  switch ((severity ?? "").toLowerCase()) {
+    case "critical":
+    case "page":
+    case "emergency":
+      return "err";
+    case "warning":
+    case "warn":
+      return "warn";
+    case "info":
+    case "information":
+    case "none":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
+
 export interface AlertReading {
   format: AlertFormat;
   alertName: string | null;

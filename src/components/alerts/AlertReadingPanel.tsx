@@ -3,11 +3,12 @@ import { ExternalLink } from "lucide-react";
 
 import { getResourceDetailUrl, isClusterScoped } from "@/lib/navigation-utils";
 import { isRoutableKind } from "@/components/resources/ResourceRef";
-import { formatAge } from "@/lib/utils";
+import { formatAge, cn } from "@/lib/utils";
 import {
   clusterChoices,
   type AlertReading,
   type Provenance,
+  severityTone,
 } from "@/lib/alerts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT, type T } from "@/i18n/useT";
@@ -32,6 +33,14 @@ export interface AlertTarget {
  * that has passed, and this panel is about what the text says, not about
  * what is true now.
  */
+/** The reserved red belongs to a failure, not to every label a rule carries. */
+const SEVERITY_CLASS: Record<ReturnType<typeof severityTone>, string> = {
+  err: "border-err/45 text-err",
+  warn: "border-warn/45 text-warn",
+  info: "border-info/45 text-info",
+  neutral: "border-hair text-fg-mut",
+};
+
 export function AlertReadingPanel({
   reading,
   onOpen,
@@ -100,7 +109,12 @@ export function AlertReadingPanel({
           {reading.alertName ?? t("alerts", "unnamedAlert")}
         </span>
         {reading.severity ? (
-          <span className="flex-none rounded border border-err/45 px-1 text-[10px] uppercase tracking-wide text-err">
+          <span
+            className={cn(
+              "flex-none rounded border px-1 text-[10px] uppercase tracking-wide",
+              SEVERITY_CLASS[severityTone(reading.severity)]
+            )}
+          >
             {reading.severity}
           </span>
         ) : null}
