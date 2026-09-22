@@ -15,6 +15,17 @@ use tokio::sync::broadcast;
 /// from the surface's point of view it is: updates it needed are gone.
 const EVENT_BRIDGE_LAGGED: &str = "event-bridge-lagged";
 
+/// Whether this build registers `rubick://` itself at startup.
+///
+/// Not inside a Flatpak: the exported .desktop file declares
+/// `MimeType=x-scheme-handler/rubick`, which is the installer's registration,
+/// and the sandbox has no `xdg-mime` to run — asking only put an error and a
+/// warning at the top of every log a Flatpak user pastes.
+#[cfg(any(windows, target_os = "linux", test))]
+fn registers_its_own_scheme(flatpak_id: Option<&std::ffi::OsStr>) -> bool {
+    flatpak_id.is_none()
+}
+
 fn main() {
     // Install rustls crypto provider before any TLS operations
     rustls::crypto::ring::default_provider()
@@ -74,7 +85,7 @@ fn main() {
             // build has no installer, so it registers itself on the platforms
             // that allow it at runtime.
             #[cfg(any(windows, target_os = "linux"))]
-            {
+            if registers_its_own_scheme(std::env::var_os("FLATPAK_ID").as_deref()) {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(error) = app.deep_link().register_all() {
                     tracing::warn!(%error, "could not register the rubick:// scheme");
@@ -486,6 +497,18 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
     use std::path::Path;
+
+    /// A Flatpak's exported .desktop file is its registration of `rubick://`,
+    /// and the sandbox has no `xdg-mime`: registering from inside put an
+    /// error and a warning at the top of every Flatpak log. Everywhere else
+    /// — a dev build above all — the app still registers itself.
+    #[test]
+    fn a_flatpak_leaves_the_scheme_to_its_desktop_file() {
+        assert!(!super::registers_its_own_scheme(Some(
+            std::ffi::OsStr::new("com.k8s_gui.app")
+        )));
+        assert!(super::registers_its_own_scheme(None));
+    }
 
     /// Every `#[tauri::command]` in the tree, by the name the frontend calls.
     fn commands_in(dir: &Path, found: &mut BTreeSet<String>) {
