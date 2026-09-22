@@ -160,6 +160,15 @@ jobs:
             exit 1
           fi
           echo "every library resolved"
+          # Links open through the runtime's xdg-open, which hands them to the
+          # portal. The old bundle copied the AppImage's usr/bin and put
+          # Ubuntu's xdg-open first on PATH, where no portal is spoken.
+          opener=$(flatpak run --command=sh com.k8s_gui.app -c 'command -v xdg-open')
+          if [ "$opener" != /usr/bin/xdg-open ]; then
+            echo "::error::xdg-open resolves to '$opener', not the runtime's portal forwarder"
+            exit 1
+          fi
+          echo "links open through $opener"
 
       # ldd reads one ELF's NEEDED list and says nothing about the WebKit
       # helper, the dlopen'd GTK modules, or the dropped environment — each of
