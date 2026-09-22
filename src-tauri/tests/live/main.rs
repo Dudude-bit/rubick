@@ -1,15 +1,7 @@
-//! Harnesses that need a real cluster, every one `#[ignore]`d. One test
-//! binary rather than one per file: each was its own crate, and every
-//! `cargo test` linked all eighteen — about 50 MB apiece — to run none.
-//!
-//! ```text
-//! cargo test --test live live_drain:: -- --ignored --nocapture
-//! ```
-//!
-//! The filter picks a harness; each file's header says what it needs. Running
-//! more than one at once puts them on parallel threads of one process, and
-//! some change the cluster (`live_drain` cordons a node), so add
-//! `--test-threads=1` then.
+//! The `#[ignore]`d harnesses that need a cluster, in one binary: as separate
+//! crates every `cargo test` linked eighteen of them to run none. Pick one
+//! with a filter (`live_drain::`); running several at once, add
+//! `--test-threads=1`, since some change the cluster.
 
 mod cross_cluster_search;
 mod live_checks;

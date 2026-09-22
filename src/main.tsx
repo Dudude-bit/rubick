@@ -24,8 +24,7 @@ import { commands } from "@/lib/commands";
 import { setHostOs } from "@/lib/platform";
 import { markStartup } from "@/lib/startup";
 
-// Imports run first, so this is the moment every eagerly loaded module has
-// been fetched and evaluated.
+// After every eagerly imported module has loaded.
 markStartup("main");
 
 const formatKey = (key: unknown) => {
