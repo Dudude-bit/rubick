@@ -33,10 +33,13 @@ alive=yes
 kill -0 "$app" 2>/dev/null || alive=no
 
 DISPLAY="$display" import -window root "$name.png" 2>/dev/null
-# The fraction of near-white pixels on a 1600x1000 screen. The window is
-# 1400x900 on a black root, so a blank one is ~0.79 and the app's own canvas,
-# light theme or dark, is far below it.
-white=$(convert "$name.png" -colorspace Gray -threshold 94% -format '%[fx:mean]' info: 2>/dev/null || echo 1)
+# How many distinct colours are on the screen. A window the web process
+# never painted is one flat colour on the black root — 2 in total — and a
+# window that never mapped is 1. The app, in either theme, is well over a
+# thousand: text, icons and their antialiasing. Measured on both before the
+# threshold was set, so neither "not white" (which a black screen passes)
+# nor "not black" (which the white window passed) decides it.
+colours=$(convert "$name.png" -format '%k' info: 2>/dev/null || echo 0)
 
 kill "$app" 2>/dev/null
 wait "$app" 2>/dev/null
@@ -47,9 +50,9 @@ broken=$(grep -iE "EGL_BAD|Could not create default EGL display|Aborting|Unable 
 verdict=ok
 [ "$alive" = yes ] || verdict="did not stay up"
 [ -z "$broken" ] || verdict="said something broke"
-awk -v w="$white" 'BEGIN { exit !(w > 0.5) }' && verdict="blank window (white=$white)"
+[ "$colours" -ge 100 ] || verdict="nothing painted ($colours colours on screen)"
 
-echo "[$name] alive=$alive white=$white verdict=$verdict"
+echo "[$name] alive=$alive colours=$colours verdict=$verdict"
 [ -z "$broken" ] || printf '%s\n' "$broken" | sed "s/^/[$name]   /"
 
 [ "$verdict" = ok ]

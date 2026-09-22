@@ -1,4 +1,4 @@
-# A Flatpak built from the AppImage this release already produces.
+# A Flatpak built from the .deb this release already produces.
 #
 # Why this exists: on RHEL 8 and its rebuilds — AlmaLinux 8, Rocky 8 — none of
 # the other Linux artifacts can run, and not for a packaging reason.
@@ -10,16 +10,21 @@
 #     RHEL 8 has 2.28. An AppImage does not carry a libc.
 #
 # The GNOME runtime carries both: a glibc new enough, and WebKitGTK 4.1 built
-# against the runtime's own GTK, glib and Mesa. Only the binary comes from the
-# AppImage.
+# against the runtime's own GTK, glib, wayland and Mesa. Only the binary comes
+# from the release — the .deb's, as Tauri's own Flatpak guide takes it, since
+# the AppImage's copy has RUNPATH $ORIGIN/../lib pointing back into a library
+# directory this bundle no longer fills. 50 because 47–49 are end-of-life on
+# Flathub and 50 is what the Tauri apps there run on.
 #
 # Not the AppImage's libraries. Up to 4.19.0 this bundle ran on the bare
 # freedesktop runtime and copied the AppImage's whole usr/lib into /app/lib —
-# Ubuntu 22.04's WebKit, GTK, glib, cairo, epoxy, gstreamer, ssl and ~90
-# more, each shadowing the runtime's own copy. WebKit's web process then met
-# the runtime's Mesa through Ubuntu's libraries and aborted on "Could not
-# create default EGL display: EGL_BAD_PARAMETER", and every launch was a white
-# window. No environment variable changed that; CI tried five.
+# Ubuntu 24.04's WebKit, GTK, glib, epoxy, gstreamer, ssl, wayland and ~90
+# more, each first on the path ahead of the runtime's own. The runtime's Mesa
+# EGL driver then loaded Ubuntu's older libwayland-client, which lacks a
+# symbol that driver binds at load, so EGL had no driver at all and WebKit's
+# web process aborted on "Could not create default EGL display:
+# EGL_BAD_PARAMETER" — a white window on every launch. No environment
+# variable changed that; CI tried five.
 #
 # This is a **bundle**, published as a release asset, not a Flathub
 # submission. Flathub forbids prebuilt binaries and builds offline, which is
@@ -58,53 +63,35 @@ modules:
   - name: rubick
     buildsystem: simple
     build-commands:
-      - install -Dm755 squashfs-root/usr/bin/Rubick /app/bin/Rubick
-      # What the runtime does not have, and nothing else — asked of the
-      # linker rather than listed by hand, so a dependency the next Tauri
-      # adds is found the same way. A library the runtime *does* have is
-      # never copied: a second, older copy first on the path is exactly how
-      # the white window happened.
+      - ar x rubick.deb && tar -xf data.tar.*
+      - install -Dm755 usr/bin/Rubick /app/bin/Rubick
+      # Everything the binary links has to come from the runtime — asked of
+      # the linker rather than listed by hand, so a dependency the next Tauri
+      # adds fails the build here instead of a launch on somebody's desktop.
       - |
-        mkdir -p /app/lib
-        for pass in 1 2 3 4 5 6; do
-          missing=$(LD_LIBRARY_PATH=/app/lib ldd /app/bin/Rubick /app/lib/*.so* 2>/dev/null \
-            | awk '/=> not found/ { print $1 }' | sort -u)
-          [ -z "$missing" ] && break
-          for lib in $missing; do
-            src=$(find squashfs-root/usr/lib -name "$lib" | head -n 1)
-            if [ -z "$src" ]; then
-              echo "neither the runtime nor the AppImage has $lib" >&2
-              exit 1
-            fi
-            echo "taking $lib from the AppImage"
-            cp -L "$src" /app/lib/
-          done
+        missing=$(ldd /app/bin/Rubick | awk '/=> not found/ { print $1 }' | sort -u)
+        for lib in $missing; do
+          # The .deb carries no libraries, so a gap here is a gap in the
+          # runtime — said out loud rather than filled from somewhere else.
+          echo "the runtime does not provide $lib" >&2
+          exit 1
         done
-        if LD_LIBRARY_PATH=/app/lib ldd /app/bin/Rubick | grep -q "not found"; then
-          echo "still unresolved after the AppImage's libraries" >&2
+        # And nothing in /app/lib at all: a library of ours first on the path
+        # is the whole of the bug this manifest was rewritten for.
+        if [ -n "$(ls -A /app/lib 2>/dev/null)" ]; then
+          echo "the bundle carries libraries; it must carry none" >&2
+          ls -la /app/lib >&2
           exit 1
         fi
-        # The stack that has to be the runtime's own. Taking any of it from
-        # the AppImage — because a runtime version lacks WebKit 4.1, say —
-        # rebuilds the white window in miniature, so it stops the build.
-        for f in /app/lib/*; do
-          case "$(basename "$f")" in
-            libwebkit2gtk*|libjavascriptcoregtk*|libgtk-3*|libgdk-3*|libglib-2*|libgio-2*|libgobject-2*|libsoup-3*|libepoxy*|libEGL*|libGL*|libgbm*|libdrm*|libwayland-*|libcairo*|libpango*)
-              echo "the runtime lacks $(basename "$f"); refusing the AppImage's copy" >&2
-              exit 1 ;;
-          esac
-        done
-        ls -la /app/lib
-      - install -Dm644 squashfs-root/usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
+      - install -Dm644 usr/share/applications/Rubick.desktop /app/share/applications/com.k8s_gui.app.desktop
       - desktop-file-edit --set-key=Icon --set-value=com.k8s_gui.app /app/share/applications/com.k8s_gui.app.desktop
       # Exec decides what the exported launcher runs: flatpak turns its first
       # word into `--command=`. `%u` is how a `rubick://` link is handed over;
       # the desktop file declares the scheme and passed nothing.
       - desktop-file-edit --set-key=Exec --set-value='Rubick %u' /app/share/applications/com.k8s_gui.app.desktop
-      # The three sizes the AppImage carries, named as hicolor names them.
+      # The three sizes the .deb carries, named as hicolor names them.
       # No `if -f`: an icon that stopped shipping must break the build.
-      - for d in 32x32 128x128 256x256@2; do install -Dm644 "squashfs-root/usr/share/icons/hicolor/$d/apps/Rubick.png" "/app/share/icons/hicolor/$d/apps/com.k8s_gui.app.png"; done
+      - for d in 32x32 128x128 256x256@2; do install -Dm644 "usr/share/icons/hicolor/$d/apps/Rubick.png" "/app/share/icons/hicolor/$d/apps/com.k8s_gui.app.png"; done
     sources:
-      - type: dir
-        path: squashfs-root
-        dest: squashfs-root
+      - type: file
+        path: rubick.deb

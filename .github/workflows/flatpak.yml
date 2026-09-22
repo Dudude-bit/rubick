@@ -1,4 +1,4 @@
-# The Flatpak, built from the AppImage a release already published.
+# The Flatpak, built from the .deb a release already published.
 #
 # Its own workflow rather than a job in `release.yml` for one reason: it has
 # to be runnable against a release that already exists. RHEL 8 users are
@@ -36,7 +36,7 @@ concurrency:
 jobs:
   bundle:
     name: flatpak ${{ matrix.gnome }}
-    # A failed Release has no AppImage; a *dispatched* one has no tag either,
+    # A failed Release has no .deb; a *dispatched* one has no tag either,
     # since workflow_run carries the upstream ref and not its inputs. Skip
     # that rather than go red — this workflow's own dispatch takes the tag.
     if: >-
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gnome: ${{ fromJSON(github.event.inputs.diagnose == 'true' && '["47","48","49","50"]' || '["manifest"]') }}
+        gnome: ${{ fromJSON(github.event.inputs.diagnose == 'true' && '["50","51"]' || '["manifest"]') }}
     env:
       TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
     steps:
@@ -64,7 +64,7 @@ jobs:
       # The branch this workflow is running from, NOT the released tag: the
       # packaging recipe is not versioned with the app, and a tag cut before
       # it existed has no `packaging/` at all — which is exactly how the
-      # first run of this failed. The AppImage comes from the tag below.
+      # first run of this failed. The .deb comes from the tag below.
       - name: Checkout the packaging recipe
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
 
@@ -90,17 +90,15 @@ jobs:
           flatpak install -y --user --noninteractive flathub \
             "org.gnome.Platform//$GNOME" "org.gnome.Sdk//$GNOME"
 
-      - name: Take the AppImage from that release
+      - name: Take the .deb from that release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # `gh release download` reaches a draft; the public URL would not.
-          # Extracted beside the manifest: a `dir` source is resolved
-          # relative to the manifest's own directory, not the working one.
+          # Beside the manifest: a `file` source is resolved relative to the
+          # manifest's own directory, not the working one.
           cd packaging/flatpak
-          gh release download "$TAG" --pattern '*_amd64.AppImage' --output rubick.AppImage
-          chmod +x rubick.AppImage
-          ./rubick.AppImage --appimage-extract > /dev/null
+          gh release download "$TAG" --pattern '*_amd64.deb' --output rubick.deb
 
       - name: Build the bundle
         run: |
@@ -205,13 +203,81 @@ jobs:
             *.log
           if-no-files-found: ignore
 
-      # Only a release's own run, or one dispatched from main, may replace the
-      # asset people download: a diagnostic dispatch from a branch builds
-      # the same file name and would silently clobber the published one.
+      - name: Keep the bundle for the next jobs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: flatpak-bundle-${{ matrix.gnome }}
+          path: Rubick-*.flatpak
+          if-no-files-found: error
+
+  # The platform this bundle exists for, with the flatpak that platform ships
+  # — 1.12 on AlmaLinux 8, not the runner's. Installed the way a reader
+  # would: no Flathub remote, the runtime fetched through the bundle's own
+  # --runtime-repo. Nothing here was ever run before 4.20; a runtime the old
+  # flatpak cannot handle would otherwise be found by the next person on RHEL 8.
+  el8:
+    name: almalinux 8 ${{ matrix.gnome }}
+    needs: bundle
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        gnome: ${{ fromJSON(github.event.inputs.diagnose == 'true' && '["50","51"]' || '["manifest"]') }}
+    steps:
+      - name: Checkout the smoke check
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+
+      - name: Take the bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          name: flatpak-bundle-${{ matrix.gnome }}
+
+      - name: Install and launch it on AlmaLinux 8
+        timeout-minutes: 30
+        run: |
+          # --privileged: flatpak runs the app in bubblewrap, which needs the
+          # namespaces a default container withholds.
+          docker run --rm --privileged -v "$PWD:/w" -w /w almalinux:8 bash -c '
+            set -e
+            dnf -y -q install epel-release >/dev/null
+            dnf -y -q install flatpak xorg-x11-server-Xvfb ImageMagick dbus-daemon procps-ng >/dev/null
+            echo "flatpak on this host: $(flatpak --version)"
+            if [ -n "$(flatpak --user remotes)" ]; then
+              echo "::error::the check location is not pristine"; exit 1
+            fi
+            flatpak install -y --user --noninteractive ./Rubick-*.flatpak
+            dbus-run-session -- bash packaging/flatpak/smoke.sh almalinux8
+          '
+
+      - name: Keep what the screen showed
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: flatpak-screens-el8-${{ matrix.gnome }}
+          path: |
+            *.png
+            *.log
+          if-no-files-found: ignore
+
+  # Only after both launches passed, and only a release's own run or one
+  # dispatched from main: a diagnostic dispatch from a branch builds the
+  # same file name and would silently clobber the published asset.
+  attach:
+    name: attach to the release
+    needs: [bundle, el8]
+    if: >-
+      github.event.inputs.diagnose != 'true' &&
+      (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Take the bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          name: flatpak-bundle-manifest
+
       - name: Attach it to the release
-        if: >-
-          github.event.inputs.diagnose != 'true' &&
-          (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG" "Rubick-${TAG#v}.flatpak" --clobber
+        run: gh release upload "$TAG" "Rubick-${TAG#v}.flatpak" --clobber --repo "$GITHUB_REPOSITORY"
