@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   bundle:
-    name: flatpak
+    name: flatpak ${{ matrix.gnome }}
     # A failed Release has no AppImage; a *dispatched* one has no tag either,
     # since workflow_run carries the upstream ref and not its inputs. Skip
     # that rather than go red — this workflow's own dispatch takes the tag.
@@ -44,6 +44,13 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    # One entry for a release: the runtime the manifest names. A diagnosis
+    # builds against several GNOME runtimes side by side, so which one works
+    # is read off screenshots rather than guessed from changelogs.
+    strategy:
+      fail-fast: false
+      matrix:
+        gnome: ${{ fromJSON(github.event.inputs.diagnose == 'true' && '["47","48","49","50"]' || '["manifest"]') }}
     env:
       TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
     steps:
@@ -66,12 +73,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils xvfb imagemagick
 
+      - name: Pick the runtime
+        run: |
+          manifest=packaging/flatpak/com.k8s_gui.app.yml
+          if [ "${{ matrix.gnome }}" != manifest ]; then
+            sed -i "s/^runtime-version: .*/runtime-version: '${{ matrix.gnome }}'/" "$manifest"
+          fi
+          version=$(sed -n "s/^runtime-version: '\(.*\)'/\1/p" "$manifest")
+          echo "GNOME=$version" >> "$GITHUB_ENV"
+          echo "building against org.gnome.Platform//$version"
+
       - name: Add Flathub and install the runtime
         run: |
           flatpak remote-add --if-not-exists --user flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install -y --user --noninteractive flathub \
-            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+            "org.gnome.Platform//$GNOME" "org.gnome.Sdk//$GNOME"
 
       - name: Take the AppImage from that release
         env:
@@ -124,7 +141,7 @@ jobs:
         run: |
           exported="$FLATPAK_USER_DIR/exports/share/applications/com.k8s_gui.app.desktop"
           cat "$exported"
-          if ! grep -qE '^Exec=.*--command=rubick( |$)' "$exported"; then
+          if ! grep -qE '^Exec=.*--command=Rubick( |$)' "$exported"; then
             echo "::error::the exported desktop entry does not run the launcher"
             exit 1
           fi
@@ -167,33 +184,22 @@ jobs:
       # it does on this runner, not by what a forum says it did elsewhere.
       - name: Diagnose the launch
         if: ${{ github.event.inputs.diagnose == 'true' }}
-        timeout-minutes: 20
+        timeout-minutes: 10
         env:
           FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
         run: |
           set +e
-          echo "---- libraries in /app/lib that the runtime also has ----"
-          flatpak run --command=sh com.k8s_gui.app -c '
-            for f in /app/lib/*.so* /app/lib/x86_64-linux-gnu/*.so*; do
-              [ -e "$f" ] || continue
-              b=$(basename "$f")
-              [ -e "/usr/lib/x86_64-linux-gnu/$b" ] && echo "shadows $b"
-            done' | sort | uniq
-          echo "---- GL extension ----"
-          flatpak --user list --runtime | grep -i gl || echo "no GL extension installed"
-          bash packaging/flatpak/smoke.sh baseline
-          bash packaging/flatpak/smoke.sh no-dmabuf --env=WEBKIT_DISABLE_DMABUF_RENDERER=1
-          bash packaging/flatpak/smoke.sh no-compositing --env=WEBKIT_DISABLE_COMPOSITING_MODE=1
-          bash packaging/flatpak/smoke.sh both-off --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 --env=WEBKIT_DISABLE_COMPOSITING_MODE=1
-          bash packaging/flatpak/smoke.sh software-gl --env=LIBGL_ALWAYS_SOFTWARE=1
-          for f in *.log; do echo "==== $f ===="; cat "$f"; done
+          echo "---- what the bundle carries beside the binary ----"
+          flatpak run --command=sh com.k8s_gui.app -c 'ls -la /app/lib'
+          bash packaging/flatpak/smoke.sh "gnome-$GNOME"
+          cat "gnome-$GNOME.log"
           exit 0
 
       - name: Keep what the screen showed
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: flatpak-screens-${{ env.TAG }}
+          name: flatpak-screens-${{ env.TAG }}-${{ matrix.gnome }}
           path: |
             *.png
             *.log
