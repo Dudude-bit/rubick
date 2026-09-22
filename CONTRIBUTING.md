@@ -71,8 +71,8 @@ written above — and the backlog it once had is at zero, so anything it reports
 is yours. The crate turns on `clippy::pedantic` in `src-tauri/src/lib.rs`.
 
 There is no pre-push hook, so run the tests yourself before pushing. Prettier
-runs in the pre-commit hook and in no CI job at all: bypass the hook and
-unformatted code lands on a green main.
+and rustfmt run in the pre-commit hook and again in CI, so a commit that
+bypasses the hook fails there instead.
 
 ## Tests
 

@@ -67,7 +67,7 @@ EVERY_PLATFORM = [
 # until main. Matched in the whole of a changed file, not the diff alone: an
 # edit inside a `#[cfg(target_os = "macos")]` body has the attribute only as
 # context, and a removed attribute is only in the old file.
-PLATFORM_CFG = re.compile(r"target_os|target_family|cfg\((not\()?(windows|unix)\b")
+PLATFORM_CFG = re.compile(r"\btarget_(os|family|arch|env|vendor|abi|pointer_width|endian|feature|has_atomic)\b|cfg!?\([^\n]*\b(windows|unix)\b")
 
 
 def git(*args):

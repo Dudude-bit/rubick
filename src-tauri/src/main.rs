@@ -50,8 +50,9 @@ fn main() {
         "rubick: asking the login shell for its environment (up to {}s)",
         shell::SHELL_ENV_TIMEOUT.as_secs()
     );
+    let shell_started = std::time::Instant::now();
     let shell_env = shell::import_login_shell_env();
-    let shell_env_ms = started.elapsed().as_millis();
+    let shell_env_ms = shell_started.elapsed().as_millis();
 
     // Initialize tracing. The file is what a reader can hand over: a
     // packaged Windows build is a GUI-subsystem binary with no console, so
