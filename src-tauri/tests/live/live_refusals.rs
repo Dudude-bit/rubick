@@ -16,7 +16,7 @@
 //!   --role=pods-only --serviceaccount=k8s-gui-test:narrow
 //! # then a kubeconfig context whose user carries
 //! #   as: system:serviceaccount:k8s-gui-test:narrow
-//! K8S_GUI_REFUSED_CONTEXT=narrow cargo test --test live_refusals -- --ignored --nocapture
+//! K8S_GUI_REFUSED_CONTEXT=narrow cargo test --test live live_refusals:: -- --ignored --nocapture
 //! ```
 
 use k8s_gui_lib::commands::helpers::ResourceContext;

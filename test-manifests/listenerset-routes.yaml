@@ -11,7 +11,7 @@
 #   kubectl apply -f test-manifests/listenerset-routes.yaml    # twice: the ns comes first
 #   ./test-manifests/listenerset-routes-play-controller.sh
 #   K8S_GUI_SHAPE_CONTEXT=kind-rubick-ls \
-#     cargo test --test live_route_status dump_listenerset -- --ignored --nocapture
+#     cargo test --test live live_route_status::dump_listenerset -- --ignored --nocapture
 #
 apiVersion: v1
 kind: Namespace

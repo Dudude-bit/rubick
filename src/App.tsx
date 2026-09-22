@@ -21,6 +21,7 @@ import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
 import { stallWatch } from "@/lib/stall-watch";
 import { logInfo, flushLogs } from "@/lib/logger";
+import { markStartup, reportStartup } from "@/lib/startup";
 import { useT } from "@/i18n/useT";
 
 // Lazy load all pages for code splitting
@@ -206,6 +207,13 @@ export default function App() {
   // the app polls against these three facts, and a second set of listeners
   // would double-count the reader's clicks.
   useEffect(() => startWindowActivity(), []);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      markStartup("painted");
+      reportStartup();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   useEffect(() => stallWatch.start(), []);
 
   useEffect(() => {

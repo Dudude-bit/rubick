@@ -9,7 +9,7 @@
 #   kubectl apply -f test-manifests/no-route-status.yaml
 #   ./test-manifests/no-route-status-play-controller.sh
 #   K8S_GUI_SHAPE_CONTEXT=kind-rubick-gw \
-#     cargo test --test live_route_status -- --ignored --nocapture
+#     cargo test --test live live_route_status:: -- --ignored --nocapture
 #
 # TCPRoute lives in the experimental channel, not standard-install.
 #

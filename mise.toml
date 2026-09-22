@@ -1,9 +1,9 @@
 [tools]
 node = "24"
 bun = "1.3"
-# nightly is only for `cargo expand`, which the binding generator shells out
-# to — the crate itself builds on stable.
-rust = ["stable", "nightly"]
+# The version is rust-toolchain.toml's, the one CI builds with. nightly is
+# only for `cargo expand`, which the binding generator shells out to.
+rust = ["1.98.1", "nightly"]
 "cargo:tauri-ts-generator" = "2.1.0"
 # Without cargo-expand the generator cannot see macro-generated commands and
 # silently drops all 15 `subscribe_*_watch` bindings while still exiting 0.

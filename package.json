@@ -8,11 +8,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prepare": "lefthook install"
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.3",

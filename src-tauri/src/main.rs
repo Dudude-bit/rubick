@@ -27,6 +27,8 @@ fn registers_its_own_scheme(flatpak_id: Option<&std::ffi::OsStr>) -> bool {
 }
 
 fn main() {
+    let started = std::time::Instant::now();
+
     // Install rustls crypto provider before any TLS operations
     rustls::crypto::ring::default_provider()
         .install_default()
@@ -48,7 +50,9 @@ fn main() {
         "rubick: asking the login shell for its environment (up to {}s)",
         shell::SHELL_ENV_TIMEOUT.as_secs()
     );
+    let shell_started = std::time::Instant::now();
     let shell_env = shell::import_login_shell_env();
+    let shell_env_ms = shell_started.elapsed().as_millis();
 
     // Initialize tracing. The file is what a reader can hand over: a
     // packaged Windows build is a GUI-subsystem binary with no console, so
@@ -61,7 +65,7 @@ fn main() {
         Some(file) => tracing::info!(path = %file.display(), "writing this run's log"),
         None => tracing::warn!("no log file this run; this run leaves nothing to send"),
     }
-    tracing::info!(?shell_env, "login shell environment");
+    tracing::info!(?shell_env, shell_env_ms, "login shell environment");
 
     tauri::Builder::default()
         // Registered first: a second launch (a `rubick://` link opened while
@@ -79,7 +83,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .setup(move |app| {
             // A packaged build registers `rubick://` through its installer
             // (Info.plist, the Windows registry, the .desktop file); a dev
             // build has no installer, so it registers itself on the platforms
@@ -164,7 +168,10 @@ fn main() {
 
             app.manage(state);
 
-            tracing::info!("Application state initialized");
+            tracing::info!(
+                since_start_ms = started.elapsed().as_millis(),
+                "Application state initialized"
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

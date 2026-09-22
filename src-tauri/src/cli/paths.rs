@@ -10,7 +10,7 @@ impl PathResolver {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```text
     /// use k8s_gui_lib::cli::paths::PathResolver;
     ///
     /// #[cfg(windows)]
@@ -62,7 +62,7 @@ impl PathResolver {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```text
     /// use k8s_gui_lib::cli::paths::PathResolver;
     ///
     /// let paths = PathResolver::search_paths("kubectl");
@@ -140,7 +140,7 @@ impl PathResolver {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```text
     /// use k8s_gui_lib::cli::paths::PathResolver;
     /// use std::path::PathBuf;
     ///

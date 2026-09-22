@@ -9,7 +9,7 @@
 //! # then play the controller: patch the statuses (see the PR that added
 //! # this file), and:
 //! K8S_GUI_INIT_CONTEXT=kwok-rubick-gw K8S_GUI_INIT_NAMESPACE=gwtest \
-//!   cargo test --test live_gateway -- --ignored --nocapture
+//!   cargo test --test live live_gateway:: -- --ignored --nocapture
 //! ```
 
 use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;

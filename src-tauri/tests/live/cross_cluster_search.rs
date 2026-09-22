@@ -6,7 +6,7 @@
 //! ```text
 //! K8S_GUI_SEARCH_CONTEXTS=ctx-a,ctx-b \
 //! K8S_GUI_SEARCH_QUERY=api \
-//!   cargo test --test cross_cluster_search -- --ignored --nocapture
+//!   cargo test --test live cross_cluster_search:: -- --ignored --nocapture
 //! ```
 //!
 //! It drives the same entry point the Tauri command does, so what it

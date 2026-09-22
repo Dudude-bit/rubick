@@ -4,7 +4,7 @@
 //!
 //!     K8S_GUI_INIT_CONTEXT=killercoda \
 //!     K8S_GUI_PROMETHEUS_URL=https://<proxy>/api/v1/namespaces/monitoring/services/prometheus:9090/proxy \
-//!       cargo test --test live_prometheus_operator -- --ignored --nocapture
+//!       cargo test --test live live_prometheus_operator:: -- --ignored --nocapture
 
 use k8s_gui_lib::config::PrometheusEntry;
 use k8s_gui_lib::integrations::prometheus::parse_targets;

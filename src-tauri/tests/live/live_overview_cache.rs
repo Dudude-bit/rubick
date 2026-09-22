@@ -3,7 +3,7 @@
 //! stores, and says so, with the same pod count the API gives.
 //!
 //!     K8S_GUI_INIT_CONTEXT=kind-rubick-check K8S_GUI_INIT_NAMESPACE=default \
-//!       cargo test --test live_overview_cache -- --ignored --nocapture
+//!       cargo test --test live live_overview_cache:: -- --ignored --nocapture
 
 use k8s_gui_lib::commands::overview::{cluster_overview, OverviewSource};
 use k8s_gui_lib::AppState;

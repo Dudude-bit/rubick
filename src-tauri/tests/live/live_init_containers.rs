@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! K8S_GUI_INIT_CONTEXT=k3d-k8s-gui-dev K8S_GUI_INIT_NAMESPACE=k8s-gui-test \
-//!   cargo test --test live_init_containers -- --ignored --nocapture
+//!   cargo test --test live live_init_containers:: -- --ignored --nocapture
 //! ```
 //!
 //! Specimens (`test-manifests/k8s-gui-all.yaml`):

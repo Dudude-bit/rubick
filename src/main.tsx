@@ -22,6 +22,10 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { isWorthRetrying } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { setHostOs } from "@/lib/platform";
+import { markStartup } from "@/lib/startup";
+
+// After every eagerly imported module has loaded.
+markStartup("main");
 
 const formatKey = (key: unknown) => {
   try {
@@ -119,6 +123,7 @@ async function resolveHostOs(): Promise<void> {
 }
 
 void resolveHostOs().then(() => {
+  markStartup("root");
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
