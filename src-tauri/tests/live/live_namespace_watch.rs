@@ -4,7 +4,7 @@
 //! ```text
 //! kind create cluster --name rubick-check
 //! K8S_GUI_WATCH_CONTEXT=kind-rubick-check \
-//!   cargo test --test live_namespace_watch -- --ignored --nocapture
+//!   cargo test --test live live_namespace_watch:: -- --ignored --nocapture
 //! ```
 //!
 //! Why this one and not the other eleven watches: `subscribe_namespace_watch`

@@ -30,7 +30,8 @@ before pushing something you want to land green.
 
 ## Code style
 
-- **Rust:** `cargo fmt` must pass; `cargo clippy` is advisory.
+- **Rust:** `cargo fmt` must pass, and so must `cargo clippy` — CI runs it
+  with `-D warnings`.
 - **TypeScript:** ESLint + Prettier (configs are in the repo).
 
 A block of lint rules exists to stop the codebase drifting back to habits it
@@ -81,13 +82,13 @@ bun run test                                          # frontend
 cargo test --workspace                                # Rust — not --lib
 ```
 
-`--workspace`, never `--lib`: the latter does not build the binary, which is
+`--workspace`, never `--lib` on its own: it does not build the binary, which is
 how v2.1.0 shipped with ninety `__cmd__X not found` errors after a green run.
 
 Tests here assert _behaviour_, not markup, and the house style is a doc comment
 saying what would break followed by the assertion — so a failing test explains
 itself. There are also `#[ignore]`d integration tests that run against a live
-cluster (`src-tauri/tests/live_*.rs`); `test-manifests/k8s-gui-all.yaml` creates
+cluster (`src-tauri/tests/live/`); `test-manifests/k8s-gui-all.yaml` creates
 every fixture they need, each block carrying its own cleanup command.
 
 ## Adding an integration

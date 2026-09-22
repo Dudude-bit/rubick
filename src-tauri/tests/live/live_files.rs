@@ -2,7 +2,7 @@
 //!
 //! Needs a reachable current context with the usual k3s system pods:
 //! traefik (busybox, so the `sh` + `stat` rung) and coredns (distroless,
-//! so no rung at all). Run with `cargo test --test live_files -- --ignored`.
+//! so no rung at all). Run with `cargo test --test live live_files:: -- --ignored`.
 
 use k8s_gui_lib::files::{list_dir, read_preview, Listing, Target};
 use kube::api::{Api, ListParams};

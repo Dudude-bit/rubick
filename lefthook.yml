@@ -23,15 +23,27 @@
 # finding out before the push rather than after, and that is now yours to do:
 # run `bun run test` before you push something you care about landing green.
 
+# The formatters fix rather than refuse, and stage what they fixed: a refusal
+# only sent you back to run the same formatter by hand, and formatting after
+# `git add` left the old bytes staged. In order, not in parallel, so eslint
+# never reads a file prettier is halfway through writing.
 pre-commit:
-  parallel: true
+  piped: true
   commands:
     rust-fmt:
+      priority: 1
       glob: "*.rs"
-      # --all, not just src-tauri: CI checks the whole workspace, so a
-      # narrower hook lets a commit pass here and fail there.
-      run: cargo fmt --all --check
+      # The staged files only — `cargo fmt` would rewrite the whole workspace.
+      # .rustfmt.toml supplies the edition.
+      run: rustfmt {staged_files}
+      stage_fixed: true
+    prettier:
+      priority: 2
+      glob: "*.{ts,tsx,css,json,md}"
+      run: bunx prettier --write {staged_files}
+      stage_fixed: true
     eslint:
+      priority: 3
       glob: "*.{ts,tsx}"
       # --max-warnings 0 matches `bun run lint`, which CI requires. The
       # react-hooks@7 backlog this used to be waived for is empty.
@@ -39,6 +51,3 @@ pre-commit:
       # config ignores — src/generated — and the "file ignored" warning
       # would fail the zero-warning gate that project-mode lint never sees.
       run: bunx eslint --max-warnings 0 --no-warn-ignored {staged_files}
-    prettier:
-      glob: "*.{ts,tsx,css,json,md}"
-      run: bunx prettier --check {staged_files}

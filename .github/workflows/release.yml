@@ -99,8 +99,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           is_linux: ${{ matrix.is_linux || false }}
-          # tauri-action bundles its own CLI, don't install again
-          install_tauri_cli: 'false'
 
       # notarytool wants the App Store Connect key as a *file*, so the
       # secret has to land on disk before the build. Runner temp is wiped

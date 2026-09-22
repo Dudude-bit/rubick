@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain K8S_GUI_DRAIN_NODE=rubick-drain-worker \
-//!   cargo test --test live_drain -- --ignored --nocapture
+//!   cargo test --test live live_drain:: -- --ignored --nocapture
 //! ```
 //!
 //! The specimens (`kind` cluster, two nodes, everything pinned to the worker):

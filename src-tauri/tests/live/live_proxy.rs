@@ -1,7 +1,7 @@
 //! `kubectl proxy` as the second way in, against a real cluster.
 //!
 //! Needs kubectl on PATH and a reachable current context (a `kind` or `k3d`
-//! cluster is enough). Run with `cargo test --test live_proxy -- --ignored`.
+//! cluster is enough). Run with `cargo test --test live live_proxy:: -- --ignored`.
 
 use k8s_gui_lib::client::{ConnectionPath, K8sClientManager, KubectlProxy};
 

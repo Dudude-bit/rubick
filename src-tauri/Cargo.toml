@@ -9,7 +9,11 @@ license = "GPL-3.0-or-later"
 
 [lib]
 name = "k8s_gui_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# rlib only: the binary and the tests are all that link it. Tauri's template
+# adds staticlib and cdylib for iOS and Android — bring them back with a
+# mobile target — and every build paid for them: a ~900 MB archive per debug
+# rebuild, and machine code for every dependency under release LTO.
+crate-type = ["rlib"]
 
 # The process name is what macOS prints in the dev app bar, where there is
 # no bundle to spell "Rubick" over it. The crate keeps its name; only the

@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! K8S_GUI_SHAPE_CONTEXT=k3d-k8s-gui-dev \
-//!   cargo test --test live_events -- --ignored --nocapture
+//!   cargo test --test live live_events:: -- --ignored --nocapture
 //! ```
 //!
 //! Feeds `src/lib/event-stories.test.ts`. Re-record rather than hand-edit.

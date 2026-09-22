@@ -3,7 +3,7 @@
 //! any cluster:
 //!
 //!     RUBICK_PERF_CONTEXT=k3d-rubick-perf \
-//!       cargo test --test live_pod_rows -- --ignored --nocapture
+//!       cargo test --test live live_pod_rows:: -- --ignored --nocapture
 
 use k8s_gui_lib::commands::pods::page_rows;
 use k8s_gui_lib::resources::PodRow;

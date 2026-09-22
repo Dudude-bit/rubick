@@ -1,0 +1,51 @@
+name: 'Set up the Rust toolchain'
+description: 'Installs Rust for one target, restores its cache, and the Linux system libraries Tauri links'
+
+inputs:
+  target:
+    description: 'Rust target triple (e.g. x86_64-unknown-linux-gnu)'
+    required: true
+  is_linux:
+    description: 'Set to "true" when the job builds on Linux'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # rust-toolchain.toml names the version; rustup, already on every
+    # runner, installs it and this job's target.
+    - name: Set up Rust toolchain
+      shell: bash
+      run: |
+        rustup toolchain install
+        rustup target add ${{ inputs.target }}
+        rustc --version
+
+    # Keyed by target: both macOS builds run on the same arm64 runner, so
+    # without it they shared one key, overwrote each other, and the x86_64
+    # one rebuilt every dependency on every run.
+    #
+    # Saved from main only. A tag or a PR can read main's cache but its own
+    # never gets read again — and the repository sits at GitHub's 10 GB
+    # limit, where every such save evicts one of main's.
+    - name: Rust cache
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
+      with:
+        key: ${{ inputs.target }}
+        cache-on-failure: true
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Install system dependencies (Linux)
+      if: inputs.is_linux == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        # librsvg2-dev and libgtk-3-bin are the AppImage's: linuxdeploy's gtk
+        # plugin reads librsvg-2.0.pc through pkg-config and exits 1 without
+        # it, and calls gtk-query-immodules-3.0 for the input modules.
+        sudo apt-get install -y \
+          build-essential curl git pkg-config \
+          libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+          libsoup-3.0-dev libssl-dev ca-certificates \
+          librsvg2-dev libgtk-3-bin

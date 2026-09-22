@@ -2,7 +2,7 @@
 //! frontend sees it. Run against the rig (`make perf-rig`):
 //!
 //!     RUBICK_PERF_CONTEXT=k3d-rubick-perf \
-//!       cargo test --test live_perf -- --ignored --nocapture
+//!       cargo test --test live live_perf:: -- --ignored --nocapture
 //!
 //! Prints the API round trip, the conversion to `PodInfo` and to `PodRow`,
 //! and the size of the JSON the IPC bridge would carry for each, per row and
