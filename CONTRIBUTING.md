@@ -16,13 +16,12 @@ Thanks for your interest in contributing.
 ```bash
 git clone https://github.com/Dudude-bit/rubick.git
 cd rubick
-bun install
-bunx lefthook install   # one-time: enables the pre-commit hooks
+bun install             # also enables the pre-commit hooks
 make dev
 ```
 
-The hooks (defined in `lefthook.yml`) run `cargo fmt --check`, `eslint`
-and `prettier --check` on staged files before each commit. Skip them for a
+The hooks (defined in `lefthook.yml`) format the staged files with rustfmt
+and prettier, stage the result, and run `eslint` on them before each commit. Skip them for a
 single commit with `LEFTHOOK=0 git commit ...`.
 
 Nothing runs on push — `lefthook.yml` says why. Run `bun run test` yourself
