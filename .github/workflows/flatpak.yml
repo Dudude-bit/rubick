@@ -15,6 +15,10 @@ on:
       tag:
         description: 'Released tag to build the Flatpak for (e.g. v4.17.0).'
         required: true
+      diagnose:
+        description: 'Launch under several environments, keep the screenshots, attach nothing.'
+        type: boolean
+        default: false
   # After a release, for the tag that release was for. A draft is fine: the
   # download below reaches drafts, so the bundle is on the release before
   # anybody publishes it.
@@ -60,7 +64,7 @@ jobs:
       - name: Install flatpak-builder
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils xvfb
+          sudo apt-get install -y -qq flatpak flatpak-builder desktop-file-utils xvfb imagemagick
 
       - name: Add Flathub and install the runtime
         run: |
@@ -143,32 +147,65 @@ jobs:
           echo "every library resolved"
 
       # ldd reads one ELF's NEEDED list and says nothing about the WebKit
-      # helper, the dlopen'd GTK modules, or the dropped environment — each
-      # of which fails as a blank window. Only the timeout killing a living
-      # process is a pass.
-      - name: Start it and require it to stay up
+      # helper, the dlopen'd GTK modules, or the dropped environment — each of
+      # which fails as a blank window. And "the process stayed up" is not a
+      # window either: the web process aborting on EGL left the main one
+      # alive behind a white window, and this step passed that on every
+      # release until 4.19.0. `smoke.sh` looks at the screen.
+      - name: Start it and require the app on screen
+        if: ${{ github.event.inputs.diagnose != 'true' }}
         timeout-minutes: 5
         env:
           FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
         run: |
-          set +e
-          xvfb-run -a --server-args='-screen 0 1280x900x24' \
-            timeout --signal=TERM 45 flatpak run com.k8s_gui.app > run.log 2>&1
-          status=$?
-          set -e
+          bash packaging/flatpak/smoke.sh launch
           echo "---- what it said ----"
-          cat run.log || true
-          if [ "$status" -ne 124 ]; then
-            echo "::error::the app did not stay up (exit $status)"
-            exit 1
-          fi
-          if grep -qiE "Unable to spawn|Failed to spawn|WebKitWebProcess|cannot open shared object|No such schema|Failed to execute child" run.log; then
-            echo "::error::it stayed up but could not bring up its web process"
-            exit 1
-          fi
-          echo "still running after 45s, with nothing broken in its output"
+          cat launch.log
 
+      # The same launch under the environments a white window is usually
+      # blamed on, each with its own screenshot — so a fix is chosen by what
+      # it does on this runner, not by what a forum says it did elsewhere.
+      - name: Diagnose the launch
+        if: ${{ github.event.inputs.diagnose == 'true' }}
+        timeout-minutes: 20
+        env:
+          FLATPAK_USER_DIR: ${{ runner.temp }}/pristine
+        run: |
+          set +e
+          echo "---- libraries in /app/lib that the runtime also has ----"
+          flatpak run --command=sh com.k8s_gui.app -c '
+            for f in /app/lib/*.so* /app/lib/x86_64-linux-gnu/*.so*; do
+              [ -e "$f" ] || continue
+              b=$(basename "$f")
+              [ -e "/usr/lib/x86_64-linux-gnu/$b" ] && echo "shadows $b"
+            done' | sort | uniq
+          echo "---- GL extension ----"
+          flatpak --user list --runtime | grep -i gl || echo "no GL extension installed"
+          bash packaging/flatpak/smoke.sh baseline
+          bash packaging/flatpak/smoke.sh no-dmabuf --env=WEBKIT_DISABLE_DMABUF_RENDERER=1
+          bash packaging/flatpak/smoke.sh no-compositing --env=WEBKIT_DISABLE_COMPOSITING_MODE=1
+          bash packaging/flatpak/smoke.sh both-off --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 --env=WEBKIT_DISABLE_COMPOSITING_MODE=1
+          bash packaging/flatpak/smoke.sh software-gl --env=LIBGL_ALWAYS_SOFTWARE=1
+          for f in *.log; do echo "==== $f ===="; cat "$f"; done
+          exit 0
+
+      - name: Keep what the screen showed
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: flatpak-screens-${{ env.TAG }}
+          path: |
+            *.png
+            *.log
+          if-no-files-found: ignore
+
+      # Only a release's own run, or one dispatched from main, may replace the
+      # asset people download: a diagnostic dispatch from a branch builds
+      # the same file name and would silently clobber the published one.
       - name: Attach it to the release
+        if: >-
+          github.event.inputs.diagnose != 'true' &&
+          (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$TAG" "Rubick-${TAG#v}.flatpak" --clobber
