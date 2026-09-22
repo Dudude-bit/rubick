@@ -29,7 +29,6 @@ pub async fn get_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<StatefulSetDetailInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<StatefulSet, StatefulSetDetailInfo>(name, namespace, state).await
 }
 
@@ -41,7 +40,6 @@ pub async fn scale_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::scale_resource::<StatefulSet>(name, replicas, namespace, state).await
 }
 
@@ -52,7 +50,6 @@ pub async fn restart_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::restart_resource::<StatefulSet>(name, namespace, state).await
 }
 
@@ -62,7 +59,6 @@ pub async fn delete_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<StatefulSet>(name, namespace, state, None).await
 }
 
@@ -82,7 +78,6 @@ pub async fn get_daemonset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DaemonSetDetailInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<DaemonSet, DaemonSetDetailInfo>(name, namespace, state).await
 }
 
@@ -93,7 +88,6 @@ pub async fn restart_daemonset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::restart_resource::<DaemonSet>(name, namespace, state).await
 }
 
@@ -103,7 +97,6 @@ pub async fn delete_daemonset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<DaemonSet>(name, namespace, state, None).await
 }
 
@@ -123,7 +116,6 @@ pub async fn get_job(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<JobDetailInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<Job, JobDetailInfo>(name, namespace, state).await
 }
 
@@ -133,7 +125,6 @@ pub async fn delete_job(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<Job>(name, namespace, state, None).await
 }
 
@@ -153,7 +144,6 @@ pub async fn get_cronjob(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<CronJobDetailInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<CronJob, CronJobDetailInfo>(name, namespace, state).await
 }
 
@@ -179,8 +169,8 @@ pub async fn trigger_cronjob(
     use kube::api::PostParams;
     use kube::ResourceExt;
 
-    crate::validation::validate_dns_label(&name)?;
-    crate::validation::validate_dns_label(&job_name)?;
+    crate::validation::validate_name::<CronJob>(&name)?;
+    crate::validation::validate_name::<Job>(&job_name)?;
 
     let ctx = crate::commands::helpers::ResourceContext::for_command(&state, namespace)?;
     let cronjobs: kube::Api<CronJob> = ctx.namespaced_api();
@@ -243,7 +233,6 @@ pub async fn delete_cronjob(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<CronJob>(name, namespace, state, None).await
 }
 

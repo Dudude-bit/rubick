@@ -258,14 +258,7 @@ fn validate(check: &Check) -> Result<()> {
 }
 
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
-    Ok((*client).clone())
+    Ok((*state.current_client()?).clone())
 }
 
 /// Walk the ladder in one container until a rung answers.
@@ -567,7 +560,7 @@ pub async fn check_pod(
     check: Check,
     copy: Option<CopyWith>,
 ) -> Result<CheckOutcome> {
-    crate::validation::validate_dns_label(pod)?;
+    crate::validation::validate_name::<Pod>(pod)?;
     crate::validation::validate_dns_label(container)?;
     validate(&check)?;
     let started = Instant::now();

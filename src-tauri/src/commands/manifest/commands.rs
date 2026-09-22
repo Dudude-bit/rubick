@@ -265,13 +265,7 @@ pub async fn dry_run_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DryRun> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
     // One client for the whole manifest, unlike `apply_manifest` which
     // re-reads it per document. The loop here is bounded by the documents
     // in one buffer and two requests each, and a token that expires inside

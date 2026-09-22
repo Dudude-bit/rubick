@@ -86,18 +86,41 @@ pub(super) fn generate_debugger_name() -> String {
     format!("debugger-{timestamp}")
 }
 
-/// Generate a unique debug pod name
+/// Generate a unique debug pod name, a DNS label whatever it is named after:
+/// a node's FQDN cut at 46 characters can end on a dot, and `….-debug-…` is
+/// no name at all.
 pub(super) fn generate_debug_pod_name(base_name: &str) -> String {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // Truncate base name if too long to fit within 63 char limit
     let max_base_len = 63 - 7 - 10; // -debug- (7) + timestamp (10)
-    let truncated = if base_name.len() > max_base_len {
-        &base_name[..max_base_len]
-    } else {
-        base_name
-    };
-    format!("{truncated}-debug-{timestamp}")
+    let base: String = base_name
+        .chars()
+        .map(|c| if c == '.' { '-' } else { c })
+        .take(max_base_len)
+        .collect();
+    format!("{}-debug-{timestamp}", base.trim_end_matches('-'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// "node-" plus an EKS node's FQDN reaches past the cut exactly where a
+    /// dot falls; the pod it names still has to be creatable.
+    #[test]
+    fn a_node_named_by_its_fqdn_gives_a_valid_debug_pod_name() {
+        for node in [
+            "ip-10-0-1-5.ec2.internal",
+            "ip-10-0-101-25.us-west-2.compute.internal",
+            "ip-10-0-101-253.us-west-2.compute.internal",
+        ] {
+            let name = generate_debug_pod_name(&format!("node-{node}"));
+            assert!(
+                crate::validation::validate_dns_label(&name).is_ok(),
+                "{name}"
+            );
+        }
+    }
 }

@@ -214,6 +214,10 @@ pub struct WarningGroup {
 pub struct NamespaceLoad {
     pub name: String,
     pub pod_count: usize,
+    /// Counted before the list is cut to `MAX_PROBLEMS`: on a cluster with
+    /// fifty critical problems elsewhere, a namespace with only warnings has
+    /// problems, not none.
+    pub problem_count: usize,
 }
 
 /// How many objects of each kind live in the requested scope.
@@ -917,19 +921,28 @@ where
     tally(&page.metadata, page.items.len())
 }
 
-fn namespace_loads<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> Vec<NamespaceLoad> {
-    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+fn namespace_loads<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+) -> Vec<NamespaceLoad> {
+    let mut counts: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
     for namespace in pods
         .into_iter()
         .filter_map(|p| p.metadata.namespace.as_deref())
     {
-        *counts.entry(namespace).or_insert(0) += 1;
+        counts.entry(namespace).or_default().0 += 1;
+    }
+    // A namespace can have a problem and no pod: a Deployment whose pods
+    // were never created.
+    for namespace in problems.iter().filter_map(|p| p.namespace.as_deref()) {
+        counts.entry(namespace).or_default().1 += 1;
     }
     let mut loads: Vec<_> = counts
         .into_iter()
-        .map(|(name, pod_count)| NamespaceLoad {
+        .map(|(name, (pod_count, problem_count))| NamespaceLoad {
             name: name.to_string(),
             pod_count,
+            problem_count,
         })
         .collect();
     loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
@@ -1028,6 +1041,12 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         input.deployments.unwrap_or_default(),
     )));
     problems.extend(node_problems(refs(nodes)));
+    // Scoped, the breakdown is one row restating the selection, under a
+    // heading that counts namespaces in the cluster. Drop it instead.
+    let namespaces = match input.namespace {
+        Some(_) => Vec::new(),
+        None => namespace_loads(refs(input.scoped_pods), &problems),
+    };
     let (problems, problems_truncated) = rank_and_cap(problems);
 
     // The lists this query already had to read answer their own counts, so
@@ -1051,12 +1070,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         counts,
         pods: pod_composition(refs(input.scoped_pods)),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
-        // Scoped, the breakdown is one row restating the selection, under a
-        // heading that counts namespaces in the cluster. Drop it instead.
-        namespaces: match input.namespace {
-            Some(_) => Vec::new(),
-            None => namespace_loads(refs(input.scoped_pods)),
-        },
+        namespaces,
         metrics_available,
         served_from: input.served_from,
     }
@@ -1625,10 +1639,63 @@ mod tests {
             scheduled_pod("b", "busy", "n1", "100m", "64Mi"),
             scheduled_pod("c", "busy", "n2", "100m", "64Mi"),
         ];
-        let loads = namespace_loads(&pods);
+        let loads = namespace_loads(&pods, &[]);
         assert_eq!(loads[0].name, "busy");
         assert_eq!(loads[0].pod_count, 2);
         assert_eq!(loads[1].name, "quiet");
+    }
+
+    /// The namespace picker counted problems in the list after it was cut to
+    /// fifty, worst first: fifty-one failed pods in one namespace pushed every
+    /// other namespace's warnings off it, and those namespaces read "0".
+    #[test]
+    fn a_namespace_counts_its_problems_before_the_list_is_cut() {
+        let now = Utc::now();
+        let mut pods: Vec<Pod> = (0..=MAX_PROBLEMS)
+            .map(|i| {
+                let mut failed = pod(
+                    &format!("job-{i}"),
+                    PodStatus {
+                        phase: Some("Failed".to_string()),
+                        ..Default::default()
+                    },
+                );
+                failed.metadata.namespace = Some("prod".to_string());
+                failed
+            })
+            .collect();
+        let mut waiting = pending_pod("web", now, 3600);
+        waiting.metadata.namespace = Some("dev".to_string());
+        pods.push(waiting);
+
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.clone()),
+            accounting_pods: &arcs(pods),
+            nodes: &[],
+            nodes_known: true,
+            deployments: Some(&[]),
+            jobs: Some(&[]),
+            events: &[],
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            namespace: None,
+            served_from: OverviewSource::List,
+            now,
+        });
+
+        assert!(result
+            .problems
+            .iter()
+            .all(|p| p.namespace.as_deref() != Some("dev")));
+        let count = |ns: &str| {
+            result
+                .namespaces
+                .iter()
+                .find(|load| load.name == ns)
+                .map(|load| load.problem_count)
+        };
+        assert_eq!(count("dev"), Some(1));
+        assert_eq!(count("prod"), Some(MAX_PROBLEMS + 1));
     }
 
     /// Terminal pods hold no reservation; counting them would inflate both the

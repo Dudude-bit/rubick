@@ -50,7 +50,6 @@ pub async fn list_crds(grouped: Option<bool>, state: State<'_, AppState>) -> Res
 /// Get CRD details by name
 #[tauri::command]
 pub async fn get_crd(name: String, state: State<'_, AppState>) -> Result<CrdDetailInfo> {
-    crate::validation::validate_dns_subdomain(&name)?;
     let crd: CustomResourceDefinition =
         crate::commands::helpers::get_cluster_resource(name, state).await?;
     Ok(CrdDetailInfo::from(&crd))
@@ -71,7 +70,6 @@ pub async fn get_crd_yaml(name: String, state: State<'_, AppState>) -> Result<St
 /// Delete a CRD
 #[tauri::command]
 pub async fn delete_crd(name: String, state: State<'_, AppState>) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&name)?;
     crate::commands::helpers::delete_cluster_resource::<CustomResourceDefinition>(name, state, None)
         .await
 }

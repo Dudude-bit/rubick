@@ -36,7 +36,6 @@ pub async fn get_secret(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<SecretInfo> {
-    crate::validation::validate_dns_subdomain(&name)?;
     get_resource_info::<Secret, SecretInfo>(name, namespace, state).await
 }
 
@@ -52,7 +51,6 @@ pub async fn get_secret_data(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigData> {
-    crate::validation::validate_dns_subdomain(&name)?;
     let secret: Secret = crate::commands::helpers::get_resource(name, namespace, state).await?;
     let secret_type = secret.type_.clone().unwrap_or_default();
 
@@ -81,6 +79,5 @@ pub async fn delete_secret(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&name)?;
     crate::commands::helpers::delete_resource::<Secret>(name, namespace, state, None).await
 }

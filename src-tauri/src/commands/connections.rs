@@ -1770,7 +1770,7 @@ async fn workload_connections(
     )
     .await;
 
-    if kind == "Deployment" {
+    let revisions_unread = if kind == "Deployment" {
         revisions_of(
             ctx,
             ns,
@@ -1779,8 +1779,10 @@ async fn workload_connections(
             template.selector.as_ref(),
             out,
         )
-        .await?;
-    }
+        .await
+    } else {
+        None
+    };
 
     // The template's labels again, and for the same reason a Service is
     // tested against them: a budget protects the pods, and the workload is
@@ -1795,6 +1797,7 @@ async fn workload_connections(
     );
 
     out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(revisions_unread);
     Ok(())
 }
 
@@ -1803,6 +1806,9 @@ async fn workload_connections(
 /// Filtered by controller owner rather than by the selector alone: matching
 /// the selector is what makes a `ReplicaSet` adoptable, and the ownership is
 /// what says it was adopted.
+///
+/// A refused list comes back as the kind unread rather than as the error: the
+/// rest of the Deployment's neighbourhood was read and still answers.
 async fn revisions_of(
     ctx: &ResourceContext,
     ns: &str,
@@ -1810,16 +1816,16 @@ async fn revisions_of(
     uid: Option<&str>,
     selector: Option<&LabelSelector>,
     out: &mut Neighbourhood,
-) -> Result<()> {
-    let Some(uid) = uid else { return Ok(()) };
-    let Some(text) = Selector::Query(selector).query_text() else {
-        return Ok(());
-    };
+) -> Option<UnexploredKind> {
+    let uid = uid?;
+    let text = Selector::Query(selector).query_text()?;
     let params = ListParams::default().labels(&text);
-    let sets = ctx.namespaced_api::<ReplicaSet>().list(&params).await?;
+    let sets = match read(ctx.namespaced_api::<ReplicaSet>().list(&params).await) {
+        Ok(sets) => sets,
+        Err(why) => return Some(UnexploredKind::unanswered("ReplicaSet", "apps/v1", &why)),
+    };
 
     let owned: Vec<&ReplicaSet> = sets
-        .items
         .iter()
         .filter(|rs| {
             rs.owner_references()
@@ -1861,7 +1867,7 @@ async fn revisions_of(
             Relation::Owns { controller: true },
         );
     }
-    Ok(())
+    None
 }
 
 async fn service_connections(
@@ -2179,8 +2185,8 @@ async fn volume_connections(
 ///
 /// Deployments, `StatefulSets`, `DaemonSets`, Jobs and `CronJobs`, plus the pods
 /// themselves, and — for a Secret — the Ingresses that serve it as a
-/// certificate. Seven concurrent lists, one per kind, whatever the answer
-/// turns out to be.
+/// certificate. One list per kind, concurrently, whatever the answer turns out
+/// to be.
 async fn users_of(
     ctx: &ResourceContext,
     ns: &str,
@@ -2195,6 +2201,7 @@ async fn users_of(
     let jobs_api = ctx.namespaced_api::<Job>();
     let crons_api = ctx.namespaced_api::<CronJob>();
     let ingresses_api = ctx.namespaced_api::<Ingress>();
+    let serves_tls = target.kind == "Secret";
     let (pods, deploys, sets, daemons, jobs, crons, ingresses) = tokio::join!(
         pods_api.list(&params),
         deploys_api.list(&params),
@@ -2202,8 +2209,69 @@ async fn users_of(
         daemons_api.list(&params),
         jobs_api.list(&params),
         crons_api.list(&params),
-        ingresses_api.list(&params),
+        async {
+            if serves_tls {
+                Some(ingresses_api.list(&params).await)
+            } else {
+                None
+            }
+        },
     );
+    note_users(
+        ns,
+        target,
+        UserLists {
+            pods: read(pods),
+            deploys: read(deploys),
+            sets: read(sets),
+            daemons: read(daemons),
+            jobs: read(jobs),
+            crons: read(crons),
+            ingresses: ingresses.map(read),
+        },
+        out,
+    );
+    Ok(())
+}
+
+/// The lists [`users_of`] reads, each answered or refused on its own.
+struct UserLists {
+    pods: Read<Pod>,
+    deploys: Read<Deployment>,
+    sets: Read<StatefulSet>,
+    daemons: Read<DaemonSet>,
+    jobs: Read<Job>,
+    crons: Read<CronJob>,
+    /// Read only for a Secret, the one thing an Ingress can use.
+    ingresses: Option<Read<Ingress>>,
+}
+
+/// The items of a list that answered; a refusal is recorded as the kind unread.
+fn answered<K>(
+    list: Read<K>,
+    kind: &str,
+    version: &str,
+    unread: &mut Vec<UnexploredKind>,
+) -> Vec<K> {
+    list.unwrap_or_else(|why| {
+        unread.push(UnexploredKind::unanswered(kind, version, &why));
+        Vec::new()
+    })
+}
+
+/// A refused list is one kind unread, named in `not_looked_at`, and the other
+/// kinds still answer: a role without `list cronjobs` lost the whole panel.
+fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &mut Neighbourhood) {
+    let mut unread = Vec::new();
+    let pods = answered(lists.pods, "Pod", "v1", &mut unread);
+    let deploys = answered(lists.deploys, "Deployment", "apps/v1", &mut unread);
+    let sets = answered(lists.sets, "StatefulSet", "apps/v1", &mut unread);
+    let daemons = answered(lists.daemons, "DaemonSet", "apps/v1", &mut unread);
+    let jobs = answered(lists.jobs, "Job", "batch/v1", &mut unread);
+    let crons = answered(lists.crons, "CronJob", "batch/v1", &mut unread);
+    let ingresses = lists.ingresses.map_or_else(Vec::new, |list| {
+        answered(list, "Ingress", "networking.k8s.io/v1", &mut unread)
+    });
 
     let mut note = |kind: &str, name: String, spec: Option<&PodSpec>| {
         let Some(spec) = spec else { return };
@@ -2218,38 +2286,38 @@ async fn users_of(
         );
     };
 
-    for pod in pods?.items {
+    for pod in pods {
         note("Pod", pod.name_any(), pod.spec.as_ref());
     }
-    for obj in deploys?.items {
+    for obj in deploys {
         note(
             "Deployment",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
         );
     }
-    for obj in sets?.items {
+    for obj in sets {
         note(
             "StatefulSet",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
         );
     }
-    for obj in daemons?.items {
+    for obj in daemons {
         note(
             "DaemonSet",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
         );
     }
-    for obj in jobs?.items {
+    for obj in jobs {
         note(
             "Job",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
         );
     }
-    for obj in crons?.items {
+    for obj in crons {
         note(
             "CronJob",
             obj.name_any(),
@@ -2260,26 +2328,24 @@ async fn users_of(
         );
     }
 
-    if target.kind == "Secret" {
-        for ing in ingresses?.items {
-            for tls in ing.spec.iter().flat_map(|spec| spec.tls.iter().flatten()) {
-                if tls.secret_name.as_deref() != Some(target.name.as_str()) {
-                    continue;
-                }
-                out.edge(
-                    ingress_ref(&ing, ns),
-                    target.clone(),
-                    Relation::Uses {
-                        usages: vec![Usage::IngressTls {
-                            hosts: tls.hosts.clone().unwrap_or_default(),
-                        }],
-                    },
-                );
+    for ing in ingresses {
+        for tls in ing.spec.iter().flat_map(|spec| spec.tls.iter().flatten()) {
+            if tls.secret_name.as_deref() != Some(target.name.as_str()) {
+                continue;
             }
+            out.edge(
+                ingress_ref(&ing, ns),
+                target.clone(),
+                Relation::Uses {
+                    usages: vec![Usage::IngressTls {
+                        hosts: tls.hosts.clone().unwrap_or_default(),
+                    }],
+                },
+            );
         }
     }
 
-    Ok(())
+    out.not_looked_at.extend(unread);
 }
 
 #[cfg(test)]
@@ -3144,5 +3210,75 @@ mod refused_list_tests {
         let (answered, stops) = absent_backend("checkout", "shop", true);
         assert_eq!(answered.existence, Existence::Missing);
         assert!(stops, "a list that answered and lacks it does");
+    }
+}
+
+#[cfg(test)]
+mod users_tests {
+    use super::*;
+
+    const REFUSED: &str = "cronjobs.batch is forbidden: User \"narrow\" cannot list \
+         resource \"cronjobs\" in API group \"batch\" in the namespace \"shop\"";
+
+    fn pod_reading(config_map: &str) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web-1", "namespace": "shop" },
+            "spec": { "containers": [{
+                "name": "web",
+                "envFrom": [{ "configMapRef": { "name": config_map } }]
+            }] }
+        }))
+        .unwrap()
+    }
+
+    fn lists(crons: Read<CronJob>) -> UserLists {
+        UserLists {
+            pods: Ok(vec![pod_reading("app-config")]),
+            deploys: Ok(Vec::new()),
+            sets: Ok(Vec::new()),
+            daemons: Ok(Vec::new()),
+            jobs: Ok(Vec::new()),
+            crons,
+            ingresses: None,
+        }
+    }
+
+    /// A role without `list cronjobs` lost the whole "used by" panel of every
+    /// `ConfigMap`, Secret and claim: one refusal ended the call. The pods that
+    /// were read still use it, and the `CronJobs` are named as not looked at.
+    #[test]
+    fn one_refused_kind_leaves_the_others_answering() {
+        let target = ObjectRef::new(
+            "ConfigMap",
+            "app-config",
+            Some("shop".into()),
+            Existence::NotChecked,
+        );
+        let mut out = Neighbourhood::new();
+        note_users("shop", &target, lists(Err(REFUSED.to_string())), &mut out);
+
+        assert_eq!(out.edges.len(), 1);
+        assert_eq!(out.edges[0].from.kind, "Pod");
+        assert_eq!(out.not_looked_at.len(), 1);
+        assert_eq!(out.not_looked_at[0].kind, "CronJob");
+        assert!(matches!(
+            &out.not_looked_at[0].why,
+            crate::resources::Unread::Unanswered { said, .. } if said.contains("forbidden")
+        ));
+    }
+
+    /// Everything answered, so nothing may be named unread.
+    #[test]
+    fn a_full_answer_names_nothing_unread() {
+        let target = ObjectRef::new(
+            "ConfigMap",
+            "app-config",
+            Some("shop".into()),
+            Existence::NotChecked,
+        );
+        let mut out = Neighbourhood::new();
+        note_users("shop", &target, lists(Ok(Vec::new())), &mut out);
+        assert!(out.not_looked_at.is_empty());
+        assert_eq!(out.edges.len(), 1);
     }
 }

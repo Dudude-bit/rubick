@@ -30,7 +30,7 @@ pub async fn debug_pod_ephemeral(
     config: DebugConfig,
     state: State<'_, AppState>,
 ) -> Result<DebugOperation> {
-    crate::validation::validate_dns_label(&pod_name)?;
+    crate::validation::validate_name::<Pod>(&pod_name)?;
 
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let api: Api<Pod> = ctx.namespaced_api();
@@ -130,7 +130,7 @@ pub async fn debug_pod_copy(
     config: DebugConfig,
     state: State<'_, AppState>,
 ) -> Result<DebugOperation> {
-    crate::validation::validate_dns_label(&pod_name)?;
+    crate::validation::validate_name::<Pod>(&pod_name)?;
 
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let api: Api<Pod> = ctx.namespaced_api();
@@ -235,7 +235,7 @@ pub async fn debug_node(
     config: DebugConfig,
     state: State<'_, AppState>,
 ) -> Result<DebugOperation> {
-    crate::validation::validate_dns_label(&node_name)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Node>(&node_name)?;
 
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let api: Api<Pod> = ctx.namespaced_api();
@@ -258,7 +258,10 @@ pub async fn debug_node(
     // Create labels
     let mut labels = BTreeMap::new();
     labels.insert("k8s-gui/debug-pod".to_string(), "true".to_string());
-    labels.insert("k8s-gui/debug-node".to_string(), node_name.clone());
+    // A label value stops at 63 characters, a node's name at 253.
+    if node_name.len() <= 63 {
+        labels.insert("k8s-gui/debug-node".to_string(), node_name.clone());
+    }
     labels.insert("k8s-gui/created-at".to_string(), created_at.to_string());
 
     // Create the privileged debug pod

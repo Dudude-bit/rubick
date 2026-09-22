@@ -35,18 +35,10 @@ use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::api::storage::v1::StorageClass;
 use tauri::State;
 
-/// Resolve the `(context, client)` pair for a watch command. Returns
-/// the standard `NO_CLUSTER` / `NO_CLIENT` errors so the frontend hook
-/// can report a real failure instead of a wedged stream.
+/// The client for a watch command, or the error saying why there is none, so
+/// the frontend hook reports a real failure instead of a wedged stream.
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
-    Ok((*client).clone())
+    Ok((*state.current_client()?).clone())
 }
 
 /// Macro to stamp out a typed namespace-scoped subscribe command.

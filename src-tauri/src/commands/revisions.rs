@@ -53,7 +53,7 @@ pub async fn get_controller_revisions(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ControllerRevisionInfo>> {
-    crate::validation::validate_dns_label(&name)?;
+    crate::validation::validate_dns_subdomain(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
 
     let (uid, update_revision, selector) = match kind.as_str() {
