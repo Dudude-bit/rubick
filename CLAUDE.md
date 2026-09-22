@@ -232,6 +232,10 @@ the recorder; the rules that fail silently are these.
 - A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/`.
   A `__tests__/` folder or any other suffix is collected by nothing and reports
   nothing.
+- A `.test.tsx` runs under jsdom and a `.test.ts` under node. A `.test.ts`
+  that needs a DOM starts with `// @vitest-environment jsdom` — and so does
+  one whose subject checks `typeof window`, which under node passes quietly
+  through the other branch.
 - Rust unit tests go in an inline `#[cfg(test)] mod tests` in the file they
   cover. `src-tauri/tests/` is reserved for the `#[ignore]`d live harnesses.
 - Name a test as a sentence stating the behaviour, with a doc comment above
