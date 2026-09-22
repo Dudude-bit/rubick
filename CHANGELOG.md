@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.19.1] - 2026-09-23
+
+### Fixed
+
+- **The Flatpak opened a white window, on every release that had one.** It
+  carried the AppImage's own copies of WebKit, GTK, glib, wayland and some
+  ninety other libraries, each loaded ahead of the runtime's, and the
+  runtime's graphics driver could not load against the older wayland — so
+  WebKit had no way to draw and aborted with `Could not create default EGL
+display`. The Flatpak now runs on the GNOME 50 runtime, which has its own
+  WebKitGTK, and carries nothing but the app. Checked on AlmaLinux 8 with the
+  Flatpak it ships. The first install downloads the GNOME runtime once.
+
+- **Links in the Flatpak open in your browser through the desktop portal**,
+  rather than through a copy of `xdg-open` the bundle carried and the sandbox
+  could not use.
+
 ## [4.19.0] - 2026-09-22
 
 ### Added
