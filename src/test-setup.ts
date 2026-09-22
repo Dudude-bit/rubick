@@ -1,19 +1,12 @@
-// Vitest global setup file. Loaded by vitest.config.ts via `setupFiles`.
-//
-// Runs before every test file, under jsdom or under node — the file's
-// extension decides which (vitest.config.ts). Stubs the @tauri-apps/api
-// surface so modules that import `invoke`, `listen`, `getCurrentWindow`, etc.
-// don't blow up where the Tauri runtime isn't present, and, under jsdom only,
-// adds the DOM matchers and unmounts what a test rendered.
+// Vitest global setup file, run before every test file under jsdom or node.
+// Stubs the @tauri-apps/api surface; the DOM half loads only under jsdom.
 
 import { vi } from "vitest";
 
 if (typeof window !== "undefined") {
   await import("./test-setup-dom");
 } else {
-  // jsdom always reports en-US; node reports the machine's locale, and the
-  // app's language follows navigator.language. Pinned, so a suite that
-  // passes on CI passes on a laptop set to Russian.
+  // As jsdom reports it: node reports the machine's locale.
   Object.defineProperty(globalThis.navigator, "language", {
     configurable: true,
     value: "en-US",
