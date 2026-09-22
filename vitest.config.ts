@@ -8,10 +8,28 @@ export default defineConfig({
     },
   },
   test: {
-    // jsdom for component tests; pure-function tests run fine on it too.
-    environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["node_modules", "dist", "src-tauri"],
+    // The extension picks the environment. A jsdom per file was half of the
+    // suite's time, and most `.test.ts` files never touch a DOM; one that
+    // does says so on its first line with `// @vitest-environment jsdom`.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+    ],
   },
 });

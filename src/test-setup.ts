@@ -1,13 +1,28 @@
 // Vitest global setup file. Loaded by vitest.config.ts via `setupFiles`.
 //
-// Runs once per worker before any test file. Registers @testing-library/jest-dom
-// matchers and stubs the @tauri-apps/api surface so components that import
-// `invoke`, `listen`, `getCurrentWindow`, etc. don't blow up under jsdom (where
-// the Tauri runtime isn't present).
+// Runs before every test file, under jsdom or under node — the file's
+// extension decides which (vitest.config.ts). Stubs the @tauri-apps/api
+// surface so modules that import `invoke`, `listen`, `getCurrentWindow`, etc.
+// don't blow up where the Tauri runtime isn't present, and, under jsdom only,
+// adds the DOM matchers and unmounts what a test rendered.
 
-import "@testing-library/jest-dom/vitest";
-import { afterEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { vi } from "vitest";
+
+if (typeof window !== "undefined") {
+  await import("./test-setup-dom");
+} else {
+  // jsdom always reports en-US; node reports the machine's locale, and the
+  // app's language follows navigator.language. Pinned, so a suite that
+  // passes on CI passes on a laptop set to Russian.
+  Object.defineProperty(globalThis.navigator, "language", {
+    configurable: true,
+    value: "en-US",
+  });
+  Object.defineProperty(globalThis.navigator, "languages", {
+    configurable: true,
+    value: ["en-US"],
+  });
+}
 
 // Default jsdom doesn't ship matchMedia or ResizeObserver — Radix and various
 // UI libraries call into them at mount.
@@ -79,7 +94,3 @@ vi.mock("@tauri-apps/api/window", () => ({
     close: vi.fn(async () => {}),
   }),
 }));
-
-afterEach(() => {
-  cleanup();
-});
