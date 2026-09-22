@@ -12,7 +12,7 @@
 //!
 //! ```text
 //! kubectl config use-context kind-rubick-old   # e.g. a v1.28 kind cluster
-//! cargo test --test live_compat -- --ignored --nocapture
+//! cargo test --test live live_compat:: -- --ignored --nocapture
 //! ```
 
 use kube::{api::ListParams, Api, Client};

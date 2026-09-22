@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! K8S_GUI_CHECK_CONTEXT=killercoda K8S_GUI_CHECK_POD=busy-demo-xxx \
-//! K8S_GUI_BARE_POD=legacy-rc-xxx cargo test --test live_checks -- --ignored --nocapture
+//! K8S_GUI_BARE_POD=legacy-rc-xxx cargo test --test live live_checks:: -- --ignored --nocapture
 //! ```
 
 use k8s_gui_lib::commands::checks::{check_pod, Check, CheckAnswer, CopyWith};

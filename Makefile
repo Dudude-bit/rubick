@@ -75,11 +75,17 @@ build:
 #
 # `cargo test` from the workspace root builds the bin, and
 # `tauri::generate_context!()` reads ../dist at compile time. dist/ is
-# gitignored, so a clean checkout has none and the macro panics. CI adds
-# an explicit frontend build for the same reason (ci.yml).
-test: dist
-	$(MISE_EXEC) cargo test
+# gitignored, so a clean checkout has none and the macro panics.
+#
+# Order-only: any dist will do, so one is built only when there is none.
+# Depending on the phony `dist` rebuilt the frontend on every run, and the
+# new bytes under ../dist then recompiled the binary as well.
+test: | dist/index.html
+	$(MISE_EXEC) cargo test --workspace
 	$(MISE_EXEC) bun run test
+
+dist/index.html:
+	$(MISE_EXEC) bun run build
 
 dist:
 	$(MISE_EXEC) bun run build

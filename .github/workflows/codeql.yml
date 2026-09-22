@@ -3,8 +3,22 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    # Prose and the site: nothing any job here builds or reads. Never
+    # CHANGELOG.md — What's New embeds it — and never a blanket **/*.md.
+    paths-ignore: &docs
+      - 'web/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CLAUDE.md'
+      - 'SECURITY.md'
+      - 'habr-*.md'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
   pull_request:
     branches: [main]
+    paths-ignore: *docs
   schedule:
     # Weekly drift-catch run on Mondays 06:00 UTC. Catches new
     # CodeQL queries and any drift in the dependency tree that

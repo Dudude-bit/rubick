@@ -1,0 +1,7 @@
+# One compiler for every machine and every job. On a floating `stable` each
+# release emptied every Rust cache in CI at once, and brought new lints that
+# `-D warnings` turned into a red main for whatever PR came next — while a
+# laptop a few versions behind saw none of them. Bump it on purpose.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

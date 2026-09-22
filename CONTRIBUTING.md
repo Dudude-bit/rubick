@@ -16,13 +16,12 @@ Thanks for your interest in contributing.
 ```bash
 git clone https://github.com/Dudude-bit/rubick.git
 cd rubick
-bun install
-bunx lefthook install   # one-time: enables the pre-commit hooks
+bun install             # also enables the pre-commit hooks
 make dev
 ```
 
-The hooks (defined in `lefthook.yml`) run `cargo fmt --check`, `eslint`
-and `prettier --check` on staged files before each commit. Skip them for a
+The hooks (defined in `lefthook.yml`) format the staged files with rustfmt
+and prettier, stage the result, and run `eslint` on them before each commit. Skip them for a
 single commit with `LEFTHOOK=0 git commit ...`.
 
 Nothing runs on push — `lefthook.yml` says why. Run `bun run test` yourself
@@ -30,7 +29,8 @@ before pushing something you want to land green.
 
 ## Code style
 
-- **Rust:** `cargo fmt` must pass; `cargo clippy` is advisory.
+- **Rust:** `cargo fmt` must pass, and so must `cargo clippy` — CI runs it
+  with `-D warnings`.
 - **TypeScript:** ESLint + Prettier (configs are in the repo).
 
 A block of lint rules exists to stop the codebase drifting back to habits it
@@ -71,8 +71,8 @@ written above — and the backlog it once had is at zero, so anything it reports
 is yours. The crate turns on `clippy::pedantic` in `src-tauri/src/lib.rs`.
 
 There is no pre-push hook, so run the tests yourself before pushing. Prettier
-runs in the pre-commit hook and in no CI job at all: bypass the hook and
-unformatted code lands on a green main.
+and rustfmt run in the pre-commit hook and again in CI, so a commit that
+bypasses the hook fails there instead.
 
 ## Tests
 
@@ -81,13 +81,13 @@ bun run test                                          # frontend
 cargo test --workspace                                # Rust — not --lib
 ```
 
-`--workspace`, never `--lib`: the latter does not build the binary, which is
+`--workspace`, never `--lib` on its own: it does not build the binary, which is
 how v2.1.0 shipped with ninety `__cmd__X not found` errors after a green run.
 
 Tests here assert _behaviour_, not markup, and the house style is a doc comment
 saying what would break followed by the assertion — so a failing test explains
 itself. There are also `#[ignore]`d integration tests that run against a live
-cluster (`src-tauri/tests/live_*.rs`); `test-manifests/k8s-gui-all.yaml` creates
+cluster (`src-tauri/tests/live/`); `test-manifests/k8s-gui-all.yaml` creates
 every fixture they need, each block carrying its own cleanup command.
 
 ## Adding an integration

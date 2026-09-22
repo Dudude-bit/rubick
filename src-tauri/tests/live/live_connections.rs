@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! K8S_GUI_INIT_CONTEXT=k3d-k8s-gui-dev K8S_GUI_INIT_NAMESPACE=k8s-gui-test \
-//!   cargo test --test live_connections -- --ignored --nocapture
+//!   cargo test --test live live_connections:: -- --ignored --nocapture
 //! ```
 //!
 //! Specimens (`test-manifests/k8s-gui-all.yaml`):
@@ -743,7 +743,7 @@ async fn a_pod_names_the_service_that_fronts_it() {
 /// ./test-manifests/listenerset-routes-play-controller.sh
 /// kubectl create service clusterip app -n apps --tcp=80:8080
 /// K8S_GUI_INIT_CONTEXT=kind-rubick-ls K8S_GUI_INIT_NAMESPACE=apps \
-///   cargo test --test live_connections listenerset -- --ignored --nocapture
+///   cargo test --test live live_connections::listenerset -- --ignored --nocapture
 /// ```
 #[tokio::test]
 #[ignore = "needs the listenerset-routes scene"]

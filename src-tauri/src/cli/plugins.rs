@@ -37,7 +37,7 @@ impl PluginDiscovery {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```text
     /// use k8s_gui_lib::cli::plugins::PluginDiscovery;
     ///
     /// let discovery = PluginDiscovery::new("kubectl-");

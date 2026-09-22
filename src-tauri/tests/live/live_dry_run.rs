@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! K8S_GUI_DRY_CONTEXT=killercoda K8S_GUI_REFUSED_CONTEXT=narrow \
-//!   cargo test --test live_dry_run -- --ignored --nocapture
+//!   cargo test --test live live_dry_run:: -- --ignored --nocapture
 //! ```
 
 use k8s_gui_lib::commands::manifest::{dry_run_of, DryRunOutcome};

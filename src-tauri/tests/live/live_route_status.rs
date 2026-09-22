@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! K8S_GUI_SHAPE_CONTEXT=kind-rubick-gw \
-//!   cargo test --test live_route_status -- --ignored --nocapture
+//!   cargo test --test live live_route_status:: -- --ignored --nocapture
 //! ```
 //!
 //! The JSON it prints is fed to the frontend's own `routeTraces` by
