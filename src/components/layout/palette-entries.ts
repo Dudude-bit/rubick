@@ -416,16 +416,21 @@ export function buildPaletteEntries({
           ? "retry"
           : "none",
     });
-    const found = [...(hitsByContext.get(cluster.context)?.values() ?? [])];
+    // The search can list kinds the router serves no detail page for, and
+    // `getResourceDetailUrl` builds a URL for any of them: an unrouted path
+    // inside the layout route matches no branch and blanks the shell. A
+    // Namespace has a page, but here it offers the stronger action — the
+    // scope the window is read under. Nothing else unrouted is offered, and
+    // it is dropped before the cap so it neither takes a row nor counts in
+    // the rest.
+    const found = [
+      ...(hitsByContext.get(cluster.context)?.values() ?? []),
+    ].filter(
+      (hit) => isRoutableKind(hit.kind, hit.namespace) || isNamespaceHit(hit)
+    );
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     for (const hit of found.slice(0, cap)) {
-      // The search can list kinds the router serves no detail page for, and
-      // `getResourceDetailUrl` builds a URL for any of them: an unrouted
-      // path inside the layout route matches no branch and blanks the shell.
-      // A Namespace has a page, but here it offers the stronger action —
-      // the scope the window is read under. Nothing else unrouted is offered.
       const routable = isRoutableKind(hit.kind, hit.namespace);
-      if (!routable && !isNamespaceHit(hit)) continue;
       out.push({
         id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
         kind: "hit",
