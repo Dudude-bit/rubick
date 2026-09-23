@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
   RESOURCE_REGISTRY,
   ResourceType,
+  kindFacts,
   listQueryFor,
   narrowingHelps,
   toPlural,
@@ -107,5 +110,44 @@ describe("whether picking one namespace shortens a read", () => {
     ]) {
       expect(narrowingHelps(kind)).toBe(true);
     }
+  });
+});
+
+describe("the facts the registry takes from shared/kinds.json", () => {
+  const file = JSON.parse(
+    readFileSync(resolve(process.cwd(), "shared/kinds.json"), "utf8")
+  ) as { kinds: Array<Record<string, unknown>> };
+
+  /**
+   * The Rust side checks the file against `k8s-openapi`; this side builds
+   * every URL out of it. A kind in one list and not the other is a kind one
+   * half cannot address, and an entry missing a fact is a URL with
+   * `undefined` in it.
+   */
+  it("names exactly the registry's kinds, each with all four facts", () => {
+    expect(file.kinds.map((facts) => facts.kind).sort()).toEqual(
+      RESOURCE_REGISTRY.map((entry) => entry.kind).sort()
+    );
+    for (const facts of file.kinds) {
+      for (const field of ["group", "version", "plural"])
+        expect(typeof facts[field], `${String(facts.kind)}.${field}`).toBe(
+          "string"
+        );
+      expect(["namespaced", "cluster"]).toContain(facts.scope);
+    }
+  });
+
+  /**
+   * The registry's `apiVersion` is what `getManifest` asks the cluster for,
+   * and the core group has no name to put in front of the slash: `/v1` is
+   * a path the API server does not serve.
+   */
+  it("spells a core kind's apiVersion without a group in front", () => {
+    const apiVersion = (kind: string) =>
+      RESOURCE_REGISTRY.find((entry) => entry.kind === kind)?.apiVersion;
+    expect(apiVersion("Pod")).toBe("v1");
+    expect(apiVersion("Deployment")).toBe("apps/v1");
+    expect(apiVersion("HorizontalPodAutoscaler")).toBe("autoscaling/v2");
+    expect(kindFacts("Pod")?.group).toBe("");
   });
 });

@@ -501,8 +501,9 @@ pub struct NetworkPolicyInfo {
     pub namespace: String,
     pub selects: PolicySelects,
     /// How many pods in scope it actually picks, and `None` where the pods
-    /// were not read. A policy that selects nothing protects nothing, and no
-    /// other screen in this app says so.
+    /// were not read or the selector cannot be evaluated. A policy that
+    /// selects nothing protects nothing, and no other screen in this app says
+    /// so.
     pub selected: Option<usize>,
     pub ingress: PolicyDirection,
     pub egress: PolicyDirection,
@@ -609,17 +610,30 @@ pub fn joined_to_pods<P: kube::Resource>(
         .map(|policy| {
             let mut info = NetworkPolicyInfo::from(policy);
             let selector = policy.spec.as_ref().and_then(|s| s.pod_selector.as_ref());
-            info.selected = pods.map(|pods| {
-                pods.iter()
-                    // A policy only ever acts in its own namespace, and a
-                    // cluster-wide pod list carries every other one's.
-                    .filter(|pod| pod.namespace() == policy.namespace())
-                    .filter(|pod| Selector::Query(selector).matches(pod.labels()))
-                    .count()
+            info.selected = pods.and_then(|pods| {
+                // A policy only ever acts in its own namespace, and a
+                // cluster-wide pod list carries every other one's.
+                let own = pods
+                    .iter()
+                    .filter(|pod| pod.namespace() == policy.namespace());
+                selected_count(selector, own)
             });
             info
         })
         .collect()
+}
+
+/// How many of `pods` a `podSelector` picks, or `None` where the selector
+/// cannot be evaluated.
+pub fn selected_count<'a, P: kube::Resource + 'a>(
+    selector: Option<&LabelSelector>,
+    pods: impl IntoIterator<Item = &'a P>,
+) -> Option<usize> {
+    pods.into_iter().try_fold(0, |n, pod| {
+        Selector::Query(selector)
+            .matches(pod.labels())
+            .map(|hit| n + usize::from(hit))
+    })
 }
 
 #[cfg(test)]
@@ -765,6 +779,22 @@ mod network_policy_tests {
             pod("np-test", &[("app", "web")]),
         ];
         assert_eq!(joined_to_pods(&policies, Some(&pods))[0].selected, Some(1));
+    }
+
+    /// A selector Kubernetes would refuse to build selects neither these
+    /// pods nor none of them. Counting its misses would report the finding
+    /// this page exists for, a policy in front of nothing, about a policy
+    /// nobody here can read.
+    #[test]
+    fn a_selector_that_cannot_be_evaluated_counts_no_pods_rather_than_zero() {
+        let policies = [policy(&serde_json::json!({
+            "podSelector": {
+                "matchExpressions": [{ "key": "app", "operator": "NotIn", "values": [] }]
+            },
+            "policyTypes": ["Ingress"],
+        }))];
+        let pods = [pod("np-test", &[("app", "api")])];
+        assert_eq!(joined_to_pods(&policies, Some(&pods))[0].selected, None);
     }
 
     /// The count the page exists for, and the one it must never invent. A

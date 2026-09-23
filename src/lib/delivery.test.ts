@@ -377,13 +377,11 @@ describe("which lists carry the column", () => {
 });
 
 /**
- * The table nothing cross-checked, which is how a kind gets left out of it.
- *
- * `API_GROUPS` is hand-kept beside a registry that already states every
- * kind's `apiVersion`, and a kind missing from it makes `apiGroupOf` answer
- * `null` — which every caller reads as "no delivery to speak of". The column,
- * the detail block and the peek go quiet together, with nothing failing.
- * Seven Gateway kinds sat like that on pages already written to ask.
+ * A kind whose group is missing makes `apiGroupOf` answer `null`, which every
+ * caller reads as "no delivery to speak of". The column, the detail block and
+ * the peek go quiet together, with nothing failing: seven Gateway kinds sat
+ * like that when the groups were a table of their own. They are read from
+ * `shared/kinds.json` now, and this holds that reading to the registry's.
  *
  * A group written *wrong* is worse than one missing: Flux's inventory id is
  * `namespace_name_group_kind`, so `"app"` for `"apps"` reports a delivered
@@ -394,7 +392,7 @@ describe("which lists carry the column", () => {
  * *draws* the column is `MADE_BY_THE_CLUSTER`'s separate question, asserted
  * below.
  */
-describe("the delivery table against the resource registry", () => {
+describe("the delivery group against the resource registry", () => {
   it("names every kind in the registry, in the registry's own group", () => {
     const missing: string[] = [];
     const wrong: string[] = [];

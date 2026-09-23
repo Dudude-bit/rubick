@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { T } from "@/i18n/useT";
 import type { MonitorRow } from "./model";
 import { selectorWords } from "./model";
+import { unknowableWords } from "./words";
 import { hourMinute } from "../../kit";
 
 /**
@@ -33,6 +34,13 @@ export function verdictOf(
         head: t("monitors", "verdictSelectionUnread"),
         body: worst.reason,
       };
+    case "selectorUnevaluable":
+      return {
+        head: t("monitors", "verdictSelectorUnevaluable"),
+        body: t("monitors", "selectorUnevaluable", {
+          selector: selectorWords(row.monitor.selector) || "{}",
+        }),
+      };
     case "notPickedUp":
       return instanceCount === 0
         ? { head: t("monitors", "verdictNoInstances"), body: null }
@@ -43,7 +51,10 @@ export function verdictOf(
     case "pickedUpUnknown":
       return {
         head: t("monitors", "verdictPickedUpUnknown"),
-        body: worst.reason,
+        body:
+          worst.why.kind === "unread"
+            ? worst.why.reason
+            : unknowableWords(worst.why, t),
       };
     case "targetsDown":
       return {

@@ -1,6 +1,6 @@
 import type { T } from "@/i18n/useT";
 import type { Picture } from "./data";
-import type { MonitorRow } from "./model";
+import type { MonitorRow, Unknowable } from "./model";
 
 /** The tone a row is drawn in, as one word so every reader of it agrees. */
 export type RowTone = "err" | "warn" | "ok" | "none" | "mut";
@@ -65,11 +65,24 @@ export function rowWords(row: MonitorRow, t: T): string {
         total: worst.total,
       });
     case "selectionUnread":
+    case "selectorUnevaluable":
     case "pickedUpUnknown":
       return t("monitors", "rowUnknown");
   }
   if (row.scrape.state !== "read") return t("monitors", "rowNotChecked");
   return t("monitors", "rowUp", { n: row.scrape.up });
+}
+
+/** Why a pick-up cannot be judged, as the line under the step says it. */
+export function unknowableWords(why: Unknowable, t: T): string {
+  switch (why.kind) {
+    case "unread":
+      return t("monitors", "pickedUpUnknown", { reason: why.reason });
+    case "unevaluable":
+      return t("monitors", "pickedUpUnevaluable", {
+        prometheus: why.prometheus,
+      });
+  }
 }
 
 /** The one line above the list, as a key so each branch is distinguishable. */

@@ -23,7 +23,7 @@ use crate::state::AppState;
 /// The five kinds `list_gateway_routes` answers for.
 const ROUTE_KINDS: [&str; 5] = ["HTTPRoute", "GRPCRoute", "TLSRoute", "TCPRoute", "UDPRoute"];
 
-fn plural_of(kind: &str) -> Result<&'static str> {
+pub(crate) fn plural_of(kind: &str) -> Result<&'static str> {
     Ok(match kind {
         "GatewayClass" => "gatewayclasses",
         "Gateway" => "gateways",
@@ -40,6 +40,10 @@ fn plural_of(kind: &str) -> Result<&'static str> {
             )))
         }
     })
+}
+
+pub(crate) fn is_cluster_scoped(kind: &str) -> bool {
+    kind == "GatewayClass"
 }
 
 /// The dynamic-API coordinates for one Gateway API kind, at the served
@@ -74,7 +78,7 @@ async fn gateway_api(
 ) -> Result<(Api<DynamicObject>, ApiResource)> {
     let api_resource = served_api_resource(kind, state).await?;
 
-    let cluster_scoped = kind == "GatewayClass";
+    let cluster_scoped = is_cluster_scoped(kind);
     let ctx = if cluster_scoped {
         ResourceContext::for_list(state, None)?
     } else if listing {

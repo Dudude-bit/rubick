@@ -475,7 +475,7 @@ impl GatewayClassInfo {
 }
 
 /// The versions this app has fixtures for, best first.
-const READ_PREFERENCE: [&str; 3] = ["v1", "v1beta1", "v1alpha2"];
+pub const READ_PREFERENCE: [&str; 3] = ["v1", "v1beta1", "v1alpha2"];
 
 const BUNDLE_VERSION_ANNOTATION: &str = "gateway.networking.k8s.io/bundle-version";
 const CHANNEL_ANNOTATION: &str = "gateway.networking.k8s.io/channel";

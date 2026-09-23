@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::error::Result;
 use crate::resources::{
-    published, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo, ObjectRef, Selector,
+    published, selected_count, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo, ObjectRef,
     ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
@@ -88,12 +88,7 @@ pub async fn get_network_policy(
         .list_metadata(&ListParams::default())
         .await
     {
-        info.selected = Some(
-            pods.items
-                .iter()
-                .filter(|pod| Selector::Query(selector).matches(pod.labels()))
-                .count(),
-        );
+        info.selected = selected_count(selector, &pods.items);
     }
     Ok(info)
 }

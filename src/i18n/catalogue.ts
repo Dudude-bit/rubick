@@ -2168,6 +2168,7 @@ export const en = {
     verdictSelectsNothing: "Selects no Service, so there is nothing to scrape.",
     verdictSelectsNothingBody: "{selector} matches nothing in {namespace}.",
     verdictSelectionUnread: "What it selects could not be counted.",
+    verdictSelectorUnevaluable: "Its selector cannot be evaluated.",
     verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
     verdictNoInstances:
       "No Prometheus object in the cluster, so nothing picks it up.",
@@ -2204,6 +2205,8 @@ export const en = {
     notCounted: "pods, not counted here",
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
+    selectorUnevaluable:
+      "Kubernetes would refuse to build this selector (an operator other than In, NotIn, Exists and DoesNotExist, a set with no values, or a presence test with some), so what it selects cannot be said: {selector}",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
     chipLabel: "label",
@@ -2219,6 +2222,8 @@ export const en = {
       "no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
     pickedUpUnknown:
       "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
+    pickedUpUnevaluable:
+      "{prometheus} has a selector Kubernetes would refuse to build, so whether it picks this up cannot be said",
     notJudged: "not judged",
     picksUp: "picks up",
     picksUpAll: "every monitor in every namespace",

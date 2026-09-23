@@ -32,9 +32,9 @@ use tauri::State;
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::resources::{
-    condition_is_true, published, usages_in_pod_spec, AutoscalerMetric, ChainStop, ConditionInfo,
-    ConnectionEdge, Existence, ObjectFacts, ObjectRef, Relation, ResourceConnections, Selector,
-    ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
+    condition_is_true, facts_of, published, usages_in_pod_spec, AutoscalerMetric, ChainStop,
+    ConditionInfo, ConnectionEdge, Existence, KindScope, ObjectFacts, ObjectRef, Relation,
+    ResourceConnections, Selector, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 use crate::utils::Moment;
@@ -69,22 +69,13 @@ pub async fn get_resource_connections(
 
 /// The kinds that are not in a namespace.
 ///
-/// The authority is the frontend registry — `src/lib/resource-registry.ts`,
-/// where each kind carries its `scope` and every URL is built from it. This
-/// mirrors the five it marks `cluster`, and only those: an unknown kind, a
-/// custom resource above all, is treated as namespaced, which is what the
-/// overwhelming majority of them are. `owner_ref` asks it about arbitrary
-/// owner kinds, not just the handful this file dispatches on.
+/// Read from `shared/kinds.json`, the file the frontend registry builds every
+/// URL from. An unknown kind, a custom resource above all, is treated as
+/// namespaced, which is what the overwhelming majority of them are.
+/// `owner_ref` asks it about arbitrary owner kinds, not just the handful this
+/// file dispatches on.
 fn cluster_scoped(kind: &str) -> bool {
-    matches!(
-        kind,
-        "Node"
-            | "PersistentVolume"
-            | "Namespace"
-            | "StorageClass"
-            | "CustomResourceDefinition"
-            | "GatewayClass"
-    )
+    facts_of(kind).is_some_and(|facts| facts.scope == KindScope::Cluster)
 }
 
 /// The same answer, for callers that already hold a client — the live
@@ -254,7 +245,7 @@ fn traffic_into(
         let Some(text) = Selector::Equality(&selector).says() else {
             continue;
         };
-        if !Selector::Equality(&selector).matches(labels) {
+        if Selector::Equality(&selector).matches(labels) != Some(true) {
             continue;
         }
         let svc_ref = service_ref(svc, ns);
@@ -498,7 +489,7 @@ fn note_reach(
     let selected: Vec<&Pod> = snapshot
         .pods()
         .iter()
-        .filter(|pod| query.matches(pod.labels()))
+        .filter(|pod| query.matches(pod.labels()) == Some(true))
         .collect();
 
     // Empty because nothing matched, or because nobody could read the pods?
@@ -1031,9 +1022,10 @@ fn budgets_over(
         }
         // `policy/v1`, and it is the reverse of a Service's rule: a null
         // selector matches no pods, an empty `{}` one covers every pod in
-        // the namespace.
+        // the namespace. The API server refuses one that cannot be built,
+        // so `None` is a budget that cannot exist and draws no edge.
         let selector = Selector::Query(pdb.spec.as_ref().and_then(|s| s.selector.as_ref()));
-        if !selector.matches(labels) {
+        if selector.matches(labels) != Some(true) {
             continue;
         }
         out.edge(
@@ -1671,10 +1663,12 @@ async fn workload_connections(
     }
 
     let selector = Selector::Query(template.selector.as_ref());
+    // As with a budget, the API server refuses a workload selector that
+    // cannot be built.
     let mine: Vec<&Pod> = snapshot
         .pods()
         .iter()
-        .filter(|pod| selector.matches(pod.labels()))
+        .filter(|pod| selector.matches(pod.labels()) == Some(true))
         .collect();
     let selector_text = selector.says().unwrap_or_default();
     let mut nodes = HashSet::new();
@@ -1870,7 +1864,7 @@ async fn workloads_behind(
     for pod in snapshot
         .pods()
         .iter()
-        .filter(|pod| query.matches(pod.labels()))
+        .filter(|pod| query.matches(pod.labels()) == Some(true))
     {
         let owners = pod.owner_references().to_vec();
         owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await;
@@ -2667,47 +2661,6 @@ spec:
 mod ownership_tests {
     use super::*;
 
-    /// `cluster_scoped` says the frontend registry is the authority, and a
-    /// comment saying so is not a thing that stays true. This reads the
-    /// registry and holds the two to the same answer, kind by kind — the
-    /// drift it guards against had already happened once, leaving three
-    /// kinds addressed as though they were in a namespace.
-    #[test]
-    fn the_scope_list_matches_the_registry_it_names() {
-        let registry = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../src/lib/resource-registry.ts"
-        ))
-        .expect("the registry this list mirrors");
-
-        // Each entry reads `kind: "Foo",` and, further down, `scope: "…",`.
-        let mut kind: Option<String> = None;
-        let mut checked = 0usize;
-        for line in registry.lines() {
-            let line = line.trim();
-            if let Some(rest) = line.strip_prefix("kind: \"") {
-                kind = rest.split('"').next().map(ToString::to_string);
-            } else if let Some(rest) = line.strip_prefix("scope: \"") {
-                let Some(name) = kind.take() else { continue };
-                let registry_says_cluster = rest.starts_with("cluster");
-                checked += 1;
-                assert_eq!(
-                    cluster_scoped(&name),
-                    registry_says_cluster,
-                    "the registry and `cluster_scoped` disagree about {name}; \
-                     a kind addressed two ways by one app is a dead link at \
-                     one of them"
-                );
-            }
-        }
-
-        assert!(
-            checked > 15,
-            "read only {checked} registry entries — the format moved and this \
-             test is no longer checking anything"
-        );
-    }
-
     fn owner(kind: &str) -> OwnerReference {
         OwnerReference {
             kind: kind.to_string(),
@@ -2735,7 +2688,13 @@ mod ownership_tests {
     /// `/persistentvolumes/<ns>/<name>`, which is nothing.
     #[test]
     fn a_cluster_scoped_owner_carries_no_namespace() {
-        for kind in ["Node", "PersistentVolume"] {
+        let cluster: Vec<&str> = crate::resources::every_kind()
+            .iter()
+            .filter(|facts| facts.scope == KindScope::Cluster)
+            .map(|facts| facts.kind.as_str())
+            .collect();
+        assert!(cluster.contains(&"PersistentVolume") && cluster.len() >= 5);
+        for kind in cluster {
             assert_eq!(
                 owner_ref(&owner(kind), "production").namespace,
                 None,

@@ -39,7 +39,7 @@ import {
 } from "./model";
 import { verdictOf } from "./verdict";
 import { Chip, Chips, Step, Sub } from "./story";
-import { rowTone, rowWords, type RowTone } from "./words";
+import { rowTone, rowWords, unknowableWords, type RowTone } from "./words";
 
 const TONE_TEXT: Record<RowTone, string> = {
   err: "text-err",
@@ -211,6 +211,13 @@ export function Detail({
               <Chip tone="mut">{t("monitors", "notCounted")}</Chip>
             )}
           </Chips>
+          {row.selected.kind === "unevaluable" && (
+            <p className="mt-1 text-xs text-warn">
+              {t("monitors", "selectorUnevaluable", {
+                selector: selectorWords(monitor.selector) || "{}",
+              })}
+            </p>
+          )}
           {row.selected.kind === "unread" && (
             <p className="mt-1 text-xs text-warn">
               {t("monitors", "selectionUnread", {
@@ -410,7 +417,7 @@ function HeartbeatPanel({
 }
 
 const selectsTone = (row: MonitorRow): RowTone =>
-  row.selected.kind === "unread"
+  row.selected.kind === "unread" || row.selected.kind === "unevaluable"
     ? "warn"
     : row.selected.kind === "notCounted"
       ? "mut"
@@ -538,9 +545,7 @@ function PickedUpStep({
         </p>
       )}
       {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
-        <p className="text-xs text-warn">
-          {t("monitors", "pickedUpUnknown", { reason: pickedUp.reason })}
-        </p>
+        <p className="text-xs text-warn">{unknowableWords(pickedUp.why, t)}</p>
       )}
       {pickedUp.state === "noKind" && (
         <p className="text-xs text-fg-mut">
