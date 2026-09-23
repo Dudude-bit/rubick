@@ -22,7 +22,8 @@ import {
 } from "recharts";
 
 import { formatQuantity } from "@/lib/metric-format";
-import { agoOf, clockOf } from "@/lib/usage-history";
+import { clockOf } from "@/lib/usage-history";
+import { formatSince } from "@/lib/utils";
 import type { TrafficWindow } from "@/integrations";
 import { useT } from "@/i18n/useT";
 
@@ -223,7 +224,8 @@ function TrafficTooltip({
       role="status"
     >
       <div className="font-mono text-[10px] tabular-nums text-fg-fnt">
-        {clockOf(point.t)} · {agoOf(point.t, now)}
+        {clockOf(point.t)} ·{" "}
+        {t("action", "agoSuffix", { age: formatSince(point.t, now) })}
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
         {t("columns", "trafficIn")}{" "}

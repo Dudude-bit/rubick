@@ -37,7 +37,7 @@ export function formatAge(createdAt: string | null, t: T): string {
  *
  * The suffixes are kubectl's and are deliberately not translated; what
  * matters is that every age in this window reads the same way. Split out
- * because a second age format had appeared — `${n}h ago`, in English, and
+ * because a second age format had appeared — "Nh ago", in English, and
  * with nothing above hours, so a file last written a week ago said
  * "168h ago".
  */
