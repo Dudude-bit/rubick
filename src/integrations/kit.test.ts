@@ -34,4 +34,24 @@ describe("the mark on a tab listing things that can be broken", () => {
       says: "1/2",
     });
   });
+
+  /**
+   * Hosts whose backends were unread wore a plain count — the page's third
+   * state collapsing into its second on the tab strip.
+   */
+  it("says rows went unchecked rather than counting them", () => {
+    expect(troubleMark(["unknown", null], says, says)).toEqual({
+      shows: "unchecked",
+      says: "1/2",
+    });
+  });
+
+  /** A real finding still outranks a row nobody could check. */
+  it("lets a finding win over an unchecked row", () => {
+    expect(troubleMark(["unknown", "warn"], says, says)).toEqual({
+      shows: "severity",
+      tone: "warn",
+      says: "1/2",
+    });
+  });
 });

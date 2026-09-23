@@ -18,6 +18,19 @@ const KEEPS_THE_PREFIX = new Set([
   "/src/components/terminal/PodTerminal.tsx",
 ]);
 
+const BY_HAND = /instanceof Error\s*\?\s*[\w.]+\.message/g;
+
+/** Where that spelling is compared, logged or kept, and never shown. */
+const NOT_SHOWN = new Map([
+  ["/src/lib/error-utils.ts", "the normaliser itself"],
+  ["/src/lib/read-deadline.ts", "searched for a marker"],
+  ["/src/lib/log-queue.ts", "kept for the retry"],
+  ["/src/main.tsx", "logged"],
+  ["/src/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
+  ["/src/workers/diff.worker.ts", "a worker's own failure, not a command's"],
+  ["/src/stores/updaterStore.ts", "the updater plugin's, not a command's"],
+]);
+
 describe("a failure shown to the reader", () => {
   beforeEach(() => toast.mockClear());
 
@@ -58,6 +71,23 @@ describe("a failure shown to the reader", () => {
             .map((line) => `${path}: ${line.trim()}`)
     );
     expect(Object.keys(SOURCES).length).toBeGreaterThan(500);
+    expect(shown).toEqual([]);
+  });
+
+  /**
+   * The same message spelled by hand — `error instanceof Error ?
+   * error.message : …` — slipped past the check above on five vendor pages
+   * and in `errorWords`, the words of every toast built from a caught error.
+   */
+  it("is not read off error.message by hand anywhere it is shown", () => {
+    const shown = Object.entries(SOURCES).flatMap(([path, source]) =>
+      NOT_SHOWN.has(path)
+        ? []
+        : [...source.matchAll(BY_HAND)].map(
+            (match) =>
+              `${path}:${source.slice(0, match.index).split("\n").length}`
+          )
+    );
     expect(shown).toEqual([]);
   });
 });

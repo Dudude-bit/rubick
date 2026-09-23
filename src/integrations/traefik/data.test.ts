@@ -6,11 +6,13 @@ vi.mock("@/lib/commands", () => ({
     listDaemonsets: vi.fn(),
     getDeployment: vi.fn(),
     getDaemonset: vi.fn(),
+    listCustomResources: vi.fn(),
   },
 }));
 
 import { commands } from "@/lib/commands";
-import { fetchController } from "./data";
+import { useClusterStore } from "@/stores/clusterStore";
+import { fetchController, listTraefik, servedGroupName } from "./data";
 
 const deployments = vi.mocked(commands.listDeployments);
 const daemonSets = vi.mocked(commands.listDaemonsets);
@@ -45,5 +47,44 @@ describe("looking for the proxy", () => {
     const controller = await fetchController();
 
     expect(controller.problem?.key).toBe("traefikNoController");
+  });
+});
+
+describe("the API group Traefik's kinds are read from", () => {
+  const onCluster = (context: string) =>
+    useClusterStore.setState({ currentContext: context });
+
+  /**
+   * Remembered once for the whole session, so a v2 cluster opened after a v3
+   * one was asked only for `traefik.io`, and its page said the routing could
+   * not be read until the app restarted.
+   */
+  it("is found again on each cluster", async () => {
+    vi.mocked(commands.listCustomResources).mockImplementation(
+      async (crd: string) => {
+        const serves =
+          useClusterStore.getState().currentContext === "old"
+            ? "traefik.containo.us"
+            : "traefik.io";
+        if (crd.endsWith(`.${serves}`)) return [];
+        throw new Error(
+          "Tauri command 'listCustomResources' failed: not found",
+          {
+            cause: { code: "NOT_FOUND", message: "not found" },
+          }
+        );
+      }
+    );
+
+    onCluster("new");
+    await listTraefik("ingressroutes");
+    expect(servedGroupName()).toBe("traefik.io");
+
+    onCluster("old");
+    await expect(listTraefik("ingressroutes")).resolves.toEqual([]);
+    expect(servedGroupName()).toBe("traefik.containo.us");
+
+    onCluster("new");
+    expect(servedGroupName()).toBe("traefik.io");
   });
 });

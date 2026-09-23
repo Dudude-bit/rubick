@@ -15,11 +15,12 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { covers } from "@/lib/certificates";
 import type { Saying } from "@/i18n/say";
-import { listOrRefusal, refusalOf, type ListRead } from "../ingress";
+import { failureOf, listOrFailure, type ListRead } from "../ingress";
 import type { ServiceRoute } from "../registry";
 import { readApplication, type ArgoApp } from "./model";
 
@@ -55,17 +56,30 @@ export function useApplications() {
   });
 }
 
+/**
+ * An Argo install without the ApplicationSet controller has no such CRD, and
+ * saying "could not be read" would call a supported install broken. Anything
+ * else — a refusal above all — is a list nobody read, not an empty one.
+ */
+export async function fetchApplicationSets(): Promise<CustomResourceInfo[]> {
+  try {
+    return await commands.listCustomResources(
+      APPLICATIONSETS_CRD,
+      null,
+      null,
+      null
+    );
+  } catch (error) {
+    if (errorCode(error) === ERROR_CODES.NOT_FOUND) return [];
+    throw error;
+  }
+}
+
 export function useApplicationSets() {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "argocd", "applicationsets"],
-    queryFn: () =>
-      commands
-        .listCustomResources(APPLICATIONSETS_CRD, null, null, null)
-        // An Argo install without the ApplicationSet controller has no such
-        // CRD, and a tab that said "could not be read" would be reporting a
-        // supported install as broken.
-        .catch((): CustomResourceInfo[] => []),
+    queryFn: fetchApplicationSets,
     staleTime: ARGO_STALE,
   });
 }
@@ -179,10 +193,12 @@ export function uiAddress(
 /** Why the list of Argo's workloads is empty, where it is. */
 function noComponents(...reads: ListRead<unknown>[]): Saying | null {
   if (reads.some((read) => read.items.length > 0)) return null;
-  const refused = refusalOf(...reads);
-  return refused
-    ? { key: "controllerUnread", values: { why: refused } }
-    : { key: "argoNoWorkloads", values: { selector: CONTROLLER_SELECTOR } };
+  return (
+    failureOf(...reads) ?? {
+      key: "argoNoWorkloads",
+      values: { selector: CONTROLLER_SELECTOR },
+    }
+  );
 }
 
 export function useController() {
@@ -197,8 +213,8 @@ export function useController() {
         limit: null,
       };
       const [deploymentRead, statefulSetRead, ingresses] = await Promise.all([
-        listOrRefusal(commands.listDeployments(filters)),
-        listOrRefusal(commands.listStatefulsets(filters)),
+        listOrFailure(commands.listDeployments(filters)),
+        listOrFailure(commands.listStatefulsets(filters)),
         // Only where the UI answers: a refusal costs the link, not the page.
         commands.listIngresses(null).catch((): IngressInfo[] => []),
       ]);

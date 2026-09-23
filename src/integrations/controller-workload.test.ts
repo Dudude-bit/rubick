@@ -99,7 +99,46 @@ describe("finding a proxy's controller", () => {
     const found = await findControllerWorkload("app=nginx");
     expect(found).toEqual({
       workload: null,
-      refused: "deployments.apps is forbidden",
+      unread: {
+        key: "controllerUnread",
+        values: { why: "deployments.apps is forbidden" },
+      },
+    });
+  });
+
+  /**
+   * A 60 s deadline on a big cluster was worded "the cluster refused",
+   * `READ_DEADLINE:` marker and all, pointing the reader at RBAC for a read
+   * that was only slow.
+   */
+  it("names a deadline as a deadline, not as a refusal", async () => {
+    commands.listDaemonsets.mockResolvedValue([]);
+    commands.listDeployments.mockRejectedValue(
+      new Error(
+        "Tauri command 'listDeployments' failed: READ_DEADLINE: the cluster did not answer within 60 s",
+        { cause: { code: "READ_DEADLINE", message: "" } }
+      )
+    );
+    const found = await findControllerWorkload("app=nginx");
+    expect(found.unread).toEqual({
+      key: "controllerLookupDeadline",
+      values: { seconds: 60 },
+    });
+  });
+
+  /** A dropped connection is a failed read, not a verdict about RBAC. */
+  it("names a failed read as a failure, not as a refusal", async () => {
+    commands.listDaemonsets.mockResolvedValue([]);
+    commands.listDeployments.mockRejectedValue(
+      new Error(
+        "Tauri command 'listDeployments' failed: connection reset by peer",
+        { cause: { code: "NETWORK_ERROR", message: "" } }
+      )
+    );
+    const found = await findControllerWorkload("app=nginx");
+    expect(found.unread).toEqual({
+      key: "controllerLookupFailed",
+      values: { why: "connection reset by peer" },
     });
   });
 });

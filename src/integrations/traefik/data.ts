@@ -20,6 +20,7 @@ import type { Saying } from "@/i18n/say";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -55,19 +56,24 @@ export const GROUPS: readonly string[] = ["traefik.io", "traefik.containo.us"];
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=traefik";
 
 /**
- * The API group this cluster answers for, remembered for the session.
+ * The API group each cluster answers for, remembered by context.
  *
  * A cluster does not migrate from v2 to v3 while the app is open, and the
- * fallback costs a failed request every time it is not remembered.
+ * fallback costs a failed request every time it is not remembered. The app
+ * does move between clusters, and the next one may be on the other group.
  */
-let servedGroup: string | null = null;
+const servedGroups = new Map<string, string>();
+
+const contextNow = () => useClusterStore.getState().currentContext ?? "";
 
 export async function listTraefik(
   kindPlural: string
 ): Promise<CustomResourceInfo[]> {
-  if (servedGroup) {
+  const context = contextNow();
+  const served = servedGroups.get(context);
+  if (served) {
     return commands.listCustomResources(
-      `${kindPlural}.${servedGroup}`,
+      `${kindPlural}.${served}`,
       null,
       null,
       null
@@ -80,7 +86,7 @@ export async function listTraefik(
       null,
       null
     );
-    servedGroup = GROUPS[0];
+    servedGroups.set(context, GROUPS[0]);
     return objects;
   } catch (error) {
     try {
@@ -90,7 +96,7 @@ export async function listTraefik(
         null,
         null
       );
-      servedGroup = GROUPS[1];
+      servedGroups.set(context, GROUPS[1]);
       return objects;
     } catch {
       // Only the group rename is recovered from. If the fallback fails too
@@ -103,7 +109,7 @@ export async function listTraefik(
 
 /** The group this cluster answered on, once anything has been read. */
 export function servedGroupName(): string {
-  return servedGroup ?? GROUPS[0];
+  return servedGroups.get(contextNow()) ?? GROUPS[0];
 }
 
 export interface RouteSources {
@@ -189,16 +195,14 @@ export async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const { workload, refused } =
+  const { workload, unread } =
     await findControllerWorkload(CONTROLLER_SELECTOR);
   if (!workload) {
     return none(
-      refused
-        ? { key: "controllerUnread", values: { why: refused } }
-        : {
-            key: "traefikNoController",
-            values: { selector: CONTROLLER_SELECTOR },
-          }
+      unread ?? {
+        key: "traefikNoController",
+        values: { selector: CONTROLLER_SELECTOR },
+      }
     );
   }
 
@@ -213,7 +217,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "traefikManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };

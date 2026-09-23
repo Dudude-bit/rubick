@@ -7,14 +7,20 @@ import type {
   IngressInfo,
   ServiceInfo,
 } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { backingFrom, hostSeverity } from "../ingress";
 import {
   allRoutes,
   duplicatedServiceNames,
   hostGroups,
+  hostState,
   middlewareUses,
   readEntryPoints,
   type TraefikSources,
 } from "./model";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
@@ -805,6 +811,41 @@ describe("what it refuses to claim before it knows", () => {
 
     expect(group.findings).toEqual([]);
   });
+
+  /**
+   * Would break if a host with nothing found and its Services unread went
+   * back to green "serving": the row, the map node and the tab mark all read
+   * `worst: null` as fine, beside a note saying nothing behind it was read.
+   */
+  it("calls a host whose backends were refused unknown, not serving", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      })
+    );
+
+    expect(group.backendsKnown).toBe(false);
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** Read and healthy is the one case "serving" is the answer. */
+  it("calls a host serving once what is behind it was read", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 2)],
+      })
+    );
+
+    expect(hostSeverity(group)).toBeNull();
+    expect(hostState(group, null, t).tone).toBe("ok");
+  });
 });
 
 describe("ordering and middlewares", () => {
@@ -990,7 +1031,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
     classes: [TRAEFIK_CLASS],
     services: [proxyService()],
     published: [],
-    backingKnown: false,
+    backingKnown: true,
     backingError: null,
     entryPoints: [
       { name: "web", address: ":8000", tls: false, redirectTo: null },
@@ -1059,5 +1100,22 @@ describe("a host whose TLS ends in front of the proxy", () => {
       base({ upstreamTls: (host) => host === "shop.example.com" })
     );
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /**
+   * Without the proxy's Services no Ingress in front can be recognised, and
+   * "could not look at the edge" was reported as "nothing terminates it".
+   */
+  it("is not called clear while the Services are unread", () => {
+    const [group] = hostGroups(
+      base(backingFrom(undefined, new Error("services is forbidden")))
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
+
+  /** A capability that has not answered is not one that said no. */
+  it("is not called clear while the capability has not answered", () => {
+    const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
   });
 });

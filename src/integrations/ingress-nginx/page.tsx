@@ -21,6 +21,7 @@ import { useMemo } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
+  hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
 } from "../ingress";
@@ -57,7 +58,6 @@ import {
   Column,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
   VendorReadFailure,
   FindingList,
 } from "../page-kit";
@@ -75,6 +75,7 @@ import {
   PROXY_LABEL,
   backingOf,
   hostGroups,
+  hostState,
   nginxClasses,
   type Finding,
   type NginxHostGroup,
@@ -157,8 +158,9 @@ export default function IngressNginxPage() {
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
       mark: troubleMark(
-        groups.map((group) => group.worst),
-        (n, total) => t("count", "hostsNeedAttention", { n, total })
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (
         <RoutesTab
@@ -371,7 +373,7 @@ function RoutesTab({
   );
 }
 
-const severityOfGroup = (group: NginxHostGroup) => group.worst;
+const severityOfGroup = hostSeverity;
 
 const searchableGroup = (group: NginxHostGroup) => [
   group.host,
@@ -381,36 +383,6 @@ const searchableGroup = (group: NginxHostGroup) => [
     route.service?.name,
   ]),
 ];
-
-function hostState(
-  group: NginxHostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  const certificate = group.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate) {
-    return {
-      text:
-        certificate.kind === "certificate" && certificate.expiry?.expired
-          ? t("empty", "certificateExpired")
-          : t("empty", "certificateRunningOut"),
-      tone: "err",
-    };
-  }
-  if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
-    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
-  }
-  if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: t("empty", "servedInTheClear"), tone: "warn" };
-  }
-  if (group.findings.length > 0) {
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  }
-  return { text: t("empty", "serving"), tone: "ok" };
-}
 
 function HostRow({
   group,
@@ -422,7 +394,7 @@ function HostRow({
   openByDefault: boolean;
 }) {
   const t = useT();
-  const state = hostState(group, t);
+  const state = hostState(group, sources?.backingError ?? null, t);
   const tls = group.tlsSecrets[0];
 
   return (

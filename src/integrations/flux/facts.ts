@@ -13,11 +13,17 @@ import type { VendorFact } from "../registry";
 import { fetchPicture } from "./data";
 
 export async function facts(): Promise<VendorFact[]> {
-  const { reconcilers, sources } = await fetchPicture();
+  const { reconcilers, sources, unread } = await fetchPicture();
 
   const lines: VendorFact[] = [
     { say: { key: "factReconcilers", values: { n: reconcilers.length } } },
   ];
+  if (unread.length > 0) {
+    lines.push({
+      say: { key: "factKindsUnread", values: { n: unread.length } },
+      tone: "warn",
+    });
+  }
 
   const failing = reconcilers.filter(
     (reconciler) => reconciler.worst === "err"

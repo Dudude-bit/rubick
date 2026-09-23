@@ -14,12 +14,15 @@ import { frontingIngressesOf, proxyServicesBy } from "./ingress";
  * the core already knows reaches the proxy's Service over TLS, or an Ingress
  * standing in front of it that a cloud controller says it terminates — an
  * ACM ARN or an Application Gateway certificate, neither of which is a route.
+ *
+ * `"unknown"` until the Services and both answers are in: a read that failed
+ * or has not come back is not "nothing in front terminates it".
  */
 export function useFrontingTls(
   ingresses: readonly IngressInfo[] | undefined,
   services: readonly ServiceInfo[] | undefined,
   proxyLabel: readonly [string, string]
-): (host: string | null) => boolean {
+): (host: string | null) => FrontingTls {
   const [labelKey, labelValue] = proxyLabel;
   const proxies = useMemo(
     () => proxyServicesBy(services ?? [], [labelKey, labelValue]),
@@ -46,13 +49,24 @@ export function useFrontingTls(
 
   const fronting = useServiceRoutes(proxy);
   const front = useIngressTls(asked);
+  const unanswered =
+    services === undefined ||
+    (proxy !== null && (fronting.isPending || fronting.error !== null)) ||
+    (asked.length > 0 && (front.isPending || front.error !== null));
   return useCallback(
-    (host: string | null) =>
-      host !== null &&
-      (asked.some((ingress) => front.of(ingress, host)?.terminated === true) ||
+    (host: string | null): FrontingTls => {
+      if (host === null) return unanswered ? "unknown" : false;
+      const terminated =
+        asked.some((ingress) => front.of(ingress, host)?.terminated === true) ||
         fronting.routes.some(
           (route) => route.tls === true && route.host === host
-        )),
-    [asked, front, fronting.routes]
+        );
+      if (terminated) return true;
+      return unanswered ? "unknown" : false;
+    },
+    [asked, front, fronting.routes, unanswered]
   );
 }
+
+/** Whether something in front terminates TLS, or `"unknown"` until it is read. */
+export type FrontingTls = boolean | "unknown";

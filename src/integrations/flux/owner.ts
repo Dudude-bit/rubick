@@ -21,6 +21,7 @@
  * answers a five-hundred-row page.
  */
 import { commands } from "@/lib/commands";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { crdObjectPath, conditionOf, getValueByPath } from "../kit";
 import type { T } from "@/i18n/useT";
 import type {
@@ -119,10 +120,14 @@ export async function ownerOf(
   });
 }
 
-function listAll(crd: string): Promise<CustomResourceInfo[]> {
-  return commands
-    .listCustomResources(crd, null, null, null)
-    .catch((): CustomResourceInfo[] => []);
+/** An unserved kind owns nothing; a refused one is not "no such owner". */
+async function listAll(crd: string): Promise<CustomResourceInfo[]> {
+  try {
+    return await commands.listCustomResources(crd, null, null, null);
+  } catch (error) {
+    if (errorCode(error) === ERROR_CODES.NOT_FOUND) return [];
+    throw error;
+  }
 }
 
 function claimOf(object: DeliveryQuery): Claim | null {

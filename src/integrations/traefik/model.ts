@@ -43,6 +43,8 @@ import {
   proxyServicesBy,
   terminatedUpstreamOf,
 } from "../ingress";
+import type { T } from "@/i18n/useT";
+import type { RowTone } from "../page-kit";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
 
 export type { Backing } from "../ingress";
@@ -179,6 +181,8 @@ export interface HostGroup {
   /** Every TLS Secret any route under this host is served under. */
   tlsSecrets: Array<{ namespace: string; secretName: string }>;
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 export interface TraefikSources extends BackingSources {
@@ -200,7 +204,7 @@ export interface TraefikSources extends BackingSources {
    * about this model. Absent on a cluster with no such vendor, which is the
    * ordinary case and where {@link terminatedUpstream} is the whole answer.
    */
-  upstreamTls?: (host: string | null) => boolean;
+  upstreamTls?: (host: string | null) => boolean | "unknown";
 }
 
 // --- which Ingresses are this Traefik's ---------------------------------
@@ -754,10 +758,13 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
+  // Without the proxy's Services nothing in front can be ruled out.
+  if (!sources.backingKnown) return null;
   // Something in front of the proxy holds the certificate. The inside hop is
   // plaintext by design and is drawn as the fact it is, not as a fault.
   if (terminatedUpstream(host, sources)) return null;
-  if (sources.upstreamTls?.(host)) return null;
+  const upstream = sources.upstreamTls?.(host);
+  if (upstream === true || upstream === "unknown") return null;
   // Nothing is claimed about entry points the controller never told us about:
   // an empty list means the workload could not be read, not that it listens
   // on nothing.
@@ -876,6 +883,8 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
             )[0],
       tlsSecrets,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown || !own.some((route) => route.service?.kubernetes),
     };
   });
 
@@ -906,6 +915,41 @@ export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
       .filter(([, spread]) => spread.size > 1)
       .map(([name]) => name)
   );
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: HostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stop = group.findings.find((finding) => finding.kind === "stop");
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate) {
+    return {
+      text:
+        certificate.kind === "certificate" && certificate.expiry?.expired
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
+      tone: "err",
+    };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function compareGroups(a: HostGroup, b: HostGroup): number {

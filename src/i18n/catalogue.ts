@@ -2696,6 +2696,10 @@ export const en = {
     certIssuerNotNamed: "issuer not named",
     controllerUnread:
       "Whether the controller is installed is unknown: the cluster refused the lists it would be found in — {why}",
+    controllerLookupFailed:
+      "Whether the controller is installed is unknown: the lists it would be found in could not be read — {why}",
+    controllerLookupDeadline:
+      "Whether the controller is installed is unknown: the cluster did not answer the lists it would be found in within {seconds} s.",
     argoNoWorkloads:
       "Nothing in this cluster carries {selector}, so Argo's own workloads could not be found. Its Applications are still read from the API server.",
     traefikNoController:
@@ -3020,6 +3024,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factKindsUnread: {
+      one: "{n} kind could not be listed",
+      other: "{n} kinds could not be listed",
+    },
     factNotReconciled: {
       one: "{n} not reconciled",
       other: "{n} not reconciled",
@@ -4232,6 +4240,12 @@ export const en = {
     readingSources: "Reading the sources…",
     fluxNoSources:
       "No source objects. Nothing is being fetched, so nothing can be applied.",
+    fluxSourcesUnread:
+      "No source of the kinds that could be read. The kinds above could not be listed, so what this cluster fetches is not known here.",
+    fluxReconcilersUnread:
+      "No Kustomization, and HelmReleases could not be listed, so whether Flux is applying anything is not known here.",
+    fluxUnreadNote:
+      "Anything below that names one of these is shown as not read, not as missing.",
     fluxSourcesDescription:
       "A source is fetched once and applied by everything that names it. This is the half of Flux that fails quietly: a source that stops fetching leaves every reconciler under it reporting the last revision it managed to apply.",
     noUrlDeclared: "no URL declared",
@@ -4772,14 +4786,14 @@ export const en = {
     lokiNamespacesTitle: "Namespaces it has lines for",
     lokiOneLineProof:
       "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way — which is why an empty answer is drawn as a question and not as a verdict.",
-    lokiRefusedQuery: "refused the query",
+    lokiQueryFailed: "query failed",
     lokiHasLines: "has lines",
     lokiNothingInWindow: "nothing in the window",
     lokiHoldsNone: "This Loki holds none of this cluster's namespaces",
     lokiHoldsNoneBody:
       "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL — which is all the connection test proved — so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
-    lokiRefusalNotAbsence:
-      "A refusal is not an absence. Nothing is claimed about these namespaces either way.",
+    lokiFailureNotAbsence:
+      "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
@@ -4869,6 +4883,7 @@ export const en = {
     nothingBehindIt: "nothing behind it",
     certificateFailed: "certificate failed",
     namesSomethingAbsent: "names something absent",
+    namesSomethingUnread: "names something not read",
     worthALook: "worth a look",
     everyHost: "every host",
     anyHostNotMatched: "any host not matched above",
@@ -4877,6 +4892,7 @@ export const en = {
     httpAndHttps: "HTTP and HTTPS",
     httpsOnly: "HTTPS only",
     nameAbsent: "{name} — absent",
+    nameUnread: "{name} — not read",
     noFrontendConfig: "no FrontendConfig",
     nothingTerminatesTls: "nothing terminates TLS",
     uploadedToGoogle: "uploaded to Google, not in this cluster",
@@ -4949,6 +4965,12 @@ export const en = {
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
     ciliumPageDescription:
       "Every endpoint with the policies that select it, and the ones nothing selects at all",
+    couldNotReadCilium: "Could not read Cilium's endpoints and policies",
+    couldNotReadCiliumBody:
+      "Coverage is the two lists joined, and one of them did not come back — so nothing here can say which pods a policy reaches.",
+    readingCilium: "Reading endpoints and policies…",
+    ciliumNoEndpoints:
+      "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
@@ -5831,6 +5853,10 @@ export const en = {
       one: "{n} reconciler from {sources}",
       other: "{n} reconcilers from {sources}",
     },
+    reconcilersSomeUnread: {
+      one: "{n} reconciler · some kinds not read",
+      other: "{n} reconcilers · some kinds not read",
+    },
     sources: { one: "{n} source", other: "{n} sources" },
     notReconcilingAndFirst: "{n} of {total} not reconciling, and first",
     reconcilersAllApplied: {
@@ -6117,6 +6143,7 @@ export const en = {
     nNotRead: "{n} not read",
     worthALook: "{n} worth a look",
     worthALookOfTotal: "{n} of {total} worth a look",
+    notCheckedOfTotal: "{n} of {total} not checked",
     hostsAcrossNamespaces: {
       one: "{n} host across every namespace",
       other: "{n} hosts across every namespace",
@@ -6220,9 +6247,9 @@ export const en = {
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
-    queriesRefused: {
-      one: "{n} query was refused",
-      other: "{n} queries were refused",
+    queriesFailed: {
+      one: "{n} query failed",
+      other: "{n} queries failed",
     },
     failedPods: { one: "{n} failed pod", other: "{n} failed pods" },
     summedOverPods: {

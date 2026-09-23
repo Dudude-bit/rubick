@@ -1,8 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const { listCustomResources } = vi.hoisted(() => ({
+  listCustomResources: vi.fn(),
+}));
+vi.mock("@/lib/commands", () => ({ commands: { listCustomResources } }));
 
 import type { ServiceRoute } from "../registry";
-import { uiAddress, uiFromRoutes } from "./data";
+import { fetchApplicationSets, uiAddress, uiFromRoutes } from "./data";
 import type { IngressInfo } from "@/generated/types";
+
+const failing = (code: string, words: string) =>
+  new Error(`Tauri command 'listCustomResources' failed: ${words}`, {
+    cause: { code, message: words },
+  });
+
+describe("reading ApplicationSets", () => {
+  /**
+   * A refused list came back as `[]`, and the tab told the reader every
+   * Application here was written by hand.
+   */
+  it("keeps a refusal as a failed read, not as none", async () => {
+    listCustomResources.mockRejectedValueOnce(
+      failing("PERMISSION_DENIED", "applicationsets.argoproj.io is forbidden")
+    );
+    await expect(fetchApplicationSets()).rejects.toThrow(/forbidden/);
+  });
+
+  /** An install without the ApplicationSet controller serves no such kind. */
+  it("reads a kind the cluster does not serve as none", async () => {
+    listCustomResources.mockRejectedValueOnce(
+      failing("NOT_FOUND", "applicationsets.argoproj.io not found")
+    );
+    await expect(fetchApplicationSets()).resolves.toEqual([]);
+  });
+});
 
 const route = (overrides: Partial<ServiceRoute> = {}): ServiceRoute => ({
   host: "argocd.example.com",

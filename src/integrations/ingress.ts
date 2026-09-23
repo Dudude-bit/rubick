@@ -23,7 +23,9 @@ import { useCallback, useMemo } from "react";
 import type { en } from "@/i18n/catalogue";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { errorToShow } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
+import type { Saying } from "@/i18n/say";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
@@ -165,6 +167,18 @@ export function backingFrom(
     backingKnown: data !== undefined,
     backingError: data === undefined && error ? errorToShow(error) : null,
   };
+}
+
+/**
+ * A host's place in a list ordered by trouble. With nothing found and its
+ * backends unread, "fine" is not what is known — every row, map node and tab
+ * mark drawn from it read that as green.
+ */
+export function hostSeverity(group: {
+  worst: "err" | "warn" | null;
+  backendsKnown: boolean;
+}): "err" | "warn" | "unknown" | null {
+  return group.worst ?? (group.backendsKnown ? null : "unknown");
 }
 
 function ref(kind: string, name: string, namespace: string): ObjectRef {
@@ -529,28 +543,45 @@ export function useRouteCertificates(
 /** A list read for a lookup: its items, or why there are none to look at. */
 export interface ListRead<T> {
   items: T[];
-  error: string | null;
+  failure: Saying | null;
 }
 
 /**
- * A list whose refusal is kept rather than read as empty. Looking for a
+ * Why a lookup list could not be read, naming the cause it had. A deadline
+ * filed as "the cluster refused" sends the reader to RBAC for a slow read.
+ */
+export function lookupFailure(error: unknown): Saying {
+  if (isReadDeadline(error)) {
+    return {
+      key: "controllerLookupDeadline",
+      values: { seconds: LIST_DEADLINE_SECONDS },
+    };
+  }
+  const why = errorToShow(error);
+  return isRefusal(error)
+    ? { key: "controllerUnread", values: { why } }
+    : { key: "controllerLookupFailed", values: { why } };
+}
+
+/**
+ * A list whose failure is kept rather than read as empty. Looking for a
  * controller through `.catch(() => [])` turned a 403 into "no controller is
  * installed", which sends somebody to install one that is running.
  */
-export async function listOrRefusal<T>(
+export async function listOrFailure<T>(
   read: Promise<T[]>
 ): Promise<ListRead<T>> {
   try {
-    return { items: await read, error: null };
+    return { items: await read, failure: null };
   } catch (error) {
-    return { items: [], error: errorToShow(error) };
+    return { items: [], failure: lookupFailure(error) };
   }
 }
 
-/** Why nothing was found, when nothing could have been: the first refusal. */
-export function refusalOf(...reads: ListRead<unknown>[]): string | null {
+/** Why nothing was found, when nothing could have been: the first failure. */
+export function failureOf(...reads: ListRead<unknown>[]): Saying | null {
   if (reads.some((read) => read.items.length > 0)) return null;
-  return reads.find((read) => read.error !== null)?.error ?? null;
+  return reads.find((read) => read.failure !== null)?.failure ?? null;
 }
 
 /** The workload running a proxy's controller, found by its chart label. */
@@ -570,7 +601,7 @@ export interface ControllerWorkload {
  */
 export async function findControllerWorkload(
   labelSelector: string
-): Promise<{ workload: ControllerWorkload | null; refused: string | null }> {
+): Promise<{ workload: ControllerWorkload | null; unread: Saying | null }> {
   const filters = {
     namespace: null,
     labelSelector,
@@ -578,8 +609,8 @@ export async function findControllerWorkload(
     limit: null,
   };
   const [deployments, daemonSets] = await Promise.all([
-    listOrRefusal(commands.listDeployments(filters)),
-    listOrRefusal(commands.listDaemonsets(filters)),
+    listOrFailure(commands.listDeployments(filters)),
+    listOrFailure(commands.listDaemonsets(filters)),
   ]);
   const deployment = deployments.items[0];
   if (deployment) {
@@ -592,7 +623,7 @@ export async function findControllerWorkload(
         ready: deployment.replicas.ready,
         desired: deployment.replicas.desired,
       },
-      refused: null,
+      unread: null,
     };
   }
   const daemonSet = daemonSets.items[0];
@@ -606,8 +637,8 @@ export async function findControllerWorkload(
         ready: daemonSet.ready,
         desired: daemonSet.desired,
       },
-      refused: null,
+      unread: null,
     };
   }
-  return { workload: null, refused: refusalOf(deployments, daemonSets) };
+  return { workload: null, unread: failureOf(deployments, daemonSets) };
 }

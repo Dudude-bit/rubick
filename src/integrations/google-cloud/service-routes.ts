@@ -19,6 +19,7 @@ import type { ServiceRoute } from "../registry";
 import { covers } from "@/lib/certificates";
 import { fetchIngressSources } from "./data";
 import {
+  MANAGED_CERTIFICATE_CRD,
   certificateDomains,
   certificateStatusOf,
   gceClassOf,
@@ -35,12 +36,14 @@ import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
  * `ManagedCertificate` that is not yet `Active` is not terminating anything
  * *now* and may be minutes from doing so; a pre-shared certificate is a name
  * in an annotation and Google holds the domains, so nothing in this cluster
- * says which hosts it covers.
+ * says which hosts it covers. Nor does a certificate named in a list nobody
+ * could read.
  */
 function terminates(
   ingress: IngressInfo,
   host: string,
-  certificates: CustomResourceInfo[]
+  certificates: CustomResourceInfo[],
+  certificatesKnown: boolean
 ): boolean | null {
   if (
     ingress.hasCatchAllTls ||
@@ -57,7 +60,10 @@ function terminates(
       (candidate) =>
         candidate.name === name && candidate.namespace === ingress.namespace
     );
-    if (!found) continue;
+    if (!found) {
+      if (!certificatesKnown) pending = true;
+      continue;
+    }
     if (!covers(certificateDomains(found), host)) continue;
     if (certificateStatusOf(found) === "Active") return true;
     pending = true;
@@ -72,6 +78,9 @@ export async function serviceRoutes(input: {
   name: string;
 }): Promise<ServiceRoute[]> {
   const sources = await fetchIngressSources();
+  const certificatesKnown = !sources.unread.some(
+    (read) => read.crd === MANAGED_CERTIFICATE_CRD
+  );
   const found = new Map<string, ServiceRoute>();
 
   for (const ingress of sources.ingresses) {
@@ -85,7 +94,12 @@ export async function serviceRoutes(input: {
       for (const path of rule.paths) {
         if (path.backendService !== input.name) continue;
         const key = `${host}${path.path || "/"}`;
-        const tls = terminates(ingress, host, sources.managedCertificates);
+        const tls = terminates(
+          ingress,
+          host,
+          sources.managedCertificates,
+          certificatesKnown
+        );
         const already = found.get(key);
         // Two Ingresses on one host and path: if either terminates TLS, a
         // client that asks for it gets it.

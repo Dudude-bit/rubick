@@ -43,7 +43,7 @@ import {
   SOURCE_KINDS,
   useControllers,
   usePicture,
-  type FluxController,
+  type FluxControllers,
 } from "./data";
 import {
   reconcilerState,
@@ -55,6 +55,7 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
 
 /** Past this many broken reconcilers, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -75,6 +76,9 @@ export default function FluxPage() {
 
   const reconcilers = picture.data?.reconcilers ?? [];
   const sources = picture.data?.sources ?? [];
+  const unread = picture.data?.unread ?? [];
+  const releasesUnread = unread.some((read) => read.kind === "HelmRelease");
+  const sourcesUnread = unread.some((read) => read.kind !== "HelmRelease");
 
   if (picture.error) {
     return (
@@ -99,7 +103,11 @@ export default function FluxPage() {
         needAttention
       ),
       content: (
-        <ReconcilersTab reconcilers={reconcilers} loading={picture.isPending} />
+        <ReconcilersTab
+          reconcilers={reconcilers}
+          loading={picture.isPending}
+          partial={releasesUnread}
+        />
       ),
     },
     {
@@ -110,17 +118,23 @@ export default function FluxPage() {
         sources.map((entry) => entry.worst),
         needAttention
       ),
-      content: <SourcesTab sources={sources} loading={picture.isPending} />,
+      content: (
+        <SourcesTab
+          sources={sources}
+          loading={picture.isPending}
+          partial={sourcesUnread}
+        />
+      ),
     },
     {
       id: "controllers",
       label: t("nav", "controllers"),
       glyph: viewGlyph(Box),
       mark:
-        controllers.data && controllers.data.length > 0
-          ? countMark(controllers.data.length)
+        controllers.data && controllers.data.controllers.length > 0
+          ? countMark(controllers.data.controllers.length)
           : undefined,
-      content: <ControllersTab controllers={controllers.data} />,
+      content: <ControllersTab read={controllers.data} />,
     },
   ];
 
@@ -131,13 +145,25 @@ export default function FluxPage() {
         count={
           picture.isPending
             ? undefined
-            : t("count", "reconcilersFromSources", {
-                n: reconcilers.length,
-                sources: t("count", "sources", { n: sources.length }),
-              })
+            : unread.length > 0
+              ? t("count", "reconcilersSomeUnread", { n: reconcilers.length })
+              : t("count", "reconcilersFromSources", {
+                  n: reconcilers.length,
+                  sources: t("count", "sources", { n: sources.length }),
+                })
         }
         description={t("empty", "fluxPageDescription")}
       />
+      {unread.map((read) => (
+        <Finding
+          key={read.crd}
+          tone="warn"
+          title={t("empty", "crdCouldNotBeListed", { crd: read.crd })}
+          verbatim={read.reason}
+        >
+          {t("empty", "fluxUnreadNote")}
+        </Finding>
+      ))}
       <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
@@ -148,9 +174,12 @@ export default function FluxPage() {
 function ReconcilersTab({
   reconcilers,
   loading,
+  partial,
 }: {
   reconcilers: FluxReconciler[];
   loading: boolean;
+  /** A reconciler kind could not be listed. */
+  partial: boolean;
 }) {
   const t = useT();
 
@@ -158,6 +187,14 @@ function ReconcilersTab({
     return (
       <p className="text-xs text-fg-fnt">
         {t("empty", "readingWhatFluxApplies")}
+      </p>
+    );
+  }
+
+  if (reconcilers.length === 0 && partial) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        {t("empty", "fluxReconcilersUnread")}
       </p>
     );
   }
@@ -251,10 +288,14 @@ function ReconcilerRow({
         <Column label={t("columns", "source")}>
           {reconciler.sourceRef ? (
             <Cell
-              bad={source?.ready === false || !source}
+              bad={
+                source?.ready === false || (!source && reconciler.sourceKnown)
+              }
               under={
                 !source
-                  ? t("empty", "notInThisCluster")
+                  ? reconciler.sourceKnown
+                    ? t("empty", "notInThisCluster")
+                    : t("empty", "notReadLower")
                   : source.ready === false
                     ? t("empty", "fetchFailingLower")
                     : (source.ref ?? t("empty", "fetchedLower"))
@@ -518,14 +559,24 @@ function describe(
 function SourcesTab({
   sources,
   loading,
+  partial,
 }: {
   sources: FluxSource[];
   loading: boolean;
+  /** A source kind could not be listed. */
+  partial: boolean;
 }) {
   const t = useT();
   if (loading) {
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "readingSources")}</p>
+    );
+  }
+  if (sources.length === 0 && partial) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        {t("empty", "fluxSourcesUnread")}
+      </p>
     );
   }
   if (sources.length === 0) {
@@ -696,19 +747,16 @@ function SourceFinding({
 
 // --- controllers --------------------------------------------------------
 
-function ControllersTab({
-  controllers,
-}: {
-  controllers: FluxController[] | undefined;
-}) {
+function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   const t = useT();
-  if (!controllers) {
+  if (!read) {
     return (
       <p className="text-xs text-fg-fnt">
         {t("empty", "readingFluxWorkloads")}
       </p>
     );
   }
+  const { controllers, unread } = read;
 
   return (
     <Section>
@@ -717,7 +765,11 @@ function ControllersTab({
         count={controllers.length || undefined}
         description={t("empty", "fluxWorkloadsDescription")}
       />
-      {controllers.length === 0 ? (
+      {unread ? (
+        <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+          {sayWords(unread, t)}
+        </p>
+      ) : controllers.length === 0 ? (
         <p className="max-w-[64ch] text-[11px] text-fg-fnt">
           {t("empty", "fluxNoControllersPre")}{" "}
           <span className="font-mono">app.kubernetes.io/part-of=flux</span>

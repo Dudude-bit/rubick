@@ -7,6 +7,7 @@ import {
   reconcilerState,
   revisionText,
   sourceState,
+  type KindUnread,
 } from "./model";
 
 import { translate } from "@/i18n";
@@ -95,12 +96,18 @@ function gitRepository(
 const picture = (
   kustomizations: CustomResourceInfo[],
   sources: CustomResourceInfo[],
-  helmReleases: CustomResourceInfo[] = []
+  helmReleases: CustomResourceInfo[] = [],
+  unread: KindUnread[] = []
 ) =>
-  fluxPicture(kustomizations, helmReleases, [
-    { kind: "GitRepository", objects: sources },
-    { kind: "HelmRepository", objects: [] },
-  ]);
+  fluxPicture(
+    kustomizations,
+    helmReleases,
+    [
+      { kind: "GitRepository", objects: sources },
+      { kind: "HelmRepository", objects: [] },
+    ],
+    unread
+  );
 
 describe("suspension is never healthy", () => {
   /**
@@ -363,7 +370,8 @@ describe("a HelmRelease is a reconciler with a chart for a unit", () => {
             ),
           ],
         },
-      ]
+      ],
+      []
     );
 
     expect(reconcilers[0].unit).toBe("podinfo 6.5.4");
@@ -383,6 +391,53 @@ describe("a source nobody applies", () => {
     );
     expect(sources[0].findings.map((finding) => finding.kind)).toEqual([
       "unused",
+    ]);
+  });
+
+  /**
+   * With HelmReleases refused, a HelmRepository only a release uses read as
+   * "fetched, unused" — a warning built on the list nobody could read.
+   */
+  it("is not claimed while a reconciler kind could not be listed", () => {
+    const { sources } = picture(
+      [],
+      [gitRepository("orphan", [ready("stored artifact")], REVISION)],
+      [],
+      [{ kind: "HelmRelease", crd: "helmreleases", reason: "forbidden" }]
+    );
+    expect(sources[0].findings).toEqual([]);
+    expect(sourceState(sources[0], t).text).not.toBe(
+      t("empty", "fluxFetchedUnused")
+    );
+  });
+});
+
+describe("a source whose kind could not be listed", () => {
+  /**
+   * A refused `gitrepositories` list came back empty, and every
+   * Kustomization naming one got a red "the source it names is not in this
+   * cluster" about a GitRepository that is there.
+   */
+  it("is not reported missing", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [ready("Applied")], REVISION)],
+      [],
+      [],
+      [{ kind: "GitRepository", crd: "gitrepositories", reason: "forbidden" }]
+    );
+    expect(reconcilers[0].sourceKnown).toBe(false);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([]);
+  });
+
+  /** The same Kustomization with the list read and empty is missing its source. */
+  it("is reported missing when its kind was read", () => {
+    const { reconcilers } = picture(
+      [kustomization("apps", {}, [ready("Applied")], REVISION)],
+      []
+    );
+    expect(reconcilers[0].sourceKnown).toBe(true);
+    expect(reconcilers[0].findings.map((finding) => finding.kind)).toEqual([
+      "noSource",
     ]);
   });
 });
