@@ -21,9 +21,7 @@ import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { crdWidthsKey } from "@/lib/resource-identity";
 import { getResourceRowId } from "@/lib/table-utils";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
-import { useState } from "react";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
 
 interface CustomResourceListProps {
@@ -203,31 +201,14 @@ export function CustomResourceList({
       ),
     [crdGroup, crdVersion, crdKind, crdPlural, watchNamespace]
   );
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "realtimeFallback", {
-          kind: crdKind,
-          error: err,
-        }),
-      });
-    },
-    [toast, watchFailed, crdKind, t]
-  );
-  const { resyncing } = useResourceWatch<CustomResourceListItem>({
+  const { live, refresh, resyncing } = useWatchedList<CustomResourceListItem>({
     enabled: watchEnabled,
     subscribe: subscribeCustomResource,
     // The memoised array itself, not a copy of it: the watch effect has this
     // in its dependencies, and a fresh array on every render tore the subscription
     // down and opened another one on every single render.
     queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
+    reportFailure: crdKind,
   });
 
   return (
@@ -275,8 +256,8 @@ export function CustomResourceList({
         resourceType: crdKind,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refresh={watchFailed || !watchEnabled ? "resourceList" : false}
-      live={watchEnabled && !watchFailed}
+      refresh={refresh}
+      live={live}
       resyncing={resyncing}
       searchPlaceholder={t("action", "searchKindPlaceholder", {
         kind: crdKind,

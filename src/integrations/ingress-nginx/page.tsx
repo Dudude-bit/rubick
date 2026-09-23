@@ -47,7 +47,6 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import {
@@ -59,6 +58,8 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { rawNote, type AnnotationReading } from "./annotations";
 import { readSettings, type SettingReading } from "./configmap";
@@ -82,6 +83,7 @@ import {
 } from "./model";
 import { problemWords } from "@/lib/certificates";
 import { T } from "@/i18n/T";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { troubleMark } from "../kit";
@@ -91,8 +93,7 @@ const AUTO_OPEN = 8;
 
 export default function IngressNginxPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -188,15 +189,12 @@ export default function IngressNginxPage() {
 
   if (routeSources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "routingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadRouting")}
+        body={t("empty", "routingRequestFailed")}
+        error={routeSources.error}
+        onRetry={() => void routeSources.refetch()}
+      />
     );
   }
 
@@ -267,15 +265,7 @@ export default function IngressNginxPage() {
         }
         description={t("empty", "nginxPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -898,21 +888,15 @@ function Findings({
     group.tlsSecrets.map((secret) => secret.secretName)
   );
 
-  if (group.findings.length === 0) return null;
-
-  const worthRepeating = group.findings.filter(
-    (finding) => finding.kind !== "clear"
-  );
-  if (brief && worthRepeating.length === 0) return null;
-  const shown = brief ? worthRepeating.slice(0, 1) : group.findings;
-  const hidden = brief ? worthRepeating.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => {
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      worthRepeating={saysMoreThanTheRow}
+      render={(finding) => {
         const said = describeFinding(finding, t);
         return (
-          <FindingBlock key={index} tone={finding.severity} title={said.title}>
+          <FindingBlock tone={finding.severity} title={said.title}>
             {!brief && said.note}
             {!brief && finding.kind === "certificate" && (
               <RenewalNote
@@ -922,15 +906,13 @@ function Findings({
             )}
           </FindingBlock>
         );
-      })}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
-      )}
-    </div>
+      }}
+    />
   );
 }
+
+const saysMoreThanTheRow = (finding: NginxHostGroup["findings"][number]) =>
+  finding.kind !== "clear";
 
 const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
   backendMissing: "stopNoServiceToSendTo",

@@ -4,11 +4,17 @@
  * where a second button is neither valid nor operable.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import { TroubleList, TroubleRow, type Severity } from "./page-kit";
+import {
+  FindingList,
+  TroubleList,
+  TroubleRow,
+  VendorReadFailure,
+  type Severity,
+} from "./page-kit";
 
 const row = (copy?: string) =>
   render(
@@ -217,5 +223,84 @@ describe("a list ordered by trouble", () => {
     ).toBeInTheDocument();
     list([{ name: "blog", severity: null }]);
     expect(screen.getByText("all 1 well")).toBeInTheDocument();
+  });
+});
+
+describe("a vendor page whose read failed", () => {
+  const REFUSED =
+    'Tauri command \'listCustomResources\' failed: kustomizations.kustomize.toolkit.fluxcd.io is forbidden: User "kirya" cannot list resource "kustomizations" in API group "kustomize.toolkit.fluxcd.io" at the cluster scope';
+
+  /**
+   * Fifteen pages drew the raw message under a red heading: the command's
+   * name in front of the cluster's words, no way to try again, and no rule
+   * to hand an administrator.
+   */
+  it("gives the cluster's words, a retry and the rule to ask for", () => {
+    const retry = vi.fn();
+    render(
+      <VendorReadFailure
+        title="Could not read what Flux is reconciling"
+        body="Flux's own objects"
+        error={new Error(REFUSED)}
+        onRetry={retry}
+      />
+    );
+
+    expect(
+      screen.getByText("Could not read what Flux is reconciling")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent("Tauri command");
+    expect(
+      screen.getByRole("button", { name: "Copy the rule to ask for" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try the read again" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a row's findings", () => {
+  const findings = ["clear", "broken", "expiring"];
+  const worth = (finding: string) => finding !== "clear";
+  const shown = (brief: boolean) =>
+    render(
+      <FindingList
+        findings={findings}
+        brief={brief}
+        worthRepeating={worth}
+        render={(finding) => <p>{finding}</p>}
+      />
+    );
+
+  /** An open row owes the reader every finding, the plain one included. */
+  it("lists every finding in an open row", () => {
+    shown(false);
+    for (const finding of findings) {
+      expect(screen.getByText(finding)).toBeInTheDocument();
+    }
+    expect(screen.queryByText(/more/)).toBeNull();
+  });
+
+  /**
+   * A closed row repeats only what its state word does not already say, and
+   * counts the rest, so a reader knows opening it is worth the click.
+   */
+  it("gives a closed row its first telling finding and a count", () => {
+    shown(true);
+    expect(screen.getByText("broken")).toBeInTheDocument();
+    expect(screen.queryByText("clear")).toBeNull();
+    expect(screen.queryByText("expiring")).toBeNull();
+    expect(screen.getByText(/1 more/)).toBeInTheDocument();
+  });
+
+  it("adds nothing to a closed row whose findings its state word covers", () => {
+    const { container } = render(
+      <FindingList
+        findings={["clear"]}
+        brief
+        worthRepeating={worth}
+        render={(finding) => <p>{finding}</p>}
+      />
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });

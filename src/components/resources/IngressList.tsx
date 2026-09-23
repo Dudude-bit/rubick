@@ -4,13 +4,7 @@ import { T } from "@/i18n/T";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -33,8 +27,7 @@ import {
 } from "@/components/resources/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { TlsBadge } from "@/components/network";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
+import { useWatchedList } from "@/hooks/useWatchedList";
 
 import type { IngressInfo } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -248,28 +241,11 @@ export function IngressList() {
     [watchNamespace]
   );
 
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "realtimeFallback", {
-          kind: toPlural(ResourceType.Ingress),
-          error: err,
-        }),
-      });
-    },
-    [t, toast, watchFailed]
-  );
-  const { resyncing } = useResourceWatch<IngressInfo>({
+  const { live, refresh, resyncing } = useWatchedList<IngressInfo>({
     enabled: watchEnabled,
     subscribe,
     queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
+    reportFailure: toPlural(ResourceType.Ingress),
   });
 
   // A second observer on the list's own cache entry, so the rows cost one
@@ -357,8 +333,8 @@ export function IngressList() {
           resourceType: ResourceType.Ingress,
         }}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchFailed || scope.several ? undefined : false}
-        live={watchEnabled && !watchFailed}
+        refresh={refresh}
+        live={live}
         resyncing={resyncing}
         getRowHref={(row) =>
           getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)
