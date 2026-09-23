@@ -25,7 +25,6 @@ pub async fn get_configmap(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigMapInfo> {
-    crate::validation::validate_dns_subdomain(&name)?;
     get_resource_info::<ConfigMap, ConfigMapInfo>(name, namespace, state).await
 }
 
@@ -43,7 +42,6 @@ pub async fn get_configmap_data(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ConfigData> {
-    crate::validation::validate_dns_subdomain(&name)?;
     let configmap: ConfigMap =
         crate::commands::helpers::get_resource(name, namespace, state).await?;
 
@@ -98,6 +96,5 @@ pub async fn delete_configmap(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&name)?;
     crate::commands::helpers::delete_resource::<ConfigMap>(name, namespace, state, None).await
 }

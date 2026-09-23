@@ -71,7 +71,7 @@ export function StatusBar() {
   const errorContext = useClusterStore((s) => s.errorContext);
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
-  const { podCount, problemCount, problemsTruncated } = useClusterSummary();
+  const { podCount, problemCount } = useClusterSummary();
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
   // permanently lit stops being read.
@@ -175,9 +175,6 @@ export function StatusBar() {
               <span>·</span>
               <span className={cn((problemCount ?? 0) > 0 && "text-err")}>
                 {t("cluster", "problemCount", { n: problemCount ?? 0 })}
-                {/* The backend caps its ranked list; saying "12+" is the
-                    difference between a count and a guess. */}
-                {problemsTruncated > 0 && "+"}
               </span>
             </>
           )}

@@ -34,14 +34,7 @@ fn check_via(via: Option<&Via>) -> Result<()> {
 }
 
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
-    Ok((*client).clone())
+    Ok((*state.current_client()?).clone())
 }
 
 /// Why a listing ended without rows, in words the frontend switches on.
@@ -69,7 +62,7 @@ pub async fn list_container_files(
     via: Option<Via>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;
@@ -256,7 +249,7 @@ pub async fn read_container_file(
     via: Option<Via>,
     state: State<'_, AppState>,
 ) -> Result<FileRead> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;
@@ -312,7 +305,7 @@ pub async fn download_container_file(
     destination: String,
     state: State<'_, AppState>,
 ) -> Result<FileRead> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;

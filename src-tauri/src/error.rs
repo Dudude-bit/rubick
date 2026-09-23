@@ -11,8 +11,6 @@ use thiserror::Error;
 pub mod messages {
     /// No cluster connected
     pub const NO_CLUSTER: &str = "No cluster connected";
-    /// Client not found for context
-    pub const NO_CLIENT: &str = "Client not found";
 }
 
 /// Application-wide result type
@@ -136,6 +134,12 @@ pub enum Error {
     /// errors cross the IPC boundary as this string and nothing else.
     #[error("READ_DEADLINE: the cluster did not answer within {after_secs} s")]
     ReadDeadline { after_secs: u64 },
+
+    /// The current context has no live client: disconnected, or between two
+    /// connections. It used to read "Client not found", and every matcher on
+    /// "not found" drew the object on screen as deleted.
+    #[error("Not connected to {0}")]
+    NotConnected(String),
 
     /// Internal errors
     #[error("Internal error: {0}")]

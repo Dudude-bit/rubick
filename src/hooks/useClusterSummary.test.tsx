@@ -67,7 +67,7 @@ describe("cluster summary counts when the overview is refused", () => {
 
   it("reports the real counts when the overview answers", async () => {
     getClusterOverview.mockResolvedValue({
-      namespaces: [{ name: "team-a", podCount: 3 }],
+      namespaces: [{ name: "team-a", podCount: 3, problemCount: 1 }],
       problems: [{ namespace: "team-a" }],
       problemsTruncated: 0,
       counts: { pods: 3 },
@@ -79,5 +79,33 @@ describe("cluster summary counts when the overview is refused", () => {
     await waitFor(() => expect(result.current.podCount).toBe(3));
     expect(result.current.namespaces[0].podCount).toBe(3);
     expect(result.current.namespaces[0].problemCount).toBe(1);
+  });
+
+  /**
+   * The backend ranks its problems worst first and keeps fifty. Counted from
+   * that list, a namespace whose warnings fell past the cut read "0", and the
+   * status bar said "50+" about a number the backend had counted exactly.
+   */
+  it("counts the problems the ranked list dropped", async () => {
+    getClusterOverview.mockResolvedValue({
+      namespaces: [
+        { name: "prod", podCount: 50, problemCount: 50 },
+        { name: "dev", podCount: 1, problemCount: 1 },
+      ],
+      problems: Array.from({ length: 50 }, () => ({ namespace: "prod" })),
+      problemsTruncated: 1,
+      counts: { pods: 51 },
+    } as never);
+    listNamespaces.mockResolvedValue([
+      { name: "prod" },
+      { name: "dev" },
+    ] as never);
+
+    const { result } = renderHook(() => useClusterSummary(), { wrapper });
+
+    await waitFor(() => expect(result.current.podCount).toBe(51));
+    expect(result.current.problemCount).toBe(51);
+    const dev = result.current.namespaces.find((ns) => ns.name === "dev");
+    expect(dev?.problemCount).toBe(1);
   });
 });

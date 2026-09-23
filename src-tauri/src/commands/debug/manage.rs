@@ -21,7 +21,7 @@ pub async fn delete_debug_pod(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&pod_name)?;
+    crate::validation::validate_name::<Pod>(&pod_name)?;
 
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let api: Api<Pod> = ctx.namespaced_api();

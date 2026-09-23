@@ -18,7 +18,6 @@ pub async fn list_namespaces(state: State<'_, AppState>) -> Result<Vec<Namespace
 /// matches against.
 #[tauri::command]
 pub async fn get_namespace(name: String, state: State<'_, AppState>) -> Result<NamespaceInfo> {
-    crate::validation::validate_dns_subdomain(&name)?;
     let ns: Namespace = crate::commands::helpers::get_cluster_resource(name, state).await?;
     Ok(NamespaceInfo::from(&ns))
 }

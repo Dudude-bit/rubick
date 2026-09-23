@@ -219,6 +219,16 @@ impl AppState {
         self.current_context.read().clone()
     }
 
+    /// The current context's client, or why there is none.
+    pub fn current_client(&self) -> Result<Arc<kube::Client>> {
+        let context = self.get_current_context().ok_or_else(|| {
+            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+        })?;
+        self.client_manager
+            .get_client(&context)
+            .ok_or(crate::error::Error::NotConnected(context))
+    }
+
     /// Set current context
     pub fn set_current_context(&self, context: Option<String>) {
         *self.current_context.write() = context;

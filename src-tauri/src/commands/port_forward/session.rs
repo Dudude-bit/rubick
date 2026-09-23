@@ -276,9 +276,7 @@ pub async fn port_forward_pod(
     // local port that would then answer nothing. The client itself is not kept
     // — each attempt asks the manager again, see `current_client`.
     if state.client_manager.get_client(&context).is_none() {
-        return Err(Error::Internal(
-            crate::error::messages::NO_CLIENT.to_string(),
-        ));
+        return Err(Error::NotConnected(context));
     }
 
     let namespace = require_namespace(namespace, String::new())?;

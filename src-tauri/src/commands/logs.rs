@@ -1,6 +1,6 @@
 //! Log streaming commands
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::logs::{LogConfig, LogLine, LogStreamer, QueryTerm};
 use crate::state::{AppState, LogStream};
 use crate::utils::normalize_optional_namespace;
@@ -80,14 +80,7 @@ pub async fn stream_pod_logs(
     config: StreamLogConfig,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
 
     let namespace = normalize_optional_namespace(config.namespace.clone())
         .unwrap_or_else(|| "default".to_string());
@@ -233,14 +226,7 @@ pub async fn get_pod_logs(
     previous: bool,
     state: State<'_, AppState>,
 ) -> Result<Vec<LogLine>> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
 
     let namespace =
         normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string());

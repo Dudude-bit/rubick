@@ -115,3 +115,43 @@ async fn a_refused_neighbourhood_says_so_instead_of_drawing_an_empty_one() {
         );
     }
 }
+
+/// What uses a `ConfigMap`, asked by an identity that may list pods and
+/// nothing else. One refusal used to end the call, so the panel said nothing
+/// at all; the pods still answer, and the five refused kinds are named.
+#[tokio::test]
+#[ignore = "needs a live cluster and a deliberately narrow identity"]
+async fn what_uses_a_config_map_answers_with_the_pods_it_could_read() {
+    let namespace = namespace();
+    let ctx = refused_context(&namespace).await;
+    let name = std::env::var("K8S_GUI_REFUSED_CONFIGMAP").unwrap_or_else(|_| "demo-config".into());
+
+    let conns = k8s_gui_lib::commands::connections::connections_of(&ctx, "ConfigMap", &name, None)
+        .await
+        .expect("a refused list is part of the answer, not the end of it");
+
+    for edge in &conns.edges {
+        println!(
+            "  {} {} uses {}",
+            edge.from.kind, edge.from.name, edge.to.name
+        );
+    }
+    let unread: Vec<_> = conns
+        .not_looked_at
+        .iter()
+        .map(|u| u.kind.as_str())
+        .collect();
+    println!("not looked at: {unread:?}");
+
+    assert!(
+        conns.edges.iter().any(|edge| edge.from.kind == "Pod"),
+        "the pods were readable and {name} is used by some of them"
+    );
+    for kind in ["Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"] {
+        assert!(
+            unread.contains(&kind),
+            "{kind} was refused and must be named"
+        );
+    }
+    assert!(!unread.contains(&"Pod"), "the pods were read");
+}

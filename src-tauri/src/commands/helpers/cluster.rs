@@ -19,6 +19,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_list(&state, None)?;
     ctx.cluster_api::<K>().get(&name).await.map_err(Error::from)
 }
@@ -36,6 +37,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_list(&state, None)?;
     let params = delete_params.unwrap_or_default();
     ctx.cluster_api::<K>().delete(&name, &params).await?;

@@ -21,7 +21,7 @@ pub async fn get_replicaset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ReplicaSetInfo> {
-    crate::validation::validate_dns_label(&name)?;
+    crate::validation::validate_name::<ReplicaSet>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
     let current = owner_revision(&ctx, &rs).await;
@@ -39,7 +39,7 @@ pub async fn get_replicaset_pods(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PodInfo>> {
-    crate::validation::validate_dns_label(&name)?;
+    crate::validation::validate_name::<ReplicaSet>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
 
     let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
@@ -64,7 +64,7 @@ pub async fn get_deployment_replicasets(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ReplicaSetInfo>> {
-    crate::validation::validate_dns_label(&name)?;
+    crate::validation::validate_name::<Deployment>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
 
     let deployment: Deployment = ctx.namespaced_api().get(&name).await?;
