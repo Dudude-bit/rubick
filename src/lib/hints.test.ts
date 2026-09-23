@@ -192,6 +192,42 @@ describe("troubleOf", () => {
     });
   });
 
+  /**
+   * The pod's figure is what its running containers may take, and a plain
+   * init container is not one of them: `migrate`, killed at its own 1Gi,
+   * was told the pod's limits add up to the app's 512Mi. A native sidecar
+   * is counted in that figure, so it keeps it.
+   */
+  it("quotes the pod's figure only for a container that figure counts", () => {
+    const killed = (phase: ContainerInfo["phase"]) =>
+      troubleOf(
+        pod({
+          initContainers: [
+            container("migrate", {
+              phase,
+              state: { type: "waiting", reason: "CrashLoopBackOff" },
+              lastTerminated: {
+                exitCode: 137,
+                signal: 9,
+                reason: "OOMKilled",
+                message: null,
+                startedAt: null,
+                finishedAt: null,
+              },
+              restartCount: 2,
+            }),
+          ],
+        }),
+        []
+      );
+    expect(killed("init")).toMatchObject({
+      reason: "oomKilled",
+      container: "migrate",
+      limit: null,
+    });
+    expect(killed("sidecar")).toMatchObject({ limit: "512Mi" });
+  });
+
   it("reads a pull failure with the kubelet's own message", () => {
     const trouble = troubleOf(
       pod({
