@@ -312,9 +312,11 @@ export interface IngressTls {
   /**
    * Whether the host is served over TLS. `false` is a real answer — a vendor
    * that owns this Ingress and finds no certificate for the host is stating
-   * that it serves plain HTTP, which is worth more than silence.
+   * that it serves plain HTTP, which is worth more than silence. `null` is
+   * the vendor owning it and not having read enough to say — a certificate
+   * named into a list it could not read — and is never read as `false`.
    */
-  terminated: boolean;
+  terminated: boolean | null;
   /**
    * What holds it, for the sentence: "an ACM certificate", "shop-cert". Never
    * branched on — the surface prints it. A key, because this is answered
@@ -389,6 +391,18 @@ export interface ServiceRoute {
    * link for `null` and names the host instead.
    */
   tls: boolean | null;
+  /**
+   * What stands in front of the proxy for this host, where `tls` is not
+   * `true` on the route's own objects: the Ingresses sending the host to the
+   * proxy's Service, and that Service. Their certificate is often an
+   * annotation only another vendor reads, so `tls` is not final until
+   * `ingress.tls` and `service.routes` have been asked about them — which
+   * `useServiceRoutes` does, as the proxy's own page does.
+   */
+  front?: {
+    ingresses: Array<{ namespace: string; name: string }>;
+    proxy: { namespace: string; name: string };
+  };
   /**
    * The route pins an h2c (gRPC) scheme on its backend, so a browser sent
    * to this host gets no page — it is a way in for a CLI, not for a link.

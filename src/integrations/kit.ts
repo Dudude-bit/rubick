@@ -13,6 +13,11 @@ import type {
   CustomResourceInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
+import {
+  countMark,
+  severityMark,
+  type DetailTabMark,
+} from "@/components/resources/detail-tab";
 import { getCustomResourceUrl } from "@/lib/navigation-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { CrdView } from "./registry";
@@ -185,3 +190,61 @@ export function getValueByPath(
 
   return current;
 }
+
+/**
+ * A tab's mark for a list ordered by trouble: its count while nothing is
+ * wrong, the worst severity and how many need attention otherwise, nothing
+ * for an empty list. Eight tabs wrote this each for themselves.
+ */
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | null | undefined>,
+  needAttention: (n: number, total: number) => string
+): DetailTabMark | undefined;
+/** A list where some verdicts could not be reached says so, not a count. */
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | "unknown" | null | undefined>,
+  needAttention: (n: number, total: number) => string,
+  notChecked: (n: number, total: number) => string
+): DetailTabMark | undefined;
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | "unknown" | null | undefined>,
+  needAttention: (n: number, total: number) => string,
+  notChecked?: (n: number, total: number) => string
+): DetailTabMark | undefined {
+  if (worsts.length === 0) return undefined;
+  const troubled = worsts.filter(
+    (worst) => worst === "err" || worst === "warn"
+  ).length;
+  const unchecked = worsts.filter((worst) => worst === "unknown").length;
+  if (troubled === 0 && unchecked > 0 && notChecked) {
+    return { shows: "unchecked", says: notChecked(unchecked, worsts.length) };
+  }
+  if (troubled === 0) return countMark(worsts.length);
+  return severityMark(
+    worsts.includes("err") ? "err" : "warn",
+    needAttention(troubled, worsts.length)
+  );
+}
+
+/** A permission check's answer, with the third one it can have. */
+export function allowedWord(allowed: boolean | null, t: T): string {
+  return allowed === null
+    ? t("operators", "couldNotTell")
+    : allowed
+      ? t("operators", "allowed")
+      : t("operators", "refused");
+}
+
+/** Three names and a tally: a row is a summary, not the whole list. */
+export function summariseNames(names: readonly string[]): string {
+  if (names.length <= 3) return names.join(", ");
+  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
+}
+
+/** A field the object left empty, drawn as a dash rather than as nothing. */
+export const dash = (value: unknown) =>
+  value === null || value === undefined || value === "" ? "—" : String(value);
+
+/** `14:22` in the reader's own zone. */
+export const hourMinute = (at: number | string) =>
+  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

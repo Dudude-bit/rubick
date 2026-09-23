@@ -1,14 +1,13 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { Section } from "@/components/ui/section";
 import { useT } from "@/i18n/useT";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "./words";
 import { cn, formatSince } from "@/lib/utils";
 import { crdObjectPath } from "../../kit";
 import { integrationSettingsPath } from "../../paths";
-import { Finding, FilterBox } from "../../page-kit";
+import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
 import { Detail } from "./Detail";
 import { useHeartbeat } from "./heartbeat";
 import { Strip } from "./Strip";
@@ -105,12 +104,11 @@ export default function Monitors() {
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("monitors", "couldNotReadMonitors")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("monitors", "couldNotReadMonitors")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
   if (!picture.data || !rows) {

@@ -37,7 +37,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
-import { useCrdReadDenied } from "@/hooks/useListAccess";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   forwardsFor,
@@ -63,7 +63,7 @@ import minikube from "./minikube";
 import prometheus from "./prometheus";
 import traefik from "./traefik";
 import { gatewayCrd } from "./gateway-crd";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   CapabilityKey,
   CapabilityState,
@@ -261,7 +261,7 @@ function useConnections(): Map<string, ConnectionState> {
 
   const saved = useQueries({
     queries: CONNECTED.map((vendor) => ({
-      queryKey: ["integration-connection", vendor.id, context],
+      queryKey: queryKeys.integrationConnection(vendor.id, context),
       queryFn: () => vendor.connect.read(),
       enabled: context !== null && isConnected,
       staleTime: CONNECTION_STALE_TIME,
@@ -270,7 +270,7 @@ function useConnections(): Map<string, ConnectionState> {
 
   const probes = useQueries({
     queries: CONNECTED.map((vendor, index) => ({
-      queryKey: ["integration-probe", vendor.id, context],
+      queryKey: queryKeys.integrationProbe(vendor.id, context),
       queryFn: () => vendor.connect.probe(),
       // The same connected gate the read above has, and it matters more
       // here: a probe fired between sessions comes back as an *answer* —
@@ -304,7 +304,7 @@ function useConnections(): Map<string, ConnectionState> {
           {
             state: "unreachable",
             saved: connection.data,
-            reason: normalizeTauriError(probe.error),
+            reason: errorToShow(probe.error),
           },
         ];
       }
@@ -709,10 +709,10 @@ export function useConnectionEditor(vendorId: string): {
   const refresh = () =>
     Promise.all([
       client.invalidateQueries({
-        queryKey: ["integration-connection", vendorId, context],
+        queryKey: queryKeys.integrationConnection(vendorId, context),
       }),
       client.invalidateQueries({
-        queryKey: ["integration-probe", vendorId, context],
+        queryKey: queryKeys.integrationProbe(vendorId, context),
       }),
     ]).then(() => undefined);
 
@@ -726,7 +726,7 @@ export function useConnectionEditor(vendorId: string): {
   });
 
   const { data: saved = null } = useQuery({
-    queryKey: ["integration-connection", vendorId, context],
+    queryKey: queryKeys.integrationConnection(vendorId, context),
     queryFn: () => vendor!.connect.read(),
     enabled: vendor !== undefined && context !== null,
     staleTime: CONNECTION_STALE_TIME,
@@ -752,7 +752,7 @@ export function useConnectionEditor(vendorId: string): {
               saved.insecureTls === draft.insecureTls
             ) {
               client.setQueryData(
-                ["integration-probe", vendorId, context],
+                queryKeys.integrationProbe(vendorId, context),
                 result
               );
             }
@@ -778,7 +778,7 @@ function factsStateOf(
   // through a failed refetch and a count nobody could re-read is not a
   // count worth printing.
   if (result.error) {
-    return { state: "failed", reason: normalizeTauriError(result.error) };
+    return { state: "failed", reason: errorToShow(result.error) };
   }
   if (result.data) return { state: "ready", facts: result.data };
   return { state: "loading" };
@@ -965,14 +965,6 @@ export function useIntegrationPages(): {
       page: VendorPage & { gate: Gate };
     } => vendor.page?.gate != null
   );
-  // A gated vendor's page reads its CRs by first resolving the CRD — a
-  // cluster-scoped get on `customresourcedefinitions`. A token refused that
-  // cannot open any of them, whatever its rights on the CRs themselves, so the
-  // review of the CR alone (the gate below) missed exactly this reader. The
-  // vendor appears at all only because detection *listed* the CRDs, so this is
-  // a token that may list them and not get one — the get review is the honest
-  // question. A mark, never a lock.
-  const crdDenied = useCrdReadDenied();
   const gateIds = (vendor: (typeof gated)[number]): string[] => {
     const crd = vendor.page.gate.crd;
     return typeof crd === "string" ? [crd] : [...crd];
@@ -1012,7 +1004,6 @@ export function useIntegrationPages(): {
   const forbidden = new Set(
     gated
       .filter((vendor) => {
-        if (crdDenied) return true;
         const answers = gateIds(vendor).map((id) =>
           allowedByResource.get(id.slice(0, id.indexOf(".")))
         );
@@ -1156,13 +1147,13 @@ export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 // core Network read a route's backends with the same two facts every vendor
 // routing page reads (see ./ingress), and naming the file from outside
 // would break the seam the lint rule keeps.
-export { backingOf, useBackingLists, ROUTING_STALE } from "./ingress";
-export type {
-  BackendRef as RouteBackendRef,
-  Backing,
-  BackingSources,
-  ServiceStop,
+export {
+  backingFrom,
+  backingOf,
+  useBackingLists,
+  ROUTING_STALE,
 } from "./ingress";
+export type { Backing, BackingSources, ServiceStop } from "./ingress";
 export { RoutingMap } from "./routing-map";
 export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 

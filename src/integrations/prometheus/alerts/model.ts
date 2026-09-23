@@ -13,6 +13,7 @@ import {
   type PickedUp,
   type PrometheusInstance,
   type Read,
+  type Unknowable,
 } from "../monitors/model";
 
 export { RULES_CRD };
@@ -145,7 +146,7 @@ export function loadedOf(rule: RuleObject, read: RulesRead): Loaded {
 
 export type RuleFinding =
   | { kind: "notPickedUp"; severity: "err" }
-  | { kind: "pickedUpUnknown"; severity: "warn"; reason: string }
+  | { kind: "pickedUpUnknown"; severity: "warn"; why: Unknowable }
   | { kind: "notLoaded"; severity: "err" }
   | { kind: "partlyLoaded"; severity: "err"; missing: string[] }
   | { kind: "evalError"; severity: "err"; rule: string; lastError: string }
@@ -197,7 +198,7 @@ export function findingsOf(
     findings.push({
       kind: "pickedUpUnknown",
       severity: "warn",
-      reason: pickedUp.reason,
+      why: pickedUp.why,
     });
   if (loaded.state === "read") {
     const knownUnpicked =

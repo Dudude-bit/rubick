@@ -22,7 +22,6 @@
 import { covers, type Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
-  ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ChainStop,
@@ -38,8 +37,16 @@ import {
   tlsSecretFor,
   worstOf,
   type Backing,
+  type BackingSources,
   type SecretRef,
+  edgeTlsOf,
+  frontingIngressesOf,
+  proxyServicesBy,
+  terminatedUpstreamOf,
+  type EdgeTls,
 } from "../ingress";
+import type { T } from "@/i18n/useT";
+import type { RowTone } from "../page-kit";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
 
 export type { Backing } from "../ingress";
@@ -176,24 +183,15 @@ export interface HostGroup {
   /** Every TLS Secret any route under this host is served under. */
   tlsSecrets: Array<{ namespace: string; secretName: string }>;
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
-export interface TraefikSources {
+export interface TraefikSources extends BackingSources {
   ingresses: IngressInfo[];
   ingressRoutes: CustomResourceInfo[];
   classes: IngressClassSummary[];
-  services: ServiceInfo[];
-  published: ServicePublished[];
   middlewares: CustomResourceInfo[];
-  /**
-   * Whether {@link services} and {@link published} have actually been read.
-   *
-   * They arrive in a second request, and an empty list means "not yet" as
-   * readily as it means "none". Without this the page spends the second
-   * between the two answers telling the reader that every backend in the
-   * cluster is missing, which is a worse lie than saying nothing.
-   */
-  backingKnown?: boolean;
   /** Empty where the controller's own configuration could not be read. */
   entryPoints: EntryPoint[];
   /** Certificates already read off the TLS Secrets, by `namespace/name`. */
@@ -208,7 +206,7 @@ export interface TraefikSources {
    * about this model. Absent on a cluster with no such vendor, which is the
    * ordinary case and where {@link terminatedUpstream} is the whole answer.
    */
-  upstreamTls?: (host: string | null) => boolean;
+  upstreamTls?: (host: string | null) => boolean | "unknown";
 }
 
 // --- which Ingresses are this Traefik's ---------------------------------
@@ -527,7 +525,7 @@ export function boundEntryPoints(
 
 export function backingOf(
   route: TraefikRoute,
-  sources: Pick<TraefikSources, "services" | "published" | "backingKnown">
+  sources: BackingSources
 ): Backing {
   // Nothing is claimed about a backend that is not a Kubernetes object: it
   // has no endpoints by design, and the app cannot see inside it.
@@ -707,13 +705,11 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
  * The label every Traefik chart puts on its own pods, which is how its own
  * Service is recognised without asking the cluster anything extra.
  */
-const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
+export const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
 
 /** The Services that send traffic to this Traefik's own pods. */
 export function proxyServices(sources: TraefikSources): ServiceInfo[] {
-  return sources.services.filter(
-    (service) => service.selector[PROXY_LABEL[0]] === PROXY_LABEL[1]
-  );
+  return proxyServicesBy(sources.services, PROXY_LABEL);
 }
 
 /**
@@ -732,20 +728,9 @@ export function proxyServices(sources: TraefikSources): ServiceInfo[] {
  * and is the `service.routes` capability's job, asked separately.
  */
 export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
-  const proxies = proxyServices(sources);
-  if (proxies.length === 0) return [];
-  return sources.ingresses.filter((ingress) =>
-    proxies.some(
-      (service) =>
-        service.namespace === ingress.namespace &&
-        // `spec.defaultBackend` is the ordinary spelling on a managed
-        // cluster: the load balancer names no rules and sends everything
-        // to the proxy. Read through `rules` alone it fronts nothing.
-        (service.name === ingress.defaultBackend?.backendService ||
-          ingress.rules.some((rule) =>
-            rule.paths.some((path) => service.name === path.backendService)
-          ))
-    )
+  return frontingIngressesOf(
+    sources.ingresses,
+    proxyServicesBy(sources.services, PROXY_LABEL)
   );
 }
 
@@ -753,22 +738,11 @@ export function terminatedUpstream(
   host: string | null,
   sources: TraefikSources
 ): { kind: "Ingress"; name: string; namespace: string } | null {
-  if (host === null) return null;
+  return terminatedUpstreamOf(host, frontingIngresses(sources));
+}
 
-  for (const ingress of frontingIngresses(sources)) {
-    // It has to terminate TLS *for this host*, not merely somewhere.
-    const terminates =
-      ingress.hasCatchAllTls ||
-      covers(ingress.tlsHosts, host) ||
-      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
-    if (!terminates) continue;
-    return {
-      kind: "Ingress",
-      name: ingress.name,
-      namespace: ingress.namespace,
-    };
-  }
-  return null;
+export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
+  return edgeTlsOf(host, sources, frontingIngresses(sources));
 }
 
 /**
@@ -790,10 +764,9 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
-  // Something in front of the proxy holds the certificate. The inside hop is
-  // plaintext by design and is drawn as the fact it is, not as a fault.
-  if (terminatedUpstream(host, sources)) return null;
-  if (sources.upstreamTls?.(host)) return null;
+  // Something in front holds the certificate, and the inside hop is plaintext
+  // by design; or what is in front could not be read and cannot be ruled out.
+  if (edgeTls(host, sources).at !== "none") return null;
   // Nothing is claimed about entry points the controller never told us about:
   // an empty list means the workload could not be read, not that it listens
   // on nothing.
@@ -912,6 +885,8 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
             )[0],
       tlsSecrets,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown || !own.some((route) => route.service?.kubernetes),
     };
   });
 
@@ -942,6 +917,41 @@ export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
       .filter(([, spread]) => spread.size > 1)
       .map(([name]) => name)
   );
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: HostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stop = group.findings.find((finding) => finding.kind === "stop");
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate) {
+    return {
+      text:
+        certificate.kind === "certificate" && certificate.expiry?.expired
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
+      tone: "err",
+    };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function compareGroups(a: HostGroup, b: HostGroup): number {

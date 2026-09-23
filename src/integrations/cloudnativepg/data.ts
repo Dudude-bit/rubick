@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, DeploymentInfo } from "@/generated/types";
 
@@ -12,7 +12,6 @@ export const CLUSTERS_CRD = `clusters.${GROUP}`;
 export const BACKUPS_CRD = `backups.${GROUP}`;
 export const SCHEDULED_BACKUPS_CRD = `scheduledbackups.${GROUP}`;
 export const POOLERS_CRD = `poolers.${GROUP}`;
-export const DATABASES_CRD = `databases.${GROUP}`;
 
 /** The operator labels its own Deployment; the namespace is the installer's choice. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=cloudnative-pg";
@@ -40,7 +39,7 @@ async function read<T>(fetch: () => Promise<T[]>): Promise<Read<T>> {
   try {
     return { ok: true, items: await fetch() };
   } catch (error) {
-    return { ok: false, reason: normalizeTauriError(error) };
+    return { ok: false, reason: errorToShow(error) };
   }
 }
 

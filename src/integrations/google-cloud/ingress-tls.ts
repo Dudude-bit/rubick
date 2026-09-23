@@ -12,6 +12,7 @@ import { covers } from "@/lib/certificates";
 import type { IngressTls } from "../registry";
 import { fetchIngressSources } from "./data";
 import {
+  MANAGED_CERTIFICATE_CRD,
   certificateDomains,
   certificateStatusOf,
   gceClassOf,
@@ -41,6 +42,18 @@ function answerFor(
 
   const named = managedCertificateRefs(ingress.annotations);
   const preShared = preSharedCerts(ingress.annotations);
+  const certificatesKnown = !sources.unread.some(
+    (read) => read.crd === MANAGED_CERTIFICATE_CRD
+  );
+  // A name into a list nobody could read may cover any host.
+  const unread = named.filter(
+    (name) =>
+      !certificatesKnown &&
+      !sources.managedCertificates.some(
+        (candidate) =>
+          candidate.name === name && candidate.namespace === ingress.namespace
+      )
+  );
 
   return input.hosts.flatMap((host): IngressTls[] => {
     for (const name of named) {
@@ -51,8 +64,8 @@ function answerFor(
       if (!found || !covers(certificateDomains(found), host)) continue;
       // A certificate that is not yet `Active` terminates nothing today, and
       // saying it does would put an https:// link in front of a connection
-      // that is refused. Silence, so `spec.tls` keeps the last word.
-      if (certificateStatusOf(found) !== "Active") return [];
+      // that is refused. Passed over, so another name or `spec.tls` decides.
+      if (certificateStatusOf(found) !== "Active") continue;
       return [
         {
           host,
@@ -73,6 +86,15 @@ function answerFor(
             key: "verbatimLine",
             values: { said: preShared.join(", ") },
           },
+        },
+      ];
+    }
+    if (unread.length > 0) {
+      return [
+        {
+          host,
+          terminated: null,
+          by: { key: "verbatimLine", values: { said: unread.join(", ") } },
         },
       ];
     }

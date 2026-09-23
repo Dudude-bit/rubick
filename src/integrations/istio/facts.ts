@@ -12,13 +12,14 @@ import { integrationPagePath } from "../paths";
 import type { VendorFact } from "../registry";
 import { fetchMesh } from "./data";
 import { hostGroups } from "./model";
+import { BACKING_NOT_READ } from "../ingress";
 
 export async function facts(): Promise<VendorFact[]> {
   const mesh = await fetchMesh();
   // The pane prints counts; every sentence `hostGroups` composes on the way
   // is discarded here.
   const noWords: T = () => "";
-  const groups = hostGroups({ ...mesh, services: [], published: [] }, noWords);
+  const groups = hostGroups({ ...mesh, ...BACKING_NOT_READ }, noWords);
 
   const lines: VendorFact[] = [
     {

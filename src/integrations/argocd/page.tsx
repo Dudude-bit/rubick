@@ -19,34 +19,38 @@
  * answers through the `service.routes` capability.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Box, GitBranch, Layers, Shield } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
-import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { formatAge } from "@/lib/utils";
-import { conditionsOf, crdObjectsPath, getValueByPath } from "../kit";
+import {
+  conditionsOf,
+  crdObjectsPath,
+  getValueByPath,
+  troubleMark,
+} from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding,
   OutLink,
+  TroubleList,
   TroubleRow,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
 import {
@@ -75,41 +79,19 @@ import {
   type ArgoResource,
   type ArgoSource,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
+import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
+import { parts } from "@/i18n/parts";
+import { TONE_TEXT } from "@/lib/tone";
 
 /** Past this many broken applications, nothing opens itself. */
 const AUTO_OPEN = 8;
 
-/**
- * One catalogue sentence drawn around a monospace word. The word is a
- * Kubernetes or Argo identifier and stays as it is spelled; only where it
- * lands in the sentence changes with the language, which is why the string
- * stays whole in the catalogue and the cut happens here.
- */
-function Mono({
-  text,
-  slot,
-  word,
-}: {
-  text: string;
-  slot: string;
-  word: string;
-}) {
-  const at = text.indexOf(slot);
-  if (at < 0) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, at)}
-      <span className="font-mono">{word}</span>
-      {text.slice(at + slot.length)}
-    </>
-  );
-}
-
 export default function ArgoCdPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "applications";
+  const [tab, setTab] = useSearchParam("tab", "applications");
 
   const applications = useApplications();
   const sets = useApplicationSets();
@@ -134,30 +116,30 @@ export default function ArgoCdPage() {
 
   if (applications.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadApplications")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          <Mono
-            text={t("empty", "applicationsUnreadableBody")}
-            slot="{kind}"
-            word="Application"
-          />
-        </p>
-        <p className="text-[11px] text-fg-fnt">{applications.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadApplications")}
+        body={
+          <>
+            {parts(t("empty", "applicationsUnreadableBody"), {
+              kind: <span className="font-mono">Application</span>,
+            })}
+          </>
+        }
+        error={applications.error}
+        onRetry={() => void applications.refetch()}
+      />
     );
   }
-
-  const troubled = apps.filter((app) => app.worst !== null);
 
   const tabs: DetailTab[] = [
     {
       id: "applications",
       label: "Applications",
       glyph: viewGlyph(GitBranch),
-      mark: applicationsMark(t, apps, troubled.length),
+      mark: troubleMark(
+        apps.map((app) => app.worst),
+        (n, total) => t("count", "applicationsNeedAttention", { n, total })
+      ),
       content: (
         <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
       ),
@@ -170,7 +152,14 @@ export default function ArgoCdPage() {
         sets.data && sets.data.length > 0
           ? countMark(sets.data.length)
           : undefined,
-      content: <AppSetsTab sets={sets.data ?? []} apps={apps} />,
+      content: (
+        <AppSetsTab
+          sets={sets.data}
+          error={sets.error}
+          onRetry={() => void sets.refetch()}
+          apps={apps}
+        />
+      ),
     },
     {
       id: "projects",
@@ -180,7 +169,14 @@ export default function ArgoCdPage() {
         projects.data && projects.data.length > 0
           ? countMark(projects.data.length)
           : undefined,
-      content: <ProjectsTab projects={projects.data ?? []} apps={apps} />,
+      content: (
+        <ProjectsTab
+          projects={projects.data}
+          error={projects.error}
+          onRetry={() => void projects.refetch()}
+          apps={apps}
+        />
+      ),
     },
     {
       id: "controller",
@@ -213,33 +209,8 @@ export default function ArgoCdPage() {
         }
         description={t("empty", "argoPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
-  );
-}
-
-function applicationsMark(
-  t: ReturnType<typeof useT>,
-  apps: ArgoApp[],
-  troubled: number
-): DetailTabMark | undefined {
-  if (apps.length === 0) return undefined;
-  if (troubled === 0) return countMark(apps.length);
-  const worst = apps.some((app) => app.worst === "err") ? "err" : "warn";
-  return severityMark(
-    worst,
-    t("count", "applicationsNeedAttention", {
-      n: troubled,
-      total: apps.length,
-    })
   );
 }
 
@@ -255,24 +226,17 @@ function ApplicationsTab({
   ui: string | null;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return apps;
-    return apps.filter(
-      (app) =>
-        app.name.toLowerCase().includes(needle) ||
-        app.project.toLowerCase().includes(needle) ||
-        destinationOf(app, t).toLowerCase().includes(needle) ||
-        app.sources.some((source) =>
-          source.repoUrl.toLowerCase().includes(needle)
-        ) ||
-        app.resources.some((resource) =>
-          resource.name.toLowerCase().includes(needle)
-        )
-    );
-  }, [apps, filter, t]);
+  // The destination is a sentence, so what matches follows the language.
+  const searchable = useCallback(
+    (app: ArgoApp) => [
+      app.name,
+      app.project,
+      destinationOf(app, t),
+      ...app.sources.map((source) => source.repoUrl),
+      ...app.resources.map((resource) => resource.name),
+    ],
+    [t]
+  );
 
   if (loading) {
     return (
@@ -285,64 +249,44 @@ function ApplicationsTab({
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">{t("empty", "argoOwnsNothing")}</p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          <Mono
-            text={t("empty", "argoNoApplicationsBody")}
-            slot="{kind}"
-            word="Application"
-          />
+          <>
+            {parts(t("empty", "argoNoApplicationsBody"), {
+              kind: <span className="font-mono">Application</span>,
+            })}
+          </>
         </p>
       </div>
     );
   }
 
-  const broken = apps.filter((app) => app.worst === "err").length;
-  const worthALook = apps.filter((app) => app.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterByNameProjectRepoObject")}
-          label={t("action", "filterApplications")}
-        />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: apps.length,
-              })
-            : broken > 0
-              ? `${t("count", "failingAndFirst", { n: broken, total: apps.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: apps.length })}`
-                : t("empty", "allInSync", {
-                    count: t("readings", "kindCount", {
-                      n: apps.length,
-                      kind: "Application",
-                    }),
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noApplicationMatches")}
-        </p>
-      ) : (
-        shown.map((app, index) => (
-          <AppRow
-            key={`${app.namespace}/${app.name}`}
-            app={app}
-            ui={ui}
-            openByDefault={app.worst === "err" && broken <= AUTO_OPEN}
-            last={index === shown.length - 1}
-          />
-        ))
+    <TroubleList
+      items={apps}
+      severityOf={severityOfApp}
+      searchable={searchable}
+      filter={{
+        placeholder: t("action", "filterByNameProjectRepoObject"),
+        label: t("action", "filterApplications"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "failingAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingFailing"),
+        allWell: (n) =>
+          t("empty", "allInSync", {
+            count: t("readings", "kindCount", { n, kind: "Application" }),
+          }),
+      }}
+      noMatch={() => t("empty", "noApplicationMatches")}
+      keyOf={(app) => `${app.namespace}/${app.name}`}
+      renderRow={(app, { openByDefault, last }) => (
+        <AppRow app={app} ui={ui} openByDefault={openByDefault} last={last} />
       )}
-    </div>
+    />
   );
 }
+
+const severityOfApp = (app: ArgoApp) => app.worst;
 
 function AppRow({
   app,
@@ -653,9 +597,7 @@ function ResourceLine({
       </span>
       <span className="min-w-0 truncate">
         {said && (
-          <span className={tone === "err" ? "text-err" : "text-warn"}>
-            {said}
-          </span>
+          <span className={tone ? TONE_TEXT[tone] : undefined}>{said}</span>
         )}
         {resource.message && (
           <span className="text-fg-fnt">
@@ -700,28 +642,14 @@ function Findings({
   url: string | null;
   brief?: boolean;
 }) {
-  const t = useT();
-  if (app.findings.length === 0) return null;
-  const shown = brief ? app.findings.slice(0, 1) : app.findings;
-  const hidden = brief ? app.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
-        <FindingLine
-          key={index}
-          app={app}
-          finding={finding}
-          url={url}
-          brief={brief}
-        />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
+    <FindingList
+      findings={app.findings}
+      brief={brief}
+      render={(finding) => (
+        <FindingLine app={app} finding={finding} url={url} brief={brief} />
       )}
-    </div>
+    />
   );
 }
 
@@ -768,11 +696,11 @@ function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
     return (
       <>
         {" "}
-        <Mono
-          text={t("empty", "argoDiffNoAddress")}
-          slot="{service}"
-          word={SERVER_SERVICE}
-        />
+        <>
+          {parts(t("empty", "argoDiffNoAddress"), {
+            service: <span className="font-mono">{SERVER_SERVICE}</span>,
+          })}
+        </>
       </>
     );
   }
@@ -860,12 +788,27 @@ function describeFinding(
 
 function AppSetsTab({
   sets,
+  error,
+  onRetry,
   apps,
 }: {
-  sets: CustomResourceInfo[];
+  sets: CustomResourceInfo[] | undefined;
+  error: unknown;
+  onRetry: () => void;
   apps: ArgoApp[];
 }) {
   const t = useT();
+  if (!sets) {
+    return error ? (
+      <VendorReadFailure
+        title={t("empty", "crdCouldNotBeListed", { crd: APPLICATIONSETS_CRD })}
+        error={error}
+        onRetry={onRetry}
+      />
+    ) : (
+      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+    );
+  }
   if (sets.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
@@ -886,7 +829,7 @@ function AppSetsTab({
           const generated = apps.filter(
             (app) => app.generatedBy?.name === set.name
           );
-          const error = conditionsOf(set).find(
+          const failing = conditionsOf(set).find(
             (condition) =>
               condition.type === "ErrorOccurred" && condition.status === "True"
           );
@@ -917,9 +860,9 @@ function AppSetsTab({
                   })}
                 </span>
               </div>
-              {error && (
+              {failing && (
                 <p className="mt-1 border-l-2 border-err pl-2.5 font-mono text-[11px] text-err">
-                  {error.message}
+                  {failing.message}
                 </p>
               )}
             </div>
@@ -934,16 +877,35 @@ function AppSetsTab({
 
 function ProjectsTab({
   projects,
+  error,
+  onRetry,
   apps,
 }: {
-  projects: CustomResourceInfo[];
+  projects: CustomResourceInfo[] | undefined;
+  error: unknown;
+  onRetry: () => void;
   apps: ArgoApp[];
 }) {
   const t = useT();
+  if (!projects) {
+    return error ? (
+      <VendorReadFailure
+        title={t("empty", "crdCouldNotBeListed", { crd: PROJECTS_CRD })}
+        error={error}
+        onRetry={onRetry}
+      />
+    ) : (
+      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+    );
+  }
   if (projects.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        <Mono text={t("empty", "noAppProjects")} slot="{name}" word="default" />
+        <>
+          {parts(t("empty", "noAppProjects"), {
+            name: <span className="font-mono">default</span>,
+          })}
+        </>
       </p>
     );
   }
@@ -1052,7 +1014,7 @@ function ControllerTab({
         />
         {controller.components.length === 0 ? (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         ) : (
           <div className="flex flex-col">
@@ -1098,11 +1060,12 @@ function ControllerTab({
         {ui ? (
           <p className="text-[11.5px] text-fg-mut">
             {routed.via && !controller.ui ? (
-              <Mono
-                text={t("empty", "kindNameServes", { kind: routed.via.kind })}
-                slot="{name}"
-                word={routed.via.name}
-              />
+              <>
+                {parts(
+                  t("empty", "kindNameServes", { kind: routed.via.kind }),
+                  { name: <span className="font-mono">{routed.via.name}</span> }
+                )}
+              </>
             ) : (
               <>{t("empty", "anIngressServes")}</>
             )}{" "}
@@ -1115,24 +1078,29 @@ function ControllerTab({
           </p>
         ) : routes.isPending ? (
           <p className="text-[11.5px] text-fg-fnt">
-            <Mono
-              text={t("empty", "readingWhatRoutes")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
+            <>
+              {parts(t("empty", "readingWhatRoutes"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
           </p>
         ) : routed.host ? (
           // The middle state, and the whole reason `tls` may be `null`: the
           // host is known and the scheme is not, so the host is named and the
           // link withheld rather than guessed at.
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            <Mono
-              text={t("empty", "kindNameServes", {
-                kind: routed.via?.kind ?? t("empty", "somethingWord"),
-              })}
-              slot="{name}"
-              word={routed.via?.name ?? ""}
-            />{" "}
+            <>
+              {parts(
+                t("empty", "kindNameServes", {
+                  kind: routed.via?.kind ?? t("empty", "somethingWord"),
+                }),
+                {
+                  name: (
+                    <span className="font-mono">{routed.via?.name ?? ""}</span>
+                  ),
+                }
+              )}
+            </>{" "}
             <span className="font-mono">{SERVER_SERVICE}</span>{" "}
             {t("action", "atInline")}{" "}
             <span className="font-mono text-fg">{routed.host}</span>
@@ -1142,27 +1110,27 @@ function ControllerTab({
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
             {/* Says what was read, not what the cluster contains: neither
                 the Ingresses nor the routing capability named a host. */}
-            <Mono
-              text={t("empty", "nothingRoutesServiceToHostname")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
+            <>
+              {parts(t("empty", "nothingRoutesServiceToHostname"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
             {routes.available ? "" : t("empty", "noIngressNoRoutingController")}
-            <Mono
-              text={t("empty", "serviceIsClusterIpNoRoute")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
-            <Mono
-              text={t("empty", "everythingReadFromObjects")}
-              slot="{kind}"
-              word="Application"
-            />
+            <>
+              {parts(t("empty", "serviceIsClusterIpNoRoute"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
+            <>
+              {parts(t("empty", "everythingReadFromObjects"), {
+                kind: <span className="font-mono">Application</span>,
+              })}
+            </>
             {routes.error && (
               <>
                 {" "}
                 {t("empty", "oneRoutingControllerDidNotAnswer")}{" "}
-                <span className="font-mono">{routes.error.message}</span>
+                <span className="font-mono">{errorToShow(routes.error)}</span>
               </>
             )}
           </p>

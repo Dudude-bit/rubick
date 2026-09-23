@@ -12,7 +12,12 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
-import { ROUTING_STALE, useBackingLists, type BackingLists } from "../ingress";
+import {
+  BACKING_NOT_READ,
+  ROUTING_STALE,
+  useBackingLists,
+  type BackingSources,
+} from "../ingress";
 import { hostGroups, type IstioSources } from "./model";
 
 export const GROUP = "networking.istio.io";
@@ -54,7 +59,7 @@ export function countHosts(mesh: MeshSources): number {
   // Only the count is wanted, and every sentence `hostGroups` composes is
   // discarded — so it is handed a translator with nothing to say.
   const noWords: T = () => "";
-  return hostGroups({ ...mesh, services: [], published: [] }, noWords).length;
+  return hostGroups({ ...mesh, ...BACKING_NOT_READ }, noWords).length;
 }
 
 export const MESH_KEY = ["istio", "mesh"] as const;
@@ -72,12 +77,7 @@ export const useBacking = useBackingLists;
 
 export function sourcesFrom(
   mesh: MeshSources,
-  backing: BackingLists | undefined
+  backing: BackingSources
 ): IstioSources {
-  return {
-    ...mesh,
-    services: backing?.services ?? [],
-    published: backing?.published ?? [],
-    backingKnown: backing !== undefined,
-  };
+  return { ...mesh, ...backing };
 }

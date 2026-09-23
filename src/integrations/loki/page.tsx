@@ -21,7 +21,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
-import { Cell, Chain, Column, Finding } from "../page-kit";
+import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import { coverage, verdict } from "./coverage";
 import { useT } from "@/i18n/useT";
@@ -56,17 +56,16 @@ export default function LokiPage() {
 
   if (found.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "lokiCouldNotAsk")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{found.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "lokiCouldNotAsk")}
+        error={found.error}
+        onRetry={() => void found.refetch()}
+      />
     );
   }
 
   const state = found.data ? verdict(found.data, t) : null;
-  const refused = found.data?.namespaces.filter(
+  const failed = found.data?.namespaces.filter(
     (entry) => entry.problem !== null
   );
   const empty = found.data?.namespaces.filter(
@@ -111,7 +110,7 @@ export default function LokiPage() {
                     title={entry.problem ?? undefined}
                   >
                     {entry.problem !== null
-                      ? t("empty", "lokiRefusedQuery")
+                      ? t("empty", "lokiQueryFailed")
                       : entry.holds
                         ? t("empty", "lokiHasLines")
                         : t("empty", "lokiNothingInWindow")}
@@ -135,14 +134,14 @@ export default function LokiPage() {
             </div>
           )}
 
-          {refused && refused.length > 0 && (
+          {failed && failed.length > 0 && (
             <div className="mt-3">
               <Finding
                 tone="warn"
-                title={t("count", "queriesRefused", { n: refused.length })}
-                verbatim={refused[0].problem}
+                title={t("count", "queriesFailed", { n: failed.length })}
+                verbatim={failed[0].problem}
               >
-                {t("empty", "lokiRefusalNotAbsence")}
+                {t("empty", "lokiFailureNotAbsence")}
               </Finding>
             </div>
           )}

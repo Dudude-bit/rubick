@@ -10,7 +10,7 @@
  * wearing a link.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import type { EntryPoint, TraefikRoute } from "./model";
@@ -22,12 +22,16 @@ vi.mock("@/lib/commands", () => ({
     listServices: vi.fn(async () => []),
     resolveIngressClass: vi.fn(async () => ({ available: [] })),
     listDeployments: vi.fn(async () => []),
+    getDeployment: vi.fn(async () => ({ containers: [] })),
     listDaemonsets: vi.fn(async () => []),
     getManifest: vi.fn(async () => ({})),
   },
 }));
 
 import { commands } from "@/lib/commands";
+import { settleFrontedRoutes } from "@/lib/fronted-tls";
+import type { IngressInfo, ServiceInfo } from "@/generated/types";
+import type { IngressTls } from "../registry";
 import { servedGroupName } from "./data";
 import { routeIsSecure, serviceRoutes } from "./routes";
 
@@ -268,5 +272,181 @@ describe("which hosts reach a Service", () => {
     await expect(
       serviceRoutes({ namespace: "argocd", name: "argocd-server" })
     ).resolves.toEqual([]);
+  });
+});
+
+describe("the scheme of a route on a plain entry point", () => {
+  beforeEach(() => {
+    vi.mocked(commands.listIngresses).mockResolvedValue([]);
+    vi.mocked(commands.listServices).mockResolvedValue([]);
+    vi.mocked(commands.listDeployments).mockResolvedValue([
+      {
+        name: "traefik",
+        namespace: "edge",
+        containers: [{ image: "traefik:v3" }],
+        replicas: { ready: 1, desired: 1 },
+      },
+    ] as never);
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      containers: [
+        { command: [], args: ["--entryPoints.web.address=:8000"], env: [] },
+      ],
+    } as never);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        entryPoints: ["web"],
+        routes: [
+          {
+            match: "Host(`argocd.example.com`)",
+            services: [{ name: "argocd-server", port: 80 }],
+          },
+        ],
+      }),
+    ]);
+  });
+
+  /** The Service list is how an edge terminating in front is found; refused, it was read as none, and a host clients reach over HTTPS was handed out as `http://`. Fails if the refusal becomes an empty list again. */
+  it("does not settle it when the Services could not be listed", async () => {
+    vi.mocked(commands.listServices).mockRejectedValueOnce(
+      new Error("services is forbidden")
+    );
+
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found[0].tls).toBeNull();
+  });
+
+  /** The other half: Services read and nothing in front, a plain entry point is plain. */
+  it("says plain when the Services were read and nothing stands in front", async () => {
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found[0].tls).toBe(false);
+  });
+});
+
+describe("the scheme of a route behind a load balancer holding the certificate", () => {
+  /** An ALB Ingress sending the host to Traefik, its certificate an ACM ARN. */
+  const alb: IngressInfo = {
+    name: "edge",
+    namespace: "edge",
+    className: "alb",
+    rules: [
+      {
+        host: "argocd.example.com",
+        paths: [
+          {
+            path: "/",
+            pathType: "Prefix",
+            backendService: "traefik",
+            backendPort: "80",
+            resourceBackend: null,
+          },
+        ],
+      },
+    ],
+    defaultBackend: null,
+    loadBalancerIps: [],
+    tlsHosts: [],
+    tlsConfigs: [],
+    hasCatchAllTls: false,
+    labels: {},
+    annotations: {
+      "alb.ingress.kubernetes.io/certificate-arn": "arn:aws:acm:cert/abc",
+    },
+    createdAt: null,
+  };
+  const proxy = {
+    name: "traefik",
+    namespace: "edge",
+    selector: { "app.kubernetes.io/name": "traefik" },
+  } as unknown as ServiceInfo;
+
+  /** What the AWS controller answers for the Ingress it owns. */
+  const acm =
+    (terminated: IngressTls["terminated"]) =>
+    async (
+      wanted: Array<{ namespace: string; name: string; hosts: string[] }>
+    ) =>
+      wanted.map((entry) =>
+        entry.name === "edge"
+          ? entry.hosts.map((host) => ({
+              host,
+              terminated,
+              by: { key: "awsAcmCertificate" as const },
+            }))
+          : []
+      );
+
+  const read = async (ingressTls: Array<ReturnType<typeof acm>>) =>
+    settleFrontedRoutes(
+      await serviceRoutes({ namespace: "argocd", name: "argocd-server" }),
+      { ingressTls, serviceRoutes: [serviceRoutes] }
+    );
+
+  beforeEach(() => {
+    vi.mocked(commands.listIngresses).mockResolvedValue([alb]);
+    vi.mocked(commands.listServices).mockResolvedValue([proxy]);
+    vi.mocked(commands.listDeployments).mockResolvedValue([
+      {
+        name: "traefik",
+        namespace: "edge",
+        containers: [{ image: "traefik:v3" }],
+        replicas: { ready: 1, desired: 1 },
+      },
+    ] as never);
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      containers: [
+        { command: [], args: ["--entryPoints.web.address=:8000"], env: [] },
+      ],
+    } as never);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        entryPoints: ["web"],
+        routes: [
+          {
+            match: "Host(`argocd.example.com`)",
+            services: [{ name: "argocd-server", port: 80 }],
+          },
+        ],
+      }),
+    ]);
+  });
+
+  /**
+   * The Traefik page asked the AWS controller and said "TLS ends at the
+   * edge"; the Service page, the peek and the Argo CD page read this route
+   * alone, saw a plain entry point and nothing in `spec.tls`, and printed
+   * `http://argocd.example.com`. Fails if the route stops naming what is in
+   * front of the proxy.
+   */
+  it("is https when the controller in front says it terminates it", async () => {
+    const [found] = await read([acm(true)]);
+    expect(found.tls).toBe(true);
+  });
+
+  /** A controller that could not read its certificate has not said plain. */
+  it("is not settled when the controller in front could not tell", async () => {
+    const [found] = await read([acm(null)]);
+    expect(found.tls).toBeNull();
+  });
+
+  /** Nor has one whose answer never came. */
+  it("is not settled when the controller in front could not be asked", async () => {
+    const [found] = await read([
+      () => Promise.reject(new Error("ingresses is forbidden")),
+    ]);
+    expect(found.tls).toBeNull();
+  });
+
+  /** Every question answered and nothing terminating it: the page says "no TLS" too. */
+  it("stays plain when nothing in front terminates it", async () => {
+    const [found] = await read([acm(false)]);
+    expect(found.tls).toBe(false);
   });
 });

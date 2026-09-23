@@ -16,6 +16,7 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
+import { hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import { backingOf, type IstioHostGroup, type IstioSources } from "./model";
 
@@ -24,9 +25,7 @@ export const hostFilterPath = (host: string) =>
   `?tab=routes&q=${encodeURIComponent(host)}`;
 
 function toneOf(group: IstioHostGroup): MapTone {
-  if (group.worst === "err") return "err";
-  if (group.worst === "warn") return "warn";
-  return "ok";
+  return hostSeverity(group) ?? "ok";
 }
 
 export function routingMap(
@@ -83,8 +82,14 @@ export function routingMap(
                 ]
                   .filter(Boolean)
                   .join(" · ")
-              : "outside the mesh",
-            tone: service ? (backing.stop ? "err" : "ok") : "mute",
+              : t("readings", "mapOutsideMesh"),
+            tone: !service
+              ? "mute"
+              : !backing.known
+                ? "unknown"
+                : backing.stop
+                  ? "err"
+                  : "ok",
             object: service
               ? {
                   kind: ResourceType.Service,
@@ -95,11 +100,18 @@ export function routingMap(
             tag: !service
               ? undefined
               : !backing.known
-                ? undefined
+                ? backing.error
+                  ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+                  : undefined
                 : backing.stop
-                  ? { text: t("readings", "mapZeroReady"), tone: "err" }
+                  ? {
+                      text: t("count", "nReady", { n: 0 }),
+                      tone: "err",
+                    }
                   : {
-                      text: `${backing.ready + backing.draining} ready`,
+                      text: t("count", "nReady", {
+                        n: backing.ready + backing.draining,
+                      }),
                       tone: backing.ready === 0 ? "warn" : "mute",
                     },
           });
@@ -107,7 +119,13 @@ export function routingMap(
         link(
           id,
           destinationId,
-          backing.stop ? "err" : tone === "err" ? "warn" : "ok"
+          service && !backing.known
+            ? "unknown"
+            : backing.stop
+              ? "err"
+              : tone === "err"
+                ? "warn"
+                : "ok"
         );
       }
     }
@@ -115,7 +133,7 @@ export function routingMap(
     return {
       id,
       label: group.host,
-      sub: `${group.routes.length} route${group.routes.length === 1 ? "" : "s"}`,
+      sub: t("count", "routeRules", { n: group.routes.length }),
       tone,
       to: hostFilterPath(group.host),
       tag: group.meshOnly

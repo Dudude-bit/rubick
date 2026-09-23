@@ -24,11 +24,16 @@
  */
 
 import { sayWords } from "@/i18n/say";
-import { Fragment, useCallback, useMemo, type ReactNode } from "react";
-import type { ServiceStop } from "../ingress";
-import { useServiceRoutes } from "@/hooks/useServiceRoutes";
-import { useIngressTls } from "@/hooks/useIngressTls";
-import { Link, useSearchParams } from "react-router-dom";
+import { Fragment, useMemo, type ReactNode } from "react";
+import {
+  BACKING_NOT_READ,
+  backingFrom,
+  edgeTlsWords,
+  hostSeverity,
+  useRouteCertificates,
+  STOP_UNDER,
+} from "../ingress";
+import { Link } from "react-router-dom";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -40,39 +45,42 @@ import {
   severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { crdObjectPath } from "../kit";
+import { crdObjectPath, troubleMark, summariseNames } from "../kit";
 import {
+  BackingUnread,
+  TroubleList,
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { RoutingMap } from "../routing-map";
+import { useFrontingTls } from "../fronting-tls";
+import { ProxyControllerTab } from "../proxy-controller";
 import { routingMap } from "./map";
 import {
   servedGroupName,
   useBacking,
   useController,
-  useRouteCertificates,
   useRouteSources,
   sourcesFrom,
   type ControllerInfo,
 } from "./data";
 import {
-  frontingIngresses,
   allRoutes,
+  PROXY_LABEL,
   backingOf,
   boundEntryPoints,
   duplicatedServiceNames,
   hostGroups,
-  terminatedUpstream,
+  hostState,
+  edgeTls,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -84,27 +92,15 @@ import {
 } from "./model";
 import { describePath, fullyRead } from "./rule";
 import { problemWords } from "@/lib/certificates";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
 
 export default function TraefikPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
-  const filter = params.get("q") ?? "";
-
-  // In the URL rather than in a `useState`, so a node on the map can hand the
-  // Routes tab a host and land the reader on that host's chain — and so the
-  // narrowed view survives a reload and can be handed to somebody else.
-  const setFilter = (next: string) => {
-    const updated = new URLSearchParams(params);
-    if (next.trim() === "") updated.delete("q");
-    else updated.set("q", next);
-    setParams(updated, { replace: true });
-  };
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -115,112 +111,64 @@ export default function TraefikPage() {
       routeSources.data
         ? allRoutes({
             ...routeSources.data,
-            services: [],
-            published: [],
+            ...BACKING_NOT_READ,
             entryPoints: [],
           })
         : [],
     [routeSources.data]
   );
   const certificates = useRouteCertificates(routes);
+  const served = useMemo(
+    () => [
+      ...new Set(
+        routes.flatMap((route) =>
+          route.clause.host ? [route.clause.host] : []
+        )
+      ),
+    ],
+    [routes]
+  );
 
-  // What is in front of the proxy. On a managed cluster the certificate is
-  // usually held by a cloud load balancer and named in an annotation, so no
-  // amount of reading `spec.tls` finds it — and every host then read as
-  // served in the clear. The proxy's own Service is the thing to ask about;
-  // asking about the first is enough, because a chart that installs two is
-  // installing one proxy behind both.
-  const proxy = useMemo(() => {
-    const services = backing.data?.services ?? [];
-    const found = services.find(
-      (service) => service.selector["app.kubernetes.io/name"] === "traefik"
-    );
-    return found ? { namespace: found.namespace, name: found.name } : null;
-  }, [backing.data]);
-  // Every Ingress whose backend is the proxy's own Service, which is what a
-  // cloud load balancer's Ingress looks like from in here.
-  const frontAsked = useMemo(
+  const upstreamTls = useFrontingTls(
+    routeSources.data?.ingresses,
+    backing.data?.services,
+    PROXY_LABEL,
+    served
+  );
+
+  const sources: TraefikSources | null = useMemo(
     () =>
-      frontingIngresses({
-        ingresses: routeSources.data?.ingresses ?? [],
-        services: backing.data?.services ?? [],
-      } as never).map(
-        (ingress: {
-          namespace: string;
-          name: string;
-          rules: Array<{ host: string }>;
-        }) => ({
-          namespace: ingress.namespace,
-          name: ingress.name,
-          hosts: ingress.rules.flatMap((rule: { host: string }) =>
-            rule.host ? [rule.host] : []
-          ),
-        })
-      ),
-    [routeSources.data, backing.data]
-  );
-
-  const fronting = useServiceRoutes(proxy);
-  // The certificate may be an ACM ARN or one installed on an Application
-  // Gateway, neither of which is a route and neither of which `spec.tls`
-  // knows about — so the Ingresses standing in front of the proxy are asked
-  // directly. Without this the fix above worked on GKE and nowhere else.
-  const front = useIngressTls(frontAsked);
-  const frontTls = useCallback(
-    (host: string | null) =>
-      host !== null &&
-      frontAsked.some(
-        (ingress) => front.of(ingress, host)?.terminated === true
-      ),
-    [front, frontAsked]
-  );
-  const upstreamTls = useCallback(
-    (host: string | null) =>
-      frontTls(host) ||
-      (host !== null &&
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        )),
-    [fronting.routes, frontTls]
-  );
-
-  const sources: TraefikSources | null = routeSources.data
-    ? {
-        ...sourcesFrom(
-          routeSources.data,
-          backing.data,
-          controller.data,
-          certificates
-        ),
-        upstreamTls,
-      }
-    : null;
-
-  const groups = useMemo(
-    () => (sources ? hostGroups(sources) : []),
-    // `sources` is rebuilt every render; the inputs it is built from are what
-    // actually change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      routeSources.data
+        ? {
+            ...sourcesFrom(
+              routeSources.data,
+              backingFrom(backing.data, backing.error),
+              controller.data,
+              certificates
+            ),
+            upstreamTls,
+          }
+        : null,
     [
       routeSources.data,
       backing.data,
+      backing.error,
       controller.data,
-      certificates.size,
+      certificates,
       upstreamTls,
     ]
   );
 
+  const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
+
   if (routeSources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "traefikRoutingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadRouting")}
+        body={t("empty", "traefikRoutingRequestFailed")}
+        error={routeSources.error}
+        onRetry={() => void routeSources.refetch()}
+      />
     );
   }
 
@@ -228,20 +176,21 @@ export default function TraefikPage() {
     ? middlewareUses(sources.middlewares, allRoutesOf(groups))
     : [];
   const unused = uses.filter((use) => use.usedBy.length === 0).length;
-  const troubled = groups.filter((group) => group.worst !== null);
 
   const tabs: DetailTab[] = [
     {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length, t),
+      mark: troubleMark(
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
+      ),
       content: (
         <RoutesTab
           groups={groups}
           sources={sources}
-          filter={filter}
-          onFilter={setFilter}
           loading={routeSources.isPending}
           backingLoading={backing.isPending}
         />
@@ -305,41 +254,13 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
 
 function allRoutesOf(groups: HostGroup[]): TraefikRoute[] {
   return groups.flatMap((group) => group.routes);
-}
-
-/**
- * A count is inventory and a colour is why you came, so the strip never
- * carries both: a routing table with three broken hosts says three broken
- * hosts, not six.
- */
-function routesMark(
-  groups: HostGroup[],
-  troubled: number,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (groups.length === 0) return undefined;
-  const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
-  return troubled > 0
-    ? severityMark(
-        worst,
-        t("count", "hostsNeedAttention", { n: troubled, total: groups.length })
-      )
-    : countMark(groups.length);
 }
 
 // --- the map ------------------------------------------------------------
@@ -378,6 +299,9 @@ function MapTab({
 
   const broken = groups.filter((group) => group.worst === "err").length;
   const worthALook = groups.filter((group) => group.worst === "warn").length;
+  const unchecked = groups.filter(
+    (group) => hostSeverity(group) === "unknown"
+  ).length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -386,9 +310,15 @@ function MapTab({
           ? `${t("count", "hostsBrokenOfTotal", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
           : worthALook > 0
             ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-            : t("count", "hostsNoneWithProblem", { n: groups.length })}
+            : unchecked > 0
+              ? t("count", "notCheckedOfTotal", {
+                  n: unchecked,
+                  total: groups.length,
+                })
+              : t("count", "hostsNoneWithProblem", { n: groups.length })}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
+      <BackingUnread error={sources?.backingError ?? null} />
       <RoutingMap data={data} />
       <p className="text-[11px] text-fg-fnt">
         {t("empty", "traefikRestOnNodeHint")}
@@ -417,38 +347,17 @@ function NothingRoutes() {
 function RoutesTab({
   groups,
   sources,
-  filter,
-  onFilter,
   loading,
   backingLoading,
 }: {
   groups: HostGroup[];
   sources: TraefikSources | null;
-  filter: string;
-  onFilter: (value: string) => void;
   loading: boolean;
   backingLoading: boolean;
 }) {
   const t = useT();
   // Once per table, not per row: the same set decides every row's spelling.
   const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        (group.host ?? "").toLowerCase().includes(needle) ||
-        group.routes.some(
-          (route) =>
-            route.source.name.toLowerCase().includes(needle) ||
-            route.source.namespace.toLowerCase().includes(needle) ||
-            (route.service?.name ?? route.resourceBackend ?? "")
-              .toLowerCase()
-              .includes(needle)
-        )
-    );
-  }, [groups, filter]);
 
   if (loading) {
     return (
@@ -458,82 +367,55 @@ function RoutesTab({
 
   if (groups.length === 0) return <NothingRoutes />;
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={onFilter}
-          placeholder={t("action", "filterByHostServiceObject")}
-          label={t("action", "filterHosts")}
+    <TroubleList
+      items={groups}
+      severityOf={severityOfGroup}
+      searchable={searchableGroup}
+      filter={{
+        placeholder: t("action", "filterByHostServiceObject"),
+        label: t("action", "filterHosts"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingBroken"),
+        allWell: (n) => t("count", "hostsNoneWithProblem", { n }),
+      }}
+      noMatch={() => t("empty", "noHostServiceObjectMatches")}
+      aside={
+        <>
+          {backingLoading && (
+            <span className="text-[11px] text-fg-fnt">
+              {t("empty", "checkingWhatIsBehind")}
+            </span>
+          )}
+          <BackingUnread error={sources?.backingError ?? null} />
+        </>
+      }
+      keyOf={(group, index) => group.host ?? `catch-all-${index}`}
+      renderRow={(group, { openByDefault }) => (
+        <HostRow
+          group={group}
+          sources={sources}
+          duplicated={duplicated}
+          openByDefault={openByDefault}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "nOfTotal", { n: shown.length, total: groups.length })
-            : broken > 0
-              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-                : t("count", "hostsNoneWithProblem", { n: groups.length })}
-        </span>
-        {backingLoading && (
-          <span className="text-[11px] text-fg-fnt">
-            {t("empty", "checkingWhatIsBehind")}
-          </span>
-        )}
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noHostServiceObjectMatches")}
-        </p>
-      ) : (
-        shown.map((group, index) => (
-          <HostRow
-            key={group.host ?? `catch-all-${index}`}
-            group={group}
-            sources={sources}
-            duplicated={duplicated}
-            // Only an outage opens itself, and only while there are few
-            // enough of them to read: a screen where everything is expanded
-            // is a screen where nothing is emphasised.
-            openByDefault={group.worst === "err" && broken <= AUTO_OPEN}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
 
-/** The word at the right of a host line: what is true of it right now. */
-function hostState(
-  group: HostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  const certificate = group.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate) {
-    return {
-      text:
-        certificate.kind === "certificate" && certificate.expiry?.expired
-          ? t("empty", "certificateExpired")
-          : t("empty", "certificateRunningOut"),
-      tone: "err",
-    };
-  }
-  if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: t("empty", "servedInTheClear"), tone: "warn" };
-  }
-  if (group.findings.length > 0) {
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  }
-  return { text: t("empty", "serving"), tone: "ok" };
-}
+const severityOfGroup = hostSeverity;
+
+const searchableGroup = (group: HostGroup) => [
+  group.host,
+  ...group.routes.flatMap((route) => [
+    route.source.name,
+    route.source.namespace,
+    route.service?.name ?? route.resourceBackend,
+  ]),
+];
 
 function HostRow({
   group,
@@ -547,17 +429,15 @@ function HostRow({
   duplicated: Set<string>;
 }) {
   const t = useT();
-  const state = hostState(group, t);
+  const state = hostState(group, sources?.backingError ?? null, t);
   const tls = group.tlsSecrets[0];
   // Where the certificate is, when it is not here. Stated rather than merely
   // not warned about: a reader who knows TLS ends at the load balancer learns
   // nothing from silence, and a reader who does not is the one this line is
-  // for. `null` on every ordinary cluster, where the proxy holds its own.
-  const upstream =
-    sources && !tls ? terminatedUpstream(group.host, sources) : null;
-  const upstreamNamed =
-    upstream ??
-    (sources?.upstreamTls?.(group.host) ? t("empty", "theEdge") : null);
+  // for.
+  const edge = sources
+    ? edgeTls(group.host, sources)
+    : { at: "unknown" as const };
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -581,12 +461,10 @@ function HostRow({
         <>
           {t("count", "paths", { n: group.routes.length })}
           {entryPoints.length > 0 &&
-            ` · ${everywhere ? t("empty", "everyEntryPoint") : summarise(entryPoints)}`}
+            ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
           {tls
             ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : upstreamNamed
-              ? ` · ${t("empty", "tlsEndsAt", { name: typeof upstreamNamed === "string" ? upstreamNamed : upstreamNamed.name })}`
-              : ` · ${t("empty", "noTls")}`}
+            : ` · ${edgeTlsWords(edge, t)}`}
         </>
       }
       state={state}
@@ -602,12 +480,6 @@ function HostRow({
       <Findings group={group} />
     </TroubleRow>
   );
-}
-
-/** Three names and a tally: a row is a summary, not the whole list. */
-function summarise(names: string[]): string {
-  if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
 function Paths({
@@ -701,7 +573,9 @@ function PathRow({
           : !route.service?.kubernetes
             ? t("empty", "insideTheProxy")
             : backing && !backing.known
-              ? "…"
+              ? backing.error
+                ? t("empty", "unknownLower")
+                : "…"
               : backing?.stop
                 ? "—"
                 : backing
@@ -879,7 +753,15 @@ function HostChain({
               {t("empty", "notPods")}
             </Cell>
           ) : !backing.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}
@@ -963,42 +845,28 @@ function middlewareDetail(
 
 // --- findings -----------------------------------------------------------
 
+// A closed row already carries its state in the word at its right end, so
+// only a finding that says more than that word earns a line on it — which
+// on a cluster of eighty plain-HTTP hosts is the difference between eighty
+// rows and a hundred and sixty.
+const saysMoreThanTheRow = (finding: HostGroup["findings"][number]) =>
+  finding.kind !== "clear";
+
 function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
-  const t = useT();
   const issuance = useCertificateIssuance(
     group.tlsSecrets[0]?.namespace,
     group.tlsSecrets.map((secret) => secret.secretName)
   );
 
-  if (group.findings.length === 0) return null;
-
-  // A closed row already carries its state in the word at its right end, so
-  // only a finding that says more than that word earns a line on it — which
-  // on a cluster of eighty plain-HTTP hosts is the difference between eighty
-  // rows and a hundred and sixty.
-  const worthRepeating = group.findings.filter(
-    (finding) => finding.kind !== "clear"
-  );
-  if (brief && worthRepeating.length === 0) return null;
-  const shown = brief ? worthRepeating.slice(0, 1) : group.findings;
-  const hidden = brief ? worthRepeating.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
-        <FindingLine
-          key={index}
-          finding={finding}
-          brief={brief}
-          issuance={issuance}
-        />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      worthRepeating={saysMoreThanTheRow}
+      render={(finding) => (
+        <FindingLine finding={finding} brief={brief} issuance={issuance} />
       )}
-    </div>
+    />
   );
 }
 
@@ -1025,15 +893,6 @@ function FindingLine({
     </FindingBlock>
   );
 }
-
-/** What a stopped path says in the column, in four words or fewer. */
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
 
 /** One object, linked, the way the reader will go and edit it. */
 function objectRef(route: TraefikRoute): ReactNode {
@@ -1327,103 +1186,16 @@ function ControllerTab({
   sources: TraefikSources | null;
 }) {
   const t = useT();
-  if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
-    );
-  }
-  const classes = sources ? traefikClasses(sources.classes) : [];
-
   return (
-    <div className="flex flex-col gap-[22px]">
-      <Section>
-        <SectionHeader
-          title={t("empty", "theProxyTitle")}
-          description={t("empty", "theProxyDescription")}
-        />
-        {controller.workload ? (
-          <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <ResourceRef
-                kind={controller.workload.kind}
-                name={controller.workload.name}
-                namespace={controller.workload.namespace}
-                showKind={false}
-              />
-              <span className="text-fg-fnt">
-                {t("count", "ofTotalReady", {
-                  n: controller.workload.ready,
-                  total: controller.workload.desired,
-                })}{" "}
-                · {controller.workload.namespace}
-              </span>
-            </span>
-            {controller.workload.image && (
-              <span className="font-mono text-[11px] text-fg-fnt">
-                {controller.workload.image}
-              </span>
-            )}
-            {controller.problem && (
-              <p className="text-[11px] text-warn">
-                {sayWords(controller.problem, t)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem && sayWords(controller.problem, t)}
-          </p>
-        )}
-      </Section>
-
-      <Section>
-        <SectionHeader
-          title={t("empty", "classesItClaims")}
-          count={classes.length}
-          description={t("empty", "classesItClaimsDescription")}
-        />
-        {classes.length === 0 ? (
-          <p className="text-[11px] text-warn">
-            {t("empty", "traefikClaimsNoClass")}
-          </p>
-        ) : (
-          <div className="flex flex-col">
-            {classes.map((entry) => (
-              <div
-                key={entry.name}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
-              >
-                <span className="font-mono text-fg-mid">{entry.name}</span>
-                {entry.isDefault && (
-                  <span className="text-[11px] text-fg-fnt">
-                    {t("empty", "clustersDefault")}
-                  </span>
-                )}
-                <span className="ml-auto font-mono text-[11px] text-fg-fnt">
-                  {entry.controller}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {controller.args.length > 0 && (
-        <Section>
-          <SectionHeader
-            title={t("empty", "staticConfiguration")}
-            count={controller.args.length}
-            description={t("empty", "staticConfigurationDescription")}
-          />
-          <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
-            {controller.args.map((arg, index) => (
-              <span key={index} className="select-text break-all">
-                {arg}
-              </span>
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
+    <ProxyControllerTab
+      controller={controller}
+      classes={sources ? traefikClasses(sources.classes) : []}
+      words={{
+        reading: t("empty", "readingTheProxy"),
+        title: t("empty", "theProxyTitle"),
+        description: t("empty", "theProxyDescription"),
+        claimsNoClass: t("empty", "traefikClaimsNoClass"),
+      }}
+    />
   );
 }

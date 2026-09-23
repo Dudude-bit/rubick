@@ -21,7 +21,7 @@
  */
 
 import { joinSayings } from "@/i18n/say";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
@@ -31,11 +31,13 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
+  BackingUnread,
+  TroubleList,
   TroubleRow,
-  type Tone,
+  VendorReadFailure,
 } from "../page-kit";
+import { backingFrom } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
 import { useT } from "@/i18n/useT";
 import {
@@ -50,8 +52,10 @@ import {
 } from "./model";
 import {
   backingFor,
+  hostState,
   hostsOf,
   ignoredByClassName,
+  severityOfHost,
   type GkeFinding,
   type GkeFront,
   type GkeHost,
@@ -66,17 +70,14 @@ export default function GkeIngressPage() {
   const t = useT();
   const sources = useIngressSources();
   const backing = useBacking();
-  const [filter, setFilter] = useState("");
 
   const joined = useMemo<GkeSources | null>(() => {
     if (!sources.data) return null;
     return {
       ...sources.data,
-      services: backing.data?.services ?? [],
-      published: backing.data?.published ?? [],
-      backingKnown: backing.data !== undefined,
+      ...backingFrom(backing.data, backing.error),
     };
-  }, [sources.data, backing.data]);
+  }, [sources.data, backing.data, backing.error]);
 
   const hosts = useMemo(() => (joined ? hostsOf(joined) : []), [joined]);
   const ignored = useMemo(
@@ -84,30 +85,13 @@ export default function GkeIngressPage() {
     [sources.data]
   );
 
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return hosts;
-    return hosts.filter(
-      (host) =>
-        (host.host ?? "").toLowerCase().includes(needle) ||
-        host.routes.some(
-          (route) =>
-            route.backend?.name.toLowerCase().includes(needle) ||
-            route.ingress.name.toLowerCase().includes(needle)
-        )
-    );
-  }, [hosts, filter]);
-
-  const broken = hosts.filter((host) => host.worst === "err").length;
-
   if (sources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadIngresses")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{sources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadIngresses")}
+        error={sources.error}
+        onRetry={() => void sources.refetch()}
+      />
     );
   }
 
@@ -163,15 +147,6 @@ export default function GkeIngressPage() {
       )}
 
       <Section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterHostsPlaceholder")}
-            label={t("action", "filterHosts")}
-          />
-        </div>
-
         {sources.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIngresses")}
@@ -184,50 +159,48 @@ export default function GkeIngressPage() {
             <span className="font-mono">gce-internal</span>
             {t("empty", "gkeControllerServesNothing")}
           </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatches")}{" "}
-            <span className="font-mono">{filter}</span>.
-          </p>
         ) : (
-          <div className="flex flex-col">
-            {shown.map((host, index) => (
+          <TroubleList
+            items={hosts}
+            severityOf={severityOfHost}
+            searchable={searchableHost}
+            filter={{
+              placeholder: t("action", "filterHostsPlaceholder"),
+              label: t("action", "filterHosts"),
+            }}
+            autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            aside={
+              <>
+                {backing.isPending && (
+                  <span className="text-[11px] text-fg-fnt">
+                    {t("empty", "checkingWhatIsBehind")}
+                  </span>
+                )}
+                <BackingUnread error={joined?.backingError ?? null} />
+              </>
+            }
+            keyOf={(host, index) => host.host ?? `catch-all-${index}`}
+            renderRow={(host, { openByDefault, last, shown }) => (
               <HostRow
-                key={host.host ?? `catch-all-${index}`}
                 host={host}
                 sources={joined}
-                openByDefault={host.worst === "err" && broken <= AUTO_OPEN}
-                last={index === shown.length - 1}
-                alone={shown.length === 1}
+                openByDefault={openByDefault}
+                last={last}
+                alone={shown === 1}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </Section>
     </div>
   );
 }
 
-/** The word at the right of a host line: what is true of it right now. */
-function hostState(
-  host: GkeHost,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  if (host.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
-  const certificate = host.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate)
-    return { text: t("empty", "certificateFailed"), tone: "err" };
-  if (host.findings.some((finding) => finding.kind === "missing-object")) {
-    return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
-  }
-  if (host.findings.length > 0)
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  return { text: t("empty", "serving"), tone: "ok" };
-}
+const searchableHost = (host: GkeHost) => [
+  host.host,
+  ...host.routes.flatMap((route) => [route.backend?.name, route.ingress.name]),
+];
 
 function HostRow({
   host,
@@ -262,7 +235,7 @@ function HostRow({
           {front && !front.allowsHttp && t("empty", "noHttpListener")}
         </>
       }
-      state={hostState(host, t)}
+      state={hostState(host, sources?.backingError ?? null, t)}
       openByDefault={openByDefault}
       last={last}
     >
@@ -327,7 +300,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
       <Column label={t("columns", "frontend")}>
         {front.frontendConfig ? (
           <Cell
-            bad={!front.frontendConfig.found}
+            bad={front.frontendConfig.known && !front.frontendConfig.found}
             title={
               front.frontendConfig.found
                 ? joinSayings(
@@ -351,7 +324,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
                 )}
               </ObjectLink>
             ) : (
-              t("empty", "nameAbsent", { name: front.frontendConfig.name })
+              t(
+                "empty",
+                front.frontendConfig.known ? "nameAbsent" : "nameUnread",
+                { name: front.frontendConfig.name }
+              )
             )}
           </Cell>
         ) : (
@@ -375,7 +352,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
               key={certificate.name}
               bad={certificateTone(certificate.status) === "err"}
               warn={certificateTone(certificate.status) === "warn"}
-              under={certificate.status ?? t("empty", "noStatusYet")}
+              under={
+                certificate.found
+                  ? (certificate.status ?? t("empty", "noStatusYet"))
+                  : undefined
+              }
             >
               {certificate.found ? (
                 <ResourceRef
@@ -386,7 +367,9 @@ function FrontBlock({ front }: { front: GkeFront }) {
                   showKind={false}
                 />
               ) : (
-                t("empty", "nameAbsent", { name: certificate.name })
+                t("empty", certificate.known ? "nameAbsent" : "nameUnread", {
+                  name: certificate.name,
+                })
               )}
             </Cell>
           ))
@@ -428,9 +411,14 @@ function RouteChain({
           <Cell
             bad={backing?.stop !== null && backing?.stop !== undefined}
             under={
-              route.neg
-                ? t("empty", "containerNativeNeg")
-                : t("empty", "throughKubeProxy")
+              !backing?.known
+                ? t(
+                    "empty",
+                    backing?.error ? "endpointsUnread" : "readingEndpoints"
+                  )
+                : route.neg
+                  ? t("empty", "containerNativeNeg")
+                  : t("empty", "throughKubeProxy")
             }
           >
             <ResourceRef
@@ -449,13 +437,17 @@ function RouteChain({
       <Column label={t("columns", "backendConfig")}>
         {route.configs.length === 0 ? (
           <Cell>
-            <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
+            <span className="text-fg-fnt">
+              {route.backend && !backing?.known
+                ? t("empty", "notReadLower")
+                : t("empty", "gkeDefaults")}
+            </span>
           </Cell>
         ) : (
           route.configs.map((config) => (
             <Cell
               key={`${config.name}/${config.port ?? "default"}`}
-              bad={!config.found}
+              bad={config.known && !config.found}
               under={
                 config.port === null
                   ? t("empty", "everyPort")
@@ -484,7 +476,9 @@ function RouteChain({
                   )}
                 </ObjectLink>
               ) : (
-                t("empty", "nameAbsent", { name: config.name })
+                t("empty", config.known ? "nameAbsent" : "nameUnread", {
+                  name: config.name,
+                })
               )}
             </Cell>
           ))

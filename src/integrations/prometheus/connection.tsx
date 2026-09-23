@@ -18,9 +18,9 @@ import { Link } from "react-router-dom";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { integrationSettingsPath } from "../paths";
 import { useClusterStore } from "@/stores/clusterStore";
-import { Cell, Chain, Column, Finding } from "../page-kit";
+import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
-import prometheus from "./index";
+import { useSavedConnection } from "./saved-connection";
 import { FAMILIES, coverage, verdict } from "./coverage";
 import { useT } from "@/i18n/useT";
 
@@ -41,11 +41,7 @@ export default function Connection() {
 
   // The saved address, so every metric on this page is a doorway into the
   // Prometheus graph UI rather than a wall of names to retype there.
-  const saved = useQuery({
-    queryKey: [context, "prometheus", "page-address"],
-    queryFn: () => prometheus.connect!.read(),
-    staleTime: ROUTING_STALE,
-  });
+  const saved = useSavedConnection(ROUTING_STALE);
   const base = saved.data?.url?.replace(/\/+$/, "") ?? null;
   const graph = (expression: string) =>
     base === null
@@ -54,12 +50,11 @@ export default function Connection() {
 
   if (found.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "promCouldNotAsk")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{found.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "promCouldNotAsk")}
+        error={found.error}
+        onRetry={() => void found.refetch()}
+      />
     );
   }
 

@@ -17,24 +17,30 @@
 
 import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
+  DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
 import {
+  BACKING_NOT_READ,
   expandEnv,
   ROUTING_STALE,
   useBackingLists,
+  controllerContainers,
   workloadArgs,
   workloadEnv,
-  type BackingLists,
+  type BackingSources,
+  findControllerWorkload,
+  type ControllerWorkload,
 } from "../ingress";
-import { allRoutes, type NginxRoute, type NginxSources } from "./model";
+import { allRoutes, type NginxSources } from "./model";
 
 /** The label every ingress-nginx release puts on its own workload. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=ingress-nginx";
@@ -65,7 +71,7 @@ export function countHosts(sources: RouteSources): number {
   // ignore it would be a parameter that exists to be discarded.
   const noWords: T = () => "";
   const hosts = new Set(
-    allRoutes({ ...sources, services: [], published: [] }, noWords).map(
+    allRoutes({ ...sources, ...BACKING_NOT_READ }, noWords).map(
       (route) => route.host ?? ""
     )
   );
@@ -95,13 +101,7 @@ export interface GlobalConfig {
 }
 
 export interface ControllerInfo {
-  workload: {
-    name: string;
-    namespace: string;
-    image: string | null;
-    ready: number;
-    desired: number;
-  } | null;
+  workload: ControllerWorkload | null;
   args: string[];
   /** The class names this controller was told to answer for, from its flags. */
   watching: { controllerClass: string | null; ingressClass: string | null };
@@ -119,7 +119,7 @@ function flagValue(args: string[], flag: string): string | null {
   return null;
 }
 
-async function fetchController(): Promise<ControllerInfo> {
+export async function fetchController(): Promise<ControllerInfo> {
   const none = (problem: Saying): ControllerInfo => ({
     workload: null,
     args: [],
@@ -128,39 +128,20 @@ async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const deployments = await commands
-    .listDeployments({
-      namespace: null,
-      labelSelector: CONTROLLER_SELECTOR,
-      fieldSelector: null,
-      limit: null,
-    })
-    .catch(() => []);
-
-  const deployment = deployments[0];
-  if (!deployment) {
-    return none({
-      key: "nginxNoController",
-      values: { selector: CONTROLLER_SELECTOR },
-    });
+  const { workload, unread } =
+    await findControllerWorkload(CONTROLLER_SELECTOR);
+  if (!workload) {
+    return none(
+      unread ?? {
+        key: "nginxNoController",
+        values: { selector: CONTROLLER_SELECTOR },
+      }
+    );
   }
 
-  const workload = {
-    name: deployment.name,
-    namespace: deployment.namespace,
-    image: deployment.containers[0]?.image ?? null,
-    ready: deployment.replicas.ready,
-    desired: deployment.replicas.desired,
-  };
-
-  let manifest: string;
+  let containers: DeploymentContainerInfo[];
   try {
-    manifest = await commands.getManifest(
-      "Deployment",
-      "apps/v1",
-      workload.name,
-      workload.namespace
-    );
+    containers = await controllerContainers(workload);
   } catch (error) {
     return {
       workload,
@@ -170,14 +151,14 @@ async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "nginxManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };
   }
 
-  const args = workloadArgs(manifest);
-  const env = workloadEnv(manifest);
+  const args = workloadArgs(containers);
+  const env = workloadEnv(containers);
   const watching = {
     controllerClass: flagValue(args, "controller-class"),
     ingressClass: flagValue(args, "ingress-class"),
@@ -227,7 +208,7 @@ async function fetchController(): Promise<ControllerInfo> {
           key: "nginxConfigMapUnreadable",
           values: {
             where: `${namespace}/${name}`,
-            why: error instanceof Error ? error.message : String(error),
+            why: errorToShow(error),
           },
         },
       },
@@ -245,54 +226,10 @@ export function useController() {
   });
 }
 
-/** The certificates behind the TLS Secrets these routes are served under. */
-export function useRouteCertificates(routes: NginxRoute[] | undefined) {
-  const context = useClusterStore((state) => state.currentContext);
-  const byNamespace = new Map<string, string[]>();
-  for (const route of routes ?? []) {
-    if (!route.tlsSecret) continue;
-    const namespace = route.source.namespace;
-    const names = byNamespace.get(namespace) ?? [];
-    if (!names.includes(route.tlsSecret)) names.push(route.tlsSecret);
-    byNamespace.set(namespace, names);
-  }
-  const batches = [...byNamespace.entries()].map(([namespace, names]) => ({
-    namespace,
-    names: [...names].sort(),
-  }));
-
-  const results = useQueries({
-    queries: batches.map((batch) => ({
-      queryKey: [
-        context,
-        "tls-certificates",
-        batch.namespace,
-        batch.names.join(","),
-      ],
-      queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
-      staleTime: ROUTING_STALE,
-    })),
-  });
-
-  const certificates = new Map<string, TlsCertificate>();
-  results.forEach((result, index) => {
-    for (const read of result.data ?? []) {
-      certificates.set(`${batches[index].namespace}/${read.secretName}`, read);
-    }
-  });
-  return certificates;
-}
-
 export function sourcesFrom(
   routeSources: RouteSources,
-  backing: BackingLists | undefined,
+  backing: BackingSources,
   certificates: Map<string, TlsCertificate>
 ): NginxSources {
-  return {
-    ...routeSources,
-    services: backing?.services ?? [],
-    published: backing?.published ?? [],
-    backingKnown: backing !== undefined,
-    certificates,
-  };
+  return { ...routeSources, ...backing, certificates };
 }

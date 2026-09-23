@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -12,24 +11,29 @@ import {
 } from "lucide-react";
 
 import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
-import { Section } from "@/components/ui/section";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
 import { useT, type T } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
-import { useClusterStore } from "@/stores/clusterStore";
-import { crdObjectPath } from "../../kit";
-import { FilterBox, Finding, OutLink } from "../../page-kit";
+import { crdObjectPath, hourMinute } from "../../kit";
+import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { integrationSettingsPath } from "../../paths";
 import { usePicture, type Picture } from "../monitors/data";
+import { useSavedConnection } from "../saved-connection";
 import {
   PROMETHEUSES_CRD,
   readPrometheus,
   sharedPrefix,
 } from "../monitors/model";
 import { Chip, Chips, Step, Sub } from "../monitors/story";
-import { DOT, RING, SELECTED, WORDS, type RowTone } from "../monitors/words";
+import {
+  DOT,
+  RING,
+  SELECTED,
+  WORDS,
+  unknowableWords,
+  type RowTone,
+} from "../monitors/words";
 import { rowWords } from "./words";
 import { verdictOf } from "./verdict";
 import {
@@ -129,12 +133,11 @@ export default function Alerts() {
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("alerts", "couldNotRead")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("alerts", "couldNotRead")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
   if (!picture.data) return <p className="text-[11px] text-fg-fnt">…</p>;
@@ -493,19 +496,11 @@ const ICON: Record<RowTone, typeof X> = {
   mut: HelpCircle,
 };
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
 function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
   const t = useT();
   const now = useNow();
   const copy = useCopyToClipboard();
-  const context = useClusterStore((state) => state.currentContext);
-  const saved = useQuery({
-    queryKey: [context, "prometheus", "page-address"],
-    queryFn: () => commands.getPrometheusConnection(),
-    staleTime: 60_000,
-  });
+  const saved = useSavedConnection(60_000);
   const base = saved.data?.url.replace(/\/+$/, "") ?? null;
   const tone = TONE[row.group];
   const Icon = ICON[tone];
@@ -631,7 +626,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
           )}
           {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
             <p className="mt-1 text-xs text-warn">
-              {t("monitors", "pickedUpUnknown", { reason: pickedUp.reason })}
+              {unknowableWords(pickedUp.why, t)}
             </p>
           )}
           {pickedUp.state === "noKind" && (
@@ -894,7 +889,7 @@ function RuleCard({
                 <span className="text-[11px] tabular-nums text-fg-fnt">
                   {alert.activeAt
                     ? t("alerts", "since", {
-                        time: clock(alert.activeAt),
+                        time: hourMinute(alert.activeAt),
                         ago: formatSince(Date.parse(alert.activeAt), now),
                       })
                     : "–"}

@@ -510,11 +510,6 @@ export function issuerRows(
   );
 }
 
-/** How many certificates are a reason to open the page. */
-export function troubled(rows: CertRow[]): CertRow[] {
-  return rows.filter((row) => row.state.tone !== "ok");
-}
-
 /**
  * The one colour a whole page of certificates is worth in the rail.
  *

@@ -23,12 +23,10 @@
  * place.
  */
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
 import { expiryText, overdueBy } from "@/lib/certificates";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -41,47 +39,49 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { FilterBox, Finding, TroubleRow } from "../page-kit";
+import {
+  Finding,
+  TroubleList,
+  TroubleRow,
+  VendorReadFailure,
+} from "../page-kit";
 import { usePicture } from "./data";
 import { uncovered } from "./serves";
 import {
   CERTIFICATES_CRD,
   CLUSTER_ISSUERS_CRD,
   ISSUERS_CRD,
-  troubled,
   type CertRow,
   type CertStep,
   type IssuerRow,
   type UnreadKind,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { troubleMark, summariseNames } from "../kit";
+import { parts } from "@/i18n/parts";
 
 /** Past this many troubled certificates, nothing opens itself. */
 const AUTO_OPEN = 8;
 
 export default function CertManagerPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "certificates";
-  const { data, isPending, error } = usePicture();
+  const [tab, setTab] = useSearchParam("tab", "certificates");
+  const { data, isPending, error, refetch } = usePicture();
 
   if (error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadCertificates")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "couldNotReadCertificatesBody")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadCertificates")}
+        body={t("empty", "couldNotReadCertificatesBody")}
+        error={error}
+        onRetry={refetch}
+      />
     );
   }
 
   const certificates = data?.certificates ?? [];
   const issuers = data?.issuers ?? [];
-  const broken = troubled(certificates);
 
   // Which tab owes the reader the sentence depends on which read failed: an
   // unread issuer kind is the difference between "there is none" and "nobody
@@ -98,7 +98,9 @@ export default function CertManagerPage() {
       id: "certificates",
       label: "Certificates",
       glyph: viewGlyph(ShieldCheck),
-      mark: certificatesMark(t, certificates, broken),
+      mark: troubleMark(certificates.map(severityOfRow), (n, total) =>
+        t("count", "needAttentionOfTotal", { n, total })
+      ),
       content: (
         <CertificatesTab
           rows={certificates}
@@ -131,33 +133,8 @@ export default function CertManagerPage() {
         }
         description={t("empty", "certManagerPageHint")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
-  );
-}
-
-/**
- * A count is inventory and a colour is why you came, so the mark never
- * carries both: thirty certificates with two failing renewals says two.
- */
-function certificatesMark(
-  t: ReturnType<typeof useT>,
-  rows: CertRow[],
-  broken: CertRow[]
-): DetailTabMark | undefined {
-  if (rows.length === 0) return undefined;
-  if (broken.length === 0) return countMark(rows.length);
-  return severityMark(
-    broken.some((row) => row.state.tone === "err") ? "err" : "warn",
-    t("count", "needAttentionOfTotal", { n: broken.length, total: rows.length })
   );
 }
 
@@ -237,20 +214,6 @@ function CertificatesTab({
   unread: UnreadKind[];
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return rows;
-    return rows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(needle) ||
-        row.namespace.toLowerCase().includes(needle) ||
-        (row.secretName ?? "").toLowerCase().includes(needle) ||
-        (row.issuer?.name ?? "").toLowerCase().includes(needle) ||
-        row.dnsNames.some((host) => host.toLowerCase().includes(needle))
-    );
-  }, [rows, filter]);
 
   if (loading) {
     return (
@@ -265,71 +228,53 @@ function CertificatesTab({
           {t("empty", "nothingAskedForCertificate")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {t("empty", "noCertificateObjectAnywhere")
-            .split("{annotation}")
-            .map((part, i) => (
-              <span key={i}>
-                {i > 0 && (
-                  <span className="font-mono">
-                    cert-manager.io/cluster-issuer
-                  </span>
-                )}
-                {part}
-              </span>
-            ))}
+          {parts(t("empty", "noCertificateObjectAnywhere"), {
+            annotation: (
+              <span className="font-mono">cert-manager.io/cluster-issuer</span>
+            ),
+          })}
         </p>
       </div>
     );
   }
 
-  const broken = rows.filter((row) => row.state.tone === "err").length;
-  const worthALook = rows.filter((row) => row.state.tone === "warn").length;
-
   return (
     <div className="flex flex-col">
       <Unread kinds={unread} cost={t("empty", "certWalkCost")} />
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterCertificatesPlaceholder")}
-          label={t("action", "filterCertificates")}
-        />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: rows.length,
-              })
-            : broken > 0
-              ? `${t("count", "brokenAndFirst", { n: broken, total: rows.length })}${
-                  worthALook > 0
-                    ? ` · ${t("count", "worthALook", { n: worthALook })}`
-                    : ""
-                }`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: rows.length })}`
-                : t("count", "certificatesNoneWithProblem", {
-                    n: rows.length,
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noCertificateMatchesFilter")}
-        </p>
-      ) : (
-        shown.map((row) => (
-          <CertificateRow
-            key={row.key}
-            row={row}
-            openByDefault={row.state.tone === "err" && broken <= AUTO_OPEN}
-          />
-        ))
-      )}
+      <TroubleList
+        items={rows}
+        severityOf={severityOfRow}
+        searchable={searchableRow}
+        filter={{
+          placeholder: t("action", "filterCertificatesPlaceholder"),
+          label: t("action", "filterCertificates"),
+        }}
+        autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+        summary={{
+          brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+          nothingBroken: t("empty", "nothingBroken"),
+          allWell: (n) => t("count", "certificatesNoneWithProblem", { n }),
+        }}
+        noMatch={() => t("empty", "noCertificateMatchesFilter")}
+        keyOf={(row) => row.key}
+        renderRow={(row, { openByDefault }) => (
+          <CertificateRow row={row} openByDefault={openByDefault} />
+        )}
+      />
     </div>
   );
 }
+
+const severityOfRow = (row: CertRow) =>
+  row.state.tone === "ok" ? null : row.state.tone;
+
+const searchableRow = (row: CertRow) => [
+  row.name,
+  row.namespace,
+  row.secretName,
+  row.issuer?.name,
+  ...row.dnsNames,
+];
 
 function CertificateRow({
   row,
@@ -354,9 +299,9 @@ function CertificateRow({
       meta={
         <>
           {row.namespace}
-          {row.dnsNames.length > 0 && ` · ${summarise(row.dnsNames)}`}
+          {row.dnsNames.length > 0 && ` · ${summariseNames(row.dnsNames)}`}
           {row.use.hosts.length > 0 &&
-            ` · serving ${summarise([
+            ` · serving ${summariseNames([
               ...new Set(row.use.hosts.map((entry) => entry.host)),
             ])}`}
           {row.issuer && ` · ${row.issuer.name}`}
@@ -470,12 +415,6 @@ function ServingLine({ row }: { row: CertRow }) {
       )}
     </div>
   );
-}
-
-/** Three names and a tally: a row is a summary, not the whole list. */
-function summarise(names: string[]): string {
-  if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
 function Facts({ row }: { row: CertRow }) {
@@ -655,6 +594,11 @@ function Walk({ steps }: { steps: CertStep[] }) {
  */
 function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
   const t = useT();
+  const secret = (
+    <span className="font-mono">
+      {row.secretName ?? t("empty", "itsSecret")}
+    </span>
+  );
   return (
     <Finding
       tone="err"
@@ -667,39 +611,17 @@ function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
     >
       {!brief &&
         (row.neverIssued ? (
-          <>
-            {t("empty", "nothingServingTlsFrom")
-              .split("{secret}")
-              .map((part, i) => (
-                <span key={i}>
-                  {i > 0 && (
-                    <span className="font-mono">
-                      {row.secretName ?? t("empty", "itsSecret")}
-                    </span>
-                  )}
-                  {part}
-                </span>
-              ))}
-          </>
+          <>{parts(t("empty", "nothingServingTlsFrom"), { secret })}</>
         ) : (
           <>
-            {(row.expiry
-              ? t("empty", "certificateStillServedUntil", {
-                  expiry: expiryText(row.expiry, t),
-                })
-              : t("empty", "certificateStillServed")
-            )
-              .split("{secret}")
-              .map((part, i) => (
-                <span key={i}>
-                  {i > 0 && (
-                    <span className="font-mono">
-                      {row.secretName ?? t("empty", "itsSecret")}
-                    </span>
-                  )}
-                  {part}
-                </span>
-              ))}
+            {parts(
+              row.expiry
+                ? t("empty", "certificateStillServedUntil", {
+                    expiry: expiryText(row.expiry, t),
+                  })
+                : t("empty", "certificateStillServed"),
+              { secret }
+            )}
           </>
         ))}
     </Finding>

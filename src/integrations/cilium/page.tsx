@@ -14,7 +14,7 @@
  * under it, with the rejected ones marked.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useT } from "@/i18n/useT";
@@ -22,9 +22,10 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
+  TroubleList,
   TroubleRow,
+  VendorReadFailure,
 } from "../page-kit";
 import type { Tone } from "../page-kit";
 import { coverageOf, type Coverage } from "./coverage";
@@ -57,7 +58,6 @@ const VERDICT_WORD: Record<
 export default function CiliumPage() {
   const t = useT();
   const picture = usePicture();
-  const [filter, setFilter] = useState("");
 
   const coverage = useMemo(
     () =>
@@ -71,23 +71,23 @@ export default function CiliumPage() {
     [picture.data]
   );
 
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return coverage;
-    return coverage.filter(
-      (one) =>
-        one.endpoint.name.toLowerCase().includes(needle) ||
-        (one.endpoint.namespace ?? "").toLowerCase().includes(needle) ||
-        one.selecting.some((s) => s.policy.name.toLowerCase().includes(needle))
-    );
-  }, [coverage, filter]);
-
   const onlyRejected = coverage.filter((one) => one.verdict === "onlyRejected");
   const unrestricted = coverage.filter((one) => one.verdict === "unrestricted");
   const rejected = [
     ...(picture.data?.policies ?? []),
     ...(picture.data?.clusterwide ?? []),
   ].filter((policy) => enforcementOf(policy).state === "rejected");
+
+  if (picture.error) {
+    return (
+      <VendorReadFailure
+        title={t("empty", "couldNotReadCilium")}
+        body={t("empty", "couldNotReadCiliumBody")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -127,73 +127,103 @@ export default function CiliumPage() {
       </Section>
 
       <Section>
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "searchEllipsis")}
-          label={t("action", "searchEllipsis")}
-        />
-        <div className="flex flex-col">
-          {shown.map((one, index) => (
-            <TroubleRow
-              key={
-                one.endpoint.uid ||
-                `${one.endpoint.namespace}/${one.endpoint.name}`
-              }
-              title={one.endpoint.name}
-              reference={{
-                kind: "CiliumEndpoint",
-                name: one.endpoint.name,
-                namespace: one.endpoint.namespace,
-                crd: KINDS.endpoints,
-              }}
-              meta={one.endpoint.namespace}
-              state={{
-                text: t("readings", VERDICT_WORD[one.verdict]),
-                tone: VERDICT_TONE[one.verdict],
-              }}
-              last={index === shown.length - 1}
-            >
-              {one.selecting.length === 0 ? (
-                <p className="text-[11.5px] text-fg-mut">
-                  {t("readings", "ciliumNothingSelects")}
-                </p>
-              ) : (
-                <Chain>
-                  {one.selecting.map((selecting) => (
-                    <Column
-                      key={`${selecting.policy.namespace ?? "*"}/${selecting.policy.name}`}
-                      label={
-                        selecting.clusterwide
-                          ? t("columns", "ciliumClusterwide")
-                          : t("columns", "ciliumNamespaced")
-                      }
-                    >
-                      <Cell
-                        bad={!selecting.enforcing}
-                        under={
-                          selecting.enforcing
-                            ? undefined
-                            : t("readings", "ciliumEnforcesNothing")
-                        }
-                      >
-                        {selecting.policy.name}
-                      </Cell>
-                    </Column>
-                  ))}
-                </Chain>
-              )}
-              {one.unreadable > 0 && (
-                <p className="mt-1 text-[11.5px] text-warn">
-                  {t("readings", "ciliumUnreadablePolicies", {
-                    n: one.unreadable,
-                  })}
-                </p>
-              )}
-            </TroubleRow>
-          ))}
-        </div>
+        {picture.isPending ? (
+          <p className="text-xs text-fg-fnt">{t("empty", "readingCilium")}</p>
+        ) : coverage.length === 0 ? (
+          <p className="max-w-[64ch] text-xs text-fg-mut">
+            {t("empty", "ciliumNoEndpoints")}
+          </p>
+        ) : (
+          <TroubleList
+            items={coverage}
+            severityOf={severityOfCoverage}
+            searchable={searchableCoverage}
+            filter={{
+              placeholder: t("action", "searchEllipsis"),
+              label: t("action", "searchEllipsis"),
+            }}
+            // The findings above say what is wrong; no row opens itself.
+            autoOpen={{ when: "err", upTo: 0 }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(one) =>
+              one.endpoint.uid ||
+              `${one.endpoint.namespace}/${one.endpoint.name}`
+            }
+            renderRow={(one, { last }) => <CoverageRow one={one} last={last} />}
+          />
+        )}
       </Section>
     </div>
   );
 }
+
+/** One endpoint and the policies that select it. */
+function CoverageRow({ one, last }: { one: Coverage; last: boolean }) {
+  const t = useT();
+  return (
+    <TroubleRow
+      key={one.endpoint.uid || `${one.endpoint.namespace}/${one.endpoint.name}`}
+      title={one.endpoint.name}
+      reference={{
+        kind: "CiliumEndpoint",
+        name: one.endpoint.name,
+        namespace: one.endpoint.namespace,
+        crd: KINDS.endpoints,
+      }}
+      meta={one.endpoint.namespace}
+      state={{
+        text: t("readings", VERDICT_WORD[one.verdict]),
+        tone: VERDICT_TONE[one.verdict],
+      }}
+      last={last}
+    >
+      {one.selecting.length === 0 ? (
+        <p className="text-[11.5px] text-fg-mut">
+          {t("readings", "ciliumNothingSelects")}
+        </p>
+      ) : (
+        <Chain>
+          {one.selecting.map((selecting) => (
+            <Column
+              key={`${selecting.policy.namespace ?? "*"}/${selecting.policy.name}`}
+              label={
+                selecting.clusterwide
+                  ? t("columns", "ciliumClusterwide")
+                  : t("columns", "ciliumNamespaced")
+              }
+            >
+              <Cell
+                bad={!selecting.enforcing}
+                under={
+                  selecting.enforcing
+                    ? undefined
+                    : t("readings", "ciliumEnforcesNothing")
+                }
+              >
+                {selecting.policy.name}
+              </Cell>
+            </Column>
+          ))}
+        </Chain>
+      )}
+      {one.unreadable > 0 && (
+        <p className="mt-1 text-[11.5px] text-warn">
+          {t("readings", "ciliumUnreadablePolicies", {
+            n: one.unreadable,
+          })}
+        </p>
+      )}
+    </TroubleRow>
+  );
+}
+
+const severityOfCoverage = (one: Coverage) => {
+  const tone = VERDICT_TONE[one.verdict];
+  return tone === "ok" ? null : tone;
+};
+
+const searchableCoverage = (one: Coverage) => [
+  one.endpoint.name,
+  one.endpoint.namespace,
+  ...one.selecting.map((selecting) => selecting.policy.name),
+];

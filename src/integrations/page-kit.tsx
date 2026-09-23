@@ -16,7 +16,9 @@
 import {
   Children,
   cloneElement,
+  Fragment,
   isValidElement,
+  useMemo,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -24,11 +26,15 @@ import {
 import { ChevronRight, ExternalLink, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import { Section } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -61,11 +67,225 @@ export function FilterBox({
   );
 }
 
+/**
+ * A vendor page whose one read failed: what could not be read, in the
+ * vendor's words, then the cluster's reason with a retry and — for a
+ * refusal — the RBAC rule to ask for.
+ */
+export function VendorReadFailure({
+  title,
+  body,
+  error,
+  onRetry,
+}: {
+  title: ReactNode;
+  body?: ReactNode;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <Section className="max-w-[64ch] py-8">
+      <Unknown
+        question={
+          body ? (
+            <>
+              <span className="block font-medium">{title}</span>
+              <span className="block text-fg-mut">{body}</span>
+            </>
+          ) : (
+            title
+          )
+        }
+        error={error}
+        onRetry={onRetry}
+      />
+    </Section>
+  );
+}
+
+/**
+ * A row's findings: all of them in the open row, and in a closed one the
+ * first that says more than the row's own state word, with a count of the
+ * rest.
+ */
+export function FindingList<F>({
+  findings,
+  brief,
+  worthRepeating,
+  render,
+}: {
+  findings: readonly F[];
+  brief?: boolean;
+  /** Left out, every finding is worth a line on a closed row. */
+  worthRepeating?: (finding: F) => boolean;
+  render: (finding: F) => ReactNode;
+}) {
+  const t = useT();
+  const worth =
+    brief && worthRepeating ? findings.filter(worthRepeating) : findings;
+  if (worth.length === 0) return null;
+  const shown = brief ? worth.slice(0, 1) : findings;
+  const hidden = brief ? worth.length - 1 : 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {shown.map((finding, index) => (
+        <Fragment key={index}>{render(finding)}</Fragment>
+      ))}
+      {hidden > 0 && (
+        <span className="text-[11px] text-fg-fnt">
+          {t("empty", "andMoreOpenRow", { n: hidden })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How bad an item in a list ordered by trouble is; nothing is fine, and
+ * `unknown` is an item whose verdict could not be reached.
+ */
+export type Severity = "err" | "warn" | "unknown" | null | undefined;
+
+export interface TroubleListProps<T> {
+  items: readonly T[];
+  severityOf: (item: T) => Severity;
+  /** What the filter is matched against: names, namespaces, hosts. */
+  searchable: (item: T) => ReadonlyArray<string | null | undefined>;
+  filter: { label: string; placeholder: string };
+  /**
+   * Which rows open themselves: the broken ones, or every one with a
+   * finding — and only while no more than `upTo` would, since a screen where
+   * everything is open is a screen where nothing is.
+   */
+  autoOpen: { when: "err" | "any"; upTo: number };
+  /** The line beside the filter; left out, a page has none. */
+  summary?: {
+    brokenFirst: (n: number, total: number) => string;
+    nothingBroken: string;
+    allWell: (total: number) => string;
+  };
+  noMatch: (query: string) => ReactNode;
+  /** Beside the summary: what is still being read, what could not be. */
+  aside?: ReactNode;
+  keyOf: (item: T, index: number) => string;
+  renderRow: (
+    item: T,
+    row: { openByDefault: boolean; last: boolean; shown: number }
+  ) => ReactNode;
+}
+
+/**
+ * A vendor's list ordered by trouble: the filter, what it holds, and the
+ * rows.
+ *
+ * Ten pages wrote this each for themselves, and a fix landed in one of them:
+ * a map node handing a page `?q=<host>` narrowed Traefik's list and left
+ * ingress-nginx's and Istio's untouched. The filter lives in the address
+ * here, so no page can keep it anywhere else.
+ */
+export function TroubleList<T>({
+  items,
+  severityOf,
+  searchable,
+  filter: filterWords,
+  autoOpen,
+  summary,
+  noMatch,
+  aside,
+  keyOf,
+  renderRow,
+}: TroubleListProps<T>) {
+  const t = useT();
+  const [filter, setFilter] = useSearchParam("q");
+  const needle = filter.trim().toLowerCase();
+
+  const shown = useMemo(
+    () =>
+      needle === ""
+        ? items
+        : items.filter((item) =>
+            searchable(item).some((text) =>
+              (text ?? "").toLowerCase().includes(needle)
+            )
+          ),
+    [items, needle, searchable]
+  );
+
+  const broken = items.filter((item) => severityOf(item) === "err").length;
+  const worthALook = items.filter((item) => severityOf(item) === "warn").length;
+  const unchecked = items.filter(
+    (item) => severityOf(item) === "unknown"
+  ).length;
+  const notChecked =
+    unchecked > 0
+      ? t("count", "notCheckedOfTotal", { n: unchecked, total: items.length })
+      : null;
+  const opening = autoOpen.when === "err" ? broken : broken + worthALook;
+  const opens = (item: T) => {
+    const severity = severityOf(item);
+    const eligible =
+      severity === "err" || (autoOpen.when === "any" && severity === "warn");
+    return eligible && opening <= autoOpen.upTo;
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="mb-1 flex items-center gap-3">
+        <FilterBox
+          value={filter}
+          onChange={setFilter}
+          placeholder={filterWords.placeholder}
+          label={filterWords.label}
+        />
+        {summary && (
+          <span className="text-[11px] text-fg-fnt">
+            {needle !== ""
+              ? t("count", "shownOfTotal", {
+                  n: shown.length,
+                  total: items.length,
+                })
+              : broken > 0
+                ? `${summary.brokenFirst(broken, items.length)}${
+                    worthALook > 0
+                      ? ` · ${t("count", "worthALook", { n: worthALook })}`
+                      : ""
+                  }`
+                : worthALook > 0
+                  ? `${summary.nothingBroken} · ${t("count", "worthALookOfTotal", { n: worthALook, total: items.length })}`
+                  : (notChecked ?? summary.allWell(items.length))}
+            {needle === "" &&
+              notChecked &&
+              (broken > 0 || worthALook > 0) &&
+              ` · ${notChecked}`}
+          </span>
+        )}
+        {aside}
+      </div>
+      {shown.length === 0 ? (
+        <p className="py-6 text-xs text-fg-fnt">{noMatch(filter.trim())}</p>
+      ) : (
+        shown.map((item, index) => (
+          <Fragment key={keyOf(item, index)}>
+            {renderRow(item, {
+              openByDefault: opens(item),
+              last: index === shown.length - 1,
+              shown: shown.length,
+            })}
+          </Fragment>
+        ))
+      )}
+    </div>
+  );
+}
+
 /** How a row reads at a glance. Anything not `ok` is a reason to open it. */
 export type Tone = "ok" | "warn" | "err";
 
-const toneText = (tone: Tone) =>
-  tone === "err" ? "text-err" : tone === "warn" ? "text-warn" : "text-ok";
+/** A row's state may also be a verdict that could not be reached. */
+export type RowTone = Tone | "unknown";
+
+const toneText = (tone: RowTone) => TONE_TEXT[tone];
 
 /**
  * A row in a list ordered by trouble.
@@ -121,7 +341,7 @@ export function TroubleRow({
     crd?: string;
   };
   meta?: ReactNode;
-  state: { text: string; tone: Tone };
+  state: { text: string; tone: RowTone };
   openByDefault?: boolean;
   brief?: ReactNode;
   children: ReactNode;
@@ -250,12 +470,7 @@ export function Finding({
   children?: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "border-l-2 pl-2.5",
-        tone === "err" ? "border-err" : "border-warn"
-      )}
-    >
+    <div className={cn("border-l-2 pl-2.5", TONE_BORDER[tone])}>
       <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
       {verbatim && (
         <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">
@@ -313,6 +528,22 @@ export function OutLink({
       {children}
       <ExternalLink className="size-2.5 self-center" aria-hidden />
     </a>
+  );
+}
+
+/**
+ * The Services and their endpoints could not be read. Without it a refused
+ * read stayed on "checking what is behind them" for as long as the page was
+ * open, which is a question that will never be answered stated as one being
+ * asked.
+ */
+export function BackingUnread({ error }: { error: string | null }) {
+  const t = useT();
+  if (!error) return null;
+  return (
+    <span className="text-[11px] text-warn" title={error}>
+      {t("empty", "behindUnread", { why: error })}
+    </span>
   );
 }
 

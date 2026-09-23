@@ -19,6 +19,7 @@ const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
   controller: "traefik.io/ingress-controller",
   isDefault: true,
+  parameters: null,
 };
 
 function ingress(
@@ -80,6 +81,8 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
     classes: [TRAEFIK_CLASS],
     services: [],
     published: [],
+    backingKnown: true,
+    backingError: null,
     middlewares: [],
     entryPoints: [
       { name: "web", address: ":80", tls: false, redirectTo: null },
@@ -95,6 +98,41 @@ function mapOf(over: Partial<TraefikSources>) {
 }
 
 describe("the routing map", () => {
+  /**
+   * A Service whose endpoints nobody could read was drawn in the same tone
+   * as one confirmed serving — the words were careful and the colour lied.
+   */
+  it("draws a Service whose endpoints were refused as unknown", () => {
+    const map = mapOf({
+      ingresses: [ingress("shop", "shop.example.com")],
+      services: [service("web")],
+      backingKnown: false,
+      backingError: "endpointslices is forbidden",
+    });
+
+    const node = map.columns[2].nodes[0];
+    expect(node.tone).toBe("unknown");
+    expect(node.tag?.tone).toBe("unknown");
+    expect(map.edges.find((edge) => edge.to === node.id)?.tone).toBe("unknown");
+  });
+
+  /**
+   * #246 greyed the Service node and left the host in front of it green, so
+   * the map still said the host was fine on the strength of an unread list.
+   */
+  it("draws the host in front of unread backends as unknown too", () => {
+    const map = mapOf({
+      ingresses: [
+        ingress("shop", "shop.example.com", { secretName: "shop-tls" }),
+      ],
+      services: [service("web")],
+      backingKnown: false,
+      backingError: "endpointslices is forbidden",
+    });
+
+    expect(map.columns[1].nodes[0].tone).toBe("unknown");
+  });
+
   /**
    * The shape the chain cannot show and the reason this view exists: two
    * hostnames landing on one Service is invisible in a list however it is
@@ -144,6 +182,31 @@ describe("the routing map", () => {
     expect(byLabel.get("promo.example.com")?.tag).toEqual({
       text: "no TLS",
       tone: "warn",
+    });
+  });
+
+  /** TLS ending at a load balancer in front is TLS; the page row said so and the map beside it said "no TLS" in warn. */
+  it("tags a host TLS when something in front terminates it", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => true,
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({ text: "TLS", tone: "mute" });
+  });
+
+  /** A supplier in front that could not say is not "no TLS"; fails if the unknown is read as none. */
+  it("tags a host as not checked when what is in front could not say", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => "unknown",
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
     });
   });
 

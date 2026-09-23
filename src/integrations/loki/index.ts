@@ -3,7 +3,7 @@ import { ScrollText } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { explain, unreachable } from "../reachability";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   defineVendor,
   USAGE_RANGES,
@@ -12,6 +12,7 @@ import {
   type SavedConnection,
 } from "../registry";
 import { logHistory, PAGE_LINES } from "./client";
+import { formatSince } from "@/lib/utils";
 
 /**
  * Loki.
@@ -128,7 +129,7 @@ export default defineVendor({
           at: Date.now(),
           reason: {
             key: "verbatimLine",
-            values: { said: normalizeTauriError(error) },
+            values: { said: errorToShow(error) },
           },
         };
       }
@@ -148,7 +149,12 @@ export default defineVendor({
       }
       return [
         { text: hostOf(saved.url) },
-        { say: { key: "connAnsweredAgo", values: { age: agoOf(probe.at) } } },
+        {
+          say: {
+            key: "connAnsweredAgo",
+            values: { age: formatSince(probe.at, Date.now()) },
+          },
+        },
         // Only where Loki itself stated it. A guessed retention is the worst
         // fact this screen could carry: a reader told "3 days" who finds
         // nothing from yesterday blames the app, and a reader told nothing
@@ -207,12 +213,4 @@ function asSaved(
 /** The address without its scheme — the row is narrow and `http://` is noise. */
 function hostOf(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-}
-
-/** "2s ago". Short, because the row is re-read whenever the pane is opened. */
-function agoOf(at: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
 }

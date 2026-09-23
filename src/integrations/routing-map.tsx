@@ -33,7 +33,8 @@ import { useT } from "@/i18n/useT";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { cn } from "@/lib/utils";
 
-export type MapTone = "ok" | "warn" | "err" | "mute";
+/** `unknown` is a node nothing could read: never drawn as working. */
+export type MapTone = "ok" | "warn" | "err" | "mute" | "unknown";
 
 export interface MapNode {
   id: string;
@@ -100,6 +101,7 @@ const TONE_BORDER: Record<MapTone, string> = {
   warn: "border-warn/50",
   err: "border-err/60",
   mute: "border-hair",
+  unknown: "border-dashed border-fg-fnt/60",
 };
 
 const TONE_TEXT: Record<MapTone, string> = {
@@ -107,6 +109,7 @@ const TONE_TEXT: Record<MapTone, string> = {
   warn: "text-warn",
   err: "text-err",
   mute: "text-fg-fnt",
+  unknown: "text-fg-fnt",
 };
 
 const EDGE_TEXT: Record<MapTone, string> = {
@@ -114,6 +117,7 @@ const EDGE_TEXT: Record<MapTone, string> = {
   warn: "text-warn/60",
   err: "text-err/70",
   mute: "text-hair",
+  unknown: "text-fg-fnt/60",
 };
 
 interface Placed {
@@ -401,6 +405,7 @@ export function RoutingMap({
                   )}
                   stroke="currentColor"
                   strokeWidth={touches ? 1.5 : edge.tone === "err" ? 1.5 : 1}
+                  strokeDasharray={edge.tone === "unknown" ? "3 3" : undefined}
                 />
               );
             })}

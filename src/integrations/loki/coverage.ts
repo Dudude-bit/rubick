@@ -24,6 +24,7 @@
 import type { VendorVerdict } from "../kit";
 import type { T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { escapeLabel } from "./queries";
 
 /** How far back to look for any line at all. */
@@ -67,7 +68,7 @@ export async function coverage(namespaces: string[]): Promise<Coverage> {
         return {
           namespace,
           holds: false,
-          problem: error instanceof Error ? error.message : String(error),
+          problem: errorToShow(error),
         };
       }
     })

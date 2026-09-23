@@ -11,17 +11,21 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
+import { edgeTlsTag, hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
-import { backingOf, type NginxHostGroup, type NginxSources } from "./model";
+import {
+  backingOf,
+  edgeTls,
+  type NginxHostGroup,
+  type NginxSources,
+} from "./model";
 
 /** Where clicking a host goes: its own routes, filtered to it. */
 export const hostFilterPath = (host: string | null) =>
   `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
 
 function toneOf(group: NginxHostGroup): MapTone {
-  if (group.worst === "err") return "err";
-  if (group.worst === "warn") return "warn";
-  return "ok";
+  return hostSeverity(group) ?? "ok";
 }
 
 export function routingMap(
@@ -57,18 +61,25 @@ export function routingMap(
           id: serviceId,
           label: service.name,
           sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
-          tone: backing.stop ? "err" : "ok",
+          tone: !backing.known ? "unknown" : backing.stop ? "err" : "ok",
           object: {
             kind: ResourceType.Service,
             name: service.name,
             namespace: service.namespace,
           },
           tag: !backing.known
-            ? undefined
+            ? backing.error
+              ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+              : undefined
             : backing.stop
-              ? { text: t("readings", "mapZeroReady"), tone: "err" }
+              ? {
+                  text: t("count", "nReady", { n: 0 }),
+                  tone: "err",
+                }
               : {
-                  text: `${backing.ready + backing.draining} ready`,
+                  text: t("count", "nReady", {
+                    n: backing.ready + backing.draining,
+                  }),
                   tone: backing.ready === 0 ? "warn" : "mute",
                 },
         });
@@ -76,14 +87,20 @@ export function routingMap(
       link(
         id,
         serviceId,
-        backing.stop ? "err" : tone === "err" ? "warn" : "ok"
+        !backing.known
+          ? "unknown"
+          : backing.stop
+            ? "err"
+            : tone === "err"
+              ? "warn"
+              : "ok"
       );
     }
 
     return {
       id,
       label: group.host ?? t("action", "anyHost"),
-      sub: `${group.routes.length} path${group.routes.length === 1 ? "" : "s"}`,
+      sub: t("count", "paths", { n: group.routes.length }),
       tone,
       to: hostFilterPath(group.host),
       // The split outranks TLS for the one word this node gets: a host
@@ -92,13 +109,15 @@ export function routingMap(
         ? {
             text:
               group.split.primaryShare === null
-                ? "canary"
-                : `${group.split.weightTotal - group.split.primaryShare}% canary`,
+                ? t("readings", "mapCanary")
+                : t("readings", "mapCanaryShare", {
+                    n: group.split.weightTotal - group.split.primaryShare,
+                  }),
             tone: "warn",
           }
         : group.tlsSecrets.length > 0
           ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-          : { text: t("empty", "noTls"), tone: "warn" },
+          : edgeTlsTag(edgeTls(group.host, sources), t),
     };
   });
 

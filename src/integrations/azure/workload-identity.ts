@@ -15,16 +15,16 @@
  * and every Azure call fails with a 401 that has no Kubernetes symptom.
  *
  * There is no `list_service_accounts` command, so the walk starts at the
- * labelled pods and `get`s each distinct ServiceAccount they name. The
+ * labelled pods and reads the metadata of each distinct ServiceAccount they
+ * name. The
  * consequence is stated rather than hidden: **an annotated ServiceAccount
  * with no labelled pod is not found this way.** That is the harmless half —
  * an identity nobody uses grants nothing — and the dangerous half is what
  * starting from the pods finds first.
  */
 
-import { load } from "js-yaml";
-
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type { PodInfo } from "@/generated/types";
 
 export const CLIENT_ID_ANNOTATION = "azure.workload.identity/client-id";
@@ -41,12 +41,28 @@ export interface FederatedAccount {
   pods: Array<{ name: string; namespace: string }>;
 }
 
-export type IdentityFinding = {
-  kind: "no-identity";
-  severity: "err";
-  pod: { name: string; namespace: string };
-  account: string;
-};
+export type IdentityFinding =
+  | {
+      kind: "no-identity";
+      severity: "err";
+      pod: { name: string; namespace: string };
+      account: string;
+    }
+  /** Its ServiceAccount could not be read, so whether it names an identity
+   *  is not known — never "it names none". */
+  | {
+      kind: "account-unread";
+      severity: "warn";
+      pod: { name: string; namespace: string };
+      account: string;
+      reason: string;
+    };
+
+/** What a ServiceAccount's annotations say, or that they were not read. */
+type Federation =
+  | { state: "federated"; clientId: string; tenantId: string | null }
+  | { state: "none" }
+  | { state: "unread"; reason: string };
 
 export interface WorkloadIdentity {
   accounts: FederatedAccount[];
@@ -56,28 +72,27 @@ export interface WorkloadIdentity {
 const usesIdentity = (pod: PodInfo): boolean =>
   pod.labels[USE_LABEL] === "true";
 
-/** The two annotations a ServiceAccount carries, from its own manifest. */
+/** The two annotations a ServiceAccount carries. */
 async function federationOf(
   namespace: string,
   name: string
-): Promise<{ clientId: string; tenantId: string | null } | null> {
+): Promise<Federation> {
   try {
-    const manifest = await commands.getManifest(
+    const { annotations } = await commands.getObjectMetadata(
       "ServiceAccount",
       "v1",
       name,
       namespace
     );
-    const parsed = load(manifest) as
-      { metadata?: { annotations?: Record<string, string> } } | undefined;
-    const annotations = parsed?.metadata?.annotations ?? {};
     const clientId = annotations[CLIENT_ID_ANNOTATION];
-    if (!clientId) return null;
-    return { clientId, tenantId: annotations[TENANT_ID_ANNOTATION] || null };
-  } catch {
-    // A ServiceAccount this token cannot read is not one that grants no
-    // identity, so nothing is claimed about it either way.
-    return null;
+    if (!clientId) return { state: "none" };
+    return {
+      state: "federated",
+      clientId,
+      tenantId: annotations[TENANT_ID_ANNOTATION] || null,
+    };
+  } catch (error) {
+    return { state: "unread", reason: errorToShow(error) };
   }
 }
 
@@ -110,7 +125,18 @@ export async function workloadIdentity(
   for (const pod of labelled) {
     const account = pod.serviceAccountName || "default";
     const at = `${pod.namespace}/${account}`;
-    if (!federation.get(at)) {
+    const found = federation.get(at);
+    if (found?.state === "unread") {
+      findings.push({
+        kind: "account-unread",
+        severity: "warn",
+        pod: { name: pod.name, namespace: pod.namespace },
+        account,
+        reason: found.reason,
+      });
+      continue;
+    }
+    if (found?.state !== "federated") {
       findings.push({
         kind: "no-identity",
         severity: "err",
@@ -127,7 +153,7 @@ export async function workloadIdentity(
 
   const accounts = [...federation.entries()].flatMap(
     ([at, found]): FederatedAccount[] => {
-      if (!found) return [];
+      if (found.state !== "federated") return [];
       const [namespace, name] = at.split("/");
       return [
         {

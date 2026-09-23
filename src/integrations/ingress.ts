@@ -13,14 +13,25 @@
  * vendor's own, and a helper holding all three would hold none honestly.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { load } from "js-yaml";
+import {
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
+import type { en } from "@/i18n/catalogue";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
+import type { Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   ChainStop,
+  DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
   ObjectRef,
@@ -110,8 +121,11 @@ export interface Backing {
   notReady: number;
   /** Set only where the path stops. */
   stop: ServiceStop | null;
-  /** False while the Services and their slices are still being read. */
+  /** False while the Services and their slices are still being read, or
+   *  since they could not be. */
   known: boolean;
+  /** Why they could not be, in the cluster's words; null while reading. */
+  error: string | null;
 }
 
 export interface BackingSources {
@@ -124,18 +138,52 @@ export interface BackingSources {
    * readily as it means "none". Without this a page spends the second
    * between the two answers telling the reader that every backend in the
    * cluster is missing, which is a worse lie than saying nothing.
+   *
+   * Required: optional, forgetting it meant "known".
    */
-  backingKnown?: boolean;
+  backingKnown: boolean;
+  /** Why they were not read, where they could not be; null while reading. */
+  backingError: string | null;
+}
+
+/** For a caller that counts routes and never reads what is behind them. */
+export const BACKING_NOT_READ: BackingSources = {
+  services: [],
+  published: [],
+  backingKnown: false,
+  backingError: null,
+};
+
+/**
+ * The lists as every page carries them. Eight places built this object by
+ * hand, and a refused read showed as "reading endpoints" for good.
+ */
+export function backingFrom(
+  data: BackingLists | undefined,
+  error: unknown
+): BackingSources {
+  return {
+    services: data?.services ?? [],
+    published: data?.published ?? [],
+    backingKnown: data !== undefined,
+    backingError: data === undefined && error ? errorToShow(error) : null,
+  };
+}
+
+/**
+ * A host's place in a list ordered by trouble. With nothing found and its
+ * backends unread, "fine" is not what is known — every row, map node and tab
+ * mark drawn from it read that as green.
+ */
+export function hostSeverity(group: {
+  worst: "err" | "warn" | null;
+  backendsKnown: boolean;
+}): "err" | "warn" | "unknown" | null {
+  return group.worst ?? (group.backendsKnown ? null : "unknown");
 }
 
 function ref(kind: string, name: string, namespace: string): ObjectRef {
   return { kind, name, namespace, existence: "present", facts: null };
-}
-
-function selectorOf(service: ServiceInfo): string {
-  return Object.entries(service.selector)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(",");
 }
 
 /**
@@ -151,7 +199,8 @@ export function backingOf(
   from: { kind: string; name: string; namespace: string },
   sources: BackingSources
 ): Backing {
-  const known = sources.backingKnown !== false;
+  const known = sources.backingKnown;
+  const error = known ? null : sources.backingError;
   const empty: Backing = {
     service: undefined,
     ready: 0,
@@ -159,6 +208,7 @@ export function backingOf(
     notReady: 0,
     stop: null,
     known,
+    error,
   };
   if (!backend || !known) return empty;
 
@@ -182,85 +232,24 @@ export function backingOf(
     };
   }
 
-  // An ExternalName Service is a DNS alias with no pods by design, so it has
-  // no endpoints and is not a stop. Saying it were would be the page calling
-  // a working configuration broken.
-  if (service.type === "ExternalName") {
-    return { service, ready: 0, draining: 0, notReady: 0, stop: null, known };
-  }
-
-  // What the Service publishes, not what its pods look like. The same answer
-  // the traffic chain's last hop is built from, so a route reading as broken
-  // here reads as broken there, in the same words.
+  // What the Service publishes, and where a path into it stops, by Rust's
+  // `service_stop` — the rule the connections graph uses, so a route reading
+  // as broken here reads as broken there, in the same words.
   const published = sources.published.find(
     (candidate) =>
       candidate.service.name === service.name &&
       candidate.service.namespace === service.namespace
   );
-  const ready = published?.ready ?? 0;
-  const draining = published?.draining ?? 0;
-  const notReady = published?.notReady ?? 0;
-  const state = { service, ready, draining, notReady, known };
-
-  // A draining address is still the one kube-proxy sends to when nothing
-  // ready is left, so a Service down to one is a restart rather than a 502.
-  if (ready + draining > 0) return { ...state, stop: null };
-
-  const selector = selectorOf(service);
-  // A Service with no selector has its endpoints managed by hand. Whether
-  // that is broken is not something these objects say, so nothing is claimed.
-  if (selector === "") return { ...state, stop: null };
-
-  const at = ref("Service", service.name, service.namespace);
-  const unrouted = published?.unrouted ?? 0;
-  // Addresses the endpoint controller wrote into a slice carrying no port at
-  // all: it resolved none of the Service's named `targetPort`s, so it wrote
-  // the pods down and gave kube-proxy nothing to send to. The pods are Ready
-  // and this host answers every request with a 502.
-  if (unrouted > 0) {
-    return {
-      ...state,
-      stop: {
-        reason: "publishesNothing",
-        service: at,
-        selector,
-        pods: unrouted,
-        readyPods: unrouted,
-        unnamedPorts: namedTargetPorts(service),
-      },
-    };
-  }
-  if (notReady > 0) {
-    return {
-      ...state,
-      stop: { reason: "noneReady", service: at, selector, pods: notReady },
-    };
-  }
+  const stop = published?.stop ?? null;
   return {
-    ...state,
-    // Not `selectsNothing`: this function holds the endpoints and no pod
-    // list, so it cannot tell a selector matching nothing from pods that are
-    // Pending or still creating — they carry the selector and have no
-    // address, so the controller writes no endpoint for them. Rust, which
-    // does list the pods, says "N pods carry this, none ready" about the very
-    // same Service; saying "no pod carries it" here sent the reader to check
-    // their labels for a problem that was in the scheduler.
-    stop: { reason: "publishesNothingYet", service: at, selector },
+    service,
+    ready: published?.ready ?? 0,
+    draining: published?.draining ?? 0,
+    notReady: published?.notReady ?? 0,
+    stop: stop && "service" in stop ? stop : null,
+    known,
+    error,
   };
-}
-
-/**
- * The `targetPort`s this Service asks for by name.
- *
- * Only reached where the controller already wrote a portless slice, which is
- * it saying it resolved none of them — so naming them here reports what the
- * cluster did rather than guessing at it. A numeric `targetPort` needs no
- * container to declare anything and can never be the thing that is missing.
- */
-function namedTargetPorts(service: ServiceInfo): string[] {
-  return service.ports
-    .map((port) => port.targetPort)
-    .filter((target) => target !== "" && !/^\d+$/.test(target));
 }
 
 /** The two lists every routing page needs to say what is behind a route. */
@@ -284,46 +273,36 @@ export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "routing", "backing"],
-    queryFn: async (): Promise<BackingLists> => {
-      const [services, published] = await Promise.all([
-        commands.listServices(null),
-        commands.listServiceEndpoints(null),
-      ]);
-      return { services, published };
-    },
+    queryFn: (): Promise<BackingLists> => commands.listServiceBacking(null),
     staleTime: ROUTING_STALE,
     enabled,
   });
 }
 
-interface WorkloadManifest {
-  spec?: {
-    template?: {
-      spec?: {
-        containers?: Array<{
-          args?: unknown[];
-          command?: unknown[];
-          env?: Array<{ name?: string; value?: string }>;
-        }>;
-      };
-    };
-  };
+/**
+ * A controller's containers, as its workload's template declares them.
+ *
+ * Both ingress controllers keep something here that exists nowhere in the
+ * API server — Traefik's entry points, nginx's `--configmap` — so both read
+ * the workload, and neither should have its own idea of where a container's
+ * arguments live.
+ */
+export async function controllerContainers(
+  workload: Pick<ControllerWorkload, "kind" | "name" | "namespace">
+): Promise<DeploymentContainerInfo[]> {
+  const detail =
+    workload.kind === "Deployment"
+      ? await commands.getDeployment(workload.name, workload.namespace)
+      : await commands.getDaemonset(workload.name, workload.namespace);
+  return detail.containers;
 }
 
-/**
- * The flags a controller's process was started with.
- *
- * Both ingress controllers keep something in here that exists nowhere in the
- * API server — Traefik's entry points, nginx's `--configmap` — so both read
- * the workload's own manifest, and neither should have its own idea of where
- * a container's arguments live.
- */
-export function workloadArgs(manifest: string): string[] {
-  const parsed = load(manifest) as WorkloadManifest | undefined;
-  const containers = parsed?.spec?.template?.spec?.containers ?? [];
-  return containers.flatMap((container) =>
-    [...(container.command ?? []), ...(container.args ?? [])].map(String)
-  );
+/** The flags a controller's process was started with. */
+export function workloadArgs(containers: DeploymentContainerInfo[]): string[] {
+  return containers.flatMap((container) => [
+    ...container.command,
+    ...container.args,
+  ]);
 }
 
 /**
@@ -334,14 +313,13 @@ export function workloadArgs(manifest: string): string[] {
  * the flag without doing the same substitution names a ConfigMap in a
  * namespace called `$(POD_NAMESPACE)`, which does not exist.
  */
-export function workloadEnv(manifest: string): Record<string, string> {
-  const parsed = load(manifest) as WorkloadManifest | undefined;
-  const containers = parsed?.spec?.template?.spec?.containers ?? [];
+export function workloadEnv(
+  containers: DeploymentContainerInfo[]
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const container of containers) {
-    for (const entry of container.env ?? []) {
-      if (entry.name && entry.value !== undefined)
-        env[entry.name] = entry.value;
+    for (const entry of container.env) {
+      if (entry.value !== null) env[entry.name] = entry.value;
     }
   }
   return env;
@@ -409,6 +387,157 @@ export function certificateProblems(
   });
 }
 
+/** What a stopped path says in the column, in four words or fewer. */
+export const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> =
+  {
+    backendMissing: "stopNoServiceToSendTo",
+    selectsNothing: "stopSelectorMatchesNothing",
+    publishesNothingYet: "stopNothingPublishedYet",
+    noneReady: "stopRunningNoneReady",
+    publishesNothing: "stopNoPortToSendTo",
+  };
+
+// --- what stands in front of the proxy ----------------------------------
+
+/** The proxy's own Services: the ones whose pods carry its chart label. */
+export function proxyServicesBy(
+  services: readonly ServiceInfo[],
+  [key, value]: readonly [string, string]
+): ServiceInfo[] {
+  return services.filter((service) => service.selector[key] === value);
+}
+
+/**
+ * Every Ingress whose backend is one of the proxy's own Services — what a
+ * cloud load balancer's Ingress looks like from in here.
+ */
+export function frontingIngressesOf(
+  ingresses: readonly IngressInfo[],
+  proxies: readonly ServiceInfo[]
+): IngressInfo[] {
+  if (proxies.length === 0) return [];
+  return ingresses.filter((ingress) =>
+    proxies.some(
+      (service) =>
+        service.namespace === ingress.namespace &&
+        // `spec.defaultBackend` is the ordinary spelling on a managed
+        // cluster: the load balancer names no rules and sends everything
+        // to the proxy. Read through `rules` alone it fronts nothing.
+        (service.name === ingress.defaultBackend?.backendService ||
+          ingress.rules.some((rule) =>
+            rule.paths.some((path) => service.name === path.backendService)
+          ))
+    )
+  );
+}
+
+/**
+ * What a cloud controller is asked about each Ingress in front: its own rule
+ * hosts, and for one sending everything to the proxy through
+ * `spec.defaultBackend`, every host the proxy serves — the load balancer's
+ * certificate is for those, and the Ingress names none of them.
+ */
+export function frontingQuestions(
+  fronting: readonly IngressInfo[],
+  proxies: readonly ServiceInfo[],
+  served: readonly string[]
+): Array<{ namespace: string; name: string; hosts: string[] }> {
+  return fronting.map((ingress) => {
+    const own = ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : []));
+    const everything = proxies.some(
+      (service) =>
+        service.namespace === ingress.namespace &&
+        service.name === ingress.defaultBackend?.backendService
+    );
+    return {
+      namespace: ingress.namespace,
+      name: ingress.name,
+      hosts: [...new Set(everything ? [...own, ...served] : own)],
+    };
+  });
+}
+
+/**
+ * Where TLS ends for a host that holds no certificate of its own: at an
+ * Ingress in front, at a cloud controller in front, nowhere — or not known,
+ * because the Services or what stands in front could not be read.
+ */
+export type EdgeTls =
+  | { at: "ingress"; name: string }
+  | { at: "edge" }
+  | { at: "none" }
+  | { at: "unknown" };
+
+export function edgeTlsOf(
+  host: string | null,
+  sources: BackingSources & {
+    upstreamTls?: (host: string | null) => boolean | "unknown";
+  },
+  fronting: readonly IngressInfo[]
+): EdgeTls {
+  const upstream = terminatedUpstreamOf(host, fronting);
+  if (upstream) return { at: "ingress", name: upstream.name };
+  const said = sources.upstreamTls?.(host);
+  if (said === true) return { at: "edge" };
+  if (!sources.backingKnown || said === "unknown") return { at: "unknown" };
+  return { at: "none" };
+}
+
+/** A host row's words for TLS it does not hold itself. */
+export function edgeTlsWords(edge: EdgeTls, t: T): string {
+  switch (edge.at) {
+    case "ingress":
+      return t("empty", "tlsEndsAt", { name: edge.name });
+    case "edge":
+      return t("empty", "tlsEndsAt", { name: t("empty", "theEdge") });
+    case "none":
+      return t("empty", "noTls");
+    case "unknown":
+      return t("empty", "tlsNotChecked");
+  }
+}
+
+/** The routing map's one-word tag for the same. */
+export function edgeTlsTag(
+  edge: EdgeTls,
+  t: T
+): { text: string; tone: "mute" | "warn" | "unknown" } {
+  switch (edge.at) {
+    case "ingress":
+    case "edge":
+      return { text: "TLS", tone: "mute" };
+    case "none":
+      return { text: t("empty", "noTls"), tone: "warn" };
+    case "unknown":
+      return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
+  }
+}
+
+/**
+ * The fronting Ingress that terminates TLS for this host before the proxy
+ * sees it — for *this* host, not merely somewhere.
+ */
+export function terminatedUpstreamOf(
+  host: string | null,
+  fronting: readonly IngressInfo[]
+): { kind: "Ingress"; name: string; namespace: string } | null {
+  if (host === null) return null;
+  for (const ingress of fronting) {
+    const terminates =
+      ingress.hasCatchAllTls ||
+      covers(ingress.tlsHosts, host) ||
+      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
+    if (terminates) {
+      return {
+        kind: "Ingress",
+        name: ingress.name,
+        namespace: ingress.namespace,
+      };
+    }
+  }
+  return null;
+}
+
 // --- ordering by trouble ------------------------------------------------
 
 export const SEVERITY_RANK = { err: 2, warn: 1 } as const;
@@ -426,4 +555,173 @@ export function worstOf(
     }
   }
   return worst;
+}
+
+// --- the certificates a set of routes is served under -------------------
+
+/** A route that may name a TLS Secret in its own namespace. */
+interface ServedRoute {
+  source: { namespace: string };
+  tlsSecret?: string | null;
+}
+
+/**
+ * The certificates behind the TLS Secrets these routes are served under,
+ * keyed `namespace/secret`.
+ *
+ * Core, and it works on a cluster with nothing installed: `tls.crt` states
+ * its own validity. On the key `useTlsCertificates` reads, so an Ingress page
+ * and a vendor page ask for one certificate once. Stable until a read
+ * changes, so a memo built on it follows a renewed certificate rather than a
+ * count of them.
+ */
+export function useRouteCertificates(
+  routes: readonly ServedRoute[] | undefined
+): Map<string, TlsCertificate> {
+  const batches = useMemo(() => {
+    const byNamespace = new Map<string, Set<string>>();
+    for (const route of routes ?? []) {
+      if (!route.tlsSecret) continue;
+      const names = byNamespace.get(route.source.namespace) ?? new Set();
+      names.add(route.tlsSecret);
+      byNamespace.set(route.source.namespace, names);
+    }
+    return [...byNamespace].map(([namespace, names]) => ({
+      namespace,
+      names: [...names].sort(),
+    }));
+  }, [routes]);
+
+  const combine = useCallback(
+    (results: UseQueryResult<Map<string, TlsCertificate>>[]) => {
+      const certificates = new Map<string, TlsCertificate>();
+      results.forEach((result, index) => {
+        for (const [name, read] of result.data ?? []) {
+          certificates.set(`${batches[index].namespace}/${name}`, read);
+        }
+      });
+      return certificates;
+    },
+    [batches]
+  );
+
+  return useQueries({
+    queries: batches.map((batch) => ({
+      queryKey: queryKeys.tlsCertificates(batch.namespace, batch.names),
+      queryFn: async (): Promise<Map<string, TlsCertificate>> => {
+        const read = await commands.getTlsCertificates(
+          batch.namespace,
+          batch.names
+        );
+        return new Map(read.map((entry) => [entry.secretName, entry]));
+      },
+      staleTime: ROUTING_STALE,
+    })),
+    combine,
+  });
+}
+
+// --- finding a controller's own workload ----------------------------------
+
+/** A list read for a lookup: its items, or why there are none to look at. */
+export interface ListRead<T> {
+  items: T[];
+  failure: Saying | null;
+}
+
+/**
+ * Why a lookup list could not be read, naming the cause it had. A deadline
+ * filed as "the cluster refused" sends the reader to RBAC for a slow read.
+ */
+export function lookupFailure(error: unknown): Saying {
+  if (isReadDeadline(error)) {
+    return {
+      key: "controllerLookupDeadline",
+      values: { seconds: LIST_DEADLINE_SECONDS },
+    };
+  }
+  const why = errorToShow(error);
+  return isRefusal(error)
+    ? { key: "controllerUnread", values: { why } }
+    : { key: "controllerLookupFailed", values: { why } };
+}
+
+/**
+ * A list whose failure is kept rather than read as empty. Looking for a
+ * controller through `.catch(() => [])` turned a 403 into "no controller is
+ * installed", which sends somebody to install one that is running.
+ */
+export async function listOrFailure<T>(
+  read: Promise<T[]>
+): Promise<ListRead<T>> {
+  try {
+    return { items: await read, failure: null };
+  } catch (error) {
+    return { items: [], failure: lookupFailure(error) };
+  }
+}
+
+/** Why nothing was found, when nothing could have been: the first failure. */
+export function failureOf(...reads: ListRead<unknown>[]): Saying | null {
+  if (reads.some((read) => read.items.length > 0)) return null;
+  return reads.find((read) => read.failure !== null)?.failure ?? null;
+}
+
+/** The workload running a proxy's controller, found by its chart label. */
+export interface ControllerWorkload {
+  kind: "Deployment" | "DaemonSet";
+  name: string;
+  namespace: string;
+  image: string | null;
+  ready: number;
+  desired: number;
+}
+
+/**
+ * The controller's workload, whichever kind it runs as, or why none was
+ * found. Both charts can install a DaemonSet; reading Deployments alone
+ * called a running ingress-nginx DaemonSet "no controller".
+ */
+export async function findControllerWorkload(
+  labelSelector: string
+): Promise<{ workload: ControllerWorkload | null; unread: Saying | null }> {
+  const filters = {
+    namespace: null,
+    labelSelector,
+    fieldSelector: null,
+    limit: null,
+  };
+  const [deployments, daemonSets] = await Promise.all([
+    listOrFailure(commands.listDeployments(filters)),
+    listOrFailure(commands.listDaemonsets(filters)),
+  ]);
+  const deployment = deployments.items[0];
+  if (deployment) {
+    return {
+      workload: {
+        kind: "Deployment",
+        name: deployment.name,
+        namespace: deployment.namespace,
+        image: deployment.containers[0]?.image ?? null,
+        ready: deployment.replicas.ready,
+        desired: deployment.replicas.desired,
+      },
+      unread: null,
+    };
+  }
+  const daemonSet = daemonSets.items[0];
+  if (daemonSet) {
+    return {
+      workload: {
+        kind: "DaemonSet",
+        name: daemonSet.name,
+        namespace: daemonSet.namespace,
+        image: daemonSet.containerImages[0]?.image ?? null,
+        ready: daemonSet.ready,
+        desired: daemonSet.desired,
+      },
+      unread: null,
+    };
+  }
+  return { workload: null, unread: failureOf(deployments, daemonSets) };
 }

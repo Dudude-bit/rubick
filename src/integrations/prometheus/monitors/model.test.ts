@@ -22,7 +22,6 @@ import {
   scrapeOf,
   selectorIsEmpty,
   selectedServices,
-  selectorMatches,
   sharedPrefix,
   upQuery,
   type Kind,
@@ -116,64 +115,6 @@ describe("the rules that decide which targets are a monitor's", () => {
   });
 });
 
-describe("selectorMatches", () => {
-  /** The operator's own asymmetry: a missing selector selects nothing, an empty one everything. */
-  it("treats a missing selector as nothing and an empty one as everything", () => {
-    expect(selectorMatches(null, { a: "b" })).toBe(false);
-    expect(selectorMatches(undefined, { a: "b" })).toBe(false);
-    expect(selectorMatches({}, { a: "b" })).toBe(true);
-    expect(selectorMatches({}, {})).toBe(true);
-  });
-
-  it("matches labels and the four expression operators", () => {
-    expect(
-      selectorMatches({ matchLabels: { app: "web" } }, { app: "web" })
-    ).toBe(true);
-    expect(
-      selectorMatches({ matchLabels: { app: "web" } }, { app: "db" })
-    ).toBe(false);
-    const labels = { tier: "front", env: "prod" };
-    expect(
-      selectorMatches(
-        {
-          matchExpressions: [
-            { key: "tier", operator: "In", values: ["front", "edge"] },
-          ],
-        },
-        labels
-      )
-    ).toBe(true);
-    expect(
-      selectorMatches(
-        {
-          matchExpressions: [
-            { key: "tier", operator: "NotIn", values: ["front"] },
-          ],
-        },
-        labels
-      )
-    ).toBe(false);
-    expect(
-      selectorMatches(
-        { matchExpressions: [{ key: "env", operator: "Exists" }] },
-        labels
-      )
-    ).toBe(true);
-    expect(
-      selectorMatches(
-        { matchExpressions: [{ key: "zone", operator: "DoesNotExist" }] },
-        labels
-      )
-    ).toBe(true);
-    expect(
-      selectorMatches(
-        { matchExpressions: [{ key: "zone", operator: "Weird" }] },
-        labels
-      )
-    ).toBe(false);
-  });
-});
-
 describe("monitorReaches", () => {
   /** An absent or empty namespaceSelector is the monitor's own namespace, which is not "all". */
   it("reaches its own namespace unless told otherwise", () => {
@@ -211,6 +152,30 @@ describe("selectedServices", () => {
       kind: "services",
       names: ["shop/web", "pay/web"],
     });
+  });
+
+  /**
+   * A selector Kubernetes would refuse to build is not one that selects
+   * nothing, and one with an expression this app could not read is not
+   * the selector without it: dropping the expression widened it to every
+   * Service that matched the rest.
+   */
+  it("carries a selector that cannot be evaluated as neither", () => {
+    for (const selector of [
+      { matchExpressions: [{ key: "app", operator: "In", values: [] }] },
+      {
+        matchLabels: { app: "web" },
+        matchExpressions: [{ key: "tier" }],
+      },
+    ]) {
+      const odd = monitor("web", "shop", { selector });
+      expect(selectedServices(odd, services)).toEqual({ kind: "unevaluable" });
+      const [row] = rowsOf([odd], { state: "absent" }, services, ok([]), {
+        state: "notConnected",
+      });
+      expect(row.findings.map((f) => f.kind)).toEqual(["selectorUnevaluable"]);
+      expect(row.worst).toBe("warn");
+    }
   });
 
   /** A refused Service list is unknown, never "selects nothing". */
@@ -292,8 +257,30 @@ describe("pickedUpBy", () => {
     expect(pickedUpBy(web, kind([labelled]), refused())).toEqual({
       state: "unknown",
       by: [],
-      reason: "forbidden",
+      why: { kind: "unread", reason: "forbidden" },
     });
+  });
+
+  /**
+   * A selector Kubernetes would refuse to build answers neither yes nor
+   * no. Read as "no", a Prometheus with `NotIn ()` on it was a Prometheus
+   * that picks nothing up, and the row said so in red.
+   */
+  it("says unknown when a Prometheus selector cannot be evaluated", () => {
+    const refusing = { matchExpressions: [{ key: "x", operator: "NotIn" }] };
+    const onObjects = prom("k8s", "shop", {
+      serviceMonitorSelector: refusing,
+    });
+    const onScope = prom("k8s", "monitoring", {
+      serviceMonitorSelector: {},
+      serviceMonitorNamespaceSelector: refusing,
+    });
+    for (const instance of [onObjects, onScope])
+      expect(pickedUpBy(web, kind([instance]), ok([]))).toEqual({
+        state: "unknown",
+        by: [],
+        why: { kind: "unevaluable", prometheus: "k8s" },
+      });
   });
 });
 
@@ -486,7 +473,7 @@ describe("a partial install", () => {
     expect(row.pickedUp).toEqual({
       state: "unknown",
       by: [],
-      reason: "forbidden",
+      why: { kind: "unread", reason: "forbidden" },
     });
     expect(row.findings.map((f) => f.kind)).toEqual(["pickedUpUnknown"]);
     expect(row.worst).toBe("warn");

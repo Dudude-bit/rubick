@@ -17,10 +17,15 @@
  */
 
 import { sayWords } from "@/i18n/say";
-import { useCallback, useMemo, useState } from "react";
-import type { ServiceStop } from "../ingress";
-import { useServiceRoutes } from "@/hooks/useServiceRoutes";
-import { useIngressTls } from "@/hooks/useIngressTls";
+import { useMemo } from "react";
+import {
+  BACKING_NOT_READ,
+  backingFrom,
+  edgeTlsWords,
+  hostSeverity,
+  useRouteCertificates,
+  STOP_UNDER,
+} from "../ingress";
 import {
   Box,
   FileCode2,
@@ -42,17 +47,20 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { useSearchParams } from "react-router-dom";
 import { RoutingMap } from "../routing-map";
+import { useFrontingTls } from "../fronting-tls";
+import { ProxyControllerTab } from "../proxy-controller";
 import { routingMap } from "./map";
 import {
+  BackingUnread,
+  TroubleList,
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { rawNote, type AnnotationReading } from "./annotations";
 import { readSettings, type SettingReading } from "./configmap";
@@ -60,15 +68,16 @@ import {
   sourcesFrom,
   useBacking,
   useController,
-  useRouteCertificates,
   useRouteSources,
   type ControllerInfo,
 } from "./data";
 import {
-  frontingIngresses,
   allRoutes,
+  PROXY_LABEL,
   backingOf,
+  edgeTls,
   hostGroups,
+  hostState,
   nginxClasses,
   type Finding,
   type NginxHostGroup,
@@ -77,16 +86,17 @@ import {
 } from "./model";
 import { problemWords } from "@/lib/certificates";
 import { T } from "@/i18n/T";
+import { parts } from "@/i18n/parts";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
+import { troubleMark } from "../kit";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
 
 export default function IngressNginxPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -95,99 +105,58 @@ export default function IngressNginxPage() {
   const routes = useMemo(
     () =>
       routeSources.data
-        ? allRoutes({ ...routeSources.data, services: [], published: [] }, t)
+        ? allRoutes({ ...routeSources.data, ...BACKING_NOT_READ }, t)
         : [],
     [routeSources.data, t]
   );
   const certificates = useRouteCertificates(routes);
+  const served = useMemo(
+    () => [
+      ...new Set(routes.flatMap((route) => (route.host ? [route.host] : []))),
+    ],
+    [routes]
+  );
 
-  // What is in front of nginx. The certificate is usually held by a cloud
-  // load balancer and named in an annotation, so `spec.tls` never sees it and
-  // every host read as served in the clear.
-  const proxy = useMemo(() => {
-    const found = (backing.data?.services ?? []).find(
-      (service) =>
-        service.selector["app.kubernetes.io/name"] === "ingress-nginx"
-    );
-    return found ? { namespace: found.namespace, name: found.name } : null;
-  }, [backing.data]);
-  // Every Ingress whose backend is the proxy's own Service, which is what a
-  // cloud load balancer's Ingress looks like from in here.
-  const frontAsked = useMemo(
+  const upstreamTls = useFrontingTls(
+    routeSources.data?.ingresses,
+    backing.data?.services,
+    PROXY_LABEL,
+    served
+  );
+
+  const sources: NginxSources | null = useMemo(
     () =>
-      frontingIngresses({
-        ingresses: routeSources.data?.ingresses ?? [],
-        services: backing.data?.services ?? [],
-      } as never).map(
-        (ingress: {
-          namespace: string;
-          name: string;
-          rules: Array<{ host: string }>;
-        }) => ({
-          namespace: ingress.namespace,
-          name: ingress.name,
-          hosts: ingress.rules.flatMap((rule: { host: string }) =>
-            rule.host ? [rule.host] : []
-          ),
-        })
-      ),
-    [routeSources.data, backing.data]
+      routeSources.data
+        ? {
+            ...sourcesFrom(
+              routeSources.data,
+              backingFrom(backing.data, backing.error),
+              certificates
+            ),
+            upstreamTls,
+          }
+        : null,
+    [routeSources.data, backing.data, backing.error, certificates, upstreamTls]
   );
 
-  const fronting = useServiceRoutes(proxy);
-  // The certificate may be an ACM ARN or one installed on an Application
-  // Gateway, neither of which is a route and neither of which `spec.tls`
-  // knows about — so the Ingresses standing in front of the proxy are asked
-  // directly. Without this the fix above worked on GKE and nowhere else.
-  const front = useIngressTls(frontAsked);
-  const frontTls = useCallback(
-    (host: string | null) =>
-      host !== null &&
-      frontAsked.some(
-        (ingress) => front.of(ingress, host)?.terminated === true
-      ),
-    [front, frontAsked]
-  );
-  const upstreamTls = useCallback(
-    (host: string | null) =>
-      frontTls(host) ||
-      (host !== null &&
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        )),
-    [fronting.routes, frontTls]
-  );
-
-  const sources: NginxSources | null = routeSources.data
-    ? {
-        ...sourcesFrom(routeSources.data, backing.data, certificates),
-        upstreamTls,
-      }
-    : null;
-
+  // `t` too: the groups carry sentences, and a memo without it kept the
+  // language they were first built in.
   const groups = useMemo(
     () => (sources ? hostGroups(sources, t) : []),
-    // `sources` is rebuilt every render; the inputs it is built from are what
-    // actually change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [routeSources.data, backing.data, certificates.size, upstreamTls]
+    [sources, t]
   );
 
   if (routeSources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "routingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadRouting")}
+        body={t("empty", "routingRequestFailed")}
+        error={routeSources.error}
+        onRetry={() => void routeSources.refetch()}
+      />
     );
   }
 
-  const troubled = groups.filter((group) => group.worst !== null);
   const settings = controller.data?.config
     ? readSettings(controller.data.config.data, t)
     : [];
@@ -197,7 +166,11 @@ export default function IngressNginxPage() {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length, t),
+      mark: troubleMark(
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
+      ),
       content: (
         <RoutesTab
           groups={groups}
@@ -252,15 +225,7 @@ export default function IngressNginxPage() {
         }
         description={t("empty", "nginxPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -303,24 +268,6 @@ function MapTab({
       <p className="text-[11px] text-fg-fnt">{t("empty", "restOnNodeHint")}</p>
     </div>
   );
-}
-
-function routesMark(
-  groups: NginxHostGroup[],
-  troubled: number,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (groups.length === 0) return undefined;
-  const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
-  return troubled > 0
-    ? severityMark(
-        worst,
-        t("count", "hostsNeedAttention", {
-          n: troubled,
-          total: groups.length,
-        })
-      )
-    : countMark(groups.length);
 }
 
 /**
@@ -377,22 +324,6 @@ function RoutesTab({
   backingLoading: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        (group.host ?? "").toLowerCase().includes(needle) ||
-        group.routes.some(
-          (route) =>
-            route.source.name.toLowerCase().includes(needle) ||
-            route.source.namespace.toLowerCase().includes(needle) ||
-            (route.service?.name ?? "").toLowerCase().includes(needle)
-        )
-    );
-  }, [groups, filter]);
 
   if (loading) {
     return (
@@ -413,83 +344,54 @@ function RoutesTab({
     );
   }
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterByHostServiceObject")}
-          label={t("action", "filterHosts")}
+    <TroubleList
+      items={groups}
+      severityOf={severityOfGroup}
+      searchable={searchableGroup}
+      filter={{
+        placeholder: t("action", "filterByHostServiceObject"),
+        label: t("action", "filterHosts"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingBroken"),
+        allWell: (n) => t("count", "hostsNoneWithProblem", { n }),
+      }}
+      noMatch={() => t("empty", "noHostServiceObjectMatches")}
+      aside={
+        <>
+          {backingLoading && (
+            <span className="text-[11px] text-fg-fnt">
+              {t("empty", "checkingWhatIsBehind")}
+            </span>
+          )}
+          <BackingUnread error={sources?.backingError ?? null} />
+        </>
+      }
+      keyOf={(group, index) => group.host ?? `catch-all-${index}`}
+      renderRow={(group, { openByDefault }) => (
+        <HostRow
+          group={group}
+          sources={sources}
+          openByDefault={openByDefault}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "nOfTotal", {
-                n: shown.length,
-                total: groups.length,
-              })
-            : broken > 0
-              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-                : t("count", "hostsNoneWithProblem", { n: groups.length })}
-        </span>
-        {backingLoading && (
-          <span className="text-[11px] text-fg-fnt">
-            {t("empty", "checkingWhatIsBehind")}
-          </span>
-        )}
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noHostServiceObjectMatches")}
-        </p>
-      ) : (
-        shown.map((group, index) => (
-          <HostRow
-            key={group.host ?? `catch-all-${index}`}
-            group={group}
-            sources={sources}
-            openByDefault={group.worst === "err" && broken <= AUTO_OPEN}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
 
-function hostState(
-  group: NginxHostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  const certificate = group.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate) {
-    return {
-      text:
-        certificate.kind === "certificate" && certificate.expiry?.expired
-          ? t("empty", "certificateExpired")
-          : t("empty", "certificateRunningOut"),
-      tone: "err",
-    };
-  }
-  if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
-    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
-  }
-  if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: t("empty", "servedInTheClear"), tone: "warn" };
-  }
-  if (group.findings.length > 0) {
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  }
-  return { text: t("empty", "serving"), tone: "ok" };
-}
+const severityOfGroup = hostSeverity;
+
+const searchableGroup = (group: NginxHostGroup) => [
+  group.host,
+  ...group.routes.flatMap((route) => [
+    route.source.name,
+    route.source.namespace,
+    route.service?.name,
+  ]),
+];
 
 function HostRow({
   group,
@@ -501,7 +403,7 @@ function HostRow({
   openByDefault: boolean;
 }) {
   const t = useT();
-  const state = hostState(group, t);
+  const state = hostState(group, sources?.backingError ?? null, t);
   const tls = group.tlsSecrets[0];
 
   return (
@@ -515,7 +417,7 @@ function HostRow({
             ` · ${t("empty", "splitShares", { shares: splitSummary(group) })}`}
           {tls
             ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : ` · ${t("empty", "noTls")}`}
+            : ` · ${edgeTlsWords(sources ? edgeTls(group.host, sources) : { at: "unknown" }, t)}`}
         </>
       }
       state={state}
@@ -626,7 +528,9 @@ function PathRow({
         {route.service === null
           ? t("empty", "notAService")
           : backing && !backing.known
-            ? "…"
+            ? backing.error
+              ? t("empty", "unknownLower")
+              : "…"
             : backing?.stop
               ? "—"
               : backing
@@ -786,7 +690,15 @@ function HostChain({
           {route.service === null ? (
             <Cell under={t("empty", "notAService")}>—</Cell>
           ) : !backing.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}
@@ -906,21 +818,15 @@ function Findings({
     group.tlsSecrets.map((secret) => secret.secretName)
   );
 
-  if (group.findings.length === 0) return null;
-
-  const worthRepeating = group.findings.filter(
-    (finding) => finding.kind !== "clear"
-  );
-  if (brief && worthRepeating.length === 0) return null;
-  const shown = brief ? worthRepeating.slice(0, 1) : group.findings;
-  const hidden = brief ? worthRepeating.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => {
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      worthRepeating={saysMoreThanTheRow}
+      render={(finding) => {
         const said = describeFinding(finding, t);
         return (
-          <FindingBlock key={index} tone={finding.severity} title={said.title}>
+          <FindingBlock tone={finding.severity} title={said.title}>
             {!brief && said.note}
             {!brief && finding.kind === "certificate" && (
               <RenewalNote
@@ -930,23 +836,13 @@ function Findings({
             )}
           </FindingBlock>
         );
-      })}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
-      )}
-    </div>
+      }}
+    />
   );
 }
 
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
+const saysMoreThanTheRow = (finding: NginxHostGroup["findings"][number]) =>
+  finding.kind !== "clear";
 
 function describeFinding(
   finding: Finding,
@@ -1176,112 +1072,28 @@ function ControllerTab({
   sources: NginxSources | null;
 }) {
   const t = useT();
-  if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingController")}</p>
-    );
-  }
-  const classes = sources ? nginxClasses(sources.classes) : [];
-
+  const flag = controller?.watching.controllerClass;
   return (
-    <div className="flex flex-col gap-[22px]">
-      <Section>
-        <SectionHeader
-          title={t("empty", "theControllerTitle")}
-          description={t("empty", "theControllerDescription")}
-        />
-        {controller.workload ? (
-          <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <ResourceRef
-                kind="Deployment"
-                name={controller.workload.name}
-                namespace={controller.workload.namespace}
-                showKind={false}
-              />
-              <span className="text-fg-fnt">
-                {t("count", "ofTotalReady", {
-                  n: controller.workload.ready,
-                  total: controller.workload.desired,
-                })}{" "}
-                · {controller.workload.namespace}
-              </span>
-            </span>
-            {controller.workload.image && (
-              <span className="font-mono text-[11px] text-fg-fnt">
-                {controller.workload.image}
-              </span>
-            )}
-            {controller.problem && (
-              <p className="text-[11px] text-warn">
-                {sayWords(controller.problem, t)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem && sayWords(controller.problem, t)}
-          </p>
-        )}
-      </Section>
-
-      <Section>
-        <SectionHeader
-          title={t("empty", "classesItClaims")}
-          count={classes.length}
-          description={t("empty", "classesItClaimsDescription")}
-        />
-        {classes.length === 0 ? (
-          <p className="text-[11px] text-warn">
-            {t("empty", "nginxClaimsNoClass")}
-          </p>
-        ) : (
-          <div className="flex flex-col">
-            {classes.map((entry) => (
-              <div
-                key={entry.name}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
-              >
-                <span className="font-mono text-fg-mid">{entry.name}</span>
-                {entry.isDefault && (
-                  <span className="text-[11px] text-fg-fnt">
-                    {t("empty", "clustersDefault")}
-                  </span>
-                )}
-                <span className="ml-auto font-mono text-[11px] text-fg-fnt">
-                  {entry.controller}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        {controller.watching.controllerClass && (
+    <ProxyControllerTab
+      controller={controller}
+      classes={sources ? nginxClasses(sources.classes) : []}
+      words={{
+        reading: t("empty", "readingController"),
+        title: t("empty", "theControllerTitle"),
+        description: t("empty", "theControllerDescription"),
+        claimsNoClass: t("empty", "nginxClaimsNoClass"),
+      }}
+      classesNote={
+        flag && (
           <p className="text-[11px] text-fg-fnt">
-            {t("empty", "startedWithPre")}
-            <span className="font-mono">
-              --controller-class={controller.watching.controllerClass}
-            </span>
-            {t("empty", "startedWithPost")}
+            {parts(t("empty", "startedWithFlag"), {
+              flag: (
+                <span className="font-mono">--controller-class={flag}</span>
+              ),
+            })}
           </p>
-        )}
-      </Section>
-
-      {controller.args.length > 0 && (
-        <Section>
-          <SectionHeader
-            title={t("empty", "staticConfiguration")}
-            count={controller.args.length}
-            description={t("empty", "staticConfigurationDescription")}
-          />
-          <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
-            {controller.args.map((arg, index) => (
-              <span key={index} className="select-text break-all">
-                {arg}
-              </span>
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
+        )
+      }
+    />
   );
 }

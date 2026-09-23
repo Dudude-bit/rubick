@@ -17,10 +17,12 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
+import { edgeTlsTag, hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
   boundEntryPoints,
+  edgeTls,
   type HostGroup,
   type TraefikSources,
 } from "./model";
@@ -33,9 +35,7 @@ export const hostFilterPath = (host: string | null) =>
   `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
 
 function toneOf(group: HostGroup): MapTone {
-  if (group.worst === "err") return "err";
-  if (group.worst === "warn") return "warn";
-  return "ok";
+  return hostSeverity(group) ?? "ok";
 }
 
 /**
@@ -113,18 +113,25 @@ export function routingMap(
           id: serviceId,
           label: service.name,
           sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
-          tone: backing.stop ? "err" : "ok",
+          tone: !backing.known ? "unknown" : backing.stop ? "err" : "ok",
           object: {
             kind: ResourceType.Service,
             name: service.name,
             namespace: service.namespace,
           },
           tag: !backing.known
-            ? undefined
+            ? backing.error
+              ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+              : undefined
             : backing.stop
-              ? { text: t("readings", "mapZeroReady"), tone: "err" }
+              ? {
+                  text: t("count", "nReady", { n: 0 }),
+                  tone: "err",
+                }
               : {
-                  text: `${backing.ready + backing.draining} ready`,
+                  text: t("count", "nReady", {
+                    n: backing.ready + backing.draining,
+                  }),
                   tone: backing.ready === 0 ? "warn" : "mute",
                 },
         });
@@ -132,7 +139,13 @@ export function routingMap(
       link(
         id,
         serviceId,
-        backing.stop ? "err" : tone === "err" ? "warn" : "ok"
+        !backing.known
+          ? "unknown"
+          : backing.stop
+            ? "err"
+            : tone === "err"
+              ? "warn"
+              : "ok"
       );
     }
 
@@ -144,7 +157,7 @@ export function routingMap(
       // Without it the column is a list of names somebody still has to go and
       // look up one at a time, which is the errand a map is supposed to end.
       sub: [
-        `${group.routes.length} path${group.routes.length === 1 ? "" : "s"}`,
+        t("count", "paths", { n: group.routes.length }),
         at.length > 0 ? at.join(", ") : null,
       ]
         .filter(Boolean)
@@ -153,7 +166,7 @@ export function routingMap(
       to: hostFilterPath(group.host),
       tag: tls
         ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-        : { text: t("empty", "noTls"), tone: "warn" },
+        : edgeTlsTag(edgeTls(group.host, sources), t),
     };
   });
 

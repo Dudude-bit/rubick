@@ -15,9 +15,8 @@
  * request.
  */
 
-import { useMemo, useState } from "react";
-import type { ServiceStop } from "../ingress";
-import { useSearchParams } from "react-router-dom";
+import { useMemo } from "react";
+import { backingFrom, hostSeverity, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -35,19 +34,22 @@ import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import type { CustomResourceInfo } from "@/generated/types";
 import {
+  BackingUnread,
+  TroubleList,
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { KINDS, sourcesFrom, useBacking, useMesh } from "./data";
 import { describeMatch, fullyRead, type MatchReading } from "./match";
 import {
   backingOf,
   hostGroups,
+  hostState,
   subsetsFor,
   type Destination,
   type Finding,
@@ -55,51 +57,55 @@ import {
   type IstioRoute,
   type IstioSources,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
+import { troubleMark } from "../kit";
 
 const AUTO_OPEN = 8;
 
 export default function IstioPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const mesh = useMesh();
   const backing = useBacking();
 
-  const sources: IstioSources | null = mesh.data
-    ? sourcesFrom(mesh.data, backing.data)
-    : null;
+  const sources: IstioSources | null = useMemo(
+    () =>
+      mesh.data
+        ? sourcesFrom(mesh.data, backingFrom(backing.data, backing.error))
+        : null,
+    [mesh.data, backing.data, backing.error]
+  );
 
+  // `t` too: the groups carry sentences, and a memo without it kept the
+  // language they were first built in.
   const groups = useMemo(
     () => (sources ? hostGroups(sources, t) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh.data, backing.data]
+    [sources, t]
   );
 
   if (mesh.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadMeshRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "meshRoutingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{mesh.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadMeshRouting")}
+        body={t("empty", "meshRoutingRequestFailed")}
+        error={mesh.error}
+        onRetry={() => void mesh.refetch()}
+      />
     );
   }
-
-  const troubled = groups.filter((group) => group.worst !== null);
 
   const tabs: DetailTab[] = [
     {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(Waypoints),
-      mark: routesMark(groups, troubled.length, t),
+      mark: troubleMark(
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
+      ),
       content: (
         <RoutesTab
           groups={groups}
@@ -157,32 +163,9 @@ export default function IstioPage() {
         }
         description={t("empty", "istioPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
-}
-
-function routesMark(
-  groups: IstioHostGroup[],
-  troubled: number,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (groups.length === 0) return undefined;
-  const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
-  return troubled > 0
-    ? severityMark(
-        worst,
-        t("count", "hostsNeedAttention", { n: troubled, total: groups.length })
-      )
-    : countMark(groups.length);
 }
 
 function subsetsMark(
@@ -250,23 +233,6 @@ function RoutesTab({
   backingLoading: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        group.host.toLowerCase().includes(needle) ||
-        group.routes.some(
-          (route) =>
-            route.source.name.toLowerCase().includes(needle) ||
-            route.destinations.some((destination) =>
-              destination.host.toLowerCase().includes(needle)
-            )
-        )
-    );
-  }, [groups, filter]);
 
   if (loading) {
     return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
@@ -285,71 +251,53 @@ function RoutesTab({
     );
   }
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterByHostVirtualServiceDestination")}
-          label={t("action", "filterHosts")}
+    <TroubleList
+      items={groups}
+      severityOf={severityOfGroup}
+      searchable={searchableGroup}
+      filter={{
+        placeholder: t("action", "filterByHostVirtualServiceDestination"),
+        label: t("action", "filterHosts"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingBroken"),
+        allWell: (n) => t("count", "hostsNoneWithProblem", { n }),
+      }}
+      noMatch={() => t("empty", "noHostVirtualServiceMatches")}
+      aside={
+        <>
+          {backingLoading && (
+            <span className="text-[11px] text-fg-fnt">
+              {t("empty", "checkingWhatIsBehind")}
+            </span>
+          )}
+          <BackingUnread error={sources?.backingError ?? null} />
+        </>
+      }
+      keyOf={(group) => group.host}
+      renderRow={(group, { openByDefault }) => (
+        <HostRow
+          group={group}
+          sources={sources}
+          openByDefault={openByDefault}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "nOfTotal", { n: shown.length, total: groups.length })
-            : broken > 0
-              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-                : t("count", "hostsNoneWithProblem", { n: groups.length })}
-        </span>
-        {backingLoading && (
-          <span className="text-[11px] text-fg-fnt">
-            {t("empty", "checkingWhatIsBehind")}
-          </span>
-        )}
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noHostVirtualServiceMatches")}
-        </p>
-      ) : (
-        shown.map((group) => (
-          <HostRow
-            key={group.host}
-            group={group}
-            sources={sources}
-            openByDefault={group.worst === "err" && broken <= AUTO_OPEN}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
 
-function hostState(
-  group: IstioHostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  if (group.findings.some((finding) => finding.kind === "noGateway")) {
-    return { text: t("empty", "noGatewayServesIt"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "noSubset")) {
-    return { text: t("empty", "subsetNotDefined"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "weights")) {
-    return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
-  }
-  if (group.findings.length > 0)
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  return { text: t("empty", "routingState"), tone: "ok" };
-}
+const severityOfGroup = hostSeverity;
+
+const searchableGroup = (group: IstioHostGroup) => [
+  group.host,
+  ...group.routes.flatMap((route) => [
+    route.source.name,
+    ...route.destinations.map((destination) => destination.host),
+  ]),
+];
 
 function HostRow({
   group,
@@ -376,7 +324,7 @@ function HostRow({
               : ` · ${t("count", "gatewaysNamed", { n: group.gateways.length })}`}
         </>
       }
-      state={hostState(group, t)}
+      state={hostState(group, sources?.backingError ?? null, t)}
       openByDefault={openByDefault}
       brief={
         group.findings.length > 0 ? <Findings group={group} brief /> : undefined
@@ -592,7 +540,15 @@ function HostChain({
           {!destination || destination.external ? (
             <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing?.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing?.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}
@@ -656,14 +612,6 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
 
 // --- findings -----------------------------------------------------------
 
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
-
 function Findings({
   group,
   brief,
@@ -672,26 +620,19 @@ function Findings({
   brief?: boolean;
 }) {
   const t = useT();
-  if (group.findings.length === 0) return null;
-  const shown = brief ? group.findings.slice(0, 1) : group.findings;
-  const hidden = brief ? group.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => {
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      render={(finding) => {
         const said = describeFinding(finding, t);
         return (
-          <FindingBlock key={index} tone={finding.severity} title={said.title}>
+          <FindingBlock tone={finding.severity} title={said.title}>
             {!brief && said.note}
           </FindingBlock>
         );
-      })}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
-      )}
-    </div>
+      }}
+    />
   );
 }
 

@@ -13,8 +13,6 @@
  * log, and both are linked from here.
  */
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -22,21 +20,22 @@ import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { formatAge } from "@/lib/utils";
 import { gitRepoLink } from "../gitops";
+import { troubleMark } from "../kit";
 import {
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding,
   OutLink,
+  TroubleList,
   TroubleRow,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import {
   HELM_RELEASES_CRD,
@@ -44,7 +43,7 @@ import {
   SOURCE_KINDS,
   useControllers,
   usePicture,
-  type FluxController,
+  type FluxControllers,
 } from "./data";
 import {
   reconcilerState,
@@ -54,7 +53,9 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
 
 /** Past this many broken reconcilers, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -68,61 +69,72 @@ const crdOf = (kind: string): string | null =>
 
 export default function FluxPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "reconcilers";
+  const [tab, setTab] = useSearchParam("tab", "reconcilers");
 
   const picture = usePicture();
   const controllers = useControllers();
 
   const reconcilers = picture.data?.reconcilers ?? [];
   const sources = picture.data?.sources ?? [];
+  const unread = picture.data?.unread ?? [];
+  const releasesUnread = unread.some((read) => read.kind === "HelmRelease");
+  const sourcesUnread = unread.some((read) => read.kind !== "HelmRelease");
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadFlux")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "couldNotReadFluxBody")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadFlux")}
+        body={t("empty", "couldNotReadFluxBody")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
 
+  const needAttention = (n: number, total: number) =>
+    t("count", "needAttentionOfTotal", { n, total });
   const tabs: DetailTab[] = [
     {
       id: "reconcilers",
       label: t("nav", "reconcilers"),
       glyph: viewGlyph(Layers),
-      mark: markFor(
+      mark: troubleMark(
         reconcilers.map((entry) => entry.worst),
-        t
+        needAttention
       ),
       content: (
-        <ReconcilersTab reconcilers={reconcilers} loading={picture.isPending} />
+        <ReconcilersTab
+          reconcilers={reconcilers}
+          loading={picture.isPending}
+          partial={releasesUnread}
+        />
       ),
     },
     {
       id: "sources",
       label: t("nav", "sources"),
       glyph: viewGlyph(GitBranch),
-      mark: markFor(
+      mark: troubleMark(
         sources.map((entry) => entry.worst),
-        t
+        needAttention
       ),
-      content: <SourcesTab sources={sources} loading={picture.isPending} />,
+      content: (
+        <SourcesTab
+          sources={sources}
+          loading={picture.isPending}
+          partial={sourcesUnread}
+        />
+      ),
     },
     {
       id: "controllers",
       label: t("nav", "controllers"),
       glyph: viewGlyph(Box),
       mark:
-        controllers.data && controllers.data.length > 0
-          ? countMark(controllers.data.length)
+        controllers.data && controllers.data.controllers.length > 0
+          ? countMark(controllers.data.controllers.length)
           : undefined,
-      content: <ControllersTab controllers={controllers.data} />,
+      content: <ControllersTab read={controllers.data} />,
     },
   ];
 
@@ -133,36 +145,27 @@ export default function FluxPage() {
         count={
           picture.isPending
             ? undefined
-            : t("count", "reconcilersFromSources", {
-                n: reconcilers.length,
-                sources: t("count", "sources", { n: sources.length }),
-              })
+            : unread.length > 0
+              ? t("count", "reconcilersSomeUnread", { n: reconcilers.length })
+              : t("count", "reconcilersFromSources", {
+                  n: reconcilers.length,
+                  sources: t("count", "sources", { n: sources.length }),
+                })
         }
         description={t("empty", "fluxPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      {unread.map((read) => (
+        <Finding
+          key={read.crd}
+          tone="warn"
+          title={t("empty", "crdCouldNotBeListed", { crd: read.crd })}
+          verbatim={read.reason}
+        >
+          {t("empty", "fluxUnreadNote")}
+        </Finding>
+      ))}
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
-  );
-}
-
-function markFor(
-  worsts: Array<"err" | "warn" | null>,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (worsts.length === 0) return undefined;
-  const troubled = worsts.filter((worst) => worst !== null).length;
-  if (troubled === 0) return countMark(worsts.length);
-  return severityMark(
-    worsts.includes("err") ? "err" : "warn",
-    t("count", "needAttentionOfTotal", { n: troubled, total: worsts.length })
   );
 }
 
@@ -171,29 +174,27 @@ function markFor(
 function ReconcilersTab({
   reconcilers,
   loading,
+  partial,
 }: {
   reconcilers: FluxReconciler[];
   loading: boolean;
+  /** A reconciler kind could not be listed. */
+  partial: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return reconcilers;
-    return reconcilers.filter(
-      (reconciler) =>
-        reconciler.name.toLowerCase().includes(needle) ||
-        reconciler.namespace.toLowerCase().includes(needle) ||
-        reconciler.unit.toLowerCase().includes(needle) ||
-        (reconciler.sourceRef?.name ?? "").toLowerCase().includes(needle)
-    );
-  }, [reconcilers, filter]);
 
   if (loading) {
     return (
       <p className="text-xs text-fg-fnt">
         {t("empty", "readingWhatFluxApplies")}
+      </p>
+    );
+  }
+
+  if (reconcilers.length === 0 && partial) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        {t("empty", "fluxReconcilersUnread")}
       </p>
     );
   }
@@ -211,58 +212,43 @@ function ReconcilersTab({
     );
   }
 
-  const broken = reconcilers.filter(
-    (reconciler) => reconciler.worst === "err"
-  ).length;
-  const worthALook = reconcilers.filter(
-    (reconciler) => reconciler.worst === "warn"
-  ).length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterReconcilersPlaceholder")}
-          label={t("action", "filterReconcilers")}
+    <TroubleList
+      items={reconcilers}
+      severityOf={severityOfReconciler}
+      searchable={searchableReconciler}
+      filter={{
+        placeholder: t("action", "filterReconcilersPlaceholder"),
+        label: t("action", "filterReconcilers"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) =>
+          t("count", "notReconcilingAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingFailing"),
+        allWell: (n) => t("count", "reconcilersAllApplied", { n }),
+      }}
+      noMatch={() => t("empty", "noReconcilerMatches")}
+      keyOf={(reconciler) => `${reconciler.kind}/${reconciler.key}`}
+      renderRow={(reconciler, { openByDefault, last }) => (
+        <ReconcilerRow
+          reconciler={reconciler}
+          openByDefault={openByDefault}
+          last={last}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: reconcilers.length,
-              })
-            : broken > 0
-              ? `${t("count", "notReconcilingAndFirst", { n: broken, total: reconcilers.length })}${
-                  worthALook > 0
-                    ? ` · ${t("count", "worthALook", { n: worthALook })}`
-                    : ""
-                }`
-              : worthALook > 0
-                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: reconcilers.length })}`
-                : t("count", "reconcilersAllApplied", {
-                    n: reconcilers.length,
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noReconcilerMatches")}
-        </p>
-      ) : (
-        shown.map((reconciler, index) => (
-          <ReconcilerRow
-            key={`${reconciler.kind}/${reconciler.key}`}
-            reconciler={reconciler}
-            openByDefault={reconciler.worst === "err" && broken <= AUTO_OPEN}
-            last={index === shown.length - 1}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
+
+const severityOfReconciler = (reconciler: FluxReconciler) => reconciler.worst;
+
+const searchableReconciler = (reconciler: FluxReconciler) => [
+  reconciler.name,
+  reconciler.namespace,
+  reconciler.unit,
+  reconciler.sourceRef?.name,
+];
 
 function ReconcilerRow({
   reconciler,
@@ -302,10 +288,14 @@ function ReconcilerRow({
         <Column label={t("columns", "source")}>
           {reconciler.sourceRef ? (
             <Cell
-              bad={source?.ready === false || !source}
+              bad={
+                source?.ready === false || (!source && reconciler.sourceKnown)
+              }
               under={
                 !source
-                  ? t("empty", "notInThisCluster")
+                  ? reconciler.sourceKnown
+                    ? t("empty", "notInThisCluster")
+                    : t("empty", "notReadLower")
                   : source.ready === false
                     ? t("empty", "fetchFailingLower")
                     : (source.ref ?? t("empty", "fetchedLower"))
@@ -424,27 +414,18 @@ function Findings({
   reconciler: FluxReconciler;
   brief?: boolean;
 }) {
-  const t = useT();
-  if (reconciler.findings.length === 0) return null;
-  const shown = brief ? reconciler.findings.slice(0, 1) : reconciler.findings;
-  const hidden = brief ? reconciler.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
+    <FindingList
+      findings={reconciler.findings}
+      brief={brief}
+      render={(finding) => (
         <ReconcilerFinding
-          key={index}
           reconciler={reconciler}
           finding={finding}
           brief={brief}
         />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
       )}
-    </div>
+    />
   );
 }
 
@@ -578,14 +559,24 @@ function describe(
 function SourcesTab({
   sources,
   loading,
+  partial,
 }: {
   sources: FluxSource[];
   loading: boolean;
+  /** A source kind could not be listed. */
+  partial: boolean;
 }) {
   const t = useT();
   if (loading) {
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "readingSources")}</p>
+    );
+  }
+  if (sources.length === 0 && partial) {
+    return (
+      <p className="max-w-[64ch] text-xs text-fg-mut">
+        {t("empty", "fluxSourcesUnread")}
+      </p>
     );
   }
   if (sources.length === 0) {
@@ -678,11 +669,17 @@ function SourceRow({
           {t("columns", "appliedBy")}
         </span>
         <span className="min-w-0 truncate">
-          {source.usedBy.length === 0
-            ? t("empty", "nothingLower")
-            : source.usedBy
+          {source.usedBy.length > 0
+            ? source.usedBy
                 .map((key) => key.split("/").slice(1).join("/"))
-                .join(", ")}
+                .join(", ")
+            : source.usersKnown && t("empty", "nothingLower")}
+          {!source.usersKnown && (
+            <span className="text-fg-fnt">
+              {source.usedBy.length > 0 && " · "}
+              {t("empty", "fluxHelmReleasesNotRead")}
+            </span>
+          )}
         </span>
       </div>
       {crd && (
@@ -725,7 +722,9 @@ function SourceFinding({
       title={fetchTitle(finding.everFetched, t)}
       verbatim={finding.message}
     >
-      {finding.frozen.length > 0 ? (
+      {finding.frozen.length === 0 && !finding.frozenKnown ? (
+        t("empty", "fluxFrozenUnread")
+      ) : finding.frozen.length > 0 ? (
         <>
           {finding.frozen.map((name, index) => (
             <span key={name}>
@@ -750,25 +749,25 @@ function SourceFinding({
       ) : (
         t("empty", "fluxSourceUnaffected")
       )}
+      {finding.frozen.length > 0 && !finding.frozenKnown && (
+        <> {t("empty", "fluxFrozenUnread")}</>
+      )}
     </Finding>
   );
 }
 
 // --- controllers --------------------------------------------------------
 
-function ControllersTab({
-  controllers,
-}: {
-  controllers: FluxController[] | undefined;
-}) {
+function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   const t = useT();
-  if (!controllers) {
+  if (!read) {
     return (
       <p className="text-xs text-fg-fnt">
         {t("empty", "readingFluxWorkloads")}
       </p>
     );
   }
+  const { controllers, unread } = read;
 
   return (
     <Section>
@@ -777,7 +776,11 @@ function ControllersTab({
         count={controllers.length || undefined}
         description={t("empty", "fluxWorkloadsDescription")}
       />
-      {controllers.length === 0 ? (
+      {unread ? (
+        <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+          {sayWords(unread, t)}
+        </p>
+      ) : controllers.length === 0 ? (
         <p className="max-w-[64ch] text-[11px] text-fg-fnt">
           {t("empty", "fluxNoControllersPre")}{" "}
           <span className="font-mono">app.kubernetes.io/part-of=flux</span>

@@ -17,9 +17,10 @@
  */
 
 import type { Saying } from "@/i18n/say";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -27,12 +28,20 @@ import type {
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
-import { useBackingLists, workloadArgs, type BackingLists } from "../ingress";
+import {
+  BACKING_NOT_READ,
+  useBackingLists,
+  type BackingLists,
+  controllerContainers,
+  workloadArgs,
+  type BackingSources,
+  findControllerWorkload,
+  type ControllerWorkload,
+} from "../ingress";
 import {
   allRoutes,
   readEntryPoints,
   type EntryPoint,
-  type TraefikRoute,
   type TraefikSources,
 } from "./model";
 
@@ -47,19 +56,24 @@ export const GROUPS: readonly string[] = ["traefik.io", "traefik.containo.us"];
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=traefik";
 
 /**
- * The API group this cluster answers for, remembered for the session.
+ * The API group each cluster answers for, remembered by context.
  *
  * A cluster does not migrate from v2 to v3 while the app is open, and the
- * fallback costs a failed request every time it is not remembered.
+ * fallback costs a failed request every time it is not remembered. The app
+ * does move between clusters, and the next one may be on the other group.
  */
-let servedGroup: string | null = null;
+const servedGroups = new Map<string, string>();
+
+const contextNow = () => useClusterStore.getState().currentContext ?? "";
 
 export async function listTraefik(
   kindPlural: string
 ): Promise<CustomResourceInfo[]> {
-  if (servedGroup) {
+  const context = contextNow();
+  const served = servedGroups.get(context);
+  if (served) {
     return commands.listCustomResources(
-      `${kindPlural}.${servedGroup}`,
+      `${kindPlural}.${served}`,
       null,
       null,
       null
@@ -72,7 +86,7 @@ export async function listTraefik(
       null,
       null
     );
-    servedGroup = GROUPS[0];
+    servedGroups.set(context, GROUPS[0]);
     return objects;
   } catch (error) {
     try {
@@ -82,7 +96,7 @@ export async function listTraefik(
         null,
         null
       );
-      servedGroup = GROUPS[1];
+      servedGroups.set(context, GROUPS[1]);
       return objects;
     } catch {
       // Only the group rename is recovered from. If the fallback fails too
@@ -95,7 +109,7 @@ export async function listTraefik(
 
 /** The group this cluster answered on, once anything has been read. */
 export function servedGroupName(): string {
-  return servedGroup ?? GROUPS[0];
+  return servedGroups.get(contextNow()) ?? GROUPS[0];
 }
 
 export interface RouteSources {
@@ -131,8 +145,7 @@ export function countHosts(sources: RouteSources): number {
   const hosts = new Set(
     allRoutes({
       ...sources,
-      services: [],
-      published: [],
+      ...BACKING_NOT_READ,
       entryPoints: [],
     }).map((route) => route.clause.host ?? "")
   );
@@ -158,14 +171,7 @@ export const useBacking = useBackingLists;
 export type Backing = BackingLists;
 
 export interface ControllerInfo {
-  workload: {
-    kind: "Deployment" | "DaemonSet";
-    name: string;
-    namespace: string;
-    image: string | null;
-    ready: number;
-    desired: number;
-  } | null;
+  workload: ControllerWorkload | null;
   args: string[];
   entryPoints: EntryPoint[];
   /** Why there is nothing above, in words rather than an empty object. */
@@ -189,54 +195,20 @@ export async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const filters = {
-    namespace: null,
-    labelSelector: CONTROLLER_SELECTOR,
-    fieldSelector: null,
-    limit: null,
-  };
-
-  const [deployments, daemonSets] = await Promise.all([
-    commands.listDeployments(filters).catch(() => []),
-    commands.listDaemonsets(filters).catch(() => []),
-  ]);
-
-  const deployment = deployments[0];
-  const daemonSet = daemonSets[0];
-  if (!deployment && !daemonSet) {
-    return none({
-      key: "traefikNoController",
-      values: { selector: CONTROLLER_SELECTOR },
-    });
-  }
-
-  const workload = deployment
-    ? {
-        kind: "Deployment" as const,
-        name: deployment.name,
-        namespace: deployment.namespace,
-        image: deployment.containers[0]?.image ?? null,
-        ready: deployment.replicas.ready,
-        desired: deployment.replicas.desired,
+  const { workload, unread } =
+    await findControllerWorkload(CONTROLLER_SELECTOR);
+  if (!workload) {
+    return none(
+      unread ?? {
+        key: "traefikNoController",
+        values: { selector: CONTROLLER_SELECTOR },
       }
-    : {
-        kind: "DaemonSet" as const,
-        name: daemonSet.name,
-        namespace: daemonSet.namespace,
-        image: null,
-        ready: daemonSet.ready,
-        desired: daemonSet.desired,
-      };
+    );
+  }
 
   let args: string[];
   try {
-    const manifest = await commands.getManifest(
-      workload.kind,
-      "apps/v1",
-      workload.name,
-      workload.namespace
-    );
-    args = workloadArgs(manifest);
+    args = workloadArgs(await controllerContainers(workload));
   } catch (error) {
     return {
       workload,
@@ -245,7 +217,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "traefikManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };
@@ -268,63 +240,16 @@ export function useController() {
   });
 }
 
-/**
- * The certificates behind the TLS Secrets these routes are served under.
- *
- * Core, and it works on a cluster with nothing installed: `tls.crt` states
- * its own validity. cert-manager's half — *why* it looks like that, and what
- * is stopping the renewal — arrives separately through the capability seam
- * and is simply absent when nothing supplies it.
- */
-export function useRouteCertificates(routes: TraefikRoute[] | undefined) {
-  const context = useClusterStore((state) => state.currentContext);
-  const byNamespace = new Map<string, string[]>();
-  for (const route of routes ?? []) {
-    if (!route.tlsSecret) continue;
-    const namespace = route.source.namespace;
-    const names = byNamespace.get(namespace) ?? [];
-    if (!names.includes(route.tlsSecret)) names.push(route.tlsSecret);
-    byNamespace.set(namespace, names);
-  }
-  const batches = [...byNamespace.entries()].map(([namespace, names]) => ({
-    namespace,
-    names: [...names].sort(),
-  }));
-
-  const results = useQueries({
-    queries: batches.map((batch) => ({
-      queryKey: [
-        context,
-        "tls-certificates",
-        batch.namespace,
-        batch.names.join(","),
-      ],
-      queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
-      staleTime: ROUTE_STALE,
-    })),
-  });
-
-  const certificates = new Map<string, TlsCertificate>();
-  results.forEach((result, index) => {
-    for (const read of result.data ?? []) {
-      certificates.set(`${batches[index].namespace}/${read.secretName}`, read);
-    }
-  });
-  return certificates;
-}
-
 /** Everything the page needs, once all three queries have answered. */
 export function sourcesFrom(
   routeSources: RouteSources,
-  backing: Backing | undefined,
+  backing: BackingSources,
   controller: ControllerInfo | undefined,
   certificates: Map<string, TlsCertificate>
 ): TraefikSources {
   return {
     ...routeSources,
-    services: backing?.services ?? [],
-    published: backing?.published ?? [],
-    backingKnown: backing !== undefined,
+    ...backing,
     entryPoints: controller?.entryPoints ?? [],
     certificates,
   };

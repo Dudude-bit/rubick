@@ -3,7 +3,7 @@ import { Flame } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { explain, unreachable } from "../reachability";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   defineVendor,
   pageCount,
@@ -28,6 +28,8 @@ import {
   worstTone,
 } from "./monitors/data";
 import { RANGE_SPECS } from "./queries";
+import { readSavedConnection } from "./saved-connection";
+import { formatSince } from "@/lib/utils";
 
 /**
  * Prometheus, with two ways in.
@@ -89,7 +91,7 @@ export default defineVendor({
         "blackbox",
       ],
     },
-    read: () => commands.getPrometheusConnection().then(asSaved),
+    read: readSavedConnection,
     save: (draft: ConnectionDraft) =>
       commands.savePrometheusConnection(
         draft.url,
@@ -144,7 +146,7 @@ export default defineVendor({
           at: Date.now(),
           reason: {
             key: "verbatimLine",
-            values: { said: normalizeTauriError(error) },
+            values: { said: errorToShow(error) },
           },
         };
       }
@@ -164,7 +166,12 @@ export default defineVendor({
       }
       return [
         { text: hostOf(saved.url) },
-        { say: { key: "connAnsweredAgo", values: { age: agoOf(probe.at) } } },
+        {
+          say: {
+            key: "connAnsweredAgo",
+            values: { age: formatSince(probe.at, Date.now()) },
+          },
+        },
         // What the address buys, named rather than implied — the row's whole
         // job is to say what you get for having plumbed it.
         {
@@ -208,27 +215,7 @@ export default defineVendor({
   },
 });
 
-function asSaved(
-  connection: Awaited<ReturnType<typeof commands.getPrometheusConnection>>
-): SavedConnection | null {
-  if (!connection) return null;
-  return {
-    url: connection.url,
-    authType: connection.authType === "bearer" ? "bearer" : "none",
-    hasToken: connection.hasToken,
-    insecureTls: connection.insecureTls,
-  };
-}
-
 /** The address without its scheme — the row is narrow and `http://` is noise. */
 function hostOf(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-}
-
-/** "2s ago". Short, because the row is re-read whenever the pane is opened. */
-function agoOf(at: number): string {
-  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`;
 }

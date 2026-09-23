@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -15,12 +14,11 @@ import { Link } from "react-router-dom";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT, type T } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
-import { useClusterStore } from "@/stores/clusterStore";
-import { crdObjectPath } from "../../kit";
+import { crdObjectPath, hourMinute } from "../../kit";
 import { OutLink } from "../../page-kit";
 import type { Picture } from "./data";
+import { useSavedConnection } from "../saved-connection";
 import { useHeartbeat, STEP } from "./heartbeat";
 import { Strip } from "./Strip";
 import { useNow } from "@/hooks/useNow";
@@ -41,7 +39,7 @@ import {
 } from "./model";
 import { verdictOf } from "./verdict";
 import { Chip, Chips, Step, Sub } from "./story";
-import { rowTone, rowWords, type RowTone } from "./words";
+import { rowTone, rowWords, unknowableWords, type RowTone } from "./words";
 
 const TONE_TEXT: Record<RowTone, string> = {
   err: "text-err",
@@ -67,9 +65,6 @@ const ICON: Record<RowTone, typeof X> = {
   mut: HelpCircle,
 };
 
-const clock = (at: number) =>
-  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
 export function Detail({
   row,
   picture,
@@ -78,7 +73,6 @@ export function Detail({
   picture: Picture;
 }) {
   const t = useT();
-  const context = useClusterStore((state) => state.currentContext);
   const copy = useCopyToClipboard();
   const { monitor, scrape } = row;
   const tone = rowTone(row);
@@ -88,11 +82,7 @@ export function Detail({
     beat.lanes !== null && beat.window !== null
       ? downSince(beat.lanes, beat.window.from, STEP)
       : null;
-  const saved = useQuery({
-    queryKey: [context, "prometheus", "page-address"],
-    queryFn: () => commands.getPrometheusConnection(),
-    staleTime: 60_000,
-  });
+  const saved = useSavedConnection(60_000);
   const base = saved.data?.url.replace(/\/+$/, "") ?? null;
   const crd =
     monitor.kind === "ServiceMonitor" ? SERVICE_MONITORS_CRD : POD_MONITORS_CRD;
@@ -221,6 +211,13 @@ export function Detail({
               <Chip tone="mut">{t("monitors", "notCounted")}</Chip>
             )}
           </Chips>
+          {row.selected.kind === "unevaluable" && (
+            <p className="mt-1 text-xs text-warn">
+              {t("monitors", "selectorUnevaluable", {
+                selector: selectorWords(monitor.selector) || "{}",
+              })}
+            </p>
+          )}
           {row.selected.kind === "unread" && (
             <p className="mt-1 text-xs text-warn">
               {t("monitors", "selectionUnread", {
@@ -386,9 +383,11 @@ function HeartbeatPanel({
               <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-2">
                 <span />
                 <span className="flex justify-between font-mono text-[9.5px] text-fg-fnt">
-                  <span>{clock(beat.window.from)}</span>
-                  <span>{clock((beat.window.from + beat.window.to) / 2)}</span>
-                  <span>{clock(beat.window.to)}</span>
+                  <span>{hourMinute(beat.window.from)}</span>
+                  <span>
+                    {hourMinute((beat.window.from + beat.window.to) / 2)}
+                  </span>
+                  <span>{hourMinute(beat.window.to)}</span>
                 </span>
               </div>
             )}
@@ -402,7 +401,7 @@ function HeartbeatPanel({
               {t("monitors", "downCount", { n: scrape.down })}
             </b>
             {since !== null &&
-              t("monitors", "sinceTime", { time: clock(since) })}
+              t("monitors", "sinceTime", { time: hourMinute(since) })}
           </>
         ) : (
           <>
@@ -418,7 +417,7 @@ function HeartbeatPanel({
 }
 
 const selectsTone = (row: MonitorRow): RowTone =>
-  row.selected.kind === "unread"
+  row.selected.kind === "unread" || row.selected.kind === "unevaluable"
     ? "warn"
     : row.selected.kind === "notCounted"
       ? "mut"
@@ -546,9 +545,7 @@ function PickedUpStep({
         </p>
       )}
       {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
-        <p className="text-xs text-warn">
-          {t("monitors", "pickedUpUnknown", { reason: pickedUp.reason })}
-        </p>
+        <p className="text-xs text-warn">{unknowableWords(pickedUp.why, t)}</p>
       )}
       {pickedUp.state === "noKind" && (
         <p className="text-xs text-fg-mut">

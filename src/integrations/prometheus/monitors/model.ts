@@ -5,6 +5,11 @@ import type {
   ScrapeTarget,
   ServiceInfo,
 } from "@/generated/types";
+import {
+  labelSelectorMatches,
+  requirementsOf,
+  type LabelSelector,
+} from "@/lib/label-selector";
 import { conditionOf, getValueByPath } from "../../kit";
 import type { Tone } from "../../page-kit";
 import { escapeRegex } from "../queries";
@@ -30,15 +35,7 @@ export type Kind<T> =
 
 export type MonitorKind = "ServiceMonitor" | "PodMonitor";
 
-/** `metav1.LabelSelector`, as the operator's CRDs carry it. */
-export interface LabelSelector {
-  matchLabels?: Record<string, string>;
-  matchExpressions?: Array<{
-    key: string;
-    operator: string;
-    values?: string[];
-  }>;
-}
+export type { LabelSelector };
 
 /**
  * The operator's own namespace selector on a monitor: `any` reaches every
@@ -92,34 +89,19 @@ export interface PrometheusInstance {
   reconciled: Condition | null;
 }
 
-function record(value: unknown): Record<string, string> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return {};
-  const out: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>))
-    if (typeof entry === "string") out[key] = entry;
-  return out;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * A selector as the object holds it. Not cleaned: dropping an expression
+ * this app could not read widened the selector, and the evaluator is what
+ * says a selector cannot be read.
+ */
 function labelSelector(value: unknown): LabelSelector | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return null;
-  const raw = value as Record<string, unknown>;
-  const expressions = Array.isArray(raw.matchExpressions)
-    ? raw.matchExpressions.filter(
-        (e): e is { key: string; operator: string; values?: string[] } =>
-          typeof e === "object" &&
-          e !== null &&
-          typeof (e as { key?: unknown }).key === "string" &&
-          typeof (e as { operator?: unknown }).operator === "string"
-      )
-    : undefined;
-  return {
-    ...(raw.matchLabels !== undefined
-      ? { matchLabels: record(raw.matchLabels) }
-      : {}),
-    ...(expressions !== undefined ? { matchExpressions: expressions } : {}),
-  };
+  return value === undefined || value === null
+    ? null
+    : (value as LabelSelector);
 }
 
 function text(value: unknown): string | null {
@@ -130,76 +112,50 @@ function count(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-/** `key=value, key2 in (a, b)`: the selector as a reader spells it. */
+/**
+ * `key=value, key2 in (a, b)`: the selector as a reader spells it, whatever
+ * shape it arrived in.
+ */
 export function selectorWords(selector: LabelSelector | null): string {
   if (selector === null) return "";
-  const parts = Object.entries(selector.matchLabels ?? {}).map(
-    ([key, value]) => `${key}=${value}`
-  );
-  for (const e of selector.matchExpressions ?? []) {
-    const values = (e.values ?? []).join(", ");
+  const raw: Record<string, unknown> = isRecord(selector) ? selector : {};
+  const parts = Object.entries(
+    isRecord(raw.matchLabels) ? raw.matchLabels : {}
+  ).map(([key, value]) => `${key}=${String(value)}`);
+  const expressions = Array.isArray(raw.matchExpressions)
+    ? raw.matchExpressions
+    : [];
+  for (const entry of expressions) {
+    const e: Record<string, unknown> = isRecord(entry) ? entry : {};
+    const key = String(e.key ?? "");
+    const values = (Array.isArray(e.values) ? e.values : []).join(", ");
     parts.push(
       e.operator === "In"
-        ? `${e.key} in (${values})`
+        ? `${key} in (${values})`
         : e.operator === "NotIn"
-          ? `${e.key} notin (${values})`
+          ? `${key} notin (${values})`
           : e.operator === "Exists"
-            ? e.key
+            ? key
             : e.operator === "DoesNotExist"
-              ? `!${e.key}`
-              : `${e.key} ${e.operator} (${values})`
+              ? `!${key}`
+              : `${key} ${String(e.operator)} (${values})`
     );
   }
   return parts.join(", ");
 }
 
-/** Which selector is the empty one: `{}` picks everything, absent nothing. */
+/**
+ * Which selector is the empty one: `{}` picks everything, absent nothing.
+ * That asymmetry is the operator's: `serviceMonitorSelector: {}` on a
+ * Prometheus means "every monitor" and leaving it out means "none".
+ */
 export function selectorIsEmpty(selector: LabelSelector | null): boolean {
-  return (
-    selector !== null &&
-    Object.keys(selector.matchLabels ?? {}).length === 0 &&
-    (selector.matchExpressions ?? []).length === 0
-  );
+  return selector !== null && requirementsOf(selector)?.length === 0;
 }
 
-/**
- * Whether `labels` satisfy `selector`.
- *
- * A missing selector matches nothing and an empty one matches everything.
- * That asymmetry is the operator's, not ours: `serviceMonitorSelector: {}`
- * on a Prometheus means "every monitor" and leaving it out means "none",
- * and a page that read both as "all" would say a Prometheus scrapes what it
- * has been told to ignore.
- */
-export function selectorMatches(
-  selector: LabelSelector | null | undefined,
-  labels: Record<string, string>
-): boolean {
-  if (selector === null || selector === undefined) return false;
-  for (const [key, value] of Object.entries(selector.matchLabels ?? {})) {
-    if (labels[key] !== value) return false;
-  }
-  for (const expression of selector.matchExpressions ?? []) {
-    const actual = labels[expression.key];
-    const values = expression.values ?? [];
-    switch (expression.operator) {
-      case "In":
-        if (actual === undefined || !values.includes(actual)) return false;
-        break;
-      case "NotIn":
-        if (actual !== undefined && values.includes(actual)) return false;
-        break;
-      case "Exists":
-        if (actual === undefined) return false;
-        break;
-      case "DoesNotExist":
-        if (actual !== undefined) return false;
-        break;
-      default:
-        return false;
-    }
-  }
-  return true;
+/** Whether the selector is one Kubernetes would refuse to build. */
+function unevaluable(selector: LabelSelector | null): boolean {
+  return selector !== null && requirementsOf(selector) === null;
 }
 
 /** Whether a monitor in `own` reaches objects in `namespace`. */
@@ -310,13 +266,16 @@ export type Selected =
   | { kind: "services"; names: string[] }
   /** Pods are not listed cluster-wide for this; the count is not claimed. */
   | { kind: "notCounted" }
-  | { kind: "unread"; reason: string };
+  | { kind: "unread"; reason: string }
+  /** Its selector is one Kubernetes would refuse to build. */
+  | { kind: "unevaluable" };
 
 export function selectedServices(
   monitor: Monitor,
   services: Read<ServiceInfo>
 ): Selected {
   if (monitor.kind === "PodMonitor") return { kind: "notCounted" };
+  if (unevaluable(monitor.selector)) return { kind: "unevaluable" };
   if (!services.ok) return { kind: "unread", reason: services.reason };
   return {
     kind: "services",
@@ -327,7 +286,7 @@ export function selectedServices(
             monitor.namespace,
             monitor.namespaceSelector,
             service.namespace
-          ) && selectorMatches(monitor.selector, service.labels)
+          ) && labelSelectorMatches(monitor.selector, service.labels) === true
       )
       .map((service) => `${service.namespace}/${service.name}`),
   };
@@ -346,8 +305,14 @@ export function selectedServices(
  */
 export type PickedUp =
   | { state: "judged"; by: string[] }
-  | { state: "unknown"; by: string[]; reason: string }
+  | { state: "unknown"; by: string[]; why: Unknowable }
   | { state: "noKind" };
+
+/** Why whether a Prometheus picks something up cannot be said. */
+export type Unknowable =
+  | { kind: "unread"; reason: string }
+  /** A selector on this Prometheus that Kubernetes would refuse to build. */
+  | { kind: "unevaluable"; prometheus: string };
 
 export function pickedUpBy(
   monitor: Monitor,
@@ -385,12 +350,21 @@ export function selectedBy(
 ): PickedUp {
   if (instances.state === "absent") return { state: "noKind" };
   if (instances.state === "unread")
-    return { state: "unknown", by: [], reason: instances.reason };
+    return {
+      state: "unknown",
+      by: [],
+      why: { kind: "unread", reason: instances.reason },
+    };
   const by: string[] = [];
-  let unknown: string | null = null;
+  let unknown: Unknowable | null = null;
   for (const instance of instances.items) {
     const [objects, scope] = selectors(instance);
-    if (!selectorMatches(objects, object.labels)) continue;
+    const picks = labelSelectorMatches(objects, object.labels);
+    if (picks === null || (picks && unevaluable(scope))) {
+      unknown = { kind: "unevaluable", prometheus: instance.name };
+      continue;
+    }
+    if (!picks) continue;
     if (scope === null) {
       if (object.namespace === instance.namespace) by.push(instance.name);
       continue;
@@ -400,16 +374,16 @@ export function selectedBy(
       continue;
     }
     if (!namespaces.ok) {
-      unknown = namespaces.reason;
+      unknown = { kind: "unread", reason: namespaces.reason };
       continue;
     }
     const labels =
       namespaces.items.find((ns) => ns.name === object.namespace)?.labels ?? {};
-    if (selectorMatches(scope, labels)) by.push(instance.name);
+    if (labelSelectorMatches(scope, labels) === true) by.push(instance.name);
   }
   return unknown === null
     ? { state: "judged", by }
-    : { state: "unknown", by, reason: unknown };
+    : { state: "unknown", by, why: unknown };
 }
 
 /** What the connected Prometheus said about its targets. */
@@ -566,8 +540,9 @@ export function downSince(
 export type MonitorFinding =
   | { kind: "selectsNothing"; severity: "err" }
   | { kind: "selectionUnread"; severity: "warn"; reason: string }
+  | { kind: "selectorUnevaluable"; severity: "warn" }
   | { kind: "notPickedUp"; severity: "err" }
-  | { kind: "pickedUpUnknown"; severity: "warn"; reason: string }
+  | { kind: "pickedUpUnknown"; severity: "warn"; why: Unknowable }
   | {
       kind: "targetsDown";
       severity: "err";
@@ -617,13 +592,15 @@ function findingsOf(
       severity: "warn",
       reason: selected.reason,
     });
+  if (selected.kind === "unevaluable")
+    findings.push({ kind: "selectorUnevaluable", severity: "warn" });
   if (pickedUp.state === "judged" && pickedUp.by.length === 0)
     findings.push({ kind: "notPickedUp", severity: "err" });
   if (pickedUp.state === "unknown" && pickedUp.by.length === 0)
     findings.push({
       kind: "pickedUpUnknown",
       severity: "warn",
-      reason: pickedUp.reason,
+      why: pickedUp.why,
     });
   if (scrape.state === "read") {
     const total = scrape.up + scrape.down + scrape.unknown;

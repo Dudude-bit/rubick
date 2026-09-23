@@ -15,7 +15,7 @@
  * it is an annotation over here and half is a label over there.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -24,10 +24,11 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
-  TroubleRow,
   type Tone,
+  TroubleList,
+  TroubleRow,
+  VendorReadFailure,
 } from "../page-kit";
 import { useAksPicture } from "./data";
 import {
@@ -38,43 +39,33 @@ import {
   danglingBindings,
 } from "./model";
 import type { FederatedAccount } from "./workload-identity";
+import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 
 export default function AksAddonsPage() {
   const t = useT();
   const picture = useAksPicture();
-  const [filter, setFilter] = useState("");
 
   const accounts = useMemo(
     () => picture.data?.workload.accounts ?? [],
     [picture.data]
   );
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return accounts;
-    return accounts.filter(
-      (account) =>
-        account.name.toLowerCase().includes(needle) ||
-        account.namespace.toLowerCase().includes(needle) ||
-        account.clientId.toLowerCase().includes(needle) ||
-        account.pods.some((pod) => pod.name.toLowerCase().includes(needle))
-    );
-  }, [accounts, filter]);
 
   const orphans = picture.data?.workload.findings ?? [];
   const legacy = picture.data?.legacyInstalled ?? false;
+  const podsKnown = picture.data?.podsKnown ?? true;
+  const unread = picture.data?.unread ?? [];
   const dangling = picture.data
     ? danglingBindings(picture.data.bindings, picture.data.identities)
     : [];
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadIdentities")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadIdentities")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
 
@@ -90,71 +81,104 @@ export default function AksAddonsPage() {
         description={t("empty", "aksAddonsHint")}
       />
 
-      {orphans.map((finding, index) => (
+      {unread.map((read) => (
         <Finding
-          key={index}
-          tone="err"
-          title={
-            <>
-              <span className="font-mono">{finding.pod.name}</span>{" "}
-              {t("empty", "podAsksForIdentity")}
-            </>
-          }
+          key={read.what}
+          tone="warn"
+          title={t("empty", "crdCouldNotBeListed", { crd: read.what })}
+          verbatim={read.reason}
         >
-          {t("empty", "azureIdentityFinding1")}{" "}
-          <span className="font-mono">azure.workload.identity/use: true</span>
-          {t("empty", "azureIdentityFinding2")}{" "}
-          <span className="font-mono">{finding.account}</span>{" "}
-          {t("empty", "azureIdentityFinding3")}{" "}
-          <span className="font-mono">{finding.pod.namespace}</span>{" "}
-          {t("empty", "azureIdentityFinding4")}{" "}
-          <span className="font-mono">azure.workload.identity/client-id</span>
-          {t("empty", "azureIdentityFinding5")}
+          {t("empty", "azureUnreadNote")}
         </Finding>
       ))}
 
-      <Section>
-        <div className="mb-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterIdentitiesPlaceholder")}
-            label={t("action", "filterIdentities")}
-          />
-        </div>
+      {orphans.map((finding, index) =>
+        finding.kind === "account-unread" ? (
+          <Finding
+            key={index}
+            tone="warn"
+            title={parts(t("empty", "azureAccountUnreadTitle"), {
+              pod: <span className="font-mono">{finding.pod.name}</span>,
+            })}
+          >
+            {parts(
+              t("empty", "azureAccountUnread", { reason: finding.reason }),
+              {
+                account: <span className="font-mono">{finding.account}</span>,
+                namespace: (
+                  <span className="font-mono">{finding.pod.namespace}</span>
+                ),
+              }
+            )}
+          </Finding>
+        ) : (
+          <Finding
+            key={index}
+            tone="err"
+            title={
+              <>
+                <span className="font-mono">{finding.pod.name}</span>{" "}
+                {t("empty", "podAsksForIdentity")}
+              </>
+            }
+          >
+            {t("empty", "azureIdentityFinding1")}{" "}
+            <span className="font-mono">azure.workload.identity/use: true</span>
+            {t("empty", "azureIdentityFinding2")}{" "}
+            <span className="font-mono">{finding.account}</span>{" "}
+            {t("empty", "azureIdentityFinding3")}{" "}
+            <span className="font-mono">{finding.pod.namespace}</span>{" "}
+            {t("empty", "azureIdentityFinding4")}{" "}
+            <span className="font-mono">azure.workload.identity/client-id</span>
+            {t("empty", "azureIdentityFinding5")}
+          </Finding>
+        )
+      )}
 
+      <Section>
         {picture.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIdentities")}
           </p>
         ) : accounts.length === 0 ? (
-          <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
-            {t("empty", "noPodCarries")}{" "}
-            <span className="font-mono">azure.workload.identity/use: true</span>
-            {t("empty", "nothingFederatingToAzure")}
-            {legacy
-              ? t("empty", "legacyAddonInstalled")
-              : t("empty", "legacyAddonNotInstalled")}
-          </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatches")}{" "}
-            <span className="font-mono">{filter}</span>.
-          </p>
+          // No pod carries the label — unless the pods were not read, and
+          // then the finding above says so and nothing here claims more.
+          podsKnown && (
+            <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
+              {t("empty", "noPodCarries")}{" "}
+              <span className="font-mono">
+                azure.workload.identity/use: true
+              </span>
+              {t("empty", "nothingFederatingToAzure")}
+              {legacy === true
+                ? t("empty", "legacyAddonInstalled")
+                : legacy === false
+                  ? t("empty", "legacyAddonNotInstalled")
+                  : null}
+            </p>
+          )
         ) : (
-          <div className="flex flex-col">
-            {shown.map((account, index) => (
-              <AccountRow
-                key={`${account.namespace}/${account.name}`}
-                account={account}
-                last={index === shown.length - 1}
-              />
-            ))}
-          </div>
+          <TroubleList
+            items={accounts}
+            // An identity is a fact here, not a verdict: the findings above
+            // carry the trouble, so no row opens itself.
+            severityOf={() => null}
+            searchable={searchableAccount}
+            filter={{
+              placeholder: t("action", "filterIdentitiesPlaceholder"),
+              label: t("action", "filterIdentities"),
+            }}
+            autoOpen={{ when: "err", upTo: 0 }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(account) => `${account.namespace}/${account.name}`}
+            renderRow={(account, { last }) => (
+              <AccountRow account={account} last={last} />
+            )}
+          />
         )}
       </Section>
 
-      {legacy && (
+      {legacy === true && (
         <Section>
           <SectionHeader
             title={t("empty", "podIdentityRetired")}
@@ -297,3 +321,10 @@ function AccountRow({
     </TroubleRow>
   );
 }
+
+const searchableAccount = (account: FederatedAccount) => [
+  account.name,
+  account.namespace,
+  account.clientId,
+  ...account.pods.map((pod) => pod.name),
+];

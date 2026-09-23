@@ -20,12 +20,18 @@ vi.mock("@/lib/commands", () => ({
       reason: null,
     })),
     getLokiConnection: vi.fn(async () => null),
+    savePrometheusConnection: vi.fn(async () => undefined),
   },
 }));
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useIntegrationPages, useIntegrations } from "./index";
+import {
+  useConnectionEditor,
+  useIntegrationPages,
+  useIntegrations,
+} from "./index";
+import { useSavedConnection } from "./prometheus/saved-connection";
 
 /**
  * A probe is a question to the cluster's tunnel, and it must only be asked
@@ -97,6 +103,56 @@ describe("the configured vendors' probe", () => {
     act(() => useClusterStore.setState({ isConnected: true }));
     await waitFor(() =>
       expect(commands.probePrometheus).toHaveBeenCalledTimes(2)
+    );
+  });
+});
+
+/**
+ * The Prometheus pages read the saved address for their links under a key
+ * of their own, so saving a new one in Settings left every "open in
+ * Prometheus" pointing at the old address until it went stale. Fails if the
+ * pages and the Connect dialog key the saved connection apart again.
+ */
+describe("the saved Prometheus address", () => {
+  afterEach(() => {
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+  });
+
+  it("moves every link into the Prometheus UI the moment it is saved", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    useClusterStore.setState({ currentContext: "prod-eu", isConnected: true });
+    const links = renderHook(() => useSavedConnection(60_000), { wrapper });
+    const editor = renderHook(() => useConnectionEditor("prometheus"), {
+      wrapper,
+    });
+    await waitFor(() =>
+      expect(links.result.current.data?.url).toBe("http://localhost:20001")
+    );
+
+    vi.mocked(commands.getPrometheusConnection).mockResolvedValue({
+      url: "https://prometheus.example.com",
+      authType: "none",
+      hasToken: false,
+      insecureTls: false,
+    });
+    await act(() =>
+      editor.result.current.save({
+        url: "https://prometheus.example.com",
+        authType: "none",
+        token: "",
+        insecureTls: false,
+      })
+    );
+
+    await waitFor(() =>
+      expect(links.result.current.data?.url).toBe(
+        "https://prometheus.example.com"
+      )
     );
   });
 });

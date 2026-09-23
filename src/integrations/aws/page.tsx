@@ -19,7 +19,7 @@
  */
 
 import { joinSayings } from "@/i18n/say";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
@@ -28,13 +28,20 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
+  TroubleList,
   TroubleRow,
-  type Tone,
+  type RowTone,
+  VendorReadFailure,
 } from "../page-kit";
 import { useAlbSources } from "./data";
-import { albGroups, type AlbFinding, type AlbGroup } from "./groups";
+import {
+  albGroups,
+  groupSeverity,
+  groupsKnown,
+  type AlbFinding,
+  type AlbGroup,
+} from "./groups";
 import { useT } from "@/i18n/useT";
 import {
   INGRESS_CLASS_PARAMS_CRD,
@@ -51,7 +58,6 @@ const AUTO_OPEN = 6;
 export default function AwsLoadBalancerPage() {
   const t = useT();
   const sources = useAlbSources();
-  const [filter, setFilter] = useState("");
 
   const groups = useMemo(
     () =>
@@ -61,36 +67,22 @@ export default function AwsLoadBalancerPage() {
             params: sources.data.params,
             classParams: sources.data.classParams,
             ownClasses: sources.data.ownClasses,
+            unread: sources.data.unread,
           })
         : [],
     [sources.data]
   );
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        (group.name ?? "").toLowerCase().includes(needle) ||
-        group.members.some(
-          (member) =>
-            member.ingress.name.toLowerCase().includes(needle) ||
-            member.ingress.namespace.toLowerCase().includes(needle) ||
-            member.hosts.some((host) => host.toLowerCase().includes(needle))
-        )
-    );
-  }, [groups, filter]);
-
-  const troubled = groups.filter((group) => group.worst !== null).length;
+  const bindingsKnown = !sources.data?.unread.some(
+    (read) => read.crd === TARGET_GROUP_BINDING_CRD
+  );
 
   if (sources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadIngresses")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{sources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadIngresses")}
+        error={sources.error}
+        onRetry={() => void sources.refetch()}
+      />
     );
   }
 
@@ -99,7 +91,7 @@ export default function AwsLoadBalancerPage() {
       <SectionHeader
         title="AWS Load Balancer Controller"
         count={
-          sources.isPending
+          sources.isPending || !groupsKnown(groups)
             ? undefined
             : t("count", "loadBalancers", { n: groups.length })
         }
@@ -118,15 +110,6 @@ export default function AwsLoadBalancerPage() {
       ))}
 
       <Section>
-        <div className="mb-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterAlbPlaceholder")}
-            label={t("action", "filterLoadBalancers")}
-          />
-        </div>
-
         {sources.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIngresses")}
@@ -135,31 +118,50 @@ export default function AwsLoadBalancerPage() {
           <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
             {t("empty", "albNoIngressAsksForClass")}
           </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatchesQuery", { query: filter })}
-          </p>
         ) : (
-          <div className="flex flex-col">
-            {shown.map((group, index) => (
+          <TroubleList
+            items={groups}
+            severityOf={severityOfGroup}
+            searchable={searchableGroup}
+            filter={{
+              placeholder: t("action", "filterAlbPlaceholder"),
+              label: t("action", "filterLoadBalancers"),
+            }}
+            // Every group with a finding, not only the broken: here a shared
+            // or disagreeing group is the reason to look.
+            autoOpen={{ when: "any", upTo: AUTO_OPEN }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(group, index) => group.name ?? `own-${index}`}
+            renderRow={(group, { openByDefault, last }) => (
               <GroupRow
-                key={group.name ?? `own-${index}`}
                 group={group}
                 bindings={sources.data?.bindings ?? []}
-                openByDefault={group.worst !== null && troubled <= AUTO_OPEN}
-                last={index === shown.length - 1}
+                bindingsKnown={bindingsKnown}
+                openByDefault={openByDefault}
+                last={last}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </Section>
     </div>
   );
 }
 
+const severityOfGroup = groupSeverity;
+
+const searchableGroup = (group: AlbGroup) => [
+  group.name,
+  ...group.members.flatMap((member) => [
+    member.ingress.name,
+    member.ingress.namespace,
+    ...member.hosts,
+  ]),
+];
+
 function groupState(group: AlbGroup): {
   key: keyof typeof en.empty;
-  tone: Tone;
+  tone: RowTone;
 } {
   if (group.findings.some((finding) => finding.kind === "no-params")) {
     return { key: "namesSomethingAbsent", tone: "err" };
@@ -173,17 +175,22 @@ function groupState(group: AlbGroup): {
   if (group.findings.some((finding) => finding.kind === "shared")) {
     return { key: "sharedAcrossNamespaces", tone: "warn" };
   }
+  if (!group.paramsKnown) {
+    return { key: "namesSomethingUnread", tone: "unknown" };
+  }
   return { key: "serving", tone: "ok" };
 }
 
 function GroupRow({
   group,
   bindings,
+  bindingsKnown,
   openByDefault,
   last,
 }: {
   group: AlbGroup;
   bindings: Parameters<typeof bindingSummary>[0][];
+  bindingsKnown: boolean;
   openByDefault: boolean;
   last: boolean;
 }) {
@@ -212,7 +219,9 @@ function GroupRow({
           {namespaces.length > 1 &&
             ` ${t("count", "acrossNamespaces", { n: namespaces.length })}`}
           {hosts.length > 0 && ` · ${t("count", "hosts", { n: hosts.length })}`}
-          {group.name === null && ` · ${t("action", "itsOwnAlb")}`}
+          {group.name === null &&
+            group.paramsKnown &&
+            ` · ${t("action", "itsOwnAlb")}`}
         </>
       }
       state={{ text: t("empty", state.key), tone: state.tone }}
@@ -221,7 +230,11 @@ function GroupRow({
     >
       <div className="flex flex-col gap-3">
         {group.params && <ParamsBlock group={group} />}
-        <MembersBlock group={group} bindings={bindings} />
+        <MembersBlock
+          group={group}
+          bindings={bindings}
+          bindingsKnown={bindingsKnown}
+        />
         {group.findings.map((finding, index) => (
           <FindingLine key={index} finding={finding} />
         ))}
@@ -281,9 +294,11 @@ function ParamsBlock({ group }: { group: AlbGroup }) {
 function MembersBlock({
   group,
   bindings,
+  bindingsKnown,
 }: {
   group: AlbGroup;
   bindings: Parameters<typeof bindingSummary>[0][];
+  bindingsKnown: boolean;
 }) {
   const t = useT();
   return (
@@ -380,7 +395,12 @@ function MembersBlock({
                         </ObjectLink>
                       ) : (
                         <span className="text-fg-fnt">
-                          {t("empty", "noTargetGroupBinding")}
+                          {t(
+                            "empty",
+                            bindingsKnown
+                              ? "noTargetGroupBinding"
+                              : "notReadLower"
+                          )}
                         </span>
                       )}
                     </Cell>

@@ -11,19 +11,28 @@ import type {
   ServiceInfo,
   ServicePublished,
 } from "@/generated/types";
+import { backingFrom, hostSeverity } from "../ingress";
 import { PREFIX } from "./annotations";
-import { hostGroups, splitOf, allRoutes, type NginxSources } from "./model";
+import {
+  hostGroups,
+  hostState,
+  splitOf,
+  allRoutes,
+  type NginxSources,
+} from "./model";
 
 const NGINX_CLASS: IngressClassSummary = {
   name: "nginx",
   controller: "k8s.io/ingress-nginx",
   isDefault: false,
+  parameters: null,
 };
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
   controller: "traefik.io/ingress-controller",
   isDefault: true,
+  parameters: null,
 };
 
 function ingress(
@@ -114,6 +123,8 @@ function sources(ingresses: IngressInfo[]): NginxSources {
     classes: [NGINX_CLASS, TRAEFIK_CLASS],
     services: [service("web"), service("web-next")],
     published: [published("web", 2), published("web-next", 1)],
+    backingKnown: true,
+    backingError: null,
   };
 }
 
@@ -373,6 +384,37 @@ describe("the findings", () => {
   });
 });
 
+describe("a host whose backends are unread", () => {
+  /**
+   * Would break if the host went back to green "serving" while the Services
+   * list was refused: nothing was found because nothing was looked at.
+   */
+  it("reads as unknown rather than serving", () => {
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("secure", "secure.test", { secretName: "tls" })]),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** The same host with its Service read is serving. */
+  it("reads as serving once they are read", () => {
+    const [group] = hostGroups(
+      sources([ingress("secure", "secure.test", { secretName: "tls" })]),
+      t
+    );
+    expect(hostSeverity(group)).toBeNull();
+    expect(hostState(group, null, t).tone).toBe("ok");
+  });
+});
+
 /** nginx's own Service, which is what an edge Ingress points at. */
 const proxyService = (): ServiceInfo => ({
   ...service("ingress-nginx-controller"),
@@ -424,5 +466,34 @@ describe("a host whose TLS ends in front of nginx", () => {
       t
     );
     expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
+  });
+
+  /**
+   * Without the Services the load balancer's Ingress in front cannot be
+   * recognised, and every host was "served in the clear" on a managed
+   * cluster whose token cannot list Services.
+   */
+  it("is not called clear while the Services are unread", () => {
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("shop", "shop.example.com"), edgeIngress()]),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
+
+  /** A capability that has not answered is not one that said no. */
+  it("is not called clear while the capability has not answered", () => {
+    const [group] = hostGroups(
+      {
+        ...fronted(),
+        ingresses: [ingress("shop", "shop.example.com"), plainIngress()],
+        upstreamTls: () => "unknown",
+      },
+      t
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
   });
 });

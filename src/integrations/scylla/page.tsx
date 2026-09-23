@@ -1,34 +1,29 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Box, HardDrive, Layers } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { useToast } from "@/components/ui/use-toast";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { useNow } from "@/hooks/useNow";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
-import { Cell, Finding, TroubleRow } from "../page-kit";
+import { cn, formatSince } from "@/lib/utils";
+import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
 import {
   CLUSTERS_CRD,
   useClusters,
   useNodeConfigs,
   useOperator,
-  type Controller,
   type OperatorInfo,
 } from "./data";
 import {
@@ -38,12 +33,15 @@ import {
   type ScyllaCluster,
   type ScyllaFinding,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
+import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
+import { troubleMark, allowedWord } from "../kit";
+import { toastError } from "@/lib/toast-error";
 
 export default function ScyllaPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "clusters";
+  const [tab, setTab] = useSearchParam("tab", "clusters");
   const clustersQuery = useClusters();
   const nodeConfigs = useNodeConfigs();
 
@@ -67,22 +65,23 @@ export default function ScyllaPage() {
 
   if (clustersQuery.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("operators", "couldNotReadScyllaClusters")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{clustersQuery.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("operators", "couldNotReadScyllaClusters")}
+        error={clustersQuery.error}
+        onRetry={() => void clustersQuery.refetch()}
+      />
     );
   }
 
-  const troubled = clusters.filter((c) => c.worst !== null);
   const tabs: DetailTab[] = [
     {
       id: "clusters",
       label: t("operators", "clustersTab"),
       glyph: viewGlyph(Layers),
-      mark: clustersMark(t, clusters, troubled.length),
+      mark: troubleMark(
+        clusters.map((cluster) => cluster.worst),
+        (n) => t("operators", "clustersNeedAttention", { n })
+      ),
       content: (
         <ClustersTab
           clusters={clusters}
@@ -126,73 +125,8 @@ export default function ScyllaPage() {
         description={t("operators", "scyllaPageDescription")}
       />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
-  );
-}
-
-function clustersMark(
-  t: T,
-  clusters: ScyllaCluster[],
-  troubled: number
-): DetailTabMark | undefined {
-  if (clusters.length === 0) return undefined;
-  if (troubled === 0) return countMark(clusters.length);
-  const worst = clusters.some((c) => c.worst === "err") ? "err" : "warn";
-  return severityMark(
-    worst,
-    t("operators", "clustersNeedAttention", { n: troubled })
-  );
-}
-
-function ControllerLine({
-  controller,
-  missing,
-  known = true,
-  reason = null,
-}: {
-  controller: Controller | null;
-  missing: string;
-  /** `false`: the Deployment list was refused, so absence is not the answer. */
-  known?: boolean;
-  reason?: string | null;
-}) {
-  const t = useT();
-  if (!controller && !known) {
-    return (
-      <span className="text-warn" title={reason ?? undefined}>
-        {t("operators", "deploymentsUnreadable")}
-      </span>
-    );
-  }
-  if (!controller) return <span className="text-warn">{missing}</span>;
-  return (
-    <>
-      <Link
-        to={getResourceDetailUrl(
-          ResourceType.Deployment,
-          controller.name,
-          controller.namespace
-        )}
-        className={cn(
-          "font-mono hover:underline",
-          controller.ready < controller.desired ? "text-err" : "text-fg"
-        )}
-      >
-        {controller.name} {controller.ready}/{controller.desired}
-      </Link>
-      <span className="ml-2 text-fg-fnt">
-        {t("operators", "inNamespace", { namespace: controller.namespace })}
-      </span>
-    </>
   );
 }
 
@@ -210,12 +144,6 @@ function OperatorStrip({
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
     );
   }
-  const yesNo = (allowed: boolean | null) =>
-    allowed === null
-      ? t("operators", "couldNotTell")
-      : allowed
-        ? t("operators", "allowed")
-        : t("operators", "refused");
   return (
     <div className="grid gap-x-8 gap-y-2 text-xs md:grid-cols-2">
       <Fact label={t("operators", "controllerFact")}>
@@ -262,28 +190,13 @@ function OperatorStrip({
       </Fact>
       <Fact label={t("operators", "canActFact")}>
         {t("operators", "canPatchScyllaClusters")}:{" "}
-        {yesNo(operator.canPatchClusters)}
+        {allowedWord(operator.canPatchClusters, t)}
         <span className="ml-2 text-fg-fnt">
           {t("operators", "checkedAgo", {
-            ago: agoOf(operator.checkedAt, now),
+            ago: formatSince(operator.checkedAt, now),
           })}
         </span>
       </Fact>
-    </div>
-  );
-}
-
-function Fact({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="w-28 flex-none text-[11px] text-fg-fnt">{label}</span>
-      <span className="min-w-0">{children}</span>
     </div>
   );
 }
@@ -386,14 +299,13 @@ function ClusterRow({
         predicate: (query) => query.queryKey.includes("scylla"),
       });
     } catch (error) {
-      toast({
-        title: t("operators", "actionFailed", {
+      toastError(
+        t("operators", "actionFailed", {
           action: t("operators", action.label),
           cluster: cluster.name,
         }),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+        error
+      );
     } finally {
       setBusy(false);
       setPending(null);
@@ -536,9 +448,10 @@ function ClusterRow({
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
             {actions.map((action, i) => (
-              <ActionButton
+              <OperatorActionButton
                 key={`${action.id}:${i}`}
                 action={action}
+                label={scyllaActionLabel(action, t)}
                 busy={busy}
                 onPick={pick}
               />
@@ -596,50 +509,6 @@ function ClusterRow({
         )}
       </ConfirmDialog>
     </>
-  );
-}
-
-function ActionButton({
-  action,
-  busy,
-  onPick,
-}: {
-  action: ScyllaAction;
-  busy: boolean;
-  onPick: (action: ScyllaAction) => void;
-}) {
-  const t = useT();
-  const label =
-    action.input?.kind === "members"
-      ? `${t("operators", action.label)} ${action.input.rack}…`
-      : action.id === "upgrade"
-        ? `${t("operators", action.label)}…`
-        : t("operators", action.label);
-  return (
-    <button
-      type="button"
-      disabled={busy || action.reason !== null}
-      onClick={() => onPick(action)}
-      title={
-        action.reason
-          ? t("operators", action.reason)
-          : t("operators", action.explains)
-      }
-      className={cn(
-        "rounded border border-hair px-1.5 py-0.5 transition-colors",
-        action.danger
-          ? "text-err hover:bg-err/10"
-          : "text-fg-mut hover:bg-hover hover:text-fg",
-        (busy || action.reason !== null) && "cursor-not-allowed opacity-50"
-      )}
-    >
-      {label}
-      {action.reason && (
-        <span className="ml-1 text-fg-fnt">
-          · {t("operators", action.reason)}
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -806,4 +675,12 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
       )}
     </div>
   );
+}
+
+function scyllaActionLabel(action: ScyllaAction, t: T): string {
+  return action.input?.kind === "members"
+    ? `${t("operators", action.label)} ${action.input.rack}…`
+    : action.id === "upgrade"
+      ? `${t("operators", action.label)}…`
+      : t("operators", action.label);
 }
