@@ -372,7 +372,7 @@ export function GatewayRoutesList() {
     enabled: showMap,
   });
   const deployments = useLiveQuery({
-    queryKey: ["map-deployments"],
+    queryKey: queryKeys.resources(ResourceType.Deployment, null),
     queryFn: () =>
       commands.listDeployments({
         namespace: null,
