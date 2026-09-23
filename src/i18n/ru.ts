@@ -4894,6 +4894,8 @@ export const ru: Catalogue = {
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
     tlsNotChecked: "TLS не проверен",
+    relatedShortBy:
+      "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopNothingPublishedYet: "пока ничего не опубликовано",

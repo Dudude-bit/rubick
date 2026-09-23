@@ -4479,6 +4479,8 @@ export const en = {
     tlsFrom: "TLS from {name}",
     noTls: "no TLS",
     tlsNotChecked: "TLS not checked",
+    relatedShortBy:
+      "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopNothingPublishedYet: "nothing published yet",

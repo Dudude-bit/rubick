@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNowSeconds } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   DebugConfig,
   DebugOperation,
@@ -96,7 +97,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -115,7 +116,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -134,7 +135,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -168,7 +169,7 @@ export function useDebugOperation({
         startPolling(operation);
       } catch (error) {
         console.error("Failed to extend timeout:", error);
-        onError(String(error));
+        onError(errorToShow(error));
       }
     }
   }, [operation, startPolling, onError]);

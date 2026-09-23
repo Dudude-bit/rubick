@@ -64,3 +64,24 @@ describe("how long a debug container has been awaited", () => {
     expect(result.current.elapsedSeconds).toBe(11);
   });
 });
+
+describe("a debug container the cluster refused", () => {
+  /** `String(err)` handed the dialog "Error: Tauri command 'debugPodEphemeral' failed: …", and the toast showed all of it. Fails if the error is stringified by hand again. */
+  it("gives the dialog the server's words without the command in front", async () => {
+    const { commands } = await import("@/lib/commands");
+    vi.mocked(commands.debugPodEphemeral).mockRejectedValueOnce(
+      new Error(
+        "Tauri command 'debugPodEphemeral' failed: pods \"web\" is forbidden"
+      )
+    );
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useDebugOperation({ onReady: vi.fn(), onError, onTimeout: vi.fn() })
+    );
+    await act(async () => {
+      await result.current.startEphemeral("web", "shop", {} as never);
+    });
+
+    expect(onError).toHaveBeenCalledWith('pods "web" is forbidden');
+  });
+});

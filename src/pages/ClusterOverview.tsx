@@ -1,6 +1,6 @@
 import { AlertCircle, Lock } from "lucide-react";
 
-import { isRefusal, verbatim } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
@@ -93,7 +93,7 @@ export function ClusterOverview() {
             </h2>
           </div>
           <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {verbatim(error.message)}
+            {errorToShow(error)}
           </p>
           {!refused && (
             <div className="flex items-center gap-2 pt-2">

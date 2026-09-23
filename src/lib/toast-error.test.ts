@@ -18,7 +18,20 @@ const KEEPS_THE_PREFIX = new Set([
   "/src/components/terminal/PodTerminal.tsx",
 ]);
 
-const BY_HAND = /instanceof Error\s*\?\s*[\w.]+\.message/g;
+/**
+ * Every spelling of a caught failure read by hand: the `instanceof` guard,
+ * `String(error)` — which adds "Error: " in front of the prefix, so even
+ * `verbatim` cannot take it off — a cast, and a bare `.message`.
+ */
+const BY_HAND = new RegExp(
+  [
+    String.raw`instanceof Error\s*\?\s*[\w.]+\.message`,
+    String.raw`String\(\s*(?:e|err|error)\s*\)`,
+    String.raw`as Error\)\.message`,
+    String.raw`\b(?:err|error)\??\.message\b`,
+  ].join("|"),
+  "g"
+);
 
 /** Where that spelling is compared, logged or kept, and never shown. */
 const NOT_SHOWN = new Map([
@@ -29,6 +42,10 @@ const NOT_SHOWN = new Map([
   ["/src/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
   ["/src/workers/diff.worker.ts", "a worker's own failure, not a command's"],
   ["/src/stores/updaterStore.ts", "the updater plugin's, not a command's"],
+  ["/src/App.tsx", "a render error, not a command's"],
+  ["/src/components/ui/error-boundary.tsx", "a render error, not a command's"],
+  ["/src/hooks/useIngressRouting.ts", "searched for a verdict"],
+  ["/src/hooks/useDeepLinks.ts", "logged"],
 ]);
 
 describe("a failure shown to the reader", () => {
@@ -78,15 +95,21 @@ describe("a failure shown to the reader", () => {
    * The same message spelled by hand — `error instanceof Error ?
    * error.message : …` — slipped past the check above on five vendor pages
    * and in `errorWords`, the words of every toast built from a caught error.
+   * Matching that one spelling let `String(error)` and a bare `.message`
+   * put "Tauri command 'probeResolveHost' failed:" on a route trace, a
+   * GatewayClass, the debug dialog and six more screens.
    */
   it("is not read off error.message by hand anywhere it is shown", () => {
     const shown = Object.entries(SOURCES).flatMap(([path, source]) =>
       NOT_SHOWN.has(path)
         ? []
-        : [...source.matchAll(BY_HAND)].map(
-            (match) =>
-              `${path}:${source.slice(0, match.index).split("\n").length}`
-          )
+        : source
+            .split("\n")
+            .flatMap((line, index) =>
+              /^\s*(\*|\/\/|\/\*)/.test(line) || !line.match(BY_HAND)
+                ? []
+                : [`${path}:${index + 1}`]
+            )
     );
     expect(shown).toEqual([]);
   });
