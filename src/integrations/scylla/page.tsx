@@ -16,6 +16,7 @@ import {
 import { useNow } from "@/hooks/useNow";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
@@ -171,14 +172,18 @@ function OperatorStrip({
       <Fact label="ScyllaDB Manager">
         {operator.manager ? (
           <>
-            <ControllerLine controller={operator.manager} missing="" />
+            <ControllerLine
+              controller={operator.manager}
+              missing=""
+              known={operator.managerKnown}
+            />
             <span className="ml-2 text-fg-fnt">
               {t("operators", "managerPresent")}
             </span>
           </>
         ) : (
           <span
-            className="text-warn"
+            className={operator.managerKnown ? "text-warn" : TONE_TEXT.unknown}
             title={operator.managerReason ?? undefined}
           >
             {t(
@@ -664,7 +669,11 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
           </Link>
         </p>
       ) : (
-        <p className="text-warn">
+        <p
+          className={
+            operator?.operatorKnown === false ? TONE_TEXT.unknown : "text-warn"
+          }
+        >
           {t(
             "operators",
             operator?.operatorKnown === false

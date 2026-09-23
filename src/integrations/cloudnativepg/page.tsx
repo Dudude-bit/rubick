@@ -15,6 +15,7 @@ import {
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatAge, formatSince } from "@/lib/utils";
 import type { CustomResourceInfo } from "@/generated/types";
 import {
@@ -195,7 +196,7 @@ export function OperatorStrip({
           // The read that would say whether a controller runs did not
           // answer; "no Deployment carries the label" would be a claim
           // about a list nobody got.
-          <span className="text-warn">
+          <span className={TONE_TEXT.unknown}>
             {t("operators", "deploymentsUnreadable")}
           </span>
         )}
@@ -829,7 +830,10 @@ function OperatorTab({
           </Link>
         </p>
       ) : operator && !operator.controllerKnown ? (
-        <p className="text-warn" title={operator.controllerReason ?? undefined}>
+        <p
+          className={TONE_TEXT.unknown}
+          title={operator.controllerReason ?? undefined}
+        >
           {t("operators", "deploymentsUnreadable")}
         </p>
       ) : (
