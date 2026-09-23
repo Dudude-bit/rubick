@@ -383,7 +383,7 @@ function RuleRow({
               {destination.weight !== null && (
                 <span className="text-info">{destination.weight}%</span>
               )}
-              {destination.service && !destination.external ? (
+              {destination.service && destination.external === false ? (
                 <ResourceRef
                   kind="Service"
                   name={destination.service.name}
@@ -439,7 +439,8 @@ function HostChain({
         destination,
         route.source.namespace,
         sources.destinationRules,
-        sources.services
+        sources.services,
+        sources.backingKnown
       )
     : { defined: [], anyRule: false };
   const serving = group.gateways.filter((gateway) => gateway.serves);
@@ -527,6 +528,10 @@ function HostChain({
             <Cell under={t("empty", "outsideThisCluster")}>
               {destination.host}
             </Cell>
+          ) : destination.external === null ? (
+            <Cell under={t("empty", "maybeThisClustersService")}>
+              {destination.host}
+            </Cell>
           ) : (
             <Cell
               bad={backing?.stop?.reason === "backendMissing"}
@@ -537,7 +542,7 @@ function HostChain({
           )}
         </Column>
         <Column label={t("columns", "published")}>
-          {!destination || destination.external ? (
+          {!destination || destination.external === true ? (
             <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
             <Cell

@@ -4405,6 +4405,7 @@ export const en = {
     noRuleNamesThisHost: "no rule names this host",
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
+    maybeThisClustersService: "Services not read — may be one here",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {

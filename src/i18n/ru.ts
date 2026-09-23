@@ -4810,6 +4810,7 @@ export const ru: Catalogue = {
     noRuleNamesThisHost: "ни одно правило не называет этот хост",
     outsideThisCluster: "вне этого кластера",
     notThisClustersPods: "это поды не этого кластера",
+    maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {

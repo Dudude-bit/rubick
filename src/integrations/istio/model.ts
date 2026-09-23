@@ -53,8 +53,13 @@ export interface Destination {
   host: string;
   /** Resolved to a Service, where the name is one this cluster could have. */
   service: { name: string; namespace: string } | null;
-  /** True where the host is plainly outside the cluster — nothing is claimed. */
-  external: boolean;
+  /**
+   * True where the host is plainly outside the cluster — nothing is claimed.
+   * `null` for a `name.namespace` host while the Services list that tells it
+   * from a hostname is unread: it may be either, and is resolved as a Service
+   * so a rule written for that Service still matches it.
+   */
+  external: boolean | null;
   subset: string | null;
   port: string | null;
   weight: number | null;
@@ -135,7 +140,9 @@ export interface IstioHostGroup {
 export function resolveHost(
   host: string,
   namespace: string,
-  services: ServiceInfo[]
+  services: ServiceInfo[],
+  /** Whether {@link services} was read; required, since forgetting it meant "read". */
+  servicesKnown: boolean
 ): Pick<Destination, "service" | "external"> {
   if (host.includes("*")) return { service: null, external: true };
 
@@ -163,6 +170,13 @@ export function resolveHost(
       external: false,
     };
   }
+  // Unread, the list that would tell the two apart says nothing either way.
+  if (labels.length === 2 && !servicesKnown) {
+    return {
+      service: { name: labels[0], namespace: labels[1] },
+      external: null,
+    };
+  }
   return { service: null, external: true };
 }
 
@@ -182,6 +196,7 @@ interface RouteSpec {
 function routesOf(
   object: CustomResourceInfo,
   services: ServiceInfo[],
+  servicesKnown: boolean,
   t: T
 ): IstioRoute[] {
   const spec = (object.spec ?? {}) as Record<string, unknown>;
@@ -198,7 +213,7 @@ function routesOf(
         const host = leg.destination?.host ?? "";
         return {
           host,
-          ...resolveHost(host, namespace, services),
+          ...resolveHost(host, namespace, services, servicesKnown),
           subset: leg.destination?.subset ?? null,
           port:
             leg.destination?.port?.number === undefined
@@ -319,13 +334,19 @@ export function subsetsFor(
   destination: Destination,
   namespace: string,
   rules: CustomResourceInfo[],
-  services: ServiceInfo[]
+  services: ServiceInfo[],
+  servicesKnown: boolean
 ): { defined: string[]; anyRule: boolean } {
   const matching = rules.filter((rule) => {
     const host = ((rule.spec ?? {}) as DestinationRuleSpec).host;
     if (!host) return false;
     if (host === destination.host) return true;
-    const resolved = resolveHost(host, rule.namespace ?? namespace, services);
+    const resolved = resolveHost(
+      host,
+      rule.namespace ?? namespace,
+      services,
+      servicesKnown
+    );
     return (
       resolved.service !== null &&
       destination.service !== null &&
@@ -403,7 +424,7 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
       gateways?: string[];
     };
     const namespace = object.namespace ?? "";
-    const routes = routesOf(object, sources.services, t);
+    const routes = routesOf(object, sources.services, sources.backingKnown, t);
     // No `gateways` at all means the mesh gateway, which is Istio's default
     // and is in-mesh traffic rather than a missing reference.
     const named = spec.gateways ?? [MESH];
@@ -453,7 +474,8 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
               destination,
               namespace,
               sources.destinationRules,
-              sources.services
+              sources.services,
+              sources.backingKnown
             );
             if (!defined.includes(destination.subset)) {
               findings.push({
@@ -495,15 +517,13 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
             (a, b) => b.destinations.length - a.destinations.length
           )[0],
         worst: worstOf(findings),
-        // A `name.namespace` host is told from a hostname by the Services
-        // list, so with that unread it may be in the cluster too.
+        // Anything not plainly outside needs the Services list — a
+        // `name.namespace` host included, which is `external: null` unread.
         backendsKnown:
           sources.backingKnown ||
           !routes.some((route) =>
             route.destinations.some(
-              (destination) =>
-                !destination.external ||
-                destination.host.split(".").length === 2
+              (destination) => destination.external !== true
             )
           ),
       };
