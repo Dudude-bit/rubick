@@ -36,6 +36,10 @@ pub struct PodExecAdapter {
     /// Where the pane's measurements go. `AttachedProcess` hands this over
     /// once, and only when the attach asked for a tty.
     resize_tx: Option<futures::channel::mpsc::Sender<TerminalSize>>,
+    /// Read into, again and again: an idle shell is read every few
+    /// milliseconds, and a fresh buffer each time was megabytes a second of
+    /// allocation for nothing.
+    read_buf: Vec<u8>,
     /// Whether the stream has ended.
     ///
     /// Separate from `attached`, because "a connection was made" and "it is
@@ -69,6 +73,7 @@ impl PodExecAdapter {
             stdin_writer: None,
             stdout_reader: None,
             resize_tx: None,
+            read_buf: vec![0u8; crate::terminal::session::TERMINAL_BUFFER_SIZE],
             finished: false,
         }
     }
@@ -117,13 +122,14 @@ impl TerminalAdapter for PodExecAdapter {
     async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
         use tokio::io::AsyncReadExt;
 
-        let mut buf = vec![0u8; crate::terminal::session::TERMINAL_BUFFER_SIZE];
-
         // With tty=true, all output comes through stdout (PTY behavior)
         // stderr is not used when TTY is enabled
         if let Some(stdout) = &mut self.stdout_reader {
-            match tokio::time::timeout(std::time::Duration::from_millis(10), stdout.read(&mut buf))
-                .await
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(10),
+                stdout.read(&mut self.read_buf),
+            )
+            .await
             {
                 Ok(Ok(0)) => {
                     // EOF: the shell exited or the container went away.
@@ -132,7 +138,7 @@ impl TerminalAdapter for PodExecAdapter {
                 }
                 Ok(Ok(n)) => {
                     // Data available (n > 0)
-                    Ok(Some(buf[..n].to_vec()))
+                    Ok(Some(self.read_buf[..n].to_vec()))
                 }
                 Ok(Err(e)) => Err(crate::error::Error::Terminal(format!("Read error: {e}"))),
                 Err(_) => {

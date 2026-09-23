@@ -11,7 +11,11 @@ use std::time::{Duration, Instant};
 use k8s_gui_lib::state::{AppEvent, AppState};
 use k8s_gui_lib::terminal::{PodExecAdapter, TerminalManager};
 
-async fn shell() -> (AppState, TerminalManager, String) {
+async fn shell() -> (
+    TerminalManager,
+    String,
+    tokio::sync::broadcast::Receiver<AppEvent>,
+) {
     let context =
         std::env::var("K8S_GUI_INIT_CONTEXT").unwrap_or_else(|_| "kind-rubick-gui".to_string());
     let namespace =
@@ -30,6 +34,9 @@ async fn shell() -> (AppState, TerminalManager, String) {
         .await
         .expect("connect");
     let manager = TerminalManager::new(state.event_tx.clone());
+    // Before the gate opens: a broadcast replays nothing to a late receiver,
+    // and a connect that fails reports the moment the gate is released.
+    let events = state.event_tx.subscribe();
     let adapter = PodExecAdapter::new(
         (*client).clone(),
         namespace,
@@ -42,7 +49,7 @@ async fn shell() -> (AppState, TerminalManager, String) {
         .await
         .expect("session");
     manager.mark_subscribed(&id).expect("subscribed");
-    (state, manager, id)
+    (manager, id, events)
 }
 
 /// Everything the shell prints until `marker` has arrived. The marker is
@@ -69,8 +76,7 @@ async fn until(
 #[tokio::test]
 #[ignore = "needs a live cluster and a pod with a shell"]
 async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
-    let (state, manager, id) = shell().await;
-    let mut events = state.event_tx.subscribe();
+    let (manager, id, mut events) = shell().await;
 
     let started = Instant::now();
     manager
@@ -89,7 +95,17 @@ async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
         took.as_secs_f64(),
         said.len()
     );
-    assert!(said.contains("\r\n300000\r\n"));
+    // Every number, once and in order: a marker alone at the end would pass
+    // a stream that lost the middle.
+    let numbers: Vec<u32> = said
+        .split("\r\n")
+        .filter_map(|line| line.trim().parse().ok())
+        .collect();
+    assert_eq!(numbers.len(), 300_000, "every line arrived");
+    assert!(
+        numbers.windows(2).all(|pair| pair[1] == pair[0] + 1),
+        "in order"
+    );
 
     manager
         .send_input(
@@ -104,6 +120,11 @@ async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
     )
     .await
     .expect("within a minute");
+    assert_eq!(
+        said.matches("привет-мир\r\n").count(),
+        2000,
+        "every line arrived"
+    );
     let broken = said.matches('\u{fffd}').count();
     println!("привет-мир ×2000: {broken} replacement characters");
     assert_eq!(broken, 0);

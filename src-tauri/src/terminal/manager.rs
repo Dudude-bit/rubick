@@ -240,6 +240,11 @@ impl TerminalManager {
                                         break;
                                     }
                                     tracing::error!("Failed to write input: {}", e);
+                                    // What the shell said last goes before the
+                                    // failure: the pane stops listening on it.
+                                    if !output.is_empty() {
+                                        send_output(&event_tx, &session_id_clone, output.finish());
+                                    }
                                     emit_failure(
                                         &event_tx,
                                         &session_id_clone,
@@ -301,6 +306,9 @@ impl TerminalManager {
                             }
                             (Err(e), _) => {
                                 tracing::error!("Failed to read output: {}", e);
+                                if !output.is_empty() {
+                                    send_output(&event_tx, &session_id_clone, output.finish());
+                                }
                                 emit_failure(
                                     &event_tx,
                                     &session_id_clone,
@@ -529,6 +537,70 @@ mod tests {
             .concat();
         assert_eq!(joined, expected);
         assert!(said.len() < 200, "{} events for 2000 reads", said.len());
+    }
+
+    /// Says something, then the connection breaks.
+    struct TalksThenBreaks {
+        step: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for TalksThenBreaks {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            self.step += 1;
+            match self.step {
+                1 => Ok(Some(b"last words".to_vec())),
+                _ => Err(Error::Terminal("Read error: connection reset".to_string())),
+            }
+        }
+
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            true
+        }
+    }
+
+    /// The pane stops listening for output once it hears the session failed,
+    /// so what the shell said last has to arrive first.
+    #[tokio::test]
+    async fn the_last_output_arrives_before_the_failure() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+        let session_id = manager
+            .create_session(Box::new(TalksThenBreaks { step: 0 }))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+
+        let order = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut order = Vec::new();
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { .. } => order.push("output"),
+                    AppEvent::StreamFailed { .. } => order.push("failed"),
+                    AppEvent::TerminalClosed { .. } => return order,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends");
+        assert_eq!(order, vec!["output", "failed"]);
     }
 
     /// Where a character begins and has not finished.
