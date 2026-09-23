@@ -332,7 +332,6 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     // this panel exists because two answers about one machine is the bug.
     // One read: the file, its error and its path belong to the same load.
     let loaded = client.loaded().await;
-    let source = loaded.source.clone();
     let Some(raw) = loaded.kubeconfig else {
         // Nothing parsed. Two different reasons land here and they must not
         // read the same: a file that would not parse is a problem with an
@@ -341,7 +340,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         // loaded" to somebody looking at a kubeconfig.
         let (kubeconfig, mut findings) = match loaded.error {
             Some(why) => {
-                let path = source.map_or_else(
+                let path = loaded.failed_source.map_or_else(
                     || "unknown".to_string(),
                     |p| p.to_string_lossy().into_owned(),
                 );
@@ -372,7 +371,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
     };
 
-    let path = source.map_or_else(
+    let path = loaded.source.map_or_else(
         || "unknown — loaded before the path was recorded".to_string(),
         |p| p.to_string_lossy().into_owned(),
     );
@@ -605,6 +604,7 @@ users:
              the reader did not already know"
         );
         assert_eq!(kc.context_count, 0);
+        assert_eq!(kc.path, path.canonicalize().unwrap().to_string_lossy());
 
         let finding = d
             .findings
@@ -616,6 +616,40 @@ users:
             finding.subject.as_deref().is_some_and(|s| !s.is_empty()),
             "a finding nobody can locate is not actionable"
         );
+    }
+
+    /// Would name the file a reload failed on beside the contexts of the one
+    /// the app still lives on: a broken file, drawn as parsed and holding
+    /// another file's clusters.
+    #[tokio::test]
+    async fn a_failed_reload_leaves_the_loaded_file_named() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let good = dir.path().join("good.yaml");
+        std::fs::write(
+            &good,
+            "apiVersion: v1\nkind: Config\ncontexts:\n  - name: prod\n    context:\n      \
+             cluster: prod\n      user: prod\nclusters: []\nusers: []\n",
+        )
+        .expect("write");
+        let bad = dir.path().join("bad.yaml");
+        std::fs::write(&bad, "clusters: [ this is not\n").expect("write");
+
+        let client = crate::client::K8sClientManager::new();
+        client
+            .load_kubeconfig_from_path(good.clone())
+            .await
+            .expect("good");
+        let failed = client.load_kubeconfig_from_path(bad).await;
+        assert!(failed.is_err(), "the reload has to actually fail");
+
+        let kc = collect(&client).await.kubeconfig.expect("a kubeconfig");
+        assert_eq!(
+            kc.path,
+            good.canonicalize().unwrap().to_string_lossy(),
+            "the file the contexts were read from"
+        );
+        assert_eq!(kc.parse_error, None);
+        assert_eq!(kc.context_count, 1);
     }
 
     /// The third state has to stay a third state: never having loaded is not
