@@ -35,19 +35,23 @@ pub fn builder() -> reqwest::ClientBuilder {
 pub fn trusting(
     roots: Vec<CertificateDer<'static>>,
 ) -> Result<reqwest::ClientBuilder, rustls::Error> {
+    let config = rustls::ClientConfig::builder_with_provider(provider())
+        .with_safe_default_protocol_versions()?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(pinned(roots)?))
+        .with_no_client_auth();
+    Ok(builder().tls_backend_preconfigured(config))
+}
+
+fn pinned(roots: Vec<CertificateDer<'static>>) -> Result<Pinned, rustls::Error> {
     let provider = provider();
     let platform =
         rustls_platform_verifier::Verifier::new_with_extra_roots(roots.clone(), provider.clone())?;
-    let config = rustls::ClientConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions()?
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(Pinned {
-            platform,
-            named: roots,
-            provider,
-        }))
-        .with_no_client_auth();
-    Ok(builder().tls_backend_preconfigured(config))
+    Ok(Pinned {
+        platform,
+        named: roots,
+        provider,
+    })
 }
 
 #[derive(Debug)]
@@ -201,6 +205,63 @@ mod tests {
             pinned_holds(&cert, &host("localhost"), at(5_000_000_000)),
             Err(rustls::Error::InvalidCertificate(CertificateError::Expired))
         );
+    }
+
+    fn fixture(pem: &[u8]) -> CertificateDer<'static> {
+        rustls_pemfile::certs(&mut &*pem)
+            .next()
+            .expect("a certificate")
+            .expect("parses")
+    }
+
+    fn served(
+        verifier: &Pinned,
+        cert: &CertificateDer<'_>,
+        host: &str,
+        secs: u64,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        verifier.verify_server_cert(
+            cert,
+            &[],
+            &ServerName::try_from(host.to_string()).expect("a name"),
+            &[],
+            UnixTime::since_unix_epoch(std::time::Duration::from_secs(secs)),
+        )
+    }
+
+    /// Would break if the verifier stopped asking the pinned certificate to
+    /// name the host and be in date once the platform refused it — then an
+    /// `idp-certificate-authority` would vouch for any host, for ever. The
+    /// platform refuses this `CA:TRUE` certificate as a server's, so every
+    /// answer here is the pinned path's.
+    #[test]
+    fn the_verifier_takes_the_named_certificate_only_for_its_host_and_dates() {
+        let cert = fixture(include_bytes!("../tests/fixtures/pinned-localhost.crt.pem"));
+        let verifier = pinned(vec![cert.clone()]).expect("a verifier");
+
+        assert!(served(&verifier, &cert, "localhost", 1_800_000_000).is_ok());
+        assert_eq!(
+            served(&verifier, &cert, "evil.example", 1_800_000_000).err(),
+            Some(rustls::Error::InvalidCertificate(
+                CertificateError::NotValidForName
+            ))
+        );
+        assert_eq!(
+            served(&verifier, &cert, "localhost", 5_000_000_000).err(),
+            Some(rustls::Error::InvalidCertificate(CertificateError::Expired))
+        );
+    }
+
+    /// Would break if "the kubeconfig names it" were loosened to anything
+    /// short of the same bytes: an attacker's own self-signed certificate
+    /// for the host, in date, would then pass as the provider's.
+    #[test]
+    fn the_verifier_refuses_a_certificate_the_kubeconfig_does_not_name() {
+        let other = fixture(include_bytes!("../tests/fixtures/leaf.crt.pem"));
+        let cert = fixture(include_bytes!("../tests/fixtures/pinned-localhost.crt.pem"));
+        let verifier = pinned(vec![other]).expect("a verifier");
+
+        assert!(served(&verifier, &cert, "localhost", 1_800_000_000).is_err());
     }
 
     #[test]

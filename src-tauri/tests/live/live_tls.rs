@@ -265,6 +265,12 @@ async fn the_https_clients_answer_as_the_one_tls_stack_should() {
     .await;
     assert!(pinned.is_ok(), "self-signed and pinned: {:?}", pinned.err());
     assert!(get(false, self_port).await.is_err(), "secure, not pinned");
+    // The same host, in date, but not the certificate the kubeconfig names:
+    // pinning is to those bytes, not to anything that looks like them.
+    let impostor = issuer(self_port)
+        .generate_auth_url("http://localhost:8000/callback")
+        .await;
+    assert!(impostor.is_err(), "self-signed, another one pinned");
 
     // The machine's own roots, through the platform verifier.
     let public = wire::client(false)
