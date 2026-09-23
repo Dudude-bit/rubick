@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   parseQuantity,
@@ -36,7 +38,8 @@ describe("parseQuantity", () => {
 
   it("parses decimal memory units", () => {
     expect(parseQuantity("1k")).toBe(1000);
-    expect(parseQuantity("1K")).toBe(1000);
+    // Refused by the API server, and by the backend.
+    expect(parseQuantity("1K")).toBeNull();
     expect(parseQuantity("2M")).toBe(2_000_000);
   });
 
@@ -95,9 +98,9 @@ describe("parseMemory", () => {
     expect(parseMemory("1Ti")).toBe(1024 ** 4);
   });
 
-  it("disambiguates K/Ki, M/Mi, G/Gi", () => {
-    // K (decimal) vs Ki (binary)
-    expect(parseMemory("1K")).toBe(1000);
+  it("disambiguates k/Ki, M/Mi, G/Gi", () => {
+    // k (decimal) vs Ki (binary)
+    expect(parseMemory("1k")).toBe(1000);
     expect(parseMemory("1Ki")).toBe(1024);
     expect(parseMemory("1M")).toBe(1_000_000);
     expect(parseMemory("1Mi")).toBe(1_048_576);
@@ -163,7 +166,6 @@ describe("the units the two parsers agree on", () => {
 
   it("reads every decimal suffix too", () => {
     expect(parseMemory("1k")).toBe(1e3);
-    expect(parseMemory("1K")).toBe(1e3);
     expect(parseMemory("1M")).toBe(1e6);
     expect(parseMemory("1G")).toBe(1e9);
     expect(parseMemory("1T")).toBe(1e12);
@@ -198,5 +200,33 @@ describe("the units the two parsers agree on", () => {
     expect(parseMemory("nonsense")).toBe(0);
     expect(parseMemory("")).toBe(0);
     expect(parseMemory(null)).toBe(0);
+  });
+});
+
+describe("one grammar on both sides of the IPC boundary", () => {
+  /**
+   * The Rust side knew `K` and not `k`, this side knew both, and neither
+   * read an exponent: one allocatable written `1k` was a thousand here and
+   * unreadable there. The corpus is what both owe.
+   */
+  it("reads every quantity in the shared corpus as the backend does", () => {
+    const corpus = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "shared/quantity-conformance.json"),
+        "utf8"
+      )
+    ) as { cases: Array<{ input: string; value: number | null }> };
+
+    for (const { input, value } of corpus.cases) {
+      const got = parseQuantity(input);
+      if (value === null) {
+        expect(got, JSON.stringify(input)).toBeNull();
+      } else {
+        expect(got, JSON.stringify(input)).not.toBeNull();
+        expect(Math.abs(got! - value)).toBeLessThanOrEqual(
+          Math.abs(value) * 1e-12
+        );
+      }
+    }
   });
 });
