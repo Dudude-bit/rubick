@@ -32,7 +32,7 @@ pub fn client(insecure_tls: bool) -> Result<reqwest::Client> {
     if let Some(client) = slot.get() {
         return Ok(client.clone());
     }
-    let built = reqwest::Client::builder()
+    let built = crate::tls::builder()
         .timeout(TIMEOUT)
         .danger_accept_invalid_certs(insecure_tls)
         .build()
