@@ -273,11 +273,16 @@ impl AppState {
             .await
     }
 
-    /// Forget what was discovered about `group` on the current cluster —
-    /// after a 404 from where discovery said it was served.
-    pub fn forget_served(&self, group: &str) {
-        if let Some(context) = self.get_current_context() {
-            self.client_manager.served().forget_group(&context, group);
+    /// A request's answer from where discovery put a kind of `group` on the
+    /// current cluster, a 404 sending discovery back: see
+    /// [`crate::client::served::ServedIndex::answered`].
+    pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
+        match self.get_current_context() {
+            Some(context) => self
+                .client_manager
+                .served()
+                .answered(&context, group, answer),
+            None => answer,
         }
     }
 

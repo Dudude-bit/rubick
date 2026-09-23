@@ -54,10 +54,7 @@ where
     };
 
     let answer = request(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced)).await;
-    if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
-        state.forget_served(group);
-    }
-    answer.map_err(Error::from)
+    state.served_answer(group, answer).map_err(Error::from)
 }
 
 /// List custom resource instances for a specific CRD
@@ -318,7 +315,13 @@ mod tests {
     async fn a_404_from_a_discovered_kind_has_discovery_read_again() {
         use crate::client::served::test_server::{connected, failure, groups, resources};
         use crate::client::served::ServedIndex;
-        let (state, hits) = connected(ServedIndex::default(), |path, _| match path {
+        use std::time::Duration;
+        let served = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        );
+        let (state, hits) = connected(served, |path, _| match path {
             "/apis" => (200, groups("v1", &["v1"])),
             "/apis/gateway.networking.k8s.io/v1" => {
                 (200, resources("v1", &[("httproutes", "HTTPRoute", true)]))
@@ -329,6 +332,8 @@ mod tests {
         .await;
         let asked = || hits.lock().unwrap().get("/apis").copied();
 
+        assert!(get(&state, "refused").await.is_err());
+        tokio::time::sleep(Duration::from_millis(150)).await;
         assert!(get(&state, "refused").await.is_err());
         assert!(get(&state, "refused").await.is_err());
         assert_eq!(
