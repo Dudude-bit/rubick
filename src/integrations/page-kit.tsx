@@ -16,7 +16,9 @@
 import {
   Children,
   cloneElement,
+  Fragment,
   isValidElement,
+  useMemo,
   useState,
   type MouseEvent,
   type ReactNode,
@@ -28,6 +30,7 @@ import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 
 /** The narrowing box above a list ordered by trouble. */
@@ -57,6 +60,130 @@ export function FilterBox({
         aria-label={label}
         className="h-7 pl-7 text-xs"
       />
+    </div>
+  );
+}
+
+/** How bad an item in a list ordered by trouble is; nothing is fine. */
+export type Severity = "err" | "warn" | null | undefined;
+
+export interface TroubleListProps<T> {
+  items: readonly T[];
+  severityOf: (item: T) => Severity;
+  /** What the filter is matched against: names, namespaces, hosts. */
+  searchable: (item: T) => ReadonlyArray<string | null | undefined>;
+  filter: { label: string; placeholder: string };
+  /**
+   * Which rows open themselves: the broken ones, or every one with a
+   * finding — and only while no more than `upTo` would, since a screen where
+   * everything is open is a screen where nothing is.
+   */
+  autoOpen: { when: "err" | "any"; upTo: number };
+  /** The line beside the filter; left out, a page has none. */
+  summary?: {
+    brokenFirst: (n: number, total: number) => string;
+    nothingBroken: string;
+    allWell: (total: number) => string;
+  };
+  noMatch: (query: string) => ReactNode;
+  /** Beside the summary: what is still being read, what could not be. */
+  aside?: ReactNode;
+  keyOf: (item: T, index: number) => string;
+  renderRow: (
+    item: T,
+    row: { openByDefault: boolean; last: boolean; shown: number }
+  ) => ReactNode;
+}
+
+/**
+ * A vendor's list ordered by trouble: the filter, what it holds, and the
+ * rows.
+ *
+ * Ten pages wrote this each for themselves, and a fix landed in one of them:
+ * a map node handing a page `?q=<host>` narrowed Traefik's list and left
+ * ingress-nginx's and Istio's untouched. The filter lives in the address
+ * here, so no page can keep it anywhere else.
+ */
+export function TroubleList<T>({
+  items,
+  severityOf,
+  searchable,
+  filter: filterWords,
+  autoOpen,
+  summary,
+  noMatch,
+  aside,
+  keyOf,
+  renderRow,
+}: TroubleListProps<T>) {
+  const t = useT();
+  const [filter, setFilter] = useSearchParam("q");
+  const needle = filter.trim().toLowerCase();
+
+  const shown = useMemo(
+    () =>
+      needle === ""
+        ? items
+        : items.filter((item) =>
+            searchable(item).some((text) =>
+              (text ?? "").toLowerCase().includes(needle)
+            )
+          ),
+    [items, needle, searchable]
+  );
+
+  const broken = items.filter((item) => severityOf(item) === "err").length;
+  const worthALook = items.filter((item) => severityOf(item) === "warn").length;
+  const opening = autoOpen.when === "err" ? broken : broken + worthALook;
+  const opens = (item: T) => {
+    const severity = severityOf(item);
+    const eligible =
+      autoOpen.when === "err" ? severity === "err" : Boolean(severity);
+    return eligible && opening <= autoOpen.upTo;
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="mb-1 flex items-center gap-3">
+        <FilterBox
+          value={filter}
+          onChange={setFilter}
+          placeholder={filterWords.placeholder}
+          label={filterWords.label}
+        />
+        {summary && (
+          <span className="text-[11px] text-fg-fnt">
+            {needle !== ""
+              ? t("count", "shownOfTotal", {
+                  n: shown.length,
+                  total: items.length,
+                })
+              : broken > 0
+                ? `${summary.brokenFirst(broken, items.length)}${
+                    worthALook > 0
+                      ? ` · ${t("count", "worthALook", { n: worthALook })}`
+                      : ""
+                  }`
+                : worthALook > 0
+                  ? `${summary.nothingBroken} · ${t("count", "worthALookOfTotal", { n: worthALook, total: items.length })}`
+                  : summary.allWell(items.length)}
+          </span>
+        )}
+        {aside}
+      </div>
+      {shown.length === 0 ? (
+        <p className="py-6 text-xs text-fg-fnt">{noMatch(filter.trim())}</p>
+      ) : (
+        shown.map((item, index) => (
+          <Fragment key={keyOf(item, index)}>
+            {renderRow(item, {
+              openByDefault: opens(item),
+              last: index === shown.length - 1,
+              shown: shown.length,
+            })}
+          </Fragment>
+        ))
+      )}
     </div>
   );
 }

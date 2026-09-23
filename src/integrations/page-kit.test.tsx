@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import { TroubleRow } from "./page-kit";
+import { TroubleList, TroubleRow, type Severity } from "./page-kit";
 
 const row = (copy?: string) =>
   render(
@@ -121,5 +121,101 @@ describe("a row whose title is an object", () => {
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText("shop")).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+});
+
+interface Item {
+  name: string;
+  severity: Severity;
+}
+
+const severityOf = (item: Item) => item.severity;
+const searchable = (item: Item) => [item.name];
+
+function list(items: Item[], at = "/", upTo = 2, when: "err" | "any" = "err") {
+  return render(
+    <MemoryRouter initialEntries={[at]}>
+      <TroubleList
+        items={items}
+        severityOf={severityOf}
+        searchable={searchable}
+        filter={{ label: "Filter", placeholder: "name" }}
+        autoOpen={{ when, upTo }}
+        summary={{
+          brokenFirst: (n, total) => `${n} of ${total} broken`,
+          nothingBroken: "nothing broken",
+          allWell: (total) => `all ${total} well`,
+        }}
+        noMatch={(query) => `nothing matches ${query}`}
+        keyOf={(item) => item.name}
+        renderRow={(item, { openByDefault }) => (
+          <p>
+            {item.name}
+            {openByDefault ? " open" : " closed"}
+          </p>
+        )}
+      />
+    </MemoryRouter>
+  );
+}
+
+const items: Item[] = [
+  { name: "shop", severity: "err" },
+  { name: "promo", severity: "warn" },
+  { name: "blog", severity: null },
+];
+
+describe("a list ordered by trouble", () => {
+  /**
+   * The routing map hands a page `?q=<host>`. Traefik read it and two other
+   * pages kept their filter in local state, so the same click narrowed one
+   * list and not the others.
+   */
+  it("takes its filter from the address", () => {
+    list(items, "/?q=pro");
+    expect(screen.getByText(/promo/)).toBeInTheDocument();
+    expect(screen.queryByText(/shop/)).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 3")).toBeInTheDocument();
+  });
+
+  it("says so when the filter matches nothing", () => {
+    list(items, "/?q=zzz");
+    expect(screen.getByText("nothing matches zzz")).toBeInTheDocument();
+  });
+
+  /** Would open every broken row on a screen of two hundred. */
+  it("opens the broken rows only while there are few of them", () => {
+    list(items);
+    expect(screen.getByText("shop open")).toBeInTheDocument();
+    expect(screen.getByText("promo closed")).toBeInTheDocument();
+
+    const many = Array.from({ length: 3 }, (_, i) => ({
+      name: `down-${i}`,
+      severity: "err" as const,
+    }));
+    list(many);
+    expect(screen.getByText("down-0 closed")).toBeInTheDocument();
+  });
+
+  it("opens rows worth a look too where the page asks for it", () => {
+    list(items, "/", 2, "any");
+    expect(screen.getByText("promo open")).toBeInTheDocument();
+    expect(screen.getByText("blog closed")).toBeInTheDocument();
+  });
+
+  it("puts the broken count first and the rest after it", () => {
+    list(items);
+    expect(
+      screen.getByText("1 of 3 broken · 1 worth a look")
+    ).toBeInTheDocument();
+  });
+
+  it("tells warnings apart from nothing to see", () => {
+    list([{ name: "promo", severity: "warn" }]);
+    expect(
+      screen.getByText("nothing broken · 1 of 1 worth a look")
+    ).toBeInTheDocument();
+    list([{ name: "blog", severity: null }]);
+    expect(screen.getByText("all 1 well")).toBeInTheDocument();
   });
 });

@@ -34,7 +34,6 @@ import {
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
-import { useSearchParam } from "@/hooks/useSearchParam";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -46,17 +45,16 @@ import {
   severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { crdObjectPath } from "../kit";
+import { crdObjectPath, troubleMark } from "../kit";
 import {
   BackingUnread,
+  TroubleList,
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding as FindingBlock,
   TroubleRow,
   type Tone,
@@ -100,7 +98,6 @@ export default function TraefikPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
-  const [filter, setFilter] = useSearchParam("q");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -222,20 +219,20 @@ export default function TraefikPage() {
     ? middlewareUses(sources.middlewares, allRoutesOf(groups))
     : [];
   const unused = uses.filter((use) => use.usedBy.length === 0).length;
-  const troubled = groups.filter((group) => group.worst !== null);
 
   const tabs: DetailTab[] = [
     {
       id: "routes",
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
-      mark: routesMark(groups, troubled.length, t),
+      mark: troubleMark(
+        groups.map((group) => group.worst),
+        (n, total) => t("count", "hostsNeedAttention", { n, total })
+      ),
       content: (
         <RoutesTab
           groups={groups}
           sources={sources}
-          filter={filter}
-          onFilter={setFilter}
           loading={routeSources.isPending}
           backingLoading={backing.isPending}
         />
@@ -316,26 +313,6 @@ function allRoutesOf(groups: HostGroup[]): TraefikRoute[] {
   return groups.flatMap((group) => group.routes);
 }
 
-/**
- * A count is inventory and a colour is why you came, so the strip never
- * carries both: a routing table with three broken hosts says three broken
- * hosts, not six.
- */
-function routesMark(
-  groups: HostGroup[],
-  troubled: number,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (groups.length === 0) return undefined;
-  const worst = groups.some((group) => group.worst === "err") ? "err" : "warn";
-  return troubled > 0
-    ? severityMark(
-        worst,
-        t("count", "hostsNeedAttention", { n: troubled, total: groups.length })
-      )
-    : countMark(groups.length);
-}
-
 // --- the map ------------------------------------------------------------
 
 /**
@@ -412,38 +389,17 @@ function NothingRoutes() {
 function RoutesTab({
   groups,
   sources,
-  filter,
-  onFilter,
   loading,
   backingLoading,
 }: {
   groups: HostGroup[];
   sources: TraefikSources | null;
-  filter: string;
-  onFilter: (value: string) => void;
   loading: boolean;
   backingLoading: boolean;
 }) {
   const t = useT();
   // Once per table, not per row: the same set decides every row's spelling.
   const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        (group.host ?? "").toLowerCase().includes(needle) ||
-        group.routes.some(
-          (route) =>
-            route.source.name.toLowerCase().includes(needle) ||
-            route.source.namespace.toLowerCase().includes(needle) ||
-            (route.service?.name ?? route.resourceBackend ?? "")
-              .toLowerCase()
-              .includes(needle)
-        )
-    );
-  }, [groups, filter]);
 
   if (loading) {
     return (
@@ -453,55 +409,55 @@ function RoutesTab({
 
   if (groups.length === 0) return <NothingRoutes />;
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={onFilter}
-          placeholder={t("action", "filterByHostServiceObject")}
-          label={t("action", "filterHosts")}
+    <TroubleList
+      items={groups}
+      severityOf={severityOfGroup}
+      searchable={searchableGroup}
+      filter={{
+        placeholder: t("action", "filterByHostServiceObject"),
+        label: t("action", "filterHosts"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingBroken"),
+        allWell: (n) => t("count", "hostsNoneWithProblem", { n }),
+      }}
+      noMatch={() => t("empty", "noHostServiceObjectMatches")}
+      aside={
+        <>
+          {backingLoading && (
+            <span className="text-[11px] text-fg-fnt">
+              {t("empty", "checkingWhatIsBehind")}
+            </span>
+          )}
+          <BackingUnread error={sources?.backingError ?? null} />
+        </>
+      }
+      keyOf={(group, index) => group.host ?? `catch-all-${index}`}
+      renderRow={(group, { openByDefault }) => (
+        <HostRow
+          group={group}
+          sources={sources}
+          duplicated={duplicated}
+          openByDefault={openByDefault}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "nOfTotal", { n: shown.length, total: groups.length })
-            : broken > 0
-              ? `${t("count", "brokenOfTotalFirst", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-                : t("count", "hostsNoneWithProblem", { n: groups.length })}
-        </span>
-        {backingLoading && (
-          <span className="text-[11px] text-fg-fnt">
-            {t("empty", "checkingWhatIsBehind")}
-          </span>
-        )}
-        <BackingUnread error={sources?.backingError ?? null} />
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noHostServiceObjectMatches")}
-        </p>
-      ) : (
-        shown.map((group, index) => (
-          <HostRow
-            key={group.host ?? `catch-all-${index}`}
-            group={group}
-            sources={sources}
-            duplicated={duplicated}
-            // Only an outage opens itself, and only while there are few
-            // enough of them to read: a screen where everything is expanded
-            // is a screen where nothing is emphasised.
-            openByDefault={group.worst === "err" && broken <= AUTO_OPEN}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
+
+const severityOfGroup = (group: HostGroup) => group.worst;
+
+const searchableGroup = (group: HostGroup) => [
+  group.host,
+  ...group.routes.flatMap((route) => [
+    route.source.name,
+    route.source.namespace,
+    route.service?.name ?? route.resourceBackend,
+  ]),
+];
 
 /** The word at the right of a host line: what is true of it right now. */
 function hostState(

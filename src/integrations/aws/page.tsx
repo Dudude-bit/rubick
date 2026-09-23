@@ -19,7 +19,7 @@
  */
 
 import { joinSayings } from "@/i18n/say";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
@@ -28,8 +28,8 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
+  TroubleList,
   TroubleRow,
   type Tone,
 } from "../page-kit";
@@ -51,7 +51,6 @@ const AUTO_OPEN = 6;
 export default function AwsLoadBalancerPage() {
   const t = useT();
   const sources = useAlbSources();
-  const [filter, setFilter] = useState("");
 
   const groups = useMemo(
     () =>
@@ -65,23 +64,6 @@ export default function AwsLoadBalancerPage() {
         : [],
     [sources.data]
   );
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return groups;
-    return groups.filter(
-      (group) =>
-        (group.name ?? "").toLowerCase().includes(needle) ||
-        group.members.some(
-          (member) =>
-            member.ingress.name.toLowerCase().includes(needle) ||
-            member.ingress.namespace.toLowerCase().includes(needle) ||
-            member.hosts.some((host) => host.toLowerCase().includes(needle))
-        )
-    );
-  }, [groups, filter]);
-
-  const troubled = groups.filter((group) => group.worst !== null).length;
 
   if (sources.error) {
     return (
@@ -118,15 +100,6 @@ export default function AwsLoadBalancerPage() {
       ))}
 
       <Section>
-        <div className="mb-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterAlbPlaceholder")}
-            label={t("action", "filterLoadBalancers")}
-          />
-        </div>
-
         {sources.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIngresses")}
@@ -135,27 +108,45 @@ export default function AwsLoadBalancerPage() {
           <p className="max-w-[68ch] text-[11.5px] text-fg-mut">
             {t("empty", "albNoIngressAsksForClass")}
           </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatchesQuery", { query: filter })}
-          </p>
         ) : (
-          <div className="flex flex-col">
-            {shown.map((group, index) => (
+          <TroubleList
+            items={groups}
+            severityOf={severityOfGroup}
+            searchable={searchableGroup}
+            filter={{
+              placeholder: t("action", "filterAlbPlaceholder"),
+              label: t("action", "filterLoadBalancers"),
+            }}
+            // Every group with a finding, not only the broken: here a shared
+            // or disagreeing group is the reason to look.
+            autoOpen={{ when: "any", upTo: AUTO_OPEN }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(group, index) => group.name ?? `own-${index}`}
+            renderRow={(group, { openByDefault, last }) => (
               <GroupRow
-                key={group.name ?? `own-${index}`}
                 group={group}
                 bindings={sources.data?.bindings ?? []}
-                openByDefault={group.worst !== null && troubled <= AUTO_OPEN}
-                last={index === shown.length - 1}
+                openByDefault={openByDefault}
+                last={last}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </Section>
     </div>
   );
 }
+
+const severityOfGroup = (group: AlbGroup) => group.worst;
+
+const searchableGroup = (group: AlbGroup) => [
+  group.name,
+  ...group.members.flatMap((member) => [
+    member.ingress.name,
+    member.ingress.namespace,
+    ...member.hosts,
+  ]),
+];
 
 function groupState(group: AlbGroup): {
   key: keyof typeof en.empty;

@@ -6897,7 +6897,6 @@ export const ru: Catalogue = {
     ofN: "из {n}",
     nDecoded: "разобрано {n}",
     nNotRead: "не разобрано {n}",
-    brokenOfTotalFirst: "сломано {n} из {total} — они первыми",
     worthALook: "на {n} стоит взглянуть",
     worthALookOfTotal: "на {n} из {total} стоит взглянуть",
     hostsAcrossNamespaces: {

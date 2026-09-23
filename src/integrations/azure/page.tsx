@@ -15,7 +15,7 @@
  * it is an annotation over here and half is a label over there.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -24,10 +24,10 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
-  TroubleRow,
   type Tone,
+  TroubleList,
+  TroubleRow,
 } from "../page-kit";
 import { useAksPicture } from "./data";
 import {
@@ -43,23 +43,11 @@ import { useT } from "@/i18n/useT";
 export default function AksAddonsPage() {
   const t = useT();
   const picture = useAksPicture();
-  const [filter, setFilter] = useState("");
 
   const accounts = useMemo(
     () => picture.data?.workload.accounts ?? [],
     [picture.data]
   );
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return accounts;
-    return accounts.filter(
-      (account) =>
-        account.name.toLowerCase().includes(needle) ||
-        account.namespace.toLowerCase().includes(needle) ||
-        account.clientId.toLowerCase().includes(needle) ||
-        account.pods.some((pod) => pod.name.toLowerCase().includes(needle))
-    );
-  }, [accounts, filter]);
 
   const orphans = picture.data?.workload.findings ?? [];
   const legacy = picture.data?.legacyInstalled ?? false;
@@ -114,15 +102,6 @@ export default function AksAddonsPage() {
       ))}
 
       <Section>
-        <div className="mb-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterIdentitiesPlaceholder")}
-            label={t("action", "filterIdentities")}
-          />
-        </div>
-
         {picture.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIdentities")}
@@ -136,21 +115,24 @@ export default function AksAddonsPage() {
               ? t("empty", "legacyAddonInstalled")
               : t("empty", "legacyAddonNotInstalled")}
           </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatches")}{" "}
-            <span className="font-mono">{filter}</span>.
-          </p>
         ) : (
-          <div className="flex flex-col">
-            {shown.map((account, index) => (
-              <AccountRow
-                key={`${account.namespace}/${account.name}`}
-                account={account}
-                last={index === shown.length - 1}
-              />
-            ))}
-          </div>
+          <TroubleList
+            items={accounts}
+            // An identity is a fact here, not a verdict: the findings above
+            // carry the trouble, so no row opens itself.
+            severityOf={() => null}
+            searchable={searchableAccount}
+            filter={{
+              placeholder: t("action", "filterIdentitiesPlaceholder"),
+              label: t("action", "filterIdentities"),
+            }}
+            autoOpen={{ when: "err", upTo: 0 }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(account) => `${account.namespace}/${account.name}`}
+            renderRow={(account, { last }) => (
+              <AccountRow account={account} last={last} />
+            )}
+          />
         )}
       </Section>
 
@@ -297,3 +279,10 @@ function AccountRow({
     </TroubleRow>
   );
 }
+
+const searchableAccount = (account: FederatedAccount) => [
+  account.name,
+  account.namespace,
+  account.clientId,
+  ...account.pods.map((pod) => pod.name),
+];

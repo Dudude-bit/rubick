@@ -23,7 +23,6 @@
  * place.
  */
 
-import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
@@ -41,20 +40,20 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { FilterBox, Finding, TroubleRow } from "../page-kit";
+import { Finding, TroubleList, TroubleRow } from "../page-kit";
 import { usePicture } from "./data";
 import { uncovered } from "./serves";
 import {
   CERTIFICATES_CRD,
   CLUSTER_ISSUERS_CRD,
   ISSUERS_CRD,
-  troubled,
   type CertRow,
   type CertStep,
   type IssuerRow,
   type UnreadKind,
 } from "./model";
 import { useT } from "@/i18n/useT";
+import { troubleMark } from "../kit";
 
 /** Past this many troubled certificates, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -81,7 +80,6 @@ export default function CertManagerPage() {
 
   const certificates = data?.certificates ?? [];
   const issuers = data?.issuers ?? [];
-  const broken = troubled(certificates);
 
   // Which tab owes the reader the sentence depends on which read failed: an
   // unread issuer kind is the difference between "there is none" and "nobody
@@ -98,7 +96,9 @@ export default function CertManagerPage() {
       id: "certificates",
       label: "Certificates",
       glyph: viewGlyph(ShieldCheck),
-      mark: certificatesMark(t, certificates, broken),
+      mark: troubleMark(certificates.map(severityOfRow), (n, total) =>
+        t("count", "needAttentionOfTotal", { n, total })
+      ),
       content: (
         <CertificatesTab
           rows={certificates}
@@ -141,23 +141,6 @@ export default function CertManagerPage() {
         }}
       />
     </div>
-  );
-}
-
-/**
- * A count is inventory and a colour is why you came, so the mark never
- * carries both: thirty certificates with two failing renewals says two.
- */
-function certificatesMark(
-  t: ReturnType<typeof useT>,
-  rows: CertRow[],
-  broken: CertRow[]
-): DetailTabMark | undefined {
-  if (rows.length === 0) return undefined;
-  if (broken.length === 0) return countMark(rows.length);
-  return severityMark(
-    broken.some((row) => row.state.tone === "err") ? "err" : "warn",
-    t("count", "needAttentionOfTotal", { n: broken.length, total: rows.length })
   );
 }
 
@@ -237,20 +220,6 @@ function CertificatesTab({
   unread: UnreadKind[];
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return rows;
-    return rows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(needle) ||
-        row.namespace.toLowerCase().includes(needle) ||
-        (row.secretName ?? "").toLowerCase().includes(needle) ||
-        (row.issuer?.name ?? "").toLowerCase().includes(needle) ||
-        row.dnsNames.some((host) => host.toLowerCase().includes(needle))
-    );
-  }, [rows, filter]);
 
   if (loading) {
     return (
@@ -282,54 +251,43 @@ function CertificatesTab({
     );
   }
 
-  const broken = rows.filter((row) => row.state.tone === "err").length;
-  const worthALook = rows.filter((row) => row.state.tone === "warn").length;
-
   return (
     <div className="flex flex-col">
       <Unread kinds={unread} cost={t("empty", "certWalkCost")} />
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterCertificatesPlaceholder")}
-          label={t("action", "filterCertificates")}
-        />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: rows.length,
-              })
-            : broken > 0
-              ? `${t("count", "brokenAndFirst", { n: broken, total: rows.length })}${
-                  worthALook > 0
-                    ? ` · ${t("count", "worthALook", { n: worthALook })}`
-                    : ""
-                }`
-              : worthALook > 0
-                ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: rows.length })}`
-                : t("count", "certificatesNoneWithProblem", {
-                    n: rows.length,
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noCertificateMatchesFilter")}
-        </p>
-      ) : (
-        shown.map((row) => (
-          <CertificateRow
-            key={row.key}
-            row={row}
-            openByDefault={row.state.tone === "err" && broken <= AUTO_OPEN}
-          />
-        ))
-      )}
+      <TroubleList
+        items={rows}
+        severityOf={severityOfRow}
+        searchable={searchableRow}
+        filter={{
+          placeholder: t("action", "filterCertificatesPlaceholder"),
+          label: t("action", "filterCertificates"),
+        }}
+        autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+        summary={{
+          brokenFirst: (n, total) => t("count", "brokenAndFirst", { n, total }),
+          nothingBroken: t("empty", "nothingBroken"),
+          allWell: (n) => t("count", "certificatesNoneWithProblem", { n }),
+        }}
+        noMatch={() => t("empty", "noCertificateMatchesFilter")}
+        keyOf={(row) => row.key}
+        renderRow={(row, { openByDefault }) => (
+          <CertificateRow row={row} openByDefault={openByDefault} />
+        )}
+      />
     </div>
   );
 }
+
+const severityOfRow = (row: CertRow) =>
+  row.state.tone === "ok" ? null : row.state.tone;
+
+const searchableRow = (row: CertRow) => [
+  row.name,
+  row.namespace,
+  row.secretName,
+  row.issuer?.name,
+  ...row.dnsNames,
+];
 
 function CertificateRow({
   row,
