@@ -114,6 +114,11 @@ describe("the peek's Overview against the detail pages", () => {
     );
   });
 });
+import { CLUSTER_SOURCES } from "./peek-sources-cluster";
+import { GATEWAY_SOURCES } from "./peek-sources-gateway";
+import { NETWORK_SOURCES } from "./peek-sources-network";
+import { CONFIG_STORAGE_SOURCES } from "./peek-sources-storage";
+import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
 
 describe("what a peek shows of a spec it has no schema for", () => {
   /**
@@ -235,5 +240,25 @@ describe("what a peek shows of a spec it has no schema for", () => {
       value: "x",
       mono: true,
     });
+  });
+});
+
+describe("the families the peek's sources are spread from", () => {
+  /**
+   * One object literal refused a kind written twice; five spread into one
+   * do not, and the family spread last would silently replace the other's
+   * reading of that kind.
+   */
+  it("claims each kind in only one family", () => {
+    const kinds = [
+      CLUSTER_SOURCES,
+      GATEWAY_SOURCES,
+      NETWORK_SOURCES,
+      CONFIG_STORAGE_SOURCES,
+      WORKLOAD_SOURCES,
+    ].flatMap((family) => Object.keys(family));
+
+    expect(kinds.length).toBeGreaterThan(0);
+    expect(kinds.filter((kind, at) => kinds.indexOf(kind) !== at)).toEqual([]);
   });
 });
