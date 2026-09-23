@@ -318,6 +318,43 @@ describe("the event bridge falling behind", () => {
     hook.unmount();
   });
 
+  /** The dropped batch can be the `deleted`, and a list selected by name says so only by coming back empty — in two batches when a burst splits it. Read as "watching", the row waited a day for an object already gone. */
+  it("says the object is gone when the fresh list comes back without it", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [{ op: "restarted", resource: null }],
+        error: null,
+      })
+    );
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [{ op: "synced", resource: null }],
+        error: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    const status = useTellMeWhenStore.getState().watches[0].status;
+    expect(status.state === "done" && status.verdict.says).toBe("gone");
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "payments is gone",
+      body: "",
+    });
+    hook.unmount();
+  });
+
   /** A watch already lost when the lag lands keeps its clock; dropping the timer with the old stream left it lost and never reported. */
   it("still reports a watch that was already lost when the lag landed", async () => {
     useTellMeWhenStore.setState({ watches: [rollout()] });

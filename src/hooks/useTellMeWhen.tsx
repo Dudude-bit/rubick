@@ -96,6 +96,12 @@ interface Stream {
   off: (() => void) | null;
   lostTimer: ReturnType<typeof setTimeout> | null;
   closed: boolean;
+  /**
+   * A list in progress, between `restarted` and `synced`, and whether it
+   * held the object. On the stream because the two markers can arrive in
+   * different batches.
+   */
+  relist: { found: boolean } | null;
 }
 
 /** Marks the watch answered and queues the answer, unless it was already. */
@@ -208,6 +214,7 @@ export function useTellMeWhen() {
           off: null,
           lostTimer: old.lostTimer,
           closed: false,
+          relist: null,
         };
         old.lostTimer = null;
         close(watchId);
@@ -229,6 +236,7 @@ export function useTellMeWhen() {
         off: null,
         lostTimer: null,
         closed: false,
+        relist: null,
       };
       live.set(watchId, stream);
       void open(watchId, stream);
@@ -298,11 +306,24 @@ export function useTellMeWhen() {
       }
       let current = store.watches.find((w) => w.id === watchId) ?? watch;
       for (const change of payload.changes) {
-        if (change.op !== "applied" && change.op !== "deleted") continue;
+        if (change.op === "restarted") {
+          stream.relist = { found: false };
+          continue;
+        }
+        // The list is selected by name, so one that finished without the
+        // object is the cluster saying it is not there. kube sends no
+        // `deleted` for it, and a lag may have dropped the one it did send.
+        const emptied =
+          change.op === "synced" && stream.relist?.found === false;
+        if (change.op === "synced") stream.relist = null;
+        if (change.op === "applied" && stream.relist)
+          stream.relist.found = true;
+        const op = emptied ? "deleted" : change.op;
+        if (op !== "applied" && op !== "deleted") continue;
         const { verdict, baseline } = judge(
           current,
-          change.op,
-          change.resource
+          op,
+          emptied ? null : change.resource
         );
         if (verdict) {
           settle(watchId, verdict, coalescer.current);
