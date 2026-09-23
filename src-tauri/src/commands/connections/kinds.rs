@@ -507,7 +507,7 @@ pub(super) async fn ingress_connections(
     }
     // As on the pod and workload pages: a refusal here has to be named, or
     // it is a gap the wire contract reads as "every kind was read".
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
 
     Ok(())
 }
@@ -624,8 +624,9 @@ pub(super) async fn node_connections(
         budgets_over(&ns, &this, pod.labels(), &budgets, out);
     }
 
-    out.not_looked_at =
-        UnexploredKind::on_a_node(budgets.as_ref().err().map(std::string::String::as_str));
+    out.not_looked_at.extend(UnexploredKind::on_a_node(
+        budgets.as_ref().err().map(std::string::String::as_str),
+    ));
     Ok(())
 }
 
@@ -695,7 +696,7 @@ pub(super) async fn volume_connections(
         );
     }
 
-    out.not_looked_at = UnexploredKind::on_a_volume();
+    out.not_looked_at.extend(UnexploredKind::on_a_volume());
     Ok(())
 }
 
@@ -1012,5 +1013,73 @@ mod subject_tests {
         };
         assert!(matches!(err, Error::KubeApi(_)), "{err:?}");
         assert!(!err.to_string().contains("Deployment/payments"));
+    }
+}
+
+#[cfg(test)]
+mod ingress_tests {
+    use super::*;
+    use crate::client::served::test_server::{failure, server};
+    use serde_json::json;
+
+    fn listing(items: &[serde_json::Value]) -> String {
+        json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": items }).to_string()
+    }
+
+    /// Would drop the `ReplicaSet` the chain could not read from the Ingress
+    /// page — the one page of the four that assigned the snapshot's refusals
+    /// over what the walk behind its Services had already named.
+    #[tokio::test]
+    async fn an_owner_unread_behind_an_ingress_is_named_beside_the_lists_unread() {
+        let ingress = json!({
+            "metadata": { "name": "front", "namespace": "shop" },
+            "spec": { "rules": [{ "http": { "paths": [{
+                "path": "/", "pathType": "Prefix",
+                "backend": { "service": { "name": "web", "port": { "number": 80 } } },
+            }] } }] },
+        });
+        let service = json!({
+            "metadata": { "name": "web", "namespace": "shop" },
+            "spec": { "selector": { "app": "web" } },
+        });
+        let pod = json!({
+            "metadata": {
+                "name": "web-7d9-x", "namespace": "shop", "labels": { "app": "web" },
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-7d9",
+                    "uid": "rs-uid", "controller": true,
+                }],
+            },
+        });
+        let refused = failure(403, "Forbidden");
+        let (client, _) = server(vec![
+            (
+                "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
+                200,
+                listing(&[ingress]),
+            ),
+            ("/api/v1/namespaces/shop/services", 200, listing(&[service])),
+            ("/api/v1/namespaces/shop/pods", 200, listing(&[pod])),
+            (
+                "/apis/autoscaling/v2/namespaces/shop/horizontalpodautoscalers",
+                refused.0,
+                refused.1.clone(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/shop/replicasets/web-7d9",
+                refused.0,
+                refused.1,
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let page = connections_of(&ctx, "Ingress", "front", None)
+            .await
+            .expect("a page");
+
+        let unread: Vec<&str> = page.not_looked_at.iter().map(|e| e.kind.as_str()).collect();
+        assert!(unread.contains(&"ReplicaSet"), "{unread:?}");
+        assert!(unread.contains(&"HorizontalPodAutoscaler"), "{unread:?}");
     }
 }
