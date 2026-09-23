@@ -15,6 +15,7 @@
 #![allow(clippy::wildcard_imports)]
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::autoscaling::v2::{
@@ -54,6 +55,7 @@ use governance::*;
 use kinds::*;
 use owners::*;
 use snapshot::*;
+pub use snapshot::{Snapshots, Source};
 use traffic::*;
 use uses::*;
 
@@ -82,7 +84,16 @@ pub async fn get_resource_connections(
     } else {
         ResourceContext::for_command(&state, namespace)?
     };
-    Box::pin(connections_of(&ctx, &kind, &name, gateway.as_ref())).await
+    let context = state.get_current_context().unwrap_or_default();
+    let source = Source::shared(&state.neighbourhoods, &context);
+    Box::pin(connections_through(
+        source,
+        &ctx,
+        &kind,
+        &name,
+        gateway.as_ref(),
+    ))
+    .await
 }
 
 /// The kinds that are not in a namespace.
@@ -97,8 +108,19 @@ fn cluster_scoped(kind: &str) -> bool {
 }
 
 /// The same answer, for callers that already hold a client — the live
-/// harness in `tests/live_connections.rs` runs against this.
+/// harness in `tests/live_connections.rs` runs against this. Every read is
+/// fresh.
 pub async fn connections_of(
+    ctx: &ResourceContext,
+    kind: &str,
+    name: &str,
+    gateway: Option<&crate::resources::GatewayApiDetection>,
+) -> Result<ResourceConnections> {
+    connections_through(Source::default(), ctx, kind, name, gateway).await
+}
+
+async fn connections_through(
+    source: Source<'_>,
     ctx: &ResourceContext,
     kind: &str,
     name: &str,
@@ -114,15 +136,15 @@ pub async fn connections_of(
 
     let mut out = Neighbourhood::new();
     match canonical {
-        "Pod" => pod_connections(ctx, &ns, name, gateway, &mut out).await?,
+        "Pod" => pod_connections(source, ctx, &ns, name, gateway, &mut out).await?,
         "Deployment" | "StatefulSet" | "DaemonSet" | "ReplicaSet" | "Job" | "CronJob" => {
             Box::pin(workload_connections(
-                ctx, &ns, canonical, name, gateway, &mut out,
+                source, ctx, &ns, canonical, name, gateway, &mut out,
             ))
             .await?;
         }
-        "Service" => service_connections(ctx, &ns, name, gateway, &mut out).await?,
-        "Ingress" => ingress_connections(ctx, &ns, name, &mut out).await?,
+        "Service" => service_connections(source, ctx, &ns, name, gateway, &mut out).await?,
+        "Ingress" => ingress_connections(source, ctx, &ns, name, &mut out).await?,
         "PersistentVolumeClaim" => claim_connections(ctx, &ns, name, &mut out).await?,
         "ConfigMap" | "Secret" => {
             config_connections(ctx, &ns, canonical, name, &mut out).await?;

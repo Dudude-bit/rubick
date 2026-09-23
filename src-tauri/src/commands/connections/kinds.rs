@@ -3,13 +3,14 @@
 use super::*;
 
 pub(super) async fn pod_connections(
+    source: Source<'_>,
     ctx: &ResourceContext,
     ns: &str,
     name: &str,
     gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx, gateway).await?;
+    let snapshot = source.snapshot(ctx, gateway).await?;
     let pod = found(&snapshot.pods, "Pod", ns, name, |pod| {
         pod.name_any() == name
     })?;
@@ -191,6 +192,7 @@ pub(super) async fn fetch_template(
 }
 
 pub(super) async fn workload_connections(
+    source: Source<'_>,
     ctx: &ResourceContext,
     ns: &str,
     kind: &str,
@@ -198,8 +200,10 @@ pub(super) async fn workload_connections(
     gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let (snapshot, template) =
-        tokio::try_join!(Snapshot::of(ctx, gateway), fetch_template(ctx, kind, name))?;
+    let (snapshot, template) = tokio::try_join!(
+        source.snapshot(ctx, gateway),
+        fetch_template(ctx, kind, name)
+    )?;
     let (template, uid) = template;
 
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present).with_facts(
@@ -368,13 +372,14 @@ pub(super) async fn revisions_of(
 }
 
 pub(super) async fn service_connections(
+    source: Source<'_>,
     ctx: &ResourceContext,
     ns: &str,
     name: &str,
     gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx, gateway).await?;
+    let snapshot = source.snapshot(ctx, gateway).await?;
     let svc = found(&snapshot.services, "Service", ns, name, |svc| {
         svc.name_any() == name
     })?;
@@ -426,12 +431,13 @@ pub(super) async fn workloads_behind(
 }
 
 pub(super) async fn ingress_connections(
+    source: Source<'_>,
     ctx: &ResourceContext,
     ns: &str,
     name: &str,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = Snapshot::of(ctx, None).await?;
+    let snapshot = source.snapshot(ctx, None).await?;
     let ing = found(&snapshot.ingresses, "Ingress", ns, name, |ing| {
         ing.name_any() == name
     })?;

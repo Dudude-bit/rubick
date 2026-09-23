@@ -42,6 +42,107 @@ pub(super) struct Snapshot {
     pub(super) gateways: Option<Vec<crate::resources::GatewayInfo>>,
 }
 
+/// Snapshots shared by the calls that arrive together.
+///
+/// "My services" with twelve pins asked for twelve neighbourhoods at once,
+/// and each listed its namespace's seven kinds again: ~120 lists a round for
+/// what was mostly three namespaces. Calls for the same (context, namespace,
+/// Gateway kinds) share one read in flight, and reuse it for [`SHARED_FOR`].
+/// A snapshot with any read that failed is not kept past its own flight — a
+/// refusal is an answer for the callers who were waiting, not for the next.
+pub struct Snapshots {
+    entries: dashmap::DashMap<SnapshotKey, (std::time::Instant, SnapshotCell)>,
+    kept_for: std::time::Duration,
+}
+
+impl Default for Snapshots {
+    fn default() -> Self {
+        Self {
+            entries: dashmap::DashMap::new(),
+            kept_for: SHARED_FOR,
+        }
+    }
+}
+
+type SnapshotKey = (String, String, String);
+type SnapshotCell = Arc<tokio::sync::OnceCell<Arc<Snapshot>>>;
+
+/// How long a finished snapshot is reused: enough for a round of cards that
+/// arrived a little apart. Kept short because an edit is followed by a
+/// re-read, and an answer from before the edit would show the old object
+/// for a whole polling interval. A read still in flight is shared however
+/// long it takes.
+pub(super) const SHARED_FOR: std::time::Duration = std::time::Duration::from_millis(250);
+
+impl Snapshots {
+    pub(super) async fn get(
+        &self,
+        context: &str,
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+    ) -> Result<Arc<Snapshot>> {
+        let key = (
+            context.to_string(),
+            ctx.namespace.clone().unwrap_or_default(),
+            gateway
+                .filter(|d| d.installed)
+                .map(|d| {
+                    d.kinds
+                        .iter()
+                        .map(|k| format!("{}@{}", k.plural, k.read_version))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default(),
+        );
+        let now = std::time::Instant::now();
+        self.entries
+            .retain(|_, (at, cell)| !cell.initialized() || now.duration_since(*at) < self.kept_for);
+        let cell = self
+            .entries
+            .entry(key.clone())
+            .or_insert_with(|| (now, Arc::default()))
+            .1
+            .clone();
+        let snapshot = cell
+            .get_or_try_init(|| async { Snapshot::of(ctx, gateway).await.map(Arc::new) })
+            .await?
+            .clone();
+        if snapshot.any_unread() {
+            self.entries
+                .remove_if(&key, |_, (_, held)| Arc::ptr_eq(held, &cell));
+        }
+        Ok(snapshot)
+    }
+}
+
+/// Where a neighbourhood's snapshot comes from: read fresh, or shared through
+/// [`Snapshots`] under a context's name.
+#[derive(Clone, Copy, Default)]
+pub struct Source<'a> {
+    pub(super) shared: Option<(&'a Snapshots, &'a str)>,
+}
+
+impl<'a> Source<'a> {
+    #[must_use]
+    pub fn shared(snapshots: &'a Snapshots, context: &'a str) -> Self {
+        Self {
+            shared: Some((snapshots, context)),
+        }
+    }
+
+    pub(super) async fn snapshot(
+        self,
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+    ) -> Result<Arc<Snapshot>> {
+        match self.shared {
+            Some((snapshots, context)) => snapshots.get(context, ctx, gateway).await,
+            None => Snapshot::of(ctx, gateway).await.map(Arc::new),
+        }
+    }
+}
+
 /// A list whose failure is part of the answer rather than the end of it, and
 /// so is carried alongside the items instead of aborting the whole call.
 pub(super) type Read<K> = std::result::Result<Vec<K>, String>;
@@ -148,6 +249,18 @@ impl Snapshot {
             gateway_routes,
             gateways,
         })
+    }
+
+    /// Whether any list failed, which makes the snapshot one caller's answer
+    /// and not one to hand the next.
+    pub(super) fn any_unread(&self) -> bool {
+        self.pods.is_err()
+            || self.services.is_err()
+            || self.ingresses.is_err()
+            || self.claims.is_err()
+            || self.autoscalers.is_err()
+            || self.budgets.is_err()
+            || (self.slices.is_err() && self.legacy.is_err())
     }
 
     /// The items, or none where the read did not answer.
@@ -597,5 +710,115 @@ mod read_live_tests {
     fn a_refused_kind_is_part_of_the_answer() {
         let answer = read_live(refused(403, "Forbidden")).expect("an answer");
         assert!(answer.expect_err("unread").contains("Forbidden"));
+    }
+}
+
+#[cfg(test)]
+mod shared_tests {
+    use super::*;
+    use crate::client::served::test_server::server;
+
+    const NS: &str = "shop";
+
+    fn empty() -> String {
+        serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [] })
+            .to_string()
+    }
+
+    /// Every list a snapshot takes, answering empty; `pods` as given.
+    fn routes(pods: (u16, String)) -> Vec<(&'static str, u16, String)> {
+        vec![
+            ("/api/v1/namespaces/shop/pods", pods.0, pods.1),
+            ("/api/v1/namespaces/shop/services", 200, empty()),
+            (
+                "/api/v1/namespaces/shop/persistentvolumeclaims",
+                200,
+                empty(),
+            ),
+            (
+                "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
+                200,
+                empty(),
+            ),
+            (
+                "/apis/autoscaling/v2/namespaces/shop/horizontalpodautoscalers",
+                200,
+                empty(),
+            ),
+            (
+                "/apis/policy/v1/namespaces/shop/poddisruptionbudgets",
+                200,
+                empty(),
+            ),
+            (
+                "/apis/discovery.k8s.io/v1/namespaces/shop/endpointslices",
+                200,
+                empty(),
+            ),
+        ]
+    }
+
+    fn pod_lists(hits: &crate::client::served::test_server::Hits) -> usize {
+        hits.lock()
+            .unwrap()
+            .get("/api/v1/namespaces/shop/pods")
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Twelve cards asking at once are one set of lists, and asking again
+    /// inside the second is none; after it, the lists are read again.
+    #[tokio::test]
+    async fn calls_together_share_one_read_for_as_long_as_it_is_kept() {
+        let (client, hits) = server(routes((200, empty()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots {
+            kept_for: std::time::Duration::from_millis(300),
+            ..Snapshots::default()
+        };
+
+        let asks = (0..12).map(|_| snapshots.get("kind", &ctx, None));
+        for answer in futures::future::join_all(asks).await {
+            assert!(answer.expect("a snapshot").pods.is_ok());
+        }
+        snapshots.get("kind", &ctx, None).await.expect("again");
+        assert_eq!(pod_lists(&hits), 1);
+
+        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        snapshots.get("kind", &ctx, None).await.expect("later");
+        assert_eq!(pod_lists(&hits), 2);
+    }
+
+    /// A read in flight is shared however long it takes; only a finished
+    /// one ages out. Expiring the flight too gave each of twelve cards a
+    /// read of its own the moment the window was shorter than the lists.
+    #[tokio::test]
+    async fn a_read_in_flight_is_shared_even_past_the_window() {
+        let (client, hits) = server(routes((200, empty()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots {
+            kept_for: std::time::Duration::ZERO,
+            ..Snapshots::default()
+        };
+        let asks = (0..12).map(|_| snapshots.get("kind", &ctx, None));
+        futures::future::join_all(asks).await;
+        assert_eq!(pod_lists(&hits), 1);
+    }
+
+    /// A refusal reaches the callers who were waiting for that read, and no
+    /// one after: the next call asks the cluster again.
+    #[tokio::test]
+    async fn a_snapshot_with_a_refused_list_is_not_handed_to_the_next_caller() {
+        let (client, hits) = server(routes((403, "{}".to_string()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots::default();
+
+        let first = snapshots.get("kind", &ctx, None).await.expect("a snapshot");
+        assert!(
+            first.pods.is_err(),
+            "the refusal is carried, not an empty list"
+        );
+        snapshots.get("kind", &ctx, None).await.expect("again");
+        assert_eq!(pod_lists(&hits), 2);
     }
 }
