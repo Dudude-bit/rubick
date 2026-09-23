@@ -255,6 +255,7 @@ describe("WorkloadUsage with a pod running", () => {
         },
       ],
       status: { status: "available", message: null },
+      unread: [],
     });
   });
 

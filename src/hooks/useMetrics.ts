@@ -3,11 +3,14 @@ import { commands } from "@/lib/commands";
 import type {
   PodMetricsResponse,
   NodeMetricsResponse,
+  UnreadNamespace,
 } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
+
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 type MetricsQueryOptions<T> = Omit<
   LiveQueryOptions<T, Error, T, string[]>,
@@ -61,6 +64,11 @@ export function useMetrics(options?: UseMetricsOptions) {
   return {
     podMetrics: podMetricsQuery.data?.data ?? [],
     podStatus: podMetricsQuery.data?.status ?? null,
+    // The last scope's unread namespaces are not this one's.
+    podUnread: podMetricsQuery.isPlaceholderData
+      ? NOTHING_UNREAD
+      : (podMetricsQuery.data?.unread ?? NOTHING_UNREAD),
+    refetchPodMetrics: podMetricsQuery.refetch,
     nodeMetrics: nodeMetricsQuery.data?.data ?? [],
     nodeStatus: nodeMetricsQuery.data?.status ?? null,
     // When the cluster last answered. The usage history stamps its samples

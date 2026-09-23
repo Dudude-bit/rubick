@@ -3502,6 +3502,7 @@ export const en = {
     // The cluster's own words, kept whole: they are what somebody takes to
     // whoever can act on them.
     metricsDetails: "Details: {details}",
+    podMetricsLabel: "pod metrics",
     markBroken: "broken",
     markUnchecked: "not checked",
     markWorthALook: "worth a look",

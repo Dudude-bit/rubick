@@ -3844,6 +3844,7 @@ export const ru: Catalogue = {
     metricsError: "Ошибка API метрик",
     metricsErrorBody: "Не удалось получить метрики из кластера.",
     metricsDetails: "Подробности: {details}",
+    podMetricsLabel: "метрики подов",
     markBroken: "сломано",
     markUnchecked: "не проверено",
     markWorthALook: "стоит взглянуть",
