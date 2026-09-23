@@ -357,7 +357,18 @@ export function useLiveQuery<
     refetchInterval: everyMs,
   });
 
-  const { dataUpdatedAt, data, refetch, isLoading, fetchStatus } = query;
+  const {
+    dataUpdatedAt,
+    errorUpdatedAt,
+    data,
+    refetch,
+    isLoading,
+    fetchStatus,
+  } = query;
+  // A failure is an answer too. Counting only `dataUpdatedAt` kept a refused
+  // read at full rate for as long as its page stayed open, one 403 every
+  // two seconds; `useLiveQueries` already counts it the same way.
+  const settledAt = Math.max(dataUpdatedAt, errorUpdatedAt);
   const waitingSince = useWaitingSince(isLoading && fetchStatus === "fetching");
 
   // How many answers in a row came back identical.
@@ -368,12 +379,12 @@ export function useLiveQuery<
   const seenAt = useRef(0);
   const seenData = useRef<TData | undefined>(undefined);
   useEffect(() => {
-    if (!dataUpdatedAt || dataUpdatedAt === seenAt.current) return;
+    if (!settledAt || settledAt === seenAt.current) return;
     const identical = seenAt.current !== 0 && data === seenData.current;
-    seenAt.current = dataUpdatedAt;
+    seenAt.current = settledAt;
     seenData.current = data;
     setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-  }, [dataUpdatedAt, data]);
+  }, [settledAt, data]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus
