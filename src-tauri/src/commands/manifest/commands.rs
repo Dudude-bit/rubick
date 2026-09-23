@@ -358,12 +358,12 @@ async fn manifest_of(
     // Gateway API kinds are pinned to /v1 by the frontend registry, but a
     // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
     // negotiation every gateway command does, so the YAML tab matches the
-    // Overview it sits beside instead of 404ing.
+    // Overview it sits beside instead of 404ing. Where discovery gave no
+    // version the registry's pin is a guess, and its 404 would read as the
+    // object gone.
     let gateway = api_version.starts_with("gateway.networking.k8s.io/");
     let api_resource = if gateway {
-        crate::commands::gateway::served_api_resource(kind, state)
-            .await
-            .unwrap_or_else(|_| api_resource_for(kind, api_version))
+        crate::commands::gateway::served_api_resource(kind, state).await?
     } else {
         api_resource_for(kind, api_version)
     };
@@ -744,5 +744,35 @@ mod tests {
         assert_eq!(asked(), Some(1));
         assert!(yaml().await.is_err());
         assert_eq!(asked(), Some(2), "the YAML tab's 404 sent discovery back");
+    }
+
+    /// Would ask for a route at the registry's `v1`, which a pre-graduation
+    /// bundle does not serve, whenever discovery failed, and hand the reader
+    /// that version's 404 in place of the failure that actually happened.
+    #[tokio::test]
+    async fn a_gateway_kind_is_not_read_at_a_version_discovery_never_gave() {
+        let (state, hits) = connected(ServedIndex::default(), |path, _| match path {
+            "/apis" => failure(503, "ServiceUnavailable"),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+
+        let answer = super::manifest_of(
+            &state,
+            "TCPRoute",
+            "gateway.networking.k8s.io/v1",
+            "db",
+            Some("default".to_string()),
+        )
+        .await;
+
+        let guessed = "/apis/gateway.networking.k8s.io/v1/namespaces/default/tcproutes/db";
+        assert_eq!(hits.lock().unwrap().get(guessed), None, "asked at a guess");
+        match answer {
+            Err(crate::error::Error::KubeApi(kube::Error::Api(status))) => {
+                assert_eq!(status.code, 503, "the discovery failure, not a 404");
+            }
+            other => panic!("the discovery failure, not {other:?}"),
+        }
     }
 }

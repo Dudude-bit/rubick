@@ -576,6 +576,24 @@ mod tests {
         }
     }
 
+    async fn output_and_failure_in_order(
+        event_rx: &mut broadcast::Receiver<AppEvent>,
+    ) -> Vec<&'static str> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut order = Vec::new();
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { .. } => order.push("output"),
+                    AppEvent::StreamFailed { .. } => order.push("failed"),
+                    AppEvent::TerminalClosed { .. } => return order,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends")
+    }
+
     /// The pane stops listening for output once it hears the session failed,
     /// so what the shell said last has to arrive first.
     #[tokio::test]
@@ -588,19 +606,65 @@ mod tests {
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
 
-        let order = tokio::time::timeout(Duration::from_secs(5), async {
-            let mut order = Vec::new();
-            loop {
-                match event_rx.recv().await.expect("the bus stays open") {
-                    AppEvent::TerminalOutput { .. } => order.push("output"),
-                    AppEvent::StreamFailed { .. } => order.push("failed"),
-                    AppEvent::TerminalClosed { .. } => return order,
-                    _ => {}
+        let order = output_and_failure_in_order(&mut event_rx).await;
+        assert_eq!(order, vec!["output", "failed"]);
+    }
+
+    /// Says something, then stays quiet and refuses the next keystroke.
+    struct TalksThenRefusesInput {
+        said: Option<tokio::sync::oneshot::Sender<()>>,
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for TalksThenRefusesInput {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            match self.said.take() {
+                Some(said) => {
+                    let _ = said.send(());
+                    Ok(Some(b"last words".to_vec()))
                 }
+                None => std::future::pending().await,
             }
-        })
-        .await
-        .expect("the session ends");
+        }
+
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Err(Error::Terminal("Write failed: broken pipe".to_string()))
+        }
+
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            true
+        }
+    }
+
+    /// The same for a keystroke the shell refused: output still gathering
+    /// when the write failed went out after the failure, to a pane that had
+    /// stopped listening.
+    #[tokio::test]
+    async fn the_last_output_arrives_before_a_refused_keystroke() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+        let (said, spoken) = tokio::sync::oneshot::channel();
+        let session_id = manager
+            .create_session(Box::new(TalksThenRefusesInput { said: Some(said) }))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+        spoken.await.expect("the shell spoke");
+        manager.send_input(&session_id, "q").await.expect("input");
+
+        let order = output_and_failure_in_order(&mut event_rx).await;
         assert_eq!(order, vec!["output", "failed"]);
     }
 
