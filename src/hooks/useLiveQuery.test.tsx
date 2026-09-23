@@ -338,6 +338,82 @@ describe("a read the cluster keeps refusing", () => {
   });
 });
 
+/** Whether the reads below are refused, switched mid-test. */
+const outage = { on: false };
+
+function Recovering() {
+  useLiveQuery<string>({
+    queryKey: ["recovering"],
+    queryFn: async () => {
+      reads++;
+      if (outage.on) throw new Error("pods is forbidden");
+      return "same";
+    },
+    refresh: "resourceList",
+    staleTime: 0,
+  });
+  return null;
+}
+
+function RecoveringFanout() {
+  useLiveQueries<string>({
+    refresh: "resourceList",
+    queries: ["a", "b"].map((name) => ({
+      queryKey: ["recovering", name],
+      queryFn: async () => {
+        reads++;
+        if (outage.on && name === "b") throw new Error("pods is forbidden");
+        return name;
+      },
+      staleTime: 0,
+    })),
+  });
+  return null;
+}
+
+/** Refused for a minute, then answering with exactly what it said before. */
+async function outageThenAnswer(): Promise<number> {
+  outage.on = true;
+  await advance(60_000);
+  outage.on = false;
+  const refused = reads;
+  for (let second = 0; reads === refused && second < 60; second++) {
+    await advance(1000);
+  }
+  return reads;
+}
+
+describe("a read that answers again after a refusal", () => {
+  afterEach(() => {
+    outage.on = false;
+  });
+
+  /**
+   * The answer after an outage is the one from before it, so React Query
+   * hands back the same object and the recovery counted as one more
+   * identical read: the list stayed at the cap it had backed off to while
+   * refused, over a read that had just come back.
+   */
+  it("comes back up to rate even when the answer has not changed", async () => {
+    wrap(<Recovering />);
+    await settle();
+    const answered = await outageThenAnswer();
+
+    await advance(RATE * 3);
+    expect(reads - answered).toBeGreaterThanOrEqual(2);
+  });
+
+  /** The same for a group, where the refusal was one part's. */
+  it("brings a group back up to rate when its refused part answers again", async () => {
+    wrap(<RecoveringFanout />);
+    await settle();
+    const answered = await outageThenAnswer();
+
+    await advance(RATE * 3);
+    expect(reads - answered).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe("one question asked of several namespaces", () => {
   /**
    * Would put the fan-out's whole cost back. A page reading four namespaces

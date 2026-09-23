@@ -970,8 +970,14 @@ export function LogViewer({
     const streaming = pods.filter(
       (pod) => !unreadable.some((failure) => failure.pod === pod.name)
     ).length;
-    return { total: pods.length, streaming, refused, gone: gone.size };
-  }, [lanes, pods, failures, gone]);
+    return {
+      podsRead: !podsError,
+      total: pods.length,
+      streaming,
+      refused,
+      gone: gone.size,
+    };
+  }, [lanes, pods, podsError, failures, gone]);
 
   return (
     <div ref={rootRef} className="flex h-full flex-col">

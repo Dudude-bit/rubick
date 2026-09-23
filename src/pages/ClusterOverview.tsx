@@ -145,7 +145,10 @@ export function ClusterOverview() {
           </div>
         </Section>
       )}
-      <WarningsPanel warnings={overview.warnings} />
+      <WarningsPanel
+        warnings={overview.warnings}
+        known={overview.warningsKnown}
+      />
     </div>
   );
 }

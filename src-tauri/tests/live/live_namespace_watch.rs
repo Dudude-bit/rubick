@@ -54,7 +54,16 @@ async fn connected() -> (AppState, kube::Client) {
 async fn a_namespace_created_now_arrives_on_the_stream() {
     let (state, client) = connected().await;
     let api: kube::Api<Namespace> = kube::Api::all(client);
-    let name = "rubick-watch-probe";
+    // New each run. A fixed name still Terminating from the last run came
+    // back in the watch's initial list and passed with no creation seen.
+    let name = format!(
+        "rubick-watch-probe-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("after 1970")
+            .as_millis()
+    );
+    let name = name.as_str();
 
     // Subscribe *before* creating, and take the receiver before that: the
     // channel drops anything sent while nobody holds a receiver.
@@ -75,9 +84,6 @@ async fn a_namespace_created_now_arrives_on_the_stream() {
         .watch_manager
         .mark_subscribed(&stream_id)
         .expect("release the gate");
-
-    let _ = api.delete(name, &Default::default()).await;
-    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let ns: Namespace = serde_json::from_value(serde_json::json!({
         "apiVersion": "v1",

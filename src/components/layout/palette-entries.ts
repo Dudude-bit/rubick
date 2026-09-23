@@ -416,16 +416,21 @@ export function buildPaletteEntries({
           ? "retry"
           : "none",
     });
-    const found = [...(hitsByContext.get(cluster.context)?.values() ?? [])];
+    // The search can list kinds the router serves no detail page for, and
+    // `getResourceDetailUrl` builds a URL for any of them: an unrouted path
+    // inside the layout route matches no branch and blanks the shell. A
+    // Namespace has a page, but here it offers the stronger action — the
+    // scope the window is read under. Nothing else unrouted is offered, and
+    // it is dropped before the cap so it neither takes a row nor counts in
+    // the rest.
+    const found = [
+      ...(hitsByContext.get(cluster.context)?.values() ?? []),
+    ].filter(
+      (hit) => isRoutableKind(hit.kind, hit.namespace) || isNamespaceHit(hit)
+    );
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     for (const hit of found.slice(0, cap)) {
-      // The search can list kinds the router serves no detail page for, and
-      // `getResourceDetailUrl` builds a URL for any of them: an unrouted
-      // path inside the layout route matches no branch and blanks the shell.
-      // A Namespace has a page, but here it offers the stronger action —
-      // the scope the window is read under. Nothing else unrouted is offered.
       const routable = isRoutableKind(hit.kind, hit.namespace);
-      if (!routable && !isNamespaceHit(hit)) continue;
       out.push({
         id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
         kind: "hit",
@@ -452,19 +457,25 @@ export function buildPaletteEntries({
     // "No results" while a cluster is still working is a lie, and so is
     // "no results" for a cluster nobody has connected to. The count is
     // the one thing a reader needs before believing an empty list.
+    // A failed cluster has answered and searched nothing: only `done` ones
+    // can say the query matches nothing there.
     const total = shownClusters.length;
-    const cold = shownClusters.filter(isCold).length;
+    const searched = shownClusters.filter(
+      (cluster) => cluster.status === "done"
+    ).length;
     out.push({
       id: "hint:empty",
       kind: "hint",
       text: working
         ? t("empty", "noMatchesYet", { answered, total })
-        : answered === 0
-          ? t("empty", "nothingSearchedNoCluster")
-          : cold > 0
+        : searched === 0
+          ? shownClusters.every(isCold)
+            ? t("empty", "nothingSearchedNoCluster")
+            : t("empty", "nothingSearchedAnywhere")
+          : searched < total
             ? t("empty", "nothingMatchesOnSearched", {
                 query,
-                answered,
+                answered: searched,
                 total,
               })
             : t("empty", "nothingMatchesQuery", { query }),

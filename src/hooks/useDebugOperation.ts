@@ -31,8 +31,12 @@ export function useDebugOperation({
   // timers, and a counter that missed them would say less time had passed.
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const now = useNowSeconds(state === "polling");
+  // Both ends in whole seconds: the clock is, and a start kept to the
+  // millisecond left the count one behind for the whole wait.
   const elapsedSeconds =
-    startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
+    startedAt === null
+      ? 0
+      : Math.max(0, Math.floor(now / 1000) - Math.floor(startedAt / 1000));
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isCancelledRef = useRef(false);

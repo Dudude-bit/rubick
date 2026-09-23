@@ -274,8 +274,8 @@ export function selectedServices(
   monitor: Monitor,
   services: Read<ServiceInfo>
 ): Selected {
-  if (monitor.kind === "PodMonitor") return { kind: "notCounted" };
   if (unevaluable(monitor.selector)) return { kind: "unevaluable" };
+  if (monitor.kind === "PodMonitor") return { kind: "notCounted" };
   if (!services.ok) return { kind: "unread", reason: services.reason };
   return {
     kind: "services",

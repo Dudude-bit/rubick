@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
-import { Peer } from "./network-policy-cells";
+import { Peer, ReachCell } from "./network-policy-cells";
 import { directionFact, portText, reachOf } from "@/lib/network-policy";
 import type { PolicyDirection } from "@/generated/types";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
@@ -124,14 +124,10 @@ export const NETWORK_SOURCES: PeekSources = {
               },
               {
                 label: t("columns", "pods"),
-                // The three answers the list gives, said the same way. A
-                // refused pod list is not a policy with nothing behind it.
-                value:
-                  reach.kind === "cannotSay"
-                    ? t("empty", "podsNotRead")
-                    : reach.kind === "nothing"
-                      ? t("empty", "selectsNoPods")
-                      : t("count", "pods", { n: reach.count }),
+                // The list's own cell, so the three answers keep the list's
+                // words and colours. A refused pod list is not a policy with
+                // nothing behind it, nor a count.
+                value: <ReachCell policy={policy} />,
                 tone: reach.kind === "nothing" ? ("warn" as const) : undefined,
               },
             ],

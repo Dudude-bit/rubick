@@ -39,7 +39,7 @@ pub(super) async fn pod_connections(
         &mut HashSet::new(),
         out,
     )
-    .await;
+    .await?;
 
     // An autoscaler never names a pod; it names the workload above it, and
     // the chain that was just walked is where that workload's name is. A
@@ -53,7 +53,7 @@ pub(super) async fn pod_connections(
         .collect();
     governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
 
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
     Ok(())
 }
 
@@ -180,7 +180,12 @@ pub(super) async fn fetch_template(
         "CronJob" => from_workload!(
             CronJob,
             obj,
-            BTreeMap::new(),
+            obj.spec
+                .as_ref()
+                .and_then(|s| s.job_template.spec.as_ref())
+                .and_then(|s| s.template.metadata.as_ref())
+                .and_then(|m| m.labels.clone())
+                .unwrap_or_default(),
             None,
             obj.spec
                 .as_ref()
@@ -263,7 +268,7 @@ pub(super) async fn workload_connections(
         &mut HashSet::new(),
         out,
     )
-    .await;
+    .await?;
 
     let revisions_unread = if kind == "Deployment" {
         revisions_of(
@@ -291,7 +296,7 @@ pub(super) async fn workload_connections(
         out,
     );
 
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
     out.not_looked_at.extend(revisions_unread);
     Ok(())
 }
@@ -399,12 +404,12 @@ pub(super) async fn service_connections(
         snapshot.gateways.as_deref(),
         out,
     );
-    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;
     // The same as the pod and workload pages. Without it a refusal on this
     // page is invisible: an empty `not_looked_at` is the wire contract for
     // "every kind was read", so the "Not looked at" group never renders and
     // the frontend's own guards have nothing to fire on.
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
 
     Ok(())
 }
@@ -420,7 +425,7 @@ pub(super) async fn workloads_behind(
     selector: &BTreeMap<String, String>,
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
-) {
+) -> Result<()> {
     let query = Selector::Equality(selector);
     let mut walked = HashSet::new();
     for pod in snapshot
@@ -429,8 +434,9 @@ pub(super) async fn workloads_behind(
         .filter(|pod| query.matches(pod.labels()) == Some(true))
     {
         let owners = pod.owner_references().to_vec();
-        owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await;
+        owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await?;
     }
+    Ok(())
 }
 
 pub(super) async fn ingress_connections(
@@ -475,7 +481,7 @@ pub(super) async fn ingress_connections(
                         continue;
                     }
                     note_reach(svc, &svc_ref, &snapshot, out, false);
-                    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+                    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;
                 } else {
                     let (backend, stops) = absent_backend(&service, ns, snapshot.services.is_ok());
                     out.edge(subject.clone(), backend.clone(), relation);
@@ -501,7 +507,7 @@ pub(super) async fn ingress_connections(
     }
     // As on the pod and workload pages: a refusal here has to be named, or
     // it is a gap the wire contract reads as "every kind was read".
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
 
     Ok(())
 }
@@ -618,8 +624,9 @@ pub(super) async fn node_connections(
         budgets_over(&ns, &this, pod.labels(), &budgets, out);
     }
 
-    out.not_looked_at =
-        UnexploredKind::on_a_node(budgets.as_ref().err().map(std::string::String::as_str));
+    out.not_looked_at.extend(UnexploredKind::on_a_node(
+        budgets.as_ref().err().map(std::string::String::as_str),
+    ));
     Ok(())
 }
 
@@ -689,7 +696,7 @@ pub(super) async fn volume_connections(
         );
     }
 
-    out.not_looked_at = UnexploredKind::on_a_volume();
+    out.not_looked_at.extend(UnexploredKind::on_a_volume());
     Ok(())
 }
 
@@ -962,6 +969,38 @@ mod subject_tests {
         assert!(err.to_string().contains("Deployment/payments"));
     }
 
+    /// Would tell a `CronJob` page no Service selects its pods and no budget
+    /// covers them: the labels its Jobs' pods carry were read as none.
+    #[tokio::test]
+    async fn a_cron_job_s_pods_carry_the_labels_its_job_template_gives_them() {
+        let cron = serde_json::json!({
+            "apiVersion": "batch/v1", "kind": "CronJob",
+            "metadata": { "name": "backup", "namespace": "shop" },
+            "spec": {
+                "schedule": "0 * * * *",
+                "jobTemplate": { "spec": { "template": {
+                    "metadata": { "labels": { "app": "backup" } },
+                    "spec": { "containers": [{ "name": "main" }] },
+                } } },
+            },
+        });
+        let (client, _) = server(vec![(
+            "/apis/batch/v1/namespaces/shop/cronjobs/backup",
+            200,
+            cron.to_string(),
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let (template, _) = fetch_template(&ctx, "shop", "CronJob", "backup")
+            .await
+            .expect("the CronJob is there");
+        assert_eq!(
+            template.labels.get("app").map(String::as_str),
+            Some("backup")
+        );
+    }
+
     /// A 404 naming no object is a path the cluster does not serve, not the
     /// object gone: it keeps the cluster's words and is not about the subject.
     #[tokio::test]
@@ -974,5 +1013,73 @@ mod subject_tests {
         };
         assert!(matches!(err, Error::KubeApi(_)), "{err:?}");
         assert!(!err.to_string().contains("Deployment/payments"));
+    }
+}
+
+#[cfg(test)]
+mod ingress_tests {
+    use super::*;
+    use crate::client::served::test_server::{failure, server};
+    use serde_json::json;
+
+    fn listing(items: &[serde_json::Value]) -> String {
+        json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": items }).to_string()
+    }
+
+    /// Would drop the `ReplicaSet` the chain could not read from the Ingress
+    /// page — the one page of the four that assigned the snapshot's refusals
+    /// over what the walk behind its Services had already named.
+    #[tokio::test]
+    async fn an_owner_unread_behind_an_ingress_is_named_beside_the_lists_unread() {
+        let ingress = json!({
+            "metadata": { "name": "front", "namespace": "shop" },
+            "spec": { "rules": [{ "http": { "paths": [{
+                "path": "/", "pathType": "Prefix",
+                "backend": { "service": { "name": "web", "port": { "number": 80 } } },
+            }] } }] },
+        });
+        let service = json!({
+            "metadata": { "name": "web", "namespace": "shop" },
+            "spec": { "selector": { "app": "web" } },
+        });
+        let pod = json!({
+            "metadata": {
+                "name": "web-7d9-x", "namespace": "shop", "labels": { "app": "web" },
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-7d9",
+                    "uid": "rs-uid", "controller": true,
+                }],
+            },
+        });
+        let refused = failure(403, "Forbidden");
+        let (client, _) = server(vec![
+            (
+                "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
+                200,
+                listing(&[ingress]),
+            ),
+            ("/api/v1/namespaces/shop/services", 200, listing(&[service])),
+            ("/api/v1/namespaces/shop/pods", 200, listing(&[pod])),
+            (
+                "/apis/autoscaling/v2/namespaces/shop/horizontalpodautoscalers",
+                refused.0,
+                refused.1.clone(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/shop/replicasets/web-7d9",
+                refused.0,
+                refused.1,
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let page = connections_of(&ctx, "Ingress", "front", None)
+            .await
+            .expect("a page");
+
+        let unread: Vec<&str> = page.not_looked_at.iter().map(|e| e.kind.as_str()).collect();
+        assert!(unread.contains(&"ReplicaSet"), "{unread:?}");
+        assert!(unread.contains(&"HorizontalPodAutoscaler"), "{unread:?}");
     }
 }

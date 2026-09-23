@@ -463,6 +463,32 @@ mod tests {
     /// table does not know reads as an unknown error there.
     #[test]
     fn every_code_is_in_the_shared_list() {
+        // No wildcard arm: a new variant does not compile here until it has a
+        // sample, and without one its code was never checked against the list.
+        fn variant(error: &Error) -> usize {
+            match error {
+                Error::KubeApi(_) => 0,
+                Error::CredentialsExpired(_) => 1,
+                Error::Config(_) => 2,
+                Error::Auth(_) => 3,
+                Error::Connection(_) => 4,
+                Error::NotFound { .. } => 5,
+                Error::PermissionDenied(_) => 6,
+                Error::InvalidInput(_) => 7,
+                Error::Serialization(_) => 8,
+                Error::Io(_) => 9,
+                Error::Plugin(_) => 10,
+                Error::Terminal(_) => 11,
+                Error::LogStream(_) => 12,
+                Error::NoPreviousRun { .. } => 13,
+                Error::ListUnread { .. } => 14,
+                Error::LogNotKept { .. } => 15,
+                Error::Timeout(_) => 16,
+                Error::ReadDeadline { .. } => 17,
+                Error::NotConnected(_) => 18,
+                Error::Internal(_) => 19,
+            }
+        }
         const LIST: &str = include_str!("../../shared/error-codes.json");
         let list: serde_json::Value = serde_json::from_str(LIST).unwrap();
         let known: Vec<&str> = list["codes"]
@@ -504,6 +530,13 @@ mod tests {
             Error::NotConnected(String::new()),
             Error::Internal(String::new()),
         ];
+        let covered: std::collections::BTreeSet<usize> = samples.iter().map(variant).collect();
+        assert_eq!(
+            covered,
+            (0..=19).collect(),
+            "a variant has no sample, so its code is never checked"
+        );
+
         let mut used = std::collections::BTreeSet::new();
         for sample in &samples {
             assert!(

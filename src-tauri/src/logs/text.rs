@@ -28,17 +28,49 @@ pub fn log_text(lines: &[LogLine]) -> String {
 }
 
 /// `name.log`, or `name (1).log` and so on when that is taken — what a
-/// browser does with a second download of the same name.
-#[must_use]
-pub fn unused_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
-    let first = dir.join(format!("{stem}.{extension}"));
-    if !first.exists() {
-        return first;
+/// browser does with a second download of the same name — created empty.
+///
+/// Taken by creating it, not by looking first: two downloads at once saw
+/// the same free name and the second overwrote the first.
+///
+/// # Errors
+///
+/// When the file cannot be created, or every name is taken.
+pub async fn create_unused(
+    dir: &Path,
+    stem: &str,
+    extension: &str,
+) -> std::io::Result<(PathBuf, tokio::fs::File)> {
+    create_within(dir, stem, extension, 10_000).await
+}
+
+async fn create_within(
+    dir: &Path,
+    stem: &str,
+    extension: &str,
+    names: u32,
+) -> std::io::Result<(PathBuf, tokio::fs::File)> {
+    for n in 0..names {
+        let name = match n {
+            0 => format!("{stem}.{extension}"),
+            n => format!("{stem} ({n}).{extension}"),
+        };
+        let path = dir.join(name);
+        match tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .await
+        {
+            Ok(file) => return Ok((path, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
     }
-    (1..10_000)
-        .map(|n| dir.join(format!("{stem} ({n}).{extension}")))
-        .find(|path| !path.exists())
-        .unwrap_or(first)
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        format!("every name for {stem}.{extension} is taken"),
+    ))
 }
 
 #[cfg(test)]
@@ -85,15 +117,38 @@ mod tests {
     }
 
     /// A second download of the same pod must not overwrite the first.
-    #[test]
-    fn a_taken_name_gets_a_number() {
+    #[tokio::test]
+    async fn a_taken_name_gets_a_number() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let first = unused_path(dir.path(), "web-app", "log");
+        let (first, _) = create_unused(dir.path(), "web-app", "log").await.unwrap();
         assert_eq!(first, dir.path().join("web-app.log"));
-        std::fs::write(&first, "x").unwrap();
-        assert_eq!(
-            unused_path(dir.path(), "web-app", "log"),
-            dir.path().join("web-app (1).log")
+        let (second, _) = create_unused(dir.path(), "web-app", "log").await.unwrap();
+        assert_eq!(second, dir.path().join("web-app (1).log"));
+    }
+
+    /// Would let two downloads started together write to one file: the name
+    /// was only looked at, so both saw it free.
+    #[tokio::test]
+    async fn two_downloads_at_once_get_two_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (a, b) = tokio::join!(
+            create_unused(dir.path(), "web-app", "log"),
+            create_unused(dir.path(), "web-app", "log"),
         );
+        assert_ne!(a.unwrap().0, b.unwrap().0);
+    }
+
+    /// Would overwrite the first file once every numbered name was taken.
+    #[tokio::test]
+    async fn with_every_name_taken_nothing_is_overwritten() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = dir.path().join("web-app.log");
+        std::fs::write(&first, "kept").unwrap();
+        std::fs::write(dir.path().join("web-app (1).log"), "kept").unwrap();
+
+        assert!(create_within(dir.path(), "web-app", "log", 2)
+            .await
+            .is_err());
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "kept");
     }
 }

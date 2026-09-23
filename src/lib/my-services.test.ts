@@ -78,6 +78,29 @@ describe("stateOf", () => {
     });
   });
 
+  /**
+   * `\b` is a boundary at `-` and `.`, both of which are inside a name, so a
+   * chain that walked into `payments-worker` and found it deleted marked the
+   * pinned `payments` gone while it ran. Fails if the name is bounded by `\b`
+   * again.
+   */
+  it("does not read a namesake's deletion as the pinned object's", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+    for (const namesake of ["payments-worker", "payments.v2"]) {
+      const said = `Resource not found: Deployment/${namesake} in namespace shop`;
+      expect(stateOf(undefined, failed("NOT_FOUND", said), pin).state).toBe(
+        "unread"
+      );
+    }
+    expect(
+      stateOf(
+        undefined,
+        failed("NOT_FOUND", "Resource not found: Deployment/payments."),
+        pin
+      ).state
+    ).toBe("gone");
+  });
+
   it("counts the replicas that are ready against the ones there are", () => {
     expect(stateOf(conns(), null)).toEqual({
       state: "ready",
@@ -552,6 +575,19 @@ describe("more ways in", () => {
       chain([publishedHop({ draining: 1 })])
     );
     expect(entries[0].serving).toBe(true);
+  });
+
+  /**
+   * Pods that matched and are ready are a read, whoever produced it. Only the
+   * zeros were tested, so dropping the address count from `servingKnown` left
+   * every test green and a service with ready pods reading "not read".
+   */
+  it("knows a service is serving when pod readiness found ready pods", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([publishedHop({ source: "podReadiness", ready: 2 })])
+    );
+    expect(entries[0]).toMatchObject({ serving: true, servingKnown: true });
   });
 
   /** Neither the endpoints nor the pods answered: the zeros are nobody's. */

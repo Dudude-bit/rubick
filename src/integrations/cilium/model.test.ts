@@ -90,14 +90,14 @@ describe("a policy whose rules are not on the wire", () => {
   });
 
   /**
-   * A host policy selects with `nodeSelector`, and a `CiliumNode` — which
-   * Cilium writes one of per node — has a spec that is not a policy's at
-   * all. Neither selects every endpoint in the cluster.
+   * A host policy selects nodes with `nodeSelector`, and a `CiliumNode` —
+   * which Cilium writes one of per node — has a spec that is not a policy's
+   * at all. Neither selects every endpoint in the cluster.
    */
   it("does not read a missing endpointSelector as everything", () => {
     expect(
       selectionOf(policy({ nodeSelector: { matchLabels: { role: "cp" } } }))
-    ).toEqual({ kind: "notHere" });
+    ).toEqual({ kind: "nodes" });
     expect(selectionOf(policy({ ingress: {} }))).toEqual({ kind: "notHere" });
   });
 });

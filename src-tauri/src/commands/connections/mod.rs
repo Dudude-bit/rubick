@@ -207,6 +207,17 @@ impl Neighbourhood {
         self.edges.push(ConnectionEdge { from, to, relation });
     }
 
+    /// Once per kind: the page lists them by kind.
+    fn unread(&mut self, entry: UnexploredKind) {
+        if !self
+            .not_looked_at
+            .iter()
+            .any(|held| held.kind == entry.kind)
+        {
+            self.not_looked_at.push(entry);
+        }
+    }
+
     fn finish(self) -> Result<ResourceConnections> {
         let subject = self
             .subject

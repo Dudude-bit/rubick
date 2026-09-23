@@ -7,6 +7,7 @@ import {
   answeredByItsController,
   selfAnswered,
   candidateListeners,
+  servingSay,
 } from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -291,6 +292,7 @@ describe("routeTraces", () => {
     expect(trace.steps.some((step) => step.state === "blind")).toBe(true);
     expect(trace.steps.some((step) => step.state === "err")).toBe(false);
     expect(trace.servingKnown).toBe(false);
+    expect(servingSay(trace, t)).toBe(t("empty", "gwServingUnknown"));
   });
 
   /** A refusal is an answer: nothing unread makes it less of one. */
@@ -330,17 +332,20 @@ describe("routeTraces", () => {
     expect(step?.say).not.toContain("nowhere");
   });
 
-  /** And a Gateway nothing has vouched for, with no address, still is one —
-   *  deleting the whole branch would pass the test above. */
-  it("still calls an unvouched gateway with no address a dead end", () => {
+  /** Nor one no controller has reported on yet: its address is missing for
+   *  the same reason its conditions are. It was called a dead end in red. */
+  it("does not call a gateway no controller has reported on a dead end", () => {
     const silent = { ...gateway("edge"), addresses: [], conditions: [] };
     const [trace] = routeTraces(
       route("healthy"),
       sources({ gateways: [silent] }),
       t
     );
+    const step = trace.steps.find((s) => s.id === "gateway");
 
-    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toContain("nowhere");
+    expect(trace.unknownBecause).toBe("undecided");
   });
 
   /** The same third answer, one object down: a controller that has taken the
@@ -348,6 +353,54 @@ describe("routeTraces", () => {
    *  accepts". Everything else on screen keeps that neutral, so the trace was
    *  the one place claiming a verdict nobody wrote — and because the step was
    *  `ok`, the route came out `serving: true, servingKnown: true`. */
+  /**
+   * No verdict at all is not a yes: a controller that wrote entries without
+   * `Accepted`, or a Gateway with no `Programmed` condition, left the trace
+   * reading "serving" with nothing behind it.
+   */
+  it("cannot say a route serves before its controller has said anything", () => {
+    const silentParent = route("healthy", {
+      parents: [
+        parentStatus("edge", [
+          condition("ResolvedRefs", "True", "ResolvedRefs"),
+        ]),
+      ],
+    });
+    const [noAccepted] = routeTraces(silentParent, sources(), t);
+    expect(noAccepted.servingKnown).toBe(false);
+    expect(noAccepted.unknownBecause).toBe("undecided");
+
+    const [noProgrammed] = routeTraces(
+      route("healthy"),
+      sources({ gateways: [gateway("edge", { conditions: [] })] }),
+      t
+    );
+    expect(noProgrammed.servingKnown).toBe(false);
+    expect(noProgrammed.unknownBecause).toBe("undecided");
+
+    const [decided] = routeTraces(route("healthy"), sources(), t);
+    expect(decided.servingKnown).toBe(true);
+  });
+
+  /**
+   * A controller that accepted the route and never wrote `ResolvedRefs` has
+   * not said the references resolve. The step read "References resolve" in
+   * green and the route came out serving.
+   */
+  it("cannot say a route serves while the controller has not said its references resolve", () => {
+    const quiet = route("healthy", {
+      parents: [
+        parentStatus("edge", [condition("Accepted", "True", "Accepted")]),
+      ],
+    });
+    const [trace] = routeTraces(quiet, sources(), t);
+    const refs = trace.steps.find((step) => step.id === "refs");
+
+    expect(refs?.state).toBe("warn");
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.unknownBecause).toBe("undecided");
+  });
+
   it("does not call a parent accepted while the controller is still deciding", () => {
     const pending = route("healthy", {
       parents: [
@@ -359,6 +412,99 @@ describe("routeTraces", () => {
 
     expect(step?.state).toBe("warn");
     expect(step?.say).not.toContain("accepts");
+  });
+
+  /**
+   * `ResolvedRefs: Unknown` was checked for `False` only, so a controller
+   * still deciding read "References resolve", green. Fails if the pending
+   * verdict falls through to the resolved step again.
+   */
+  it("does not say the references resolve while the controller is still deciding", () => {
+    const pending = route("healthy", {
+      parents: [
+        parentStatus("edge", [
+          condition("Accepted", "True", "Accepted"),
+          condition("ResolvedRefs", "Unknown", "Pending"),
+        ]),
+      ],
+    });
+    const [trace] = routeTraces(pending, sources(), t);
+    const step = trace.steps.find((s) => s.id === "refs");
+
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toBe(t("empty", "gwRefsResolve"));
+  });
+
+  /**
+   * The pending step was a `warn`, and only `blind` steps kept the verdict
+   * unknown — so a controller that had not decided whether the references
+   * resolve left the header green, "Serving". Fails if any of the three
+   * `Unknown` verdicts stops holding the answer back.
+   */
+  it("gives no verdict while a controller has one to give", () => {
+    const deciding = (conditions: ConditionInfo[]) =>
+      route("healthy", { parents: [parentStatus("edge", conditions)] });
+    const traces = [
+      routeTraces(
+        deciding([
+          condition("Accepted", "True", "Accepted"),
+          condition("ResolvedRefs", "Unknown", "Pending"),
+        ]),
+        sources(),
+        t
+      )[0],
+      routeTraces(
+        deciding([condition("Accepted", "Unknown", "Pending")]),
+        sources(),
+        t
+      )[0],
+      routeTraces(
+        route("healthy"),
+        sources({
+          gateways: [
+            {
+              ...gateway("edge"),
+              conditions: [condition("Programmed", "Unknown", "Pending")],
+            },
+          ],
+        }),
+        t
+      )[0],
+    ];
+
+    for (const trace of traces) {
+      expect(trace.serving).toBe(true);
+      expect(trace.servingKnown).toBe(false);
+      expect(trace.unknownBecause).toBe("undecided");
+      expect(servingSay(trace, t)).toBe(t("empty", "gwServingUndecided"));
+    }
+  });
+
+  /** A break is an answer, whatever else is still being decided. */
+  it("still knows a route is not serving when a verdict is pending above the break", () => {
+    const [trace] = routeTraces(
+      route("healthy", {
+        parents: [
+          parentStatus("edge", [
+            condition("Accepted", "True", "Accepted"),
+            condition("ResolvedRefs", "Unknown", "Pending"),
+          ]),
+        ],
+      }),
+      sources({
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: true,
+          backingError: null,
+        },
+      }),
+      t
+    );
+
+    expect(trace.serving).toBe(false);
+    expect(trace.servingKnown).toBe(true);
+    expect(servingSay(trace, t)).toBe(t("empty", "gwNotServing"));
   });
 
   /** `Programmed: Unknown` is the API's third answer — the controller has
@@ -934,6 +1080,33 @@ describe("routeTraces", () => {
     expect(trace.serving).toBe(true);
   });
 
+  /**
+   * A Service list that failed read "still being read" for as long as the
+   * page stayed open. Still blind — nobody looked, nothing is broken — but
+   * saying why. Fails if the failure is drawn as a read in flight.
+   */
+  it("says the backends could not be read when their read failed", () => {
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: "services is forbidden",
+        },
+      }),
+      t
+    );
+    const [backend, endpoints] = [trace.steps[5], trace.steps[6]];
+
+    expect(backend.state).toBe("blind");
+    expect(backend.say).toBe(t("empty", "gwBackendsUnread"));
+    expect(backend.detail?.body).toBe("services is forbidden");
+    expect(endpoints.say).toBe(t("empty", "gwEndpointsUnread"));
+    expect(trace.servingKnown).toBe(false);
+  });
+
   it("keeps each listener's verdict on its own trace when one gateway is named twice", () => {
     const both = route("both", {
       parentRefs: [parentRef2("edge", "http"), parentRef2("edge", "https")],
@@ -1064,21 +1237,6 @@ describe("a gateway that publishes no address", () => {
     expect(trace.serving).toBe(true);
     // And it says so: a verdict nobody checked must not read as checked.
     expect(trace.servingKnown).toBe(false);
-  });
-
-  /** Nothing vouched for it and there is no address: both halves unknown,
-   *  and the old reading is the right one. */
-  it("still reports an unvouched gateway with no address as broken", () => {
-    const trace = routeTraces(
-      route("healthy"),
-      sources({
-        gateways: [gateway("edge", { addresses: [], conditions: [] })],
-      }),
-      t
-    )[0];
-
-    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
-    expect(trace.serving).toBe(false);
   });
 
   /** A controller that said no is an answer, not a silence. */

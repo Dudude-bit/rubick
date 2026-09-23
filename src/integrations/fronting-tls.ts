@@ -20,8 +20,9 @@ import {
  * standing in front of it that a cloud controller says it terminates — an
  * ACM ARN or an Application Gateway certificate, neither of which is a route.
  *
- * `"unknown"` until the Services and both answers are in: a read that failed
- * or has not come back is not "nothing in front terminates it".
+ * `"unknown"` until the Services, the Ingresses and both answers are in: a
+ * read that failed or has not come back is not "nothing in front terminates
+ * it".
  */
 export function useFrontingTls(
   ingresses: readonly IngressInfo[] | undefined,
@@ -58,6 +59,7 @@ export function useFrontingTls(
   const front = useIngressTls(asked);
   const unanswered =
     services === undefined ||
+    ingresses === undefined ||
     (proxy !== null && (fronting.isPending || fronting.error !== null)) ||
     (asked.length > 0 && (front.isPending || front.error !== null));
   return useCallback(

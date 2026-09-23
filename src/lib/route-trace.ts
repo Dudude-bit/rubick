@@ -83,6 +83,9 @@ export interface TraceStep {
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
+  /** The controller took this and wrote `Unknown`: nothing broke here, and
+   *  nothing said it works either. */
+  pending?: boolean;
 }
 
 export interface RouteTrace {
@@ -109,6 +112,11 @@ export interface RouteTrace {
    * the unprobed last mile, which is blind on every healthy trace.
    */
   servingKnown: boolean;
+  /**
+   * Why {@link servingKnown} is false, null where it is not: a source nobody
+   * could read, or a verdict a controller has taken and not given yet.
+   */
+  unknownBecause: "unread" | "undecided" | null;
   /** 1-based index of the first broken step, where one is. */
   stopStep: number | null;
   steps: TraceStep[];
@@ -499,6 +507,18 @@ function gatewayStep(
       },
     };
   }
+  // No Programmed condition at all: nobody has said, which is undecided,
+  // not programmed — with or without an address.
+  if (!programmed) {
+    return {
+      id: "gateway",
+      state: "warn",
+      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
+      who: "infra",
+      subject,
+      pending: true,
+    };
+  }
   if (gateway.addresses.length === 0) {
     // `status.addresses` is optional in the spec, and an implementation on
     // a private or overlay network has nothing to publish there. So once
@@ -526,13 +546,14 @@ function gatewayStep(
     // mid-provisioning must not read "traffic has nowhere to arrive". The
     // same over-claim as calling it programmed, three branches down; this
     // branch runs first, so it is the one the reader actually saw.
-    if (programmed?.status === "Unknown") {
+    if (programmed.status === "Unknown") {
       return {
         id: "gateway",
         state: "warn",
         say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
         who: "infra",
         subject,
+        pending: true,
       };
     }
     // Nothing has vouched for it and there is no address: the old reading
@@ -550,15 +571,6 @@ function gatewayStep(
       },
     };
   }
-  if (!programmed) {
-    return {
-      id: "gateway",
-      state: "warn",
-      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
-      who: "infra",
-      subject,
-    };
-  }
   // `Unknown` is the API's third answer: a controller that has taken the
   // Gateway and not decided yet (`Pending`) is not "is programmed". The
   // Gateways list says "unknown" in its column for the same state.
@@ -569,6 +581,7 @@ function gatewayStep(
       say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
       who: "infra",
       subject,
+      pending: true,
     };
   }
   return {
@@ -645,6 +658,7 @@ function acceptanceSteps(
         id: "listener",
         state: "warn",
         say: t("empty", "gwNoAcceptedYet"),
+        pending: true,
         who: "controller",
         freshness,
       },
@@ -731,6 +745,7 @@ function acceptanceSteps(
         say: t("empty", "gwAcceptedPending"),
         who: "controller",
         freshness,
+        pending: true,
       },
       namespaceQuiet(route, listeners, "ok", t),
     ];
@@ -809,8 +824,22 @@ function refsStep(
   entries: RouteParentStatusInfo[],
   t: T
 ): TraceStep {
-  const resolved = saidOf(verdictOf(entries, "ResolvedRefs"));
+  const verdict = verdictOf(entries, "ResolvedRefs");
+  const resolved = saidOf(verdict);
   const freshness = freshnessOf(resolved, route);
+
+  // `Unknown` is not "they resolve", the same third answer the listener step
+  // keeps apart from "accepts".
+  if (verdict.state === "pending") {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsPending"),
+      who: "controller",
+      freshness,
+      pending: true,
+    };
+  }
 
   if (resolved?.status === "False") {
     if (resolved.reason === "RefNotPermitted") {
@@ -861,13 +890,22 @@ function refsStep(
     };
   }
 
+  // No ResolvedRefs at all is the controller not having said: undecided,
+  // like `Unknown`, not resolved.
+  if (resolved == null) {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsResolveQuiet"),
+      who: "controller",
+      freshness,
+      pending: true,
+    };
+  }
   return {
     id: "refs",
     state: freshness ? "warn" : "ok",
-    say:
-      resolved == null
-        ? t("empty", "gwRefsResolveQuiet")
-        : t("empty", "gwRefsResolve"),
+    say: t("empty", "gwRefsResolve"),
     who: "yours",
     freshness,
   };
@@ -948,18 +986,25 @@ function backendSteps(
       },
     ];
   }
+  // A read that failed is not one still coming. Blind either way, not err:
+  // nothing here says the route is broken, only that nobody could look.
   if (!backing.backingKnown) {
+    const failed = backing.backingError;
+    const detail = failed
+      ? { title: t("empty", "gwBackendsUnread"), body: failed }
+      : undefined;
     return [
       {
         id: "backend",
         state: "blind",
-        say: t("empty", "gwBackendsReading"),
+        say: t("empty", failed ? "gwBackendsUnread" : "gwBackendsReading"),
         who: "yours",
+        detail,
       },
       {
         id: "endpoints",
         state: "blind",
-        say: t("empty", "gwEndpointsReading"),
+        say: t("empty", failed ? "gwEndpointsUnread" : "gwEndpointsReading"),
         who: "yours",
       },
     ];
@@ -1197,6 +1242,14 @@ function traceFor(
   const unread = steps.some(
     (step) => step.state === "blind" && step.who !== "machine"
   );
+  const unknownBecause =
+    firstBroken >= 0
+      ? null
+      : unread
+        ? "unread"
+        : steps.some((step) => step.pending)
+          ? "undecided"
+          : null;
   if (firstBroken >= 0) {
     for (const step of steps.slice(firstBroken + 1)) {
       step.state = "off";
@@ -1205,6 +1258,7 @@ function traceFor(
       step.subject = undefined;
       step.addresses = undefined;
       step.forwardPort = undefined;
+      step.pending = undefined;
     }
   }
 
@@ -1219,11 +1273,27 @@ function traceFor(
     via:
       parent.kind === "ListenerSet" ? { name: parent.name, namespace } : null,
     serving: firstBroken < 0,
-    servingKnown: firstBroken >= 0 || !unread,
+    servingKnown: unknownBecause === null,
+    unknownBecause,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,
     steps,
     probe,
   };
+}
+
+/** The verdict in words, the reason included where there is no verdict. */
+export function servingSay(trace: RouteTrace, t: T): string {
+  if (trace.unknownBecause === null) {
+    return t("empty", trace.serving ? "gwServing" : "gwNotServing");
+  }
+  const why = {
+    unread: "gwServingUnknown",
+    undecided: "gwServingUndecided",
+  } as const satisfies Record<
+    NonNullable<RouteTrace["unknownBecause"]>,
+    string
+  >;
+  return t("empty", why[trace.unknownBecause]);
 }
 
 /**

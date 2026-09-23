@@ -8,11 +8,13 @@ lines for $GITHUB_OUTPUT.
     build-matrix.py <event> <labels-json> <head-commit-message> [base]
 
 `base` is the commit a pull request is compared against; the changed files,
-before and after, are read with git.
+before and after, are read with git. `ADDED_LABEL` is the label a `labeled`
+event added.
 """
 
 import fnmatch
 import json
+import os
 import re
 import subprocess
 import sys
@@ -51,8 +53,10 @@ EVERY_PLATFORM = [
     "Cargo.toml",
     "Cargo.lock",
     "*/Cargo.toml",
+    "rust-toolchain.toml",
+    ".cargo/*",
     "src-tauri/build.rs",
-    "src-tauri/tauri.conf.json",
+    "src-tauri/tauri*.conf.json",
     "src-tauri/capabilities/*",
     "src-tauri/icons/*",
     "package.json",
@@ -84,7 +88,7 @@ def show(rev, path):
     return result.stdout if result.returncode == 0 else ""
 
 
-def plan(event, labels, message, changed, rust_sources):
+def plan(event, labels, message, changed, rust_sources, added=""):
     everything = list(PLATFORMS)
     if event == "push":
         # release.yml builds this very commit from its tag, signed.
@@ -93,6 +97,8 @@ def plan(event, labels, message, changed, rust_sources):
         return everything, "a push to main"
     if event != "pull_request":
         return everything, f"{event}"
+    if added and added != "build-all":
+        return [], f"the {added} label, which changes no build"
     if "build-all" in labels:
         return everything, "the build-all label"
     for path in changed:
@@ -117,7 +123,8 @@ def main():
                     show(rev, path) for rev in (base, "HEAD")
                 )
     labels = json.loads(labels_json or "[]") or []
-    names, reason = plan(event, labels, message, changed, rust_sources)
+    added = os.environ.get("ADDED_LABEL", "")
+    names, reason = plan(event, labels, message, changed, rust_sources, added)
     include = [{"name": name, **PLATFORMS[name]} for name in names]
     print(f"matrix={json.dumps({'include': include})}")
     print(f"reason={reason}")

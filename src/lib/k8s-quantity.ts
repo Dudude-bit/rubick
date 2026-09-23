@@ -60,8 +60,18 @@ export function parseQuantity(value: string | null | undefined): number | null {
   if (exponent) return amount * 10 ** Number(exponent[1]);
 
   const factor =
-    CPU_UNITS[suffix] ?? BINARY_UNITS[suffix] ?? DECIMAL_UNITS[suffix];
+    unitOf(CPU_UNITS, suffix) ??
+    unitOf(BINARY_UNITS, suffix) ??
+    unitOf(DECIMAL_UNITS, suffix);
   return factor === undefined ? null : amount * factor;
+}
+
+/** A table's own entry: `1toString` found `Object.prototype.toString` and parsed to NaN. */
+function unitOf(
+  table: Record<string, number>,
+  suffix: string
+): number | undefined {
+  return Object.hasOwn(table, suffix) ? table[suffix] : undefined;
 }
 
 /**

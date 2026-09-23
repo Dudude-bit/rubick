@@ -10,6 +10,7 @@ import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 
 type OperatorsKey = keyof typeof en.operators;
@@ -40,22 +41,26 @@ export interface OperatorController {
  * The controller's Deployment, or why there is none to show. A refused
  * Deployment list is not "no controller": `known: false` says it could not
  * be looked for.
+ *
+ * `known` is required: defaulted to `true`, a caller that forgot it drew a
+ * refused list as "not found". And the two are told apart by colour as well
+ * as by word.
  */
 export function ControllerLine({
   controller,
   missing,
-  known = true,
+  known,
   reason = null,
 }: {
   controller: OperatorController | null;
   missing: string;
-  known?: boolean;
+  known: boolean;
   reason?: string | null;
 }) {
   const t = useT();
   if (!controller && !known) {
     return (
-      <span className="text-warn" title={reason ?? undefined}>
+      <span className={TONE_TEXT.unknown} title={reason ?? undefined}>
         {t("operators", "deploymentsUnreadable")}
       </span>
     );

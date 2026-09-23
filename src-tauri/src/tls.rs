@@ -158,20 +158,26 @@ mod tests {
     /// Would break if a client built where `main` never ran — a filtered test
     /// run, a live harness — panicked with "No provider set" again. In a fresh
     /// process, because any earlier test may have installed one in this.
+    ///
+    /// A filter that matches nothing exits 0 too, so the child has to say it
+    /// ran the one test.
     #[test]
     fn a_client_builds_in_a_process_that_never_ran_main() {
-        let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
             .args([
                 "--exact",
                 "tls::tests::fresh_process_builds_clients",
                 "--ignored",
             ])
             .env("RUBICK_FRESH_PROCESS", "1")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
+            .output()
             .expect("the test binary runs");
-        assert!(status.success());
+        let said = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{said}");
+        assert!(
+            said.contains("test result: ok. 1 passed;"),
+            "the fresh-process test did not run: {said}"
+        );
     }
 
     /// A certificate the kubeconfig names is trusted as itself, not as a

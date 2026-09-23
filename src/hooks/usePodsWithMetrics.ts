@@ -135,6 +135,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     error: podsError,
     /** The namespaces of the scope whose pods could not be read. */
     unread,
+    /** The pods are the last scope's, standing in while this one is read. */
+    isPlaceholderData,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
     watchLive: live,

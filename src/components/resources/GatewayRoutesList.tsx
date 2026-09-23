@@ -54,7 +54,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { KIND_TONE } from "@/lib/route-kind-tone";
-import { routesBoard, type RouteRow } from "@/lib/route-rows";
+import { allServing, routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -154,7 +154,11 @@ function Row({
       <span
         className={cn(
           "justify-self-center text-[9px] leading-none",
-          muted || mesh ? "text-fg-fnt" : row.serving ? "text-ok" : "text-err"
+          muted || mesh || (row.serving && !row.servingKnown)
+            ? "text-fg-fnt"
+            : row.serving
+              ? "text-ok"
+              : "text-err"
         )}
       >
         ●
@@ -415,8 +419,9 @@ export function GatewayRoutesList() {
     );
   }
 
-  const total = board.notServing.length + board.serving.length;
-  const quietCluster = board.verdictsKnown && board.notServing.length === 0;
+  const total =
+    board.notServing.length + board.unknown.length + board.serving.length;
+  const quietCluster = allServing(board);
   const shown = brokenOnly ? [] : board.serving;
 
   return (
@@ -611,15 +616,18 @@ export function GatewayRoutesList() {
                 : t("empty", "gwReadingVerdicts")}
             </p>
             <div className="border-t border-hair">
-              {[...board.notServing, ...board.serving, ...board.mesh].map(
-                (row) => (
-                  <Row
-                    key={`${row.kind}/${row.namespace}/${row.name}`}
-                    row={row}
-                    muted
-                  />
-                )
-              )}
+              {[
+                ...board.notServing,
+                ...board.unknown,
+                ...board.serving,
+                ...board.mesh,
+              ].map((row) => (
+                <Row
+                  key={`${row.kind}/${row.namespace}/${row.name}`}
+                  row={row}
+                  muted
+                />
+              ))}
             </div>
           </>
         ) : (
@@ -633,6 +641,23 @@ export function GatewayRoutesList() {
                 />
                 <div className="border-t border-hair">
                   {board.notServing.map((row) => (
+                    <Row
+                      key={`${row.kind}/${row.namespace}/${row.name}`}
+                      row={row}
+                      muted={false}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {!brokenOnly && board.unknown.length > 0 && (
+              <>
+                <GroupCap
+                  label={t("empty", "gwGroupUnknown")}
+                  count={board.unknown.length}
+                />
+                <div className="border-t border-hair">
+                  {board.unknown.map((row) => (
                     <Row
                       key={`${row.kind}/${row.namespace}/${row.name}`}
                       row={row}

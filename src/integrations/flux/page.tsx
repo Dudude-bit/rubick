@@ -226,7 +226,11 @@ function ReconcilersTab({
         brokenFirst: (n, total) =>
           t("count", "notReconcilingAndFirst", { n, total }),
         nothingBroken: t("empty", "nothingFailing"),
-        allWell: (n) => t("count", "reconcilersAllApplied", { n }),
+        // Not "all applied" over a list missing the kind that was refused.
+        allWell: (n) =>
+          partial
+            ? t("count", "reconcilersSomeUnread", { n })
+            : t("count", "reconcilersAllApplied", { n }),
       }}
       noMatch={() => t("empty", "noReconcilerMatches")}
       keyOf={(reconciler) => `${reconciler.kind}/${reconciler.key}`}

@@ -51,6 +51,7 @@ import {
   hostGroups,
   hostState,
   subsetsFor,
+  subsetUses,
   type Destination,
   type Finding,
   type IstioHostGroup,
@@ -383,13 +384,22 @@ function RuleRow({
               {destination.weight !== null && (
                 <span className="text-info">{destination.weight}%</span>
               )}
-              {destination.service && !destination.external ? (
+              {destination.service && destination.external === false ? (
                 <ResourceRef
                   kind="Service"
                   name={destination.service.name}
                   namespace={destination.service.namespace}
                   showKind={false}
                 />
+              ) : destination.external === null ? (
+                <span className="flex items-baseline gap-x-1">
+                  <span className="font-mono text-fg-fnt">
+                    {destination.host}
+                  </span>
+                  <span className="rounded-[3px] border border-dashed border-fg-fnt/60 px-1 text-[10px] text-fg-fnt">
+                    {t("empty", "maybeThisClustersService")}
+                  </span>
+                </span>
               ) : (
                 <span className="font-mono text-fg-mid">
                   {destination.host}
@@ -439,9 +449,10 @@ function HostChain({
         destination,
         route.source.namespace,
         sources.destinationRules,
-        sources.services
+        sources.services,
+        sources.backingKnown
       )
-    : { defined: [], anyRule: false };
+    : { defined: [], unconfirmed: [], anyRule: false };
   const serving = group.gateways.filter((gateway) => gateway.serves);
   const unread = route.matches.filter((match) => !fullyRead(match));
 
@@ -504,16 +515,24 @@ function HostChain({
             </div>
           ) : (
             <Cell
-              bad={!subsets.defined.includes(destination.subset)}
+              bad={
+                !subsets.defined.includes(destination.subset) &&
+                !subsets.unconfirmed.includes(destination.subset)
+              }
+              unknown={subsets.unconfirmed.includes(destination.subset)}
               under={
                 subsets.defined.includes(destination.subset)
                   ? t("count", "ofN", { n: subsets.defined.join(", ") })
-                  : subsets.anyRule
-                    ? t("empty", "definesList", {
-                        list:
-                          subsets.defined.join(", ") || t("empty", "noSubsets"),
-                      })
-                    : t("empty", "noRuleNamesThisHost")
+                  : subsets.unconfirmed.includes(destination.subset)
+                    ? t("empty", "subsetUnconfirmed")
+                    : subsets.anyRule
+                      ? t("empty", "definesList", {
+                          list:
+                            [...subsets.defined, ...subsets.unconfirmed].join(
+                              ", "
+                            ) || t("empty", "noSubsets"),
+                        })
+                      : t("empty", "noRuleNamesThisHost")
               }
             >
               {destination.subset}
@@ -527,6 +546,10 @@ function HostChain({
             <Cell under={t("empty", "outsideThisCluster")}>
               {destination.host}
             </Cell>
+          ) : destination.external === null ? (
+            <Cell unknown under={t("empty", "maybeThisClustersService")}>
+              {destination.host}
+            </Cell>
           ) : (
             <Cell
               bad={backing?.stop?.reason === "backendMissing"}
@@ -537,10 +560,11 @@ function HostChain({
           )}
         </Column>
         <Column label={t("columns", "published")}>
-          {!destination || destination.external ? (
+          {!destination || destination.external === true ? (
             <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
             <Cell
+              unknown
               under={t(
                 "empty",
                 backing?.error ? "endpointsUnread" : "readingEndpoints"
@@ -827,6 +851,10 @@ function SubsetsTab({
   loading: boolean;
 }) {
   const t = useT();
+  const uses = useMemo(
+    () => (sources ? subsetUses(rules, groups, sources) : null),
+    [rules, groups, sources]
+  );
   if (loading)
     return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (rules.length === 0) {
@@ -836,20 +864,6 @@ function SubsetsTab({
       </p>
     );
   }
-
-  const routed = new Set(
-    groups.flatMap((group) =>
-      group.routes.flatMap((route) =>
-        route.destinations.flatMap((destination): string[] =>
-          destination.subset
-            ? [
-                `${destination.service?.name ?? destination.host}/${destination.subset}`,
-              ]
-            : []
-        )
-      )
-    )
-  );
 
   const missing = groups.flatMap((group) =>
     group.findings.flatMap((finding): Destination[] =>
@@ -896,10 +910,9 @@ function SubsetsTab({
             const subsets = (spec.subsets ?? []).flatMap((subset) =>
               subset.name ? [subset.name] : []
             );
-            const short = (spec.host ?? "").split(".")[0];
-            const unused = subsets.filter(
-              (subset) => !routed.has(`${short}/${subset}`)
-            );
+            const use = uses?.get(rule) ?? null;
+            const idle =
+              use !== null && use.used.size === 0 && use.maybe.size === 0;
 
             return (
               <div
@@ -923,7 +936,7 @@ function SubsetsTab({
                     <span className="text-fg-fnt">
                       {t("empty", "noSubsetsTrafficPolicyOnly")}
                     </span>
-                  ) : unused.length === subsets.length ? (
+                  ) : idle ? (
                     <span className="text-warn">
                       {t("count", "subsetsNothingRoutesTo", {
                         n: subsets.length,
@@ -931,7 +944,17 @@ function SubsetsTab({
                       })}
                     </span>
                   ) : (
-                    subsets.join(", ")
+                    <>
+                      {subsets.join(", ")}
+                      {use !== null && use.maybe.size > 0 && (
+                        <span className="text-fg-fnt">
+                          {" · "}
+                          {t("empty", "istioSubsetsMaybeRouted", {
+                            list: [...use.maybe].join(", "),
+                          })}
+                        </span>
+                      )}
+                    </>
                   )}
                 </span>
               </div>

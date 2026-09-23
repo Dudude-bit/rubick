@@ -45,6 +45,7 @@ import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
+import { TLS_NOT_CHECKED_TONE } from "@/components/network";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -261,7 +262,7 @@ export function IngressDetail() {
   const soonest = tlsConfigs
     .map((config) =>
       config.secretName
-        ? certificates.data?.get(config.secretName)?.certificate
+        ? certificates?.get(config.secretName)?.certificate
         : undefined
     )
     .filter((cert) => cert != null)
@@ -332,15 +333,19 @@ export function IngressDetail() {
       // useful answer than how many hosts it covers — the host count is a
       // shape, and the expiry is a date somebody has to act on.
       value:
-        tls === "no"
-          ? t("empty", "noneTrafficUnencrypted")
-          : tls === "unknown"
-            ? t("empty", "tlsNotChecked")
-            : soonest
-              ? expiryText(soonest, t)
-              : hasCatchAllTls
-                ? t("empty", "catchAllCertificate")
-                : t("count", "hosts", { n: tlsHosts.length }),
+        tls === "no" ? (
+          t("empty", "noneTrafficUnencrypted")
+        ) : tls === "unknown" ? (
+          <span className={TLS_NOT_CHECKED_TONE}>
+            {t("empty", "tlsNotChecked")}
+          </span>
+        ) : soonest ? (
+          expiryText(soonest, t)
+        ) : hasCatchAllTls ? (
+          t("empty", "catchAllCertificate")
+        ) : (
+          t("count", "hosts", { n: tlsHosts.length })
+        ),
       tone:
         tls === "no"
           ? "warn"
@@ -363,7 +368,7 @@ export function IngressDetail() {
 
           <TrafficChain
             query={connections}
-            certificates={certificates.data}
+            certificates={certificates}
             issuance={issuance}
             controller={controller}
           />
@@ -399,7 +404,11 @@ export function IngressDetail() {
                   <span
                     className={cn(
                       "text-[11px] font-medium",
-                      url.isHttps === false ? "text-warn" : "text-fg-fnt"
+                      url.isHttps === null
+                        ? TLS_NOT_CHECKED_TONE
+                        : url.isHttps
+                          ? "text-fg-fnt"
+                          : "text-warn"
                     )}
                     title={
                       url.isHttps === null
@@ -630,7 +639,7 @@ export function IngressDetail() {
                     </span>
                     {config.secretName && (
                       <CertificateLine
-                        read={certificates.data?.get(config.secretName)}
+                        read={certificates?.get(config.secretName)}
                         hosts={config.hosts}
                       />
                     )}
@@ -744,9 +753,11 @@ export function IngressDetail() {
               "text-[11px]",
               tls === "no"
                 ? "text-warn"
-                : tls === "yes" && soonest?.tone
-                  ? TONE_CLASS[soonest.tone]
-                  : "text-fg-fnt"
+                : tls === "unknown"
+                  ? TLS_NOT_CHECKED_TONE
+                  : soonest?.tone
+                    ? TONE_CLASS[soonest.tone]
+                    : "text-fg-fnt"
             )}
           >
             {tls === "no"

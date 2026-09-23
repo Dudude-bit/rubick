@@ -20,7 +20,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { covers } from "@/lib/certificates";
 import type { Saying } from "@/i18n/say";
-import { failureOf, listOrFailure, type ListRead } from "../ingress";
+import { listOrFailure, type ListRead } from "../ingress";
 import type { ServiceRoute } from "../registry";
 import { readApplication, type ArgoApp } from "./model";
 
@@ -108,7 +108,14 @@ export interface ControllerInfo {
   ui: string | null;
   /** Where its workloads run, which is where `argocd-server` is too. */
   namespace: string;
+  /** Why the list is empty, where every read answered and it still is. */
   problem: Saying | null;
+  /**
+   * The kinds whose list failed, whether or not the other found anything:
+   * the application controller is a StatefulSet, so a refused StatefulSet
+   * list beside a full Deployment one is a list missing its controller.
+   */
+  unread: Array<{ kind: ArgoComponent["kind"]; failure: Saying }>;
 }
 
 /**
@@ -190,14 +197,12 @@ export function uiAddress(
   return null;
 }
 
-/** Why the list of Argo's workloads is empty, where it is. */
-function noComponents(...reads: ListRead<unknown>[]): Saying | null {
-  if (reads.some((read) => read.items.length > 0)) return null;
-  return (
-    failureOf(...reads) ?? {
-      key: "argoNoWorkloads",
-      values: { selector: CONTROLLER_SELECTOR },
-    }
+/** The reads that failed, each with the kind it was a list of. */
+function unreadOf(
+  reads: Array<[ArgoComponent["kind"], ListRead<unknown>]>
+): ControllerInfo["unread"] {
+  return reads.flatMap(([kind, read]) =>
+    read.failure ? [{ kind, failure: read.failure }] : []
   );
 }
 
@@ -243,11 +248,22 @@ export function useController() {
       ].sort((left, right) => left.name.localeCompare(right.name));
 
       const namespace = components[0]?.namespace ?? "argocd";
+      const unread = unreadOf([
+        ["Deployment", deploymentRead],
+        ["StatefulSet", statefulSetRead],
+      ]);
       return {
         components,
         ui: uiAddress(ingresses, namespace),
         namespace,
-        problem: noComponents(deploymentRead, statefulSetRead),
+        problem:
+          components.length === 0 && unread.length === 0
+            ? {
+                key: "argoNoWorkloads",
+                values: { selector: CONTROLLER_SELECTOR },
+              }
+            : null,
+        unread,
       };
     },
     staleTime: ARGO_STALE,

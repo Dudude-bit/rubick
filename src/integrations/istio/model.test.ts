@@ -11,8 +11,11 @@ import {
   hostGroups,
   hostState,
   resolveHost,
+  subsetsFor,
   type IstioSources,
+  subsetUses,
 } from "./model";
+import { routingMap } from "./map";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -181,16 +184,17 @@ describe("resolving a destination host", () => {
   /** The three spellings Istio takes for the same Service. */
   it("reads a short name, a namespaced one and an FQDN as the same Service", () => {
     const services = [service("shop")];
-    expect(resolveHost("shop", "mesh", services).service).toEqual({
+    expect(resolveHost("shop", "mesh", services, true).service).toEqual({
       name: "shop",
       namespace: "mesh",
     });
-    expect(resolveHost("shop.mesh", "other", services).service).toEqual({
+    expect(resolveHost("shop.mesh", "other", services, true).service).toEqual({
       name: "shop",
       namespace: "mesh",
     });
     expect(
-      resolveHost("shop.mesh.svc.cluster.local", "other", services).service
+      resolveHost("shop.mesh.svc.cluster.local", "other", services, true)
+        .service
     ).toEqual({ name: "shop", namespace: "mesh" });
   });
 
@@ -200,9 +204,205 @@ describe("resolving a destination host", () => {
    * a working ServiceEntry.
    */
   it("claims nothing about a host that is plainly not in this cluster", () => {
-    const outside = resolveHost("api.stripe.com", "mesh", [service("shop")]);
+    const outside = resolveHost(
+      "api.stripe.com",
+      "mesh",
+      [service("shop")],
+      true
+    );
     expect(outside.service).toBeNull();
     expect(outside.external).toBe(true);
+  });
+
+  /**
+   * `name.namespace` is told from a hostname by the Services list. Unread,
+   * it was resolved as "outside the cluster" — a claim about a list nobody
+   * got. Fails if an unread list decides it either way.
+   */
+  it("leaves a name.namespace host undecided while the Services are unread", () => {
+    expect(resolveHost("shop.payments", "mesh", [], false)).toEqual({
+      service: { name: "shop", namespace: "payments" },
+      external: null,
+    });
+    expect(resolveHost("api.stripe.com", "mesh", [], false).external).toBe(
+      true
+    );
+  });
+});
+
+describe("a subset on a host the Services list would decide", () => {
+  /**
+   * With the Services unread, `shop.mesh` was taken for a hostname, the
+   * DestinationRule written for the Service did not match it, and the host
+   * went red with "subset not defined" on a cluster that only refused this
+   * token the Services. Fails if the unread host stops resolving to the
+   * Service a rule can be written for.
+   */
+  it("does not report a missing subset the Service's rule defines", () => {
+    const qualified = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v1" } }] }],
+    });
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }],
+    });
+    const unread = {
+      ...sources({
+        virtualServices: [qualified],
+        destinationRules: [fqdnRule],
+      }),
+      ...backingFrom(undefined, new Error("services is forbidden")),
+    };
+    const groups = hostGroups(unread, t);
+    const [group] = groups;
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual([]);
+    expect(group.backendsKnown).toBe(false);
+    expect(hostSeverity(group)).toBe("unknown");
+
+    // The map drew it "outside the mesh", quiet — and must not link a
+    // Service nobody has seen.
+    const node = routingMap(groups, unread, t)
+      .columns.flatMap((column) => column.nodes)
+      .find((candidate) => candidate.label === "shop.mesh");
+    expect(node?.tone).toBe("unknown");
+    expect(node?.object).toBeUndefined();
+  });
+
+  /**
+   * The rule matched `shop.mesh` only by taking it for the Service, and the
+   * subset read as defined: if the host is a hostname, that rule is another
+   * object's. Fails if a match through the unread list confirms the subset,
+   * or if one that fails either way stops being a finding.
+   */
+  /**
+   * The Subsets tab matched routes to a rule by the host's first label, so a
+   * subset reached only through a Service nobody read was either "used" or
+   * "nothing routes to" depending on how the names happened to split. It
+   * reads the chain's own rule now.
+   */
+  it("reads a subset routed only through an unread Service as maybe, not used or idle", () => {
+    const qualified = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v1" } }] }],
+    });
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }, { name: "v2" }],
+    });
+    const unread = {
+      ...sources({
+        virtualServices: [qualified],
+        destinationRules: [fqdnRule],
+      }),
+      ...backingFrom(undefined, new Error("services is forbidden")),
+    };
+    const use = subsetUses([fqdnRule], hostGroups(unread, t), unread).get(
+      fqdnRule
+    );
+    expect([...(use?.used ?? [])]).toEqual([]);
+    expect([...(use?.maybe ?? ["none"])]).toEqual(["v1"]);
+  });
+
+  it("keeps a subset only a Service nobody read would define unconfirmed", () => {
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }],
+    });
+    const destination = {
+      host: "shop.mesh",
+      ...resolveHost("shop.mesh", "mesh", [], false),
+      subset: "v1",
+      port: null,
+      weight: null,
+    };
+
+    expect(subsetsFor(destination, "mesh", [fqdnRule], [], false)).toEqual({
+      defined: [],
+      unconfirmed: ["v1"],
+      anyRule: true,
+    });
+
+    const read = {
+      ...destination,
+      ...resolveHost("shop.mesh", "mesh", [service("shop")], true),
+    };
+    expect(
+      subsetsFor(read, "mesh", [fqdnRule], [service("shop")], true)
+    ).toEqual({ defined: ["v1"], unconfirmed: [], anyRule: true });
+
+    const typo = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v9" } }] }],
+    });
+    const [group] = hostGroups(
+      {
+        ...sources({ virtualServices: [typo], destinationRules: [fqdnRule] }),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(group.findings).toEqual([
+      expect.objectContaining({ kind: "noSubset", defined: ["v1"] }),
+    ]);
+  });
+});
+
+describe("a destination the unread Services list would have to confirm", () => {
+  const route = (hosts: string[]) =>
+    custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [
+        {
+          route: hosts.map((host) => ({
+            destination: { host },
+            weight: 100 / hosts.length,
+          })),
+        },
+      ],
+    });
+  const unread = (hosts: string[]) => ({
+    ...sources({ virtualServices: [route(hosts)] }),
+    ...backingFrom(undefined, new Error("services is forbidden")),
+  });
+  const reached = (hosts: string[]) => {
+    const data = routingMap(hostGroups(unread(hosts), t), unread(hosts), t);
+    const nodes = data.columns.flatMap((column) => column.nodes);
+    return data.edges
+      .filter((edge) => edge.from === "host/shop.mesh.test")
+      .map((edge) => nodes.find((node) => node.id === edge.to));
+  };
+
+  /**
+   * `shop` and `shop.mesh` shared the Service's node, which took its link
+   * from whichever came first: `shop.mesh` led to a Service page nobody knew
+   * existed, or `shop` lost the link it has by its form. Fails if the two
+   * are one node again, in either order.
+   */
+  it("draws it as its own node, whichever rule comes first", () => {
+    for (const hosts of [
+      ["shop", "shop.mesh"],
+      ["shop.mesh", "shop"],
+    ]) {
+      const nodes = reached(hosts);
+      const byName = nodes.find((node) => node?.label === "shop");
+      const unsure = nodes.find((node) => node?.label === "shop.mesh");
+
+      expect(nodes).toHaveLength(2);
+      expect(byName?.object).toEqual({
+        kind: "Service",
+        name: "shop",
+        namespace: "mesh",
+      });
+      expect(unsure?.object).toBeUndefined();
+      expect(unsure?.tone).toBe("unknown");
+      expect(unsure?.sub).toBe(t("empty", "maybeThisClustersService"));
+    }
   });
 });
 

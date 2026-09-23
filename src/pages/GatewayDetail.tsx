@@ -54,6 +54,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
+import { cautioningCondition, failingCondition } from "@/lib/condition-health";
 import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
 import type {
@@ -131,7 +132,9 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
   const certificates = useTlsCertificates(gateway.namespace, ownSecrets);
 
   const broken = (listener: ListenerInfo) =>
-    listener.conditions.some((c) => c.status === "False");
+    failingCondition(listener.conditions);
+  const caution = (listener: ListenerInfo) =>
+    cautioningCondition(listener.conditions);
 
   return (
     <Section>
@@ -170,13 +173,18 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                       })}
                     </span>
                   )}
-                  {broken(listener) && (
+                  {broken(listener) ? (
                     <span className="text-err">
                       {" "}
-                      ·{" "}
-                      {listener.conditions.find((c) => c.status === "False")
-                        ?.reason ?? t("empty", "brokenWord")}
+                      · {broken(listener)?.reason ?? t("empty", "brokenWord")}
                     </span>
+                  ) : (
+                    caution(listener) && (
+                      <span className="text-warn">
+                        {" "}
+                        · {caution(listener)?.reason ?? caution(listener)?.type}
+                      </span>
+                    )
                   )}
                 </TableCell>
                 <TableCell className="text-fg-fnt">
@@ -210,7 +218,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                         ref.namespace === null ? (
                           <CertificateLine
                             key={ref.name}
-                            read={certificates.data?.get(ref.name)}
+                            read={certificates?.get(ref.name)}
                             hosts={listener.hostname ? [listener.hostname] : []}
                           />
                         ) : (

@@ -10,13 +10,24 @@
 
 import { integrationPagePath } from "../paths";
 import type { VendorFact } from "../registry";
-import { fetchPicture } from "./data";
+import { countReconcilers, fetchPicture } from "./data";
 
 export async function facts(): Promise<VendorFact[]> {
-  const { reconcilers, sources, unread } = await fetchPicture();
+  const picture = await fetchPicture();
+  const { reconcilers, sources, unread } = picture;
 
+  // With HelmReleases unread the number is the ones that were read, not
+  // how many there are — the same line the page's header draws.
   const lines: VendorFact[] = [
-    { say: { key: "factReconcilers", values: { n: reconcilers.length } } },
+    {
+      say: {
+        key:
+          countReconcilers(picture) === null
+            ? "factReconcilersRead"
+            : "factReconcilers",
+        values: { n: reconcilers.length },
+      },
+    },
   ];
   if (unread.length > 0) {
     lines.push({
@@ -53,7 +64,7 @@ export async function facts(): Promise<VendorFact[]> {
     });
   }
 
-  if (reconcilers.length > 0) {
+  if (reconcilers.length > 0 || unread.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
       to: integrationPagePath("flux"),

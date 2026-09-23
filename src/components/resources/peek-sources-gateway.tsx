@@ -4,7 +4,8 @@ import {
 } from "@/components/ui/copyable-value";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
-import { verdictOf } from "@/lib/route-verdict";
+import { cautioningCondition, failingCondition } from "@/lib/condition-health";
+import { verdictOf, type Verdict } from "@/lib/route-verdict";
 import {
   redirectOnly,
   parentCarriesTraffic,
@@ -23,6 +24,24 @@ import {
 } from "./peek-sources-kit";
 
 /**
+ * The badge for a route's Accepted verdict. A verdict nobody has given is
+ * `null`, which the peek says out loud; `undefined` would erase the badge.
+ */
+function acceptedBadge(verdict: Verdict): string | null {
+  switch (verdict.state) {
+    case "true":
+      return "Accepted";
+    case "false":
+      return "Refused";
+    case "pending":
+      return verdict.said.status;
+    case "none":
+    case "undecided":
+      return null;
+  }
+}
+
+/**
  * One reading for the five route kinds — the object is one shape, and a
  * peek that flattened it to dotted paths said nothing a person could act
  * on. Parents up, backends down, the controllers' verdicts in their own
@@ -32,15 +51,9 @@ function gatewayRouteSource(kind: string): PeekSource {
   return source(
     (name, namespace) => commands.getGatewayRoute(kind, name, namespace),
     (route: RouteInfo, _target, t) => {
-      const verdict = verdictOf(route.parents, "Accepted").state;
       const redirects = redirectOnly(route);
       return {
-        status:
-          verdict === "false"
-            ? "Refused"
-            : verdict === "true"
-              ? "Accepted"
-              : undefined,
+        status: acceptedBadge(verdictOf(route.parents, "Accepted")),
         createdAt: route.createdAt,
         groups: [
           {
@@ -155,10 +168,11 @@ export const GATEWAY_SOURCES: PeekSources = {
   Gateway: source(commands.getGateway, (gateway, _target, t) => {
     const programmed = gatewayProgrammed(gateway);
     return {
-      status:
-        programmed?.status === "True"
+      status: !programmed
+        ? null
+        : programmed.status === "True"
           ? "Programmed"
-          : (programmed?.reason ?? undefined),
+          : (programmed.reason ?? programmed.status),
       createdAt: gateway.createdAt,
       groups: [
         {
@@ -181,9 +195,12 @@ export const GATEWAY_SOURCES: PeekSources = {
           title: t("columns", "listeners"),
           count: gateway.listeners.length || undefined,
           items: gateway.listeners.map((listener) => {
-            const broken = listener.conditions.find(
-              (c) => c.status === "False"
-            );
+            // By each condition's own polarity: `Conflicted=False` is the
+            // healthy answer.
+            const broken = failingCondition(listener.conditions);
+            const caution = broken
+              ? null
+              : cautioningCondition(listener.conditions);
             const address = gateway.addresses[0];
             return {
               label: listener.name,
@@ -220,9 +237,18 @@ export const GATEWAY_SOURCES: PeekSources = {
                       — {broken.reason ?? t("empty", "brokenWord")}
                     </span>
                   )}
+                  {caution && (
+                    <span className="text-warn">
+                      — {caution.reason ?? caution.type}
+                    </span>
+                  )}
                 </span>
               ),
-              tone: broken ? ("err" as const) : undefined,
+              tone: broken
+                ? ("err" as const)
+                : caution
+                  ? ("warn" as const)
+                  : undefined,
             };
           }),
           emptyMessage: t("empty", "gwNoListeners"),

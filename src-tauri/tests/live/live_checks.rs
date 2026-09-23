@@ -10,7 +10,7 @@
 use k8s_gui_lib::commands::checks::{check_pod, Check, CheckAnswer, CopyWith};
 use k8s_gui_lib::state::AppState;
 use k8s_openapi::api::core::v1::Pod;
-use kube::api::{Api, ListParams};
+use kube::api::Api;
 
 async fn client() -> (kube::Client, String) {
     let name = std::env::var("K8S_GUI_CHECK_CONTEXT").unwrap_or_else(|_| "killercoda".to_string());
@@ -132,14 +132,14 @@ async fn a_bare_image_is_said_so_and_a_copy_answers_and_leaves() {
     let report = copied.copy.expect("a copy is reported");
     assert!(report.deleted, "deleted, not merely asked");
 
+    // This copy by name, Terminating included: one still being removed is
+    // still there, and a label count skipping those passed with it running.
     let api: Api<Pod> = Api::namespaced(client, &ns);
-    let left = api
-        .list(&ListParams::default().labels("k8s-gui/check-pod=true"))
-        .await
-        .expect("list")
-        .items
-        .into_iter()
-        .filter(|p| p.metadata.deletion_timestamp.is_none())
-        .count();
-    assert_eq!(left, 0, "no copy is left behind");
+    let started = std::time::Instant::now();
+    let mut left = api.get_opt(&report.pod).await.expect("get");
+    while left.is_some() && started.elapsed() < std::time::Duration::from_secs(30) {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        left = api.get_opt(&report.pod).await.expect("get");
+    }
+    assert!(left.is_none(), "the copy {} is left behind", report.pod);
 }

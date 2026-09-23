@@ -9,9 +9,10 @@
  * merge is a render-time concern and lives here in one `useMemo`.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { toast } from "@/components/ui/use-toast";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
@@ -25,6 +26,7 @@ import {
   wireScope,
 } from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
+import { useT } from "@/i18n/useT";
 import {
   ResourceType,
   toPlural,
@@ -44,21 +46,29 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
  *  The failure flag is the kind's OWN: five watches share a page, and one
  *  kind's recovery must not stop the polling that covers another's still
  *  broken stream. */
-function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
+function useRouteKind(
+  kind: ResourceKind,
+  scope: string[],
+  served: boolean,
+  report: (kind: ResourceKind, message: string) => void
+) {
   const cacheKey = scopeCacheKey(scope);
   const wire = useMemo(() => wireScope(scope), [scope]);
   const queryKey = useMemo(
     () => queryKeys.resources(kind, cacheKey),
     [kind, cacheKey]
   );
-  const { live, refresh, resyncing } = useWatchedList<RouteInfo>({
+  const { live, refresh, resyncing, watchFailed } = useWatchedList<RouteInfo>({
     enabled: served,
     subscribe: useCallback(
       () => commands.subscribeGatewayRouteWatch(kind, wire),
       [kind, wire]
     ),
     queryKey,
-    reportFailure: toPlural(kind),
+    reportFailure: useCallback(
+      (message: string) => report(kind, message),
+      [kind, report]
+    ),
   });
   const queryClient = useQueryClient();
   const query = useLiveQuery<Scoped<RouteInfo>>({
@@ -74,7 +84,7 @@ function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
     // The watch feeds the cache; polling is the fallback after it fails.
     refresh,
   });
-  return { kind, query, resyncing, served, live };
+  return { kind, query, resyncing, served, live, watchFailed };
 }
 
 export function useGatewayRoutes(scope: string[]) {
@@ -89,33 +99,45 @@ export function useGatewayRoutes(scope: string[]) {
     [detection]
   );
 
+  // One notice for five watches: the toaster shows one toast at a time, so
+  // five left the last kind to fail named alone.
+  const reasons = useRef(new Map<ResourceKind, string>());
+  const report = useCallback((kind: ResourceKind, message: string) => {
+    reasons.current.set(kind, message);
+  }, []);
+
   // Five fixed calls, not a loop: the kinds are a closed set and hooks
   // must not be conditional. A kind the cluster does not serve costs
   // nothing — its query and watch stay disabled.
   const http = useRouteKind(
     GATEWAY_ROUTE_KINDS[0],
     scope,
-    served.has(GATEWAY_ROUTE_KINDS[0])
+    served.has(GATEWAY_ROUTE_KINDS[0]),
+    report
   );
   const grpc = useRouteKind(
     GATEWAY_ROUTE_KINDS[1],
     scope,
-    served.has(GATEWAY_ROUTE_KINDS[1])
+    served.has(GATEWAY_ROUTE_KINDS[1]),
+    report
   );
   const tls = useRouteKind(
     GATEWAY_ROUTE_KINDS[2],
     scope,
-    served.has(GATEWAY_ROUTE_KINDS[2])
+    served.has(GATEWAY_ROUTE_KINDS[2]),
+    report
   );
   const tcp = useRouteKind(
     GATEWAY_ROUTE_KINDS[3],
     scope,
-    served.has(GATEWAY_ROUTE_KINDS[3])
+    served.has(GATEWAY_ROUTE_KINDS[3]),
+    report
   );
   const udp = useRouteKind(
     GATEWAY_ROUTE_KINDS[4],
     scope,
-    served.has(GATEWAY_ROUTE_KINDS[4])
+    served.has(GATEWAY_ROUTE_KINDS[4]),
+    report
   );
 
   const kinds = useMemo(
@@ -123,6 +145,28 @@ export function useGatewayRoutes(scope: string[]) {
     [http, grpc, tls, tcp, udp]
   );
   const active = kinds.filter((entry) => entry.served);
+
+  const t = useT();
+  const fellBack = active
+    .filter((entry) => entry.watchFailed)
+    .map((entry) => entry.kind)
+    .join(",");
+  const told = useRef("");
+  useEffect(() => {
+    const now = fellBack === "" ? [] : (fellBack.split(",") as ResourceKind[]);
+    const before = told.current.split(",");
+    told.current = fellBack;
+    if (!now.some((kind) => !before.includes(kind))) return;
+    toast({
+      title: t("action", "realtimeUnavailable"),
+      description: t("action", "fallingBackToPolling", {
+        title: now.map((kind) => toPlural(kind)).join(", "),
+        error: [...new Set(now.map((kind) => reasons.current.get(kind)))]
+          .filter(Boolean)
+          .join(" "),
+      }),
+    });
+  }, [fellBack, t]);
   // One answer from five: a namespace any kind could not read is unread for
   // the page, and the rows beside it are not the scope's whole.
   const { rows: routes, unread } = useMemo(

@@ -555,43 +555,116 @@ mod tests {
         assert!(super::registers_its_own_scheme(None));
     }
 
-    /// Every `#[tauri::command]` in the tree, by the name the frontend calls.
-    fn commands_in(dir: &Path, found: &mut BTreeSet<String>) {
+    /// Every source file under `dir`.
+    fn sources_in(dir: &Path, found: &mut Vec<String>) {
         for entry in fs::read_dir(dir).expect("read the source tree") {
             let path = entry.expect("a directory entry").path();
             if path.is_dir() {
-                commands_in(&path, found);
-                continue;
+                sources_in(&path, found);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                found.push(fs::read_to_string(&path).expect("read a source file"));
             }
-            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-                continue;
-            }
-            let source = fs::read_to_string(&path).expect("read a source file");
-            let mut lines = source.lines().peekable();
+        }
+    }
+
+    fn ident(text: &str) -> String {
+        text.chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect()
+    }
+
+    /// Every command in `sources`, by the name the frontend calls: each
+    /// `#[tauri::command]` fn, and each call of a macro that stamps one out.
+    fn commands_in(sources: &[String]) -> BTreeSet<String> {
+        let mut found = BTreeSet::new();
+        let mut stamps = BTreeSet::new();
+        for source in sources {
+            // The macro being read, and the first of its parameters.
+            let mut inside: Option<(String, Option<String>)> = None;
+            let mut lines = source.lines();
             while let Some(line) = lines.next() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("macro_rules!") {
+                    inside = Some((ident(rest.trim_start()), None));
+                    continue;
+                }
+                if let Some((_, first @ None)) = inside.as_mut() {
+                    if let Some((_, after)) = line.split_once('$') {
+                        *first = Some(ident(after));
+                    }
+                }
                 // Parameterised forms count too — `#[tauri::command(rename_all
                 // = "snake_case")]` is still a command, and matching the bare
                 // attribute alone left a hole in the very guard this is.
-                let attribute = line.trim();
-                if attribute != "#[tauri::command]" && !attribute.starts_with("#[tauri::command(") {
+                if trimmed != "#[tauri::command]" && !trimmed.starts_with("#[tauri::command(") {
                     continue;
                 }
                 // The signature can be several lines down, past other
                 // attributes; the name is on the first `fn` after it.
                 for next in lines.by_ref() {
-                    if let Some(rest) = next.split(" fn ").nth(1) {
-                        let name: String = rest
-                            .chars()
-                            .take_while(|c| c.is_alphanumeric() || *c == '_')
-                            .collect();
-                        if !name.is_empty() {
-                            found.insert(name);
-                        }
-                        break;
+                    let Some(rest) = next.split(" fn ").nth(1) else {
+                        continue;
+                    };
+                    if let Some(param) = rest.strip_prefix('$') {
+                        let (stamp, first) = inside.as_ref().expect("`fn $name` outside a macro");
+                        assert_eq!(
+                            first.as_deref(),
+                            Some(ident(param).as_str()),
+                            "`{stamp}!` names its command by a parameter other than its \
+                             first, and the first is the one read at its calls"
+                        );
+                        stamps.insert(stamp.clone());
+                    } else if !ident(rest).is_empty() {
+                        found.insert(ident(rest));
+                    }
+                    break;
+                }
+            }
+        }
+        for source in sources {
+            let mut lines = source.lines().map(str::trim);
+            while let Some(line) = lines.next() {
+                if line.starts_with("//") {
+                    continue;
+                }
+                for stamp in &stamps {
+                    let call = format!("{stamp}!(");
+                    let Some(at) = line.find(&call) else { continue };
+                    if line[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_') {
+                        continue;
+                    }
+                    let mut rest = &line[at + call.len()..];
+                    // A call wrapped by rustfmt names the command on the next line.
+                    while rest.is_empty() {
+                        rest = lines.next().expect("the rest of a macro call");
+                    }
+                    if !ident(rest).is_empty() {
+                        found.insert(ident(rest));
                     }
                 }
             }
         }
+        found
+    }
+
+    /// Would pass a command stamped out by a macro and registered nowhere:
+    /// the attribute sits on `fn $cmd(`, which names nothing, so every
+    /// `list_*_in` and `subscribe_*_watch` was outside the guard below.
+    #[test]
+    fn a_command_a_macro_stamps_out_is_found_by_the_name_it_is_called_with() {
+        let calls = "stamp!(list_one_in, Pod);\n\
+                     // stamp!(commented_out, Pod);\n\
+                     not_a_stamp!(list_nothing_in, Pod);\n\
+                     stamp!(\n    list_other_in,\n    Service,\n);\n\
+                     #[tauri::command]\npub async fn plain() {}\n";
+        let definition = "macro_rules! stamp {\n    (\n        $cmd:ident,\n        \
+                          $kind:ty $(,)?\n    ) => {\n        #[tauri::command]\n        \
+                          pub async fn $cmd() {}\n    };\n}\n";
+        let found = commands_in(&[calls.to_string(), definition.to_string()]);
+        assert_eq!(
+            found,
+            BTreeSet::from(["list_one_in", "list_other_in", "plain"].map(String::from))
+        );
     }
 
     /// Nothing else in this repository holds these two together.
@@ -607,8 +680,9 @@ mod tests {
     #[test]
     fn every_command_is_registered_in_the_handler() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut written = BTreeSet::new();
-        commands_in(&root, &mut written);
+        let mut sources = Vec::new();
+        sources_in(&root, &mut sources);
+        let written = commands_in(&sources);
         assert!(
             written.len() > 200,
             "the scan found only {} commands; it is not reading the tree",
@@ -640,5 +714,65 @@ mod tests {
             "written as commands and never registered, so they exist only at \
              build time: {missing:?}"
         );
+    }
+
+    /// Would let a live harness document a command that runs nothing:
+    /// libtest exits 0 when its filter matches no test, so the command reads
+    /// as a pass. `live_connections::listenerset` was one.
+    #[test]
+    fn every_command_a_live_harness_documents_runs_a_test() {
+        const RUN: &str = "cargo test --test live ";
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/live");
+        let mut tests = Vec::new();
+        let mut commands = Vec::new();
+        for entry in fs::read_dir(&dir).expect("the live harnesses") {
+            let path = entry.expect("an entry").path();
+            let module = path.file_stem().expect("a name").to_string_lossy();
+            let source = fs::read_to_string(&path).expect("a harness");
+            let mut marked = false;
+            for line in source.lines().map(str::trim) {
+                if line.starts_with("#[tokio::test") || line.starts_with("#[test") {
+                    marked = true;
+                } else if let Some(rest) =
+                    line.strip_prefix("async fn ").or(line.strip_prefix("fn "))
+                {
+                    if std::mem::take(&mut marked) {
+                        let name = rest.split('(').next().unwrap_or_default();
+                        tests.push(format!("{module}::{name}"));
+                    }
+                }
+            }
+            // A command may run on past a `\` into the next doc line.
+            let prose = source
+                .lines()
+                .map(|line| line.trim().trim_start_matches('/').trim_start_matches('!'))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .replace("\\\n", " ");
+            for line in prose.lines() {
+                if let Some((_, args)) = line.split_once(RUN) {
+                    let args: Vec<&str> = args.split_whitespace().collect();
+                    let filter = args.first().copied().unwrap_or_default().to_string();
+                    commands.push((module.to_string(), filter, args.contains(&"--exact")));
+                }
+            }
+        }
+        assert!(tests.len() > 40, "found only {} tests", tests.len());
+        assert!(
+            commands.len() > 20,
+            "found only {} commands",
+            commands.len()
+        );
+
+        for (module, filter, exact) in commands {
+            let runs = tests.iter().any(|test| {
+                if exact {
+                    *test == filter
+                } else {
+                    test.contains(&filter)
+                }
+            });
+            assert!(runs, "{module} documents `{filter}`, which runs no test");
+        }
     }
 }

@@ -290,6 +290,7 @@ export interface ClusterOverview {
   nodes: NodeSummary[];
   nodesKnown: boolean;
   warnings: WarningGroup[];
+  warningsKnown: boolean;
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
   pods: PodComposition;

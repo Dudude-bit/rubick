@@ -13,13 +13,14 @@
 
 import { useCallback, useMemo } from "react";
 import { useNavigate, type NavigateFunction } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
 import { ResourceList } from "./ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey } from "@/lib/namespace-scope";
+import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
@@ -78,6 +79,7 @@ export function createWorkloadListPage<T extends Workload>(
     const t = useT();
     const scope = useNamespaceScope();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     // Read for the aggregated CPU and memory columns only. The workloads are
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
@@ -107,9 +109,16 @@ export function createWorkloadListPage<T extends Workload>(
       reportFailure: config.title,
     });
 
+    // Under a live watch, a namespace this read missed keeps the rows the
+    // watch holds current, as `ResourceList` does for the lists it reads.
     const listQuery = useResourceList(
       queryKey,
-      () => config.fetchList({ scope: scope.wire }),
+      async () => {
+        const answer = await config.fetchList({ scope: scope.wire });
+        return live
+          ? keepWatched(answer, queryClient.getQueryData<Scoped<T>>(queryKey))
+          : answer;
+      },
       { refresh }
     );
 
@@ -158,6 +167,7 @@ export function createWorkloadListPage<T extends Workload>(
         title={config.title}
         data={dataWithMetrics}
         unread={listQuery.data?.unread}
+        placeholder={listQuery.isPlaceholderData}
         onRetry={() => void listQuery.refetch()}
         // A resync holds the rows it has until the new state is complete, so
         // there is normally something to show. With nothing to show, "still

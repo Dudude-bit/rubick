@@ -36,6 +36,9 @@
     { "input": "1 Mi", "value": null },
     { "input": "1e", "value": null },
     { "input": "e3", "value": null },
-    { "input": "1Gi5", "value": null }
+    { "input": "1Gi5", "value": null },
+    { "input": "1toString", "value": null },
+    { "input": "1constructor", "value": null },
+    { "input": "1__proto__", "value": null }
   ]
 }

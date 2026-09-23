@@ -1,6 +1,7 @@
 export { TlsBadge } from "./TlsBadge";
 export {
   ingressOpenUrl,
+  TLS_NOT_CHECKED_TONE,
   vendorTlsAnswer,
   type VendorTlsAnswer,
 } from "./vendor-tls";

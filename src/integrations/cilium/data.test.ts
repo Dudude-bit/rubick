@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { GROUP, KINDS } from "./data";
+import type { CustomResourceInfo } from "@/generated/types";
+import { GROUP, KINDS, countUnrestricted, coverageTone } from "./data";
 
 describe("the kinds this vendor asks the cluster for", () => {
   /**
@@ -15,5 +16,38 @@ describe("the kinds this vendor asks the cluster for", () => {
     expect(KINDS.clusterwide).toBe(
       "ciliumclusterwidenetworkpolicies.cilium.io"
     );
+  });
+});
+
+describe("the sidebar's number for Cilium", () => {
+  /**
+   * The count leaves out an endpoint whose covering policy could not be read,
+   * and nothing beside it said so: an undecided endpoint read as a restricted
+   * one. Fails if the dot stops marking what the count left out.
+   */
+  it("marks the count unchecked while an endpoint cannot be decided", () => {
+    const endpoint = {
+      name: "api",
+      namespace: "shop",
+      kind: "CiliumEndpoint",
+      spec: null,
+      status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+    } as CustomResourceInfo;
+    const unreadable = {
+      name: "p",
+      namespace: "shop",
+      kind: "CiliumNetworkPolicy",
+      spec: null,
+      status: { conditions: [{ type: "Valid", status: "True" }] },
+    } as CustomResourceInfo;
+
+    const picture = {
+      endpoints: [endpoint],
+      policies: [unreadable],
+      clusterwide: [],
+    };
+    expect(countUnrestricted(picture)).toBe(0);
+    expect(coverageTone(picture)).toBe("unchecked");
+    expect(coverageTone({ ...picture, policies: [] })).toBeNull();
   });
 });

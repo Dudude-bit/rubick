@@ -22,6 +22,9 @@ const HEALTHY_WHEN_FALSE = new Set([
   "failuretarget",
   "suspended",
   "terminating",
+  // Gateway API listeners: a controller that looked writes these False.
+  "conflicted",
+  "overlappingtlsconfig",
 ]);
 
 /**
@@ -57,6 +60,15 @@ const ADVISORY = new Set([
  */
 const LIFECYCLE_STEP = new Set(["podreadytostartcontainers", "initialized"]);
 
+/**
+ * Conditions whose off value is a caution, not a fault.
+ *
+ * A Gateway listener on `*.example.com` beside one on `foo.example.com` gets
+ * `OverlappingTLSConfig=True`, and both go on serving: the spec raises it for
+ * what HTTP/2 connection coalescing may do, not for a listener that broke.
+ */
+const CAUTION = new Set(["overlappingtlsconfig"]);
+
 const normalize = (type: string) => type.toLowerCase().replace(/[\s_-]/g, "");
 
 /**
@@ -75,6 +87,7 @@ export function conditionRole(condition: ConditionInfo): StatusRole {
   const healthyValue = HEALTHY_WHEN_FALSE.has(type) ? "false" : "true";
   if (status === healthyValue) return "ok";
   if (ADVISORY.has(type)) return "neutral";
+  if (CAUTION.has(type)) return "warn";
   return LIFECYCLE_STEP.has(type) ? "pending" : "err";
 }
 
@@ -97,5 +110,17 @@ export function failingCondition(
         !skip.has(condition.type.toLowerCase()) &&
         conditionRole(condition) === "err"
     ) ?? null
+  );
+}
+
+/**
+ * The condition worth a look though nothing failed — a caution, or one the
+ * controller has not decided — or nothing. Asked after `failingCondition`.
+ */
+export function cautioningCondition(
+  conditions: readonly ConditionInfo[]
+): ConditionInfo | null {
+  return (
+    conditions.find((condition) => conditionRole(condition) === "warn") ?? null
   );
 }

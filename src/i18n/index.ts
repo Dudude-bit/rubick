@@ -111,16 +111,22 @@ export function translate<S extends Section>(
   values?: Record<string, string | number>
 ): string {
   const catalogue = CATALOGUES[locale];
+  const translated = (
+    catalogue?.[section] as Record<string, string | Plural> | undefined
+  )?.[key as string];
   const entry =
-    (catalogue?.[section] as Record<string, string | Plural> | undefined)?.[
-      key as string
-    ] ??
+    translated ??
     ((en[section] as Record<string, string | Plural>)[key as string] as
       string | Plural);
 
   if (isPlural(entry)) {
     const n = Number(values?.n ?? 0);
-    return fill(pluralForm(entry, locale, n), values);
+    // An English fallback takes English forms: French calls 0 `one`, and
+    // "0 pod" is not a sentence in either language.
+    return fill(
+      pluralForm(entry, translated === undefined ? "en" : locale, n),
+      values
+    );
   }
   return fill(entry, values);
 }

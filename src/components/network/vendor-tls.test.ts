@@ -54,6 +54,39 @@ describe("what the Ingress list takes from a cloud controller", () => {
     ]);
   });
 
+  /**
+   * A question still out has not said no. Without it the host counted as
+   * answered while the controllers were being asked, and the row offered
+   * `http://` for a site that may well be HTTPS.
+   */
+  it("keeps a host apart while the controllers have not answered yet", () => {
+    const pending = answering(undefined, { isPending: true });
+    expect(vendorTlsAnswer(shop, pending, t)?.unchecked).toEqual([
+      "shop.example.com",
+    ]);
+    expect(ingressOpenUrl(shop, vendorTlsAnswer(shop, pending, t))).toBeNull();
+  });
+
+  /**
+   * Two rules for one host are still one host: counted twice it read
+   * "TLS 2" and keyed two tooltip rows alike.
+   */
+  it("names a host two rules share once", () => {
+    const twice = {
+      ...shop,
+      rules: [
+        { host: "shop.example.com", paths: [] },
+        { host: "shop.example.com", paths: [] },
+      ],
+    } as IngressInfo;
+    expect(vendorTlsAnswer(twice, answering(true), t)?.hosts).toEqual([
+      "shop.example.com",
+    ]);
+    expect(vendorTlsAnswer(twice, answering(null), t)?.unchecked).toEqual([
+      "shop.example.com",
+    ]);
+  });
+
   /** Everything answered and nobody speaking for the Ingress is spec.tls's call. */
   it("says nothing when every controller answered and none owns it", () => {
     expect(vendorTlsAnswer(shop, answering(undefined), t)).toBeNull();
@@ -73,5 +106,16 @@ describe("what the Ingress list takes from a cloud controller", () => {
     expect(
       ingressOpenUrl(shop, vendorTlsAnswer(shop, answering(false), t))
     ).toBe("http://shop.example.com");
+  });
+
+  /**
+   * `spec.tls` naming the host settles the scheme whatever the controller
+   * could not tell; the link went missing when its silence outranked it.
+   */
+  it("offers https for a host spec.tls covers though the controller could not tell", () => {
+    const covered = { ...shop, tlsHosts: ["*.example.com"] } as IngressInfo;
+    expect(
+      ingressOpenUrl(covered, vendorTlsAnswer(covered, answering(null), t))
+    ).toBe("https://shop.example.com");
   });
 });

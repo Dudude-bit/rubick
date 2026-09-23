@@ -2221,7 +2221,7 @@ export const en = {
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
     selectorUnevaluable:
-      "Kubernetes would refuse to build this selector (an operator other than In, NotIn, Exists and DoesNotExist, a set with no values, or a presence test with some), so what it selects cannot be said: {selector}",
+      "Kubernetes would refuse to build this selector (a missing or empty key, an operator other than In, NotIn, Exists and DoesNotExist, In or NotIn with no values, Exists or DoesNotExist with some, or a field of the wrong type), so what it selects cannot be said: {selector}",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
     chipLabel: "label",
@@ -2635,6 +2635,10 @@ export const en = {
     rowsOfTotal: "{shown} of {total} {label}",
     rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
+    rowCountWhereAnswered: {
+      one: "{n} row, from the namespaces that answered",
+      other: "{n} rows, from the namespaces that answered",
+    },
     longListTrim: {
       one: "{n} row — narrow the scope or search to trim",
       other: "{n} rows — narrow the scope or search to trim",
@@ -3024,6 +3028,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factReconcilersRead: {
+      one: "{n} reconciler read",
+      other: "{n} reconcilers read",
+    },
     factKindsUnread: {
       one: "{n} kind could not be listed",
       other: "{n} kinds could not be listed",
@@ -3458,6 +3466,7 @@ export const en = {
     rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
+    ciliumSelectsNodes: "nodes, by nodeSelector — no endpoint",
     ciliumCovered: "covered",
     ciliumUnrestricted: "nothing selects it",
     ciliumOnlyRejected: "only rejected policies",
@@ -3624,6 +3633,8 @@ export const en = {
       "requests vs allocatable · no metrics-server, live usage unknown",
     warningEvents: "Warning events",
     warningEventsScope: "last hour, by reason",
+    warningEventsUnread:
+      "Not every events list was read in full, so warnings may be missing here.",
     noCluster: "no cluster",
     missingBadge: "missing",
     missingTabHint:
@@ -4081,6 +4092,7 @@ export const en = {
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
+    podListUnread: "pod list not read",
     everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
@@ -4399,6 +4411,10 @@ export const en = {
     noRuleNamesThisHost: "no rule names this host",
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
+    maybeThisClustersService: "Services not read — may be one here",
+    subsetUnconfirmed: "defined if this is the Service — Services not read",
+    istioSubsetsMaybeRouted:
+      "{list} routed only through a host the unread Services would confirm",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {
@@ -4688,6 +4704,8 @@ export const en = {
     anyCluster: "any cluster",
     namespaceOnCluster: "{namespace} on {cluster}",
     readingArgoWorkloads: "Reading Argo’s own workloads…",
+    argoWorkloadsUnread:
+      "Could not list {kinds}, so any of Argo's own workloads among them are missing here.",
     argoWorkloadsDescription:
       "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
     argoUiDescription:
@@ -4862,7 +4880,7 @@ export const en = {
     legacyAddonInstalled:
       " The retired pod-identity add-on is still installed, and what it holds is below.",
     legacyAddonNotInstalled:
-      " The retired pod-identity add-on is not installed either — its three kinds are not served by this API server.",
+      " The retired pod-identity add-on is not installed either — neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
     podIdentityRetired: "Pod identity, which is retired",
     podIdentityRetiredHint:
       "aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes.",
@@ -4998,6 +5016,8 @@ export const en = {
     noTargetGroupBinding: "no TargetGroupBinding",
     noLimitsDeclared:
       "No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take.",
+    limitsNotKnown:
+      "This template's limits could not be read — the scale is what these pods have used, and whether anything caps them is not known.",
     noStructuralSchema:
       "This version publishes no structural schema, so the API server validates nothing beyond the object's metadata.",
     readyLower: "ready",
@@ -5433,6 +5453,8 @@ export const en = {
       "No matches yet — {answered} of {total} clusters have answered.",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
+    nothingSearchedAnywhere:
+      "Nothing has been searched: the search did not complete on any cluster here.",
     nothingMatchesOnSearched:
       "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",
@@ -5548,8 +5570,11 @@ export const en = {
       "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
     gwRefUnresolvedSay: "A reference this route makes did not resolve",
     gwRefUnresolvedShort: "a reference did not resolve",
-    gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
+    gwRefsResolveQuiet:
+      "The controller has not said whether references resolve",
     gwRefsResolve: "References resolve",
+    gwRefsPending:
+      "The controller has not decided whether the references resolve",
     gwRedirectsOnly: "This route redirects — no backends, and none needed",
     gwFilterNamed:
       "An extension filter is named and no backend is — what the filter does, this app does not read",
@@ -5561,6 +5586,8 @@ export const en = {
       "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
     gwBackendsReading: "Backend Services — still being read",
     gwEndpointsReading: "Endpoints — still being read",
+    gwBackendsUnread: "Backend Services — could not be read",
+    gwEndpointsUnread: "Endpoints — could not be read",
     gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
     gwBackendMissingShort: "Service {name} does not exist",
     gwWrongPortSay: "Service {name} does not serve port {port}",
@@ -5608,6 +5635,7 @@ export const en = {
     gwConnecting: "connecting…",
     gwAnswersIn: "answers in {ms} ms",
     gwServing: "Serving",
+    gwGroupUnknown: "Cannot tell whether serving",
     gwNotServing: "Not serving",
     gwAllHostsListenerServes: "all hosts the listener serves",
     gwStopsAtStep: "stops at step {n} of {total}",
@@ -5701,6 +5729,7 @@ export const en = {
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
     gwServingUnknown: "Can't tell — something here could not be read",
+    gwServingUndecided: "Can't tell yet — a controller has not decided",
     gwCheckingInstall: "Checking whether Gateway API is installed…",
     gwCouldNotCheckInstall:
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",

@@ -5,7 +5,7 @@
  * editor and not at startup.
  */
 
-import { load } from "js-yaml";
+import { load, loadAll } from "js-yaml";
 
 import type { DeliveryQuery } from "@/integrations";
 
@@ -78,23 +78,45 @@ function stringsOf(value: unknown): Record<string, string> {
  * from here.
  */
 export function changesReplicaCount(original: string, edited: string): boolean {
-  const before = replicaCountIn(original);
-  const after = replicaCountIn(edited);
-  if (before === UNREADABLE || after === UNREADABLE) return false;
-  return before !== after;
+  const [subject] = documentsIn(original) ?? [];
+  const docs = documentsIn(edited);
+  if (subject === undefined || docs === null || docs.length === 0) return false;
+  // The apply takes every document in the buffer, in order, so a second one
+  // added under `---` does not stop this one from moving the count — and
+  // each copy of this object sets its own count, the last one to stay.
+  const counterparts =
+    docs.length === 1 ? docs : docs.filter((doc) => sameObject(doc, subject));
+  return counterparts.some(
+    (doc) => replicaCountOf(subject) !== replicaCountOf(doc)
+  );
 }
 
-/** Distinguishes t("readings", "docNoReplicaCount") from t("readings", "cannotTell"). */
-const UNREADABLE = Symbol("unreadable");
-
-function replicaCountIn(text: string): number | null | typeof UNREADABLE {
-  let doc: unknown;
+/** The buffer's documents, or `null` where it will not parse. */
+function documentsIn(text: string): Record<string, unknown>[] | null {
+  let docs: unknown[];
   try {
-    doc = load(text);
+    docs = loadAll(text);
   } catch {
-    return UNREADABLE;
+    return null;
   }
-  if (!isRecord(doc)) return UNREADABLE;
+  return docs.filter(isRecord);
+}
+
+function sameObject(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>
+): boolean {
+  const meta = (doc: Record<string, unknown>) =>
+    isRecord(doc.metadata) ? doc.metadata : {};
+  const [left, right] = [meta(a).namespace, meta(b).namespace];
+  return (
+    a.kind === b.kind &&
+    meta(a).name === meta(b).name &&
+    (left === undefined || right === undefined || left === right)
+  );
+}
+
+function replicaCountOf(doc: Record<string, unknown>): number | null {
   const spec = doc.spec;
   if (!isRecord(spec)) return null;
   return typeof spec.replicas === "number" ? spec.replicas : null;

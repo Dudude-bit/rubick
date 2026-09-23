@@ -224,6 +224,36 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
   });
 
   /**
+   * A template whose quantities would not parse arrives with `known: false`
+   * and no sums, and the block said "No limits declared" about limits it
+   * could not read. Fails if the known bit is dropped on the way in.
+   */
+  it("says limits it could not read are not known rather than not declared", async () => {
+    const replica = {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+    };
+    const job = {
+      kind: "Job",
+      name: "job-demo",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      idle: "This Job has finished.",
+    };
+    const { unmount } = view({
+      ...job,
+      template: { replica: { ...replica, known: false } },
+    });
+    expect(await screen.findByText(/limits could not be read/i)).toBeVisible();
+    expect(screen.queryByText(/No limits declared/i)).toBeNull();
+    unmount();
+
+    view({ ...job, template: { replica: { ...replica, known: true } } });
+    expect(await screen.findByText(/No limits declared/i)).toBeVisible();
+  });
+
+  /**
    * The other half of the deal, and the one a regression would be silent
    * about. Without a supplier this page owes exactly what it owed before:
    * the sentence, and no chart of a workload nothing measured.

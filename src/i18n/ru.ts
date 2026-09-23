@@ -2300,7 +2300,7 @@ export const ru: Catalogue = {
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
     selectorUnevaluable:
-      "Такой селектор Kubernetes не соберёт (оператор не из In, NotIn, Exists и DoesNotExist, набор без значений или проверка наличия со значениями), поэтому что он выбирает, сказать нельзя: {selector}",
+      "Такой селектор Kubernetes не соберёт (ключ отсутствует или пуст, оператор не из In, NotIn, Exists и DoesNotExist, In или NotIn без значений, Exists или DoesNotExist со значениями или поле не того типа), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
     chipLabel: "лейбл",
@@ -2783,6 +2783,12 @@ export const ru: Catalogue = {
       few: "{n} строки",
       many: "{n} строк",
       other: "{n} строки",
+    },
+    rowCountWhereAnswered: {
+      one: "{n} строка, из ответивших namespace",
+      few: "{n} строки, из ответивших namespace",
+      many: "{n} строк, из ответивших namespace",
+      other: "{n} строки, из ответивших namespace",
     },
     longListTrim: {
       one: "{n} строка — сузьте область или поиск",
@@ -3298,6 +3304,12 @@ export const ru: Catalogue = {
       many: "{n} сверщиков",
       other: "{n} сверщика",
     },
+    factReconcilersRead: {
+      one: "прочитан {n} сверщик",
+      few: "прочитано {n} сверщика",
+      many: "прочитано {n} сверщиков",
+      other: "прочитано {n} сверщика",
+    },
     factKindsUnread: {
       one: "{n} вид перечислить не удалось",
       few: "{n} вида перечислить не удалось",
@@ -3782,6 +3794,7 @@ export const ru: Catalogue = {
     rolloutSeenRevision: "готово {ready} из {desired}, ревизия {revision}",
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumSelectsNodes: "узлы, по nodeSelector, — ни одного эндпоинта",
     ciliumCovered: "под политикой",
     ciliumUnrestricted: "его не выбирает ни одна политика",
     ciliumOnlyRejected: "только отвергнутые",
@@ -3971,6 +3984,8 @@ export const ru: Catalogue = {
       "запросы к доступному · metrics-server нет, текущее потребление неизвестно",
     warningEvents: "События-предупреждения",
     warningEventsScope: "за последний час, по причинам",
+    warningEventsUnread:
+      "Не все списки событий прочитаны целиком — части предупреждений здесь может не быть.",
     noCluster: "нет кластера",
     missingBadge: "отсутствует",
     missingTabHint:
@@ -4451,6 +4466,7 @@ export const ru: Catalogue = {
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
+    podListUnread: "список подов не прочитан",
     everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
       "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
@@ -4802,6 +4818,11 @@ export const ru: Catalogue = {
     noRuleNamesThisHost: "ни одно правило не называет этот хост",
     outsideThisCluster: "вне этого кластера",
     notThisClustersPods: "это поды не этого кластера",
+    maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
+    subsetUnconfirmed:
+      "определён, если это тот Service, — Service не прочитаны",
+    istioSubsetsMaybeRouted:
+      "{list}: маршрут идёт через хост, который подтвердили бы непрочитанные Services",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {
@@ -5116,6 +5137,8 @@ export const ru: Catalogue = {
     anyCluster: "любой кластер",
     namespaceOnCluster: "{namespace} в {cluster}",
     readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
+    argoWorkloadsUnread:
+      "Не удалось перечислить {kinds}, поэтому собственные рабочие нагрузки Argo среди них здесь не показаны.",
     argoWorkloadsDescription:
       "Где на самом деле диагностируется проблема Argo. Репозиторий, до которого он не достучался, и вебхук, который до него не дошёл, — в логах repo-server и контроллера, а не в статусе какого-либо Application.",
     argoUiDescription:
@@ -5297,7 +5320,7 @@ export const ru: Catalogue = {
     legacyAddonInstalled:
       " Снятое с поддержки дополнение pod-identity всё ещё установлено — что в нём есть, показано ниже.",
     legacyAddonNotInstalled:
-      " Снятое с поддержки дополнение pod-identity тоже не установлено — его три вида этот API-сервер не обслуживает.",
+      " Снятое с поддержки дополнение pod-identity тоже не установлено — ни один из двух его видов, AzureIdentity и AzureIdentityBinding, этот API-сервер не обслуживает.",
     podIdentityRetired: "Pod identity — снято с поддержки",
     podIdentityRetiredHint:
       "aad-pod-identity объявлен устаревшим в октябре 2022, заархивирован в сентябре 2023, а его дополнение для AKS вышло из поддержки в сентябре 2025. Всё это работает, пока работает; переезжать надо на Workload ID выше.",
@@ -5435,6 +5458,8 @@ export const ru: Catalogue = {
     noTargetGroupBinding: "нет TargetGroupBinding",
     noLimitsDeclared:
       "В этом шаблоне не объявлены лимиты — шкала показывает то, что эти поды уже потребляли, и ничто не ограничивает, сколько они могут взять.",
+    limitsNotKnown:
+      "Лимиты этого шаблона прочитать не удалось — шкала показывает то, что эти поды уже потребляли, а ограничивает ли их что-то, неизвестно.",
     noStructuralSchema:
       "Эта версия не публикует структурную схему, поэтому API-сервер не проверяет ничего, кроме metadata объекта.",
     readyLower: "готов",
@@ -5872,6 +5897,8 @@ export const ru: Catalogue = {
       "Совпадений пока нет — ответили {answered} из {total} кластеров.",
     nothingSearchedNoCluster:
       "Поиск не выполнялся: ни один кластер ещё не подключён.",
+    nothingSearchedAnywhere:
+      "Поиск не выполнен: ни на одном кластере здесь он не завершился.",
     nothingMatchesOnSearched:
       "По запросу «{query}» ничего не найдено на {answered} из {total} кластеров, где выполнялся поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
@@ -5986,8 +6013,9 @@ export const ru: Catalogue = {
       "{said}. Ссылка через границу неймспейсов требует согласия целевого неймспейса, и контроллер обязан ронять этот трафик, пока согласия нет. Вот грант, который это чинит:",
     gwRefUnresolvedSay: "Одна из ссылок этого маршрута не разрешилась",
     gwRefUnresolvedShort: "ссылка не разрешилась",
-    gwRefsResolveQuiet: "Ссылки разрешаются — обратного никто не сообщил",
+    gwRefsResolveQuiet: "Контроллер не сообщил, разрешаются ли ссылки",
     gwRefsResolve: "Ссылки разрешаются",
+    gwRefsPending: "Контроллер ещё не решил, разрешаются ли ссылки",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
     gwFilterNamed:
@@ -5999,6 +6027,8 @@ export const ru: Catalogue = {
       "Во всех правилах нет backendRefs (и нет ни редиректа, ни фильтра-расширения). Совпавший запрос сразу получает ошибку от шлюза.",
     gwBackendsReading: "Бэкенд-Service — ещё читаются",
     gwEndpointsReading: "Эндпоинты — ещё читаются",
+    gwBackendsUnread: "Бэкенд-Service — прочитать не удалось",
+    gwEndpointsUnread: "Эндпоинты — прочитать не удалось",
     gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
     gwBackendMissingShort: "Service {name} не существует",
     gwWrongPortSay: "Service {name} не обслуживает порт {port}",
@@ -6043,6 +6073,7 @@ export const ru: Catalogue = {
     gwConnecting: "подключается…",
     gwAnswersIn: "отвечает за {ms} мс",
     gwServing: "Обслуживает",
+    gwGroupUnknown: "Не удалось определить, обслуживает ли",
     gwNotServing: "Не обслуживает",
     gwAllHostsListenerServes: "все хосты, которые обслуживает слушатель",
     gwStopsAtStep: "останавливается на шаге {n} из {total}",
@@ -6138,6 +6169,7 @@ export const ru: Catalogue = {
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     gwServingUnknown: "Непонятно — что-то не удалось прочитать",
+    gwServingUndecided: "Пока непонятно — контроллер ещё не решил",
     gwCheckingInstall: "Проверяем, установлен ли Gateway API…",
     gwCouldNotCheckInstall:
       "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",

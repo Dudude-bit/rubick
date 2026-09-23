@@ -61,6 +61,8 @@ async function listKind(
   }
 }
 
+const LEGACY_KINDS = [AZURE_IDENTITY_CRD, AZURE_IDENTITY_BINDING_CRD];
+
 export async function fetchAksPicture(): Promise<AksPicture> {
   const unread: AksPicture["unread"] = [];
   let podsKnown = true;
@@ -88,14 +90,14 @@ export async function fetchAksPicture(): Promise<AksPicture> {
   ]);
 
   const legacyFound = identities.length > 0 || bindings.length > 0;
+  // Only the add-on's own kinds decide it: `AzureIngressProhibitedTarget` is
+  // AGIC's, and a refusal there says nothing about aad-pod-identity.
+  const legacyUnread = unread.some((read) => LEGACY_KINDS.includes(read.what));
   return {
     identities,
     bindings,
     prohibited,
-    legacyInstalled:
-      legacyFound || !unread.some((read) => read.what !== "Pod")
-        ? legacyFound
-        : null,
+    legacyInstalled: legacyFound || !legacyUnread ? legacyFound : null,
     workload: await workloadIdentity(pods),
     podsKnown,
     unread,
@@ -113,7 +115,27 @@ export function useAksPicture() {
   });
 }
 
-/** The sidebar's number: identities this cluster can actually hand out. */
-export function countIdentities(picture: AksPicture): number {
+/**
+ * Whether every labelled pod and each ServiceAccount it names were read.
+ * Where one was not, the accounts listed are some of them, not all.
+ */
+export function accountsKnown(picture: AksPicture): boolean {
+  return (
+    picture.podsKnown &&
+    !picture.workload.findings.some(
+      (finding) => finding.kind === "account-unread"
+    )
+  );
+}
+
+/**
+ * The sidebar's number: identities this cluster can actually hand out.
+ * `null` where a read that would add to it failed — a refused pod list is
+ * not "0 identities".
+ */
+export function countIdentities(picture: AksPicture): number | null {
+  if (!accountsKnown(picture)) return null;
+  if (picture.unread.some((read) => read.what === AZURE_IDENTITY_CRD))
+    return null;
   return picture.workload.accounts.length + picture.identities.length;
 }

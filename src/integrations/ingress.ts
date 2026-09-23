@@ -29,6 +29,7 @@ import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
+import { certificatesOf } from "@/hooks/useTlsCertificates";
 import type {
   ChainStop,
   DeploymentContainerInfo,
@@ -596,8 +597,10 @@ export function useRouteCertificates(
     (results: UseQueryResult<Map<string, TlsCertificate>>[]) => {
       const certificates = new Map<string, TlsCertificate>();
       results.forEach((result, index) => {
-        for (const [name, read] of result.data ?? []) {
-          certificates.set(`${batches[index].namespace}/${name}`, read);
+        const { namespace, names } = batches[index];
+        const read = certificatesOf(result.data, result.error, names);
+        for (const [name, certificate] of read ?? []) {
+          certificates.set(`${namespace}/${name}`, certificate);
         }
       });
       return certificates;

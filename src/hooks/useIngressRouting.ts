@@ -224,7 +224,7 @@ export function useIngressRouting(
 
   return {
     routing,
-    certificates: certificates.data ?? new Map(),
+    certificates: certificates ?? new Map(),
     issuance,
     unread,
   };

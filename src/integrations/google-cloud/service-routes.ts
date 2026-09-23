@@ -73,6 +73,9 @@ function terminates(
   return false;
 }
 
+const rankOf = (tls: boolean | null): number =>
+  tls === true ? 2 : tls === null ? 1 : 0;
+
 export async function serviceRoutes(input: {
   namespace: string;
   name: string;
@@ -102,8 +105,9 @@ export async function serviceRoutes(input: {
         );
         const already = found.get(key);
         // Two Ingresses on one host and path: if either terminates TLS, a
-        // client that asks for it gets it.
-        if (already && already.tls === true) continue;
+        // client that asks for it gets it; one that could not tell has not
+        // said no, so it outranks one that did.
+        if (already && rankOf(already.tls) >= rankOf(tls)) continue;
         found.set(key, {
           host,
           path: path.path || "/",
