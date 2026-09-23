@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SurfaceVisibility } from "@/lib/surface-visibility";
+import { useWindowActivity } from "@/lib/window-activity";
 import { RealtimeAge } from "./realtime-age";
 
 const T0 = Date.parse("2026-09-23T12:00:00Z");
@@ -29,6 +30,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
   commits = 0;
+  useWindowActivity.setState({ visible: true });
 });
 
 afterEach(() => {
@@ -89,5 +91,22 @@ describe("an age cell's clock", () => {
 
     seconds(1);
     expect(screen.getByText("16s")).toBeInTheDocument();
+  });
+
+  /**
+   * A minimised app is not looked at either, and the poll next to these
+   * cells already stops for it. The clocks kept every age column ticking
+   * behind the dock.
+   */
+  it("stops re-rendering while the window is hidden", () => {
+    render(cell(secondsAgo(5)));
+    act(() => useWindowActivity.setState({ visible: false }));
+    const hiddenAt = commits;
+
+    seconds(10);
+    expect(commits).toBe(hiddenAt);
+
+    act(() => useWindowActivity.setState({ visible: true }));
+    expect(screen.getByText("15s")).toBeInTheDocument();
   });
 });

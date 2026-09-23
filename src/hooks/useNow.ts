@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { useWindowActivity } from "@/lib/window-activity";
 
 interface Clock {
   subscribe: (onTick: () => void) => () => void;
@@ -46,16 +47,17 @@ const EVERY = {
 export type Every = keyof typeof EVERY;
 
 /**
- * Every clock here stops waking a component whose surface is hidden, as well
- * as one that passed `live: false`. Radix force-mounts a detail tab once it
- * has been opened, so an age cell on a tab switched away from went on
+ * Every clock here stops waking a component whose surface or window is
+ * hidden, as well as one that passed `live: false`. Radix force-mounts a
+ * detail tab once it has been opened, so an age cell on a tab switched away from went on
  * re-rendering every second at nobody for as long as the page stayed open.
  * Shown again, the surface re-renders and reads the clock afresh.
  */
 function useClock(rate: Clock, live: boolean): number {
-  const visible = useSurfaceVisible();
+  const surfaceVisible = useSurfaceVisible();
+  const windowVisible = useWindowActivity((state) => state.visible);
   return useSyncExternalStore(
-    live && visible ? rate.subscribe : stopped,
+    live && surfaceVisible && windowVisible ? rate.subscribe : stopped,
     rate.snapshot
   );
 }
