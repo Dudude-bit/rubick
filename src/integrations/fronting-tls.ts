@@ -62,7 +62,11 @@ export function useFrontingTls(
           (route) => route.tls === true && route.host === host
         );
       if (terminated) return true;
-      return unanswered ? "unknown" : false;
+      // A supplier that read too little to say has not said no.
+      const unsure = fronting.routes.some(
+        (route) => route.tls === null && route.host === host
+      );
+      return unanswered || unsure ? "unknown" : false;
     },
     [asked, front, fronting.routes, unanswered]
   );

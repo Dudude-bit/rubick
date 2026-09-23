@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -397,7 +398,7 @@ function ProbePanel({
         resolvedFirst = result.resolved[0];
         setDns({ status: "finished", result });
       } catch (error) {
-        setDns({ status: "error", message: String(error) });
+        setDns({ status: "error", message: errorToShow(error) });
       }
     }
     if (udp) return;
@@ -415,7 +416,7 @@ function ProbePanel({
       const result = await commands.probeTcpConnect(connectTo, port ?? 80);
       setTcp({ status: "finished", result });
     } catch (error) {
-      setTcp({ status: "error", message: String(error) });
+      setTcp({ status: "error", message: errorToShow(error) });
     }
   };
 

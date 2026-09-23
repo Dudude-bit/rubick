@@ -28,6 +28,7 @@ import { Fragment, useMemo, type ReactNode } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
+  edgeTlsWords,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -79,7 +80,7 @@ import {
   duplicatedServiceNames,
   hostGroups,
   hostState,
-  terminatedUpstream,
+  edgeTls,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -422,14 +423,10 @@ function HostRow({
   // Where the certificate is, when it is not here. Stated rather than merely
   // not warned about: a reader who knows TLS ends at the load balancer learns
   // nothing from silence, and a reader who does not is the one this line is
-  // for. `null` on every ordinary cluster, where the proxy holds its own.
-  const upstream =
-    sources && !tls ? terminatedUpstream(group.host, sources) : null;
-  const upstreamNamed =
-    upstream ??
-    (sources?.upstreamTls?.(group.host) === true
-      ? t("empty", "theEdge")
-      : null);
+  // for.
+  const edge = sources
+    ? edgeTls(group.host, sources)
+    : { at: "unknown" as const };
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -456,9 +453,7 @@ function HostRow({
             ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
           {tls
             ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : upstreamNamed
-              ? ` · ${t("empty", "tlsEndsAt", { name: typeof upstreamNamed === "string" ? upstreamNamed : upstreamNamed.name })}`
-              : ` · ${t("empty", "noTls")}`}
+            : ` · ${edgeTlsWords(edge, t)}`}
         </>
       }
       state={state}

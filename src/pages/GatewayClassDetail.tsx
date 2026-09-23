@@ -7,6 +7,7 @@
  */
 
 import { Info, Tag, Trash2 } from "lucide-react";
+import { errorToShow } from "@/lib/error-utils";
 
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -59,7 +60,7 @@ function GatewayRows({ className }: { className: string }) {
       {error && gateways === undefined ? (
         <p className="text-xs text-err">
           {t("empty", "couldNotReadGateways", {
-            message: (error as Error).message,
+            message: errorToShow(error),
           })}
         </p>
       ) : isLoading && gateways === undefined ? (

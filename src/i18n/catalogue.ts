@@ -4268,6 +4268,9 @@ export const en = {
       other: "have nothing to apply.",
     },
     fluxSourceUnaffected: "Nothing names this source, so nothing is affected.",
+    fluxFrozenUnread:
+      "HelmReleases could not be listed, so any built from this source are not counted here.",
+    fluxHelmReleasesNotRead: "HelmReleases not read",
     readingFluxWorkloads: "Reading Flux’s own workloads…",
     fluxWorkloadsTitle: "Flux's own workloads",
     fluxWorkloadsDescription:
@@ -4475,6 +4478,9 @@ export const en = {
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
     noTls: "no TLS",
+    tlsNotChecked: "TLS not checked",
+    relatedShortBy:
+      "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopNothingPublishedYet: "nothing published yet",
@@ -4598,6 +4604,8 @@ export const en = {
       "Whatever their emptyDir holds does not survive the move.",
     waitingOnTheseExplained:
       "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
+    drainReportsMissed:
+      "Some of this drain's reports were lost on the way to this window, so it may already have finished. What is shown is the last one that arrived.",
     stoppedExplained:
       "Nothing here changes by waiting. Each one needs an answer only you can give.",
     notNowExplained:

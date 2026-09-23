@@ -17,11 +17,12 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
-import { hostSeverity } from "../ingress";
+import { edgeTlsTag, hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
   boundEntryPoints,
+  edgeTls,
   type HostGroup,
   type TraefikSources,
 } from "./model";
@@ -165,7 +166,7 @@ export function routingMap(
       to: hostFilterPath(group.host),
       tag: tls
         ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-        : { text: t("empty", "noTls"), tone: "warn" },
+        : edgeTlsTag(edgeTls(group.host, sources), t),
     };
   });
 

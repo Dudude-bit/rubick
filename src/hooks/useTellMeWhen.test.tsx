@@ -28,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
     subscribeCustomObjectWatch: vi.fn(async () => "stream-2"),
     resourceWatchSubscribed: vi.fn(async () => undefined),
     unsubscribeResourceWatch: vi.fn(async () => undefined),
+    listPortForwards: vi.fn(async () => [] as Array<{ id: string }>),
   },
 }));
 
@@ -318,6 +319,43 @@ describe("the event bridge falling behind", () => {
     hook.unmount();
   });
 
+  /** The dropped batch can be the `deleted`, and a list selected by name says so only by coming back empty — in two batches when a burst splits it. Read as "watching", the row waited a day for an object already gone. */
+  it("says the object is gone when the fresh list comes back without it", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [{ op: "restarted", resource: null }],
+        error: null,
+      })
+    );
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [{ op: "synced", resource: null }],
+        error: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    const status = useTellMeWhenStore.getState().watches[0].status;
+    expect(status.state === "done" && status.verdict.says).toBe("gone");
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "payments is gone",
+      body: "",
+    });
+    hook.unmount();
+  });
+
   /** A watch already lost when the lag lands keeps its clock; dropping the timer with the old stream left it lost and never reported. */
   it("still reports a watch that was already lost when the lag landed", async () => {
     useTellMeWhenStore.setState({ watches: [rollout()] });
@@ -333,6 +371,109 @@ describe("the event bridge falling behind", () => {
       title: "Lost sight of payments",
       body: "",
     });
+    hook.unmount();
+  });
+});
+
+const drainWatch = (): Watch => ({
+  ...rollout(),
+  id: "w-drain",
+  kind: "Node",
+  namespace: null,
+  name: "node-7",
+  ask: "drain",
+});
+
+const forwardWatch = (): Watch => ({
+  ...rollout(),
+  id: "w-fwd",
+  kind: "PortForward",
+  ask: "forwardAlive",
+  sessionId: "pf-9",
+});
+
+async function mounted() {
+  const hook = renderHook(() => useTellMeWhen());
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  return hook;
+}
+
+describe("a drain or a forward when the event bridge falls behind", () => {
+  /** The lag can drop `drain-finished`, and a drain cannot be asked again; left on "watching", the row waited a day for an answer already thrown away. Fails if the lag skips Node watches. */
+  it("loses sight of a drain and says so when it is not heard from again", async () => {
+    useTellMeWhenStore.setState({ watches: [drainWatch()] });
+    const hook = await mounted();
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOST_SIGHT_MS + 10_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "Lost sight of node-7",
+      body: "",
+    });
+    hook.unmount();
+  });
+
+  /** A drain still running reports progress every few seconds; that report is the proof the lag hid nothing, and without it every drain across a lag would claim it was lost. */
+  it("goes back to watching a drain when its next progress report arrives", async () => {
+    useTellMeWhenStore.setState({ watches: [drainWatch()] });
+    const hook = await mounted();
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    act(() =>
+      emit("drain-progress", {
+        drain_id: "d1",
+        node: "node-7",
+        attempt: 3,
+        report: {},
+      })
+    );
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe(
+      "watching"
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOST_SIGHT_MS + 10_000);
+    });
+    expect(notifyMock).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  /** A dropped `stopped` left the row watching a forward that had already died; the backend's list of forwards is the second look. Fails if the lag skips PortForward watches. */
+  it("says a forward died when the list after the lag no longer has it", async () => {
+    vi.mocked(commands.listPortForwards).mockResolvedValueOnce([]);
+    useTellMeWhenStore.setState({ watches: [forwardWatch()] });
+    const hook = await mounted();
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    const status = useTellMeWhenStore.getState().watches[0].status;
+    expect(status.state === "done" && status.verdict.says).toBe("forwardDied");
+    hook.unmount();
+  });
+
+  /** The other half: a forward the list still has is alive, and must not be called dead because a lag happened near it. */
+  it("keeps watching a forward the list after the lag still has", async () => {
+    vi.mocked(commands.listPortForwards).mockResolvedValueOnce([
+      { id: "pf-9" },
+    ] as never);
+    useTellMeWhenStore.setState({ watches: [forwardWatch()] });
+    const hook = await mounted();
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(commands.listPortForwards).toHaveBeenCalled();
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe(
+      "watching"
+    );
+    expect(notifyMock).not.toHaveBeenCalled();
     hook.unmount();
   });
 });

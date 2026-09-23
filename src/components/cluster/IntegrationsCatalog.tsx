@@ -10,6 +10,7 @@ import {
   type VendorFact,
 } from "@/integrations";
 import { cn } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import { sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -59,7 +60,7 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
         <p className="mt-1.5 text-xs text-fg-mut">
           {t("empty", "crdDetectionFailed")}
         </p>
-        <p className="mt-2 text-[11px] text-fg-fnt">{error.message}</p>
+        <p className="mt-2 text-[11px] text-fg-fnt">{errorToShow(error)}</p>
       </div>
     );
   }

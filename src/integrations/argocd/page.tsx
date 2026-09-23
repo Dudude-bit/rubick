@@ -829,7 +829,7 @@ function AppSetsTab({
           const generated = apps.filter(
             (app) => app.generatedBy?.name === set.name
           );
-          const error = conditionsOf(set).find(
+          const failing = conditionsOf(set).find(
             (condition) =>
               condition.type === "ErrorOccurred" && condition.status === "True"
           );
@@ -860,9 +860,9 @@ function AppSetsTab({
                   })}
                 </span>
               </div>
-              {error && (
+              {failing && (
                 <p className="mt-1 border-l-2 border-err pl-2.5 font-mono text-[11px] text-err">
-                  {error.message}
+                  {failing.message}
                 </p>
               )}
             </div>

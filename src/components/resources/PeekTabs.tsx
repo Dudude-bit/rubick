@@ -10,6 +10,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
@@ -138,7 +139,7 @@ function TabError({
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">{what}</p>
       <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
-        {error.message}
+        {errorToShow(error)}
       </p>
       <div className="mt-2">
         <DetailAction

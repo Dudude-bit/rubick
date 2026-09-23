@@ -173,3 +173,48 @@ describe("stopping a drain before anyone listened", () => {
     expect(result.current.state).toMatchObject({ phase: "failed" });
   });
 });
+
+function emit(event: string, payload: unknown) {
+  for (const handler of listeners[event] ?? []) handler({ payload });
+}
+
+describe("a drain when the event bridge falls behind", () => {
+  /** The lag can drop `drain-finished`, and nothing sends it twice; without a mark the dialog read "running" over a drain the backend had already ended. Fails if the lag is ignored. */
+  it("marks the running drain as having missed reports, until the next one arrives", async () => {
+    const { result } = renderHook(() => useNodeDrain());
+    await act(async () => {
+      await result.current.start("node-7", OPTIONS);
+    });
+    expect(result.current.state).toMatchObject({
+      phase: "running",
+      missed: false,
+    });
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    expect(result.current.state).toMatchObject({
+      phase: "running",
+      missed: true,
+    });
+
+    act(() =>
+      emit("drain-progress", {
+        drain_id: "d1",
+        node: "node-7",
+        attempt: 4,
+        report: {
+          evicted: 3,
+          alreadyGone: 0,
+          leaving: 0,
+          daemonsetPodsLeft: 0,
+          staticPodsLeft: 0,
+          refused: [],
+        },
+      })
+    );
+    expect(result.current.state).toMatchObject({
+      phase: "running",
+      attempt: 4,
+      missed: false,
+    });
+  });
+});

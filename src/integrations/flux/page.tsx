@@ -669,11 +669,17 @@ function SourceRow({
           {t("columns", "appliedBy")}
         </span>
         <span className="min-w-0 truncate">
-          {source.usedBy.length === 0
-            ? t("empty", "nothingLower")
-            : source.usedBy
+          {source.usedBy.length > 0
+            ? source.usedBy
                 .map((key) => key.split("/").slice(1).join("/"))
-                .join(", ")}
+                .join(", ")
+            : source.usersKnown && t("empty", "nothingLower")}
+          {!source.usersKnown && (
+            <span className="text-fg-fnt">
+              {source.usedBy.length > 0 && " · "}
+              {t("empty", "fluxHelmReleasesNotRead")}
+            </span>
+          )}
         </span>
       </div>
       {crd && (
@@ -716,7 +722,9 @@ function SourceFinding({
       title={fetchTitle(finding.everFetched, t)}
       verbatim={finding.message}
     >
-      {finding.frozen.length > 0 ? (
+      {finding.frozen.length === 0 && !finding.frozenKnown ? (
+        t("empty", "fluxFrozenUnread")
+      ) : finding.frozen.length > 0 ? (
         <>
           {finding.frozen.map((name, index) => (
             <span key={name}>
@@ -740,6 +748,9 @@ function SourceFinding({
         </>
       ) : (
         t("empty", "fluxSourceUnaffected")
+      )}
+      {finding.frozen.length > 0 && !finding.frozenKnown && (
+        <> {t("empty", "fluxFrozenUnread")}</>
       )}
     </Finding>
   );

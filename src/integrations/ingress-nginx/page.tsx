@@ -21,6 +21,7 @@ import { useMemo } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
+  edgeTlsWords,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -74,6 +75,7 @@ import {
   allRoutes,
   PROXY_LABEL,
   backingOf,
+  edgeTls,
   hostGroups,
   hostState,
   nginxClasses,
@@ -408,7 +410,7 @@ function HostRow({
             ` · ${t("empty", "splitShares", { shares: splitSummary(group) })}`}
           {tls
             ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : ` · ${t("empty", "noTls")}`}
+            : ` · ${edgeTlsWords(sources ? edgeTls(group.host, sources) : { at: "unknown" }, t)}`}
         </>
       }
       state={state}

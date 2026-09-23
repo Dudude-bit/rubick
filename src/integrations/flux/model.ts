@@ -130,6 +130,8 @@ export type FluxFinding =
       severity: "err";
       message: string | null;
       frozen: string[];
+      /** False where HelmReleases could not be listed: {@link frozen} may be short. */
+      frozenKnown: boolean;
       everFetched: boolean;
     };
 
@@ -560,6 +562,7 @@ function sourceFindings(
       severity: "err",
       message: source.message,
       frozen,
+      frozenKnown: source.usersKnown,
       everFetched: source.artifact !== null,
     });
   }

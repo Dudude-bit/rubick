@@ -27,6 +27,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   endpointAddress,
   endpointState,
@@ -73,7 +74,7 @@ export function PublishedEndpoints({
     return (
       <p className="text-xs text-err">
         {t("empty", "couldNotReadWhatServicePublishes")}{" "}
-        {error?.message ?? t("empty", "noAnswer")}
+        {error ? errorToShow(error) : t("empty", "noAnswer")}
       </p>
     );
   }

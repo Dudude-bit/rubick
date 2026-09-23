@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
@@ -428,6 +429,62 @@ export function frontingIngressesOf(
           ))
     )
   );
+}
+
+/**
+ * Where TLS ends for a host that holds no certificate of its own: at an
+ * Ingress in front, at a cloud controller in front, nowhere — or not known,
+ * because the Services or what stands in front could not be read.
+ */
+export type EdgeTls =
+  | { at: "ingress"; name: string }
+  | { at: "edge" }
+  | { at: "none" }
+  | { at: "unknown" };
+
+export function edgeTlsOf(
+  host: string | null,
+  sources: BackingSources & {
+    upstreamTls?: (host: string | null) => boolean | "unknown";
+  },
+  fronting: readonly IngressInfo[]
+): EdgeTls {
+  const upstream = terminatedUpstreamOf(host, fronting);
+  if (upstream) return { at: "ingress", name: upstream.name };
+  const said = sources.upstreamTls?.(host);
+  if (said === true) return { at: "edge" };
+  if (!sources.backingKnown || said === "unknown") return { at: "unknown" };
+  return { at: "none" };
+}
+
+/** A host row's words for TLS it does not hold itself. */
+export function edgeTlsWords(edge: EdgeTls, t: T): string {
+  switch (edge.at) {
+    case "ingress":
+      return t("empty", "tlsEndsAt", { name: edge.name });
+    case "edge":
+      return t("empty", "tlsEndsAt", { name: t("empty", "theEdge") });
+    case "none":
+      return t("empty", "noTls");
+    case "unknown":
+      return t("empty", "tlsNotChecked");
+  }
+}
+
+/** The routing map's one-word tag for the same. */
+export function edgeTlsTag(
+  edge: EdgeTls,
+  t: T
+): { text: string; tone: "mute" | "warn" | "unknown" } {
+  switch (edge.at) {
+    case "ingress":
+    case "edge":
+      return { text: "TLS", tone: "mute" };
+    case "none":
+      return { text: t("empty", "noTls"), tone: "warn" };
+    case "unknown":
+      return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
+  }
 }
 
 /**

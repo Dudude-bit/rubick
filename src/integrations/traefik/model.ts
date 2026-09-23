@@ -39,9 +39,11 @@ import {
   type Backing,
   type BackingSources,
   type SecretRef,
+  edgeTlsOf,
   frontingIngressesOf,
   proxyServicesBy,
   terminatedUpstreamOf,
+  type EdgeTls,
 } from "../ingress";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "../page-kit";
@@ -739,6 +741,10 @@ export function terminatedUpstream(
   return terminatedUpstreamOf(host, frontingIngresses(sources));
 }
 
+export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
+  return edgeTlsOf(host, sources, frontingIngresses(sources));
+}
+
 /**
  * A host served with no encryption at all.
  *
@@ -758,13 +764,9 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
-  // Without the proxy's Services nothing in front can be ruled out.
-  if (!sources.backingKnown) return null;
-  // Something in front of the proxy holds the certificate. The inside hop is
-  // plaintext by design and is drawn as the fact it is, not as a fault.
-  if (terminatedUpstream(host, sources)) return null;
-  const upstream = sources.upstreamTls?.(host);
-  if (upstream === true || upstream === "unknown") return null;
+  // Something in front holds the certificate, and the inside hop is plaintext
+  // by design; or what is in front could not be read and cannot be ruled out.
+  if (edgeTls(host, sources).at !== "none") return null;
   // Nothing is claimed about entry points the controller never told us about:
   // an empty list means the workload could not be read, not that it listens
   // on nothing.

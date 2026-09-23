@@ -10,7 +10,7 @@
  * wearing a link.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import type { EntryPoint, TraefikRoute } from "./model";
@@ -22,6 +22,7 @@ vi.mock("@/lib/commands", () => ({
     listServices: vi.fn(async () => []),
     resolveIngressClass: vi.fn(async () => ({ available: [] })),
     listDeployments: vi.fn(async () => []),
+    getDeployment: vi.fn(async () => ({ containers: [] })),
     listDaemonsets: vi.fn(async () => []),
     getManifest: vi.fn(async () => ({})),
   },
@@ -268,5 +269,60 @@ describe("which hosts reach a Service", () => {
     await expect(
       serviceRoutes({ namespace: "argocd", name: "argocd-server" })
     ).resolves.toEqual([]);
+  });
+});
+
+describe("the scheme of a route on a plain entry point", () => {
+  beforeEach(() => {
+    vi.mocked(commands.listIngresses).mockResolvedValue([]);
+    vi.mocked(commands.listServices).mockResolvedValue([]);
+    vi.mocked(commands.listDeployments).mockResolvedValue([
+      {
+        name: "traefik",
+        namespace: "edge",
+        containers: [{ image: "traefik:v3" }],
+        replicas: { ready: 1, desired: 1 },
+      },
+    ] as never);
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      containers: [
+        { command: [], args: ["--entryPoints.web.address=:8000"], env: [] },
+      ],
+    } as never);
+    vi.mocked(commands.listCustomResources).mockResolvedValue([
+      ingressRoute({
+        entryPoints: ["web"],
+        routes: [
+          {
+            match: "Host(`argocd.example.com`)",
+            services: [{ name: "argocd-server", port: 80 }],
+          },
+        ],
+      }),
+    ]);
+  });
+
+  /** The Service list is how an edge terminating in front is found; refused, it was read as none, and a host clients reach over HTTPS was handed out as `http://`. Fails if the refusal becomes an empty list again. */
+  it("does not settle it when the Services could not be listed", async () => {
+    vi.mocked(commands.listServices).mockRejectedValueOnce(
+      new Error("services is forbidden")
+    );
+
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found[0].tls).toBeNull();
+  });
+
+  /** The other half: Services read and nothing in front, a plain entry point is plain. */
+  it("says plain when the Services were read and nothing stands in front", async () => {
+    const found = await serviceRoutes({
+      namespace: "argocd",
+      name: "argocd-server",
+    });
+
+    expect(found[0].tls).toBe(false);
   });
 });

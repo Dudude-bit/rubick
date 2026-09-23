@@ -4662,6 +4662,9 @@ export const ru: Catalogue = {
     },
     fluxSourceUnaffected:
       "На этот источник никто не ссылается, поэтому ничего не затронуто.",
+    fluxFrozenUnread:
+      "HelmRelease перечислить не удалось, поэтому собранные из этого источника здесь не учтены.",
+    fluxHelmReleasesNotRead: "HelmRelease не прочитаны",
     readingFluxWorkloads: "Читаем собственные нагрузки Flux…",
     fluxWorkloadsTitle: "Собственные нагрузки Flux",
     fluxWorkloadsDescription:
@@ -4890,6 +4893,9 @@ export const ru: Catalogue = {
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
+    tlsNotChecked: "TLS не проверен",
+    relatedShortBy:
+      "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopNothingPublishedYet: "пока ничего не опубликовано",
@@ -5021,6 +5027,8 @@ export const ru: Catalogue = {
       "То, что лежит в их emptyDir, переезда не переживёт.",
     waitingOnTheseExplained:
       "Они уедут сами, как только кластер позволит. Если закрыть окно, освобождение не прервётся.",
+    drainReportsMissed:
+      "Часть сообщений этого освобождения потерялась по дороге в окно, так что оно, возможно, уже закончилось. Здесь показано последнее, что дошло.",
     stoppedExplained:
       "Здесь ожидание ничего не изменит: на каждого нужен ответ, который можете дать только вы.",
     notNowExplained:
