@@ -13,6 +13,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
+import { Unknown } from "@/components/ui/unknown";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { RelatedResources } from "@/components/resources/RelatedResources";
@@ -186,23 +187,25 @@ export function CronJobDetail() {
     },
   });
 
-  const { data: jobs = [] } = useLiveQuery({
+  // A refused list is carried, not read as "no runs": the peek already
+  // said "could not read this CronJob's runs" beside a page claiming none.
+  const {
+    data: jobs = [],
+    error: jobsError,
+    refetch: refetchJobs,
+  } = useLiveQuery({
     queryKey: ["cronjob-jobs", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
-      try {
-        const all = await commands.listJobs({
-          namespace,
-          labelSelector: null,
-          fieldSelector: null,
-          limit: null,
-        });
-        // The list command carries no owner references, so the naming
-        // convention the controller uses is the only link available.
-        return all.filter((job) => job.name.startsWith(`${name}-`));
-      } catch {
-        return [];
-      }
+      const all = await commands.listJobs({
+        namespace,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+      });
+      // The list command carries no owner references, so the naming
+      // convention the controller uses is the only link available.
+      return all.filter((job) => job.name.startsWith(`${name}-`));
     },
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
@@ -270,46 +273,54 @@ export function CronJobDetail() {
                   // and says what keeps it.
                   subject={t("action", "runsSubject")}
                 >
-                  <Composition
-                    total={jobs.length}
-                    label={t("count", "jobsKept", { n: jobs.length })}
-                    // Every segment is counted off the same list as the total,
-                    // so the bar cannot disagree with the rows under the Jobs
-                    // tab.
-                    segments={[
-                      {
-                        label: t("count", "runningSegment"),
-                        count: jobs.filter((job) => job.status === "Running")
-                          .length,
-                        tone: "ok",
-                      },
-                      {
-                        label: t("count", "succeededSegment"),
-                        count: jobs.filter((job) => job.status === "Complete")
-                          .length,
-                        tone: "neutral",
-                      },
-                      {
-                        label: t("count", "failedSegment"),
-                        count: jobs.filter((job) => job.status === "Failed")
-                          .length,
-                        tone: "err",
-                      },
-                    ]}
-                    note={
-                      <>
-                        {t("action", "historyLimits", {
-                          succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
-                          failed: cronJob?.failedJobsHistoryLimit ?? 1,
-                        })}
-                        {cronJob?.active
-                          ? ` · ${t("action", "activePerController", {
-                              n: cronJob.active,
-                            })}`
-                          : ""}
-                      </>
-                    }
-                  />
+                  {jobsError ? (
+                    <Unknown
+                      question={t("empty", "couldNotReadCronJobRuns")}
+                      error={jobsError}
+                      onRetry={() => void refetchJobs()}
+                    />
+                  ) : (
+                    <Composition
+                      total={jobs.length}
+                      label={t("count", "jobsKept", { n: jobs.length })}
+                      // Every segment is counted off the same list as the total,
+                      // so the bar cannot disagree with the rows under the Jobs
+                      // tab.
+                      segments={[
+                        {
+                          label: t("count", "runningSegment"),
+                          count: jobs.filter((job) => job.status === "Running")
+                            .length,
+                          tone: "ok",
+                        },
+                        {
+                          label: t("count", "succeededSegment"),
+                          count: jobs.filter((job) => job.status === "Complete")
+                            .length,
+                          tone: "neutral",
+                        },
+                        {
+                          label: t("count", "failedSegment"),
+                          count: jobs.filter((job) => job.status === "Failed")
+                            .length,
+                          tone: "err",
+                        },
+                      ]}
+                      note={
+                        <>
+                          {t("action", "historyLimits", {
+                            succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
+                            failed: cronJob?.failedJobsHistoryLimit ?? 1,
+                          })}
+                          {cronJob?.active
+                            ? ` · ${t("action", "activePerController", {
+                                n: cronJob.active,
+                              })}`
+                            : ""}
+                        </>
+                      }
+                    />
+                  )}
                 </CountBlock>
               }
               usage={
@@ -367,14 +378,26 @@ export function CronJobDetail() {
         id: toPlural(ResourceType.Job),
         label: "Jobs",
         glyph: kindGlyph(ResourceType.Job),
-        mark: countMark(jobs.length),
+        mark: jobsError ? undefined : countMark(jobs.length),
         content: (
           <Section>
             <SectionHeader
               title="Jobs"
-              count={t("action", "keptHistoryLimits", { n: jobs.length })}
+              count={
+                jobsError
+                  ? undefined
+                  : t("action", "keptHistoryLimits", { n: jobs.length })
+              }
             />
-            <JobRows jobs={jobs} />
+            {jobsError ? (
+              <Unknown
+                question={t("empty", "couldNotReadCronJobRuns")}
+                error={jobsError}
+                onRetry={() => void refetchJobs()}
+              />
+            ) : (
+              <JobRows jobs={jobs} />
+            )}
           </Section>
         ),
       },
@@ -407,7 +430,19 @@ export function CronJobDetail() {
         namespace: cronJob?.namespace || namespace,
       }),
     ],
-    [cronJob, jobs, pods, podsError, yaml, copyYaml, namespace, name, t]
+    [
+      cronJob,
+      jobs,
+      jobsError,
+      refetchJobs,
+      pods,
+      podsError,
+      yaml,
+      copyYaml,
+      namespace,
+      name,
+      t,
+    ]
   );
 
   if (!cronJob && !isLoading && !error) {
