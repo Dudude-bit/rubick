@@ -4412,6 +4412,7 @@ export const en = {
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
     maybeThisClustersService: "Services not read — may be one here",
+    subsetUnconfirmed: "defined if this is the Service — Services not read",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {

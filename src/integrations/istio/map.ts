@@ -67,25 +67,33 @@ export function routingMap(
     for (const route of group.routes) {
       for (const destination of route.destinations) {
         const service = destination.service;
-        const destinationId = service
-          ? `service/${service.namespace}/${service.name}`
-          : `external/${destination.host}`;
+        // A host the unread Services list would have to confirm is its own
+        // node: merged into the Service's, it took or lent that node's link
+        // depending on which rule came first.
+        const unsure = destination.external === null;
+        const destinationId = unsure
+          ? `unsure/${destination.host}`
+          : service
+            ? `service/${service.namespace}/${service.name}`
+            : `external/${destination.host}`;
         const backing = backingOf(destination, route.source, sources);
         if (!destinations.has(destinationId)) {
           destinations.set(destinationId, {
             id: destinationId,
-            label: service ? service.name : destination.host,
-            sub: service
-              ? [
-                  service.namespace,
-                  destination.port ? `:${destination.port}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              : t("readings", "mapOutsideMesh"),
+            label: service && !unsure ? service.name : destination.host,
+            sub: unsure
+              ? t("empty", "maybeThisClustersService")
+              : service
+                ? [
+                    service.namespace,
+                    destination.port ? `:${destination.port}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : t("readings", "mapOutsideMesh"),
             tone: !service
               ? "mute"
-              : !backing.known
+              : unsure || !backing.known
                 ? "unknown"
                 : backing.stop
                   ? "err"

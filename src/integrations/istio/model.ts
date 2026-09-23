@@ -329,6 +329,11 @@ interface DestinationRuleSpec {
  * `log-demo.k8s-gui-test.svc.cluster.local`. Istio resolves both to the same
  * service; a page that compared the strings would report a working mesh as
  * broken.
+ *
+ * A match through a `name.namespace` host the unread Services list would
+ * have to confirm is only a possible one: if the host is a hostname, the rule
+ * is for another object. What such a rule defines is `unconfirmed` — neither
+ * defined nor missing.
  */
 export function subsetsFor(
   destination: Destination,
@@ -336,31 +341,53 @@ export function subsetsFor(
   rules: CustomResourceInfo[],
   services: ServiceInfo[],
   servicesKnown: boolean
-): { defined: string[]; anyRule: boolean } {
-  const matching = rules.filter((rule) => {
+): { defined: string[]; unconfirmed: string[]; anyRule: boolean } {
+  const confirmed: CustomResourceInfo[] = [];
+  const possible: CustomResourceInfo[] = [];
+  for (const rule of rules) {
     const host = ((rule.spec ?? {}) as DestinationRuleSpec).host;
-    if (!host) return false;
-    if (host === destination.host) return true;
+    if (!host) continue;
+    if (host === destination.host) {
+      confirmed.push(rule);
+      continue;
+    }
     const resolved = resolveHost(
       host,
       rule.namespace ?? namespace,
       services,
       servicesKnown
     );
-    return (
-      resolved.service !== null &&
-      destination.service !== null &&
-      resolved.service.name === destination.service.name &&
-      resolved.service.namespace === destination.service.namespace
-    );
-  });
+    if (
+      resolved.service === null ||
+      destination.service === null ||
+      resolved.service.name !== destination.service.name ||
+      resolved.service.namespace !== destination.service.namespace
+    ) {
+      continue;
+    }
+    (resolved.external === null || destination.external === null
+      ? possible
+      : confirmed
+    ).push(rule);
+  }
 
-  const defined = matching.flatMap((rule) =>
-    (((rule.spec ?? {}) as DestinationRuleSpec).subsets ?? []).flatMap(
-      (subset) => (subset.name ? [subset.name] : [])
-    )
-  );
-  return { defined: [...new Set(defined)], anyRule: matching.length > 0 };
+  const subsetsOf = (matching: CustomResourceInfo[]) => [
+    ...new Set(
+      matching.flatMap((rule) =>
+        (((rule.spec ?? {}) as DestinationRuleSpec).subsets ?? []).flatMap(
+          (subset) => (subset.name ? [subset.name] : [])
+        )
+      )
+    ),
+  ];
+  const defined = subsetsOf(confirmed);
+  return {
+    defined,
+    unconfirmed: subsetsOf(possible).filter(
+      (subset) => !defined.includes(subset)
+    ),
+    anyRule: confirmed.length + possible.length > 0,
+  };
 }
 
 // --- what is behind a route ---------------------------------------------
@@ -470,20 +497,24 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
           }
 
           if (destination.subset) {
-            const { defined, anyRule } = subsetsFor(
+            const { defined, unconfirmed, anyRule } = subsetsFor(
               destination,
               namespace,
               sources.destinationRules,
               sources.services,
               sources.backingKnown
             );
-            if (!defined.includes(destination.subset)) {
+            // One only a Service nobody read would define is not missing.
+            if (
+              !defined.includes(destination.subset) &&
+              !unconfirmed.includes(destination.subset)
+            ) {
               findings.push({
                 kind: "noSubset",
                 severity: "err",
                 route,
                 destination,
-                defined,
+                defined: [...defined, ...unconfirmed],
                 anyRule,
               });
             }

@@ -4819,6 +4819,8 @@ export const ru: Catalogue = {
     outsideThisCluster: "вне этого кластера",
     notThisClustersPods: "это поды не этого кластера",
     maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
+    subsetUnconfirmed:
+      "определён, если это тот Service, — Service не прочитаны",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {
