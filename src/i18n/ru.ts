@@ -4717,11 +4717,11 @@ export const ru: Catalogue = {
         "Запрошено и лимит неизвестны: список подов в {n} пространствах имён отклонён ({namespaces}). Сумма по остальным была бы меньшим числом, выданным за целое, поэтому её нет.",
     },
     nodeBudgetRule: {
-      one: "requested: max(init, Σ containers) + overhead по {n} поду, занимающему место здесь",
-      few: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
-      many: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} поду, занимающему место здесь",
+      few: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
+      many: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
       other:
-        "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
     },
     unknownWord: "неизвестно",
     noUsageSource: "источника нет",
