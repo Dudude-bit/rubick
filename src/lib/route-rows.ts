@@ -87,12 +87,14 @@ export interface RoutesBoard {
   pulse: GatewayPulse[];
 }
 
-/** Every route traced to serving: nothing broken, nothing it cannot tell. */
+/** Every route traced to serving: nothing broken, nothing it cannot tell —
+ *  and no mesh route, which no trace vouches for. */
 export function allServing(board: RoutesBoard): boolean {
   return (
     board.verdictsKnown &&
     board.notServing.length === 0 &&
-    board.unknown.length === 0
+    board.unknown.length === 0 &&
+    board.mesh.length === 0
   );
 }
 
@@ -230,10 +232,12 @@ function pulseOf(sources: TraceSources, t: T): GatewayPulse[] {
     // address yet is what that looks like — the rail's red dot claimed
     // everything through the gateway was dead while the trace called the
     // same object a work in progress.
+    // No Programmed condition at all is the controller not having said.
     if (
       gateway.addresses.length === 0 &&
-      programmed?.status !== "True" &&
-      programmed?.status !== "Unknown"
+      programmed !== undefined &&
+      programmed.status !== "True" &&
+      programmed.status !== "Unknown"
     ) {
       pulse.push({
         ...at,

@@ -390,35 +390,49 @@ export function subsetsFor(
   };
 }
 
+export interface SubsetUse {
+  used: Set<string>;
+  maybe: Set<string>;
+}
+
 /**
- * Which of one DestinationRule's subsets the routes reach, through the same
+ * Which of each DestinationRule's subsets the routes reach, through the same
  * reading the chain and the findings use. A subset reached only through a
  * host the unread Services would confirm is `maybe`: neither used nor idle.
  */
-export function subsetUse(
-  rule: CustomResourceInfo,
+export function subsetUses(
+  rules: CustomResourceInfo[],
   groups: IstioHostGroup[],
   sources: IstioSources
-): { used: Set<string>; maybe: Set<string> } {
-  const used = new Set<string>();
-  const maybe = new Set<string>();
-  for (const route of groups.flatMap((group) => group.routes)) {
-    for (const destination of route.destinations) {
-      if (!destination.subset) continue;
-      const { defined, unconfirmed } = subsetsFor(
-        destination,
-        route.source.namespace,
-        [rule],
-        sources.services,
-        sources.backingKnown
-      );
-      if (defined.includes(destination.subset)) used.add(destination.subset);
-      else if (unconfirmed.includes(destination.subset))
-        maybe.add(destination.subset);
-    }
-  }
-  for (const subset of used) maybe.delete(subset);
-  return { used, maybe };
+): Map<CustomResourceInfo, SubsetUse> {
+  const routed = groups
+    .flatMap((group) => group.routes)
+    .flatMap((route) =>
+      route.destinations.flatMap((destination) =>
+        destination.subset
+          ? [{ destination, subset: destination.subset, from: route.source }]
+          : []
+      )
+    );
+  return new Map(
+    rules.map((rule): [CustomResourceInfo, SubsetUse] => {
+      const used = new Set<string>();
+      const maybe = new Set<string>();
+      for (const { destination, subset, from } of routed) {
+        const { defined, unconfirmed } = subsetsFor(
+          destination,
+          from.namespace,
+          [rule],
+          sources.services,
+          sources.backingKnown
+        );
+        if (defined.includes(subset)) used.add(subset);
+        else if (unconfirmed.includes(subset)) maybe.add(subset);
+      }
+      for (const subset of used) maybe.delete(subset);
+      return [rule, { used, maybe }];
+    })
+  );
 }
 
 // --- what is behind a route ---------------------------------------------

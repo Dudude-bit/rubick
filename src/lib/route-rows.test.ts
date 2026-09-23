@@ -434,6 +434,19 @@ describe("routesBoard", () => {
     expect(gatewaysMark([overlay], board.pulse, true)).toBeUndefined();
   });
 
+  /** A gateway no controller has reported on yet has no address either; the
+   *  sidebar painted it red while its trace said "not decided". */
+  it("does not call a gateway no controller has reported on broken", () => {
+    const quiet = gateway("quiet", { conditions: [], addresses: [] });
+    const board = routesBoard(
+      [route("healthy")],
+      sources({ gateways: [quiet] }),
+      t
+    );
+
+    expect(board.pulse).toHaveLength(0);
+  });
+
   /** The other half of the same branch: nothing has vouched for this one, so
    *  an absent address is still the old reading. */
   it("still calls an unprogrammed gateway with no address broken", () => {
@@ -691,6 +704,20 @@ describe("the sidebar marks", () => {
     );
     expect(
       allServing(routesBoard([direct, route("healthy")], sources(), t))
+    ).toBe(false);
+  });
+
+  /** A mesh route is never traced, so "all serving" above a GAMMA group
+   *  vouched for routes nothing had looked at. */
+  it("does not say all serving beside a mesh route", () => {
+    const mesh = route("mesh", {
+      parentRefs: [
+        parentRef("app", { group: "", kind: "Service", sectionName: null }),
+      ],
+      parents: [],
+    });
+    expect(
+      allServing(routesBoard([route("healthy"), mesh], sources(), t))
     ).toBe(false);
   });
 

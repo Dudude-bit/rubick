@@ -5570,7 +5570,8 @@ export const en = {
       "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
     gwRefUnresolvedSay: "A reference this route makes did not resolve",
     gwRefUnresolvedShort: "a reference did not resolve",
-    gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
+    gwRefsResolveQuiet:
+      "The controller has not said whether references resolve",
     gwRefsResolve: "References resolve",
     gwRefsPending:
       "The controller has not decided whether the references resolve",

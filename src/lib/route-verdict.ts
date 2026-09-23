@@ -35,12 +35,13 @@ const fits = <V>(said: V | null | undefined, asked: V | null | undefined) =>
  * The entries that answer for one parentRef. A status parentRef echoes the
  * spec's, sectionName included — a route attached through two listeners has
  * two verdicts, and each must read its own. Entries that name no section, or
- * a controller that did not echo it, answer for every attachment.
+ * a controller that did not echo it, answer for every attachment. Narrowing
+ * to the exact ones is per controller: one that echoed the listener must not
+ * silence another that did not.
  */
-export function statusesFor<E extends Pick<RouteParentStatusInfo, "parent">>(
-  route: { namespace: string; parents: E[] },
-  parent: ParentKey
-): E[] {
+export function statusesFor<
+  E extends Pick<RouteParentStatusInfo, "parent" | "controllerName">,
+>(route: { namespace: string; parents: E[] }, parent: ParentKey): E[] {
   // A Gateway and a ListenerSet may share a name; each is its own parent.
   const named = route.parents.filter(
     (entry) =>
@@ -52,12 +53,15 @@ export function statusesFor<E extends Pick<RouteParentStatusInfo, "parent">>(
       fits(entry.parent.sectionName, parent.sectionName) &&
       fits(entry.parent.port, parent.port)
   );
-  const exact = named.filter(
-    (entry) =>
-      (entry.parent.sectionName ?? null) === (parent.sectionName ?? null) &&
-      (entry.parent.port ?? null) === (parent.port ?? null)
+  const exact = (entry: E) =>
+    (entry.parent.sectionName ?? null) === (parent.sectionName ?? null) &&
+    (entry.parent.port ?? null) === (parent.port ?? null);
+  const echoed = new Set(
+    named.filter(exact).map((entry) => entry.controllerName)
   );
-  return exact.length > 0 ? exact : named;
+  return named.filter(
+    (entry) => exact(entry) || !echoed.has(entry.controllerName)
+  );
 }
 
 /** One refusal decides; True only when every entry says True. */

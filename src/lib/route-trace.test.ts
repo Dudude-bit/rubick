@@ -332,17 +332,20 @@ describe("routeTraces", () => {
     expect(step?.say).not.toContain("nowhere");
   });
 
-  /** And a Gateway nothing has vouched for, with no address, still is one —
-   *  deleting the whole branch would pass the test above. */
-  it("still calls an unvouched gateway with no address a dead end", () => {
+  /** Nor one no controller has reported on yet: its address is missing for
+   *  the same reason its conditions are. It was called a dead end in red. */
+  it("does not call a gateway no controller has reported on a dead end", () => {
     const silent = { ...gateway("edge"), addresses: [], conditions: [] };
     const [trace] = routeTraces(
       route("healthy"),
       sources({ gateways: [silent] }),
       t
     );
+    const step = trace.steps.find((s) => s.id === "gateway");
 
-    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toContain("nowhere");
+    expect(trace.unknownBecause).toBe("undecided");
   });
 
   /** The same third answer, one object down: a controller that has taken the
@@ -377,6 +380,25 @@ describe("routeTraces", () => {
 
     const [decided] = routeTraces(route("healthy"), sources(), t);
     expect(decided.servingKnown).toBe(true);
+  });
+
+  /**
+   * A controller that accepted the route and never wrote `ResolvedRefs` has
+   * not said the references resolve. The step read "References resolve" in
+   * green and the route came out serving.
+   */
+  it("cannot say a route serves while the controller has not said its references resolve", () => {
+    const quiet = route("healthy", {
+      parents: [
+        parentStatus("edge", [condition("Accepted", "True", "Accepted")]),
+      ],
+    });
+    const [trace] = routeTraces(quiet, sources(), t);
+    const refs = trace.steps.find((step) => step.id === "refs");
+
+    expect(refs?.state).toBe("warn");
+    expect(trace.servingKnown).toBe(false);
+    expect(trace.unknownBecause).toBe("undecided");
   });
 
   it("does not call a parent accepted while the controller is still deciding", () => {
@@ -1215,21 +1237,6 @@ describe("a gateway that publishes no address", () => {
     expect(trace.serving).toBe(true);
     // And it says so: a verdict nobody checked must not read as checked.
     expect(trace.servingKnown).toBe(false);
-  });
-
-  /** Nothing vouched for it and there is no address: both halves unknown,
-   *  and the old reading is the right one. */
-  it("still reports an unvouched gateway with no address as broken", () => {
-    const trace = routeTraces(
-      route("healthy"),
-      sources({
-        gateways: [gateway("edge", { addresses: [], conditions: [] })],
-      }),
-      t
-    )[0];
-
-    expect(trace.steps.find((s) => s.id === "gateway")?.state).toBe("err");
-    expect(trace.serving).toBe(false);
   });
 
   /** A controller that said no is an answer, not a silence. */

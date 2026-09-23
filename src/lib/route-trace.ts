@@ -507,6 +507,18 @@ function gatewayStep(
       },
     };
   }
+  // No Programmed condition at all: nobody has said, which is undecided,
+  // not programmed — with or without an address.
+  if (!programmed) {
+    return {
+      id: "gateway",
+      state: "warn",
+      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
+      who: "infra",
+      subject,
+      pending: true,
+    };
+  }
   if (gateway.addresses.length === 0) {
     // `status.addresses` is optional in the spec, and an implementation on
     // a private or overlay network has nothing to publish there. So once
@@ -534,7 +546,7 @@ function gatewayStep(
     // mid-provisioning must not read "traffic has nowhere to arrive". The
     // same over-claim as calling it programmed, three branches down; this
     // branch runs first, so it is the one the reader actually saw.
-    if (programmed?.status === "Unknown") {
+    if (programmed.status === "Unknown") {
       return {
         id: "gateway",
         state: "warn",
@@ -557,18 +569,6 @@ function gatewayStep(
         title: t("empty", "gwNoAddressTitle"),
         body: t("empty", "gwNoAddressBody"),
       },
-    };
-  }
-  // No Programmed condition at all: nobody has said, which is undecided,
-  // not programmed.
-  if (!programmed) {
-    return {
-      id: "gateway",
-      state: "warn",
-      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
-      who: "infra",
-      subject,
-      pending: true,
     };
   }
   // `Unknown` is the API's third answer: a controller that has taken the
@@ -890,13 +890,22 @@ function refsStep(
     };
   }
 
+  // No ResolvedRefs at all is the controller not having said: undecided,
+  // like `Unknown`, not resolved.
+  if (resolved == null) {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsResolveQuiet"),
+      who: "controller",
+      freshness,
+      pending: true,
+    };
+  }
   return {
     id: "refs",
     state: freshness ? "warn" : "ok",
-    say:
-      resolved == null
-        ? t("empty", "gwRefsResolveQuiet")
-        : t("empty", "gwRefsResolve"),
+    say: t("empty", "gwRefsResolve"),
     who: "yours",
     freshness,
   };

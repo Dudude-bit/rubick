@@ -14,7 +14,7 @@
 //! `parentRefs` up and `backendRefs` down, and five near-identical structs
 //! would be five places for the next field to be forgotten in.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use kube::api::DynamicObject;
 use serde::{Deserialize, Serialize};
@@ -155,8 +155,9 @@ pub enum Verdict<'a> {
 
 impl RouteInfo {
     /// The entries that answer for one parentRef: those naming it, narrowed
-    /// to the ones echoing its sectionName when any do. A controller that
-    /// did not echo the section answers for every listener.
+    /// per controller to the ones echoing its sectionName and port when that
+    /// controller wrote any. A controller that did not echo them answers for
+    /// every listener.
     #[must_use]
     pub fn statuses_for(&self, parent: &ParentRefInfo) -> Vec<&RouteParentStatusInfo> {
         let ns_of = |ns: &Option<String>| ns.clone().unwrap_or_else(|| self.namespace.clone());
@@ -175,18 +176,18 @@ impl RouteInfo {
                     && fits(entry.parent.port.as_ref(), parent.port.as_ref())
             })
             .collect();
-        let exact: Vec<&RouteParentStatusInfo> = named
+        let exact = |entry: &RouteParentStatusInfo| {
+            entry.parent.section_name == parent.section_name && entry.parent.port == parent.port
+        };
+        let echoed: HashSet<&str> = named
             .iter()
-            .copied()
-            .filter(|entry| {
-                entry.parent.section_name == parent.section_name && entry.parent.port == parent.port
-            })
+            .filter(|entry| exact(entry))
+            .map(|entry| entry.controller_name.as_str())
             .collect();
-        if exact.is_empty() {
-            named
-        } else {
-            exact
-        }
+        named
+            .into_iter()
+            .filter(|entry| exact(entry) || !echoed.contains(entry.controller_name.as_str()))
+            .collect()
     }
 }
 

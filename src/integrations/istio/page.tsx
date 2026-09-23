@@ -51,7 +51,7 @@ import {
   hostGroups,
   hostState,
   subsetsFor,
-  subsetUse,
+  subsetUses,
   type Destination,
   type Finding,
   type IstioHostGroup,
@@ -851,6 +851,10 @@ function SubsetsTab({
   loading: boolean;
 }) {
   const t = useT();
+  const uses = useMemo(
+    () => (sources ? subsetUses(rules, groups, sources) : null),
+    [rules, groups, sources]
+  );
   if (loading)
     return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (rules.length === 0) {
@@ -906,7 +910,7 @@ function SubsetsTab({
             const subsets = (spec.subsets ?? []).flatMap((subset) =>
               subset.name ? [subset.name] : []
             );
-            const use = sources ? subsetUse(rule, groups, sources) : null;
+            const use = uses?.get(rule) ?? null;
             const idle =
               use !== null && use.used.size === 0 && use.maybe.size === 0;
 

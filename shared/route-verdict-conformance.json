@@ -1,5 +1,5 @@
 {
-  "about": "What a route's status says about one of its parentRefs, as both halves read it: RouteInfo::statuses_for and verdict_of in src-tauri/src/resources/gateway.rs (the connections graph) and statusesFor / verdictOf in src/lib/route-verdict.ts (the trace, the routes list, the Gateway page, the map and the peek). The entries for a parent are those naming it by group, kind, name and namespace, leaving out any that name a different sectionName or port, and narrowed to the ones echoing both exactly when any do. Over those entries, one False decides; True only when every one says True, and then the one about the oldest generation speaks; anything else is pending. `none` is no entry at all, `undecided` entries without the condition. Parents are written short: group, kind and port are filled in by the tests.",
+  "about": "What a route's status says about one of its parentRefs, as both halves read it: RouteInfo::statuses_for and verdict_of in src-tauri/src/resources/gateway.rs (the connections graph) and statusesFor / verdictOf in src/lib/route-verdict.ts (the trace, the routes list, the Gateway page, the map and the peek). The entries for a parent are those naming it by group, kind, name and namespace, leaving out any that name a different sectionName or port, and narrowed, per controllerName, to that controller's entries echoing both exactly when it wrote any. Over those entries, one False decides; True only when every one says True, and then the one about the oldest generation speaks; anything else is pending. `none` is no entry at all, `undecided` entries without the condition. Parents are written short: group, kind and port are filled in by the tests.",
   "cases": [
     {
       "name": "no controller wrote status",
@@ -588,6 +588,94 @@
       },
       "resolvedRefs": {
         "state": "none"
+      }
+    },
+    {
+      "name": "one controller echoing the listener does not silence another that did not",
+      "routeNamespace": "shop",
+      "parent": {
+        "name": "public",
+        "sectionName": "https"
+      },
+      "entries": [
+        {
+          "parent": {
+            "name": "public",
+            "sectionName": "https"
+          },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "True",
+              "reason": "Accepted"
+            }
+          ]
+        },
+        {
+          "parent": {
+            "name": "public"
+          },
+          "controllerName": "b.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        }
+      ],
+      "accepted": {
+        "state": "false",
+        "reason": "NotAllowedByListeners"
+      },
+      "resolvedRefs": {
+        "state": "undecided"
+      }
+    },
+    {
+      "name": "a controller's own echo still narrows its own entries",
+      "routeNamespace": "shop",
+      "parent": {
+        "name": "public",
+        "sectionName": "https"
+      },
+      "entries": [
+        {
+          "parent": {
+            "name": "public",
+            "sectionName": "https"
+          },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "True",
+              "reason": "Accepted"
+            }
+          ]
+        },
+        {
+          "parent": {
+            "name": "public"
+          },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        }
+      ],
+      "accepted": {
+        "state": "true",
+        "reason": "Accepted"
+      },
+      "resolvedRefs": {
+        "state": "undecided"
       }
     }
   ]

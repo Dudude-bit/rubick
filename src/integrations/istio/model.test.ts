@@ -13,7 +13,7 @@ import {
   resolveHost,
   subsetsFor,
   type IstioSources,
-  subsetUse,
+  subsetUses,
 } from "./model";
 import { routingMap } from "./map";
 
@@ -300,9 +300,11 @@ describe("a subset on a host the Services list would decide", () => {
       }),
       ...backingFrom(undefined, new Error("services is forbidden")),
     };
-    const use = subsetUse(fqdnRule, hostGroups(unread, t), unread);
-    expect([...use.used]).toEqual([]);
-    expect([...use.maybe]).toEqual(["v1"]);
+    const use = subsetUses([fqdnRule], hostGroups(unread, t), unread).get(
+      fqdnRule
+    );
+    expect([...(use?.used ?? [])]).toEqual([]);
+    expect([...(use?.maybe ?? ["none"])]).toEqual(["v1"]);
   });
 
   it("keeps a subset only a Service nobody read would define unconfirmed", () => {
