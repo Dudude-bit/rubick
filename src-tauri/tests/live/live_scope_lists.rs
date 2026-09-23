@@ -30,7 +30,7 @@ use k8s_gui_lib::watch::WatchManager;
 use k8s_openapi::api::core::v1::ConfigMap;
 use kube::config::{KubeConfigOptions, Kubeconfig};
 use kube::{Api, Client, Config};
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 
 const SCOPE: [&str; 3] = ["default", "k8s-gui-test", "kube-system"];
 
@@ -119,8 +119,8 @@ async fn several_namespaces_answer_as_their_parts_do() {
     assert!(whole.unread.is_empty(), "unread: {:?}", whole.unread);
     assert_eq!(whole.rows.len(), parts);
 
-    let (_tx, mut cancel) = oneshot::channel::<()>();
-    let paged = page_scope(&client, Some(&scope()), |_| {}, &mut cancel)
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let paged = page_scope(&client, Some(&scope()), |_| {}, &cancel)
         .await
         .expect("pods of three namespaces");
     println!("pods {} across {SCOPE:?}", paged.rows);

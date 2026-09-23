@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 /// How long a stream waits to hear that someone is listening before it
 /// starts anyway. Long enough that a slow first render never loses a batch;
@@ -19,8 +20,15 @@ use tokio::sync::oneshot;
 pub const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
 
 struct Entry {
-    cancel: Option<oneshot::Sender<()>>,
+    cancel: CancellationToken,
     subscribe: Option<oneshot::Sender<()>>,
+}
+
+/// An entry leaving cancels its stream, one stop or all of them.
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+    }
 }
 
 /// Open streams by id.
@@ -35,12 +43,12 @@ impl Streams {
     /// included.
     #[must_use]
     pub fn open(&self, id: String) -> Opened {
-        let (cancel_tx, cancel_rx) = oneshot::channel();
+        let cancel = CancellationToken::new();
         let (subscribe_tx, subscribe_rx) = oneshot::channel();
         self.map.insert(
             id.clone(),
             Entry {
-                cancel: Some(cancel_tx),
+                cancel: cancel.clone(),
                 subscribe: Some(subscribe_tx),
             },
         );
@@ -48,7 +56,7 @@ impl Streams {
         let key = id.clone();
         Opened {
             id,
-            cancel: cancel_rx,
+            cancel,
             subscribed: Some(subscribe_rx),
             held: Held {
                 _leave: Leave { map, key },
@@ -70,15 +78,12 @@ impl Streams {
     /// Stop a stream. A no-op for one that has already gone.
     #[must_use]
     pub fn stop(&self, id: &str) -> bool {
-        match self.map.remove(id) {
-            Some((_, mut entry)) => {
-                if let Some(cancel) = entry.cancel.take() {
-                    let _ = cancel.send(());
-                }
-                true
-            }
-            None => false,
-        }
+        self.map.remove(id).is_some()
+    }
+
+    /// Stop every stream in the table.
+    pub fn stop_all(&self) {
+        self.map.clear();
     }
 
     #[must_use]
@@ -113,8 +118,9 @@ impl Drop for Leave {
 pub struct Opened {
     pub id: String,
     /// Fires when the stream is stopped, or when its entry is dropped
-    /// without a stop — both mean nobody wants what it would send.
-    pub cancel: oneshot::Receiver<()>,
+    /// without a stop — both mean nobody wants what it would send. Cloned
+    /// into every task that works for the stream.
+    pub cancel: CancellationToken,
     subscribed: Option<oneshot::Receiver<()>>,
     held: Held,
 }
@@ -128,7 +134,7 @@ impl Opened {
     /// The cancel signal by value, for a loop that takes it, and what keeps
     /// the entry: hold it for as long as the stream runs.
     #[must_use]
-    pub fn split(self) -> (oneshot::Receiver<()>, Held) {
+    pub fn split(self) -> (CancellationToken, Held) {
         (self.cancel, self.held)
     }
 
@@ -147,7 +153,7 @@ impl Opened {
         };
         tokio::select! {
             biased;
-            _ = &mut self.cancel => false,
+            () = self.cancel.cancelled() => false,
             answer = subscribed => answer.is_ok(),
             () = tokio::time::sleep(timeout) => {
                 tracing::warn!(
@@ -210,6 +216,33 @@ mod tests {
         assert!(streams.is_empty());
         assert!(!streams.subscribed("s-1"));
         assert!(!streams.stop("s-1"));
+    }
+
+    /// A search's clusters and a drain's pass and pause all wait on one stop.
+    /// A single-receiver cancel reached only one of them, which is why both
+    /// kept their own tables.
+    #[tokio::test]
+    async fn a_stop_reaches_every_task_working_for_the_stream() {
+        let streams = Streams::default();
+        let (cancel, _held) = streams.open("s-1".into()).split();
+        let workers = [cancel.clone(), cancel.clone()];
+        assert!(streams.stop("s-1"));
+        for worker in workers {
+            tokio::time::timeout(SOON, worker.cancelled())
+                .await
+                .expect("every clone hears the stop");
+        }
+    }
+
+    /// A new search stops every older one.
+    #[tokio::test]
+    async fn stopping_everything_stops_each_stream() {
+        let streams = Streams::default();
+        let (a, _a) = streams.open("s-1".into()).split();
+        let (b, _b) = streams.open("s-2".into()).split();
+        streams.stop_all();
+        assert!(a.is_cancelled() && b.is_cancelled());
+        assert!(streams.is_empty());
     }
 
     /// Nobody subscribing is not a reason never to start: after the timeout

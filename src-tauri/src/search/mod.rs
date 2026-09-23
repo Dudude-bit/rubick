@@ -25,16 +25,16 @@ pub use types::{
 
 use crate::client::K8sClientManager;
 use crate::error::{Error, Result};
+use crate::state::streams::Streams;
 use crate::state::AppEvent;
 use crate::utils::generate_id;
-use dashmap::DashMap;
 use futures::StreamExt;
 use kube::api::{Api, DynamicObject, ListParams};
 use kube::{Client, ResourceExt};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, oneshot, watch};
+use tokio::sync::broadcast;
 use types::SearchableKind;
 
 /// Budget for establishing a client for a cold cluster. Long enough
@@ -50,32 +50,11 @@ const CONTEXT_BUDGET: Duration = Duration::from_secs(15);
 /// listener before starting anyway.
 const SUBSCRIBE_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 
-struct SearchSession {
-    /// Dropping or firing this cancels every context task. Cancellation
-    /// is a `watch` rather than a `oneshot` because one search has many
-    /// consumers — one per cluster.
-    cancel_tx: watch::Sender<bool>,
-    subscribe_tx: Option<oneshot::Sender<()>>,
-}
-
-/// Removes the session row on every exit path of the fan-out task,
-/// including a panic unwind.
-struct SearchCleanup {
-    sessions: Arc<DashMap<String, SearchSession>>,
-    key: String,
-}
-
-impl Drop for SearchCleanup {
-    fn drop(&mut self) {
-        self.sessions.remove(&self.key);
-    }
-}
-
 /// Owns every in-flight search.
 pub struct SearchManager {
     event_tx: broadcast::Sender<AppEvent>,
     client_manager: Arc<K8sClientManager>,
-    sessions: Arc<DashMap<String, SearchSession>>,
+    streams: Streams,
 }
 
 impl SearchManager {
@@ -87,23 +66,20 @@ impl SearchManager {
         Self {
             event_tx,
             client_manager,
-            sessions: Arc::new(DashMap::new()),
+            streams: Streams::default(),
         }
     }
 
     #[must_use]
     pub fn active_searches(&self) -> usize {
-        self.sessions.len()
+        self.streams.len()
     }
 
     /// Release the gate once the frontend's listener is installed.
     /// Erroring on unknown ids keeps a caller from poking at searches
     /// it does not own. Idempotent.
     pub fn mark_subscribed(&self, search_id: &str) -> Result<()> {
-        if let Some(mut entry) = self.sessions.get_mut(search_id) {
-            if let Some(tx) = entry.subscribe_tx.take() {
-                let _ = tx.send(());
-            }
+        if self.streams.subscribed(search_id) || self.streams.contains(search_id) {
             Ok(())
         } else {
             Err(Error::Internal(format!("Search {search_id} not found")))
@@ -112,17 +88,12 @@ impl SearchManager {
 
     /// Stop a search. Idempotent, and safe to race with completion.
     pub fn cancel(&self, search_id: &str) {
-        if let Some((_, session)) = self.sessions.remove(search_id) {
-            let _ = session.cancel_tx.send(true);
-        }
+        let _ = self.streams.stop(search_id);
     }
 
     /// Stop every in-flight search.
     pub fn cancel_all(&self) {
-        let ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
-        for id in ids {
-            self.cancel(&id);
-        }
+        self.streams.stop_all();
     }
 
     /// Plan a search from a frontend request and start it.
@@ -183,16 +154,7 @@ impl SearchManager {
         self.cancel_all();
 
         let search_id = generate_id("search");
-        let (cancel_tx, cancel_rx) = watch::channel(false);
-        let (subscribe_tx, subscribe_rx) = oneshot::channel();
-
-        self.sessions.insert(
-            search_id.clone(),
-            SearchSession {
-                cancel_tx,
-                subscribe_tx: Some(subscribe_tx),
-            },
-        );
+        let mut opened = self.streams.open(search_id.clone());
 
         let active: Vec<String> = targets
             .iter()
@@ -201,25 +163,14 @@ impl SearchManager {
             .collect();
         let event_tx = self.event_tx.clone();
         let client_manager = self.client_manager.clone();
-        let sessions = self.sessions.clone();
         let id = search_id.clone();
         let kinds = Arc::new(kinds);
 
         tokio::spawn(async move {
-            let _cleanup = SearchCleanup {
-                sessions,
-                key: id.clone(),
-            };
-
-            let mut cancel_rx = cancel_rx;
-            tokio::select! {
-                biased;
-                () = cancelled(&mut cancel_rx) => return,
-                _ = subscribe_rx => {}
-                () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
-                    tracing::warn!("Search {id} subscribe gate timed out; emitting anyway");
-                }
+            if !opened.wait_for_subscriber(SUBSCRIBE_GATE_TIMEOUT).await {
+                return;
             }
+            let (cancel, _held) = opened.split();
 
             // One task per cluster behind a permit, rather than one
             // future chain: an aborted task drops its in-flight HTTP
@@ -276,7 +227,7 @@ impl SearchManager {
             }
 
             tokio::select! {
-                () = cancelled(&mut cancel_rx) => {
+                () = cancel.cancelled() => {
                     tracing::debug!("Search {id} cancelled; aborting {} cluster tasks", tasks.len());
                     tasks.shutdown().await;
                 }
@@ -285,19 +236,6 @@ impl SearchManager {
         });
 
         search_id
-    }
-}
-
-/// Resolves when the search has been cancelled — either explicitly or
-/// because its session row (and with it the sender) went away.
-async fn cancelled(rx: &mut watch::Receiver<bool>) {
-    loop {
-        if *rx.borrow_and_update() {
-            return;
-        }
-        if rx.changed().await.is_err() {
-            return;
-        }
     }
 }
 

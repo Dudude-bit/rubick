@@ -9,7 +9,7 @@ use futures::future::join_all;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
 use tauri::State;
-use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 use crate::commands::filters::PodFilters;
 use crate::commands::helpers::{
@@ -127,7 +127,7 @@ pub async fn page_scope<F>(
     client: &kube::Client,
     scope: Option<&[String]>,
     on_rows: F,
-    cancel: &mut oneshot::Receiver<()>,
+    cancel: &CancellationToken,
 ) -> Result<ScopePaged>
 where
     F: Fn(Vec<PodRow>) + Sync,
@@ -144,7 +144,7 @@ where
     }));
     let answers = tokio::select! {
         biased;
-        _ = &mut *cancel => {
+        () = cancel.cancelled() => {
             return Ok(ScopePaged {
                 rows: sent.load(Ordering::Relaxed),
                 complete: false,
@@ -210,7 +210,7 @@ pub async fn list_pod_rows(
             });
             return;
         }
-        let (mut cancel_rx, _held) = opened.split();
+        let (cancel, _held) = opened.split();
         // After the gate, not before it. The task can sit here for a minute
         // waiting to be subscribed, and CLAUDE.md states the rule: a held
         // `kube::Client` carries a token that expires. Taken per run, so a
@@ -234,7 +234,7 @@ pub async fn list_pod_rows(
                     });
                 }
             },
-            &mut cancel_rx,
+            &cancel,
         )
         .await;
         let terminal = match outcome {
@@ -370,7 +370,7 @@ mod paging_tests {
         let client = kube::Client::try_from(config).expect("a client");
         let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
 
-        let (_tx, mut cancel_rx) = oneshot::channel::<()>();
+        let (_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
         let mut seen: Vec<String> = Vec::new();
         let paged = page_rows(
             &api,
@@ -400,7 +400,7 @@ mod paging_tests {
         let client = kube::Client::try_from(config).expect("a client");
         let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
 
-        let (tx, mut cancel_rx) = oneshot::channel::<()>();
+        let (tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
         drop(tx);
         let paged = page_rows(&api, |_| {}, &mut cancel_rx)
             .await
@@ -437,7 +437,7 @@ mod scope_tests {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let (client, _) = server(routes).await;
         let seen = Mutex::new(Vec::new());
-        let (_tx, mut cancel_rx) = oneshot::channel::<()>();
+        let cancel = CancellationToken::new();
         let scope = ["prod".to_string(), "staging".to_string()];
         let answer = page_scope(
             &client,
@@ -447,7 +447,7 @@ mod scope_tests {
                     .unwrap()
                     .extend(rows.into_iter().map(|row| row.name));
             },
-            &mut cancel_rx,
+            &cancel,
         )
         .await;
         (answer, seen.into_inner().unwrap())

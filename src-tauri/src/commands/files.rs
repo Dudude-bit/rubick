@@ -120,7 +120,7 @@ async fn run_listing(
         });
         return;
     }
-    let (mut cancel_rx, _held) = opened.split();
+    let (cancel, _held) = opened.split();
     let began = Instant::now();
     let emit_batch = |entries: Vec<files::FileEntry>| {
         let _ = event_tx.send(AppEvent::FilesBatch {
@@ -138,7 +138,7 @@ async fn run_listing(
             path: &listing.path,
         },
         emit_batch,
-        &mut cancel_rx,
+        &cancel,
     )
     .await;
     let elapsed_ms = began.elapsed().as_millis() as u64;

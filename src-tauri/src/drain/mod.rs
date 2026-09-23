@@ -21,17 +21,17 @@
 //! listening.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::time::Duration;
 
-use dashmap::DashMap;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
 use kube::{Api, Client};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, oneshot, watch};
+use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{Error, Result};
+use crate::state::streams::Streams;
 use crate::state::AppEvent;
 use crate::utils::generate_id;
 
@@ -308,29 +308,10 @@ fn retry_after(status: &kube::core::Status) -> Option<Duration> {
 
 // --- running -------------------------------------------------------------
 
-struct DrainSession {
-    /// Firing this stops the loop. A `watch` rather than a `oneshot` so the
-    /// pass and the sleep can both wait on it.
-    cancel_tx: watch::Sender<bool>,
-    subscribe_tx: Option<oneshot::Sender<()>>,
-}
-
-/// Removes the session row on every exit path, including a panic unwind.
-struct DrainCleanup {
-    sessions: Arc<DashMap<String, DrainSession>>,
-    key: String,
-}
-
-impl Drop for DrainCleanup {
-    fn drop(&mut self) {
-        self.sessions.remove(&self.key);
-    }
-}
-
 /// Owns every drain in flight.
 pub struct DrainManager {
     event_tx: broadcast::Sender<AppEvent>,
-    sessions: Arc<DashMap<String, DrainSession>>,
+    streams: Streams,
 }
 
 impl DrainManager {
@@ -338,13 +319,13 @@ impl DrainManager {
     pub fn new(event_tx: broadcast::Sender<AppEvent>) -> Self {
         Self {
             event_tx,
-            sessions: Arc::new(DashMap::new()),
+            streams: Streams::default(),
         }
     }
 
     #[must_use]
     pub fn active_drains(&self) -> usize {
-        self.sessions.len()
+        self.streams.len()
     }
 
     /// Release the gate once the frontend's listener is installed.
@@ -354,10 +335,7 @@ impl DrainManager {
     /// Unknown ids error, which keeps a caller from poking at drains it does
     /// not own. Idempotent for one it does.
     pub fn mark_subscribed(&self, drain_id: &str) -> Result<()> {
-        if let Some(mut entry) = self.sessions.get_mut(drain_id) {
-            if let Some(tx) = entry.subscribe_tx.take() {
-                let _ = tx.send(());
-            }
+        if self.streams.subscribed(drain_id) || self.streams.contains(drain_id) {
             Ok(())
         } else {
             Err(Error::Internal(format!("Drain {drain_id} not found")))
@@ -368,9 +346,7 @@ impl DrainManager {
     ///
     /// Stops the asking, not the asked: pods already evicted are gone.
     pub fn cancel(&self, drain_id: &str) {
-        if let Some((_, session)) = self.sessions.remove(drain_id) {
-            let _ = session.cancel_tx.send(true);
-        }
+        let _ = self.streams.stop(drain_id);
     }
 
     /// Start draining, and return at once.
@@ -382,60 +358,37 @@ impl DrainManager {
     #[must_use]
     pub fn start(&self, client: Client, node: String, options: DrainOptions) -> DrainHandle {
         let drain_id = generate_id("drain");
-        let (cancel_tx, cancel_rx) = watch::channel(false);
-        let (subscribe_tx, subscribe_rx) = oneshot::channel();
-
-        self.sessions.insert(
-            drain_id.clone(),
-            DrainSession {
-                cancel_tx,
-                subscribe_tx: Some(subscribe_tx),
-            },
-        );
-
+        let mut opened = self.streams.open(drain_id.clone());
         let event_tx = self.event_tx.clone();
-        let sessions = self.sessions.clone();
         let id = drain_id.clone();
 
         tokio::spawn(async move {
-            let _cleanup = DrainCleanup {
-                sessions,
-                key: id.clone(),
-            };
-            let mut cancel_rx = cancel_rx;
-
             // Cancel first, as every stream's gate checks it.
-            tokio::select! {
-                biased;
+            if !opened.wait_for_subscriber(SUBSCRIBE_GATE_TIMEOUT).await {
                 // Not a bare `return`. Every drain owes exactly one terminal
                 // event: a caller that pressed Stop while the gate was still
                 // held would otherwise wait on an answer that never comes,
                 // and its dialog would sit on "starting" for good.
-                () = cancelled(&mut cancel_rx) => {
-                    finish(
-                        &event_tx,
-                        &id,
-                        &node,
-                        DrainOutcome::Cancelled,
-                        &DrainReport {
-                            evicted: 0,
-                            already_gone: 0,
-                            leaving: 0,
-                            daemonset_pods_left: 0,
-                            static_pods_left: 0,
-                            refused: Vec::new(),
-                        },
-                        None,
-                    );
-                    return;
-                }
-                _ = subscribe_rx => {}
-                () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
-                    tracing::warn!("Drain {id} subscribe gate timed out; going ahead anyway");
-                }
+                finish(
+                    &event_tx,
+                    &id,
+                    &node,
+                    DrainOutcome::Cancelled,
+                    &DrainReport {
+                        evicted: 0,
+                        already_gone: 0,
+                        leaving: 0,
+                        daemonset_pods_left: 0,
+                        static_pods_left: 0,
+                        refused: Vec::new(),
+                    },
+                    None,
+                );
+                return;
             }
+            let (cancel, _held) = opened.split();
 
-            run(&event_tx, &id, &client, &node, options, &mut cancel_rx).await;
+            run(&event_tx, &id, &client, &node, options, &cancel).await;
         });
 
         DrainHandle { drain_id }
@@ -561,7 +514,7 @@ async fn run(
     client: &Client,
     node: &str,
     options: DrainOptions,
-    cancel_rx: &mut watch::Receiver<bool>,
+    cancel: &CancellationToken,
 ) {
     let empty = DrainReport {
         evicted: 0,
@@ -584,7 +537,7 @@ async fn run(
     // accepting them, forever.
     let cordoned = tokio::select! {
         result = cordon(client, node) => result,
-        () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &empty, None),
+        () = cancel.cancelled() => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     if let Err(err) = cordoned {
         let message = crate::state::readable_cause(&err);
@@ -594,7 +547,7 @@ async fn run(
 
     let surveyed = tokio::select! {
         result = survey(client, node, options) => result,
-        () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &empty, None),
+        () = cancel.cancelled() => bail!(DrainOutcome::Cancelled, &empty, None),
     };
     let Survey {
         targets,
@@ -624,7 +577,7 @@ async fn run(
         if attempt > 1 {
             let seen = tokio::select! {
                 result = present_on(client, node) => result,
-                () = cancelled(cancel_rx) => {
+                () = cancel.cancelled() => {
                     let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Cancelled, &report, None);
                 }
@@ -652,7 +605,7 @@ async fn run(
 
             let outcome = tokio::select! {
                 result = evict(client, &target) => result,
-                () = cancelled(cancel_rx) => {
+                () = cancel.cancelled() => {
                     progress.waiting = still_waiting;
                     let report = assemble(&progress, daemonset_pods_left, static_pods_left, &terminal);
                     bail!(DrainOutcome::Cancelled, &report, None);
@@ -714,7 +667,7 @@ async fn run(
         );
         tokio::select! {
             () = tokio::time::sleep(wait) => {}
-            () = cancelled(cancel_rx) => bail!(DrainOutcome::Cancelled, &report, None),
+            () = cancel.cancelled() => bail!(DrainOutcome::Cancelled, &report, None),
         }
     }
 }
@@ -800,19 +753,6 @@ fn backoff_for(attempt: u32) -> Duration {
         .unwrap_or(usize::MAX)
         .saturating_sub(1);
     BACKOFF[index.min(BACKOFF.len() - 1)]
-}
-
-/// Resolves when the drain has been cancelled — either explicitly or
-/// because its session row (and with it the sender) went away.
-async fn cancelled(rx: &mut watch::Receiver<bool>) {
-    loop {
-        if *rx.borrow_and_update() {
-            return;
-        }
-        if rx.changed().await.is_err() {
-            return;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1212,6 +1152,31 @@ mod tests {
             0,
             "the session row goes with the task, on every exit path"
         );
+    }
+
+    /// Stop pressed while the gate still held the drain. Its dialog waits on
+    /// one terminal event, and a bare return left it on "starting" for good.
+    #[tokio::test]
+    async fn a_drain_stopped_before_anyone_listened_still_says_it_was_cancelled() {
+        let (manager, mut rx) = manager();
+        let handle = manager.start(nowhere(), "node-a".to_string(), safe());
+        manager.cancel(&handle.drain_id);
+
+        let outcome = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let AppEvent::DrainFinished {
+                    drain_id, outcome, ..
+                } = rx.recv().await.expect("the channel stays open")
+                {
+                    if drain_id == handle.drain_id {
+                        return outcome;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("a stopped drain has to finish, not hang");
+        assert_eq!(outcome, DrainOutcome::Cancelled);
     }
 
     #[tokio::test]
