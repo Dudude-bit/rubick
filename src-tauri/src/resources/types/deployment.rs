@@ -414,6 +414,32 @@ mod tests {
         assert_eq!((bare.cpu_limits, bare.memory_requests), (None, None));
     }
 
+    /// Would print "No limits declared on this template" over an app capped
+    /// at 512Mi, because the cloudsql-proxy beside it declares none.
+    #[test]
+    fn a_template_with_one_unlimited_container_still_declares_the_others() {
+        let mib = 1024.0 * 1024.0;
+        let spec = PodSpec {
+            containers: vec![
+                Container {
+                    resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                        limits: Some(
+                            [("memory".to_string(), Quantity("512Mi".to_string()))].into(),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..container("app", None)
+                },
+                container("cloudsql-proxy", None),
+            ],
+            ..Default::default()
+        };
+        let replica = ReplicaReservation::of(Some(&spec));
+        assert_eq!(replica.memory_limits, Some(512.0 * mib));
+        let pod = crate::resources::types::pod::resource_totals(&spec);
+        assert_eq!(pod.memory_limits, Some(format!("{}", (512.0 * mib) as u64)));
+    }
+
     /// KEP-2837: pod-level resources on the template are the replica's own —
     /// carried here next to the service account, not folded into a container,
     /// so the workload's Usage ceiling can match its pods' instead of saying

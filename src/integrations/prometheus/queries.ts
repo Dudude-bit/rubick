@@ -225,21 +225,40 @@ export function memoryQuery(scope: UsageScope, spec: RangeSpec): string {
  * What was declared, as kube-state-metrics recorded it: a step function,
  * so no peak wrapping — the value at the bucket's edge is the value.
  * Cores come back as cores and go out as millicores, like everything else.
+ *
+ * The running containers' figures added up — app containers and native
+ * sidecars — the rule the live figure beside the line is read by. To
+ * kube-state-metrics a sidecar is an init container, told apart only by
+ * `restart_policy` on its info series; a plain one has finished before
+ * anything is measured.
  */
 export function declaredQuery(
   scope: UsageScope,
   resource: "cpu" | "memory",
   what: "requests" | "limits"
 ): string {
-  const selector =
-    scope.kind === "pod"
-      ? `namespace="${escapeLabel(scope.namespace)}",pod="${escapeLabel(scope.pod)}"`
-      : scope.kind === "workload"
-        ? `namespace="${escapeLabel(scope.namespace)}",pod=~"${escapeLabel(
-            podPattern(scope.ownerKind, scope.owner)
-          )}"`
-        : `node="${escapeLabel(scope.node)}"`;
-  const sum = `sum(kube_pod_container_resource_${what}{resource="${resource}",${selector}})`;
+  let pods = "";
+  let selector: string;
+  switch (scope.kind) {
+    case "pod":
+      pods = `namespace="${escapeLabel(scope.namespace)}",pod="${escapeLabel(scope.pod)}"`;
+      selector = pods;
+      break;
+    case "workload":
+      pods = `namespace="${escapeLabel(scope.namespace)}",pod=~"${escapeLabel(
+        podPattern(scope.ownerKind, scope.owner)
+      )}"`;
+      selector = pods;
+      break;
+    case "node":
+      // The info series has no node label; the join keeps only the pods
+      // the other side already narrowed to the node.
+      selector = `node="${escapeLabel(scope.node)}"`;
+      break;
+  }
+  const matchers = `resource="${resource}",${selector}`;
+  const sidecars = `max by (namespace, pod, container) (kube_pod_init_container_info{restart_policy="Always"${pods && `,${pods}`}})`;
+  const sum = `sum(kube_pod_container_resource_${what}{${matchers}} or (kube_pod_init_container_resource_${what}{${matchers}} * on (namespace, pod, container) group_left () ${sidecars}))`;
   return resource === "cpu" ? `${sum} * 1000` : sum;
 }
 
