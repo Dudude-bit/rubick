@@ -10,10 +10,11 @@ pub(super) async fn pod_connections(
     gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = source.snapshot(ctx, gateway).await?;
-    let pod = found(&snapshot.pods, "Pod", ns, name, |pod| {
-        pod.name_any() == name
-    })?;
+    let is_it = |pod: &Pod| pod.name_any() == name;
+    let snapshot = source
+        .subject_snapshot(ctx, gateway, |s| lacks(&s.pods, is_it))
+        .await?;
+    let pod = found(&snapshot.pods, "Pod", ns, name, is_it)?;
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
@@ -380,10 +381,11 @@ pub(super) async fn service_connections(
     gateway: Option<&crate::resources::GatewayApiDetection>,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = source.snapshot(ctx, gateway).await?;
-    let svc = found(&snapshot.services, "Service", ns, name, |svc| {
-        svc.name_any() == name
-    })?;
+    let is_it = |svc: &Service| svc.name_any() == name;
+    let snapshot = source
+        .subject_snapshot(ctx, gateway, |s| lacks(&s.services, is_it))
+        .await?;
+    let svc = found(&snapshot.services, "Service", ns, name, is_it)?;
 
     let subject = service_ref(svc, ns);
     out.subject = Some(subject.clone());
@@ -438,10 +440,11 @@ pub(super) async fn ingress_connections(
     name: &str,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let snapshot = source.snapshot(ctx, None).await?;
-    let ing = found(&snapshot.ingresses, "Ingress", ns, name, |ing| {
-        ing.name_any() == name
-    })?;
+    let is_it = |ing: &Ingress| ing.name_any() == name;
+    let snapshot = source
+        .subject_snapshot(ctx, None, |s| lacks(&s.ingresses, is_it))
+        .await?;
+    let ing = found(&snapshot.ingresses, "Ingress", ns, name, is_it)?;
 
     let subject = ingress_ref(ing, ns);
     out.subject = Some(subject.clone());

@@ -185,16 +185,32 @@ pub(crate) mod test_server {
     /// An API server that answers discovery for one group from a table:
     /// `(path, status, body)`. Anything else is a 404.
     pub(crate) async fn server(routes: Vec<(&'static str, u16, String)>) -> (Client, Hits) {
+        answering(move |path, _| {
+            routes
+                .iter()
+                .find(|(route, _, _)| *route == path)
+                .map_or((404, "{}".to_string()), |(_, status, body)| {
+                    (*status, body.clone())
+                })
+        })
+        .await
+    }
+
+    /// An API server whose answer to a path may change with each time it is
+    /// asked: `answer(path, nth)`, counting from 1.
+    pub(crate) async fn answering(
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (Client, Hits) {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind");
         let port = listener.local_addr().expect("addr").port();
         let hits: Hits = Arc::default();
         let seen = hits.clone();
-        let routes = Arc::new(routes);
+        let answer = Arc::new(answer);
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
-                let routes = routes.clone();
+                let answer = answer.clone();
                 let seen = seen.clone();
                 tokio::spawn(async move {
                     let mut buf = vec![0u8; 8192];
@@ -208,15 +224,15 @@ pub(crate) mod test_server {
                         .next()
                         .unwrap_or("")
                         .to_string();
-                    *seen.lock().unwrap().entry(path.clone()).or_default() += 1;
+                    let nth = {
+                        let mut seen = seen.lock().unwrap();
+                        let count = seen.entry(path.clone()).or_default();
+                        *count += 1;
+                        *count
+                    };
                     // Slow enough that callers arriving together overlap.
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    let (status, body) = routes
-                        .iter()
-                        .find(|(route, _, _)| *route == path)
-                        .map_or((404, "{}".to_string()), |(_, status, body)| {
-                            (*status, body.clone())
-                        });
+                    let (status, body) = answer(&path, nth);
                     let reply = format!(
                         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                         body.len()
