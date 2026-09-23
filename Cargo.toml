@@ -3,7 +3,10 @@ members = ["src-tauri", "k8s-gui-common"]
 resolver = "2"
 
 # Optimised release profile — used for `cargo tauri build` artifacts.
-# - lto = "fat"          : whole-program inlining; ~10-15% smaller and faster
+# - lto = "fat"          : whole-program inlining. Against thin with 16 CGUs
+#                          (2026-09-23, same commit): the binary is 13-17%
+#                          smaller (arm64 26.1 vs 31.3 MB, Linux 35.2 vs
+#                          41.5 MB) for 3-6 more minutes per platform.
 # - codegen-units = 1    : single CGU lets LLVM optimise across the whole crate
 # - strip = "symbols"    : drops debug symbols from the final binary
 # - panic = "abort"      : no unwinding -> smaller binary (we don't catch panics)
