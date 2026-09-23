@@ -1736,6 +1736,16 @@ export const en = {
       one: "· {n} line could not be read, so a row is missing",
       other: "· {n} lines could not be read, so rows are missing",
     },
+    lostOnTheWay: {
+      one: "· {n} row was lost on the way, so this is not the whole directory",
+      other:
+        "· {n} rows were lost on the way, so this is not the whole directory",
+    },
+    nothingArrived: {
+      one: "The tool listed {n} row and it was lost on the way, so what is in here is unknown.",
+      other:
+        "The tool listed {n} rows and none of them arrived, so what is in here is unknown.",
+    },
     cannotSwitchViaDebug:
       "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",

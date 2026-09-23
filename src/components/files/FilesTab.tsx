@@ -457,6 +457,10 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
               // other answers — and neither is "there is nothing here".
               state.stopped ? (
                 <Sentence>{t("files", "stoppedBeforeAnything")}</Sentence>
+              ) : state.lost ? (
+                <Sentence>
+                  {t("files", "nothingArrived", { n: state.lost })}
+                </Sentence>
               ) : state.unreadable ? (
                 <Sentence>
                   {t("files", "nothingReadable", { n: state.unreadable })}
@@ -613,6 +617,11 @@ function Status({
         {state.unreadable !== null && state.unreadable > 0 && (
           <span className="ml-1 text-warn">
             {t("files", "unreadableLines", { n: state.unreadable })}
+          </span>
+        )}
+        {state.lost !== null && state.lost > 0 && (
+          <span className="ml-1 text-warn">
+            {t("files", "lostOnTheWay", { n: state.lost })}
           </span>
         )}
       </span>
