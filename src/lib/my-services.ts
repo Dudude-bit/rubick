@@ -19,6 +19,8 @@ import type {
 } from "@/generated/types";
 import type { ChainPath, ChainHop } from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
+import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
 import type { RefreshRate } from "@/lib/refresh";
 
@@ -99,10 +101,6 @@ export function isPinned(
   );
 }
 
-export function isPinnable(kind: string): kind is PinnableKind {
-  return (PINNABLE_KINDS as readonly string[]).includes(kind);
-}
-
 /**
  * What the workload is doing, or why the app cannot say.
  *
@@ -120,7 +118,8 @@ export type ServiceState =
 
 export function stateOf(
   connections: ResourceConnections | undefined,
-  error: { message: string } | null,
+  /** The query's error as thrown, so its code comes with it. */
+  error: unknown,
   /** The pinned object, for telling its own 404 from the app's other ones. */
   pin?: { kind: string; name: string },
   /** Whether the read is still in flight. */
@@ -131,29 +130,17 @@ export function stateOf(
   // answer left the last good one on screen — green — with the failure
   // sitting beside it unread.
   if (error) {
-    // "Resource not found: Deployment/payments in namespace shop" is the
-    // cluster answering. "Client not found" and "Plugin not found" are this
-    // app failing, and calling those a deleted workload sends somebody to
-    // rebuild something that is still running.
-    // The kind as well as the name. A chain walks into the objects around
-    // this one, so "Resource not found: Service/payments" is about the
-    // Service — and marking the pinned Deployment of that name deleted
-    // sends somebody to recreate what is still running.
+    const said = errorToShow(error);
+    // The code says the cluster answered "not there"; `Kind/name` says it
+    // was about this object and not a namesake a chain walked into.
+    // Escaped, because a name is data: `payments.v1` matched `paymentsXv1`.
     const quoted = (text: string) =>
       text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const gone =
-      /resource not found/i.test(error.message) &&
+      errorCode(error) === ERROR_CODES.NOT_FOUND &&
       (!pin ||
-        // Escaped, because a name is data: `payments.v1` matched
-        // `paymentsXv1`, and a value with a bracket in it threw.
-        new RegExp(`\\b${quoted(pin.kind)}/${quoted(pin.name)}\\b`).test(
-          error.message
-        ) ||
-        // Some refusals name only the object, with no kind in front of it.
-        new RegExp(`not found:\\s*${quoted(pin.name)}\\b`, "i").test(
-          error.message
-        ));
-    return gone ? { state: "gone" } : { state: "unread", why: error.message };
+        new RegExp(`\\b${quoted(pin.kind)}/${quoted(pin.name)}\\b`).test(said));
+    return gone ? { state: "gone" } : { state: "unread", why: said };
   }
   // A read that has not answered yet is not a read that failed: the card
   // said "could not read" for the first second of every visit.
@@ -259,8 +246,12 @@ function publishedEntry(published: ServicePublished): EntryPoint {
     detail: published.ports
       .map((port) => (port.name === null ? `${port.port}` : port.name))
       .join(", "),
-    serving: published.ready > 0,
-    servingKnown: published.whole,
+    serving: servingCount(published) > 0,
+    // `whole` is about the one address a summary keeps, not the counts. The
+    // one answer that is nobody's read is a deduction from pods that matched
+    // nothing — possibly because nobody could list them.
+    servingKnown:
+      published.source !== "podReadiness" || endpointCount(published) > 0,
   };
 }
 

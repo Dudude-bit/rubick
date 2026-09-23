@@ -10,9 +10,11 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 
 import {
   useCapabilities,
+  type Capabilities,
   type ProxyBehind,
   type ServiceRoute,
 } from "@/integrations";
+import { settleFrontedRoutes } from "@/lib/fronted-tls";
 
 export interface ServiceRoutes {
   /**
@@ -36,10 +38,27 @@ export interface ServiceRoutes {
 
 const NONE: ServiceRoute[] = [];
 
+/**
+ * Every supplier's routes, with what stands in front of a proxy asked about
+ * here, once, so no reader of a route can skip it.
+ */
+async function routesOf(
+  service: { namespace: string; name: string },
+  suppliers: ReadonlyArray<Capabilities["service.routes"]>,
+  ingressTls: ReadonlyArray<Capabilities["ingress.tls"]>
+): Promise<ServiceRoute[]> {
+  const answers = await Promise.all(suppliers.map((ask) => ask(service)));
+  return settleFrontedRoutes(answers.flat(), {
+    ingressTls,
+    serviceRoutes: suppliers,
+  });
+}
+
 export function useServiceRoutes(
   service: { namespace: string; name: string } | null
 ): ServiceRoutes {
   const suppliers = useCapabilities("service.routes");
+  const ingressTls = useCapabilities("ingress.tls");
   const enabled = suppliers.length > 0 && service !== null;
 
   const query = useQuery({
@@ -48,15 +67,14 @@ export function useServiceRoutes(
       service?.namespace ?? "",
       service?.name ?? "",
       suppliers.length,
+      ingressTls.length,
     ],
-    queryFn: async () => {
-      const answers = await Promise.all(
-        suppliers.map((ask) =>
-          ask({ namespace: service!.namespace, name: service!.name })
-        )
-      );
-      return answers.flat();
-    },
+    queryFn: () =>
+      routesOf(
+        { namespace: service!.namespace, name: service!.name },
+        suppliers,
+        ingressTls
+      ),
     enabled,
     // Routing changes with a deploy, not by the second — the same minute the
     // routing pages read at.
@@ -76,6 +94,8 @@ export interface ServicesRoutes {
   /** By `namespace/name`. A Service nothing routes is simply absent. */
   routes: Map<string, ServiceRoute[]>;
   isPending: boolean;
+  /** The first supplier that did not answer — see {@link ServiceRoutes.error}. */
+  error: Error | null;
 }
 
 /**
@@ -87,6 +107,7 @@ export function useServicesRoutes(
   services: Array<{ namespace: string; name: string }>
 ): ServicesRoutes {
   const suppliers = useCapabilities("service.routes");
+  const ingressTls = useCapabilities("ingress.tls");
   const enabled = suppliers.length > 0;
 
   const queries = useQueries({
@@ -96,15 +117,14 @@ export function useServicesRoutes(
         service.namespace,
         service.name,
         suppliers.length,
+        ingressTls.length,
       ],
-      queryFn: async () => {
-        const answers = await Promise.all(
-          suppliers.map((ask) =>
-            ask({ namespace: service.namespace, name: service.name })
-          )
-        );
-        return answers.flat();
-      },
+      queryFn: () =>
+        routesOf(
+          { namespace: service.namespace, name: service.name },
+          suppliers,
+          ingressTls
+        ),
       enabled,
       staleTime: 60_000,
     })),
@@ -122,6 +142,7 @@ export function useServicesRoutes(
     available: enabled,
     routes,
     isPending: enabled && queries.some((query) => query.isPending),
+    error: (queries.find((query) => query.error)?.error as Error) ?? null,
   };
 }
 

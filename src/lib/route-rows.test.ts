@@ -195,6 +195,7 @@ const published = (name: string, ready: number): ServicePublished => ({
   endpoints: [],
   whole: true,
   unpublished: [],
+  stop: null,
 });
 
 const sources = (over: Partial<Parameters<typeof routesBoard>[1]> = {}) => ({
@@ -205,6 +206,7 @@ const sources = (over: Partial<Parameters<typeof routesBoard>[1]> = {}) => ({
     services: [service("app")],
     published: [published("app", 1)],
     backingKnown: true,
+    backingError: null,
   },
   ...over,
 });
@@ -460,7 +462,12 @@ describe("routesBoard", () => {
     const board = routesBoard(
       [route("healthy")],
       sources({
-        backing: { services: [], published: [], backingKnown: false },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: null,
+        },
       }),
       t
     );

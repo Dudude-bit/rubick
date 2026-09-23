@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { nodePlacement, type NodePlacement } from "@/lib/node-pool";
 import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType } from "@/lib/resource-registry";
 
 /**
  * What the node under an object says about itself.
@@ -21,7 +23,7 @@ export function useNodePlacement(
   nodeName: string | null | undefined
 ): NodePlacement | null {
   const { data } = useQuery({
-    queryKey: ["node", undefined, nodeName],
+    queryKey: queryKeys.detail(ResourceType.Node, null, nodeName ?? undefined),
     queryFn: () => commands.getNode(nodeName as string),
     enabled: !!nodeName,
     staleTime: STALE_TIMES.resourceDetail,

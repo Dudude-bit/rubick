@@ -1,5 +1,17 @@
-/** Host OS as reported by the backend (`std::env::consts::OS`). */
+/** Host OS, spelled as the backend's `std::env::consts::OS` spells it. */
 let hostOs = "linux";
+
+/**
+ * The host OS from the webview's own user agent: WKWebView says
+ * `Macintosh`, WebView2 `Windows NT`, WebKitGTK `X11; Linux`. Known before
+ * the first render, where asking the backend held the window blank for up to
+ * two seconds.
+ */
+export function hostOsFromUserAgent(userAgent: string): string {
+  if (/Macintosh|Mac OS X/.test(userAgent)) return "macos";
+  if (/Windows/.test(userAgent)) return "windows";
+  return "linux";
+}
 
 export function setHostOs(os: string): void {
   hostOs = os;

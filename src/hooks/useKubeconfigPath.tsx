@@ -17,7 +17,9 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
+import { toastError } from "@/lib/toast-error";
 
 export function useKubeconfigPath() {
   const { toast } = useToast();
@@ -51,17 +53,12 @@ export function useKubeconfigPath() {
     queryClient.invalidateQueries({ queryKey: ["kubeconfig-path"] });
     queryClient.invalidateQueries({ queryKey: ["kubeconfig-paths"] });
     queryClient.invalidateQueries({ queryKey: ["kubeconfig-source"] });
-    queryClient.invalidateQueries({ queryKey: ["contexts"] });
-    queryClient.invalidateQueries({ queryKey: ["current-context"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.contexts() });
     return useClusterStore.getState().loadContexts();
   };
 
   const failed = (title: string) => (error: unknown) =>
-    toast({
-      title,
-      description: error instanceof Error ? error.message : String(error),
-      variant: "destructive",
-    });
+    toastError(title, error);
 
   /**
    * Put back whatever was in force before. Both surfaces apply a path

@@ -15,13 +15,16 @@ import {
   useMutation,
   useQueryClient,
   keepPreviousData,
+  type QueryKey,
 } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useResourceYaml } from "./useResourceYaml";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -128,8 +131,8 @@ export function useResourceDetail<T>(
     error: readError,
     refetch,
     freshness,
-  } = useLiveQuery<T, Error, T, string[]>({
-    queryKey: [resourceKind.toLowerCase(), namespace, name] as string[],
+  } = useLiveQuery<T, Error, T, QueryKey>({
+    queryKey: queryKeys.detail(resourceKind, namespace, name),
     queryFn: async () => {
       if (!name) throw new Error("Name is required");
       const result = await fetchResource(name, namespace || null);
@@ -189,7 +192,7 @@ export function useResourceDetail<T>(
         }),
       });
       queryClient.invalidateQueries({
-        queryKey: [resourceKind.toLowerCase()],
+        queryKey: queryKeys.details(resourceKind),
       });
       if (onDeleted) {
         onDeleted();
@@ -203,7 +206,7 @@ export function useResourceDetail<T>(
         description: t("action", "deleteFailed", {
           kind: resourceKind.toLowerCase(),
           name: name ?? "",
-          error: String(err),
+          error: errorToShow(err),
         }),
         variant: "destructive",
       });
@@ -233,10 +236,11 @@ export function useResourceDetail<T>(
 }
 
 /**
- * Check if error indicates resource not found
+ * Whether the object is gone, as the backend's code says — not a refused
+ * list, and not a container with no previous run, both of which read "not
+ * found" to a substring.
  */
 export function isResourceNotFoundError(error: Error | null | string): boolean {
   if (!error) return false;
-  const errorStr = String(error);
-  return errorStr.includes("not found") || errorStr.includes("NotFound");
+  return errorCode(error) === ERROR_CODES.NOT_FOUND;
 }

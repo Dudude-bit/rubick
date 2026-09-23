@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useNowSeconds } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   DebugConfig,
   DebugOperation,
@@ -25,10 +27,14 @@ export function useDebugOperation({
   const [state, setState] = useState<DebugOperationState>("idle");
   const [operation, setOperation] = useState<DebugOperation | null>(null);
   const [statusReason, setStatusReason] = useState<string | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  // When polling began, not a count of ticks: a hidden window throttles
+  // timers, and a counter that missed them would say less time had passed.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const now = useNowSeconds(state === "polling");
+  const elapsedSeconds =
+    startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const elapsedIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isCancelledRef = useRef(false);
 
   const cleanup = useCallback(() => {
@@ -36,21 +42,13 @@ export function useDebugOperation({
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-    if (elapsedIntervalRef.current) {
-      clearInterval(elapsedIntervalRef.current);
-      elapsedIntervalRef.current = null;
-    }
   }, []);
 
   const startPolling = useCallback(
     (op: DebugOperation) => {
       cleanup();
       isCancelledRef.current = false;
-      setElapsedSeconds(0);
-
-      elapsedIntervalRef.current = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
+      setStartedAt(Date.now());
 
       const poll = async () => {
         if (isCancelledRef.current) return;
@@ -99,7 +97,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -118,7 +116,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -137,7 +135,7 @@ export function useDebugOperation({
         startPolling(op);
       } catch (err) {
         setState("failed");
-        onError(String(err));
+        onError(errorToShow(err));
       }
     },
     [startPolling, onError]
@@ -158,7 +156,7 @@ export function useDebugOperation({
     setOperation(null);
     setState("idle");
     setStatusReason(null);
-    setElapsedSeconds(0);
+    setStartedAt(null);
   }, [operation, cleanup]);
 
   const continueWaiting = useCallback(async () => {
@@ -166,12 +164,12 @@ export function useDebugOperation({
       try {
         // Extend timeout on backend before resuming polling
         await commands.extendDebugTimeout(operation.id, null);
-        setElapsedSeconds(0);
+        setStartedAt(null);
         setState("polling");
         startPolling(operation);
       } catch (error) {
         console.error("Failed to extend timeout:", error);
-        onError(String(error));
+        onError(errorToShow(error));
       }
     }
   }, [operation, startPolling, onError]);

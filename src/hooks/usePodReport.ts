@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 
 import { useHintChain } from "@/components/pod/useHintChain";
-import { commands } from "@/lib/commands";
+import { useAppInfo } from "@/hooks/useAppInfo";
 import { buildDeepLink } from "@/lib/deep-link";
 import { familyOf } from "@/lib/event-stories";
 import { describeStop } from "@/lib/connections";
@@ -269,11 +268,7 @@ export function usePodReport(
     trouble,
     pod !== undefined && showPanel
   );
-  const version = useQuery({
-    queryKey: ["app-info"],
-    queryFn: () => commands.getAppInfo(),
-    staleTime: Infinity,
-  });
+  const version = useAppInfo();
   const journal = useChangeJournalStore((s) => s.entries);
   // The same fact the page reads beside the status badge: when the node has
   // stopped answering, everything the kubelet wrote is the last thing it

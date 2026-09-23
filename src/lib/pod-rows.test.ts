@@ -70,18 +70,28 @@ describe("listPodRows", () => {
       expect(index, `${event} listener`).toBeGreaterThan(-1);
       expect(index).toBeLessThan(gate);
     }
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 0, complete: true });
-    await expect(answer).resolves.toEqual([]);
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 0,
+      complete: true,
+      unread: [],
+    });
+    await expect(answer).resolves.toEqual({ rows: [], unread: [] });
   });
 
   /** Chunks are one list. Losing their order would resort the table on every reload. */
   it("reassembles the chunks in arrival order and resolves on done", async () => {
-    const answer = listPodRows("shop");
+    const answer = listPodRows(["shop"]);
     await settled();
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a"), row("b")] });
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("c")] });
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 3, complete: true });
-    const rows = await answer;
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 3,
+      complete: true,
+      unread: [],
+    });
+    const { rows } = await answer;
     expect(rows.map((r) => r.name)).toEqual(["a", "b", "c"]);
     expect(calls.listeners["pod-rows-batch"]).toBeUndefined();
   });
@@ -94,11 +104,16 @@ describe("listPodRows", () => {
    * not to do.
    */
   it("refuses a list that arrived short of the count the backend sent", async () => {
-    const answer = listPodRows("shop");
+    const answer = listPodRows(["shop"]);
     await settled();
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a")] });
     // The backend emitted three; one batch never made it across.
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 3, complete: true });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 3,
+      complete: true,
+      unread: [],
+    });
     await expect(answer).rejects.toThrow(/lost 2 of 3/);
   });
 
@@ -114,7 +129,7 @@ describe("listPodRows", () => {
       await import("./credentials");
     credentialsRestored();
 
-    const answer = listPodRows("shop");
+    const answer = listPodRows(["shop"]);
     await settled();
     emit("pod-rows-failed", {
       stream_id: "pods-1",
@@ -125,14 +140,52 @@ describe("listPodRows", () => {
     credentialsRestored();
   });
 
+  /**
+   * A namespace that failed partway had already sent some pods. Keeping them
+   * would draw part of a namespace as all of it beside the sentence saying it
+   * could not be read; dropping the name would draw the rest as the scope.
+   */
+  it("names a namespace that could not be read and keeps none of its rows", async () => {
+    const answer = listPodRows(["shop", "staging"]);
+    await settled();
+    const refused = {
+      namespace: "staging",
+      code: "PERMISSION_DENIED",
+      message: "pods is forbidden",
+    };
+    emit("pod-rows-batch", {
+      stream_id: "pods-1",
+      rows: [row("a"), { name: "half", namespace: "staging" } as PodRow],
+    });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 2,
+      complete: true,
+      unread: [refused],
+    });
+    const { rows, unread } = await answer;
+    expect(rows.map((r) => r.name)).toEqual(["a"]);
+    expect(unread).toEqual([refused]);
+  });
+
   /** Another screen's stream shares the channel; its rows are not this list's. */
   it("ignores chunks addressed to another stream", async () => {
     const answer = listPodRows(null);
     await settled();
     emit("pod-rows-batch", { stream_id: "pods-2", rows: [row("x")] });
-    emit("pod-rows-done", { stream_id: "pods-2", rows: 1, complete: true });
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 0, complete: true });
-    await expect(answer).resolves.toEqual([]);
+    emit("pod-rows-done", {
+      stream_id: "pods-2",
+      rows: 1,
+      complete: true,
+      unread: [],
+    });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 0,
+      complete: true,
+      unread: [],
+    });
+    await expect(answer).resolves.toEqual({ rows: [], unread: [] });
   });
 
   /** A refused list is an error the screen shows, in the cluster's words, not an empty list. */
@@ -152,7 +205,12 @@ describe("listPodRows", () => {
     const answer = listPodRows(null);
     await settled();
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a")] });
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 1, complete: false });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 1,
+      complete: false,
+      unread: [],
+    });
     await expect(answer).rejects.toThrow("stopped");
   });
 
@@ -172,7 +230,12 @@ describe("listPodRows", () => {
     const answer = listPodRows(null);
     await settled();
     emit("pod-rows-batch", { stream_id: "pods-1", rows: [row("a"), row("b")] });
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 2, complete: true });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 2,
+      complete: true,
+      unread: [],
+    });
     await answer;
     // Its own name: the command wrapper records the handshake under
     // `listPodRows`, and folding the whole stream into that row made the
@@ -196,7 +259,12 @@ describe("listPodRows", () => {
     await settled();
     const many = Array.from({ length: 1200 }, (_, i) => row(`p${i}`));
     emit("pod-rows-batch", { stream_id: "pods-1", rows: many });
-    emit("pod-rows-done", { stream_id: "pods-1", rows: 1200, complete: true });
+    emit("pod-rows-done", {
+      stream_id: "pods-1",
+      rows: 1200,
+      complete: true,
+      unread: [],
+    });
     await answer;
     expect(stallWatch.report().largest?.rows).toBe(1200);
   });

@@ -1,21 +1,20 @@
 /**
  * Auto-updating age and countdown displays.
  *
- * The refresh rate follows the value: the shared tick store batches every
- * subscriber on one channel into a single timer.
+ * The refresh rate follows the value, on the shared clocks in `useNow`, so
+ * an age under a hidden surface stops re-rendering with everything else.
  *
  * @module hooks/useRealtimeAge
  */
 
-import { useSyncExternalStore, useCallback } from "react";
-import { tickStore, type TickChannel } from "@/stores/tickStore";
+import { useNowEvery, type Every } from "@/hooks/useNow";
 import { formatAge } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
-function getChannelForAge(ageSeconds: number): TickChannel {
-  if (ageSeconds < 60) return "fast"; // < 1 minute: update every 1s
-  if (ageSeconds < 3600) return "medium"; // < 1 hour: update every 10s
-  return "slow"; // >= 1 hour: update every 60s
+function everyForAge(ageSeconds: number): Every {
+  if (ageSeconds < 60) return 1_000;
+  if (ageSeconds < 3600) return 10_000;
+  return 60_000;
 }
 
 function getAgeSeconds(timestamp: string | null): number {
@@ -39,27 +38,10 @@ function getAgeSeconds(timestamp: string | null): number {
  */
 export function useRealtimeAge(timestamp: string | null): string {
   const t = useT();
-  const ageSeconds = getAgeSeconds(timestamp);
-  const channel = getChannelForAge(ageSeconds);
 
-  const subscribe = useCallback(
-    (callback: () => void) => tickStore.subscribe(channel, callback),
-    [channel]
-  );
-
-  const getSnapshot = useCallback(
-    () => tickStore.getSnapshot(channel),
-    [channel]
-  );
-
-  const getServerSnapshot = useCallback(
-    () => tickStore.getServerSnapshot(channel),
-    [channel]
-  );
-
-  // Result unused: subscribing re-renders on each tick, and that render is
-  // what recomputes the age.
-  useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // Result unused: each tick re-renders, and that render is what recomputes
+  // the age.
+  useNowEvery(everyForAge(getAgeSeconds(timestamp)));
 
   return formatAge(timestamp, t);
 }
@@ -93,10 +75,10 @@ function getRemainingSeconds(targetDate: string | Date | null): number {
   return Math.max(0, Math.floor((target.getTime() - Date.now()) / 1000));
 }
 
-function getChannelForCountdown(remainingSeconds: number): TickChannel {
-  if (remainingSeconds <= 60) return "fast"; // Last minute: every 1s
-  if (remainingSeconds <= 3600) return "medium"; // Last hour: every 10s
-  return "slow"; // > 1 hour: every 60s
+function everyForCountdown(remainingSeconds: number): Every {
+  if (remainingSeconds <= 60) return 1_000;
+  if (remainingSeconds <= 3600) return 10_000;
+  return 60_000;
 }
 
 export interface CountdownResult {
@@ -134,27 +116,9 @@ export function useRealtimeCountdown(
 ): CountdownResult {
   const { warningThresholdDays = 7, criticalThresholdDays = 1 } = options ?? {};
 
-  const remainingSeconds = getRemainingSeconds(targetDate);
-  const channel = getChannelForCountdown(remainingSeconds);
-
-  const subscribe = useCallback(
-    (callback: () => void) => tickStore.subscribe(channel, callback),
-    [channel]
-  );
-
-  const getSnapshot = useCallback(
-    () => tickStore.getSnapshot(channel),
-    [channel]
-  );
-
-  const getServerSnapshot = useCallback(
-    () => tickStore.getServerSnapshot(channel),
-    [channel]
-  );
-
-  // Result unused: subscribing re-renders on each tick, and that render is
-  // what recomputes the remainder.
-  useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // Result unused: each tick re-renders, and that render is what recomputes
+  // the remainder.
+  useNowEvery(everyForCountdown(getRemainingSeconds(targetDate)));
 
   const remaining = getRemainingSeconds(targetDate);
   const remainingDays = remaining / 86400;

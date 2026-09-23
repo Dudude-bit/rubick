@@ -1,5 +1,5 @@
 import { startFrameWatch, type TaskSink } from "@/lib/perf-frames";
-import type { PerfReport, PerfSample } from "@/lib/perf";
+import { rowsOf, type PerfReport, type PerfSample } from "@/lib/perf";
 
 /** A main-thread stall: how long, and when it ended. */
 export interface Stall {
@@ -39,6 +39,8 @@ export const BIG_LIST_ROWS = 1_000;
 /** Under this an answer is not the reason for anything. */
 export const BIG_ANSWER_ROWS = 1_000;
 const KEEP = 200;
+/** How long a change waits for the rest of its burst before listeners hear of it. */
+export const REPAINT_MS = 250;
 
 /**
  * The cheap half of the performance recorder, always on: stalls of the
@@ -76,8 +78,9 @@ export class StallWatch {
 
   /** Costs an `Array.isArray` and a length: never a walk over the value. */
   noteAnswer(name: string, value: unknown, at: number = this.now()): void {
-    if (!Array.isArray(value) || value.length < BIG_ANSWER_ROWS) return;
-    this.answers.push({ name, rows: value.length, at });
+    const rows = rowsOf(value);
+    if (rows === undefined || rows < BIG_ANSWER_ROWS) return;
+    this.answers.push({ name, rows, at });
     if (this.answers.length > KEEP) this.answers.shift();
     this.notify();
   }
@@ -131,7 +134,7 @@ export class StallWatch {
     this.pending = setTimeout(() => {
       this.pending = null;
       for (const listener of this.listeners) listener();
-    }, 250);
+    }, REPAINT_MS);
   }
 }
 

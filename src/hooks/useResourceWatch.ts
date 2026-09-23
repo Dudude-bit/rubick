@@ -1,29 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import {
+  listenEvent,
+  listenResourceEvents,
+  type ResourceChange,
+} from "@/lib/events";
 import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useT } from "@/i18n/useT";
-
-/** Operation tag — mirrors backend `WatchOp`. */
-type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
-
-/** One change inside a batch — mirrors backend `WatchChange`. */
-interface WatchChange<T> {
-  op: WatchOp;
-  /** `null` on the resync markers and on `failed`. */
-  resource: T | null;
-}
-
-interface ResourceEventPayload<T> {
-  stream_id: string;
-  /** In arrival order, never empty. */
-  changes: Array<WatchChange<T>>;
-  /** Set on `failed` — backend's error description. `null` for every
-   *  other op. */
-  error: string | null;
-}
+import type { Scoped } from "@/generated/types";
 
 interface UseResourceWatchOptions {
   /**
@@ -36,7 +22,7 @@ interface UseResourceWatchOptions {
    * the rest of the lifecycle (listen + gate release + unsubscribe).
    */
   subscribe: () => Promise<string>;
-  /** TanStack Query cache key the watch should keep up to date. */
+  /** The cache entry the watch keeps up to date: a list's `Scoped` answer. */
   queryKey: QueryKey;
   /**
    * Called on a backend `failed` event — typically RBAC `watch` denial or a
@@ -61,9 +47,6 @@ export interface ResourceWatchState {
    */
   resyncing: boolean;
 }
-
-/** Matches `EVENT_BRIDGE_LAGGED` in `src-tauri/src/main.rs`. */
-const EVENT_BRIDGE_LAGGED = "event-bridge-lagged";
 
 /**
  * Subscribes to a backend resource watch, listens for `resource-event` Tauri
@@ -149,86 +132,94 @@ export function useResourceWatch<
         }
         streamId = id;
 
-        const off = await listen<ResourceEventPayload<T>>(
-          "resource-event",
-          (event) => {
-            const payload = event.payload;
-            if (payload.stream_id !== id) return;
-            if (payload.changes.some((change) => change.op === "failed")) {
-              inFailedState = true;
-              abandonResync();
-              onErrorRef.current?.(
-                payload.error ?? tRef.current("action", "resourceWatchFailed")
-              );
-              return;
-            }
-            if (payload.changes.length === 0) return;
-            // A `restarted` marker says the watcher is trying again; it is
-            // not the cluster answering. kube emits one before every list
-            // attempt, so a refused watch sends a marker between every pair
-            // of failures — and recovering on it put the list back on
-            // "live", stopped the polling that was standing in for the
-            // watch, and drew a resync that never syncs. The same rule the
-            // other side of the boundary applies in `watch::answered`.
-            const answered = payload.changes.some(
-              (change) => change.op !== "restarted"
+        const off = await listenResourceEvents<T>((event) => {
+          const payload = event.payload;
+          if (payload.stream_id !== id) return;
+          if (payload.changes.some((change) => change.op === "failed")) {
+            inFailedState = true;
+            abandonResync();
+            onErrorRef.current?.(
+              payload.error ?? tRef.current("action", "resourceWatchFailed")
             );
-            // The marker still does its work — it opens the staging map the
-            // resync is collected into, and skipping that left the objects
-            // deleted while the watch was down in the cache for good. What
-            // it must not do is end the failure.
-            if (inFailedState && answered) {
-              inFailedState = false;
-              onRecoveredRef.current?.();
-            }
+            return;
+          }
+          if (payload.changes.length === 0) return;
+          // A `restarted` marker says the watcher is trying again; it is
+          // not the cluster answering. kube emits one before every list
+          // attempt, so a refused watch sends a marker between every pair
+          // of failures — and recovering on it put the list back on
+          // "live", stopped the polling that was standing in for the
+          // watch, and drew a resync that never syncs. The same rule the
+          // other side of the boundary applies in `watch::answered`.
+          const answered = payload.changes.some(
+            (change) => change.op !== "restarted"
+          );
+          // The marker still does its work — it opens the staging map the
+          // resync is collected into, and skipping that left the objects
+          // deleted while the watch was down in the cache for good. What
+          // it must not do is end the failure.
+          if (inFailedState && answered) {
+            inFailedState = false;
+            onRecoveredRef.current?.();
+          }
 
-            // Live changes accumulate and land as one cache write, so a
-            // batch is one render no matter how many objects moved.
-            let live: Array<WatchChange<T>> = [];
-            for (const change of payload.changes) {
-              if (change.op === "restarted") {
-                staged = new Map();
-                // A watch that is failing announces every attempt; saying
-                // "resyncing" each time claims progress on a stream that is
-                // not making any. The failure is what the reader is shown.
-                setResyncing(!inFailedState);
-                // The resync's list is the whole truth; anything from
-                // before it is about to be superseded.
-                live = [];
-                continue;
-              }
-              if (change.op === "synced") {
-                const rows = staged;
-                staged = null;
-                setResyncing(false);
-                if (rows) {
-                  queryClient.setQueryData<T[]>(queryKey, [...rows.values()]);
-                  positions.clear();
-                  indexedList = undefined;
-                }
-                continue;
-              }
-              if (staged) {
-                stage(staged, change);
-              } else {
-                live.push(change);
-              }
+          // Live changes accumulate and land as one cache write, so a
+          // batch is one render no matter how many objects moved.
+          let live: Array<ResourceChange<T>> = [];
+          for (const change of payload.changes) {
+            if (change.op === "restarted") {
+              staged = new Map();
+              // A watch that is failing announces every attempt; saying
+              // "resyncing" each time claims progress on a stream that is
+              // not making any. The failure is what the reader is shown.
+              setResyncing(!inFailedState);
+              // The resync's list is the whole truth; anything from
+              // before it is about to be superseded.
+              live = [];
+              continue;
             }
+            if (change.op === "synced") {
+              const rows = staged;
+              staged = null;
+              setResyncing(false);
+              if (rows) {
+                // Synced is every namespace of the stream answering, so
+                // nothing in the scope is unread any more.
+                queryClient.setQueryData<Scoped<T>>(queryKey, {
+                  rows: [...rows.values()],
+                  unread: [],
+                });
+                positions.clear();
+                indexedList = undefined;
+              }
+              continue;
+            }
+            if (staged) {
+              stage(staged, change);
+            } else {
+              live.push(change);
+            }
+          }
 
-            if (live.length > 0) {
-              const changes = live;
-              indexedList = queryClient.setQueryData<T[]>(queryKey, (prev) => {
-                if (prev !== indexedList) {
+          if (live.length > 0) {
+            const changes = live;
+            const stored = queryClient.setQueryData<Scoped<T>>(
+              queryKey,
+              (prev) => {
+                if (prev?.rows !== indexedList) {
                   positions.clear();
-                  prev?.forEach((item, index) =>
+                  prev?.rows.forEach((item, index) =>
                     positions.set(identify(item), index)
                   );
                 }
-                return applyChanges(prev ?? [], changes, positions);
-              });
-            }
+                const rows = applyChanges(prev?.rows ?? [], changes, positions);
+                if (prev && rows === prev.rows) return prev;
+                return { rows, unread: prev?.unread ?? [] };
+              }
+            );
+            indexedList = stored?.rows;
           }
-        );
+        });
 
         // The bridge dropping events is this watch failing, whatever the
         // stream itself is doing: a resync replaces the cache from a burst,
@@ -236,13 +227,15 @@ export function useResourceWatch<
         // stale, it is short, and nothing polls it back while it believes it
         // is live. Same treatment as a failed stream: say so, drop the badge,
         // start polling again.
-        const offLagged = await listen<number>(EVENT_BRIDGE_LAGGED, (event) => {
+        const offLagged = await listenEvent("event-bridge-lagged", (event) => {
           inFailedState = true;
           // A resync missing an unknown number of its own rows is not a
           // state to swap in — committing it would delete rows that exist.
           abandonResync();
           onErrorRef.current?.(
-            tRef.current("action", "eventBridgeLagged", { n: event.payload })
+            tRef.current("action", "eventBridgeLagged", {
+              n: event.payload.missed,
+            })
           );
         });
 
@@ -295,7 +288,7 @@ function identify<T extends { name: string; namespace?: string | null }>(
 
 function stage<T extends { name: string; namespace?: string | null }>(
   rows: Map<string, T>,
-  change: WatchChange<T>
+  change: ResourceChange<T>
 ) {
   const incoming = change.resource;
   if (!incoming) return;
@@ -307,7 +300,7 @@ function stage<T extends { name: string; namespace?: string | null }>(
 // ordered deletion still copy O(N) array slots.
 function applyChanges<T extends { name: string; namespace?: string | null }>(
   list: T[],
-  changes: Array<WatchChange<T>>,
+  changes: Array<ResourceChange<T>>,
   positions: Map<string, number>
 ): T[] {
   let next: T[] | undefined;

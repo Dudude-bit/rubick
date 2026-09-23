@@ -1,16 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-function sources(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) sources(path, out);
-    else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name))
-      out.push(path);
-  }
-  return out;
-}
+import { CODE_FILES } from "@/test/source-files";
 
 describe("asking to be told when", () => {
   /**
@@ -24,8 +15,7 @@ describe("asking to be told when", () => {
    * `useAsk` itself is excluded: it is where `dialog` is built.
    */
   it("is mounted by every file that asks", () => {
-    const unmounted = sources("src")
-      .filter((path) => !path.endsWith("useAsk.tsx"))
+    const unmounted = CODE_FILES.filter((path) => !path.endsWith("useAsk.tsx"))
       .filter((path) => {
         const text = readFileSync(path, "utf8");
         return /\buseAsk\(\)/.test(text) && !/\.dialog\}/.test(text);
@@ -36,7 +26,7 @@ describe("asking to be told when", () => {
 
   /** A guard that reads nothing passes forever. */
   it("reads the files it is meant to be checking", () => {
-    const callers = sources("src").filter((path) =>
+    const callers = CODE_FILES.filter((path) =>
       /\buseAsk\(\)/.test(readFileSync(path, "utf8"))
     );
     expect(callers.length).toBeGreaterThan(3);

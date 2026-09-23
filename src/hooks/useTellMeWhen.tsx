@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
+import {
+  listenEvent,
+  listenResourceEvents,
+  type ResourceEvent,
+} from "@/lib/events";
 import { notify } from "@/lib/notify";
 import {
   Coalescer,
@@ -21,29 +25,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
-
-interface WatchChange {
-  op: "applied" | "deleted" | "restarted" | "synced" | "failed";
-  resource: unknown;
-}
-
-interface ResourceEventPayload {
-  stream_id: string;
-  changes: WatchChange[];
-  error: string | null;
-}
-
-interface DrainFinished {
-  node: string;
-  outcome: "drained" | "stopped" | "cancelled" | "failed";
-  message: string | null;
-}
-
-interface ForwardStatus {
-  id: string;
-  status: string;
-  message?: string | null;
-}
+import type { DrainOutcome } from "@/generated/types";
 
 export interface Answer {
   watch: Watch;
@@ -76,7 +58,7 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
  * not failures — folding them into `drainFailed` painted an expected ending
  * red, the third state collapsing into the second.
  */
-const DRAIN_SAYS: Record<DrainFinished["outcome"], Says> = {
+const DRAIN_SAYS: Record<DrainOutcome, Says> = {
   drained: "drained",
   stopped: "drainStopped",
   cancelled: "drainCancelled",
@@ -108,12 +90,22 @@ export function notice(
 /** Deadlines are two minutes; a check every ten seconds keeps the answer within a breath of it. */
 const TIMEOUT_EVERY_MS = 10_000;
 
-/** The stream behind one open watch, and the timer that says it went quiet. */
-interface Stream {
+/** The timer that says a watch went quiet. */
+interface Sight {
+  lostTimer: ReturnType<typeof setTimeout> | null;
+}
+
+/** The stream behind one open watch. */
+interface Stream extends Sight {
   id: string | null;
   off: (() => void) | null;
-  lostTimer: ReturnType<typeof setTimeout> | null;
   closed: boolean;
+  /**
+   * A list in progress, between `restarted` and `synced`, and whether it
+   * held the object. On the stream because the two markers can arrive in
+   * different batches.
+   */
+  relist: { found: boolean } | null;
 }
 
 /** Marks the watch answered and queues the answer, unless it was already. */
@@ -127,6 +119,49 @@ function settle(
   if (!current || !isOpen(current)) return;
   store.setStatus(watchId, { state: "done", verdict, at: Date.now() });
   coalescer?.push({ watch: current, verdict });
+}
+
+/**
+ * Marks the watch lost, and reports it after `LOST_SIGHT_MS` unless something
+ * answers first.
+ */
+function loseSight(
+  watchId: string,
+  sight: Sight,
+  coalescer: { current: Coalescer<Answer> | null }
+) {
+  const store = useTellMeWhenStore.getState();
+  const watch = store.watches.find((w) => w.id === watchId);
+  if (!watch || watch.status.state !== "watching") return;
+  const since = Date.now();
+  store.setStatus(watchId, { state: "lost", since, told: false });
+  if (sight.lostTimer !== null) clearTimeout(sight.lostTimer);
+  sight.lostTimer = setTimeout(() => {
+    const again = useTellMeWhenStore
+      .getState()
+      .watches.find((w) => w.id === watchId);
+    if (!again || again.status.state !== "lost" || again.status.told) {
+      return;
+    }
+    useTellMeWhenStore
+      .getState()
+      .setStatus(watchId, { state: "lost", since, told: true });
+    coalescer.current?.push({
+      watch: again,
+      verdict: { says: "lostSight", detail: null },
+    });
+  }, LOST_SIGHT_MS);
+}
+
+/** A lost watch heard from again. */
+function regainSight(watchId: string, sight: Sight | undefined) {
+  const store = useTellMeWhenStore.getState();
+  const watch = store.watches.find((w) => w.id === watchId);
+  if (watch?.status.state === "lost") {
+    store.setStatus(watchId, { state: "watching" });
+  }
+  if (sight && sight.lostTimer !== null) clearTimeout(sight.lostTimer);
+  if (sight) sight.lostTimer = null;
 }
 
 /**
@@ -154,8 +189,11 @@ export function useTellMeWhen() {
   );
 
   const streams = useRef(new Map<string, Stream>());
+  // Drains and forwards have no stream; their answers are events of their own.
+  const aside = useRef(new Map<string, Sight>());
   const coalescer = useRef<Coalescer<Answer> | null>(null);
   const deliver = useRef<(answers: Answer[]) => void>(() => {});
+  const reopenAll = useRef<() => void>(() => {});
 
   useEffect(() => {
     deliver.current = (answers) => {
@@ -213,6 +251,28 @@ export function useTellMeWhen() {
       }
     };
 
+    // A lag dropped events nobody can name, so each watch looks again from a
+    // fresh list and is lost until that list answers. The lost timer carries
+    // over, or a watch already lost would never be reported.
+    reopenAll.current = () => {
+      for (const watchId of [...live.keys()]) {
+        const old = live.get(watchId);
+        if (!old) continue;
+        const stream: Stream = {
+          id: null,
+          off: null,
+          lostTimer: old.lostTimer,
+          closed: false,
+          relist: null,
+        };
+        old.lostTimer = null;
+        close(watchId);
+        live.set(watchId, stream);
+        loseSight(watchId, stream, coalescer);
+        void open(watchId, stream);
+      }
+    };
+
     for (const id of [...live.keys()]) {
       if (!wanted.has(id) || !connected) close(id);
     }
@@ -225,6 +285,7 @@ export function useTellMeWhen() {
         off: null,
         lostTimer: null,
         closed: false,
+        relist: null,
       };
       live.set(watchId, stream);
       void open(watchId, stream);
@@ -255,13 +316,10 @@ export function useTellMeWhen() {
           return;
         }
         stream.id = id;
-        stream.off = await listen<ResourceEventPayload>(
-          "resource-event",
-          (event) => {
-            if (event.payload.stream_id !== id || stream.closed) return;
-            onEvent(watchId, stream, event.payload);
-          }
-        );
+        stream.off = await listenResourceEvents<unknown>((event) => {
+          if (event.payload.stream_id !== id || stream.closed) return;
+          onEvent(watchId, stream, event.payload);
+        });
         if (stream.closed) {
           stream.off();
           return;
@@ -270,35 +328,49 @@ export function useTellMeWhen() {
       } catch {
         // Never opened: the cluster refused or is unreachable. Reported the
         // way a dropped stream is, so the row says so rather than nothing.
-        lost(watchId, stream);
+        loseSight(watchId, stream, coalescer);
       }
     }
 
     function onEvent(
       watchId: string,
       stream: Stream,
-      payload: ResourceEventPayload
+      payload: ResourceEvent<unknown>
     ) {
       const store = useTellMeWhenStore.getState();
       const watch = store.watches.find((w) => w.id === watchId);
       if (!watch || !isOpen(watch)) return;
 
       if (payload.changes.some((c) => c.op === "failed")) {
-        lost(watchId, stream);
+        loseSight(watchId, stream, coalescer);
         return;
       }
-      if (watch.status.state === "lost") {
-        store.setStatus(watchId, { state: "watching" });
-        if (stream.lostTimer !== null) clearTimeout(stream.lostTimer);
-        stream.lostTimer = null;
+      // A `restarted` marker is the watcher trying again, not the cluster
+      // answering: kube sends one before every retry of a refused list.
+      const answered = payload.changes.some((c) => c.op !== "restarted");
+      if (watch.status.state === "lost" && answered) {
+        regainSight(watchId, stream);
       }
       let current = store.watches.find((w) => w.id === watchId) ?? watch;
       for (const change of payload.changes) {
-        if (change.op !== "applied" && change.op !== "deleted") continue;
+        if (change.op === "restarted") {
+          stream.relist = { found: false };
+          continue;
+        }
+        // The list is selected by name, so one that finished without the
+        // object is the cluster saying it is not there. kube sends no
+        // `deleted` for it, and a lag may have dropped the one it did send.
+        const emptied =
+          change.op === "synced" && stream.relist?.found === false;
+        if (change.op === "synced") stream.relist = null;
+        if (change.op === "applied" && stream.relist)
+          stream.relist.found = true;
+        const op = emptied ? "deleted" : change.op;
+        if (op !== "applied" && op !== "deleted") continue;
         const { verdict, baseline } = judge(
           current,
-          change.op,
-          change.resource
+          op,
+          emptied ? null : change.resource
         );
         if (verdict) {
           settle(watchId, verdict, coalescer.current);
@@ -312,37 +384,75 @@ export function useTellMeWhen() {
       }
     }
 
-    function lost(watchId: string, stream: Stream) {
-      const store = useTellMeWhenStore.getState();
-      const watch = store.watches.find((w) => w.id === watchId);
-      if (!watch || watch.status.state !== "watching") return;
-      const since = Date.now();
-      store.setStatus(watchId, { state: "lost", since, told: false });
-      if (stream.lostTimer !== null) clearTimeout(stream.lostTimer);
-      stream.lostTimer = setTimeout(() => {
-        const again = useTellMeWhenStore
-          .getState()
-          .watches.find((w) => w.id === watchId);
-        if (!again || again.status.state !== "lost" || again.status.told) {
-          return;
-        }
-        useTellMeWhenStore
-          .getState()
-          .setStatus(watchId, { state: "lost", since, told: true });
-        coalescer.current?.push({
-          watch: again,
-          verdict: { says: "lostSight", detail: null },
-        });
-      }, LOST_SIGHT_MS);
-    }
     // No cleanup here on purpose: this effect re-runs on every list change,
     // and the streams it did not touch have to outlive the run.
   }, [openIds, connected]);
 
   useEffect(() => {
+    const kept = aside.current;
+    const sightOf = (watchId: string) => {
+      let sight = kept.get(watchId);
+      if (!sight) {
+        sight = { lostTimer: null };
+        kept.set(watchId, sight);
+      }
+      return sight;
+    };
+    // The drain's ending and the forward's death travel the same bridge, so
+    // a lag can drop them too. A forward can be asked again; a drain cannot,
+    // and is lost until its next progress report says it is still going.
+    const off = listenEvent("event-bridge-lagged", () => {
+      reopenAll.current();
+      const open = useTellMeWhenStore.getState().watches.filter(isOpen);
+      for (const watch of open) {
+        if (watch.kind === "Node")
+          loseSight(watch.id, sightOf(watch.id), coalescer);
+      }
+      const forwards = open.filter((w) => w.kind === "PortForward");
+      if (forwards.length === 0) return;
+      commands.listPortForwards().then(
+        (sessions) => {
+          const alive = new Set(sessions.map((s) => s.id));
+          for (const watch of forwards) {
+            if (watch.sessionId && alive.has(watch.sessionId)) continue;
+            settle(
+              watch.id,
+              { says: "forwardDied", detail: null },
+              coalescer.current
+            );
+          }
+        },
+        () => {
+          for (const watch of forwards) {
+            loseSight(watch.id, sightOf(watch.id), coalescer);
+          }
+        }
+      );
+    });
+    return () => {
+      void off.then((stop) => stop());
+      for (const sight of kept.values()) {
+        if (sight.lostTimer !== null) clearTimeout(sight.lostTimer);
+      }
+      kept.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     let offDrain: null | (() => void) = null;
+    let offProgress: null | (() => void) = null;
     let offForward: null | (() => void) = null;
-    void listen<DrainFinished>("drain-finished", (event) => {
+    void listenEvent("drain-progress", (event) => {
+      const watch = useTellMeWhenStore
+        .getState()
+        .watches.find(
+          (w) => w.kind === "Node" && w.name === event.payload.node && isOpen(w)
+        );
+      if (watch) regainSight(watch.id, aside.current.get(watch.id));
+    }).then((off) => {
+      offProgress = off;
+    });
+    void listenEvent("drain-finished", (event) => {
       const { node, outcome, message } = event.payload;
       // No current-context filter: the payload carries no context and the
       // drain keeps running across a cluster switch, so match by identity
@@ -364,15 +474,18 @@ export function useTellMeWhen() {
     }).then((off) => {
       offDrain = off;
     });
-    void listen<ForwardStatus>("port-forward-status", (event) => {
+    void listenEvent("port-forward-status", (event) => {
       const { id, status, message } = event.payload;
-      if (status !== "stopped" && status !== "error") return;
       const watch = useTellMeWhenStore
         .getState()
         .watches.find(
           (w) => w.kind === "PortForward" && w.sessionId === id && isOpen(w)
         );
       if (!watch) return;
+      if (status !== "stopped" && status !== "error") {
+        regainSight(watch.id, aside.current.get(watch.id));
+        return;
+      }
       settle(
         watch.id,
         { says: "forwardDied", detail: message ?? null },
@@ -383,6 +496,7 @@ export function useTellMeWhen() {
     });
     return () => {
       offDrain?.();
+      offProgress?.();
       offForward?.();
     };
     // No context in the body any more: these listeners resolve the watch by

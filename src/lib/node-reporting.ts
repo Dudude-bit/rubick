@@ -22,6 +22,7 @@
 
 import type { T } from "@/i18n/useT";
 import type { NodeInfo } from "@/generated/types";
+import { formatSince } from "@/lib/utils";
 
 /** A node whose Ready condition stopped being asserted either way. */
 export interface NodeSilence {
@@ -128,20 +129,14 @@ export function silenceNote(
     : t("readings", "nodeStoppedReporting", { node: silence.node });
 }
 
-/** `4m ago`, or null when the timestamp is unusable. */
+/** `4m`, or null when the timestamp is unusable. */
 function ago(iso: string, now: Date): string | null {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return null;
-  const seconds = Math.floor((now.getTime() - then) / 1000);
   // A clock that disagrees with the cluster's would otherwise produce
   // "-3m ago", which reads as a bug in this app rather than in the clock.
-  if (seconds < 0) return null;
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (then > now.getTime()) return null;
+  return formatSince(then, now.getTime());
 }
 
 /**

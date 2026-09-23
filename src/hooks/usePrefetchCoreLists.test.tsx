@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listDeployments: vi.fn(async () => []),
-    listServices: vi.fn(async () => []),
+    listDeploymentsIn: vi.fn(async () => ({ rows: [], unread: [] })),
+    listServicesIn: vi.fn(async () => ({ rows: [], unread: [] })),
     // The overview prefetch was added without its mock, so the hook's most
     // expensive warm-up threw into a swallowed promise and every assertion
     // about it would have passed over a hook that fetched nothing.
@@ -14,13 +14,18 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 vi.mock("@/lib/pod-rows", () => ({
-  listPodRows: vi.fn(async () => []),
+  listPodRows: vi.fn(async () => ({ rows: [], unread: [] })),
 }));
 
+import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useClusterOverview } from "./useClusterOverview";
 import { usePrefetchCoreLists } from "./usePrefetchCoreLists";
+
+/** A list some page reads and the landing does not warm. */
+const PARKED = queryKeys.resources(ResourceType.ConfigMap, null);
 
 /**
  * The warm-up is also the flush: a connection landing is the one moment
@@ -47,6 +52,7 @@ describe("usePrefetchCoreLists", () => {
     useClusterStore.setState({
       currentContext: "prod-eu",
       currentNamespace: "",
+      namespaceScope: [],
       isConnected: true,
     });
   });
@@ -77,15 +83,13 @@ describe("usePrefetchCoreLists", () => {
     // Nothing observes this entry, and the harness collects those at once —
     // which would empty it whatever the hook did, and the assertion would
     // hold over the bug it is written to catch.
-    client.setQueryDefaults(queryKeys.pods(null), { gcTime: Infinity });
-    client.setQueryData(queryKeys.pods(null), [{ name: "shop-db-1" }]);
+    client.setQueryDefaults(PARKED, { gcTime: Infinity });
+    client.setQueryData(PARKED, [{ name: "shop-db-1" }]);
     renderHook(() => usePrefetchCoreLists(), { wrapper });
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
 
     act(() => useClusterStore.setState({ currentContext: "staging-eu" }));
-    await waitFor(() =>
-      expect(client.getQueryData(queryKeys.pods(null))).toBeUndefined()
-    );
+    await waitFor(() => expect(client.getQueryData(PARKED)).toBeUndefined());
   });
 
   /**
@@ -97,14 +101,12 @@ describe("usePrefetchCoreLists", () => {
     renderHook(() => usePrefetchCoreLists(), { wrapper });
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
 
-    client.setQueryDefaults(queryKeys.pods(null), { gcTime: Infinity });
-    client.setQueryData(queryKeys.pods(null), [{ name: "shop-db-1" }]);
+    client.setQueryDefaults(PARKED, { gcTime: Infinity });
+    client.setQueryData(PARKED, [{ name: "shop-db-1" }]);
     act(() => useClusterStore.setState({ isConnected: false }));
     act(() => useClusterStore.setState({ isConnected: true }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
-    expect(client.getQueryData(queryKeys.pods(null))).toEqual([
-      { name: "shop-db-1" },
-    ]);
+    expect(client.getQueryData(PARKED)).toEqual([{ name: "shop-db-1" }]);
   });
 
   it("does not flush again for a mere re-render of the same landing", async () => {
@@ -128,18 +130,77 @@ describe("usePrefetchCoreLists", () => {
     renderHook(() => usePrefetchCoreLists(), { wrapper });
 
     await waitFor(() => {
-      expect(client.getQueryData(["cluster-overview", "prod-eu", ""])).toEqual({
-        counts: { pods: 3 },
-      });
+      expect(client.getQueryData(queryKeys.clusterOverview("prod-eu"))).toEqual(
+        { counts: { pods: 3 } }
+      );
     });
+    const nothing = { rows: [], unread: [] };
     await waitFor(() => {
-      expect(client.getQueryData(queryKeys.podRows(null))).toEqual([]);
+      expect(client.getQueryData(queryKeys.podRows(null))).toEqual(nothing);
     });
     expect(
       client.getQueryData(queryKeys.resources(ResourceType.Deployment, null))
-    ).toEqual([]);
+    ).toEqual(nothing);
     expect(
       client.getQueryData(queryKeys.resources(ResourceType.Service, null))
-    ).toEqual([]);
+    ).toEqual(nothing);
   });
+
+  /**
+   * Several namespaces have no wire value, and the store's `""` for them
+   * warmed the whole cluster's lists: keys no page on that selection reads,
+   * and lists a namespace-scoped token is refused.
+   */
+  it("warms the selection's own keys when several namespaces are selected", async () => {
+    client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+    useClusterStore.setState({ namespaceScope: ["shop", "staging"] });
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryData(queryKeys.podRows("shop,staging"))
+      ).toBeDefined();
+    });
+    expect(commands.listDeploymentsIn).toHaveBeenCalledWith([
+      "shop",
+      "staging",
+    ]);
+    expect(
+      client.getQueryData(queryKeys.resources(ResourceType.Service, null))
+    ).toBeUndefined();
+  });
+
+  /**
+   * The store says "every namespace" as `""` and the page asks with an empty
+   * scope; the overview was keyed by hand on both sides. Fails if the prefetch and
+   * `useClusterOverview` key one scope apart: the page asks again on mount
+   * and the landing's most expensive request was spent for nothing.
+   */
+  it.each([
+    ["every namespace", [], []],
+    ["one namespace", ["shop"], ["shop"]],
+    ["several namespaces", ["shop", "staging"], ["shop", "staging"]],
+  ])(
+    "opens the overview on the answer the landing asked for, for %s",
+    async (_, storeSays, pageAsks) => {
+      const getClusterOverview = vi.mocked(commands.getClusterOverview);
+      getClusterOverview.mockClear();
+      client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+      useClusterStore.setState({ namespaceScope: storeSays });
+      renderHook(() => usePrefetchCoreLists(), { wrapper });
+      await waitFor(() =>
+        expect(
+          client.getQueryData(queryKeys.clusterOverview("prod-eu", pageAsks))
+        ).toBeDefined()
+      );
+
+      const { result } = renderHook(() => useClusterOverview(pageAsks), {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(result.current.data).toEqual({ counts: { pods: 3 } })
+      );
+      expect(getClusterOverview).toHaveBeenCalledTimes(1);
+    }
+  );
 });

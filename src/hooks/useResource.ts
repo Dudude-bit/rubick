@@ -5,10 +5,11 @@ import {
   useQueryClient,
   keepPreviousData,
   UseMutationOptions,
+  type QueryKey,
 } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
@@ -88,7 +89,7 @@ export interface UseResourceMutationOptions<TData, TVariables, TError = Error> {
   /** Toast notification config */
   toast: MutationToastConfig<TData, TVariables>;
   /** Query keys to invalidate on success */
-  invalidateQueryKeys?: string[][];
+  invalidateQueryKeys?: QueryKey[];
   /** Additional onSuccess callback */
   onSuccess?: (data: TData, variables: TVariables) => void;
   /** Additional onError callback */
@@ -145,7 +146,7 @@ export function useResourceMutation<
       options.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {
-      const errorMessage = normalizeTauriError(error);
+      const errorMessage = errorToShow(error);
       toast({
         title: t("action", "error"),
         description: `${options.toast.errorPrefix}: ${errorMessage}`,

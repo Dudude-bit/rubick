@@ -1,25 +1,26 @@
-import { useT } from "@/i18n/useT";
-import { useCallback, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useToast } from "@/components/ui/use-toast";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useMetrics } from "@/hooks/useMetrics";
 import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useWatchedList } from "@/hooks/useWatchedList";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { listPodRows, type PodRow } from "@/lib/pod-rows";
+import type { UnreadNamespace } from "@/generated/types";
 
 export type { PodWithMetrics } from "@/lib/metrics";
 
 const EMPTY_PODS: PodRow[] = [];
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 interface UsePodsWithMetricsOptions {
   /** Whether the query should be enabled (default: true when connected) */
@@ -34,15 +35,11 @@ interface UsePodsWithMetricsOptions {
  * with the same namespace will share the cached data.
  */
 export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
-  const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
   const scope = useNamespaceScope();
   const enabled = isConnected && options?.enabled !== false;
 
-  // The one namespace a watch or metrics call is scoped to. Several is read
-  // per namespace and polled instead — a cluster-wide LIST needs rights a
-  // namespace-scoped user may not have. See `listAcrossScope`.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  // The one namespace the metrics call is scoped to; several read it all.
   const cacheKey = scopeCacheKey(scope.scope);
 
   // Fetch pods - cached by TanStack Query. Real-time updates after
@@ -51,25 +48,21 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   // (e.g. RBAC `watch` denial); see handleWatchError below.
   const queryKey = useMemo(() => queryKeys.podRows(cacheKey), [cacheKey]);
 
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "fallingBackToPolling", {
-          title: "Pods",
-          error: err,
-        }),
-      });
-    },
-    [toast, watchFailed, t]
+  const subscribePods = useCallback(
+    () => commands.subscribePodRowWatch(scope.wire),
+    [scope.wire]
   );
+  const { live, refresh, resyncing } = useWatchedList<PodRow>({
+    enabled,
+    subscribe: subscribePods,
+    queryKey,
+    reportFailure: toPlural(ResourceType.Pod),
+  });
 
+  const queryClient = useQueryClient();
   const {
-    data: pods = EMPTY_PODS,
+    data: answer,
+    isPlaceholderData,
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
@@ -80,35 +73,34 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     // Rows, streamed in chunks, rather than `listPods` in one answer: the
     // full pod is three kilobytes a row and the table reads a dozen fields.
     // The signal stops a stream the screen has stopped waiting for.
-    queryFn: ({ signal }) =>
-      listAcrossScope(scope.scope, async (namespace) => {
-        try {
-          return await listPodRows(namespace, signal);
-        } catch (err) {
-          throw new Error(normalizeTauriError(err), { cause: err });
-        }
-      })(),
+    queryFn: async ({ signal }) => {
+      const wire = scope.wire;
+      try {
+        const read = await listPodRows(wire, signal);
+        return live
+          ? keepWatched(read, queryClient.getQueryData(queryKey))
+          : read;
+      } catch (err) {
+        throw new Error(normalizeTauriError(err), { cause: err });
+      }
+    },
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    // A watch covers none or one; several is polled (the watch is off below).
-    refresh: watchFailed || scope.several ? "resourceList" : false,
+    refresh,
   });
 
-  const subscribePods = useCallback(
-    () => commands.subscribePodRowWatch(watchNamespace),
-    [watchNamespace]
-  );
-  const { resyncing } = useResourceWatch<PodRow>({
-    enabled: enabled && !scope.several,
-    subscribe: subscribePods,
-    queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
-  });
+  const pods = answer?.rows ?? EMPTY_PODS;
+  // The last scope's answer stands in while this one is read, and its unread
+  // namespaces are not this scope's.
+  const unread = isPlaceholderData
+    ? NOTHING_UNREAD
+    : (answer?.unread ?? NOTHING_UNREAD);
 
-  const { podMetrics, podStatus } = useMetrics({
-    namespace: watchNamespace,
+  const { podMetrics, podStatus, podUnread, refetchPodMetrics } = useMetrics({
+    // Read per namespace, like the pods: a cluster-wide read is refused to a
+    // namespace-scoped token, which then lost every sample on the page.
+    scope: scope.scope,
     enabled,
     includeNodes: false,
   });
@@ -131,6 +123,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     pods,
     podMetrics,
     podStatus,
+    podUnread,
+    refetchPodMetrics,
     // The pods, and only the pods. Metrics are an optional column pair on a
     // cluster that may not even run metrics-server, and waiting for them held
     // the whole list behind a skeleton on every cluster that does: the rows
@@ -139,9 +133,11 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     isLoading: isLoadingPods,
     /** Why there are no pods, when there are none because the read failed. */
     error: podsError,
+    /** The namespaces of the scope whose pods could not be read. */
+    unread,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
-    watchLive: !watchFailed,
+    watchLive: live,
     /** It is re-listing: the pods here are the ones from before it started. */
     resyncing,
     /** When a read with nothing to show began, for the list to say so. */

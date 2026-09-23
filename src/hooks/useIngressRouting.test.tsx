@@ -28,6 +28,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { useIngressRouting } = await import("./useIngressRouting");
+const { queryKeys } = await import("@/lib/query-keys");
 
 function wrapper() {
   const client = new QueryClient({
@@ -194,6 +195,45 @@ describe("useIngressRouting", () => {
    * stopped being retried: one blip would leave a workload page silent about
    * its own URL and certificate until somebody navigated away and back.
    */
+  /**
+   * The Ingress page and this map read the same `get_ingress`, and the class
+   * resolution the page asks for is the one this asks for. Fails if either
+   * is keyed apart from the page's: every workload page fronted by an
+   * Ingress would read it a second time.
+   */
+  it("reads the Ingress and its class from the entries the Ingress page keeps", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(
+      queryKeys.detail("Ingress", "storefront", "shop"),
+      info("nginx")
+    );
+    client.setQueryData(queryKeys.ingressClass("nginx"), {
+      requested: "nginx",
+      resolved: "nginx",
+      controller: "k8s.io/ingress-nginx",
+      viaDefault: false,
+      available: [],
+    });
+    const seeded = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useIngressRouting(conns), {
+      wrapper: seeded,
+    });
+
+    await waitFor(() =>
+      expect(
+        result.current.routing.get("Ingress/storefront/shop")?.binding
+          ?.controller
+      ).toBe("k8s.io/ingress-nginx")
+    );
+    expect(getIngress).not.toHaveBeenCalled();
+    expect(resolveIngressClass).not.toHaveBeenCalled();
+  });
+
   it("asks again after a failure that is not an answer", async () => {
     getIngress.mockRejectedValue(new Error("Connection error: reset by peer"));
 

@@ -199,6 +199,8 @@ function declared(
     phase: "app",
     ports: [],
     resources: { requests: {}, limits: {} },
+    command: [],
+    args: [],
     env: [],
     envFrom: [],
     ...overrides,

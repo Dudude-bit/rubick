@@ -1,146 +1,72 @@
-import { useMemo } from "react";
-
 import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { mergeOverviews } from "@/lib/overview-merge";
 import { ofSameCluster } from "@/lib/previous-answer";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ClusterOverview } from "@/generated/types";
 
-const read = async (namespace: string | null) => {
+/**
+ * One overview for `scope`, as the store spells it: empty is the whole
+ * cluster. The backend adds several namespaces up itself, reading what is
+ * the cluster's once, and refuses an empty list rather than widening it, so
+ * "every namespace" is the one value sent as `null`.
+ */
+export async function readOverview(
+  scope: readonly string[]
+): Promise<ClusterOverview> {
   try {
-    return await commands.getClusterOverview(namespace || null);
+    return await commands.getClusterOverview(
+      scope.length > 0 ? [...scope] : null
+    );
   } catch (err) {
     throw new Error(normalizeTauriError(err), { cause: err });
   }
-};
+}
 
 /**
  * The cluster overview query, shared by everything that reads it.
  *
  * The scope is the cache key, so the sidebar counts, the overview page and
  * the window chrome all read one response per scope rather than issuing the
- * same request three times every two seconds.
+ * same request three times every ten seconds.
  *
- * `namespace` is the scope to ask for: `null` means the whole cluster. It is
+ * `scope` is the namespaces to ask about, empty for the whole cluster. It is
  * a scope somebody names, not the window's — the namespace picker wants every
  * namespace's pod count however narrowly the window is scoped, which is why
  * this hook does not read the selection itself. {@link useScopedOverview} is
  * the one that follows it.
- *
- * `enabled` is for a caller that has to keep the hook mounted while this is
- * not the question it is asking. This is the most expensive query in the app
- * and an idle subscription to it is not free, however cheap a cache hit looks
- * from here.
  */
-export function useClusterOverview(namespace: string | null, enabled = true) {
+export function useClusterOverview(scope: readonly string[]) {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
 
   return useLiveQuery({
-    queryKey: ["cluster-overview", currentContext, namespace ?? ""],
-    queryFn: () => read(namespace),
-    enabled: isConnected && enabled,
+    queryKey: queryKeys.clusterOverview(currentContext, scope),
+    queryFn: () => readOverview(scope),
+    enabled: isConnected,
     staleTime: STALE_TIMES.overview,
     // Previous, but only of this cluster: `keepPreviousData` answered the
     // new context's key with the old context's totals, which is how the rail
-    // kept `Pods 51` beside a cluster that refuses to list pods.
-    placeholderData: ofSameCluster<ClusterOverview>(currentContext),
+    // kept `Pods 51` beside a cluster that refuses to list pods. And not
+    // into a scope of several namespaces: those are the old selection's
+    // totals under the new selection's label, and the skeleton is one read
+    // away.
+    placeholderData:
+      scope.length > 1
+        ? undefined
+        : ofSameCluster<ClusterOverview>(currentContext),
     refresh: "overview",
   });
-}
-
-export interface ScopedOverview {
-  data: ClusterOverview | undefined;
-  isLoading: boolean;
-  error: Error | null;
-  refetch: () => void;
 }
 
 /**
- * The overview of what this window is looking at.
- *
- * One namespace or the whole cluster is one request, exactly as it always
- * was. Several namespaces is one request each, added up here — unlike the
- * lists, which are narrowed on this side from a single cluster-wide read,
- * these numbers arrive pre-aggregated and cannot be taken apart again. A
- * cluster-wide `47 pods` under a two-namespace label would be the rail
- * stating something it cannot back.
- *
- * Each of those is one request, answered from the backend's watch-fed stores
- * when they are healthy (`src-tauri/src/overview/mod.rs`): a namespaced
- * overview is then a projection in memory plus the counts and metrics reads,
- * and no pod list at all. When the stores cannot be trusted the backend lists
- * as it always did, and a namespaced overview is again a full cluster pod
- * LIST beside the scoped one, which is the cost `SCOPE_LIMIT` bounds; the
- * store is where it is enforced. The answer says which it was in
- * `servedFrom`.
- *
- * The saving that remains is between windows: the entries are keyed by
- * namespace, so a scope of `prod` and one of `prod, staging` make one `prod`
- * request between them.
+ * The overview of what this window is looking at: one request whatever the
+ * scope, answered from the backend's watch-fed stores when they are healthy
+ * (`src-tauri/src/overview/mod.rs`) and by listing when they are not. The
+ * answer says which in `servedFrom`.
  */
-export function useScopedOverview(): ScopedOverview {
-  const currentContext = useClusterStore((s) => s.currentContext);
-  const isConnected = useClusterStore((s) => s.isConnected);
-  const scope = useClusterStore((s) => s.namespaceScope);
-  const several = scope.length > 1;
-
-  // Held mounted but switched off while the fan-out below is the answer.
-  // Subscribed to a cache key somebody else is filling, it looks free and is
-  // not: the day that other reader unmounts, this quietly adds a whole
-  // cluster-wide overview to a query that is already several.
-  const single = useClusterOverview(
-    several ? null : (scope[0] ?? null),
-    !several
-  );
-
-  const parts = useLiveQueries<ClusterOverview>({
-    refresh: "overview",
-    // No `placeholderData: keepPreviousData` here, and it is not an omission.
-    // `useQueries` matches observers by query hash, so the namespace the
-    // reader has just added gets a brand-new `QueryObserver`, and
-    // `keepPreviousData` resolves through a field that observer owns and has
-    // never filled: the option is inert in a fan-out, and the part that made
-    // the scope change is the one part with no previous answer to keep.
-    // Holding the previous *join* instead would be worse than the skeleton it
-    // saves — those are the old selection's totals under the new selection's
-    // label, which is the one thing `lib/namespace-scope.ts` exists to stop.
-    // A poll, where the question is unchanged, keeps every part's data and
-    // never reaches the skeleton at all.
-    queries: (several ? scope : []).map((name) => ({
-      queryKey: ["cluster-overview", currentContext, name],
-      queryFn: () => read(name),
-      enabled: isConnected,
-      staleTime: STALE_TIMES.overview,
-    })),
-  });
-
-  const { data: answers } = parts;
-  const merged = useMemo(() => {
-    const answered = answers.filter((part) => part !== undefined);
-    // Every namespace or none: a total missing one of its three parts is not
-    // a total, and the loading state is the honest thing to show until it is.
-    return answered.length > 0 && answered.length === answers.length
-      ? mergeOverviews(answered)
-      : undefined;
-  }, [answers]);
-
-  if (!several) {
-    return {
-      data: single.data,
-      isLoading: single.isLoading,
-      error: single.error,
-      refetch: () => void single.refetch(),
-    };
-  }
-
-  return {
-    data: merged,
-    isLoading: parts.isLoading,
-    error: parts.error,
-    refetch: parts.refetch,
-  };
+export function useScopedOverview() {
+  return useClusterOverview(useClusterStore((s) => s.namespaceScope));
 }

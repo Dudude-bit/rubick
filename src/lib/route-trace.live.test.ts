@@ -41,7 +41,12 @@ describe("the Netbird shape, as the cluster really reports it", () => {
         gateways: scene.gateways,
         classes: scene.classes,
         topologyKnown: true,
-        backing: { services: [], published: [], backingKnown: false },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: null,
+        },
       },
       t
     )[0];

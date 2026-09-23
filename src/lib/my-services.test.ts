@@ -13,10 +13,14 @@ import {
   waitingFor,
 } from "./my-services";
 import { REFRESH_INTERVALS } from "./refresh";
-import type { ChainPath } from "./connections";
+import type { ChainHop, ChainPath } from "./connections";
 import type { JournalEntry } from "./changes";
 import type { Watch } from "./tell-me-when";
-import type { ObjectRef, ResourceConnections } from "@/generated/types";
+import type {
+  ObjectRef,
+  ResourceConnections,
+  ServicePublished,
+} from "@/generated/types";
 
 function ref(kind: string, name: string): ObjectRef {
   return { kind, name, namespace: "shop", existence: "present", facts: null };
@@ -45,7 +49,35 @@ function conns(over: Partial<ResourceConnections> = {}): ResourceConnections {
   };
 }
 
+/** What the commands wrapper throws: the backend's `{code, message}` as the cause. */
+function failed(code: string, message: string): Error {
+  return new Error(
+    `Tauri command 'getResourceConnections' failed: ${message}`,
+    {
+      cause: { code, message },
+    }
+  );
+}
+
 describe("stateOf", () => {
+  /**
+   * The code decides, not the sentence. The card matched "resource not
+   * found" in English, and a deleted Deployment's 404 said something else,
+   * so it drew "could not read" over a service that is gone.
+   */
+  it("reads a deletion off the error's code", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+    const said = "Resource not found: Deployment/payments in namespace shop";
+
+    expect(stateOf(undefined, failed("NOT_FOUND", said), pin).state).toBe(
+      "gone"
+    );
+    expect(stateOf(undefined, failed("LIST_UNREAD", said), pin)).toEqual({
+      state: "unread",
+      why: said,
+    });
+  });
+
   it("counts the replicas that are ready against the ones there are", () => {
     expect(stateOf(conns(), null)).toEqual({
       state: "ready",
@@ -82,15 +114,23 @@ describe("stateOf", () => {
    */
   it("tells a service that is gone from one it could not read", () => {
     expect(
-      stateOf(undefined, {
-        message: "Resource not found: Deployment/payments in namespace shop",
-      })
+      stateOf(
+        undefined,
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        )
+      )
     ).toEqual({
       state: "gone",
     });
-    const unread = stateOf(undefined, {
-      message: "Permission denied: deployments.apps is forbidden",
-    });
+    const unread = stateOf(
+      undefined,
+      failed(
+        "PERMISSION_DENIED",
+        "Permission denied: deployments.apps is forbidden"
+      )
+    );
     expect(unread.state).toBe("unread");
     expect(unread).toMatchObject({
       why: "Permission denied: deployments.apps is forbidden",
@@ -104,33 +144,31 @@ describe("stateOf", () => {
    */
   it("does not keep the last good answer when the next read failed", () => {
     expect(
-      stateOf(
-        conns(),
-        { message: "services is forbidden" },
-        {
-          kind: "Deployment",
-          name: "payments",
-        }
-      ).state
+      stateOf(conns(), failed("PERMISSION_DENIED", "services is forbidden"), {
+        kind: "Deployment",
+        name: "payments",
+      }).state
     ).toBe("unread");
   });
 
   /**
-   * "Client not found" and "Plugin not found" are this app failing, not the
-   * cluster answering. Reading them as a deleted workload sends somebody to
-   * rebuild something that is still running.
+   * A lost connection is this app failing, not the cluster answering.
+   * Reading it as a deleted workload sends somebody to rebuild something
+   * that is still running.
    */
   it("calls a workload gone only when the cluster said so about it", () => {
     const pin = { kind: "Deployment", name: "payments" };
-    expect(stateOf(undefined, { message: "Client not found" }, pin).state).toBe(
-      "unread"
-    );
+    expect(
+      stateOf(undefined, failed("NOT_CONNECTED", "Not connected to prod"), pin)
+        .state
+    ).toBe("unread");
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/payments in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -146,9 +184,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/checkout in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/checkout in namespace shop"
+        ),
         { kind: "Deployment", name: "payments" }
       ).state
     ).toBe("unread");
@@ -191,7 +230,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Service/payments in namespace shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Service/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("unread");
@@ -199,9 +241,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/payments in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -218,7 +261,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/paymentsXv1 in shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/paymentsXv1 in shop"
+        ),
         pin
       ).state
     ).toBe("unread");
@@ -226,7 +272,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/payments.v1 in shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments.v1 in shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -235,7 +284,7 @@ describe("stateOf", () => {
     expect(() =>
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/weird[ in shop" },
+        failed("NOT_FOUND", "Resource not found: Deployment/weird[ in shop"),
         { kind: "Deployment", name: "weird[" }
       )
     ).not.toThrow();
@@ -364,6 +413,7 @@ describe("entryPointsOf", () => {
             endpoints: [],
             whole: true,
             unpublished: [],
+            stop: null,
           },
           first: null,
           address: null,
@@ -482,40 +532,62 @@ describe("more ways in", () => {
   });
 
   /**
-   * `whole` is the endpoints read admitting it saw all of them. A partial
-   * read with nothing ready is not a Service with nothing behind it, and
-   * the card says "nothing behind it" in warning colours on that bit alone.
+   * A card's neighbourhood is a summary: three ready addresses arrive as one
+   * with `whole: false`. Reading `whole` as "the counts were partial" put
+   * "not read yet" on every Service with more than one replica.
    */
-  it("does not claim to know what is behind a service from a partial read", () => {
+  it("knows a service with several replicas is serving from its summary", () => {
     const { entries } = entryPointsOf(
       conns(),
-      chain([
-        {
-          at: "published",
-          published: {
-            service: ref("Service", "payments"),
-            source: "slices",
-            slices: 1,
-            ready: 0,
-            draining: 0,
-            notReady: 0,
-            unrouted: 0,
-            ports: [],
-            endpoints: [],
-            whole: false,
-            unpublished: [],
-          },
-          first: null,
-          address: null,
-          summary: "",
-          tone: "warn",
-        },
-      ])
+      chain([publishedHop({ ready: 3, whole: false })])
     );
-    expect(entries[0].serving).toBe(false);
-    expect(entries[0].servingKnown).toBe(false);
+    expect(entries[0]).toMatchObject({ serving: true, servingKnown: true });
+  });
+
+  /** Down to draining addresses is a restart: kube-proxy still sends there,
+   *  and the traffic chain beside the card says so. */
+  it("calls a service with only draining addresses still serving", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([publishedHop({ draining: 1 })])
+    );
+    expect(entries[0].serving).toBe(true);
+  });
+
+  /** Neither the endpoints nor the pods answered: the zeros are nobody's. */
+  it("does not claim nothing is behind a service nobody could read", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([publishedHop({ source: "podReadiness" })])
+    );
+    expect(entries[0]).toMatchObject({ serving: false, servingKnown: false });
   });
 });
+
+function publishedHop(over: Partial<ServicePublished>): ChainHop {
+  return {
+    at: "published",
+    published: {
+      service: ref("Service", "payments"),
+      source: "slices",
+      slices: 1,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      ports: [],
+      endpoints: [],
+      whole: true,
+      unpublished: [],
+      stop: null,
+      ...over,
+    },
+    first: null,
+    address: null,
+    summary: "",
+    tone: "on",
+  };
+}
 
 describe("what is still open", () => {
   it("passes on every kind the read admits it did not look at", () => {

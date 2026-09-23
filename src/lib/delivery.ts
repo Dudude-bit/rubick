@@ -23,63 +23,23 @@
 
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import { load } from "js-yaml";
 
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
+import { kindFacts } from "./resource-registry";
 import { formatAge } from "./utils";
 
 /**
- * The API group each kind lives in, `""` for the core group.
+ * The API group a kind lives in, `""` for the core group, from
+ * `shared/kinds.json`.
  *
- * Here and not spelled out at seventeen call sites, because Flux's inventory
- * id is `namespace_name_group_kind` and a group written `"app"` at one call
- * site would not fail — it would quietly report a delivered object as
- * *labelled and disowned*, which is the loudest wrong thing this feature can
- * say.
- *
- * **Every kind the registry names belongs here.** A missing one makes
- * `apiGroupOf` answer `null`, which every caller reads as "no delivery to
- * speak of" — column, detail block and peek go quiet together, and nothing
- * fails. Whether a *list* draws the column is {@link MADE_BY_THE_CLUSTER}'s
- * separate question.
+ * Flux's inventory id is `namespace_name_group_kind`, so a group written
+ * wrong would not fail — it would quietly report a delivered object as
+ * *labelled and disowned*. `null` for a kind the registry does not know,
+ * which every caller reads as "no delivery to speak of". Whether a *list*
+ * draws the column is {@link MADE_BY_THE_CLUSTER}'s separate question.
  */
-const GATEWAY = "gateway.networking.k8s.io";
-
-const API_GROUPS: Record<string, string> = {
-  ConfigMap: "",
-  CronJob: "batch",
-  CustomResourceDefinition: "apiextensions.k8s.io",
-  DaemonSet: "apps",
-  Deployment: "apps",
-  Endpoints: "",
-  Event: "",
-  Gateway: GATEWAY,
-  GatewayClass: GATEWAY,
-  GRPCRoute: GATEWAY,
-  HorizontalPodAutoscaler: "autoscaling",
-  HTTPRoute: GATEWAY,
-  Ingress: "networking.k8s.io",
-  Job: "batch",
-  Namespace: "",
-  NetworkPolicy: "networking.k8s.io",
-  Node: "",
-  PersistentVolume: "",
-  PersistentVolumeClaim: "",
-  Pod: "",
-  PodDisruptionBudget: "policy",
-  ReplicaSet: "apps",
-  Secret: "",
-  Service: "",
-  StatefulSet: "apps",
-  StorageClass: "storage.k8s.io",
-  TCPRoute: GATEWAY,
-  TLSRoute: GATEWAY,
-  UDPRoute: GATEWAY,
-};
-
-/** A kind's group, or `null` for one this table does not name. */
 export function apiGroupOf(kind: string): string | null {
-  return API_GROUPS[kind] ?? null;
+  return kindFacts(kind)?.group ?? null;
 }
 
 /**
@@ -145,62 +105,7 @@ export function deliveryScopeOf(
   return { group, kind };
 }
 
-/**
- * The same question, asked of a manifest rather than of a list row.
- *
- * The YAML editor has no typed object behind it — it has the document, which
- * states its own `apiVersion`, `kind` and `metadata`. Reading the query out of
- * the text is therefore both free and *better* than {@link API_GROUPS}: a
- * custom resource's group is in the document and will never be in that table,
- * so an Argo `Application` edited by hand gets the same answer a Deployment
- * does.
- *
- * Always the text the API server gave, never the buffer. Deleting the tracking
- * label from the editor does not change who owns the object, and asking the
- * question of the edited copy would let a reader talk the warning away by
- * typing.
- */
-export function deliveryOfManifest(text: string): DeliveryQuery | null {
-  let doc: unknown;
-  try {
-    doc = load(text);
-  } catch {
-    return null;
-  }
-  if (!isRecord(doc)) return null;
-  const { apiVersion, kind } = doc;
-  if (typeof apiVersion !== "string" || typeof kind !== "string") return null;
-  const metadata = isRecord(doc.metadata) ? doc.metadata : {};
-  const name = metadata.name;
-  if (typeof name !== "string" || name === "") return null;
-
-  const slash = apiVersion.indexOf("/");
-  return {
-    group: slash === -1 ? "" : apiVersion.slice(0, slash),
-    kind,
-    name,
-    namespace:
-      typeof metadata.namespace === "string" ? metadata.namespace : null,
-    labels: stringsOf(metadata.labels),
-    annotations: stringsOf(metadata.annotations),
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Only the string-valued entries: a label with a number in it is not one. */
-function stringsOf(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry === "string") out[key] = entry;
-  }
-  return out;
-}
-
-/** {@link deliveryOf} for a kind whose group {@link API_GROUPS} names. */
+/** {@link deliveryOf} for a kind whose group {@link apiGroupOf} knows. */
 export function deliveryOfKind(
   kind: string,
   object: Parameters<typeof deliveryOf>[2]

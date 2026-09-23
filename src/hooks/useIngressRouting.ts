@@ -23,6 +23,7 @@
 import { useQueries } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -123,16 +124,12 @@ export function useIngressRouting(
   const read = useQueries({
     queries: ingresses.map((ingress) => ({
       // The Ingress detail page's own key, so the two share one cache entry
-      // and arriving from there costs nothing. `useResourceDetail`'s shape —
-      // singular, lowercased — and deliberately not
-      // `queryKeys.resourceDetail`, which is plural-first and belongs to the
-      // lists (`peek-actions.ts` documents the same split): the wrong one
-      // here looks like sharing and quietly fetches the Ingress twice.
-      queryKey: [
-        ResourceType.Ingress.toLowerCase(),
-        ingress.namespace ?? "",
-        ingress.name,
-      ],
+      // and arriving from there costs nothing.
+      queryKey: queryKeys.detail(
+        ResourceType.Ingress,
+        ingress.namespace,
+        ingress.name
+      ),
       queryFn: () => commands.getIngress(ingress.name, ingress.namespace),
       staleTime: STALE_TIMES.resourceDetail,
       retry: retryTransient,
@@ -156,7 +153,7 @@ export function useIngressRouting(
 
   const bindings = useQueries({
     queries: classNames.map((className) => ({
-      queryKey: ["ingress-class", className],
+      queryKey: queryKeys.ingressClass(className),
       queryFn: () => commands.resolveIngressClass(className),
       staleTime: STALE_TIMES.resourceDetail,
       retry: retryTransient,

@@ -7,9 +7,9 @@
  */
 
 import { useEffect, useSyncExternalStore } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import { listenEvent } from "@/lib/events";
 import {
   credentialsRenewed,
   credentialsRestored,
@@ -23,23 +23,18 @@ import type { Renewal } from "@/generated/types";
 /** Installed once, by the shell. Everything else only reads the count. */
 export function useWatchForRenewals(): void {
   useEffect(() => {
-    const pending = listen<{ context: string }>(
-      "credentials-renewed",
-      (event) => {
-        // A renewal for a cluster this window is not showing replaced a
-        // client nothing here holds; restarting its streams buys nothing.
-        if (
-          event.payload.context !== useClusterStore.getState().currentContext
-        ) {
-          return;
-        }
-        credentialsRenewed();
-        // Proof of a live session — `renew_once` asks the cluster before
-        // sending this — and the refusal screen is a takeover only a connect
-        // used to lift, though a renewal can land right after a `401`.
-        credentialsRestored();
+    const pending = listenEvent("credentials-renewed", (event) => {
+      // A renewal for a cluster this window is not showing replaced a
+      // client nothing here holds; restarting its streams buys nothing.
+      if (event.payload.context !== useClusterStore.getState().currentContext) {
+        return;
       }
-    );
+      credentialsRenewed();
+      // Proof of a live session — `renew_once` asks the cluster before
+      // sending this — and the refusal screen is a takeover only a connect
+      // used to lift, though a renewal can land right after a `401`.
+      credentialsRestored();
+    });
     return () => {
       void pending.then((off) => off());
     };

@@ -213,6 +213,22 @@ const published = (name: string, ready: number): ServicePublished => ({
   endpoints: [],
   whole: true,
   unpublished: [],
+  // What `service_stop` sends for one pod published and not ready.
+  stop:
+    ready === 0
+      ? {
+          reason: "noneReady",
+          service: {
+            kind: "Service",
+            name,
+            namespace: "gwtest",
+            existence: "present",
+            facts: null,
+          },
+          selector: `app=${name}`,
+          pods: 1,
+        }
+      : null,
 });
 
 const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({
@@ -223,6 +239,7 @@ const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({
     services: [service("healthy")],
     published: [published("healthy", 1)],
     backingKnown: true,
+    backingError: null,
   },
   ...over,
 });
@@ -466,6 +483,29 @@ describe("routeTraces", () => {
     );
   });
 
+  /**
+   * Two controllers wrote entries for one Gateway and disagree. The trace
+   * read the first `Accepted` it found and walked green while the Gateway
+   * page, the map and the connections graph drew the same route refused.
+   */
+  it("stops at the listener when a second controller refused what the first accepted", () => {
+    const contested = route("contested", {
+      parents: [
+        parentStatus("edge", [condition("Accepted", "True", "Accepted")]),
+        {
+          ...parentStatus("edge", [
+            condition("Accepted", "False", "NoMatchingListenerHostname"),
+          ]),
+          controllerName: "other.example.net/gw",
+        },
+      ],
+    });
+    const [trace] = routeTraces(contested, sources(), t);
+
+    expect(trace.serving).toBe(false);
+    expect(trace.steps[2].state).toBe("err");
+  });
+
   it("blames the namespace step, not the listener, when the listener refused the namespace", () => {
     const outsider = route("outsider", {
       parents: [
@@ -546,6 +586,7 @@ describe("routeTraces", () => {
           services: [service("edited")],
           published: [published("edited", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -644,7 +685,12 @@ describe("routeTraces", () => {
     const [trace] = routeTraces(
       route("healthy"),
       sources({
-        backing: { services: [], published: [], backingKnown: true },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: true,
+          backingError: null,
+        },
       }),
       t
     );
@@ -663,6 +709,7 @@ describe("routeTraces", () => {
           services: [service("healthy", [9999])],
           published: [published("healthy", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -683,6 +730,7 @@ describe("routeTraces", () => {
           services: [service("healthy")],
           published: [published("healthy", 0)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -871,7 +919,12 @@ describe("routeTraces", () => {
     const [trace] = routeTraces(
       route("healthy"),
       sources({
-        backing: { services: [], published: [], backingKnown: false },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: null,
+        },
       }),
       t
     );
@@ -914,6 +967,7 @@ describe("routeTraces", () => {
           services: [service("both")],
           published: [published("both", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t

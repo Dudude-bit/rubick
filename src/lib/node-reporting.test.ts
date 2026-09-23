@@ -189,6 +189,22 @@ describe("the sentence on the row", () => {
     );
   });
 
+  /**
+   * The age came back from the helper as "5m ago", in English, and the
+   * Russian sentence was built around it: "перестал отчитываться 5m ago".
+   */
+  it("gives the age to the sentence and leaves 'ago' to the language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const note = silenceNote(
+      { node: "n1", since: "2026-08-17T10:00:00Z", reason: null },
+      ru,
+      now
+    );
+    expect(note).toContain("5m назад");
+    expect(note).not.toContain("ago");
+  });
+
   it("still warns when the API did not say when", () => {
     const note = silenceNote({ node: "n1", since: null, reason: null }, t, now);
     expect(note).toBe(

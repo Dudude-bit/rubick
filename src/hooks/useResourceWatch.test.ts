@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -39,6 +40,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useResourceWatch } from "./useResourceWatch";
+import type { Scoped } from "@/generated/types";
 
 // ----- Test harness -----
 
@@ -47,6 +49,15 @@ type Item = { name: string; namespace?: string | null; data?: number };
 // One reference for the whole file, the way every consumer passes it: a
 // key rebuilt on each render re-subscribes the watch on each render.
 const KEY = ["configmaps", "default"];
+
+// The cache holds a list's `Scoped` answer; these read and seed its rows.
+function rowsIn(client: QueryClient): Item[] | undefined {
+  return client.getQueryData<Scoped<Item>>(KEY)?.rows;
+}
+
+function seed(client: QueryClient, rows: Item[]) {
+  client.setQueryData<Scoped<Item>>(KEY, { rows, unread: [] });
+}
 
 function makeWrapper(client: QueryClient) {
   return ({ children }: { children: ReactNode }) =>
@@ -117,7 +128,7 @@ describe("useResourceWatch", () => {
       data: 0,
     }));
     const client = new QueryClient();
-    client.setQueryData(KEY, rows);
+    seed(client, rows);
     await start(client);
     emit("stream-cm-1", "applied", {
       name: "pod-9999",
@@ -126,14 +137,14 @@ describe("useResourceWatch", () => {
     });
 
     for (const data of [1, 2]) {
-      const before = client.getQueryData<Item[]>(KEY)!;
+      const before = rowsIn(client)!;
       keyReads = 0;
       emit("stream-cm-1", "applied", {
         name: "pod-1234",
         namespace: "default",
         data,
       });
-      const after = client.getQueryData<Item[]>(KEY)!;
+      const after = rowsIn(client)!;
       expect(after).not.toBe(before);
       expect(after).toHaveLength(10_000);
       expect(after[1234]).not.toBe(before[1234]);
@@ -150,35 +161,67 @@ describe("useResourceWatch", () => {
   it("replaces the complete collection in one atomic resync write", async () => {
     const client = new QueryClient();
     const before = [{ name: "old", data: 1 }];
-    client.setQueryData(KEY, before);
+    seed(client, before);
     await start(client);
     const writes: Item[][] = [];
     const off = client.getQueryCache().subscribe((event) => {
       if (event.type === "updated" && event.action.type === "success") {
-        writes.push(client.getQueryData<Item[]>(KEY)!);
+        writes.push(rowsIn(client)!);
       }
     });
 
     emit("stream-cm-1", "restarted", null);
     emit("stream-cm-1", "applied", { name: "first" });
     emit("stream-cm-1", "applied", { name: "second" });
-    expect(client.getQueryData(KEY)).toBe(before);
+    expect(rowsIn(client)).toBe(before);
     expect(writes).toEqual([]);
     emit("stream-cm-1", "synced", null);
     expect(writes).toEqual([[{ name: "first" }, { name: "second" }]]);
     emit("stream-cm-1", "applied", { name: "second", data: 2 });
-    expect(client.getQueryData(KEY)).toEqual([
+    expect(rowsIn(client)).toEqual([
       { name: "first" },
       { name: "second", data: 2 },
     ]);
     off();
   });
 
+  /**
+   * A polled read left a namespace unread; the watch then synced every
+   * namespace of its stream. Keeping the old `unread` would leave the page
+   * saying "could not read staging" over staging's rows.
+   */
+  it("clears the unread namespaces once a resync has every namespace's rows", async () => {
+    const client = new QueryClient();
+    const missing = {
+      namespace: "staging",
+      code: "PERMISSION_DENIED",
+      message: "",
+    };
+    client.setQueryData<Scoped<Item>>(KEY, {
+      rows: [{ name: "a", namespace: "prod" }],
+      unread: [missing],
+    });
+    await start(client);
+
+    emit("stream-cm-1", "applied", { name: "b", namespace: "prod" });
+    expect(client.getQueryData<Scoped<Item>>(KEY)?.unread).toEqual([missing]);
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "a", namespace: "prod" } },
+      { op: "applied", resource: { name: "s", namespace: "staging" } },
+      { op: "synced", resource: null },
+    ]);
+    const answer = client.getQueryData<Scoped<Item>>(KEY);
+    expect(answer?.rows.map((row) => row.name)).toEqual(["a", "s"]);
+    expect(answer?.unread).toEqual([]);
+  });
+
   /** Stale positions after deletion would update the wrong row or move a replacement to the front. */
   it("keeps updates in place and appends a deleted row when it is added again", async () => {
     const client = new QueryClient();
-    client.setQueryData(
-      KEY,
+    seed(
+      client,
       ["a", "b", "c"].map((name) => ({ name }))
     );
     await start(client);
@@ -187,7 +230,7 @@ describe("useResourceWatch", () => {
       { op: "deleted", resource: { name: "a" } },
       { op: "applied", resource: { name: "a", data: 2 } },
     ]);
-    expect(client.getQueryData(KEY)).toEqual([
+    expect(rowsIn(client)).toEqual([
       { name: "b", data: 1 },
       { name: "c" },
       { name: "a", data: 2 },
@@ -195,7 +238,7 @@ describe("useResourceWatch", () => {
     emit("stream-cm-1", "deleted", { name: "c" });
     emit("stream-cm-1", "applied", { name: "c", data: 3 });
     emit("stream-cm-1", "applied", { name: "b", data: 4 });
-    expect(client.getQueryData(KEY)).toEqual([
+    expect(rowsIn(client)).toEqual([
       { name: "b", data: 4 },
       { name: "a", data: 2 },
       { name: "c", data: 3 },
@@ -205,13 +248,13 @@ describe("useResourceWatch", () => {
   /** Polling or another observer can replace the array and invalidate every cached position. */
   it("rebuilds positions after another writer replaces the cached list", async () => {
     const client = new QueryClient();
-    client.setQueryData(KEY, [{ name: "a" }, { name: "b" }]);
+    seed(client, [{ name: "a" }, { name: "b" }]);
     await start(client);
     emit("stream-cm-1", "applied", { name: "a", data: 1 });
-    client.setQueryData(KEY, [{ name: "b" }, { name: "c" }]);
+    seed(client, [{ name: "b" }, { name: "c" }]);
     emit("stream-cm-1", "applied", { name: "b", data: 2 });
     emit("stream-cm-1", "deleted", { name: "c" });
-    expect(client.getQueryData(KEY)).toEqual([{ name: "b", data: 2 }]);
+    expect(rowsIn(client)).toEqual([{ name: "b", data: 2 }]);
   });
 
   it("registers resource-event listener before calling resourceWatchSubscribed", async () => {
@@ -254,7 +297,7 @@ describe("useResourceWatch", () => {
 
   it("appends an applied event for an unseen item", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [{ name: "a", namespace: "default" }]);
+    seed(client, [{ name: "a", namespace: "default" }]);
 
     renderHook(
       () =>
@@ -277,19 +320,17 @@ describe("useResourceWatch", () => {
     });
 
     await waitFor(() => {
-      const list = client.getQueryData<Item[]>(KEY);
+      const list = rowsIn(client);
       expect(list).toHaveLength(2);
     });
 
-    const list = client.getQueryData<Item[]>(KEY)!;
+    const list = rowsIn(client)!;
     expect(list.map((i) => i.name)).toEqual(["a", "b"]);
   });
 
   it("replaces an existing item on applied", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [
-      { name: "a", namespace: "default", data: 1 },
-    ]);
+    seed(client, [{ name: "a", namespace: "default", data: 1 }]);
 
     renderHook(
       () =>
@@ -312,16 +353,16 @@ describe("useResourceWatch", () => {
     });
 
     await waitFor(() => {
-      const list = client.getQueryData<Item[]>(KEY)!;
+      const list = rowsIn(client)!;
       expect(list[0].data).toBe(999);
     });
 
-    expect(client.getQueryData<Item[]>(KEY)).toHaveLength(1);
+    expect(rowsIn(client)).toHaveLength(1);
   });
 
   it("removes the matching item on deleted", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [
+    seed(client, [
       { name: "a", namespace: "default" },
       { name: "b", namespace: "default" },
     ]);
@@ -343,7 +384,7 @@ describe("useResourceWatch", () => {
     emit("stream-cm-1", "deleted", { name: "a", namespace: "default" });
 
     await waitFor(() => {
-      const list = client.getQueryData<Item[]>(KEY)!;
+      const list = rowsIn(client)!;
       expect(list.map((i) => i.name)).toEqual(["b"]);
     });
   });
@@ -358,7 +399,7 @@ describe("useResourceWatch", () => {
    */
   it("keeps the rows it has for the length of a resync", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [
+    seed(client, [
       { name: "a", namespace: "default" },
       { name: "b", namespace: "default" },
     ]);
@@ -383,10 +424,7 @@ describe("useResourceWatch", () => {
     ]);
 
     await waitFor(() => expect(result.current.resyncing).toBe(true));
-    expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual([
-      "a",
-      "b",
-    ]);
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a", "b"]);
 
     // The burst ends without `b`, which is how a watch says it is gone.
     emitBatch("stream-cm-1", [
@@ -395,7 +433,7 @@ describe("useResourceWatch", () => {
     ]);
 
     await waitFor(() => expect(result.current.resyncing).toBe(false));
-    const list = client.getQueryData<Item[]>(KEY)!;
+    const list = rowsIn(client)!;
     expect(list.map((i) => i.name)).toEqual(["a", "c"]);
     expect(list[0].data).toBe(2);
   });
@@ -407,7 +445,7 @@ describe("useResourceWatch", () => {
    */
   it("applies a whole batch in a single cache write", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, []);
+    seed(client, []);
 
     renderHook(
       () =>
@@ -432,10 +470,7 @@ describe("useResourceWatch", () => {
     ]);
 
     await waitFor(() => {
-      expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual([
-        "b",
-        "c",
-      ]);
+      expect(rowsIn(client)!.map((i) => i.name)).toEqual(["b", "c"]);
     });
     expect(writes).toHaveBeenCalledTimes(1);
     writes.mockRestore();
@@ -443,7 +478,7 @@ describe("useResourceWatch", () => {
 
   it("ignores events for a different stream id", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [{ name: "a", namespace: "default" }]);
+    seed(client, [{ name: "a", namespace: "default" }]);
 
     renderHook(
       () =>
@@ -463,12 +498,12 @@ describe("useResourceWatch", () => {
     emit("some-other-stream", "deleted", { name: "a", namespace: "default" });
 
     await new Promise((r) => setTimeout(r, 30));
-    expect(client.getQueryData<Item[]>(KEY)).toHaveLength(1);
+    expect(rowsIn(client)).toHaveLength(1);
   });
 
   it("calls onError on a failed event without mutating the cache", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [{ name: "a", namespace: "default" }]);
+    seed(client, [{ name: "a", namespace: "default" }]);
     const onError = vi.fn();
 
     renderHook(
@@ -494,14 +529,45 @@ describe("useResourceWatch", () => {
 
     // Failed events MUST NOT touch the cache. The consumer is the one
     // that decides what to do (toast + re-enable polling, etc.).
-    expect(client.getQueryData<Item[]>(KEY)).toEqual([
-      { name: "a", namespace: "default" },
-    ]);
+    expect(rowsIn(client)).toEqual([{ name: "a", namespace: "default" }]);
+  });
+
+  /**
+   * The bridge dropping events is this watch failing: the list is short, not
+   * stale. The payload is `{ missed }`; reading it as the bare number it
+   * once was prints "dropped [object Object] updates".
+   */
+  it("reports a lagging event bridge as a failure, with how many were dropped", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    const onError = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(listeners["event-bridge-lagged"]).toBeDefined();
+    });
+    listeners["event-bridge-lagged"]?.({
+      payload: { channel: "event-bridge-lagged", missed: 37 },
+    });
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("dropped 37 updates")
+    );
   });
 
   it("calls onRecovered exactly once when a non-failed event follows a failed one", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, []);
+    seed(client, []);
     const onError = vi.fn();
     const onRecovered = vi.fn();
 
@@ -532,10 +598,7 @@ describe("useResourceWatch", () => {
     });
 
     // Cache reflects both applied events.
-    expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual([
-      "x",
-      "y",
-    ]);
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["x", "y"]);
   });
 
   /**
@@ -547,7 +610,7 @@ describe("useResourceWatch", () => {
    */
   it("does not treat the restart marker of a refused watch as a recovery", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, []);
+    seed(client, []);
     const onError = vi.fn();
     const onRecovered = vi.fn();
 
@@ -595,7 +658,7 @@ describe("useResourceWatch", () => {
    */
   it("commits the resync that follows a failure, dropping what went away", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [
+    seed(client, [
       { name: "gone", namespace: "default" },
       { name: "stays", namespace: "default" },
     ]);
@@ -626,9 +689,7 @@ describe("useResourceWatch", () => {
     await waitFor(() => {
       expect(onRecovered).toHaveBeenCalledTimes(1);
     });
-    expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual([
-      "stays",
-    ]);
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["stays"]);
   });
 
   it("calls onRecovered again on a second failure→recovery cycle", async () => {
@@ -670,7 +731,7 @@ describe("useResourceWatch", () => {
    */
   it("abandons a resync the watch failed in the middle of", async () => {
     const client = new QueryClient();
-    client.setQueryData<Item[]>(KEY, [{ name: "a", namespace: "default" }]);
+    seed(client, [{ name: "a", namespace: "default" }]);
 
     const { result } = renderHook(
       () =>
@@ -700,7 +761,7 @@ describe("useResourceWatch", () => {
     // A `synced` that arrives after the failure has nothing to commit.
     emit("stream-cm-1", "synced", null);
     await new Promise((r) => setTimeout(r, 20));
-    expect(client.getQueryData<Item[]>(KEY)!.map((i) => i.name)).toEqual(["a"]);
+    expect(rowsIn(client)!.map((i) => i.name)).toEqual(["a"]);
   });
 
   it("calls unsubscribeResourceWatch on unmount", async () => {

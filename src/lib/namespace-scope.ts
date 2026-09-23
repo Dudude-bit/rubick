@@ -2,17 +2,18 @@
  * Which namespaces the window is looking at, and the one string the backend
  * is told about.
  *
- * A list command takes one `Option<String>`, because a `LIST` is scoped to
- * one namespace or to none. The selection can be several, so it and the wire
- * value are different things: none selected asks for the cluster, one asks
- * for that one, several has no wire value at all.
+ * A `LIST` is scoped to one namespace or to none, and the selection can be
+ * several, so the selection and the one-namespace wire value are different
+ * things: none selected asks for the cluster, one asks for that one, several
+ * has no wire value at all.
  *
- * Lists are read once cluster-wide and narrowed here — a request and a watch
- * per namespace per screen would multiply every page by the size of the
- * selection. Aggregates cannot be narrowed after the fact, so the overview
- * and the events feed's limit are asked per namespace and joined; those two
- * are what {@link SCOPE_LIMIT} bounds, and the overview is the priciest query
- * in the app (`lib/refresh.ts`).
+ * A list page hands the backend the selection itself ({@link wireScope}),
+ * which reads several namespaces one `LIST` and one watch apiece and says
+ * which of them did not answer. The overview is asked for the whole
+ * selection and adds it up in the backend, and the events feed's limit is
+ * asked per namespace and joined. All of it costs more per namespace
+ * selected, which is what {@link SCOPE_LIMIT} bounds, and the overview is
+ * the priciest query in the app (`lib/refresh.ts`).
  *
  * Both places the selection persists are fields that predate it, and an older
  * build reads either straight into `currentNamespace` — `"prod,staging"`
@@ -24,25 +25,28 @@
  * parses a joined list, because early builds of this feature wrote one.
  */
 
+import type { Scoped, UnreadNamespace } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
 /**
  * How many namespaces one window may watch at once.
  *
- * Counted from `get_cluster_overview`: the cluster-wide overview is fifteen
- * requests and a namespaced one is sixteen — and one of those sixteen is a
- * *full cluster* pod LIST, because the scheduler panel divides requests by
- * every node's allocatable and is cluster-wide whatever the scope. The window
- * asks for the cluster-wide overview however narrow the selection is (the
- * namespace picker exists to show the namespaces you are *not* on) and for one
- * more per namespace selected, every ten seconds: about 90 requests a minute
- * at "All namespaces", 186 at one namespace, about 480 at four — five of them
- * whole-cluster pod lists every poll. A dozen namespaces would be over 1200 a
- * minute, and nothing on screen would say so.
+ * Counted from `get_cluster_overview`, when it has to list rather than read
+ * its watches: the cluster-wide overview is fifteen requests, and one for a
+ * selection is four cluster reads — metrics, the namespace count, the nodes
+ * and one *full cluster* pod LIST, because the scheduler panel divides
+ * requests by every node's allocatable — plus twelve per namespace. The
+ * window asks for the cluster-wide overview however narrow the selection is
+ * (the namespace picker exists to show the namespaces you are *not* on) and
+ * for the selection's, every ten seconds: about 90 requests a minute at "All
+ * namespaces", 186 at one namespace, about 400 at four, two of them
+ * whole-cluster pod lists a poll. From the watches it is about 260 at four.
  *
- * Four holds the window to about two and a half times what one namespace
- * costs, and covers what people actually ask for — prod beside staging, or an
- * app's namespace beside the one its database lives in.
+ * Four covers what people actually ask for — prod beside staging, or an
+ * app's namespace beside the one its database lives in. Reading the cluster
+ * once instead of once per namespace would pay for a fifth at the overview's
+ * old cost of four, but the events feed and every list across the selection
+ * still ask once per namespace, and nothing made those cheaper.
  *
  * Enforced where a selection is *made* — `clusterStore.setNamespaceScope`, and
  * the picker that calls it — rather than where it is read. A bound applied at
@@ -74,47 +78,84 @@ export function scopeCacheKey(scope: readonly string[]): string | null {
 }
 
 /**
- * Read a list across the selection: none or one as a single `LIST`, several as
- * one request per namespace, merged. A cluster-wide `LIST` needs list rights
- * across the whole cluster, which a namespace-scoped RBAC user lacks — so every
- * such selection came back empty and unexplained. Each namespace the user can
- * read on its own, which is the whole point of the picker.
+ * The scope as a `list_*_in` command takes it: `null` for the whole cluster,
+ * otherwise the names. Several are read one `LIST` apiece in the backend,
+ * never cluster-wide — a namespace-scoped RBAC user is refused that, and the
+ * picker exists for them.
  */
-export function listAcrossScope<T>(
-  scope: readonly string[],
-  fetchOne: (namespace: string | null) => Promise<T[]>
-): () => Promise<T[]> {
-  return async () => {
-    if (scope.length <= 1) {
-      return fetchOne(scope.length === 1 ? scope[0] : null);
+export function wireScope(scope: readonly string[]): string[] | null {
+  return scope.length === 0 ? null : [...scope];
+}
+
+/** A read that answers whole or fails whole: nothing in it can be unread. */
+export function whole<T>(rows: T[]): Scoped<T> {
+  return { rows, unread: [] };
+}
+
+/**
+ * Several reads of one scope as one answer — a kind each, say. Every
+ * namespace one of them could not read is named once, with the first reason.
+ */
+export function joinScoped<T>(parts: readonly Scoped<T>[]): Scoped<T> {
+  const unread = new Map<string, UnreadNamespace>();
+  for (const part of parts) {
+    for (const missing of part.unread) {
+      if (!unread.has(missing.namespace))
+        unread.set(missing.namespace, missing);
     }
-    // One read per namespace, settled independently. A user with rights in
-    // some of the selected namespaces and not others keeps the rows they can
-    // read rather than losing every namespace's rows to one namespace's
-    // refusal — the failure of the old `Promise.all`, which rejected whole.
-    //
-    // But a failed read is still never answered with an empty list: if
-    // nothing came back and a namespace refused, that refusal is the answer,
-    // thrown so the list shows it. The one thing not carried here is *which*
-    // namespace refused when other namespaces did return rows — surfacing that
-    // beside the rows needs a richer return than this shared shape allows.
-    const settled = await Promise.allSettled(scope.map((ns) => fetchOne(ns)));
-    const rows: T[] = [];
-    let firstError: unknown;
-    let failed = false;
-    for (const result of settled) {
-      if (result.status === "fulfilled") {
-        rows.push(...result.value);
-      } else if (!failed) {
-        failed = true;
-        firstError = result.reason;
-      }
-    }
-    if (failed && rows.length === 0) {
-      throw firstError;
-    }
-    return rows;
+  }
+  return {
+    rows: parts.flatMap((part) => part.rows),
+    unread: [...unread.values()],
   };
+}
+
+/**
+ * A fresh answer under a live watch. The watch keeps the cached rows of every
+ * namespace current, so a namespace this read timed out in keeps them rather
+ * than turning unread: dropping them left the watch streaming changes into
+ * rows the page no longer had.
+ */
+export function keepWatched<T extends { namespace?: string | null }>(
+  answer: Scoped<T>,
+  watched: Scoped<T> | undefined
+): Scoped<T> {
+  if (!watched || answer.unread.length === 0) return answer;
+  const missing = new Set(answer.unread.map((u) => u.namespace));
+  return {
+    rows: [
+      ...answer.rows,
+      ...watched.rows.filter((row) => missing.has(row.namespace ?? "")),
+    ],
+    unread: [],
+  };
+}
+
+/** The namespaces of `scope` that answered. */
+export function answeredIn(
+  scope: readonly string[],
+  unread: readonly UnreadNamespace[]
+): string[] {
+  return scope.filter((name) => !unread.some((u) => u.namespace === name));
+}
+
+/**
+ * "None" said only of the namespaces that answered — and when none did, not
+ * said at all.
+ */
+export function noneWhereAnswered(
+  t: T,
+  label: string,
+  scope: readonly string[],
+  unread: readonly UnreadNamespace[]
+): string {
+  const answered = answeredIn(scope, unread);
+  return answered.length === 0
+    ? t("empty", "couldNotReadInScope", { label })
+    : t("empty", "noneWhereAnswered", {
+        label,
+        namespaces: answered.join(", "),
+      });
 }
 
 /** What a stored value means, including one an older build wrote. */

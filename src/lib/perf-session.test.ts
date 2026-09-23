@@ -12,7 +12,11 @@ function harness(opts: { failStop?: boolean; failCounters?: boolean } = {}) {
     {
       setRecording: async (on) => {
         calls.push(`set:${on}`);
-        if (!on && opts.failStop) throw new Error("bridge down");
+        if (!on && opts.failStop) {
+          throw new Error(
+            "Tauri command 'perfSetRecording' failed: bridge down"
+          );
+        }
       },
       counters: async () => {
         calls.push("counters");
@@ -60,18 +64,18 @@ describe("PerfSession", () => {
     expect(h.calls).toEqual(["set:true", "counters", "set:false"]);
   });
 
-  /** A backend still serialising every event after a failed stop is a cost the panel must show. */
+  /** A backend still serialising every event after a failed stop is a cost the panel must show — in the backend's words: `String(error)` put "Error: Tauri command 'perfSetRecording' failed:" in front of them. */
   it("keeps the failure of a backend stop visible and lets it be retried", async () => {
     const h = harness({ failStop: true });
     await h.session.start();
     await h.session.stop();
     expect(h.session.current).toEqual({
       phase: "stopped",
-      error: "Error: bridge down",
+      error: "bridge down",
     });
     expect(h.recorder.recording).toBe(false);
     await h.session.retryBackendStop();
-    expect(h.session.current.error).toBe("Error: bridge down");
+    expect(h.session.current.error).toBe("bridge down");
   });
 
   /** Counters that could not be read must not stop the recording from stopping. */

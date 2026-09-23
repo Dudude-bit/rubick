@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
+import { listenEvent } from "@/lib/events";
 import type {
   SearchContextStatus,
   SearchFailureKind,
+  SearchHit,
   SearchTarget,
 } from "@/generated/types";
 
-/** Shortest query the backend accepts. Mirrors `MIN_QUERY_LEN`. */
+/** Shortest query the backend accepts, in characters; `shared/search-limits.json`. */
 export const MIN_SEARCH_LENGTH = 2;
+
+/**
+ * Whether the backend will take this query. Characters, as Rust counts
+ * them: `"é".length` is 1 and `"😀".length` is 2, and a query the palette
+ * sends and the backend refuses comes back as an error for one emoji.
+ */
+export function isSearchable(query: string): boolean {
+  return [...query.trim()].length >= MIN_SEARCH_LENGTH;
+}
 
 /** Default keystroke debounce. Matches what the palette used before. */
 const DEFAULT_DEBOUNCE_MS = 250;
@@ -17,31 +28,7 @@ const DEFAULT_DEBOUNCE_MS = 250;
 /** Separator for list-shaped dependencies; illegal in context names. */
 const SEP = "\u0000";
 
-/** One matching resource. Mirrors the backend `SearchHit`. */
-export interface SearchHit {
-  context: string;
-  kind: string;
-  name: string;
-  namespace: string | null;
-}
-
-/** `search-hits` event payload. */
-interface SearchHitsEvent {
-  search_id: string;
-  context: string;
-  hits: SearchHit[];
-}
-
-/** `search-status` event payload. */
-interface SearchStatusEvent {
-  search_id: string;
-  context: string;
-  status: SearchContextStatus;
-  reason: SearchFailureKind | null;
-  message: string | null;
-  matched: number;
-  truncated: boolean;
-}
+export type { SearchHit } from "@/generated/types";
 
 /** One cluster's row: where it is, and why, if it went nowhere. */
 export interface ClusterSearchState {
@@ -154,7 +141,7 @@ export function useResourceSearch({
   const kindsKey = (kinds ?? []).join(SEP);
 
   const trimmed = query.trim();
-  const active = enabled && trimmed.length >= MIN_SEARCH_LENGTH;
+  const active = enabled && isSearchable(trimmed);
 
   /** Which clusters are being asked, regardless of what they are asked. */
   const scope = [contextsKey, String(allContexts)].join(SEP);
@@ -218,14 +205,14 @@ export function useResourceSearch({
         });
 
         const [offHits, offStatus] = await Promise.all([
-          listen<SearchHitsEvent>("search-hits", (event) => {
+          listenEvent("search-hits", (event) => {
             if (event.payload.search_id !== searchId) return;
             setState((prev) => ({
               ...prev,
               hits: [...prev.hits, ...event.payload.hits],
             }));
           }),
-          listen<SearchStatusEvent>("search-status", (event) => {
+          listenEvent("search-status", (event) => {
             const payload = event.payload;
             if (payload.search_id !== searchId) return;
             setState((prev) => {
@@ -267,7 +254,7 @@ export function useResourceSearch({
           hits: [],
           clusters: [],
           isSearching: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorToShow(error),
         });
       }
     }, debounceMs);

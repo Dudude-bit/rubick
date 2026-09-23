@@ -1,27 +1,6 @@
-import type { PodVolumeInfo } from "@/generated/types";
+import type { FileEntry, PodVolumeInfo } from "@/generated/types";
 
-/**
- * The event payloads, mirrored by hand: the bindings generator only emits
- * what a command signature reaches, and these ride events.
- */
-export type FileKind = "file" | "dir" | "symlink" | "other";
-
-export interface FileEntry {
-  name: string;
-  kind: FileKind;
-  /** Octal, as the tool printed it: `644`, `755`. */
-  mode: string;
-  size: number;
-  /** Seconds since the epoch; `null` when the tool gave none. */
-  modified: number | null;
-  owner: string;
-  group: string;
-  /** Where a symlink points, as written. */
-  target: string | null;
-}
-
-/** Which rung of the ladder answered. */
-export type ListedWith = "gnuFind" | "busyboxStat";
+export type { FileEntry, FileKind, ListedWith } from "@/generated/types";
 
 /** The mount a path sits in, for the tag beside the row. */
 export interface MountTag {

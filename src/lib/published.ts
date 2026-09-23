@@ -20,6 +20,11 @@ import type {
 export const endpointCount = (published: ServicePublished): number =>
   published.ready + published.draining + published.notReady;
 
+/** Addresses taking traffic: a draining one counts, as kube-proxy falls back
+ *  to it when nothing ready is left. Rust's `ServicePublished::serving`. */
+export const servingCount = (published: ServicePublished): number =>
+  published.ready + published.draining;
+
 export function publishedFor(
   conns: ResourceConnections,
   service: ObjectRef

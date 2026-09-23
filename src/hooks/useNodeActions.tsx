@@ -11,6 +11,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 
 export interface NodeActions {
   cordon: (node: string) => void;
@@ -40,7 +41,9 @@ export function useNodeActions(): NodeActions {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.resources(ResourceType.Node, null),
     });
-    void queryClient.invalidateQueries({ queryKey: ["node"] });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.details(ResourceType.Node),
+    });
   };
 
   const cordonMutation = useMutation({
@@ -55,7 +58,7 @@ export function useNodeActions(): NodeActions {
     onError: (error) => {
       toast({
         title: t("action", "error"),
-        description: t("action", "cordonFailed", { error: String(error) }),
+        description: t("action", "cordonFailed", { error: errorToShow(error) }),
         variant: "destructive",
       });
     },
@@ -73,7 +76,9 @@ export function useNodeActions(): NodeActions {
     onError: (error) => {
       toast({
         title: t("action", "error"),
-        description: t("action", "uncordonFailed", { error: String(error) }),
+        description: t("action", "uncordonFailed", {
+          error: errorToShow(error),
+        }),
         variant: "destructive",
       });
     },

@@ -266,6 +266,13 @@ export const perf = new PerfRecorder();
 
 const utf8 = new TextEncoder();
 
+/** The rows an answer carries: a list's, or a scoped list's `rows`. */
+export function rowsOf(value: unknown): number | undefined {
+  if (Array.isArray(value)) return value.length;
+  const rows = (value as { rows?: unknown } | null | undefined)?.rows;
+  return Array.isArray(rows) ? rows.length : undefined;
+}
+
 /**
  * Shape of an answer, for the sample. Serialising is the cost this whole
  * module hides behind `recording`; a value that cannot be serialised (a
@@ -273,7 +280,7 @@ const utf8 = new TextEncoder();
  * unit, not string length.
  */
 export function sizeOf(value: unknown): { rows?: number; bytes?: number } {
-  const rows = Array.isArray(value) ? value.length : undefined;
+  const rows = rowsOf(value);
   let bytes: number | undefined;
   try {
     const text = JSON.stringify(value);

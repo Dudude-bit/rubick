@@ -210,16 +210,16 @@ export function clockOf(t: number): string {
 }
 
 /**
- * "38s ago" / "4m ago", to sit beside the wall clock.
+ * The highest reading in the window, or null where it holds none.
  *
- * `now` is the newest sample's own timestamp, not the wall clock: it is
- * the last moment the cluster is known to have answered, and reading it
- * off the data keeps the component pure.
+ * What a stopped workload is summarised by. "What did it use when it ran" is
+ * a question about the worst moment, not the last one — and the last one is
+ * a value the reader would take for the current one.
  */
-export function agoOf(t: number, now: number): string {
-  const seconds = Math.max(0, Math.round((now - t) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.round(minutes / 60)}h ago`;
+export function peakOf(points: readonly UsagePoint[]): number | null {
+  let peak: number | null = null;
+  for (const point of points) {
+    if (point.v !== null && (peak === null || point.v > peak)) peak = point.v;
+  }
+  return peak;
 }

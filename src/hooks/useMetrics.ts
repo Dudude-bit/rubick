@@ -3,10 +3,14 @@ import { commands } from "@/lib/commands";
 import type {
   PodMetricsResponse,
   NodeMetricsResponse,
+  UnreadNamespace,
 } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
+
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 type MetricsQueryOptions<T> = Omit<
   LiveQueryOptions<T, Error, T, string[]>,
@@ -15,6 +19,8 @@ type MetricsQueryOptions<T> = Omit<
 
 export interface UseMetricsOptions {
   namespace?: string | null;
+  /** A selection of namespaces, read one at a time; wins over `namespace`. */
+  scope?: readonly string[];
   enabled?: boolean;
   includePods?: boolean;
   includeNodes?: boolean;
@@ -27,11 +33,15 @@ export function useMetrics(options?: UseMetricsOptions) {
   const includePods = options?.includePods ?? true;
   const includeNodes = options?.includeNodes ?? true;
 
+  const scope = options?.scope;
   const podMetricsQuery = useLiveQuery({
-    queryKey: queryKeys.metrics.pods(options?.namespace),
-    queryFn: async () => {
-      return await commands.getPodsMetrics(options?.namespace ?? null);
-    },
+    queryKey: queryKeys.metrics.pods(
+      scope ? scopeCacheKey(scope) : options?.namespace
+    ),
+    queryFn: async () =>
+      scope
+        ? await commands.getPodsMetricsIn(wireScope(scope))
+        : await commands.getPodsMetrics(options?.namespace ?? null),
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.metrics,
@@ -54,6 +64,11 @@ export function useMetrics(options?: UseMetricsOptions) {
   return {
     podMetrics: podMetricsQuery.data?.data ?? [],
     podStatus: podMetricsQuery.data?.status ?? null,
+    // The last scope's unread namespaces are not this one's.
+    podUnread: podMetricsQuery.isPlaceholderData
+      ? NOTHING_UNREAD
+      : (podMetricsQuery.data?.unread ?? NOTHING_UNREAD),
+    refetchPodMetrics: podMetricsQuery.refetch,
     nodeMetrics: nodeMetricsQuery.data?.data ?? [],
     nodeStatus: nodeMetricsQuery.data?.status ?? null,
     // When the cluster last answered. The usage history stamps its samples

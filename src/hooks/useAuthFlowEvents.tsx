@@ -1,38 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-shell";
 import { useToast } from "@/components/ui/use-toast";
 import { useT, type T } from "@/i18n/useT";
 import { ToastAction } from "@/components/ui/toast";
 import { commands } from "@/lib/commands";
-
-interface AuthUrlRequestedPayload {
-  context: string;
-  url: string;
-  flow: string;
-  session_id?: string | null;
-  /// Where the provider is expected to send the browser back, when the flow
-  /// has one. Shown while waiting: a provider that has not been told to allow
-  /// it refuses immediately, and only the reader can go and add it.
-  redirect_uri?: string | null;
-}
-
-/**
- * Why a sign-in ended without a credential.
- *
- * Hand-mirrored, like every event payload here: the generator only emits
- * types a command signature reaches, and these arrive on an event. `said`
- * is the provider's own words and is quoted; the rest are named so the
- * reader sees them in their own language.
- */
-type AuthOutcome =
-  | { says: "said"; text: string }
-  | { says: "timedOut" }
-  | { says: "noTokenInCredential" }
-  | { says: "stateMismatch" }
-  | { says: "superseded" }
-  | { says: "switchedAway" };
+import { listenEvent } from "@/lib/events";
+import type { AuthOutcome } from "@/generated/types";
 
 function outcomeWords(why: AuthOutcome, t: T): string {
   switch (why.says) {
@@ -49,26 +23,6 @@ function outcomeWords(why: AuthOutcome, t: T): string {
     case "switchedAway":
       return t("readings", "authSwitchedAway");
   }
-}
-
-interface AuthFlowCompletedPayload {
-  session_id: string;
-  context: string;
-  success: boolean;
-  why?: AuthOutcome | null;
-}
-
-interface AuthFlowCancelledPayload {
-  session_id: string;
-  context: string;
-  why?: AuthOutcome | null;
-}
-
-interface AuthTerminalSessionCreatedPayload {
-  auth_session_id: string;
-  terminal_session_id: string;
-  context: string;
-  command: string;
 }
 
 interface AuthTerminalSession {
@@ -196,7 +150,7 @@ export function useAuthFlowEvents() {
 
     const setupListeners = async () => {
       // Listener for auth URL requests
-      const unlistenRequested = await listen<AuthUrlRequestedPayload>(
+      const unlistenRequested = await listenEvent(
         "auth-url-requested",
         async (event) => {
           if (!mounted) return;
@@ -335,7 +289,7 @@ export function useAuthFlowEvents() {
       );
       unlistenFns.push(unlistenRequested);
 
-      const unlistenCompleted = await listen<AuthFlowCompletedPayload>(
+      const unlistenCompleted = await listenEvent(
         "auth-flow-completed",
         async (event) => {
           if (!mounted) return;
@@ -371,7 +325,7 @@ export function useAuthFlowEvents() {
       );
       unlistenFns.push(unlistenCompleted);
 
-      const unlistenCancelled = await listen<AuthFlowCancelledPayload>(
+      const unlistenCancelled = await listenEvent(
         "auth-flow-cancelled",
         async (event) => {
           if (!mounted) return;
@@ -400,64 +354,62 @@ export function useAuthFlowEvents() {
 
       // Everything a held-back session prints, so the pane that eventually
       // opens is not missing the prompt it is being asked to answer.
-      const unlistenHeldOutput = await listen<{
-        session_id: string;
-        data: string;
-      }>("terminal-output", (event) => {
-        for (const session of Object.values(held)) {
-          if (session.terminalSessionId !== event.payload.session_id) continue;
-          if (session.output.length < REPLAY_MAX) {
-            session.output += event.payload.data;
+      const unlistenHeldOutput = await listenEvent(
+        "terminal-output",
+        (event) => {
+          for (const session of Object.values(held)) {
+            if (session.terminalSessionId !== event.payload.session_id)
+              continue;
+            if (session.output.length < REPLAY_MAX) {
+              session.output += event.payload.data;
+            }
           }
         }
-      });
+      );
       unlistenFns.push(unlistenHeldOutput);
 
       // Listener for auth terminal session created
-      const unlistenTerminalCreated =
-        await listen<AuthTerminalSessionCreatedPayload>(
-          "auth-terminal-session-created",
-          async (event) => {
-            if (!mounted) return;
+      const unlistenTerminalCreated = await listenEvent(
+        "auth-terminal-session-created",
+        async (event) => {
+          if (!mounted) return;
 
-            const payload = event.payload;
-            const authSessionId = payload.auth_session_id;
+          const payload = event.payload;
+          const authSessionId = payload.auth_session_id;
 
-            // Subscribed at once, shown later: the backend holds the
-            // session's output until somebody is listening, so delaying this
-            // would delay the plugin itself.
-            commands
-              .terminalSubscribed(payload.terminal_session_id)
-              .catch(() => {
-                // Already gone: the plugin answered before this ran, which
-                // is exactly the case the hold-back exists for.
+          // Subscribed at once, shown later: the backend holds the
+          // session's output until somebody is listening, so delaying this
+          // would delay the plugin itself.
+          commands.terminalSubscribed(payload.terminal_session_id).catch(() => {
+            // Already gone: the plugin answered before this ran, which
+            // is exactly the case the hold-back exists for.
+          });
+
+          held[authSessionId] = {
+            terminalSessionId: payload.terminal_session_id,
+            output: "",
+            timer: setTimeout(() => {
+              const session = held[authSessionId];
+              if (!mounted || !session) return;
+              // Not released here: the pane still has to mount, load the
+              // lazy xterm chunk and install its listener, and what the
+              // plugin prints in between is exactly what draining is for.
+              setAuthTerminalSession({
+                authSessionId,
+                terminalSessionId: payload.terminal_session_id,
+                context: payload.context,
+                command: payload.command,
+                replay: () => {
+                  releaseHold(authSessionId);
+                  const text = session.output;
+                  session.output = "";
+                  return text;
+                },
               });
-
-            held[authSessionId] = {
-              terminalSessionId: payload.terminal_session_id,
-              output: "",
-              timer: setTimeout(() => {
-                const session = held[authSessionId];
-                if (!mounted || !session) return;
-                // Not released here: the pane still has to mount, load the
-                // lazy xterm chunk and install its listener, and what the
-                // plugin prints in between is exactly what draining is for.
-                setAuthTerminalSession({
-                  authSessionId,
-                  terminalSessionId: payload.terminal_session_id,
-                  context: payload.context,
-                  command: payload.command,
-                  replay: () => {
-                    releaseHold(authSessionId);
-                    const text = session.output;
-                    session.output = "";
-                    return text;
-                  },
-                });
-              }, HOLD_BACK_MS),
-            };
-          }
-        );
+            }, HOLD_BACK_MS),
+          };
+        }
+      );
       unlistenFns.push(unlistenTerminalCreated);
     };
 

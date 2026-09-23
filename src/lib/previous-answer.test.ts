@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ofSameCluster } from "./previous-answer";
+import { queryKeys } from "./query-keys";
 
 /**
  * Without the context check this is `keepPreviousData`, and the rail read
@@ -11,14 +12,14 @@ describe("ofSameCluster", () => {
   it("keeps an answer the same cluster gave", () => {
     const keep = ofSameCluster<string>("prod-eu");
     expect(
-      keep("51 pods", { queryKey: ["cluster-overview", "prod-eu", ""] })
+      keep("51 pods", { queryKey: queryKeys.clusterOverview("prod-eu") })
     ).toBe("51 pods");
   });
 
   it("drops an answer another cluster gave", () => {
     const keep = ofSameCluster<string>("staging-eu");
     expect(
-      keep("51 pods", { queryKey: ["cluster-overview", "prod-eu", ""] })
+      keep("51 pods", { queryKey: queryKeys.clusterOverview("prod-eu") })
     ).toBeUndefined();
   });
 
