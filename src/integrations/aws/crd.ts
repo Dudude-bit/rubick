@@ -9,7 +9,7 @@
 
 import { joinSayings } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { matchByGroup } from "../kit";
+import { matchByGroup, dash } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingFailure,
@@ -19,9 +19,6 @@ import {
   ingressClassParamsSummary,
   targetGroupLabel,
 } from "./model";
-
-const dash = (value: unknown) =>
-  value === null || value === undefined || value === "" ? "—" : String(value);
 
 const targetGroupBindingColumns: CrdColumn[] = [
   {

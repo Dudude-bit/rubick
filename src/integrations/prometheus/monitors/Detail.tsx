@@ -18,7 +18,7 @@ import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
-import { crdObjectPath } from "../../kit";
+import { crdObjectPath, hourMinute } from "../../kit";
 import { OutLink } from "../../page-kit";
 import type { Picture } from "./data";
 import { useHeartbeat, STEP } from "./heartbeat";
@@ -66,9 +66,6 @@ const ICON: Record<RowTone, typeof X> = {
   none: AlertTriangle,
   mut: HelpCircle,
 };
-
-const clock = (at: number) =>
-  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function Detail({
   row,
@@ -386,9 +383,11 @@ function HeartbeatPanel({
               <div className="grid grid-cols-[150px_minmax(0,1fr)] gap-2">
                 <span />
                 <span className="flex justify-between font-mono text-[9.5px] text-fg-fnt">
-                  <span>{clock(beat.window.from)}</span>
-                  <span>{clock((beat.window.from + beat.window.to) / 2)}</span>
-                  <span>{clock(beat.window.to)}</span>
+                  <span>{hourMinute(beat.window.from)}</span>
+                  <span>
+                    {hourMinute((beat.window.from + beat.window.to) / 2)}
+                  </span>
+                  <span>{hourMinute(beat.window.to)}</span>
                 </span>
               </div>
             )}
@@ -402,7 +401,7 @@ function HeartbeatPanel({
               {t("monitors", "downCount", { n: scrape.down })}
             </b>
             {since !== null &&
-              t("monitors", "sinceTime", { time: clock(since) })}
+              t("monitors", "sinceTime", { time: hourMinute(since) })}
           </>
         ) : (
           <>

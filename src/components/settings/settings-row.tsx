@@ -105,27 +105,3 @@ export function SettingRow({
     </div>
   );
 }
-
-/**
- * A block of settings that is not built from rows — a tabbed editor, a
- * list with its own controls — indexed as one thing.
- *
- * It matches or it does not; there is nothing finer to filter inside it.
- */
-export function SettingsSearchable({
-  keywords,
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement> & { keywords?: string }) {
-  const visible = useSettingSearchMatch(keywords);
-  return (
-    <div
-      className={cn(!visible && "hidden", className)}
-      {...props}
-      hidden={!visible}
-    >
-      {children}
-    </div>
-  );
-}

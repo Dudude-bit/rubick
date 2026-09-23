@@ -7,7 +7,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple } from "../kit";
+import { getValueByPath, matchMultiple, dash } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingIdentity,
@@ -17,9 +17,6 @@ import {
   identityType,
   prohibitedTargetSummary,
 } from "./model";
-
-const dash = (value: unknown) =>
-  value === null || value === undefined || value === "" ? "—" : String(value);
 
 const identityColumns: CrdColumn[] = [
   {

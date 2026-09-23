@@ -48,7 +48,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
-import { crdObjectPath, troubleMark } from "../kit";
+import { crdObjectPath, troubleMark, summariseNames } from "../kit";
 import {
   BackingUnread,
   TroubleList,
@@ -524,7 +524,7 @@ function HostRow({
         <>
           {t("count", "paths", { n: group.routes.length })}
           {entryPoints.length > 0 &&
-            ` · ${everywhere ? t("empty", "everyEntryPoint") : summarise(entryPoints)}`}
+            ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
           {tls
             ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
             : upstreamNamed
@@ -545,12 +545,6 @@ function HostRow({
       <Findings group={group} />
     </TroubleRow>
   );
-}
-
-/** Three names and a tally: a row is a summary, not the whole list. */
-function summarise(names: string[]): string {
-  if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
 function Paths({

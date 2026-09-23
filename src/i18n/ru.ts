@@ -1892,8 +1892,6 @@ export const ru: Catalogue = {
     controllerFact: "Контроллер",
     controllerNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
-    controllerUnknown:
-      "Deployment'ы прочитать не удалось, поэтому работает ли контроллер оператора — неизвестно; это не значит, что его нет",
     inNamespace: "в {namespace}",
     versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
     fromImage: "из образа Deployment",
@@ -2913,7 +2911,9 @@ export const ru: Catalogue = {
     azureSomeCertOnGateway: "сертификат на Application Gateway",
     istioMeshOnly: "только внутри меша",
     mapEntryPoint: "Точка входа",
-    mapZeroReady: "0 готовых",
+    mapCanary: "канарейка",
+    mapCanaryShare: "канарейка {n}%",
+    mapOutsideMesh: "вне меша",
     traefikRouting: "Маршрутизация",
     traefikRouteNumber: {
       one: "Маршрут {n}",
@@ -4061,6 +4061,7 @@ export const ru: Catalogue = {
     toolsProfiles: "— {gcp}, {azure}.",
     toolsGcpCount: "{n} GCP",
     toolsAzureCount: "{n} Azure",
+    notOnPath: "{label} нет в PATH. Укажите путь ниже.",
     lookingForBinary: "Ищем исполняемый файл…",
     kubeconfigRestored: "Kubeconfig восстановлен",
     kubeconfigUpdated: "Kubeconfig изменён",
@@ -6995,6 +6996,12 @@ export const ru: Catalogue = {
       few: "{n} настройки подходят",
       many: "{n} настроек подходит",
       other: "{n} настройки подходят",
+    },
+    routeRules: {
+      one: "{n} маршрут",
+      few: "{n} маршрута",
+      many: "{n} маршрутов",
+      other: "{n} маршрута",
     },
     paths: {
       one: "{n} путь",

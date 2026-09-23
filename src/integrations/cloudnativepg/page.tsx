@@ -22,6 +22,7 @@ import {
   crdObjectsPath,
   getValueByPath,
   troubleMark,
+  allowedWord,
 } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
@@ -46,7 +47,8 @@ import {
 } from "./model";
 import { useNow } from "@/hooks/useNow";
 import { useSearchParam } from "@/hooks/useSearchParam";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
 
 /**
  * The words for a failed action. Two of them are this module's own sentinels
@@ -168,7 +170,7 @@ export default function CloudNativePgPage() {
  * version, and whether the reader may act. Each a checked fact, and each
  * with the word "unknown" where the check did not answer.
  */
-function OperatorStrip({
+export function OperatorStrip({
   operator,
   pending,
 }: {
@@ -177,54 +179,24 @@ function OperatorStrip({
 }) {
   const t = useT();
   const now = useNow();
-  const yesNo = (allowed: boolean | null) =>
-    allowed === null
-      ? t("operators", "couldNotTell")
-      : allowed
-        ? t("operators", "allowed")
-        : t("operators", "refused");
   return (
     <div className="grid gap-x-8 gap-y-2 text-xs md:grid-cols-2">
       <Fact label={t("operators", "controllerFact")}>
-        {pending ? (
+        {operator ? (
+          <ControllerLine
+            controller={operator.controller}
+            missing={t("operators", "controllerNotFound")}
+            known={operator.controllerKnown}
+            reason={operator.controllerReason}
+          />
+        ) : pending ? (
           <span className="text-fg-fnt">{t("action", "readingInline")}</span>
-        ) : operator?.controller ? (
-          <Link
-            to={getResourceDetailUrl(
-              ResourceType.Deployment,
-              operator.controller.name,
-              operator.controller.namespace
-            )}
-            className={cn(
-              "font-mono hover:underline",
-              operator.controller.ready < operator.controller.desired
-                ? "text-err"
-                : "text-fg"
-            )}
-          >
-            {operator.controller.name} {operator.controller.ready}/
-            {operator.controller.desired}
-          </Link>
-        ) : operator && !operator.controllerKnown ? (
-          // The Deployment list was refused or failed. "No Deployment
-          // carries the operator's label" is a claim about a read nobody
-          // got, and a reader with namespace-scoped RBAC gets it every time.
-          <span
-            className="text-warn"
-            title={operator.controllerReason ?? undefined}
-          >
-            {t("operators", "controllerUnknown")}
-          </span>
         ) : (
+          // The read that would say whether a controller runs did not
+          // answer; "no Deployment carries the label" would be a claim
+          // about a list nobody got.
           <span className="text-warn">
-            {t("operators", "controllerNotFound")}
-          </span>
-        )}
-        {operator?.controller && (
-          <span className="ml-2 text-fg-fnt">
-            {t("operators", "inNamespace", {
-              namespace: operator.controller.namespace,
-            })}
+            {t("operators", "deploymentsUnreadable")}
           </span>
         )}
       </Fact>
@@ -234,7 +206,7 @@ function OperatorStrip({
         ) : (
           <span className="text-fg-fnt">
             {operator && !operator.controllerKnown
-              ? t("operators", "controllerUnknown")
+              ? t("operators", "deploymentsUnreadable")
               : t("operators", "versionUnknown")}
           </span>
         )}
@@ -249,12 +221,12 @@ function OperatorStrip({
           <>
             <span>
               {t("operators", "canPatchClusters")}:{" "}
-              {yesNo(operator.canPatchClusters)}
+              {allowedWord(operator.canPatchClusters, t)}
             </span>
             <span className="mx-2 text-fg-fnt">·</span>
             <span>
               {t("operators", "canCreateBackups")}:{" "}
-              {yesNo(operator.canCreateBackups)}
+              {allowedWord(operator.canCreateBackups, t)}
             </span>
             <span className="ml-2 text-fg-fnt">
               {t("operators", "checkedAgo", {
@@ -266,21 +238,6 @@ function OperatorStrip({
           <span className="text-fg-fnt">{t("action", "readingInline")}</span>
         )}
       </Fact>
-    </div>
-  );
-}
-
-function Fact({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="w-28 flex-none text-[11px] text-fg-fnt">{label}</span>
-      <span className="min-w-0">{children}</span>
     </div>
   );
 }
@@ -523,9 +480,10 @@ function ClusterRow({
             {actions
               .filter((a) => a.id !== "fence" && a.id !== "unfence")
               .map((action) => (
-                <ActionButton
+                <OperatorActionButton
                   key={action.id}
                   action={action}
+                  label={pgActionLabel(action, t)}
                   busy={busy}
                   onPick={setPending}
                 />
@@ -533,9 +491,10 @@ function ClusterRow({
             {actions
               .filter((a) => a.id === "fence" || a.id === "unfence")
               .map((action) => (
-                <ActionButton
+                <OperatorActionButton
                   key={`${action.id}:${action.instance}`}
                   action={action}
+                  label={pgActionLabel(action, t)}
                   busy={busy}
                   onPick={setPending}
                 />
@@ -563,47 +522,6 @@ function ClusterRow({
         onConfirm={() => pending && void run(pending)}
       />
     </>
-  );
-}
-
-function ActionButton({
-  action,
-  busy,
-  onPick,
-}: {
-  action: PgAction;
-  busy: boolean;
-  onPick: (action: PgAction) => void;
-}) {
-  const t = useT();
-  const label = action.instance
-    ? `${t("operators", action.label)} ${action.instance}`
-    : t("operators", action.label);
-  return (
-    <button
-      type="button"
-      disabled={busy || action.reason !== null}
-      onClick={() => onPick(action)}
-      title={
-        action.reason
-          ? t("operators", action.reason)
-          : t("operators", action.explains)
-      }
-      className={cn(
-        "rounded border border-hair px-1.5 py-0.5 transition-colors",
-        action.danger
-          ? "text-err hover:bg-err/10"
-          : "text-fg-mut hover:bg-hover hover:text-fg",
-        (busy || action.reason !== null) && "cursor-not-allowed opacity-50"
-      )}
-    >
-      {label}
-      {action.reason && (
-        <span className="ml-1 text-fg-fnt">
-          · {t("operators", action.reason)}
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -912,11 +830,17 @@ function OperatorTab({
         </p>
       ) : operator && !operator.controllerKnown ? (
         <p className="text-warn" title={operator.controllerReason ?? undefined}>
-          {t("operators", "controllerUnknown")}
+          {t("operators", "deploymentsUnreadable")}
         </p>
       ) : (
         <p className="text-warn">{t("operators", "controllerNotFound")}</p>
       )}
     </div>
   );
+}
+
+function pgActionLabel(action: PgAction, t: T): string {
+  return action.instance
+    ? `${t("operators", action.label)} ${action.instance}`
+    : t("operators", action.label);
 }

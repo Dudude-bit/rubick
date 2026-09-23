@@ -124,9 +124,14 @@ export function routingMap(
               ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
               : undefined
             : backing.stop
-              ? { text: t("readings", "mapZeroReady"), tone: "err" }
+              ? {
+                  text: t("count", "nReady", { n: 0 }),
+                  tone: "err",
+                }
               : {
-                  text: `${backing.ready + backing.draining} ready`,
+                  text: t("count", "nReady", {
+                    n: backing.ready + backing.draining,
+                  }),
                   tone: backing.ready === 0 ? "warn" : "mute",
                 },
         });
@@ -152,7 +157,7 @@ export function routingMap(
       // Without it the column is a list of names somebody still has to go and
       // look up one at a time, which is the errand a map is supposed to end.
       sub: [
-        `${group.routes.length} path${group.routes.length === 1 ? "" : "s"}`,
+        t("count", "paths", { n: group.routes.length }),
         at.length > 0 ? at.join(", ") : null,
       ]
         .filter(Boolean)
