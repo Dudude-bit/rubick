@@ -288,10 +288,8 @@ describe("what two revisions are compared on", () => {
       en.changes.unchangedTemplate,
       ru.changes.unchangedTemplate,
     ]) {
-      const said = line
-        .split(":")[1]
-        .split(",")
-        .map((word) => word.trim());
+      // By word, not by the catalogue's punctuation, which is a translator's.
+      const said = line.match(/[A-Za-z]+/g) ?? [];
       for (const field of named) expect(said).toContain(field);
     }
   });
