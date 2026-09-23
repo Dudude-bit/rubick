@@ -24,8 +24,12 @@ export type Verdict =
 
 type ParentKey = Pick<
   ParentRefInfo,
-  "group" | "kind" | "name" | "namespace" | "sectionName"
+  "group" | "kind" | "name" | "namespace" | "sectionName" | "port"
 >;
+
+/** An entry naming a different listener or port is another attachment's. */
+const fits = <V>(said: V | null | undefined, asked: V | null | undefined) =>
+  said == null || asked == null || said === asked;
 
 /**
  * The entries that answer for one parentRef. A status parentRef echoes the
@@ -44,11 +48,14 @@ export function statusesFor<E extends Pick<RouteParentStatusInfo, "parent">>(
       entry.parent.kind === parent.kind &&
       entry.parent.name === parent.name &&
       (entry.parent.namespace ?? route.namespace) ===
-        (parent.namespace ?? route.namespace)
+        (parent.namespace ?? route.namespace) &&
+      fits(entry.parent.sectionName, parent.sectionName) &&
+      fits(entry.parent.port, parent.port)
   );
   const exact = named.filter(
     (entry) =>
-      (entry.parent.sectionName ?? null) === (parent.sectionName ?? null)
+      (entry.parent.sectionName ?? null) === (parent.sectionName ?? null) &&
+      (entry.parent.port ?? null) === (parent.port ?? null)
   );
   return exact.length > 0 ? exact : named;
 }

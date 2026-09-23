@@ -168,12 +168,16 @@ impl RouteInfo {
                     && entry.parent.kind == parent.kind
                     && entry.parent.name == parent.name
                     && ns_of(&entry.parent.namespace) == ns_of(&parent.namespace)
+                    && fits(&entry.parent.section_name, &parent.section_name)
+                    && fits(&entry.parent.port, &parent.port)
             })
             .collect();
         let exact: Vec<&RouteParentStatusInfo> = named
             .iter()
             .copied()
-            .filter(|entry| entry.parent.section_name == parent.section_name)
+            .filter(|entry| {
+                entry.parent.section_name == parent.section_name && entry.parent.port == parent.port
+            })
             .collect();
         if exact.is_empty() {
             named
@@ -181,6 +185,11 @@ impl RouteInfo {
             exact
         }
     }
+}
+
+/// An entry naming a different listener or port is another attachment's.
+fn fits<T: PartialEq>(said: &Option<T>, asked: &Option<T>) -> bool {
+    said.is_none() || asked.is_none() || said == asked
 }
 
 /// One refusal decides, wherever it sits; True only when every entry says
