@@ -19,7 +19,7 @@
  * answers through the `service.routes` capability.
  */
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Box, GitBranch, Layers, Shield } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -30,22 +30,25 @@ import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { formatAge } from "@/lib/utils";
-import { conditionsOf, crdObjectsPath, getValueByPath } from "../kit";
+import {
+  conditionsOf,
+  crdObjectsPath,
+  getValueByPath,
+  troubleMark,
+} from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding,
   OutLink,
+  TroubleList,
   TroubleRow,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
@@ -151,14 +154,15 @@ export default function ArgoCdPage() {
     );
   }
 
-  const troubled = apps.filter((app) => app.worst !== null);
-
   const tabs: DetailTab[] = [
     {
       id: "applications",
       label: "Applications",
       glyph: viewGlyph(GitBranch),
-      mark: applicationsMark(t, apps, troubled.length),
+      mark: troubleMark(
+        apps.map((app) => app.worst),
+        (n, total) => t("count", "applicationsNeedAttention", { n, total })
+      ),
       content: (
         <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />
       ),
@@ -227,23 +231,6 @@ export default function ArgoCdPage() {
   );
 }
 
-function applicationsMark(
-  t: ReturnType<typeof useT>,
-  apps: ArgoApp[],
-  troubled: number
-): DetailTabMark | undefined {
-  if (apps.length === 0) return undefined;
-  if (troubled === 0) return countMark(apps.length);
-  const worst = apps.some((app) => app.worst === "err") ? "err" : "warn";
-  return severityMark(
-    worst,
-    t("count", "applicationsNeedAttention", {
-      n: troubled,
-      total: apps.length,
-    })
-  );
-}
-
 // --- applications -------------------------------------------------------
 
 function ApplicationsTab({
@@ -256,24 +243,17 @@ function ApplicationsTab({
   ui: string | null;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return apps;
-    return apps.filter(
-      (app) =>
-        app.name.toLowerCase().includes(needle) ||
-        app.project.toLowerCase().includes(needle) ||
-        destinationOf(app, t).toLowerCase().includes(needle) ||
-        app.sources.some((source) =>
-          source.repoUrl.toLowerCase().includes(needle)
-        ) ||
-        app.resources.some((resource) =>
-          resource.name.toLowerCase().includes(needle)
-        )
-    );
-  }, [apps, filter, t]);
+  // The destination is a sentence, so what matches follows the language.
+  const searchable = useCallback(
+    (app: ArgoApp) => [
+      app.name,
+      app.project,
+      destinationOf(app, t),
+      ...app.sources.map((source) => source.repoUrl),
+      ...app.resources.map((resource) => resource.name),
+    ],
+    [t]
+  );
 
   if (loading) {
     return (
@@ -296,54 +276,34 @@ function ApplicationsTab({
     );
   }
 
-  const broken = apps.filter((app) => app.worst === "err").length;
-  const worthALook = apps.filter((app) => app.worst === "warn").length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterByNameProjectRepoObject")}
-          label={t("action", "filterApplications")}
-        />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: apps.length,
-              })
-            : broken > 0
-              ? `${t("count", "failingAndFirst", { n: broken, total: apps.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-              : worthALook > 0
-                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: apps.length })}`
-                : t("empty", "allInSync", {
-                    count: t("readings", "kindCount", {
-                      n: apps.length,
-                      kind: "Application",
-                    }),
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noApplicationMatches")}
-        </p>
-      ) : (
-        shown.map((app, index) => (
-          <AppRow
-            key={`${app.namespace}/${app.name}`}
-            app={app}
-            ui={ui}
-            openByDefault={app.worst === "err" && broken <= AUTO_OPEN}
-            last={index === shown.length - 1}
-          />
-        ))
+    <TroubleList
+      items={apps}
+      severityOf={severityOfApp}
+      searchable={searchable}
+      filter={{
+        placeholder: t("action", "filterByNameProjectRepoObject"),
+        label: t("action", "filterApplications"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) => t("count", "failingAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingFailing"),
+        allWell: (n) =>
+          t("empty", "allInSync", {
+            count: t("readings", "kindCount", { n, kind: "Application" }),
+          }),
+      }}
+      noMatch={() => t("empty", "noApplicationMatches")}
+      keyOf={(app) => `${app.namespace}/${app.name}`}
+      renderRow={(app, { openByDefault, last }) => (
+        <AppRow app={app} ui={ui} openByDefault={openByDefault} last={last} />
       )}
-    </div>
+    />
   );
 }
+
+const severityOfApp = (app: ArgoApp) => app.worst;
 
 function AppRow({
   app,

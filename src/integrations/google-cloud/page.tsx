@@ -21,7 +21,7 @@
  */
 
 import { joinSayings } from "@/i18n/say";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
@@ -31,10 +31,10 @@ import {
   Cell,
   Chain,
   Column,
-  FilterBox,
   Finding,
-  TroubleRow,
   type Tone,
+  TroubleList,
+  TroubleRow,
 } from "../page-kit";
 import { backingFrom } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
@@ -67,7 +67,6 @@ export default function GkeIngressPage() {
   const t = useT();
   const sources = useIngressSources();
   const backing = useBacking();
-  const [filter, setFilter] = useState("");
 
   const joined = useMemo<GkeSources | null>(() => {
     if (!sources.data) return null;
@@ -82,22 +81,6 @@ export default function GkeIngressPage() {
     () => (sources.data ? ignoredByClassName(sources.data.ingresses) : []),
     [sources.data]
   );
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return hosts;
-    return hosts.filter(
-      (host) =>
-        (host.host ?? "").toLowerCase().includes(needle) ||
-        host.routes.some(
-          (route) =>
-            route.backend?.name.toLowerCase().includes(needle) ||
-            route.ingress.name.toLowerCase().includes(needle)
-        )
-    );
-  }, [hosts, filter]);
-
-  const broken = hosts.filter((host) => host.worst === "err").length;
 
   if (sources.error) {
     return (
@@ -162,15 +145,6 @@ export default function GkeIngressPage() {
       )}
 
       <Section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <FilterBox
-            value={filter}
-            onChange={setFilter}
-            placeholder={t("action", "filterHostsPlaceholder")}
-            label={t("action", "filterHosts")}
-          />
-        </div>
-
         {sources.isPending ? (
           <p className="text-xs text-fg-fnt">
             {t("empty", "readingIngresses")}
@@ -183,29 +157,40 @@ export default function GkeIngressPage() {
             <span className="font-mono">gce-internal</span>
             {t("empty", "gkeControllerServesNothing")}
           </p>
-        ) : shown.length === 0 ? (
-          <p className="text-[11.5px] text-fg-fnt">
-            {t("empty", "nothingMatches")}{" "}
-            <span className="font-mono">{filter}</span>.
-          </p>
         ) : (
-          <div className="flex flex-col">
-            {shown.map((host, index) => (
+          <TroubleList
+            items={hosts}
+            severityOf={severityOfHost}
+            searchable={searchableHost}
+            filter={{
+              placeholder: t("action", "filterHostsPlaceholder"),
+              label: t("action", "filterHosts"),
+            }}
+            autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(host, index) => host.host ?? `catch-all-${index}`}
+            renderRow={(host, { openByDefault, last, shown }) => (
               <HostRow
-                key={host.host ?? `catch-all-${index}`}
                 host={host}
                 sources={joined}
-                openByDefault={host.worst === "err" && broken <= AUTO_OPEN}
-                last={index === shown.length - 1}
-                alone={shown.length === 1}
+                openByDefault={openByDefault}
+                last={last}
+                alone={shown === 1}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </Section>
     </div>
   );
 }
+
+const severityOfHost = (host: GkeHost) => host.worst;
+
+const searchableHost = (host: GkeHost) => [
+  host.host,
+  ...host.routes.flatMap((route) => [route.backend?.name, route.ingress.name]),
+];
 
 /** The word at the right of a host line: what is true of it right now. */
 function hostState(

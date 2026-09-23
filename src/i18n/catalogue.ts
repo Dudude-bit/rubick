@@ -6080,7 +6080,6 @@ export const en = {
     ofN: "of {n}",
     nDecoded: "{n} decoded",
     nNotRead: "{n} not read",
-    brokenOfTotalFirst: "{n} of {total} broken, and first",
     worthALook: "{n} worth a look",
     worthALookOfTotal: "{n} of {total} worth a look",
     hostsAcrossNamespaces: {

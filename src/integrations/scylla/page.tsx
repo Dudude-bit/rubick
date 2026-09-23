@@ -10,10 +10,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { useNow } from "@/hooks/useNow";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -38,7 +36,8 @@ import {
   type ScyllaCluster,
   type ScyllaFinding,
 } from "./model";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
+import { troubleMark } from "../kit";
 
 export default function ScyllaPage() {
   const t = useT();
@@ -76,13 +75,15 @@ export default function ScyllaPage() {
     );
   }
 
-  const troubled = clusters.filter((c) => c.worst !== null);
   const tabs: DetailTab[] = [
     {
       id: "clusters",
       label: t("operators", "clustersTab"),
       glyph: viewGlyph(Layers),
-      mark: clustersMark(t, clusters, troubled.length),
+      mark: troubleMark(
+        clusters.map((cluster) => cluster.worst),
+        (n) => t("operators", "clustersNeedAttention", { n })
+      ),
       content: (
         <ClustersTab
           clusters={clusters}
@@ -136,20 +137,6 @@ export default function ScyllaPage() {
         }}
       />
     </div>
-  );
-}
-
-function clustersMark(
-  t: T,
-  clusters: ScyllaCluster[],
-  troubled: number
-): DetailTabMark | undefined {
-  if (clusters.length === 0) return undefined;
-  if (troubled === 0) return countMark(clusters.length);
-  const worst = clusters.some((c) => c.worst === "err") ? "err" : "warn";
-  return severityMark(
-    worst,
-    t("operators", "clustersNeedAttention", { n: troubled })
   );
 }
 

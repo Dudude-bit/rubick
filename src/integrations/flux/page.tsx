@@ -13,7 +13,6 @@
  * log, and both are linked from here.
  */
 
-import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Box, GitBranch, Layers } from "lucide-react";
 
@@ -22,20 +21,19 @@ import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { formatAge } from "@/lib/utils";
 import { gitRepoLink } from "../gitops";
+import { troubleMark } from "../kit";
 import {
   Chain,
   Cell,
   Column,
-  FilterBox,
   Finding,
   OutLink,
+  TroubleList,
   TroubleRow,
 } from "../page-kit";
 import {
@@ -91,14 +89,16 @@ export default function FluxPage() {
     );
   }
 
+  const needAttention = (n: number, total: number) =>
+    t("count", "needAttentionOfTotal", { n, total });
   const tabs: DetailTab[] = [
     {
       id: "reconcilers",
       label: t("nav", "reconcilers"),
       glyph: viewGlyph(Layers),
-      mark: markFor(
+      mark: troubleMark(
         reconcilers.map((entry) => entry.worst),
-        t
+        needAttention
       ),
       content: (
         <ReconcilersTab reconcilers={reconcilers} loading={picture.isPending} />
@@ -108,9 +108,9 @@ export default function FluxPage() {
       id: "sources",
       label: t("nav", "sources"),
       glyph: viewGlyph(GitBranch),
-      mark: markFor(
+      mark: troubleMark(
         sources.map((entry) => entry.worst),
-        t
+        needAttention
       ),
       content: <SourcesTab sources={sources} loading={picture.isPending} />,
     },
@@ -153,19 +153,6 @@ export default function FluxPage() {
   );
 }
 
-function markFor(
-  worsts: Array<"err" | "warn" | null>,
-  t: ReturnType<typeof useT>
-): DetailTabMark | undefined {
-  if (worsts.length === 0) return undefined;
-  const troubled = worsts.filter((worst) => worst !== null).length;
-  if (troubled === 0) return countMark(worsts.length);
-  return severityMark(
-    worsts.includes("err") ? "err" : "warn",
-    t("count", "needAttentionOfTotal", { n: troubled, total: worsts.length })
-  );
-}
-
 // --- reconcilers --------------------------------------------------------
 
 function ReconcilersTab({
@@ -176,19 +163,6 @@ function ReconcilersTab({
   loading: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
-
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (needle === "") return reconcilers;
-    return reconcilers.filter(
-      (reconciler) =>
-        reconciler.name.toLowerCase().includes(needle) ||
-        reconciler.namespace.toLowerCase().includes(needle) ||
-        reconciler.unit.toLowerCase().includes(needle) ||
-        (reconciler.sourceRef?.name ?? "").toLowerCase().includes(needle)
-    );
-  }, [reconcilers, filter]);
 
   if (loading) {
     return (
@@ -211,58 +185,43 @@ function ReconcilersTab({
     );
   }
 
-  const broken = reconcilers.filter(
-    (reconciler) => reconciler.worst === "err"
-  ).length;
-  const worthALook = reconcilers.filter(
-    (reconciler) => reconciler.worst === "warn"
-  ).length;
-
   return (
-    <div className="flex flex-col">
-      <div className="mb-1 flex items-center gap-3">
-        <FilterBox
-          value={filter}
-          onChange={setFilter}
-          placeholder={t("action", "filterReconcilersPlaceholder")}
-          label={t("action", "filterReconcilers")}
+    <TroubleList
+      items={reconcilers}
+      severityOf={severityOfReconciler}
+      searchable={searchableReconciler}
+      filter={{
+        placeholder: t("action", "filterReconcilersPlaceholder"),
+        label: t("action", "filterReconcilers"),
+      }}
+      autoOpen={{ when: "err", upTo: AUTO_OPEN }}
+      summary={{
+        brokenFirst: (n, total) =>
+          t("count", "notReconcilingAndFirst", { n, total }),
+        nothingBroken: t("empty", "nothingFailing"),
+        allWell: (n) => t("count", "reconcilersAllApplied", { n }),
+      }}
+      noMatch={() => t("empty", "noReconcilerMatches")}
+      keyOf={(reconciler) => `${reconciler.kind}/${reconciler.key}`}
+      renderRow={(reconciler, { openByDefault, last }) => (
+        <ReconcilerRow
+          reconciler={reconciler}
+          openByDefault={openByDefault}
+          last={last}
         />
-        <span className="text-[11px] text-fg-fnt">
-          {filter.trim() !== ""
-            ? t("count", "shownOfTotal", {
-                n: shown.length,
-                total: reconcilers.length,
-              })
-            : broken > 0
-              ? `${t("count", "notReconcilingAndFirst", { n: broken, total: reconcilers.length })}${
-                  worthALook > 0
-                    ? ` · ${t("count", "worthALook", { n: worthALook })}`
-                    : ""
-                }`
-              : worthALook > 0
-                ? `${t("empty", "nothingFailing")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: reconcilers.length })}`
-                : t("count", "reconcilersAllApplied", {
-                    n: reconcilers.length,
-                  })}
-        </span>
-      </div>
-      {shown.length === 0 ? (
-        <p className="py-6 text-xs text-fg-fnt">
-          {t("empty", "noReconcilerMatches")}
-        </p>
-      ) : (
-        shown.map((reconciler, index) => (
-          <ReconcilerRow
-            key={`${reconciler.kind}/${reconciler.key}`}
-            reconciler={reconciler}
-            openByDefault={reconciler.worst === "err" && broken <= AUTO_OPEN}
-            last={index === shown.length - 1}
-          />
-        ))
       )}
-    </div>
+    />
   );
 }
+
+const severityOfReconciler = (reconciler: FluxReconciler) => reconciler.worst;
+
+const searchableReconciler = (reconciler: FluxReconciler) => [
+  reconciler.name,
+  reconciler.namespace,
+  reconciler.unit,
+  reconciler.sourceRef?.name,
+];
 
 function ReconcilerRow({
   reconciler,

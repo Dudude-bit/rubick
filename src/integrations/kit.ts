@@ -13,6 +13,11 @@ import type {
   CustomResourceInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
+import {
+  countMark,
+  severityMark,
+  type DetailTabMark,
+} from "@/components/resources/detail-tab";
 import { getCustomResourceUrl } from "@/lib/navigation-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { CrdView } from "./registry";
@@ -184,4 +189,22 @@ export function getValueByPath(
   }
 
   return current;
+}
+
+/**
+ * A tab's mark for a list ordered by trouble: its count while nothing is
+ * wrong, the worst severity and how many need attention otherwise, nothing
+ * for an empty list. Eight tabs wrote this each for themselves.
+ */
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | null | undefined>,
+  needAttention: (n: number, total: number) => string
+): DetailTabMark | undefined {
+  if (worsts.length === 0) return undefined;
+  const troubled = worsts.filter(Boolean).length;
+  if (troubled === 0) return countMark(worsts.length);
+  return severityMark(
+    worsts.includes("err") ? "err" : "warn",
+    needAttention(troubled, worsts.length)
+  );
 }

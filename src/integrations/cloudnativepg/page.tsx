@@ -9,17 +9,20 @@ import { useToast } from "@/components/ui/use-toast";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import {
   countMark,
-  severityMark,
   viewGlyph,
   type DetailTab,
-  type DetailTabMark,
 } from "@/components/resources/detail-tab";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn, formatAge, formatSince } from "@/lib/utils";
 import type { CustomResourceInfo } from "@/generated/types";
-import { crdObjectPath, crdObjectsPath, getValueByPath } from "../kit";
+import {
+  crdObjectPath,
+  crdObjectsPath,
+  getValueByPath,
+  troubleMark,
+} from "../kit";
 import { Cell, Finding, TroubleRow } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
 import {
@@ -42,7 +45,7 @@ import {
   type PgFinding,
 } from "./model";
 import { useNow } from "@/hooks/useNow";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 
 /**
  * The words for a failed action. Two of them are this module's own sentinels
@@ -91,13 +94,15 @@ export default function CloudNativePgPage() {
     );
   }
 
-  const troubled = clusters.filter((c) => c.worst !== null);
   const tabs: DetailTab[] = [
     {
       id: "clusters",
       label: t("operators", "clustersTab"),
       glyph: viewGlyph(Database),
-      mark: clustersMark(t, clusters, troubled.length),
+      mark: troubleMark(
+        clusters.map((cluster) => cluster.worst),
+        (n) => t("operators", "clustersNeedAttention", { n })
+      ),
       content: (
         <ClustersTab
           clusters={clusters}
@@ -164,20 +169,6 @@ export default function CloudNativePgPage() {
         }}
       />
     </div>
-  );
-}
-
-function clustersMark(
-  t: T,
-  clusters: PgCluster[],
-  troubled: number
-): DetailTabMark | undefined {
-  if (clusters.length === 0) return undefined;
-  if (troubled === 0) return countMark(clusters.length);
-  const worst = clusters.some((c) => c.worst === "err") ? "err" : "warn";
-  return severityMark(
-    worst,
-    t("operators", "clustersNeedAttention", { n: troubled })
   );
 }
 
