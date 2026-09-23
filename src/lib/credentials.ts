@@ -26,9 +26,9 @@
 /**
  * The marker `Error::CredentialsExpired` puts at the front of its message.
  *
- * Errors cross the Tauri boundary as their `Display` string and nothing else —
- * `error_code()` is not serialised — so this prefix is the wire format, and it
- * is matched rather than the prose after it. Sniffing the API server's own
+ * An error crosses as `{ code, message }`, and this prefix at the front of
+ * the message is a wire format of its own: it is matched rather than the
+ * prose after it, and a message is all some callers have. Sniffing the API server's own
  * English is how `isRetryableError` came to read every Ingress error as a
  * network blip. Defined in `src-tauri/src/error.rs`.
  */

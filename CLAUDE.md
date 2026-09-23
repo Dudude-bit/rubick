@@ -153,6 +153,10 @@ Claims here are settled by running things, not by reasoning about them.
   `Error::KubeApi`; only 401 has its own variant.
 - Do not touch the text of `Error::CredentialsExpired` — the `CREDENTIALS_EXPIRED:`
   prefix _is_ the wire format the frontend matches on.
+- An `Error` crosses IPC as `{ code, message }`. Branch on `errorCode(error)`
+  on the frontend, never on words in the message: "not found" is also in a
+  refused list and a container with no previous run. A new variant needs its
+  code in `shared/error-codes.json`; both sides test against it.
 - Inside a long-running task, get the client per attempt from
   `state.client_manager`; a held `kube::Client` carries a token that expires.
 - A spawned operation that emits events waits on its subscribe gate, exposes a

@@ -7,7 +7,7 @@ import type {
   StreamLogConfig,
   StyledSegment,
 } from "@/generated/types";
-import { errorToShow } from "@/lib/error-utils";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import {
   listenForStreamFailures,
   type StreamFailure,
@@ -500,8 +500,7 @@ export function useLogStream({
                       container: source.container,
                       pod: source.pod,
                       kind:
-                        message.includes("not found") ||
-                        message.includes("NotFound")
+                        errorCode(err) === ERROR_CODES.NOT_FOUND
                           ? "gone"
                           : "broken",
                       message,

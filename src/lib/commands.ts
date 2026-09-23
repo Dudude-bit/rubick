@@ -60,6 +60,7 @@ function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
       if (isCredentialsExpired(message)) {
         credentialsExpired(expiryReason(message));
       }
+      // `cause` carries the backend's `{ code, message }`; `errorCode` reads it.
       throw new Error(`Tauri command '${name}' failed: ${message}`, {
         cause: error,
       });

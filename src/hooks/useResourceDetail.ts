@@ -24,7 +24,7 @@ import { useResourceYaml } from "./useResourceYaml";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
-import { errorToShow } from "@/lib/error-utils";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -236,10 +236,11 @@ export function useResourceDetail<T>(
 }
 
 /**
- * Check if error indicates resource not found
+ * Whether the object is gone, as the backend's code says — not a refused
+ * list, and not a container with no previous run, both of which read "not
+ * found" to a substring.
  */
 export function isResourceNotFoundError(error: Error | null | string): boolean {
   if (!error) return false;
-  const errorStr = String(error);
-  return errorStr.includes("not found") || errorStr.includes("NotFound");
+  return errorCode(error) === ERROR_CODES.NOT_FOUND;
 }
