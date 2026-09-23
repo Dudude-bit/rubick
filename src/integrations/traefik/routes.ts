@@ -63,13 +63,13 @@ export async function serviceRoutes(input: {
   const [sources, controller, services] = await Promise.all([
     fetchRouteSources(),
     fetchController().catch(() => null),
-    commands.listServices(null).catch(() => []),
+    commands.listServices(null).catch(() => null),
   ]);
   const entryPoints = controller?.entryPoints ?? [];
   const withServices = {
     ...sources,
     ...BACKING_NOT_READ,
-    services,
+    services: services ?? [],
     entryPoints,
   };
 
@@ -92,10 +92,14 @@ export async function serviceRoutes(input: {
     // The client-facing scheme first: a cloud load balancer terminating in
     // front of the proxy serves this host over TLS whatever entry point the
     // route itself binds — the inside hop is plaintext by arrangement.
+    // With the Services unread, what stands in front cannot be ruled out.
+    const own = routeIsSecure(route, entryPoints);
     const secure =
       terminatedUpstream(host, withServices) !== null
         ? true
-        : routeIsSecure(route, entryPoints);
+        : own === false && services === null
+          ? null
+          : own;
     const h2c = service.scheme === "h2c";
     // Only this file knows which API group serves the CRD; a core kind
     // names itself. On the source so a consumer can draw a real reference,
