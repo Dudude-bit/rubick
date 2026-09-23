@@ -1,7 +1,8 @@
 //! The `#[ignore]`d harnesses that need a cluster, in one binary: as separate
 //! crates every `cargo test` linked eighteen of them to run none. Pick one
-//! with a filter (`live_drain::`); running several at once, add
-//! `--test-threads=1`, since some change the cluster.
+//! with a filter (`live_checks::`); running several at once, add
+//! `--test-threads=1`, since some change the cluster. A harness whose tests
+//! need different scenes says so in its header — `live_drain` does.
 
 mod cross_cluster_search;
 mod live_checks;

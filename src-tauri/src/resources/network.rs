@@ -629,6 +629,9 @@ pub fn selected_count<'a, P: kube::Resource + 'a>(
     selector: Option<&LabelSelector>,
     pods: impl IntoIterator<Item = &'a P>,
 ) -> Option<usize> {
+    // Whether it can be built is the selector's alone: with no pods to test,
+    // the fold below would never ask and would call it zero.
+    Selector::Query(selector).matches(&std::collections::BTreeMap::new())?;
     pods.into_iter().try_fold(0, |n, pod| {
         Selector::Query(selector)
             .matches(pod.labels())
@@ -795,6 +798,12 @@ mod network_policy_tests {
         }))];
         let pods = [pod("np-test", &[("app", "api")])];
         assert_eq!(joined_to_pods(&policies, Some(&pods))[0].selected, None);
+        let none: [k8s_openapi::api::core::v1::Pod; 0] = [];
+        assert_eq!(
+            joined_to_pods(&policies, Some(&none))[0].selected,
+            None,
+            "a namespace with no pods does not make it countable"
+        );
     }
 
     /// The count the page exists for, and the one it must never invent. A

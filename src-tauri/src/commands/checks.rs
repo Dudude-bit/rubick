@@ -398,7 +398,7 @@ fn copy_name(pod: &str) -> String {
     let suffix = format!("-check-{secs}");
     let keep = 63usize.saturating_sub(suffix.len());
     let base: String = pod.chars().take(keep).collect();
-    format!("{}{suffix}", base.trim_end_matches('-'))
+    format!("{}{suffix}", base.trim_end_matches(['-', '.']))
 }
 
 /// A readiness condition nothing ever sets, so the copy is never Ready.
@@ -784,6 +784,18 @@ mod tests {
         assert!(name.len() <= 63);
         assert!(crate::validation::validate_dns_label(&name).is_ok());
         assert!(name.contains("-check-"));
+    }
+
+    /// A pod name may carry dots, and one cut just after a dot left `a.-check-…`:
+    /// a segment starting with `-`, which the API refuses, so the copy never ran.
+    #[test]
+    fn a_copy_name_cut_at_a_dot_is_still_a_name() {
+        let dotted = format!("{}.internal", "a".repeat(45));
+        let name = copy_name(&dotted);
+        assert!(
+            crate::validation::validate_dns_subdomain(&name).is_ok(),
+            "{name}"
+        );
     }
 
     /// A pod name may run to 253 characters now that it is checked as one,

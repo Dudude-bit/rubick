@@ -189,8 +189,10 @@ pub async fn save_pod_log(
         "{pod_name}-{container}{}",
         if previous { "-previous" } else { "" }
     );
-    let path = crate::logs::text::unused_path(&dir, &stem, "log");
-    tokio::fs::write(&path, crate::logs::text::log_text(&lines)).await?;
+    let (path, mut file) = crate::logs::text::create_unused(&dir, &stem, "log").await?;
+    tokio::io::AsyncWriteExt::write_all(&mut file, crate::logs::text::log_text(&lines).as_bytes())
+        .await?;
+    tokio::io::AsyncWriteExt::flush(&mut file).await?;
     Ok(path.to_string_lossy().into_owned())
 }
 

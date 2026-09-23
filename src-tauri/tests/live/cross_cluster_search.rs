@@ -89,10 +89,18 @@ async fn fan_out_reports_every_cluster() {
     let mut terminal = 0usize;
     let expected = handle.targets.iter().filter(|t| t.is_active()).count();
 
-    while terminal < expected && started.elapsed() < Duration::from_secs(40) {
-        let Ok(Ok(event)) = tokio::time::timeout(Duration::from_secs(5), events.recv()).await
-        else {
-            break;
+    // The whole budget, not a quiet spell: an unreachable context can take
+    // longer than any gap to say anything.
+    let deadline = Duration::from_secs(40);
+    while terminal < expected && started.elapsed() < deadline {
+        let remaining = deadline.saturating_sub(started.elapsed());
+        let event = match tokio::time::timeout(remaining, events.recv()).await {
+            Ok(Ok(event)) => event,
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(missed))) => {
+                println!("lagged: {missed} events dropped, a status among them perhaps");
+                continue;
+            }
+            _ => break,
         };
         match event {
             AppEvent::SearchHits {

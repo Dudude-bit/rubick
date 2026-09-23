@@ -24,6 +24,10 @@ pub(super) fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
 ///
 /// `seen` is shared across the pods of one Service so that each pod states
 /// the `ReplicaSet` that made it while the hop above it is walked once.
+///
+/// A hop that could not be read ends the walk named unread: the page would
+/// otherwise say nothing is above it, and an autoscaler on the Deployment
+/// there would drop off the pod's page.
 pub(super) async fn owner_chain(
     ctx: &ResourceContext,
     ns: &str,
@@ -31,7 +35,7 @@ pub(super) async fn owner_chain(
     owners: Vec<OwnerReference>,
     seen: &mut HashSet<String>,
     out: &mut Neighbourhood,
-) {
+) -> Result<()> {
     let mut child = child;
     let mut owners = owners;
 
@@ -55,8 +59,13 @@ pub(super) async fn owner_chain(
         if !seen.insert(controller.uid.clone()) {
             break;
         }
-        let Some(next) = fetch_owners(ctx, &controller.kind, &controller.name).await else {
-            break;
+        let next = match fetch_owners(ctx, &controller.kind, &controller.name).await? {
+            Above::Owners(next) => next,
+            Above::Nothing => break,
+            Above::Unread(unread) => {
+                out.unread(unread);
+                break;
+            }
         };
         child = ObjectRef::new(
             &controller.kind,
@@ -66,6 +75,16 @@ pub(super) async fn owner_chain(
         );
         owners = next;
     }
+    Ok(())
+}
+
+/// What is above one hop of the chain.
+pub(super) enum Above {
+    /// The walk ends: a top, or an owner gone since the child named it.
+    Nothing,
+    Owners(Vec<OwnerReference>),
+    /// The owner could not be read, so what is above it is unknown.
+    Unread(UnexploredKind),
 }
 
 /// The owner references of the only two kinds that have any.
@@ -73,25 +92,34 @@ pub(super) async fn owner_chain(
 /// A Deployment, a `StatefulSet`, a `DaemonSet` and a `CronJob` are tops; fetching
 /// them would buy nothing, so the walk ends there rather than spending a
 /// request to learn that.
-pub(super) async fn fetch_owners(
-    ctx: &ResourceContext,
-    kind: &str,
-    name: &str,
-) -> Option<Vec<OwnerReference>> {
+pub(super) async fn fetch_owners(ctx: &ResourceContext, kind: &str, name: &str) -> Result<Above> {
     match kind {
-        "ReplicaSet" => ctx
-            .namespaced_api::<ReplicaSet>()
-            .get(name)
-            .await
-            .ok()
-            .map(|rs| rs.owner_references().to_vec()),
-        "Job" => ctx
-            .namespaced_api::<Job>()
-            .get(name)
-            .await
-            .ok()
-            .map(|job| job.owner_references().to_vec()),
-        _ => None,
+        "ReplicaSet" => {
+            let got = ctx.namespaced_api::<ReplicaSet>().get(name).await;
+            above(got, kind, "apps/v1")
+        }
+        "Job" => above(
+            ctx.namespaced_api::<Job>().get(name).await,
+            kind,
+            "batch/v1",
+        ),
+        _ => Ok(Above::Nothing),
+    }
+}
+
+/// An expired session ends the call, as every other read here does.
+fn above<K: kube::Resource>(got: kube::Result<K>, kind: &str, version: &str) -> Result<Above> {
+    match got {
+        Ok(owner) => Ok(Above::Owners(owner.owner_references().to_vec())),
+        Err(kube::Error::Api(status)) if status.code == 404 => Ok(Above::Nothing),
+        Err(err) => match Error::from(err) {
+            expired @ Error::CredentialsExpired(_) => Err(expired),
+            other => Ok(Above::Unread(UnexploredKind::unanswered(
+                kind,
+                version,
+                &other.to_string(),
+            ))),
+        },
     }
 }
 
@@ -139,5 +167,65 @@ mod ownership_tests {
                 "{kind} is not in a namespace"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod walk_tests {
+    use super::*;
+    use crate::client::served::test_server::{failure, server};
+
+    const PODS: &str = "/api/v1/namespaces/shop/pods";
+    const SET: &str = "/apis/apps/v1/namespaces/shop/replicasets/web-7d9";
+
+    fn pods() -> String {
+        let pod = serde_json::json!({
+            "metadata": {
+                "name": "web-7d9-x", "namespace": "shop",
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-7d9",
+                    "uid": "rs-uid", "controller": true,
+                }],
+            },
+        });
+        serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [pod] })
+            .to_string()
+    }
+
+    async fn pod_page(set: (u16, String)) -> Result<ResourceConnections> {
+        let (client, _) = server(vec![(PODS, 200, pods()), (SET, set.0, set.1)]).await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        connections_of(&ctx, "Pod", "web-7d9-x", None).await
+    }
+
+    /// Would say nothing is above the `ReplicaSet` for a token refused
+    /// `get replicasets`, and drop the Deployment's autoscaler from the page.
+    #[tokio::test]
+    async fn a_refused_owner_is_named_unread() {
+        let page = pod_page(failure(403, "Forbidden")).await.expect("a page");
+        let set = page
+            .not_looked_at
+            .iter()
+            .find(|entry| entry.kind == "ReplicaSet")
+            .expect("the refused owner is named");
+        assert!(matches!(
+            &set.why,
+            crate::resources::Unread::Unanswered { version, .. } if version == "apps/v1"
+        ));
+    }
+
+    /// An owner deleted since the pod named it ends the walk, and is not a
+    /// read that failed.
+    #[tokio::test]
+    async fn an_owner_gone_is_the_top_of_the_walk() {
+        let page = pod_page(failure(404, "NotFound")).await.expect("a page");
+        assert!(page.not_looked_at.iter().all(|e| e.kind != "ReplicaSet"));
+    }
+
+    /// Would leave an expired session as one owner "not looked at".
+    #[tokio::test]
+    async fn an_expired_session_on_the_owner_ends_the_call() {
+        let page = pod_page(failure(401, "Unauthorized")).await;
+        assert!(matches!(page, Err(Error::CredentialsExpired(_))));
     }
 }

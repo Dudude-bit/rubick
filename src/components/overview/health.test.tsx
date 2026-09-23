@@ -56,7 +56,7 @@ describe("the overview's two event panels", () => {
           nodes={[]}
           nodesKnown={true}
         />
-        <WarningsPanel warnings={[warning]} />
+        <WarningsPanel warnings={[warning]} known />
       </>
     );
 
@@ -68,11 +68,28 @@ describe("the overview's two event panels", () => {
   it("offers the object a warning group is about", () => {
     /** The row already printed `Deployment/meshed-demo`; it was the one
      *  naming of an object on this screen that went nowhere. */
-    wrap(<WarningsPanel warnings={[warning]} />);
+    wrap(<WarningsPanel warnings={[warning]} known />);
 
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
     ).toHaveAttribute("href", "/deployments/k8s-gui-test/meshed-demo");
+  });
+
+  it("says the warnings are unknown when an events list failed", () => {
+    /** A refused events list drew no panel at all, and a scope where one
+     *  namespace refused showed the others' warnings as the whole. */
+    const { container } = wrap(<WarningsPanel warnings={[]} known={false} />);
+    expect(container).toHaveTextContent(
+      "Not every events list could be read, so warnings may be missing here."
+    );
+    wrap(<WarningsPanel warnings={[warning]} known={false} />);
+    expect(screen.getAllByText(/Not every events list/)).toHaveLength(2);
+    expect(screen.getByText("ScalingReplicaSet")).toBeInTheDocument();
+  });
+
+  it("draws nothing for warnings read and none found", () => {
+    const { container } = wrap(<WarningsPanel warnings={[]} known />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("still renders a group whose event named no object", () => {
@@ -83,6 +100,7 @@ describe("the overview's two event panels", () => {
         warnings={[
           { ...warning, objectKind: null, objectName: null, namespace: null },
         ]}
+        known
       />
     );
 

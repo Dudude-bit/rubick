@@ -34,12 +34,14 @@ pub(super) struct Snapshot {
     pub(super) legacy: Read<Endpoints>,
     /// The namespace's Gateway API routes, all five kinds in one list —
     /// empty where the caller brought no detection, or the cluster serves
-    /// none of them.
+    /// none of them. A kind whose list failed is in `gateway_unread`.
     pub(super) gateway_routes: Vec<crate::resources::RouteInfo>,
     /// Every Gateway in the cluster, unscoped: a route in this namespace
     /// ordinarily attaches to a Gateway in another one, and a
     /// namespace-scoped list would call every such parent missing.
     pub(super) gateways: Option<Vec<crate::resources::GatewayInfo>>,
+    /// The Gateway API kinds whose list failed.
+    pub(super) gateway_unread: Vec<UnexploredKind>,
 }
 
 /// Snapshots shared by the calls that arrive together.
@@ -285,27 +287,28 @@ impl Snapshot {
             budgets_api.list(&params),
             slices_api.list(&params),
         );
-        let slices = read(slices);
+        let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
         // fallback for a cluster that serves no slices, and paying a round
         // trip for it on every call to every other cluster would be the cost
         // this feature is supposed to bring down.
         let legacy = match slices {
             Ok(_) => Err("the slices answered".to_string()),
-            Err(_) => read(ctx.namespaced_api::<Endpoints>().list(&params).await),
+            Err(_) => read_live(ctx.namespaced_api::<Endpoints>().list(&params).await)?,
         };
-        let (gateway_routes, gateways) = gateway_lists(ctx, gateway).await;
+        let (gateway_routes, gateways, gateway_unread) = gateway_lists(ctx, gateway).await?;
         Ok(Self {
-            pods: read(pods),
-            services: read(services),
-            ingresses: read(ingresses),
-            claims: read(claims),
-            autoscalers: read(autoscalers),
-            budgets: read(budgets),
+            pods: read_live(pods)?,
+            services: read_live(services)?,
+            ingresses: read_live(ingresses)?,
+            claims: read_live(claims)?,
+            autoscalers: read_live(autoscalers)?,
+            budgets: read_live(budgets)?,
             slices,
             legacy,
             gateway_routes,
             gateways,
+            gateway_unread,
         })
     }
 
@@ -319,6 +322,7 @@ impl Snapshot {
             || self.autoscalers.is_err()
             || self.budgets.is_err()
             || (self.slices.is_err() && self.legacy.is_err())
+            || !self.gateway_unread.is_empty()
     }
 
     /// The items, or none where the read did not answer.
@@ -371,8 +375,8 @@ impl Snapshot {
 ///
 /// The detection is the frontend's cached one-scan-per-cluster answer —
 /// passed in rather than re-derived here, so a workload page costs no CRD
-/// list. A route kind whose list fails is read as absent for this call; the
-/// page draws the chain it has rather than failing the whole neighbourhood.
+/// list. A kind whose list fails is named unread, and the page draws the
+/// chain it has rather than failing the whole neighbourhood.
 ///
 /// The gateways come back as `None` when that list was never read — no
 /// detection, the kind not served, or the list refused. "The API server does
@@ -381,14 +385,15 @@ impl Snapshot {
 pub(super) async fn gateway_lists(
     ctx: &ResourceContext,
     gateway: Option<&crate::resources::GatewayApiDetection>,
-) -> (
+) -> Result<(
     Vec<crate::resources::RouteInfo>,
     Option<Vec<crate::resources::GatewayInfo>>,
-) {
+    Vec<UnexploredKind>,
+)> {
     use crate::resources::{GatewayInfo, ListenerSetInfo, RouteInfo};
 
     let Some(detection) = gateway.filter(|d| d.installed) else {
-        return (Vec::new(), None);
+        return Ok((Vec::new(), None, Vec::new()));
     };
 
     let params = ListParams::default();
@@ -410,24 +415,35 @@ pub(super) async fn gateway_lists(
     // found none are different facts, and the graph reports a route's
     // Gateway missing on the strength of the second.
     let mut sets: Option<Vec<ListenerSetInfo>> = None;
+    let mut unread = Vec::new();
     for (kind, api_resource, list) in futures::future::join_all(fetches).await {
-        let Ok(list) = list else { continue };
+        let items = match read_live(list)? {
+            Ok(items) => items,
+            Err(said) => {
+                unread.push(UnexploredKind::unanswered(
+                    &kind,
+                    &api_resource.api_version,
+                    &said,
+                ));
+                continue;
+            }
+        };
         match kind.as_str() {
             "HTTPRoute" | "GRPCRoute" | "TLSRoute" | "TCPRoute" | "UDPRoute" => {
-                routes.extend(list.items.into_iter().map(|obj| {
+                routes.extend(items.into_iter().map(|obj| {
                     RouteInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
                 }));
             }
             "Gateway" => {
                 gateways
                     .get_or_insert_with(Vec::new)
-                    .extend(list.items.into_iter().map(|obj| {
+                    .extend(items.into_iter().map(|obj| {
                         GatewayInfo::read(&crate::commands::gateway::with_types(obj, &api_resource))
                     }));
             }
             "ListenerSet" => {
                 sets.get_or_insert_with(Vec::new)
-                    .extend(list.items.into_iter().map(|obj| {
+                    .extend(items.into_iter().map(|obj| {
                         ListenerSetInfo::read(&crate::commands::gateway::with_types(
                             obj,
                             &api_resource,
@@ -445,7 +461,7 @@ pub(super) async fn gateway_lists(
             gateway.merge_listener_sets(sets.as_deref());
         }
     }
-    (routes, gateways)
+    Ok((routes, gateways, unread))
 }
 
 #[cfg(test)]
@@ -597,6 +613,7 @@ mod refused_list_tests {
             legacy: Err(REFUSED.to_string()),
             gateways: None,
             gateway_routes: Vec::new(),
+            gateway_unread: Vec::new(),
         }
     }
 
@@ -707,6 +724,7 @@ mod refused_list_tests {
             legacy: Err("the slices answered".to_string()),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_unread: Vec::new(),
         };
 
         let unread = unanswered(&snapshot);
@@ -774,7 +792,7 @@ mod read_live_tests {
 #[cfg(test)]
 mod shared_tests {
     use super::*;
-    use crate::client::served::test_server::{answering, server};
+    use crate::client::served::test_server::{answering, failure, server};
 
     const NS: &str = "shop";
 
@@ -917,6 +935,66 @@ mod shared_tests {
             .is_ok_and(Vec::is_empty));
         assert_eq!(b.expect("b is there").subject.name, "b");
         assert_eq!(hits.lock().unwrap().get(SERVICES), Some(&2));
+    }
+
+    /// Every list answering empty, `path` as given.
+    fn with(path: &'static str, answer: (u16, String)) -> Vec<(&'static str, u16, String)> {
+        let mut table = routes((200, empty()));
+        table.retain(|(route, _, _)| *route != path);
+        table.push((path, answer.0, answer.1));
+        table
+    }
+
+    /// Would leave a session the cluster no longer accepts as one list "not
+    /// looked at": the sign-in is asked for on `CREDENTIALS_EXPIRED` alone.
+    #[tokio::test]
+    async fn an_expired_session_on_any_list_ends_the_read() {
+        let (client, _) = server(with(SERVICES, failure(401, "Unauthorized"))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+
+        match Snapshot::of(&ctx, None).await {
+            Err(Error::CredentialsExpired(_)) => {}
+            Err(other) => panic!("a 401 is the session over, not {other:?}"),
+            Ok(_) => panic!("a 401 on the Services list read as a snapshot"),
+        }
+    }
+
+    /// Would draw a route chain with no routes and nothing unread for a token
+    /// refused `list httproutes`: an empty `notLookedAt` says every kind was
+    /// read, and the snapshot was then handed to the next caller too.
+    #[tokio::test]
+    async fn a_refused_route_kind_is_named_unread() {
+        let (client, _) = server(with(
+            "/apis/gateway.networking.k8s.io/v1/httproutes",
+            failure(403, "Forbidden"),
+        ))
+        .await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let detection = crate::resources::GatewayApiDetection {
+            installed: true,
+            bundle_version: None,
+            channel: None,
+            mixed_bundle: false,
+            kinds: vec![crate::resources::ServedGatewayKind {
+                kind: "HTTPRoute".into(),
+                plural: "httproutes".into(),
+                versions: vec!["v1".into()],
+                read_version: "v1".into(),
+            }],
+        };
+
+        let snapshot = Snapshot::of(&ctx, Some(&detection)).await.expect("a read");
+        assert!(snapshot.any_unread());
+        let unread = unanswered(&snapshot);
+        let route = unread
+            .iter()
+            .find(|entry| entry.kind == "HTTPRoute")
+            .expect("the refused route kind is named");
+        assert!(matches!(
+            &route.why,
+            crate::resources::Unread::Unanswered { version, .. }
+                if version == "gateway.networking.k8s.io/v1"
+        ));
     }
 
     /// Only a read that began before the call is asked again: one of its own

@@ -1,9 +1,17 @@
 //! Manual proof harness for draining a node against a real cluster. Ignored
 //! by default — it needs a kubeconfig and the specimens.
 //!
+//! One test per run, never `live_drain::`: all three drain at once, one
+//! needs the budget another deletes, and the third cordons the control plane.
+//!
 //! ```text
-//! K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain K8S_GUI_DRAIN_NODE=rubick-drain-worker \
-//!   cargo test --test live live_drain:: -- --ignored --nocapture
+//! export K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain K8S_GUI_DRAIN_NODE=rubick-drain-worker
+//! cargo test --test live live_drain::a_spent_budget_keeps_its_pods -- --ignored --exact --nocapture
+//! kubectl uncordon rubick-drain-worker && kubectl delete pdb held-pdb -n draintest
+//! kubectl wait -n draintest --for=condition=Ready pod --all --timeout=120s
+//! cargo test --test live live_drain::drained_means_the_pods_are_gone -- --ignored --exact --nocapture
+//! cargo test --test live live_drain::a_control_plane_drain_leaves_the_static_pods_alone -- --ignored --exact --nocapture
+//! kubectl uncordon rubick-drain-worker rubick-drain-control-plane
 //! ```
 //!
 //! The specimens (`kind` cluster, two nodes, everything pinned to the worker):
@@ -28,11 +36,7 @@
 //!
 //! `a_spent_budget_keeps_its_pods` wants the budget in place;
 //! `drained_means_the_pods_are_gone` drains the node completely, which
-//! `held-pdb` would forbid for ever:
-//!
-//! ```text
-//! kubectl delete pdb held-pdb -n draintest
-//! ```
+//! `held-pdb` would forbid for ever — hence the order above.
 //!
 //! Set up:
 //!

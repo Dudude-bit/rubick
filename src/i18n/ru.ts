@@ -3984,6 +3984,8 @@ export const ru: Catalogue = {
       "запросы к доступному · metrics-server нет, текущее потребление неизвестно",
     warningEvents: "События-предупреждения",
     warningEventsScope: "за последний час, по причинам",
+    warningEventsUnread:
+      "Не все списки событий удалось прочитать — части предупреждений здесь может не быть.",
     noCluster: "нет кластера",
     missingBadge: "отсутствует",
     missingTabHint:

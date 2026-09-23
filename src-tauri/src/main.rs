@@ -715,4 +715,64 @@ mod tests {
              build time: {missing:?}"
         );
     }
+
+    /// Would let a live harness document a command that runs nothing:
+    /// libtest exits 0 when its filter matches no test, so the command reads
+    /// as a pass. `live_connections::listenerset` was one.
+    #[test]
+    fn every_command_a_live_harness_documents_runs_a_test() {
+        const RUN: &str = "cargo test --test live ";
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/live");
+        let mut tests = Vec::new();
+        let mut commands = Vec::new();
+        for entry in fs::read_dir(&dir).expect("the live harnesses") {
+            let path = entry.expect("an entry").path();
+            let module = path.file_stem().expect("a name").to_string_lossy();
+            let source = fs::read_to_string(&path).expect("a harness");
+            let mut marked = false;
+            for line in source.lines().map(str::trim) {
+                if line.starts_with("#[tokio::test") || line.starts_with("#[test") {
+                    marked = true;
+                } else if let Some(rest) =
+                    line.strip_prefix("async fn ").or(line.strip_prefix("fn "))
+                {
+                    if std::mem::take(&mut marked) {
+                        let name = rest.split('(').next().unwrap_or_default();
+                        tests.push(format!("{module}::{name}"));
+                    }
+                }
+            }
+            // A command may run on past a `\` into the next doc line.
+            let prose = source
+                .lines()
+                .map(|line| line.trim().trim_start_matches('/').trim_start_matches('!'))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .replace("\\\n", " ");
+            for line in prose.lines() {
+                if let Some((_, args)) = line.split_once(RUN) {
+                    let args: Vec<&str> = args.split_whitespace().collect();
+                    let filter = args.first().copied().unwrap_or_default().to_string();
+                    commands.push((module.to_string(), filter, args.contains(&"--exact")));
+                }
+            }
+        }
+        assert!(tests.len() > 40, "found only {} tests", tests.len());
+        assert!(
+            commands.len() > 20,
+            "found only {} commands",
+            commands.len()
+        );
+
+        for (module, filter, exact) in commands {
+            let runs = tests.iter().any(|test| {
+                if exact {
+                    *test == filter
+                } else {
+                    test.contains(&filter)
+                }
+            });
+            assert!(runs, "{module} documents `{filter}`, which runs no test");
+        }
+    }
 }
