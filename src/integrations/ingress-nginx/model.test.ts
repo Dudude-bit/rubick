@@ -18,12 +18,14 @@ const NGINX_CLASS: IngressClassSummary = {
   name: "nginx",
   controller: "k8s.io/ingress-nginx",
   isDefault: false,
+  parameters: null,
 };
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
   controller: "traefik.io/ingress-controller",
   isDefault: true,
+  parameters: null,
 };
 
 function ingress(

@@ -286,6 +286,7 @@ describe("TrafficChain", () => {
               name: "traefik",
               controller: "traefik.io/ingress-controller",
               isDefault: false,
+              parameters: null,
             },
           ],
         }}

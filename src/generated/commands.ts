@@ -81,6 +81,7 @@ import type {
   NodeFilters,
   NodeInfo,
   NodeMetricsResponse,
+  ObjectMetadata,
   PerfSnapshot,
   PersistentVolumeClaimInfo,
   PersistentVolumeInfo,
@@ -785,6 +786,20 @@ export async function getManifest(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("get_manifest", { kind, apiVersion, name, namespace });
+}
+
+export async function getObjectMetadata(
+  kind: string,
+  apiVersion: string,
+  name: string,
+  namespace: string | null
+): Promise<ObjectMetadata> {
+  return invoke<ObjectMetadata>("get_object_metadata", {
+    kind,
+    apiVersion,
+    name,
+    namespace,
+  });
 }
 
 export async function locateBinaries(

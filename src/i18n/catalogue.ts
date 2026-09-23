@@ -4810,6 +4810,12 @@ export const en = {
     azureIdentityFinding4: "has no",
     azureIdentityFinding5:
       " annotation, so the token is for no identity at all. Every call it makes to Azure comes back 401 and nothing in Kubernetes says why.",
+    azureUnreadNote:
+      "What is drawn below is what the other reads answered; this one is not in it, and nothing here says what it would have shown.",
+    azureAccountUnreadTitle:
+      "{pod} asks for an identity, and its ServiceAccount could not be read",
+    azureAccountUnread:
+      "Whether {account} in {namespace} names an Azure identity is not known: {reason}",
     readingIdentities: "Reading the identities…",
     noPodCarries: "No pod in this cluster carries",
     nothingFederatingToAzure:
