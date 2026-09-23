@@ -22,6 +22,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import {
+  backingFrom,
   ROUTING_STALE,
   useBackingLists,
   useIntegrationPages,
@@ -395,11 +396,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
           // empty class list reads "class does not exist", which would
           // put a red dot on a healthy cluster for one render.
           topologyKnown: gatewaysAll.data !== undefined && classesSettled,
-          backing: {
-            services: backing.data?.services ?? [],
-            published: backing.data?.published ?? [],
-            backingKnown: backing.data !== undefined,
-          },
+          backing: backingFrom(backing.data, backing.error),
         },
         t
       ),
@@ -408,6 +405,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       gatewaysAll.data,
       classes.data,
       backing.data,
+      backing.error,
       classesSettled,
       t,
     ]

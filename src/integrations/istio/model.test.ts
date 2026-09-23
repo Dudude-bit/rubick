@@ -101,6 +101,8 @@ function sources(objects: {
     destinationRules: objects.destinationRules ?? [rule],
     services: [service("shop")],
     published: [published("shop", 3)],
+    backingKnown: true,
+    backingError: null,
   };
 }
 

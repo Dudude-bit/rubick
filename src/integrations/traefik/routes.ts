@@ -24,6 +24,7 @@ import {
   type EntryPoint,
   type TraefikRoute,
 } from "./model";
+import { BACKING_NOT_READ } from "../ingress";
 
 /**
  * Whether this route is served over TLS, or `null` where the objects do not
@@ -67,8 +68,8 @@ export async function serviceRoutes(input: {
   const entryPoints = controller?.entryPoints ?? [];
   const withServices = {
     ...sources,
+    ...BACKING_NOT_READ,
     services,
-    published: [],
     entryPoints,
   };
 
@@ -151,8 +152,7 @@ export async function proxyBehind(input: {
   const hosts = new Set(
     allRoutes({
       ...sources,
-      services: [],
-      published: [],
+      ...BACKING_NOT_READ,
       entryPoints: [],
     }).flatMap((route) => (route.clause.host ? [route.clause.host] : []))
   );

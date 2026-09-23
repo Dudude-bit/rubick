@@ -113,14 +113,16 @@ export function routingMap(
           id: serviceId,
           label: service.name,
           sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
-          tone: backing.stop ? "err" : "ok",
+          tone: !backing.known ? "unknown" : backing.stop ? "err" : "ok",
           object: {
             kind: ResourceType.Service,
             name: service.name,
             namespace: service.namespace,
           },
           tag: !backing.known
-            ? undefined
+            ? backing.error
+              ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+              : undefined
             : backing.stop
               ? { text: t("readings", "mapZeroReady"), tone: "err" }
               : {
@@ -132,7 +134,13 @@ export function routingMap(
       link(
         id,
         serviceId,
-        backing.stop ? "err" : tone === "err" ? "warn" : "ok"
+        !backing.known
+          ? "unknown"
+          : backing.stop
+            ? "err"
+            : tone === "err"
+              ? "warn"
+              : "ok"
       );
     }
 

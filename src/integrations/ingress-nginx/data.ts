@@ -17,7 +17,7 @@
 
 import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -27,14 +27,16 @@ import type {
   TlsCertificate,
 } from "@/generated/types";
 import {
+  BACKING_NOT_READ,
   expandEnv,
+  listOrRefusal,
   ROUTING_STALE,
   useBackingLists,
   workloadArgs,
   workloadEnv,
-  type BackingLists,
+  type BackingSources,
 } from "../ingress";
-import { allRoutes, type NginxRoute, type NginxSources } from "./model";
+import { allRoutes, type NginxSources } from "./model";
 
 /** The label every ingress-nginx release puts on its own workload. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=ingress-nginx";
@@ -65,7 +67,7 @@ export function countHosts(sources: RouteSources): number {
   // ignore it would be a parameter that exists to be discarded.
   const noWords: T = () => "";
   const hosts = new Set(
-    allRoutes({ ...sources, services: [], published: [] }, noWords).map(
+    allRoutes({ ...sources, ...BACKING_NOT_READ }, noWords).map(
       (route) => route.host ?? ""
     )
   );
@@ -128,21 +130,25 @@ async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const deployments = await commands
-    .listDeployments({
+  const deployments = await listOrRefusal(
+    commands.listDeployments({
       namespace: null,
       labelSelector: CONTROLLER_SELECTOR,
       fieldSelector: null,
       limit: null,
     })
-    .catch(() => []);
+  );
 
-  const deployment = deployments[0];
+  const deployment = deployments.items[0];
   if (!deployment) {
-    return none({
-      key: "nginxNoController",
-      values: { selector: CONTROLLER_SELECTOR },
-    });
+    return none(
+      deployments.error
+        ? { key: "controllerUnread", values: { why: deployments.error } }
+        : {
+            key: "nginxNoController",
+            values: { selector: CONTROLLER_SELECTOR },
+          }
+    );
   }
 
   const workload = {
@@ -245,54 +251,10 @@ export function useController() {
   });
 }
 
-/** The certificates behind the TLS Secrets these routes are served under. */
-export function useRouteCertificates(routes: NginxRoute[] | undefined) {
-  const context = useClusterStore((state) => state.currentContext);
-  const byNamespace = new Map<string, string[]>();
-  for (const route of routes ?? []) {
-    if (!route.tlsSecret) continue;
-    const namespace = route.source.namespace;
-    const names = byNamespace.get(namespace) ?? [];
-    if (!names.includes(route.tlsSecret)) names.push(route.tlsSecret);
-    byNamespace.set(namespace, names);
-  }
-  const batches = [...byNamespace.entries()].map(([namespace, names]) => ({
-    namespace,
-    names: [...names].sort(),
-  }));
-
-  const results = useQueries({
-    queries: batches.map((batch) => ({
-      queryKey: [
-        context,
-        "tls-certificates",
-        batch.namespace,
-        batch.names.join(","),
-      ],
-      queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
-      staleTime: ROUTING_STALE,
-    })),
-  });
-
-  const certificates = new Map<string, TlsCertificate>();
-  results.forEach((result, index) => {
-    for (const read of result.data ?? []) {
-      certificates.set(`${batches[index].namespace}/${read.secretName}`, read);
-    }
-  });
-  return certificates;
-}
-
 export function sourcesFrom(
   routeSources: RouteSources,
-  backing: BackingLists | undefined,
+  backing: BackingSources,
   certificates: Map<string, TlsCertificate>
 ): NginxSources {
-  return {
-    ...routeSources,
-    services: backing?.services ?? [],
-    published: backing?.published ?? [],
-    backingKnown: backing !== undefined,
-    certificates,
-  };
+  return { ...routeSources, ...backing, certificates };
 }

@@ -35,7 +35,12 @@ const sources = () => ({
   gateways: scene.gateways,
   classes: scene.classes,
   topologyKnown: true,
-  backing: { services: [], published: [], backingKnown: false },
+  backing: {
+    services: [],
+    published: [],
+    backingKnown: false,
+    backingError: null,
+  },
 });
 
 describe("a route through a ListenerSet, as the cluster reports it", () => {

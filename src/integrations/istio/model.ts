@@ -25,13 +25,13 @@ import type {
   ChainStop,
   CustomResourceInfo,
   ServiceInfo,
-  ServicePublished,
 } from "@/generated/types";
 import {
   backingOf as backingOfBackend,
   SEVERITY_RANK as RANK,
   worstOf,
   type Backing,
+  type BackingSources,
 } from "../ingress";
 import { readMatches, type MatchReading } from "./match";
 
@@ -40,13 +40,10 @@ export type { Backing } from "../ingress";
 /** The reserved gateway name meaning "traffic already inside the mesh". */
 export const MESH = "mesh";
 
-export interface IstioSources {
+export interface IstioSources extends BackingSources {
   gateways: CustomResourceInfo[];
   virtualServices: CustomResourceInfo[];
   destinationRules: CustomResourceInfo[];
-  services: ServiceInfo[];
-  published: ServicePublished[];
-  backingKnown?: boolean;
 }
 
 /** One `route[]` entry: where a share of the requests goes. */
@@ -347,7 +344,7 @@ export function subsetsFor(
 export function backingOf(
   destination: Destination,
   from: IstioRoute["source"],
-  sources: Pick<IstioSources, "services" | "published" | "backingKnown">
+  sources: BackingSources
 ): Backing {
   // Nothing is claimed about a host outside the cluster: it has no
   // endpoints here by design, and the app cannot see inside it.

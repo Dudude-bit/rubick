@@ -40,7 +40,12 @@ import {
 } from "@/hooks/useGatewayRoutes";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { ROUTING_STALE, RoutingMap, useBackingLists } from "@/integrations";
+import {
+  backingFrom,
+  ROUTING_STALE,
+  RoutingMap,
+  useBackingLists,
+} from "@/integrations";
 import { commands } from "@/lib/commands";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { KIND_TONE } from "@/lib/route-kind-tone";
@@ -331,15 +336,19 @@ export function GatewayRoutesList() {
           topologyKnown:
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
-          backing: {
-            services: backing.data?.services ?? [],
-            published: backing.data?.published ?? [],
-            backingKnown: backing.data !== undefined,
-          },
+          backing: backingFrom(backing.data, backing.error),
         },
         t
       ),
-    [filtered, gateways.data, classes.data, backing.data, served, t]
+    [
+      filtered,
+      gateways.data,
+      classes.data,
+      backing.data,
+      backing.error,
+      served,
+      t,
+    ]
   );
 
   // The map's outer columns: pods and deployments, read only while the
@@ -379,7 +388,7 @@ export function GatewayRoutesList() {
       gatewayTopology(
         gateways.data,
         filtered,
-        backing.data ? { ...backing.data, backingKnown: true } : undefined,
+        backing.data ? backingFrom(backing.data, null) : undefined,
         t,
         pods.data && deployments.data
           ? { pods: pods.data, deployments: deployments.data }

@@ -2884,6 +2884,10 @@ export const ru: Catalogue = {
     certSelfSigned: "самоподписанный — за него никто выше не поручился",
     certIssuedBy: "выпущен: {name}",
     certIssuerNotNamed: "издатель не указан",
+    controllerUnread:
+      "Установлен ли контроллер, неизвестно: кластер отказал в списках, где его можно найти — {why}",
+    argoNoWorkloads:
+      "Ничто в этом кластере не несёт {selector}, поэтому собственные рабочие нагрузки Argo найти не удалось. Его Applications по-прежнему читаются из API-сервера.",
     traefikNoController:
       "Ничто в этом кластере не несёт {selector}, поэтому собственную конфигурацию прокси прочитать не удалось.",
     traefikManifestUnreadable:
@@ -5567,6 +5571,8 @@ export const ru: Catalogue = {
     shownRawBelow: "ниже показано как есть",
     apiObjectNotService: "объект API, а не Service",
     readingEndpoints: "читаем Endpoints",
+    endpointsUnread: "Endpoints не прочитаны",
+    behindUnread: "что за ними, прочитать не удалось — {why}",
     servedUnder: "сертификат из",
     rawNginxConfig: "Сырая конфигурация nginx, вставляется как есть",
     shownAsWritten: "Показано как написано",

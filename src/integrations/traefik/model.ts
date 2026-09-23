@@ -22,7 +22,6 @@
 import { covers, type Expiry } from "@/lib/certificates";
 import type {
   CustomResourceInfo,
-  ServicePublished,
   IngressClassSummary,
   IngressInfo,
   ChainStop,
@@ -38,6 +37,7 @@ import {
   tlsSecretFor,
   worstOf,
   type Backing,
+  type BackingSources,
   type SecretRef,
 } from "../ingress";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
@@ -178,22 +178,11 @@ export interface HostGroup {
   worst: "err" | "warn" | null;
 }
 
-export interface TraefikSources {
+export interface TraefikSources extends BackingSources {
   ingresses: IngressInfo[];
   ingressRoutes: CustomResourceInfo[];
   classes: IngressClassSummary[];
-  services: ServiceInfo[];
-  published: ServicePublished[];
   middlewares: CustomResourceInfo[];
-  /**
-   * Whether {@link services} and {@link published} have actually been read.
-   *
-   * They arrive in a second request, and an empty list means "not yet" as
-   * readily as it means "none". Without this the page spends the second
-   * between the two answers telling the reader that every backend in the
-   * cluster is missing, which is a worse lie than saying nothing.
-   */
-  backingKnown?: boolean;
   /** Empty where the controller's own configuration could not be read. */
   entryPoints: EntryPoint[];
   /** Certificates already read off the TLS Secrets, by `namespace/name`. */
@@ -527,7 +516,7 @@ export function boundEntryPoints(
 
 export function backingOf(
   route: TraefikRoute,
-  sources: Pick<TraefikSources, "services" | "published" | "backingKnown">
+  sources: BackingSources
 ): Backing {
   // Nothing is claimed about a backend that is not a Kubernetes object: it
   // has no endpoints by design, and the app cannot see inside it.

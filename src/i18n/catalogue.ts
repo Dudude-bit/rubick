@@ -2734,6 +2734,10 @@ export const en = {
     certSelfSigned: "self-signed — nothing above it vouched for this",
     certIssuedBy: "issued by {name}",
     certIssuerNotNamed: "issuer not named",
+    controllerUnread:
+      "Whether the controller is installed is unknown: the cluster refused the lists it would be found in — {why}",
+    argoNoWorkloads:
+      "Nothing in this cluster carries {selector}, so Argo's own workloads could not be found. Its Applications are still read from the API server.",
     traefikNoController:
       "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
     traefikManifestUnreadable:
@@ -5141,6 +5145,8 @@ export const en = {
     shownRawBelow: "shown raw below",
     apiObjectNotService: "an API object, not a Service",
     readingEndpoints: "reading endpoints",
+    endpointsUnread: "endpoints not read",
+    behindUnread: "what is behind them could not be read — {why}",
     servedUnder: "served under",
     rawNginxConfig: "Raw nginx configuration, injected verbatim",
     shownAsWritten: "Shown as written",

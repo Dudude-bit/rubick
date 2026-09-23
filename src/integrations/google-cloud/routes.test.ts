@@ -105,6 +105,7 @@ const sources = (overrides: Partial<GkeSources> = {}): GkeSources => ({
   services: [service()],
   published: [],
   backingKnown: false,
+  backingError: null,
   ...overrides,
 });
 

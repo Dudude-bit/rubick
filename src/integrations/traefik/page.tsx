@@ -25,10 +25,16 @@
 
 import { sayWords } from "@/i18n/say";
 import { Fragment, useCallback, useMemo, type ReactNode } from "react";
-import type { ServiceStop } from "../ingress";
+import {
+  BACKING_NOT_READ,
+  backingFrom,
+  useRouteCertificates,
+  type ServiceStop,
+} from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -46,6 +52,7 @@ import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import { crdObjectPath } from "../kit";
 import {
+  BackingUnread,
   Chain,
   Cell,
   Column,
@@ -60,7 +67,6 @@ import {
   servedGroupName,
   useBacking,
   useController,
-  useRouteCertificates,
   useRouteSources,
   sourcesFrom,
   type ControllerInfo,
@@ -94,17 +100,7 @@ export default function TraefikPage() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "routes";
-  const filter = params.get("q") ?? "";
-
-  // In the URL rather than in a `useState`, so a node on the map can hand the
-  // Routes tab a host and land the reader on that host's chain — and so the
-  // narrowed view survives a reload and can be handed to somebody else.
-  const setFilter = (next: string) => {
-    const updated = new URLSearchParams(params);
-    if (next.trim() === "") updated.delete("q");
-    else updated.set("q", next);
-    setParams(updated, { replace: true });
-  };
+  const [filter, setFilter] = useSearchParam("q");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -115,8 +111,7 @@ export default function TraefikPage() {
       routeSources.data
         ? allRoutes({
             ...routeSources.data,
-            services: [],
-            published: [],
+            ...BACKING_NOT_READ,
             entryPoints: [],
           })
         : [],
@@ -184,31 +179,30 @@ export default function TraefikPage() {
     [fronting.routes, frontTls]
   );
 
-  const sources: TraefikSources | null = routeSources.data
-    ? {
-        ...sourcesFrom(
-          routeSources.data,
-          backing.data,
-          controller.data,
-          certificates
-        ),
-        upstreamTls,
-      }
-    : null;
-
-  const groups = useMemo(
-    () => (sources ? hostGroups(sources) : []),
-    // `sources` is rebuilt every render; the inputs it is built from are what
-    // actually change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const sources: TraefikSources | null = useMemo(
+    () =>
+      routeSources.data
+        ? {
+            ...sourcesFrom(
+              routeSources.data,
+              backingFrom(backing.data, backing.error),
+              controller.data,
+              certificates
+            ),
+            upstreamTls,
+          }
+        : null,
     [
       routeSources.data,
       backing.data,
+      backing.error,
       controller.data,
-      certificates.size,
+      certificates,
       upstreamTls,
     ]
   );
+
+  const groups = useMemo(() => (sources ? hostGroups(sources) : []), [sources]);
 
   if (routeSources.error) {
     return (
@@ -389,6 +383,7 @@ function MapTab({
             : t("count", "hostsNoneWithProblem", { n: groups.length })}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
+      <BackingUnread error={sources?.backingError ?? null} />
       <RoutingMap data={data} />
       <p className="text-[11px] text-fg-fnt">
         {t("empty", "traefikRestOnNodeHint")}
@@ -484,6 +479,7 @@ function RoutesTab({
             {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
+        <BackingUnread error={sources?.backingError ?? null} />
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
@@ -701,7 +697,9 @@ function PathRow({
           : !route.service?.kubernetes
             ? t("empty", "insideTheProxy")
             : backing && !backing.known
-              ? "…"
+              ? backing.error
+                ? t("empty", "unknownLower")
+                : "…"
               : backing?.stop
                 ? "—"
                 : backing
@@ -879,7 +877,15 @@ function HostChain({
               {t("empty", "notPods")}
             </Cell>
           ) : !backing.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}

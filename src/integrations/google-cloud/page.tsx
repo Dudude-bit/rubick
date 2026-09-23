@@ -36,6 +36,7 @@ import {
   TroubleRow,
   type Tone,
 } from "../page-kit";
+import { backingFrom } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
 import { useT } from "@/i18n/useT";
 import {
@@ -72,11 +73,9 @@ export default function GkeIngressPage() {
     if (!sources.data) return null;
     return {
       ...sources.data,
-      services: backing.data?.services ?? [],
-      published: backing.data?.published ?? [],
-      backingKnown: backing.data !== undefined,
+      ...backingFrom(backing.data, backing.error),
     };
-  }, [sources.data, backing.data]);
+  }, [sources.data, backing.data, backing.error]);
 
   const hosts = useMemo(() => (joined ? hostsOf(joined) : []), [joined]);
   const ignored = useMemo(

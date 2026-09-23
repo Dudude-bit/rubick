@@ -114,6 +114,8 @@ function sources(ingresses: IngressInfo[]): NginxSources {
     classes: [NGINX_CLASS, TRAEFIK_CLASS],
     services: [service("web"), service("web-next")],
     published: [published("web", 2), published("web-next", 1)],
+    backingKnown: true,
+    backingError: null,
   };
 }
 
