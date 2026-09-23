@@ -3,7 +3,12 @@ import { Network } from "lucide-react";
 import { defineVendor, pageCount } from "../registry";
 import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
-import { countUnrestricted, fetchPicture, PICTURE_KEY } from "./data";
+import {
+  countUnrestricted,
+  coverageTone,
+  fetchPicture,
+  PICTURE_KEY,
+} from "./data";
 import { facts } from "./facts";
 
 /**
@@ -41,6 +46,7 @@ export default defineVendor({
       queryKey: PICTURE_KEY,
       queryFn: fetchPicture,
       select: countUnrestricted,
+      tone: coverageTone,
       staleTime: ROUTING_STALE,
     }),
     load: () => import("./page"),

@@ -69,6 +69,21 @@ export function countUnrestricted(picture: Picture): number {
   ).length;
 }
 
+/**
+ * The dot beside that number. An endpoint a policy might select, and whose
+ * rules could not be read, is left out of the count — which is only honest
+ * if something beside it says so.
+ */
+export function coverageTone(picture: Picture): "unchecked" | null {
+  return coverageOf(
+    picture.endpoints,
+    picture.policies,
+    picture.clusterwide
+  ).some((one) => one.verdict === "cannotSay")
+    ? "unchecked"
+    : null;
+}
+
 export function usePicture() {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
