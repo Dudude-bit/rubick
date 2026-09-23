@@ -61,6 +61,9 @@ pub struct AppState {
     /// the same way `search_manager` owns a fan-out.
     pub drain_manager: Arc<crate::drain::DrainManager>,
 
+    /// Neighbourhood snapshots shared by the calls that arrive together.
+    pub neighbourhoods: crate::commands::connections::Snapshots,
+
     /// Credential renewals waiting on a deadline, one per connected context.
     pub renew_manager: Arc<crate::auth::renew::RenewManager>,
 
@@ -123,6 +126,7 @@ impl AppState {
             client_manager,
             search_manager,
             drain_manager,
+            neighbourhoods: crate::commands::connections::Snapshots::default(),
             renew_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
