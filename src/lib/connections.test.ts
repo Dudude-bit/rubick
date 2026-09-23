@@ -101,6 +101,7 @@ const publishes = (
   endpoints: [],
   whole: true,
   unpublished: [],
+  stop: null,
   ...counts,
   ...extra,
 });

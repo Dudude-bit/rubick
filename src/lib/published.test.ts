@@ -52,6 +52,7 @@ const published = (over: Partial<ServicePublished> = {}): ServicePublished => ({
   endpoints: [],
   whole: true,
   unpublished: [],
+  stop: null,
   ...over,
 });
 

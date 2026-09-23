@@ -256,7 +256,19 @@ describe("the gateway topology map", () => {
           createdAt: null,
         },
       ],
-      published: [],
+      published: [
+        {
+          service: { kind: "Service", name: "promo", namespace: "gwtest" },
+          ready: 0,
+          draining: 0,
+          notReady: 0,
+          stop: {
+            reason: "publishesNothingYet",
+            service: { kind: "Service", name: "promo", namespace: "gwtest" },
+            selector: "app=promo",
+          },
+        },
+      ],
       backingKnown: true,
     };
     const data = gatewayTopology(
@@ -375,6 +387,7 @@ describe("the gateway topology map", () => {
           ],
           whole: true,
           unpublished: [],
+          stop: null,
         },
       ],
       backingKnown: true,

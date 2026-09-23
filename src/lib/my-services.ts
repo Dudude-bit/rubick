@@ -19,6 +19,7 @@ import type {
 } from "@/generated/types";
 import type { ChainPath, ChainHop } from "@/lib/connections";
 import type { JournalEntry } from "@/lib/changes";
+import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
 import type { RefreshRate } from "@/lib/refresh";
 
@@ -255,8 +256,12 @@ function publishedEntry(published: ServicePublished): EntryPoint {
     detail: published.ports
       .map((port) => (port.name === null ? `${port.port}` : port.name))
       .join(", "),
-    serving: published.ready > 0,
-    servingKnown: published.whole,
+    serving: servingCount(published) > 0,
+    // `whole` is about the one address a summary keeps, not the counts. The
+    // one answer that is nobody's read is a deduction from pods that matched
+    // nothing — possibly because nobody could list them.
+    servingKnown:
+      published.source !== "podReadiness" || endpointCount(published) > 0,
   };
 }
 

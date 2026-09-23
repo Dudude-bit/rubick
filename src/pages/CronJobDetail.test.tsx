@@ -41,6 +41,13 @@ function buildCronJob(
     initContainers: [],
     serviceAccountName: null,
     podResources: { requests: {}, limits: {} },
+    replica: {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    },
     labels: {},
     annotations: {},
     ownerReferences: [],

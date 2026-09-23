@@ -40,6 +40,8 @@ const published = (
     ports: [],
     endpoints: [],
     whole: true,
+    unpublished: [],
+    stop: null,
     ...overrides,
   }) as unknown as ServicePublished;
 
@@ -55,48 +57,45 @@ const from = { kind: "HTTPRoute", name: "web", namespace: "shop" };
 
 describe("what a route's backend is doing", () => {
   /**
-   * This function holds the endpoints and no pod list, so it cannot tell a
-   * selector matching nothing from pods that carry it and have no address
-   * yet — Pending, unscheduled, still creating. The endpoint controller
-   * writes nothing for those, so both look identical from here.
-   *
-   * It used to answer `selectsNothing`, which renders as "No pod carries
-   * app=promo" and sends the reader to check their labels for a problem that
-   * is in the scheduler. Rust, which does list the pods, says "N pods carry
-   * this, none ready" about the very same Service.
+   * Where the path stops is Rust's `service_stop`, the rule the connections
+   * graph uses; this page only carries it. Deriving it again here from the
+   * counts is how the two screens came to disagree about one Service.
    */
-  it("does not claim a selector matches nothing when it never looked at pods", () => {
+  it("carries the stop the backend decided, and none where it decided none", () => {
+    const stop = {
+      reason: "publishesNothingYet" as const,
+      service: published().service,
+      selector: "app=promo",
+    };
+    const backend = { name: "app", namespace: "shop" };
+
+    expect(
+      backingOf(backend, from, sources({ published: [published({ stop })] }))
+        .stop
+    ).toEqual(stop);
+    expect(
+      backingOf(
+        backend,
+        from,
+        sources({ published: [published({ draining: 1 })] })
+      ).stop
+    ).toBeNull();
+  });
+
+  /** A route naming a Service the list does not hold: the one stop only the
+   *  route's own page can see, because only it knows who asked. */
+  it("names a backend Service the cluster does not have", () => {
     const answer = backingOf(
-      { name: "app", namespace: "shop" },
+      { name: "gone", namespace: "shop" },
       from,
       sources()
     );
 
-    expect(answer.stop?.reason).toBe("publishesNothingYet");
-  });
-
-  /** A draining address is still the one kube-proxy sends to, so a Service
-   *  down to one is a restart rather than an outage — no stop at all. */
-  it("calls a Service with a draining address still serving", () => {
-    const answer = backingOf(
-      { name: "app", namespace: "shop" },
-      from,
-      sources({ published: [published({ draining: 1 })] })
-    );
-
-    expect(answer.stop).toBeNull();
-  });
-
-  /** Endpoints written with no port resolved: the pods are Ready and every
-   *  request gets a 502. That one this function can name. */
-  it("still names the case where addresses exist and no port resolved", () => {
-    const answer = backingOf(
-      { name: "app", namespace: "shop" },
-      from,
-      sources({ published: [published({ unrouted: 2 })] })
-    );
-
-    expect(answer.stop?.reason).toBe("publishesNothing");
+    expect(answer.stop).toMatchObject({
+      reason: "backendMissing",
+      ingress: { kind: "HTTPRoute", name: "web" },
+      service: { name: "gone", existence: "missing" },
+    });
   });
 
   /** Nothing has been read yet: an empty list means "not yet" as readily as

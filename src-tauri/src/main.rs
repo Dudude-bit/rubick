@@ -438,6 +438,7 @@ fn main() {
             commands::network::delete_ingress,
             commands::network::list_endpoints,
             commands::network::list_service_endpoints,
+            commands::network::list_service_backing,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Gateway API commands

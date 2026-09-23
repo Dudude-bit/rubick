@@ -171,12 +171,6 @@ function ref(kind: string, name: string, namespace: string): ObjectRef {
   return { kind, name, namespace, existence: "present", facts: null };
 }
 
-function selectorOf(service: ServiceInfo): string {
-  return Object.entries(service.selector)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(",");
-}
-
 /**
  * What a route's backend publishes, and where the path stops when it does.
  *
@@ -223,93 +217,24 @@ export function backingOf(
     };
   }
 
-  // An ExternalName Service is a DNS alias with no pods by design, so it has
-  // no endpoints and is not a stop. Saying it were would be the page calling
-  // a working configuration broken.
-  if (service.type === "ExternalName") {
-    return {
-      service,
-      ready: 0,
-      draining: 0,
-      notReady: 0,
-      stop: null,
-      known,
-      error,
-    };
-  }
-
-  // What the Service publishes, not what its pods look like. The same answer
-  // the traffic chain's last hop is built from, so a route reading as broken
-  // here reads as broken there, in the same words.
+  // What the Service publishes, and where a path into it stops, by Rust's
+  // `service_stop` — the rule the connections graph uses, so a route reading
+  // as broken here reads as broken there, in the same words.
   const published = sources.published.find(
     (candidate) =>
       candidate.service.name === service.name &&
       candidate.service.namespace === service.namespace
   );
-  const ready = published?.ready ?? 0;
-  const draining = published?.draining ?? 0;
-  const notReady = published?.notReady ?? 0;
-  const state = { service, ready, draining, notReady, known, error };
-
-  // A draining address is still the one kube-proxy sends to when nothing
-  // ready is left, so a Service down to one is a restart rather than a 502.
-  if (ready + draining > 0) return { ...state, stop: null };
-
-  const selector = selectorOf(service);
-  // A Service with no selector has its endpoints managed by hand. Whether
-  // that is broken is not something these objects say, so nothing is claimed.
-  if (selector === "") return { ...state, stop: null };
-
-  const at = ref("Service", service.name, service.namespace);
-  const unrouted = published?.unrouted ?? 0;
-  // Addresses the endpoint controller wrote into a slice carrying no port at
-  // all: it resolved none of the Service's named `targetPort`s, so it wrote
-  // the pods down and gave kube-proxy nothing to send to. The pods are Ready
-  // and this host answers every request with a 502.
-  if (unrouted > 0) {
-    return {
-      ...state,
-      stop: {
-        reason: "publishesNothing",
-        service: at,
-        selector,
-        pods: unrouted,
-        readyPods: unrouted,
-        unnamedPorts: namedTargetPorts(service),
-      },
-    };
-  }
-  if (notReady > 0) {
-    return {
-      ...state,
-      stop: { reason: "noneReady", service: at, selector, pods: notReady },
-    };
-  }
+  const stop = published?.stop ?? null;
   return {
-    ...state,
-    // Not `selectsNothing`: this function holds the endpoints and no pod
-    // list, so it cannot tell a selector matching nothing from pods that are
-    // Pending or still creating — they carry the selector and have no
-    // address, so the controller writes no endpoint for them. Rust, which
-    // does list the pods, says "N pods carry this, none ready" about the very
-    // same Service; saying "no pod carries it" here sent the reader to check
-    // their labels for a problem that was in the scheduler.
-    stop: { reason: "publishesNothingYet", service: at, selector },
+    service,
+    ready: published?.ready ?? 0,
+    draining: published?.draining ?? 0,
+    notReady: published?.notReady ?? 0,
+    stop: stop && "service" in stop ? stop : null,
+    known,
+    error,
   };
-}
-
-/**
- * The `targetPort`s this Service asks for by name.
- *
- * Only reached where the controller already wrote a portless slice, which is
- * it saying it resolved none of them — so naming them here reports what the
- * cluster did rather than guessing at it. A numeric `targetPort` needs no
- * container to declare anything and can never be the thing that is missing.
- */
-function namedTargetPorts(service: ServiceInfo): string[] {
-  return service.ports
-    .map((port) => port.targetPort)
-    .filter((target) => target !== "" && !/^\d+$/.test(target));
 }
 
 /** The two lists every routing page needs to say what is behind a route. */
@@ -333,13 +258,7 @@ export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "routing", "backing"],
-    queryFn: async (): Promise<BackingLists> => {
-      const [services, published] = await Promise.all([
-        commands.listServices(null),
-        commands.listServiceEndpoints(null),
-      ]);
-      return { services, published };
-    },
+    queryFn: (): Promise<BackingLists> => commands.listServiceBacking(null),
     staleTime: ROUTING_STALE,
     enabled,
   });
