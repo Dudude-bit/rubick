@@ -548,7 +548,11 @@ mod tests {
     /// miss asks again reached search and CRD pages and never these.
     #[tokio::test]
     async fn a_listener_set_added_to_a_group_already_read_is_found_on_the_next_miss() {
-        let served = ServedIndex::aged(Duration::from_mins(1), Duration::from_millis(100));
+        let served = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_millis(100),
+            Duration::from_secs(30),
+        );
         let (state, _) = connected(served, |path, nth| match path {
             "/apis" => (200, groups("v1", &["v1"])),
             V1 if nth == 1 => (200, resources("v1", &[("gateways", "Gateway", true)])),
@@ -584,18 +588,47 @@ mod tests {
         );
     }
 
+    /// Would re-read Gateway API discovery on every Gateway poll of a
+    /// cluster without `ListenerSet` — most of them: the probe's miss was
+    /// kept 5 s, where a Gateway's hit is kept a minute.
+    #[tokio::test]
+    async fn an_absent_listener_set_is_not_asked_for_on_every_poll() {
+        let (state, hits) = connected(ServedIndex::scaled(300), |path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            V1 => (200, resources("v1", &[("gateways", "Gateway", true)])),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+
+        assert!(super::listener_sets(&state).await.is_none());
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(super::listener_sets(&state).await.is_none());
+        assert_eq!(asked(), Some(1), "a poll well inside the floor");
+
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(super::listener_sets(&state).await.is_none());
+        assert_eq!(asked(), Some(2), "and asked again once past it");
+    }
+
     /// Would keep a Gateway or route page on "not found" until discovery aged
     /// out, when the version it was read at stopped being served: a 404 from
     /// a get, a delete or a namespace's list sends discovery back.
     #[tokio::test]
     async fn a_404_on_a_gateway_kind_has_discovery_read_again() {
-        let (state, hits) = connected(ServedIndex::default(), |path, _| match path {
+        let served = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        );
+        let (state, hits) = connected(served, |path, _| match path {
             "/apis" => (200, groups("v1", &["v1"])),
             V1 => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
             _ => failure(404, "NotFound"),
         })
         .await;
         let asked = || hits.lock().unwrap().get("/apis").copied();
+        let past_the_floor = || tokio::time::sleep(Duration::from_millis(150));
         let get = || {
             super::on_served(
                 &state,
@@ -607,14 +640,16 @@ mod tests {
         };
 
         assert!(get().await.is_err());
+        past_the_floor().await;
+        assert!(get().await.is_err());
         assert_eq!(asked(), Some(1));
         assert!(get().await.is_err());
         assert_eq!(asked(), Some(2), "a get's 404 sent discovery back");
 
+        past_the_floor().await;
         let api_resource = super::served_api_resource("HTTPRoute", &state)
             .await
             .expect("served");
-        assert_eq!(asked(), Some(3));
         let client = (*state.current_client().expect("client")).clone();
         let listed = super::read_in(
             &state,
@@ -625,7 +660,8 @@ mod tests {
         )
         .await;
         assert!(listed.is_err());
+        assert_eq!(asked(), Some(2));
         assert!(get().await.is_err());
-        assert_eq!(asked(), Some(4), "a namespace's 404 sent it back too");
+        assert_eq!(asked(), Some(3), "a namespace's 404 sent it back too");
     }
 }

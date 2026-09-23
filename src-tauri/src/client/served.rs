@@ -43,14 +43,18 @@ struct Discovered {
 
 type Entry = Arc<OnceCell<Discovered>>;
 
-/// How long an answer that holds what was asked for is kept. A CRD installed
-/// or upgraded under a connected window shows up within this.
+/// How long an answer that holds what was asked for is kept. A kind added to
+/// a group in use, or a version dropped from it, shows up within this.
 const FRESH_FOR: Duration = Duration::from_secs(60);
 
-/// How old an answer that lacks what was asked for may be before it is asked
-/// again: kubectl's rule, a miss re-reads discovery. The floor keeps a
-/// keystroke's search over kinds nobody installed from asking on every key.
-const MISS_AFTER: Duration = Duration::from_secs(5);
+/// How long an answer that lacks what was asked for is kept. A miss is what
+/// most clusters say about most kinds, asked on every poll; a group in use
+/// is read again by its hits anyway, so this paces only groups nobody has.
+const MISSING_FOR: Duration = Duration::from_mins(2);
+
+/// How old an answer has to be for a 404 to send it back: a deleted
+/// object's open page 404s on every poll.
+const RECHECK_AFTER: Duration = Duration::from_secs(30);
 
 /// Discovered groups by (context, group).
 ///
@@ -62,7 +66,8 @@ const MISS_AFTER: Duration = Duration::from_secs(5);
 pub struct ServedIndex {
     groups: DashMap<(String, String), Entry>,
     fresh_for: Duration,
-    miss_after: Duration,
+    missing_for: Duration,
+    recheck_after: Duration,
 }
 
 impl Default for ServedIndex {
@@ -70,7 +75,8 @@ impl Default for ServedIndex {
         Self {
             groups: DashMap::new(),
             fresh_for: FRESH_FOR,
-            miss_after: MISS_AFTER,
+            missing_for: MISSING_FOR,
+            recheck_after: RECHECK_AFTER,
         }
     }
 }
@@ -155,9 +161,12 @@ impl ServedIndex {
     ) -> Result<Option<Arc<ApiGroup>>> {
         let key = (context.to_string(), group.to_string());
         let (cell, found) = self.read(&key, client).await?;
-        let age = found.at.elapsed();
-        let answered = found.group.as_deref().is_some_and(answers);
-        if age < self.fresh_for && (answered || age < self.miss_after) {
+        let kept_for = if found.group.as_deref().is_some_and(answers) {
+            self.fresh_for
+        } else {
+            self.missing_for
+        };
+        if found.at.elapsed() < kept_for {
             return Ok(found.group);
         }
         // Only the answer this call judged: one a caller beside it already
@@ -189,10 +198,14 @@ impl ServedIndex {
     }
 
     /// Forget one group, after a 404 says what was discovered has moved: a
-    /// CRD reinstalled without the version this app was asking for.
+    /// CRD reinstalled without the version this app was asking for. An
+    /// answer read since is kept: it has already said where the kind is.
     pub fn forget_group(&self, context: &str, group: &str) {
         self.groups
-            .remove(&(context.to_string(), group.to_string()));
+            .remove_if(&(context.to_string(), group.to_string()), |_, held| {
+                held.get()
+                    .is_some_and(|found| found.at.elapsed() >= self.recheck_after)
+            });
     }
 
     /// Forget a context, when its client goes.
@@ -208,12 +221,22 @@ impl ServedIndex {
 #[cfg(test)]
 impl ServedIndex {
     /// An index whose answers age as fast as a test can wait.
-    pub(crate) fn aged(fresh_for: Duration, miss_after: Duration) -> Self {
+    pub(crate) fn aged(
+        fresh_for: Duration,
+        missing_for: Duration,
+        recheck_after: Duration,
+    ) -> Self {
         Self {
             fresh_for,
-            miss_after,
+            missing_for,
+            recheck_after,
             ..Self::default()
         }
+    }
+
+    /// The real floors, `by` times shorter.
+    pub(crate) fn scaled(by: u32) -> Self {
+        Self::aged(FRESH_FOR / by, MISSING_FOR / by, RECHECK_AFTER / by)
     }
 }
 
@@ -585,11 +608,90 @@ mod tests {
         assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
     }
 
-    fn aged(fresh_for: u64, miss_after: u64) -> ServedIndex {
+    fn aged(fresh_for: u64, missing_for: u64) -> ServedIndex {
         ServedIndex::aged(
             Duration::from_millis(fresh_for),
-            Duration::from_millis(miss_after),
+            Duration::from_millis(missing_for),
+            RECHECK_AFTER,
         )
+    }
+
+    fn gateways_only() -> Vec<(&'static str, u16, String)> {
+        vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("gateways", "Gateway", true)]),
+            ),
+        ]
+    }
+
+    /// Would have the Gateway pages read `/apis` and the whole group again
+    /// every few seconds on most clusters, for a `ListenerSet` nobody
+    /// installed: a miss was kept 5 s. The real floors, scaled down — at the
+    /// age a hit is read again, a miss is still kept.
+    #[tokio::test]
+    async fn a_miss_is_kept_after_a_hit_has_aged_out() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = ServedIndex::scaled(300);
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let listener_sets = || index.resource("kind", &client, GROUP, "listenersets");
+
+        assert!(listener_sets().await.expect("read").is_none());
+        tokio::time::sleep(FRESH_FOR / 200).await;
+        assert!(listener_sets().await.expect("read").is_none());
+        assert_eq!(asked(), Some(1), "a miss is kept past a hit's age");
+
+        index
+            .resource("kind", &client, GROUP, "gateways")
+            .await
+            .expect("read");
+        assert_eq!(asked(), Some(2), "a hit this old is read again");
+    }
+
+    /// Would send a discovery read per caller where one answers them all:
+    /// a page's burst of requests arrives together once the answer is old.
+    #[tokio::test]
+    async fn callers_together_share_one_read_again() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = aged(100, 100);
+        index
+            .resource("kind", &client, GROUP, "gateways")
+            .await
+            .expect("read");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let asks = (0..10).map(|_| index.resource("kind", &client, GROUP, "gateways"));
+        for answer in futures::future::join_all(asks).await {
+            assert!(answer.expect("read").is_some());
+        }
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    /// Would read discovery on every poll of a deleted object's page: each
+    /// 404 sent back an answer read moments before, which had already said
+    /// where the kind is served. An older one still goes.
+    #[tokio::test]
+    async fn a_404_sends_back_only_an_answer_older_than_the_floor() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        );
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let read = || index.resource("kind", &client, GROUP, "gateways");
+
+        read().await.expect("read");
+        index.forget_group("kind", GROUP);
+        read().await.expect("read");
+        assert_eq!(asked(), Some(1), "an answer this young is kept");
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        index.forget_group("kind", GROUP);
+        read().await.expect("read");
+        assert_eq!(asked(), Some(2), "an older one is read again");
     }
 
     /// Gateway API installed under a connected window. "Not served" was kept
