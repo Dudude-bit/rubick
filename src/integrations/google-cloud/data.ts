@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { ROUTING_STALE, useBackingLists } from "../ingress";
@@ -47,10 +48,14 @@ const listKind = async (
   try {
     return await commands.listCustomResources(crd, null, null, null);
   } catch (error) {
-    unread.push({
-      crd,
-      reason: error instanceof Error ? error.message : String(error),
-    });
+    // A kind the API server does not serve holds none; a name into it is
+    // truly absent. Anything else is a list nobody read.
+    if (errorCode(error) !== ERROR_CODES.NOT_FOUND) {
+      unread.push({
+        crd,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
     return [];
   }
 };

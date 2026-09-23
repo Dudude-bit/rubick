@@ -23,6 +23,7 @@
 
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
+import { INGRESS_CLASS_PARAMS_CRD } from "./model";
 
 const PREFIX = "alb.ingress.kubernetes.io/";
 export const GROUP_NAME_ANNOTATION = `${PREFIX}group.name`;
@@ -129,6 +130,12 @@ export interface AlbGroup {
   params: Params | null;
   findings: AlbFinding[];
   worst: "err" | "warn" | null;
+  /**
+   * False where a member's class names an `IngressClassParams` nobody could
+   * list: what it configures is unknown, and so, for a member with no group
+   * annotation, is which load balancer it joins.
+   */
+  paramsKnown: boolean;
 }
 
 const orderOf = (ingress: IngressInfo): number | null => {
@@ -149,6 +156,8 @@ export interface GroupSources {
   classParams: Map<string, string>;
   /** Class names whose controller is the ALB controller. */
   ownClasses: string[];
+  /** Kinds that could not be listed: a name into one is unresolved, not absent. */
+  unread: ReadonlyArray<{ crd: string }>;
 }
 
 /**
@@ -173,20 +182,16 @@ export function albGroups(sources: GroupSources): AlbGroup[] {
 
   const buckets = new Map<string, Member[]>();
   const groupParams = new Map<string, Params | null>();
-  const missing: AlbFinding[] = [];
+  const missing = new Map<string, AlbFinding[]>();
+  const unresolved = new Set<string>();
+  const paramsListed = !sources.unread.some(
+    (read) => read.crd === INGRESS_CLASS_PARAMS_CRD
+  );
 
   for (const ingress of mine) {
     const params = paramsFor(ingress);
     const className = classOf(ingress);
     const named = className ? sources.classParams.get(className) : undefined;
-    if (named && !paramsByName.has(named)) {
-      missing.push({
-        kind: "no-params",
-        severity: "err",
-        className: className!,
-        named,
-      });
-    }
     // The annotation wins over the class, which is how the controller reads
     // it: a per-Ingress group is an opt-in to somebody else's load balancer.
     const name =
@@ -197,11 +202,31 @@ export function albGroups(sources: GroupSources): AlbGroup[] {
       { ingress, order: orderOf(ingress), hosts: hostsOf(ingress) },
     ]);
     if (!groupParams.has(key)) groupParams.set(key, params);
+
+    if (!named || paramsByName.has(named)) continue;
+    if (!paramsListed) {
+      unresolved.add(key);
+      continue;
+    }
+    const found = missing.get(key) ?? [];
+    if (
+      !found.some(
+        (finding) => finding.kind === "no-params" && finding.named === named
+      )
+    ) {
+      found.push({
+        kind: "no-params",
+        severity: "err",
+        className: className!,
+        named,
+      });
+    }
+    missing.set(key, found);
   }
 
   const groups = [...buckets.entries()].map(([key, members]): AlbGroup => {
     const name = key.startsWith("\0") ? null : key;
-    const findings: AlbFinding[] = name === null ? [] : [...missing];
+    const findings: AlbFinding[] = [...(missing.get(key) ?? [])];
 
     const namespaces = [
       ...new Set(members.map((member) => member.ingress.namespace)),
@@ -275,6 +300,7 @@ export function albGroups(sources: GroupSources): AlbGroup[] {
         : findings.length > 0
           ? "warn"
           : null,
+      paramsKnown: !unresolved.has(key),
     };
   });
 
@@ -291,7 +317,23 @@ export function albGroups(sources: GroupSources): AlbGroup[] {
   });
 }
 
+/** A group's place in the list: unread parameters are not a clean bill. */
+export function groupSeverity(
+  group: AlbGroup
+): "err" | "warn" | "unknown" | null {
+  return group.worst ?? (group.paramsKnown ? null : "unknown");
+}
+
+/**
+ * Whether the rows are the load balancers. An Ingress with no group of its
+ * own whose parameters went unread may be on somebody else's.
+ */
+export function groupsKnown(groups: AlbGroup[]): boolean {
+  return !groups.some((group) => group.name === null && !group.paramsKnown);
+}
+
 /** The sidebar's number: load balancers this controller is running. */
-export function countGroups(sources: GroupSources): number {
-  return albGroups(sources).length;
+export function countGroups(sources: GroupSources): number | null {
+  const groups = albGroups(sources);
+  return groupsKnown(groups) ? groups.length : null;
 }

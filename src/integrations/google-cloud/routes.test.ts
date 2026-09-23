@@ -17,8 +17,11 @@ import type {
 } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { backingFrom, hostSeverity } from "../ingress";
+import { backingFrom } from "../ingress";
 import {
+  BACKEND_CONFIG_CRD,
+  FRONTEND_CONFIG_CRD,
+  MANAGED_CERTIFICATE_CRD,
   allowsHttp,
   gceClassOf,
   managedCertificateRefs,
@@ -30,6 +33,7 @@ import {
   hostState,
   hostsOf,
   ignoredByClassName,
+  severityOfHost,
   type GkeSources,
 } from "./routes";
 
@@ -109,6 +113,7 @@ const sources = (overrides: Partial<GkeSources> = {}): GkeSources => ({
   backendConfigs: [],
   frontendConfigs: [],
   managedCertificates: [],
+  unread: [],
   services: [service()],
   published: [],
   backingKnown: false,
@@ -209,7 +214,7 @@ describe("a host whose backends are unread", () => {
     const [host] = hostsOf(
       sources(backingFrom(undefined, new Error("services is forbidden")))
     );
-    expect(hostSeverity(host)).toBe("unknown");
+    expect(severityOfHost(host)).toBe("unknown");
     expect(hostState(host, "services is forbidden", t)).toEqual({
       text: t("empty", "endpointsUnread"),
       tone: "unknown",
@@ -238,7 +243,7 @@ describe("a host whose backends are unread", () => {
         ],
       })
     );
-    expect(hostSeverity(host)).toBeNull();
+    expect(severityOfHost(host)).toBeNull();
     expect(hostState(host, null, t).tone).toBe("ok");
   });
 });
@@ -474,5 +479,68 @@ describe("what a host is joined to", () => {
         domain: "example.com",
       })
     );
+  });
+});
+
+describe("a name into a kind nobody could list", () => {
+  const naming = () =>
+    sources({
+      ingresses: [
+        ingress({
+          annotations: {
+            "kubernetes.io/ingress.class": "gce",
+            "networking.gke.io/v1beta1.FrontendConfig": "shop-fc",
+            "networking.gke.io/managed-certificates": "shop-cert",
+          },
+        }),
+      ],
+      services: [
+        service({ "cloud.google.com/backend-config": '{"default":"shop-bc"}' }),
+      ],
+      backingKnown: true,
+    });
+  const unread = [
+    { crd: FRONTEND_CONFIG_CRD },
+    { crd: MANAGED_CERTIFICATE_CRD },
+    { crd: BACKEND_CONFIG_CRD },
+  ];
+
+  /**
+   * With the three lists refused every name became a red "names something
+   * absent", right under the page's own note that anything naming them is
+   * shown as unresolved rather than missing.
+   */
+  it("is unresolved rather than missing", () => {
+    const [host] = hostsOf({ ...naming(), unread });
+
+    expect(host.findings).toEqual([]);
+    expect(host.fronts[0].frontendConfig?.known).toBe(false);
+    expect(host.fronts[0].certificates[0].known).toBe(false);
+    expect(host.routes[0].configs[0].known).toBe(false);
+    expect(host.namesKnown).toBe(false);
+  });
+
+  /** And not green either: a host naming what nobody read is not "serving". */
+  it("reads as unknown rather than serving", () => {
+    const [host] = hostsOf({ ...naming(), unread });
+
+    expect(severityOfHost(host)).toBe("unknown");
+    expect(hostState(host, null, t)).toEqual({
+      text: t("empty", "namesSomethingUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** Listed and not there, the same three names are the fault they always were. */
+  it("is missing once the lists were read", () => {
+    const [host] = hostsOf(naming());
+
+    expect(
+      host.findings
+        .filter((finding) => finding.kind === "missing-object")
+        .map((finding) => finding.kind === "missing-object" && finding.what)
+    ).toEqual(["FrontendConfig", "ManagedCertificate", "BackendConfig"]);
+    expect(host.namesKnown).toBe(true);
+    expect(hostState(host, null, t).tone).toBe("err");
   });
 });

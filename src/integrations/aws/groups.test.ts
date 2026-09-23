@@ -10,7 +10,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
-import { albGroups, readParams, type GroupSources } from "./groups";
+import {
+  albGroups,
+  countGroups,
+  groupSeverity,
+  readParams,
+  type GroupSources,
+} from "./groups";
+import { INGRESS_CLASS_PARAMS_CRD } from "./model";
 
 const ingress = (
   name: string,
@@ -65,6 +72,7 @@ const sources = (overrides: Partial<GroupSources> = {}): GroupSources => ({
   params: [],
   classParams: new Map(),
   ownClasses: ["alb"],
+  unread: [],
   ...overrides,
 });
 
@@ -177,6 +185,100 @@ describe("which Ingresses share a load balancer", () => {
     expect(group.findings).toContainEqual(
       expect.objectContaining({ kind: "disagree", field: "scheme" })
     );
+  });
+
+  /**
+   * With `ingressclassparams` refused every class naming one got a red "names
+   * something absent", right under the page's own note that the kind could
+   * not be listed.
+   */
+  it("does not call a class's parameters missing when they went unread", () => {
+    const grouped = {
+      ingresses: [
+        ingress("shop", "web", {
+          "alb.ingress.kubernetes.io/group.name": "public",
+        }),
+      ],
+      classParams: new Map([["alb", "shared-alb"]]),
+    };
+    const noParams = (unread: GroupSources["unread"]) =>
+      albGroups(sources({ ...grouped, unread }))[0].findings.some(
+        (finding) => finding.kind === "no-params"
+      );
+
+    expect(noParams([{ crd: INGRESS_CLASS_PARAMS_CRD }])).toBe(false);
+    expect(noParams([])).toBe(true);
+  });
+
+  /**
+   * Nor green instead of red: a group whose class names parameters nobody
+   * read is not known to be serving.
+   */
+  it("reads a group behind unread parameters as unknown", () => {
+    const [group] = albGroups(
+      sources({
+        ingresses: [
+          ingress("shop", "web", {
+            "alb.ingress.kubernetes.io/group.name": "public",
+          }),
+        ],
+        classParams: new Map([["alb", "shared-alb"]]),
+        unread: [{ crd: INGRESS_CLASS_PARAMS_CRD }],
+      })
+    );
+
+    expect(group.paramsKnown).toBe(false);
+    expect(groupSeverity(group)).toBe("unknown");
+  });
+
+  /**
+   * The parameters may name a group, so an Ingress with none of its own is
+   * not known to own its ALB — and the sidebar's count of load balancers
+   * said three for what the class may well have merged into one.
+   */
+  it("cannot count load balancers whose membership went unread", () => {
+    const unread = sources({
+      ingresses: [ingress("shop", "web"), ingress("api", "web")],
+      classParams: new Map([["alb", "shared-alb"]]),
+      unread: [{ crd: INGRESS_CLASS_PARAMS_CRD }],
+    });
+
+    expect(countGroups(unread)).toBeNull();
+    expect(countGroups({ ...unread, unread: [] })).toBe(2);
+  });
+
+  /**
+   * Missing parameters belong to the groups whose class names them. They
+   * were copied onto every named group, and never onto an Ingress on its
+   * own ALB, which is the one they break.
+   */
+  it("puts missing parameters on the group whose class names them", () => {
+    const groups = albGroups(
+      sources({
+        ingresses: [
+          ingress("shop", "web"),
+          ingress("api", "api", {
+            "kubernetes.io/ingress.class": "alb-internal",
+            "alb.ingress.kubernetes.io/group.name": "internal",
+          }),
+        ],
+        params: [params("internal-alb", {})],
+        classParams: new Map([
+          ["alb", "absent-alb"],
+          ["alb-internal", "internal-alb"],
+        ]),
+        ownClasses: ["alb", "alb-internal"],
+      })
+    );
+    const noParams = (name: string | null) =>
+      groups
+        .find((group) => group.name === name)
+        ?.findings.filter((finding) => finding.kind === "no-params");
+
+    expect(noParams(null)).toEqual([
+      expect.objectContaining({ className: "alb", named: "absent-alb" }),
+    ]);
+    expect(noParams("internal")).toEqual([]);
   });
 
   /** Somebody else's Ingress is not this controller's to draw. */

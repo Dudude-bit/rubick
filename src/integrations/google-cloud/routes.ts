@@ -37,6 +37,9 @@ import {
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import {
+  BACKEND_CONFIG_CRD,
+  FRONTEND_CONFIG_CRD,
+  MANAGED_CERTIFICATE_CRD,
   allowsHttp,
   backendConfigRefs,
   certificateTone,
@@ -57,7 +60,12 @@ export interface GkeSources extends BackingSources {
   backendConfigs: CustomResourceInfo[];
   frontendConfigs: CustomResourceInfo[];
   managedCertificates: CustomResourceInfo[];
+  /** Kinds that could not be listed: a name into one is unresolved, not absent. */
+  unread: ReadonlyArray<{ crd: string }>;
 }
+
+const listed = (sources: GkeSources, crd: string) =>
+  !sources.unread.some((read) => read.crd === crd);
 
 /** One path an Ingress serves, and what stands behind it. */
 export interface GkeRoute {
@@ -70,7 +78,13 @@ export interface GkeRoute {
   /** `backend.resource` — an API object rather than a Service. */
   resourceBackend: string | null;
   /** The configs the backing Service names, and whether each one exists. */
-  configs: Array<BackendConfigRef & { found: CustomResourceInfo | undefined }>;
+  configs: Array<
+    BackendConfigRef & {
+      found: CustomResourceInfo | undefined;
+      /** False where BackendConfigs could not be listed. */
+      known: boolean;
+    }
+  >;
   /** Whether the Service opted into container-native load balancing. */
   neg: boolean;
 }
@@ -91,10 +105,14 @@ export interface GkeFront {
   frontendConfig: {
     name: string;
     found: CustomResourceInfo | undefined;
+    /** False where FrontendConfigs could not be listed. */
+    known: boolean;
   } | null;
   certificates: Array<{
     name: string;
     found: CustomResourceInfo | undefined;
+    /** False where ManagedCertificates could not be listed. */
+    known: boolean;
     status: string | null;
     domains: DomainStatus[];
   }>;
@@ -151,6 +169,8 @@ export interface GkeHost {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
+  /** False while something this host names is of a kind nobody could list. */
+  namesKnown: boolean;
 }
 
 const byName = (list: CustomResourceInfo[], name: string) =>
@@ -158,6 +178,14 @@ const byName = (list: CustomResourceInfo[], name: string) =>
 
 const inNamespace = (list: CustomResourceInfo[], namespace: string) =>
   list.filter((entry) => entry.namespace === namespace);
+
+/** Whether a name on these went unread: neither found nor absent. */
+const namesUnread = (routes: GkeRoute[], fronts: GkeFront[]) =>
+  fronts.some(
+    (front) =>
+      front.frontendConfig?.known === false ||
+      front.certificates.some((certificate) => !certificate.known)
+  ) || routes.some((route) => route.configs.some((config) => !config.known));
 
 /** Every Ingress this cluster's GKE controller claims. */
 export function claimed(ingresses: IngressInfo[]): IngressInfo[] {
@@ -205,6 +233,7 @@ function frontOf(ingress: IngressInfo, sources: GkeSources): GkeFront {
             inNamespace(sources.frontendConfigs, namespace),
             frontendName
           ),
+          known: listed(sources, FRONTEND_CONFIG_CRD),
         }
       : null,
     certificates: managedCertificateRefs(ingress.annotations).map((name) => {
@@ -215,6 +244,7 @@ function frontOf(ingress: IngressInfo, sources: GkeSources): GkeFront {
       return {
         name,
         found,
+        known: listed(sources, MANAGED_CERTIFICATE_CRD),
         status: found ? statusOf(found) : null,
         domains: found ? domainStatuses(found) : [],
       };
@@ -251,6 +281,7 @@ function routesOf(ingress: IngressInfo, sources: GkeSources): GkeRoute[] {
       configs: refs.map((ref) => ({
         ...ref,
         found: byName(configs, ref.name),
+        known: listed(sources, BACKEND_CONFIG_CRD),
       })),
       neg: service ? negForIngress(service.annotations) : false,
     };
@@ -310,7 +341,11 @@ function findingsFor(
   const findings: GkeFinding[] = [];
 
   for (const front of fronts) {
-    if (front.frontendConfig && !front.frontendConfig.found) {
+    if (
+      front.frontendConfig &&
+      front.frontendConfig.known &&
+      !front.frontendConfig.found
+    ) {
       findings.push({
         kind: "missing-object",
         severity: "err",
@@ -321,6 +356,7 @@ function findingsFor(
     }
     for (const certificate of front.certificates) {
       if (!certificate.found) {
+        if (!certificate.known) continue;
         findings.push({
           kind: "missing-object",
           severity: "err",
@@ -388,7 +424,8 @@ function findingsFor(
   const seen = new Set<string>();
   for (const route of routes) {
     for (const config of route.configs) {
-      if (config.found || seen.has(`cfg/${config.name}`)) continue;
+      if (config.found || !config.known || seen.has(`cfg/${config.name}`))
+        continue;
       seen.add(`cfg/${config.name}`);
       findings.push({
         kind: "missing-object",
@@ -464,6 +501,7 @@ export function hostsOf(sources: GkeSources): GkeHost[] {
       backendsKnown:
         sources.backingKnown ||
         !bucket.routes.some((route) => route.backend !== null),
+      namesKnown: !namesUnread(bucket.routes, bucket.fronts),
     };
   });
 
@@ -499,6 +537,9 @@ export function hostState(
   }
   if (host.findings.length > 0)
     return { text: t("empty", "worthALook"), tone: "warn" };
+  if (!host.namesKnown) {
+    return { text: t("empty", "namesSomethingUnread"), tone: "unknown" };
+  }
   if (!host.backendsKnown) {
     return {
       text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
@@ -506,6 +547,15 @@ export function hostState(
     };
   }
   return { text: t("empty", "serving"), tone: "ok" };
+}
+
+/** A host's place in the list: an unresolved name is not a clean bill. */
+export function severityOfHost(
+  host: GkeHost
+): "err" | "warn" | "unknown" | null {
+  return (
+    host.worst ?? (host.backendsKnown && host.namesKnown ? null : "unknown")
+  );
 }
 
 /** The sidebar's number: hosts this GKE Ingress stack serves. */

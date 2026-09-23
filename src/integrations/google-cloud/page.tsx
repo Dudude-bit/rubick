@@ -37,7 +37,7 @@ import {
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
-import { backingFrom, hostSeverity } from "../ingress";
+import { backingFrom } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
 import { useT } from "@/i18n/useT";
 import {
@@ -55,6 +55,7 @@ import {
   hostState,
   hostsOf,
   ignoredByClassName,
+  severityOfHost,
   type GkeFinding,
   type GkeFront,
   type GkeHost,
@@ -196,8 +197,6 @@ export default function GkeIngressPage() {
   );
 }
 
-const severityOfHost = hostSeverity;
-
 const searchableHost = (host: GkeHost) => [
   host.host,
   ...host.routes.flatMap((route) => [route.backend?.name, route.ingress.name]),
@@ -301,7 +300,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
       <Column label={t("columns", "frontend")}>
         {front.frontendConfig ? (
           <Cell
-            bad={!front.frontendConfig.found}
+            bad={front.frontendConfig.known && !front.frontendConfig.found}
             title={
               front.frontendConfig.found
                 ? joinSayings(
@@ -325,7 +324,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
                 )}
               </ObjectLink>
             ) : (
-              t("empty", "nameAbsent", { name: front.frontendConfig.name })
+              t(
+                "empty",
+                front.frontendConfig.known ? "nameAbsent" : "nameUnread",
+                { name: front.frontendConfig.name }
+              )
             )}
           </Cell>
         ) : (
@@ -349,7 +352,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
               key={certificate.name}
               bad={certificateTone(certificate.status) === "err"}
               warn={certificateTone(certificate.status) === "warn"}
-              under={certificate.status ?? t("empty", "noStatusYet")}
+              under={
+                certificate.found
+                  ? (certificate.status ?? t("empty", "noStatusYet"))
+                  : undefined
+              }
             >
               {certificate.found ? (
                 <ResourceRef
@@ -360,7 +367,9 @@ function FrontBlock({ front }: { front: GkeFront }) {
                   showKind={false}
                 />
               ) : (
-                t("empty", "nameAbsent", { name: certificate.name })
+                t("empty", certificate.known ? "nameAbsent" : "nameUnread", {
+                  name: certificate.name,
+                })
               )}
             </Cell>
           ))
@@ -438,7 +447,7 @@ function RouteChain({
           route.configs.map((config) => (
             <Cell
               key={`${config.name}/${config.port ?? "default"}`}
-              bad={!config.found}
+              bad={config.known && !config.found}
               under={
                 config.port === null
                   ? t("empty", "everyPort")
@@ -467,7 +476,9 @@ function RouteChain({
                   )}
                 </ObjectLink>
               ) : (
-                t("empty", "nameAbsent", { name: config.name })
+                t("empty", config.known ? "nameAbsent" : "nameUnread", {
+                  name: config.name,
+                })
               )}
             </Cell>
           ))
