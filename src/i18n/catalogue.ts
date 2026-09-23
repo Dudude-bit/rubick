@@ -3634,7 +3634,7 @@ export const en = {
     warningEvents: "Warning events",
     warningEventsScope: "last hour, by reason",
     warningEventsUnread:
-      "Not every events list could be read, so warnings may be missing here.",
+      "Not every events list was read in full, so warnings may be missing here.",
     noCluster: "no cluster",
     missingBadge: "missing",
     missingTabHint:

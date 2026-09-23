@@ -83,9 +83,13 @@ pub struct LoadedKubeconfig {
     /// nothing has been loaded yet, which must not be drawn as a file that
     /// would not parse.
     pub error: Option<String>,
-    /// The file it came from — recorded even when the read failed, since
-    /// naming the file to fix is most of the answer.
+    /// The file `kubeconfig` was read from, the first of them for a merge. A
+    /// failed reload leaves it alone, as it leaves `kubeconfig`.
     pub source: Option<PathBuf>,
+    /// The file the load in `error` was reading, since naming the file to fix
+    /// is most of the answer. Its own field: in `source` it put the parse of
+    /// one file under the name of another.
+    pub failed_source: Option<PathBuf>,
 }
 
 /// Manages Kubernetes client connections for multiple clusters
@@ -234,17 +238,17 @@ impl K8sClientManager {
             origins: HashMap::new(),
             error: None,
             source: Some(source),
+            failed_source: None,
         };
         Ok(())
     }
 
-    /// A load that failed: why, and the file it was reading. The file is
-    /// recorded even then — naming it is most of the answer — and never left
-    /// as the previous load's.
+    /// A load that failed: why, and the file it was reading. The kubeconfig
+    /// the app lives on, and the file it came from, stay as they were.
     async fn failed(&self, why: String, source: Option<PathBuf>) -> Error {
         let mut loaded = self.loaded.write().await;
         loaded.error = Some(why.clone());
-        loaded.source = source;
+        loaded.failed_source = source;
         Error::Auth(AuthError::Kubeconfig(why))
     }
 
@@ -367,6 +371,7 @@ impl K8sClientManager {
             origins,
             error: None,
             source: canonical.first().cloned(),
+            failed_source: None,
         };
         Ok(())
     }
@@ -410,6 +415,7 @@ impl K8sClientManager {
             origins: HashMap::new(),
             error: None,
             source: Some(path),
+            failed_source: None,
         };
         Ok(())
     }
@@ -1061,8 +1067,9 @@ users:
     }
 
     /// Would put the last good file's name beside a failed default load's
-    /// error: the diagnostics screen then sent the reader to fix a file that
-    /// was fine.
+    /// error, sending the reader to fix a file that was fine — or the failed
+    /// file's name beside the good file's parse, naming as the app's
+    /// kubeconfig a file that would not load.
     #[tokio::test]
     async fn a_default_load_that_fails_names_the_file_it_read() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1072,7 +1079,7 @@ users:
 
         let manager = K8sClientManager::new();
         manager
-            .load_kubeconfig_resolved(vec![good])
+            .load_kubeconfig_resolved(vec![good.clone()])
             .await
             .expect("good");
         let env = KubeconfigEnv::set(&bad).await;
@@ -1082,7 +1089,31 @@ users:
         assert!(failed.is_err());
         let loaded = manager.loaded().await;
         assert!(loaded.error.is_some());
-        assert_eq!(loaded.source, Some(bad.canonicalize().unwrap()));
+        assert_eq!(loaded.failed_source, Some(bad.canonicalize().unwrap()));
+        assert_eq!(loaded.source, Some(good.canonicalize().unwrap()));
+        assert_eq!(
+            manager.kubeconfig_path().await,
+            Some(good.canonicalize().unwrap()),
+            "the file the app still reads its contexts from"
+        );
+    }
+
+    /// Would keep naming a file that failed once after a later load
+    /// succeeded, beside no error.
+    #[tokio::test]
+    async fn a_load_that_succeeds_clears_the_failed_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let good = write_kubeconfig(dir.path(), "good.yaml", &["prod"]);
+        let gone = dir.path().join("gone.yaml");
+
+        let manager = K8sClientManager::new();
+        assert!(manager.load_kubeconfig_from_path(gone).await.is_err());
+        assert!(manager.loaded().await.failed_source.is_some());
+        manager.load_kubeconfig_from_path(good).await.expect("good");
+
+        let loaded = manager.loaded().await;
+        assert_eq!(loaded.error, None);
+        assert_eq!(loaded.failed_source, None);
     }
 
     /// Would fail the whole load on a `$KUBECONFIG` entry that is not there,
@@ -1116,7 +1147,7 @@ users:
 
         let manager = K8sClientManager::new();
         manager
-            .load_kubeconfig_resolved(vec![good])
+            .load_kubeconfig_resolved(vec![good.clone()])
             .await
             .expect("good");
         assert!(manager
@@ -1126,7 +1157,8 @@ users:
 
         let loaded = manager.loaded().await;
         assert!(loaded.error.is_some());
-        assert_eq!(loaded.source, Some(gone));
+        assert_eq!(loaded.failed_source, Some(gone));
+        assert_eq!(loaded.source, Some(good.canonicalize().unwrap()));
     }
 
     fn write_kubeconfig(dir: &std::path::Path, name: &str, contexts: &[&str]) -> PathBuf {

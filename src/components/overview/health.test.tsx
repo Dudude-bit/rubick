@@ -80,7 +80,7 @@ describe("the overview's two event panels", () => {
      *  namespace refused showed the others' warnings as the whole. */
     const { container } = wrap(<WarningsPanel warnings={[]} known={false} />);
     expect(container).toHaveTextContent(
-      "Not every events list could be read, so warnings may be missing here."
+      "Not every events list was read in full, so warnings may be missing here."
     );
     wrap(<WarningsPanel warnings={[warning]} known={false} />);
     expect(screen.getAllByText(/Not every events list/)).toHaveLength(2);
