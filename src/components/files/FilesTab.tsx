@@ -47,6 +47,7 @@ import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
 import { toastError } from "@/lib/toast-error";
+import { TONE_TEXT } from "@/lib/tone";
 
 const ROW_PX = 26;
 
@@ -527,7 +528,7 @@ function Notice({
       role="status"
       className={cn(
         "border-b border-hair px-3 py-1.5 text-[11px]",
-        tone === "warn" ? "text-warn" : "text-err"
+        TONE_TEXT[tone]
       )}
     >
       {children}

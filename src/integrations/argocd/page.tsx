@@ -84,6 +84,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
 import { parts } from "@/i18n/parts";
+import { TONE_TEXT } from "@/lib/tone";
 
 /** Past this many broken applications, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -582,9 +583,7 @@ function ResourceLine({
       </span>
       <span className="min-w-0 truncate">
         {said && (
-          <span className={tone === "err" ? "text-err" : "text-warn"}>
-            {said}
-          </span>
+          <span className={tone ? TONE_TEXT[tone] : undefined}>{said}</span>
         )}
         {resource.message && (
           <span className="text-fg-fnt">
