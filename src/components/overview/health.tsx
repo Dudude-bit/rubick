@@ -630,7 +630,8 @@ export function WarningsPanel({
   known,
 }: {
   warnings: WarningGroup[];
-  /** False when an events list failed: the rows are then only part. */
+  /** False when an events list failed or was cut short: the rows are
+   *  then only part. */
   known: boolean;
 }) {
   const t = useT();

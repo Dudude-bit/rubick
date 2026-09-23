@@ -301,8 +301,9 @@ pub struct ClusterOverview {
     /// the panels say so rather than drawing a cluster with zero headroom.
     pub nodes_known: bool,
     pub warnings: Vec<WarningGroup>,
-    /// False when an events list failed: `warnings` then holds only what
-    /// answered, and an empty one is not "no warnings".
+    /// False when an events list failed or was cut at the page cap:
+    /// `warnings` then holds only what was read, and an empty one is not
+    /// "no warnings".
     pub warnings_known: bool,
     pub namespaces: Vec<NamespaceLoad>,
     /// Objects per kind in the requested scope, for the sidebar and the
@@ -939,9 +940,9 @@ fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usiz
     (problems, truncated)
 }
 
-/// Warning events from the last pages the API will hand over cheaply, and
-/// whether every page asked for answered: a failure keeps what was collected
-/// and says it is not the whole.
+/// Warning events from the pages the API will hand over cheaply, and whether
+/// they are the whole list: a failure, or a `continue` still left at the
+/// page cap, keeps what was collected and says it is not.
 async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
     let mut items = Vec::new();
     let mut token: Option<String> = None;
@@ -965,7 +966,7 @@ async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
         }
     }
 
-    (items, true)
+    (items, token.is_none())
 }
 
 /// Borrowed from the watch stores or from a fresh list alike: `Arc`s so the
@@ -2602,7 +2603,7 @@ mod tests {
 #[cfg(test)]
 mod across_namespaces {
     use super::*;
-    use crate::client::served::test_server::{server, Hits};
+    use crate::client::served::test_server::{answering, server, Hits};
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
     use serde_json::{json, Value};
 
@@ -2823,6 +2824,53 @@ mod across_namespaces {
             .listed()
             .await;
         assert!(!refused.warnings_known);
+    }
+
+    /// Prod's warning events in `pages` pages, a `continue` on all but the
+    /// last; what the overview read of them, and how many pages it asked for.
+    async fn events_in_pages(pages: usize) -> ((Vec<Event>, bool), usize) {
+        const EVENTS: &str = "/api/v1/namespaces/prod/events";
+        let (client, hits) = answering(move |path, nth| {
+            if path != EVENTS {
+                return (404, "{}".to_string());
+            }
+            let metadata = if nth < pages {
+                json!({ "continue": format!("after-{nth}") })
+            } else {
+                json!({})
+            };
+            let page = json!({
+                "apiVersion": "v1", "kind": "EventList", "metadata": metadata,
+                "items": [warning(PROD, &format!("Page{nth}"), 1)],
+            });
+            (200, page.to_string())
+        })
+        .await;
+        let read = list_warning_events(&Api::namespaced(client, PROD)).await;
+        (read, asked(&hits, EVENTS))
+    }
+
+    /// Would draw the pages the cap let through as the whole list, and a cut
+    /// that held no warnings as a namespace with none.
+    #[tokio::test]
+    async fn events_left_past_the_page_cap_leave_the_warnings_unknown() {
+        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES + 1).await;
+        assert_eq!(
+            asked, MAX_EVENT_PAGES,
+            "the cap ended the walk, not a failure"
+        );
+        assert_eq!(events.len(), MAX_EVENT_PAGES);
+        assert!(!known);
+    }
+
+    /// Would call a list unknown for using every page the cap allows, when
+    /// the last of them said there was nothing after it.
+    #[tokio::test]
+    async fn a_list_that_ends_on_the_last_page_allowed_is_the_whole() {
+        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES).await;
+        assert_eq!(asked, MAX_EVENT_PAGES);
+        assert_eq!(events.len(), MAX_EVENT_PAGES);
+        assert!(known);
     }
 
     /// Would draw one `NotReady` node once per namespace in scope, under as
