@@ -3298,6 +3298,12 @@ export const ru: Catalogue = {
       many: "{n} сверщиков",
       other: "{n} сверщика",
     },
+    factReconcilersRead: {
+      one: "прочитан {n} сверщик",
+      few: "прочитано {n} сверщика",
+      many: "прочитано {n} сверщиков",
+      other: "прочитано {n} сверщика",
+    },
     factKindsUnread: {
       one: "{n} вид перечислить не удалось",
       few: "{n} вида перечислить не удалось",

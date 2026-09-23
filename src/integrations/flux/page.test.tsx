@@ -20,6 +20,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { default: FluxPage } = await import("./page");
+const { en } = await import("@/i18n/catalogue");
 
 const FORBIDDEN =
   'deployments.apps is forbidden: User "dev" cannot list resource "deployments" in API group "apps" at the cluster scope';
@@ -197,4 +198,97 @@ describe("a failing source when HelmReleases could not be listed", () => {
     );
     expect(screen.getByText(/^nothing$/)).toBeInTheDocument();
   });
+});
+
+describe("the reconcilers when HelmReleases could not be listed", () => {
+  const releasesRefused = () =>
+    Promise.reject(
+      new Error(
+        `Tauri command 'listCustomResources' failed: ${RELEASES_FORBIDDEN}`,
+        {
+          cause: { code: "PERMISSION_DENIED", message: RELEASES_FORBIDDEN },
+        }
+      )
+    );
+
+  /**
+   * No Kustomization and HelmReleases refused: nothing held the branch that
+   * says so, and deleting it drew "Flux is applying nothing" over a kind
+   * nobody read. Fails if the partial read is drawn as the empty one.
+   */
+  it("does not say Flux applies nothing when the releases were not read", async () => {
+    answers.crds.set(HELM_RELEASES, releasesRefused);
+
+    renderOn("reconcilers");
+
+    expect(
+      await screen.findByText(en.empty.fluxReconcilersUnread)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(en.empty.fluxApplyingNothing)).toBeNull();
+  });
+
+  /**
+   * The list's summary read "1 reconciler, all applied" beside a refused
+   * HelmRelease list — every one of the ones read, called all of them.
+   * Fails if the summary ignores the partial read.
+   */
+  it("does not call the reconcilers it read all of them", async () => {
+    answers.crds.set(HELM_RELEASES, releasesRefused);
+    answers.crds.set(KUSTOMIZATIONS, () => Promise.resolve([appliedApps()]));
+    answers.crds.set(GIT_REPOSITORIES, () => Promise.resolve([fetchingRepo()]));
+
+    renderOn("reconcilers");
+
+    await screen.findByText("apps");
+    expect(screen.queryByText(/all applied/)).toBeNull();
+  });
+});
+
+const KUSTOMIZATIONS = "kustomizations.kustomize.toolkit.fluxcd.io";
+
+const readyCondition = {
+  type: "Ready",
+  status: "True",
+  reason: "ReconciliationSucceeded",
+  message: "Applied revision: main@sha1:abc",
+};
+
+const appliedApps = (): CustomResourceInfo => ({
+  name: "apps",
+  namespace: "flux-system",
+  uid: "kustomization-apps",
+  apiVersion: "kustomize.toolkit.fluxcd.io/v1",
+  kind: "Kustomization",
+  spec: {
+    path: "./apps",
+    interval: "10m",
+    sourceRef: { kind: "GitRepository", name: "infra" },
+  },
+  status: {
+    conditions: [readyCondition],
+    lastAppliedRevision: "main@sha1:abc",
+  },
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  ownerReferences: [],
+  generation: null,
+});
+
+const fetchingRepo = (): CustomResourceInfo => ({
+  name: "infra",
+  namespace: "flux-system",
+  uid: "gitrepo-infra",
+  apiVersion: "source.toolkit.fluxcd.io/v1",
+  kind: "GitRepository",
+  spec: { url: "https://github.com/acme/infra", interval: "1m" },
+  status: {
+    conditions: [{ ...readyCondition, message: "stored artifact" }],
+    artifact: { revision: "main@sha1:abc" },
+  },
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  ownerReferences: [],
+  generation: null,
 });

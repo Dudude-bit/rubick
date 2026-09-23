@@ -3024,6 +3024,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factReconcilersRead: {
+      one: "{n} reconciler read",
+      other: "{n} reconcilers read",
+    },
     factKindsUnread: {
       one: "{n} kind could not be listed",
       other: "{n} kinds could not be listed",
