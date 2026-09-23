@@ -71,6 +71,16 @@ describe("whether something in front terminates TLS", () => {
     expect(ask([])).toBe(false);
   });
 
+  /** GKE answers `tls: null` for a route whose ManagedCertificate it could not list; read as "no", every host behind it was called served in the clear. Fails if the null is dropped. */
+  it("could not say when the route in front could not tell whether it terminates", () => {
+    answers.routes = {
+      routes: [{ host: "shop.example.com", tls: null }],
+      isPending: false,
+      error: null,
+    };
+    expect(ask([proxy])).toBe("unknown");
+  });
+
   it("says yes for a host a route in front serves over TLS", () => {
     answers.routes = {
       routes: [{ host: "shop.example.com", tls: true }],
