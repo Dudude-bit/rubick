@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: { runPodCheck: vi.fn() },
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
+import { renderWithProviders } from "@/test/render";
 import type { CheckOutcome, PodInfo } from "@/generated/types";
 import { ChecksTab } from "./ChecksTab";
 
@@ -41,13 +40,7 @@ const outcome = (over: Partial<CheckOutcome>): CheckOutcome => ({
 });
 
 function mount(subject: PodInfo = pod) {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
-      <TooltipProvider>
-        <ChecksTab pod={subject} />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
+  return renderWithProviders(<ChecksTab pod={subject} />);
 }
 
 /** One container, crash-looping — the pod this tab is most opened on. */

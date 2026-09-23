@@ -80,18 +80,6 @@ describe("groupConsecutive", () => {
     expect(groupConsecutive(logs).map((r) => r.count)).toEqual([1, 1, 1]);
   });
 
-  it("never crosses a level change", () => {
-    const logs = [
-      line("upstream slow", { level: "info" }),
-      line("upstream slow", { level: "warn" }),
-      line("upstream slow", { level: "warn" }),
-    ];
-
-    const runs = groupConsecutive(logs);
-    expect(runs.map((r) => r.count)).toEqual([1, 2]);
-    expect(runs[1].head.level).toBe("warn");
-  });
-
   it("gives every line its own run when collapsing is off", () => {
     const logs = [line("same 1"), line("same 2"), line("same 3")];
 

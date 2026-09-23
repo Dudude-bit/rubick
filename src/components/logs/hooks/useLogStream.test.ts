@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { StreamLogConfig } from "@/generated/types";
 
@@ -118,8 +118,24 @@ function failureEvent(
   return { payload: { stream_id: `stream-${container}`, kind, message } };
 }
 
-/** Wait past the reorder window so a released batch has been committed. */
-const settled = (n: number) => ({ timeout: 500 + n });
+/**
+ * From here on the reorder window runs on a clock the test moves. Installed
+ * once the streams have subscribed, because opening them waits on a
+ * zero-delay timer of its own, and so does `waitFor` settling: no `waitFor`
+ * while the clock is held. `Date` stays real: an untimestamped first line is
+ * stamped with `Date.now()`.
+ */
+const holdTheClock = () =>
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+/** One reorder window on, with whatever it held committed. */
+const pastTheWindow = () => advance(REORDER_WINDOW_MS);
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("useLogStream deferred-start handshake", () => {
   beforeEach(reset);
@@ -204,15 +220,13 @@ describe("useLogStream streams every container at once", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(2);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(logEvent("web", "GET /checkout 200"));
       listeners["log-batch"]!(logEvent("sidecar", "proxying upstream"));
     });
-
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(2);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
 
     expect(result.current.logs.map((l) => l.container)).toEqual([
       "web",
@@ -222,8 +236,9 @@ describe("useLogStream streams every container at once", () => {
 
   it("orders one reorder window by timestamp, not by arrival", async () => {
     // Two live streams do not arrive in timestamp order. Everything
-    // that lands inside one window is emitted ordered; the guarantee
-    // stops at the window edge, which the next test pins down.
+    // that lands inside one window is emitted ordered, a batch arriving
+    // halfway through it included; the guarantee stops at the window
+    // edge, which the next test pins down.
     const { result } = renderHook(() =>
       useLogStream({ ...baseProps, containers: ["web", "sidecar"] })
     );
@@ -231,6 +246,7 @@ describe("useLogStream streams every container at once", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(2);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(
@@ -239,6 +255,11 @@ describe("useLogStream streams every container at once", () => {
           timestamp: "2026-08-06T10:00:02.000Z",
         })
       );
+    });
+    await advance(REORDER_WINDOW_MS / 2);
+    expect(result.current.logs, "committed before its window ran").toEqual([]);
+
+    act(() => {
       listeners["log-batch"]!(
         logEvent("sidecar", {
           message: "earlier",
@@ -246,10 +267,7 @@ describe("useLogStream streams every container at once", () => {
         })
       );
     });
-
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(2);
-    }, settled(REORDER_WINDOW_MS));
+    await advance(REORDER_WINDOW_MS / 2);
 
     expect(result.current.logs.map((l) => l.message)).toEqual([
       "earlier",
@@ -268,6 +286,7 @@ describe("useLogStream streams every container at once", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(2);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(
@@ -277,9 +296,8 @@ describe("useLogStream streams every container at once", () => {
         })
       );
     });
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(1);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(1);
 
     act(() => {
       listeners["log-batch"]!(
@@ -289,9 +307,7 @@ describe("useLogStream streams every container at once", () => {
         })
       );
     });
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(2);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
 
     expect(result.current.logs.map((l) => l.message)).toEqual([
       "committed first",
@@ -308,6 +324,7 @@ describe("useLogStream streams every container at once", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(2);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(
@@ -325,9 +342,7 @@ describe("useLogStream streams every container at once", () => {
       );
     });
 
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(3);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
 
     expect(result.current.logs.map((l) => l.message)).toEqual([
       "older",
@@ -342,17 +357,16 @@ describe("useLogStream streams every container at once", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(
         logEvent("c", "flood line 643585 done", "flood line 643586 done")
       );
     });
+    await pastTheWindow();
 
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(2);
-    }, settled(REORDER_WINDOW_MS));
-
+    expect(result.current.logs).toHaveLength(2);
     const [a, b] = result.current.logs;
     expect(a.groupKey).toBe(b.groupKey);
   });
@@ -390,6 +404,7 @@ describe("useLogStream one cap", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     const batch = Array.from({ length: 100 }, (_, i) => `line ${i}`);
     act(() => {
@@ -397,11 +412,9 @@ describe("useLogStream one cap", () => {
         listeners["log-batch"]!(logEvent("c", ...batch));
       }
     });
+    await pastTheWindow();
 
-    await waitFor(() => {
-      expect(result.current.retained).toBe(limit);
-    }, settled(REORDER_WINDOW_MS));
-
+    expect(result.current.retained).toBe(limit);
     expect(result.current.limit).toBe(limit);
     expect(result.current.dropped).toBe(300);
     // Ids stay strictly increasing across the drop, which is what the
@@ -419,14 +432,14 @@ describe("useLogStream one cap", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(logEvent("c", "one", "two"));
     });
+    await pastTheWindow();
 
-    await waitFor(() => {
-      expect(result.current.retained).toBe(2);
-    }, settled(REORDER_WINDOW_MS));
+    expect(result.current.retained).toBe(2);
     expect(result.current.dropped).toBe(0);
   });
 });
@@ -481,12 +494,12 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
     expect(result.current.failures[0].container).toBe("web");
     expect(result.current.isStreaming).toBe(true);
 
+    holdTheClock();
     act(() => {
       listeners["log-batch"]!(logEvent("json-logger", "still alive"));
     });
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(1);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(1);
   });
 
   it("ignores a failure belonging to a stream it does not own", async () => {
@@ -495,6 +508,7 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     act(() => {
       listeners["stream-failed"]!(
@@ -502,10 +516,9 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
       );
       listeners["log-batch"]!(logEvent("c", "still alive"));
     });
+    await pastTheWindow();
 
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(1);
-    }, settled(REORDER_WINDOW_MS));
+    expect(result.current.logs).toHaveLength(1);
     expect(result.current.failures).toHaveLength(0);
   });
 
@@ -542,15 +555,13 @@ describe("useLogStream stable line ids", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(logEvent("c", "first"));
       listeners["log-batch"]!(logEvent("c", "second", "third"));
     });
-
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(3);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
 
     const ids = result.current.logs.map((l) => l.id);
     expect(new Set(ids).size).toBe(3);
@@ -569,21 +580,20 @@ describe("useLogStream stable line ids", () => {
     await waitFor(() => {
       expect(subscribedCalls).toHaveLength(1);
     });
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!(logEvent("c", "alpha", "beta"));
     });
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(2);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(2);
     const idsBefore = result.current.logs.map((l) => l.id);
 
     act(() => {
       listeners["log-batch"]!(logEvent("c", "gamma"));
     });
-    await waitFor(() => {
-      expect(result.current.logs).toHaveLength(3);
-    }, settled(REORDER_WINDOW_MS));
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(3);
 
     expect(result.current.logs[0].id).toBe(idsBefore[0]);
     expect(result.current.logs[1].id).toBe(idsBefore[1]);
@@ -709,6 +719,7 @@ describe("useLogStream on a workload whose pods are replaced", () => {
       { initialProps: { sources: [old] } }
     );
     await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    holdTheClock();
 
     act(() => {
       listeners["log-batch"]!({
@@ -718,10 +729,9 @@ describe("useLogStream on a workload whose pods are replaced", () => {
         },
       });
     });
-    await waitFor(
-      () => expect(result.current.logs).toHaveLength(1),
-      settled(1)
-    );
+    await pastTheWindow();
+    expect(result.current.logs).toHaveLength(1);
+    vi.useRealTimers();
 
     rerender({ sources: [fresh] });
     await waitFor(() => expect(subscribedCalls).toHaveLength(2));
@@ -733,6 +743,7 @@ describe("useLogStream on a workload whose pods are replaced", () => {
       backfillPerContainer(DEFAULT_LOG_LIMIT, 1)
     );
 
+    holdTheClock();
     act(() => {
       listeners["log-batch"]!({
         payload: {
@@ -741,13 +752,11 @@ describe("useLogStream on a workload whose pods are replaced", () => {
         },
       });
     });
-    await waitFor(
-      () =>
-        expect(result.current.logs.map((l) => `${l.pod}:${l.message}`)).toEqual(
-          ["api-old:old says hi", "api-new:new says hi"]
-        ),
-      settled(1)
-    );
+    await pastTheWindow();
+    expect(result.current.logs.map((l) => `${l.pod}:${l.message}`)).toEqual([
+      "api-old:old says hi",
+      "api-new:new says hi",
+    ]);
     // One session throughout: the listeners were registered once.
     expect(listenCalls.filter((c) => c.event === "log-batch")).toHaveLength(1);
   });
