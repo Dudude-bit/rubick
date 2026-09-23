@@ -5211,6 +5211,8 @@ export const en = {
     readDeadlineHint:
       "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
+    couldNotReadInNamespace: "Could not read {label} in {namespace}.",
+    noneWhereAnswered: "No {label} in {namespaces}.",
     readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",

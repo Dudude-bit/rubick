@@ -26,8 +26,9 @@ import type {
   HelmChartSearchResult,
   HelmInstallOptions,
   NamespaceInfo,
+  UnreadNamespace,
 } from "@/generated/types";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
@@ -36,6 +37,8 @@ import { toastError } from "@/lib/toast-error";
 
 const namesOf = (namespaces: NamespaceInfo[]) =>
   namespaces.map((ns) => ns.name);
+const NO_RELEASES: HelmRelease[] = [];
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 export function Helm() {
   const t = useT();
@@ -56,7 +59,7 @@ export function Helm() {
   // other list, rather than carrying a second dropdown of its own. A two- or
   // more namespace scope is read one namespace at a time, so a user with rights
   // in some namespaces and not others still sees theirs — a single cluster-wide
-  // secret list would 403 and come back empty. See `listAcrossScope`.
+  // secret list would 403 and come back empty.
   const scope = useNamespaceScope();
   const [activeTab, setActiveTab] = useState<string>("releases");
 
@@ -101,7 +104,7 @@ export function Helm() {
   const helmCliAvailable = helm?.available ?? false;
 
   const {
-    data: releases = [],
+    data: answer,
     isLoading,
     error: releasesError,
     refetch,
@@ -111,12 +114,13 @@ export function Helm() {
     // catch here re-threw a bare string, and the refusal block's
     // `verbatim(error.message)` then read `.message` off a string and crashed.
     // Let the wrapper's Error propagate, like every other list.
-    queryFn: listAcrossScope(scope.scope, (ns) =>
-      commands.listHelmReleasesNative(ns)
-    ),
+    queryFn: () => commands.listHelmReleasesIn(wireScope(scope.scope)),
     enabled: isConnected,
     refresh: "steady",
   });
+
+  const releases = answer?.rows ?? NO_RELEASES;
+  const unread = answer?.unread ?? NOTHING_UNREAD;
 
   const { data: historyData = [], isLoading: historyLoading } = useQuery({
     queryKey: queryKeys.helm.history(
@@ -325,8 +329,9 @@ export function Helm() {
           title="Helm"
           // No count beside a refused read — "0 releases" there would say the
           // opposite of the tab's "no access". The tab reads the same error.
+          // Nor beside an unread namespace, where it is not the total.
           count={
-            releasesError && releases.length === 0
+            (releasesError && releases.length === 0) || unread.length > 0
               ? undefined
               : t("count", "releases", { n: releases.length })
           }
@@ -351,6 +356,7 @@ export function Helm() {
         <TabsContent value="releases">
           <HelmReleasesTab
             releases={releases}
+            unread={unread}
             isLoading={isLoading}
             error={releasesError ?? null}
             helmCliAvailable={helmCliAvailable}

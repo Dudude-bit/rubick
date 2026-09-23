@@ -209,4 +209,9 @@ describe("sizeOf", () => {
   it("counts UTF-8 bytes, not string length", () => {
     expect(sizeOf("я")).toEqual({ bytes: 4 });
   });
+
+  /** A list page's answer is `{ rows, unread }`; without this its rows went unrecorded. */
+  it("counts the rows of a scoped list", () => {
+    expect(sizeOf({ rows: [1, 2], unread: [] }).rows).toBe(2);
+  });
 });

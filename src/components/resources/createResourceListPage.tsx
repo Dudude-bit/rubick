@@ -18,7 +18,8 @@ import {
   useNamespaceScope,
   type NamespaceScope,
 } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import type { Scoped } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -38,8 +39,12 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   resourceType: ResourceKind;
   /** Page title (also used as the empty-state label by default). */
   title: string;
-  /** Async fetch the list. `namespace` is `null` for cluster-scoped pages. */
-  fetcher: (params: { namespace: string | null }) => Promise<T[]>;
+  /**
+   * Read the list: the `list_*_in` command for a namespaced kind, given the
+   * selection (`null` for the whole cluster, and always for a cluster-scoped
+   * page); a cluster-scoped kind's list wrapped in `whole`.
+   */
+  fetcher: (params: { scope: string[] | null }) => Promise<Scoped<T>>;
   /**
    * Optional delete function. When provided a Trash2 quick action and the
    * confirm dialog wiring activate automatically.
@@ -134,9 +139,8 @@ export function createResourceListPage<T extends ListableResource>(
 
     const watchFactory = config.watch;
     // A watch is one cluster-wide or one single-namespace stream. A selection
-    // of several is polled per namespace instead (see `listAcrossScope`): a
-    // cluster-wide watch needs rights this user may lack and would stream
-    // namespaces they did not ask for.
+    // of several is polled instead: a cluster-wide watch needs rights this
+    // user may lack and would stream namespaces they did not ask for.
     const watchEnabled = !!watchFactory && (isCluster || !scope.several);
     const subscribe = useCallback(
       () => watchFactory!({ namespace: watchNamespace }),
@@ -148,11 +152,8 @@ export function createResourceListPage<T extends ListableResource>(
     );
     // Rebuilt each render, which React Query is fine with — it keys on
     // `queryKey`, and `cacheKey` moves with the selection.
-    const queryFn = isCluster
-      ? () => config.fetcher({ namespace: null })
-      : listAcrossScope(scope.scope, (namespace) =>
-          config.fetcher({ namespace })
-        );
+    const queryFn = () =>
+      config.fetcher({ scope: isCluster ? null : wireScope(scope.scope) });
 
     const { live, refresh, resyncing } = useWatchedList<T>({
       enabled: watchEnabled,

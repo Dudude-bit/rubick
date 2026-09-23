@@ -1,6 +1,10 @@
 //! Pod-specific commands
 
+use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+
+use futures::future::join_all;
 
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
@@ -8,13 +12,15 @@ use tauri::State;
 use tokio::sync::oneshot;
 
 use crate::commands::filters::PodFilters;
-use crate::commands::helpers::{get_resource_info, ResourceContext};
+use crate::commands::helpers::{
+    api_in, gathered, get_resource_info, reaches, scope_of, ResourceContext, UnreadNamespace,
+};
 use crate::error::Result;
 use crate::resources::{PodInfo, PodRow};
 use crate::state::perf::{chunks_within, IPC_TARGET_BYTES};
 use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::{AppEvent, AppState};
-use crate::utils::{elapsed_ms, generate_id, normalize_optional_namespace};
+use crate::utils::{elapsed_ms, generate_id};
 
 /// Rows per API page: one round trip's worth, converted and sent on before
 /// the next is asked for, so the first rows land before the last are read.
@@ -77,13 +83,10 @@ pub struct Paged {
 
 /// Read every page of `api`, handing each page's rows to `on_rows` as it
 /// lands, until the last page or `cancel`.
-pub async fn page_rows<F>(
-    api: &kube::Api<Pod>,
-    mut on_rows: F,
-    cancel: &mut oneshot::Receiver<()>,
-) -> Result<Paged>
+pub async fn page_rows<F, C>(api: &kube::Api<Pod>, mut on_rows: F, cancel: &mut C) -> Result<Paged>
 where
     F: FnMut(Vec<PodRow>),
+    C: Future + Unpin,
 {
     let mut lp = ListParams::default().limit(PAGE);
     let mut total = 0;
@@ -107,18 +110,81 @@ where
     }
 }
 
-/// Start listing pods as rows. They arrive in `pod-rows-batch` events, each
-/// under the IPC target, and the end as exactly one `pod-rows-done` or
-/// `pod-rows-failed`.
+/// How a read of the scope's pods ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopePaged {
+    pub rows: usize,
+    pub complete: bool,
+    pub unread: Vec<UnreadNamespace>,
+}
+
+/// Page every reach of `scope` at once until each has ended, or `cancel`.
+///
+/// Rows go to `on_rows` as they land, a namespace that fails partway
+/// included: `unread` names it, and the rows it did send are not its list.
+/// The rules for several answers are [`gathered`]'s.
+pub async fn page_scope<F>(
+    client: &kube::Client,
+    scope: Option<&[String]>,
+    on_rows: F,
+    cancel: &mut oneshot::Receiver<()>,
+) -> Result<ScopePaged>
+where
+    F: Fn(Vec<PodRow>) + Sync,
+{
+    let sent = AtomicUsize::new(0);
+    let counted = |rows: Vec<PodRow>| {
+        sent.fetch_add(rows.len(), Ordering::Relaxed);
+        on_rows(rows);
+    };
+    let walks = join_all(reaches(scope).into_iter().map(|reach| {
+        let api = api_in::<Pod>(client, reach);
+        let counted = &counted;
+        async move { page_rows(&api, counted, &mut std::future::pending::<()>()).await }
+    }));
+    let answers = tokio::select! {
+        biased;
+        _ = &mut *cancel => {
+            return Ok(ScopePaged {
+                rows: sent.load(Ordering::Relaxed),
+                complete: false,
+                unread: Vec::new(),
+            });
+        }
+        answers = walks => answers,
+    };
+    let unread = match scope {
+        Some(names) if names.len() > 1 => {
+            let answers = answers
+                .into_iter()
+                .map(|walk| walk.map(|_| Vec::<()>::new()));
+            gathered(names.to_vec(), answers.collect())?.unread
+        }
+        _ => {
+            for walk in answers {
+                walk?;
+            }
+            Vec::new()
+        }
+    };
+    Ok(ScopePaged {
+        rows: sent.load(Ordering::Relaxed),
+        complete: true,
+        unread,
+    })
+}
+
+/// Start listing the scope's pods as rows. They arrive in `pod-rows-batch`
+/// events, each under the IPC target, and the end as exactly one
+/// `pod-rows-done` or `pod-rows-failed`.
 #[tauri::command]
 pub async fn list_pod_rows(
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let namespace = normalize_optional_namespace(namespace);
-    // Built once here so a bad scope is refused before a stream id exists,
-    // and thrown away: the one the task uses is taken after the gate.
-    let _ = ResourceContext::for_list(&state, namespace.clone())?;
+    // Checked here so a bad scope is refused before a stream id exists.
+    let scope = scope_of(scope)?;
+    state.current_client()?;
     let context = state.get_current_context().ok_or_else(|| {
         crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
     })?;
@@ -140,6 +206,7 @@ pub async fn list_pod_rows(
                 rows: 0,
                 complete: false,
                 elapsed_ms: 0,
+                unread: Vec::new(),
             });
             return;
         }
@@ -155,13 +222,10 @@ pub async fn list_pod_rows(
             });
             return;
         };
-        let api: kube::Api<Pod> = match namespace.as_deref() {
-            Some(ns) => kube::Api::namespaced((*client).clone(), ns),
-            None => kube::Api::all((*client).clone()),
-        };
         let began = Instant::now();
-        let outcome = page_rows(
-            &api,
+        let outcome = page_scope(
+            &client,
+            scope.as_deref(),
             |rows| {
                 for chunk in chunks_within(rows, IPC_TARGET_BYTES) {
                     let _ = event_tx.send(AppEvent::PodRowsBatch {
@@ -186,6 +250,7 @@ pub async fn list_pod_rows(
                     rows: paged.rows,
                     complete: paged.complete,
                     elapsed_ms: elapsed_ms(began),
+                    unread: paged.unread,
                 }
             }
             Err(error) => AppEvent::PodRowsFailed {
@@ -305,7 +370,7 @@ mod paging_tests {
         let client = kube::Client::try_from(config).expect("a client");
         let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
 
-        let (_tx, mut cancel_rx) = oneshot::channel();
+        let (_tx, mut cancel_rx) = oneshot::channel::<()>();
         let mut seen: Vec<String> = Vec::new();
         let paged = page_rows(
             &api,
@@ -335,12 +400,110 @@ mod paging_tests {
         let client = kube::Client::try_from(config).expect("a client");
         let api: kube::Api<Pod> = kube::Api::namespaced(client, "shop");
 
-        let (tx, mut cancel_rx) = oneshot::channel();
+        let (tx, mut cancel_rx) = oneshot::channel::<()>();
         drop(tx);
         let paged = page_rows(&api, |_| {}, &mut cancel_rx)
             .await
             .expect("a cancelled walk still answers");
         assert!(!paged.complete, "a stopped list is not a finished one");
         server.abort();
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+    use crate::client::served::test_server::server;
+    use serde_json::json;
+    use std::sync::Mutex;
+
+    fn pods(namespace: &str, names: &[&str]) -> String {
+        let items: Vec<_> = names
+            .iter()
+            .map(|name| json!({ "metadata": { "name": name, "namespace": namespace } }))
+            .collect();
+        json!({ "kind": "PodList", "apiVersion": "v1", "metadata": {}, "items": items }).to_string()
+    }
+
+    fn forbidden() -> String {
+        json!({
+            "kind": "Status", "apiVersion": "v1", "status": "Failure",
+            "message": "pods is forbidden", "reason": "Forbidden", "code": 403,
+        })
+        .to_string()
+    }
+
+    async fn paged(routes: Vec<(&'static str, u16, String)>) -> (Result<ScopePaged>, Vec<String>) {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let (client, _) = server(routes).await;
+        let seen = Mutex::new(Vec::new());
+        let (_tx, mut cancel_rx) = oneshot::channel::<()>();
+        let scope = ["prod".to_string(), "staging".to_string()];
+        let answer = page_scope(
+            &client,
+            Some(&scope),
+            |rows| {
+                seen.lock()
+                    .unwrap()
+                    .extend(rows.into_iter().map(|row| row.name));
+            },
+            &mut cancel_rx,
+        )
+        .await;
+        (answer, seen.into_inner().unwrap())
+    }
+
+    /// The pods of the namespace that answered arrive, and the one that
+    /// refused is named at the end. Dropping `unread` here is the old
+    /// defect: a shorter list drawn as the whole scope.
+    #[tokio::test]
+    async fn a_refused_namespace_is_named_at_the_end_of_the_scope() {
+        let (answer, seen) = paged(vec![
+            (
+                "/api/v1/namespaces/prod/pods",
+                200,
+                pods("prod", &["api", "db"]),
+            ),
+            ("/api/v1/namespaces/staging/pods", 403, forbidden()),
+        ])
+        .await;
+        let paged = answer.expect("prod answered");
+        assert!(paged.complete);
+        assert_eq!(paged.rows, 2);
+        assert_eq!(seen, ["api", "db"]);
+        assert_eq!(paged.unread.len(), 1);
+        assert_eq!(paged.unread[0].namespace, "staging");
+        assert_eq!(paged.unread[0].code, "PERMISSION_DENIED");
+    }
+
+    /// Every namespace refusing is the refusal, not an empty scope.
+    #[tokio::test]
+    async fn a_scope_where_nothing_answered_fails() {
+        let (answer, seen) = paged(vec![
+            ("/api/v1/namespaces/prod/pods", 403, forbidden()),
+            ("/api/v1/namespaces/staging/pods", 403, forbidden()),
+        ])
+        .await;
+        assert!(answer.is_err_and(|error| error.is_refusal()));
+        assert!(seen.is_empty());
+    }
+
+    /// Both namespaces answering leaves nothing unread and every pod once.
+    #[tokio::test]
+    async fn every_namespace_answering_is_a_whole_scope() {
+        let (answer, mut seen) = paged(vec![
+            ("/api/v1/namespaces/prod/pods", 200, pods("prod", &["api"])),
+            (
+                "/api/v1/namespaces/staging/pods",
+                200,
+                pods("staging", &["web"]),
+            ),
+        ])
+        .await;
+        let paged = answer.expect("both answered");
+        seen.sort();
+        assert_eq!(seen, ["api", "web"]);
+        assert_eq!(paged.rows, 2);
+        assert!(paged.unread.is_empty());
     }
 }

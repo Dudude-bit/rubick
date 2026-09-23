@@ -1,7 +1,9 @@
 //! Deployment-specific commands
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
+use crate::commands::helpers::{
+    get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
+};
 use crate::error::Result;
 use crate::resources::{DeploymentCondition, DeploymentInfo, PodInfo, RolloutStatus};
 use crate::state::AppState;
@@ -18,6 +20,8 @@ pub async fn list_deployments(
 ) -> Result<Vec<DeploymentInfo>> {
     list_resource_infos::<Deployment, DeploymentInfo>(filters, state).await
 }
+
+list_in_scope!(list_deployments_in, Deployment, DeploymentInfo);
 
 /// Get a single deployment by name
 #[tauri::command]

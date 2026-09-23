@@ -26,15 +26,9 @@ export const configMapColumns = (): ColumnDef<ConfigMapInfo>[] => [
 export const ConfigMapList = createResourceListPage<ConfigMapInfo>({
   resourceType: ResourceType.ConfigMap,
   title: "ConfigMaps",
-  fetcher: ({ namespace }) =>
-    commands.listConfigmaps({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetcher: ({ scope }) => commands.listConfigmapsIn(scope),
   // Real-time updates via the resource-watch subsystem. Initial state
-  // still comes from `listConfigmaps` (TanStack Query's first fetch);
+  // still comes from `listConfigmapsIn` (TanStack Query's first fetch);
   // every change after that is delivered through `resource-event`
   // Tauri events and applied to the cache via `setQueryData`. The
   // factory switches the poll `refresh` rate off automatically when `watch` is

@@ -3,10 +3,10 @@
 //! Each command needs the same dynamic Api — the kind at the version the
 //! cluster serves — and `crd_to_dynamic_api` is the one place it is built.
 
-use kube::api::{Api, DeleteParams, DynamicObject, Patch, PatchParams};
+use kube::api::{Api, DeleteParams, DynamicObject, ListParams, Patch, PatchParams};
 use tauri::State;
 
-use crate::commands::helpers::{build_list_params, ResourceContext};
+use crate::commands::helpers::{across, build_list_params, ResourceContext, Scoped};
 use crate::error::{Error, Result};
 use crate::state::AppState;
 
@@ -57,19 +57,47 @@ pub async fn list_custom_resources(
     state: State<'_, AppState>,
 ) -> Result<Vec<CustomResourceInfo>> {
     crate::validation::validate_dns_subdomain(&crd_name)?;
-
-    let api = crd_to_dynamic_api(&crd_name, namespace, true, &state).await?;
     let params = build_list_params(label_selector.as_deref(), None, limit);
-    let list = api.list(&params).await;
+    instances_in(&crd_name, namespace, &params, &state).await
+}
+
+/// The instances page's read: one LIST per namespace of the scope. A
+/// cluster-scoped kind has no namespaces to read across and is read once.
+#[tauri::command]
+pub async fn list_custom_resources_in(
+    crd_name: String,
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Scoped<CustomResourceInfo>> {
+    crate::validation::validate_dns_subdomain(&crd_name)?;
+    let (plural, group) = crd_name.split_once('.').unwrap_or_default();
+    let namespaced = state
+        .served(group, plural)
+        .await?
+        .is_none_or(|served| served.namespaced);
+    let scope = if namespaced { scope } else { None };
+    let params = build_list_params(None, None, None);
+    across(scope, |reach| {
+        instances_in(&crd_name, reach, &params, &state)
+    })
+    .await
+}
+
+async fn instances_in(
+    crd_name: &str,
+    namespace: Option<String>,
+    params: &ListParams,
+    state: &State<'_, AppState>,
+) -> Result<Vec<CustomResourceInfo>> {
+    let api = crd_to_dynamic_api(crd_name, namespace, true, state).await?;
+    let list = api.list(params).await;
     // The collection gone from where discovery put it: the CRD moved on.
     if matches!(&list, Err(kube::Error::Api(status)) if status.code == 404) {
         if let Some((_, group)) = crd_name.split_once('.') {
             state.forget_served(group);
         }
     }
-    let list = list?;
-
-    Ok(list
+    Ok(list?
         .items
         .iter()
         .map(dynamic_object_to_custom_resource_info)

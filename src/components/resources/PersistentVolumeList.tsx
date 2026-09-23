@@ -3,6 +3,7 @@ import { T } from "@/i18n/T";
 
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { whole } from "@/lib/namespace-scope";
 import { ResourceType } from "@/lib/resource-registry";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import { ClaimRef, StorageClassRef } from "./storage-refs";
@@ -61,7 +62,7 @@ export const PersistentVolumeList =
     title: "Persistent Volumes",
     description: ({ t }) => t("empty", "persistentVolumesAre"),
     scope: "cluster",
-    fetcher: () => commands.listPersistentVolumes(null),
+    fetcher: () => commands.listPersistentVolumes(null).then(whole),
     watch: () => commands.subscribePersistentvolumeWatch(),
     deleter: (item) => commands.deletePersistentVolume(item.name),
     columns,

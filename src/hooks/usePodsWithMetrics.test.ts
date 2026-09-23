@@ -35,7 +35,7 @@ vi.mock("@/hooks/useLiveQuery", () => ({
   // Freshness comes with every real answer; a mock without it made the hook
   // read waitingSince off undefined.
   useLiveQuery: () => ({
-    data: state.pods,
+    data: { rows: state.pods, unread: [] },
     isLoading: false,
     error: null,
     freshness: { slowed: false, waitingSince: null },

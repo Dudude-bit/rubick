@@ -29,6 +29,35 @@ const listGatewayClasses = vi.fn();
 const listServices = vi.fn();
 const listServiceEndpoints = vi.fn();
 
+/** The backend's fan-out over the per-namespace mocks: one read per namespace, the refused ones named. */
+async function across<T>(
+  scope: string[] | null,
+  read: (ns: string | null) => Promise<T[]>
+) {
+  if (scope === null) return { rows: await read(null), unread: [] };
+  const settled = await Promise.allSettled(scope.map((ns) => read(ns)));
+  const failed = settled.flatMap((answer, i) =>
+    answer.status === "rejected"
+      ? [
+          {
+            namespace: scope[i],
+            code: "PERMISSION_DENIED",
+            message: String(answer.reason),
+          },
+        ]
+      : []
+  );
+  if (failed.length === scope.length) {
+    throw (settled[0] as PromiseRejectedResult).reason;
+  }
+  return {
+    rows: settled.flatMap((answer) =>
+      answer.status === "fulfilled" ? answer.value : []
+    ),
+    unread: failed,
+  };
+}
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     detectInClusterExtensions: () => detectInClusterExtensions(),
@@ -39,9 +68,10 @@ vi.mock("@/lib/commands", () => ({
     checkListAccess: () => checkListAccess(),
     checkCrdReadAccess: () => checkCrdReadAccess(),
     detectGatewayApi: () => detectGatewayApi(),
-    listGatewayRoutes: (kind: string, ns: string | null) =>
-      listGatewayRoutes(kind, ns),
+    listGatewayRoutesIn: (kind: string, scope: string[] | null) =>
+      across(scope, (ns) => listGatewayRoutes(kind, ns)),
     listGateways: (ns: string | null) => listGateways(ns),
+    listGatewaysIn: (scope: string[] | null) => across(scope, listGateways),
     listGatewayClasses: () => listGatewayClasses(),
     listServices: (ns: string | null) => listServices(ns),
     listServiceEndpoints: (ns: string | null) => listServiceEndpoints(ns),
@@ -593,6 +623,48 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
     expect(routeNamespacesAsked).toContain("team-a");
     expect(routeNamespacesAsked).toContain("team-b");
     expect(routeNamespacesAsked).not.toContain(null);
+  });
+
+  /**
+   * One namespace of the selection refused while the other answered. The
+   * rail used to count the one that answered and print it as the scope's
+   * total; a number there now would say the refused namespace has none.
+   */
+  it("gives no count when a namespace of the selection could not be read", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-a", "team-b"],
+    });
+    listGateways.mockImplementation(async (ns: string | null) => {
+      if (ns !== "team-a") throw new Error("gateways is forbidden (code: 403)");
+      return [gatewayIn(ns)];
+    });
+    listGatewayRoutes.mockImplementation(
+      async (_kind: string, ns: string | null) => {
+        if (ns !== "team-a") {
+          throw new Error("httproutes is forbidden (code: 403)");
+        }
+        return [routeIn(ns)];
+      }
+    );
+
+    wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    const gateways = await screen.findByRole("link", { name: /gateways/i });
+    await waitFor(() =>
+      expect(listGatewayRoutes.mock.calls.map(([, ns]) => ns)).toContain(
+        "team-b"
+      )
+    );
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(within(routes).queryByText("1")).toBeNull();
+    expect(within(gateways).queryByText("1")).toBeNull();
   });
 
   /**

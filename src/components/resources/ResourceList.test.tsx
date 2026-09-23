@@ -15,20 +15,22 @@ import type { ColumnDef } from "@/components/ui/table-features";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-vi.mock("@/stores/clusterStore", () => {
-  const state = {
+const store = vi.hoisted(() => ({
+  state: {
     currentNamespace: "default",
     namespaceScope: [] as string[],
     isConnected: true,
-  };
-  return {
-    useClusterStore: vi.fn(<T,>(selector?: (s: typeof state) => T) =>
-      typeof selector === "function" ? selector(state) : state
-    ),
-  };
-});
+  },
+}));
+
+vi.mock("@/stores/clusterStore", () => ({
+  useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
+    typeof selector === "function" ? selector(store.state) : store.state
+  ),
+}));
 
 import { ResourceList } from "./ResourceList";
+import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
 
 interface Item {
@@ -38,7 +40,13 @@ interface Item {
 
 const columns: ColumnDef<Item>[] = [{ accessorKey: "name", header: "Name" }];
 
-const list = (props: { data: Item[]; error?: Error | null }) =>
+const list = (props: {
+  data?: Item[];
+  error?: Error | null;
+  unread?: UnreadNamespace[];
+  queryKey?: string[];
+  queryFn?: () => Promise<Scoped<Item>>;
+}) =>
   render(
     <QueryClientProvider
       client={
@@ -113,6 +121,55 @@ describe("a list whose rows come from outside", () => {
   });
 });
 
+describe("a scope some of whose namespaces did not answer", () => {
+  const refused: UnreadNamespace = {
+    namespace: "staging",
+    code: "PERMISSION_DENIED",
+    message: 'pods is forbidden: User "narrow" cannot list pods in staging',
+  };
+
+  afterEach(() => {
+    store.state.namespaceScope = [];
+  });
+
+  /**
+   * The defect the scoped read exists for: one namespace refused, the other
+   * answered, and the page drew the answer as the whole selection. The
+   * refused one is named with the cluster's words, and the header carries no
+   * count, because the rows are not the scope's total.
+   */
+  it("names the namespace it could not read beside the rows of the rest", () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+
+    expect(screen.getByText("api")).toBeVisible();
+    expect(
+      screen.getByText("Could not read pods in staging.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/The cluster refused: pods is forbidden/)
+    ).toBeVisible();
+    expect(screen.queryByText("1")).toBeNull();
+  });
+
+  /**
+   * "None in the current scope" over a scope with an unread namespace is the
+   * third state collapsed into the second. The empty table speaks only for
+   * the namespaces that answered.
+   */
+  it("says none only of the namespaces that answered", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({
+      queryKey: ["pods", "prod,staging"],
+      queryFn: async () => ({ rows: [], unread: [refused] }),
+    });
+
+    expect(await screen.findByText("No pods in prod.")).toBeVisible();
+    expect(screen.queryByText(/No resources of this type/)).toBeNull();
+    expect(screen.getByText("Could not read pods in staging.")).toBeVisible();
+  });
+});
+
 describe("a read on a large cluster", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -153,8 +210,8 @@ describe("a read on a large cluster", () => {
    */
   it("says what it is still reading once the wait is long enough to notice", async () => {
     vi.useFakeTimers();
-    let resolve: (rows: Item[]) => void = () => {};
-    const pending = new Promise<Item[]>((done) => {
+    let resolve: (answer: Scoped<Item>) => void = () => {};
+    const pending = new Promise<Scoped<Item>>((done) => {
       resolve = done;
     });
     render(
@@ -189,7 +246,7 @@ describe("a read on a large cluster", () => {
       /Still reading pods/
     );
 
-    resolve([{ name: "web", namespace: "default" }]);
+    resolve({ rows: [{ name: "web", namespace: "default" }], unread: [] });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });

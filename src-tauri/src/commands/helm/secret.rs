@@ -4,7 +4,7 @@
 //! directly from the API server avoids the helm CLI dependency for
 //! the read-only paths.
 
-use crate::commands::helpers::ResourceContext;
+use crate::commands::helpers::{across, api_in, ResourceContext, Scoped};
 use crate::error::{Error, PluginError, Result};
 use crate::state::AppState;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -87,15 +87,19 @@ fn latest_release_secrets<'a>(
         .collect()
 }
 
-/// List Helm releases using native Kubernetes API (reads Helm secrets directly)
+/// The Helm page's read: the latest revision of every release in the scope,
+/// from the release secrets themselves, one LIST per namespace.
 #[tauri::command]
-pub async fn list_helm_releases_native(
-    namespace: Option<String>,
+pub async fn list_helm_releases_in(
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
-) -> Result<Vec<HelmRelease>> {
-    let ctx = ResourceContext::for_list(&state, namespace)?;
+) -> Result<Scoped<HelmRelease>> {
+    let client = (*state.current_client()?).clone();
+    across(scope, |reach| releases_in(client.clone(), reach)).await
+}
 
-    let secrets: Api<Secret> = ctx.namespaced_or_cluster_api();
+async fn releases_in(client: kube::Client, reach: Option<String>) -> Result<Vec<HelmRelease>> {
+    let secrets: Api<Secret> = api_in(&client, reach.as_deref());
 
     // Metadata first, payloads for the winners only: this list used to
     // fetch every revision of every release whole — on the reported
@@ -111,7 +115,6 @@ pub async fn list_helm_releases_native(
         ))
     }));
 
-    let client = ctx.client.clone();
     let fetched = futures::stream::iter(winners)
         .map(|(namespace, name)| {
             let client = client.clone();

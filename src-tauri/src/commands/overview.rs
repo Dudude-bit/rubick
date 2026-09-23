@@ -11,6 +11,7 @@
 //! the transfer and the main thread, and the reduction has to re-run on
 //! every watch event.
 
+use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::state::AppState;
@@ -1062,46 +1063,6 @@ pub async fn get_cluster_overview(
     state: State<'_, AppState>,
 ) -> Result<ClusterOverview> {
     Box::pin(cluster_overview(&state, scope)).await
-}
-
-/// `scope` checked, sorted and without repeats. The answer is about a set of
-/// namespaces, so two spellings of one set read, rank and tie alike.
-fn scope_of(scope: Option<Vec<String>>) -> Result<Option<Vec<String>>> {
-    let Some(mut names) = scope else {
-        return Ok(None);
-    };
-    if names.is_empty() {
-        return Err(Error::InvalidInput(
-            "An overview scope names at least one namespace".to_string(),
-        ));
-    }
-    for name in &names {
-        crate::validation::validate_namespace(name)?;
-    }
-    names.sort();
-    names.dedup();
-    Ok(Some(names))
-}
-
-/// Where the namespaced kinds are read: once across the cluster, or once in
-/// each namespace of the scope. The cluster-scoped reads beside them happen
-/// once whichever it is.
-fn reaches(scope: Option<&[String]>) -> Vec<Option<&str>> {
-    scope.map_or_else(
-        || vec![None],
-        |names| names.iter().map(|name| Some(name.as_str())).collect(),
-    )
-}
-
-fn api_in<K>(client: &Client, reach: Option<&str>) -> Api<K>
-where
-    K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>,
-    K::DynamicType: Default,
-{
-    match reach {
-        Some(namespace) => Api::namespaced(client.clone(), namespace),
-        None => Api::all(client.clone()),
-    }
 }
 
 /// The counts and the usage every overview needs beside its lists.
@@ -3273,28 +3234,5 @@ mod across_namespaces {
         let unmeasured = with(None);
         assert!(!unmeasured.metrics_available);
         assert_eq!(unmeasured.nodes[0].cpu.usage, None);
-    }
-
-    /// An empty list read as "every namespace" hands a caller that lost its
-    /// selection the whole cluster's numbers under a label naming none of it.
-    #[test]
-    fn an_empty_scope_is_refused_rather_than_read_as_the_whole_cluster() {
-        assert!(matches!(scope_of(None), Ok(None)));
-        assert!(matches!(
-            scope_of(Some(Vec::new())),
-            Err(Error::InvalidInput(_))
-        ));
-    }
-
-    /// A scope is a set: the same namespaces in another order, or twice,
-    /// are one question with one answer — including how ties are ordered.
-    #[test]
-    fn a_scope_is_read_as_a_set_of_valid_names() {
-        let asked = vec![STAGING.to_string(), PROD.to_string(), STAGING.to_string()];
-        assert_eq!(
-            scope_of(Some(asked)).expect("a valid scope"),
-            Some(vec![PROD.to_string(), STAGING.to_string()])
-        );
-        assert!(scope_of(Some(vec!["Prod_1".to_string()])).is_err());
     }
 }

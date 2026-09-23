@@ -24,7 +24,10 @@ vi.mock("@/stores/clusterStore", () => {
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listConfigmaps: vi.fn(async () => [] as ConfigMapInfo[]),
+    listConfigmapsIn: vi.fn(async () => ({
+      rows: [] as ConfigMapInfo[],
+      unread: [],
+    })),
     deleteConfigmap: vi.fn(async () => undefined),
   },
 }));
@@ -64,7 +67,10 @@ function renderList() {
 
 describe("ConfigMapList", () => {
   beforeEach(() => {
-    vi.mocked(commands.listConfigmaps).mockResolvedValue([]);
+    vi.mocked(commands.listConfigmapsIn).mockResolvedValue({
+      rows: [],
+      unread: [],
+    });
   });
 
   it("renders the title", async () => {
@@ -72,37 +78,39 @@ describe("ConfigMapList", () => {
     expect(await screen.findByText("ConfigMaps")).toBeInTheDocument();
   });
 
-  it("invokes listConfigmaps with the current namespace from the cluster store", async () => {
+  it("asks for the window's selection from the cluster store", async () => {
     renderList();
     await waitFor(() => {
-      expect(commands.listConfigmaps).toHaveBeenCalled();
+      expect(commands.listConfigmapsIn).toHaveBeenCalled();
     });
-    const call = vi.mocked(commands.listConfigmaps).mock.calls[0]?.[0];
-    expect(call).toBeDefined();
-    expect(call!.namespace).toBe("default");
-    // Other filters default to null per current contract.
-    expect(call!.labelSelector).toBeNull();
-    expect(call!.fieldSelector).toBeNull();
-    expect(call!.limit).toBeNull();
+    expect(vi.mocked(commands.listConfigmapsIn).mock.calls[0]?.[0]).toEqual([
+      "default",
+    ]);
   });
 
   // TODO: row-level rendering needs deeper mocking of useResource's loading
   // state — DataTable shows a skeleton while loading and the test query
   // resolution timing leaves it in skeleton state. Pinned for follow-up.
   it.skip("renders rows for each returned configmap (name visible)", async () => {
-    vi.mocked(commands.listConfigmaps).mockResolvedValue([
-      buildConfigMap({ name: "alpha" }),
-      buildConfigMap({ name: "beta", uid: "uid-2" }),
-    ]);
+    vi.mocked(commands.listConfigmapsIn).mockResolvedValue({
+      rows: [
+        buildConfigMap({ name: "alpha" }),
+        buildConfigMap({ name: "beta", uid: "uid-2" }),
+      ],
+      unread: [],
+    });
     renderList();
     expect(await screen.findByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("beta")).toBeInTheDocument();
   });
 
   it.skip("shows the data-keys column count for each configmap", async () => {
-    vi.mocked(commands.listConfigmaps).mockResolvedValue([
-      buildConfigMap({ name: "alpha", dataKeys: ["one", "two", "three"] }),
-    ]);
+    vi.mocked(commands.listConfigmapsIn).mockResolvedValue({
+      rows: [
+        buildConfigMap({ name: "alpha", dataKeys: ["one", "two", "three"] }),
+      ],
+      unread: [],
+    });
     renderList();
     await screen.findByText("alpha");
     // The createDataKeysColumn helper renders the count of keys.
@@ -110,11 +118,14 @@ describe("ConfigMapList", () => {
   });
 
   it("shows an empty state when the API returns no configmaps", async () => {
-    vi.mocked(commands.listConfigmaps).mockResolvedValue([]);
+    vi.mocked(commands.listConfigmapsIn).mockResolvedValue({
+      rows: [],
+      unread: [],
+    });
     renderList();
     // Wait for the load to complete, then confirm the table renders no rows.
     await waitFor(() => {
-      expect(commands.listConfigmaps).toHaveBeenCalled();
+      expect(commands.listConfigmapsIn).toHaveBeenCalled();
     });
     expect(screen.queryByText(/^my-config$/)).not.toBeInTheDocument();
   });

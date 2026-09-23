@@ -2,7 +2,7 @@ import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +29,7 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 import { TlsBadge } from "@/components/network";
 import { useWatchedList } from "@/hooks/useWatchedList";
 
-import type { IngressInfo } from "@/generated/types";
+import type { IngressInfo, Scoped } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useT } from "@/i18n/useT";
@@ -219,18 +219,11 @@ export function IngressList() {
   const scope = useNamespaceScope();
   const navigate = useNavigate();
 
-  // Several namespaces are read one apiece and polled; a watch covers none or
-  // one. See `listAcrossScope`.
+  // Several namespaces are polled; a watch covers none or one.
   const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
   const watchEnabled = !scope.several;
-  const listIngressesFor = (namespace: string | null) =>
-    commands.listIngresses({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    });
+  const listIngresses = () => commands.listIngressesIn(wireScope(scope.scope));
 
   const queryKey = useMemo(
     () => queryKeys.resources(ResourceType.Ingress, cacheKey),
@@ -249,14 +242,14 @@ export function IngressList() {
   });
 
   // A second observer on the list's own cache entry, so the rows cost one
-  // request and not two — the same trick the sidebar counts use.
-  const listed = useResourceList<IngressInfo[]>(
-    queryKey,
-    listAcrossScope(scope.scope, listIngressesFor)
-  );
+  // request and not two — the same trick the sidebar counts use. At the
+  // list's own rate: left at the default it polled under a live watch.
+  const listed = useResourceList<Scoped<IngressInfo>>(queryKey, listIngresses, {
+    refresh,
+  });
   const asked = useMemo(
     () =>
-      (listed.data ?? []).map((ingress) => ({
+      (listed.data?.rows ?? []).map((ingress) => ({
         namespace: ingress.namespace,
         name: ingress.name,
         hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
@@ -322,7 +315,7 @@ export function IngressList() {
         title="Ingresses"
         queryKey={queryKey}
         getRowId={getResourceRowId}
-        queryFn={listAcrossScope(scope.scope, listIngressesFor)}
+        queryFn={listIngresses}
         columns={baseColumns}
         quickActions={quickActions}
         emptyStateLabel={toPlural(ResourceType.Ingress)}

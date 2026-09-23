@@ -165,13 +165,7 @@ export const EndpointsList = createResourceListPage<EndpointsInfo>({
   title: "Endpoints",
   description: ({ scope, t }) =>
     t("empty", "endpointsFor", { scope: scope.inWords }),
-  fetcher: ({ namespace }) =>
-    commands.listEndpoints({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetcher: ({ scope }) => commands.listEndpointsIn(scope),
   watch: ({ namespace }) => commands.subscribeEndpointsWatch(namespace),
   // No deleter — read-only resource
   columns,

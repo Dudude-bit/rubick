@@ -11,7 +11,7 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_in_scope, list_resource_infos};
 
 // ============= StatefulSet =============
 
@@ -22,6 +22,8 @@ pub async fn list_statefulsets(
 ) -> Result<Vec<StatefulSetInfo>> {
     list_resource_infos::<StatefulSet, StatefulSetInfo>(filters, state).await
 }
+
+list_in_scope!(list_statefulsets_in, StatefulSet, StatefulSetInfo);
 
 #[tauri::command]
 pub async fn get_statefulset(
@@ -72,6 +74,8 @@ pub async fn list_daemonsets(
     list_resource_infos::<DaemonSet, DaemonSetInfo>(filters, state).await
 }
 
+list_in_scope!(list_daemonsets_in, DaemonSet, DaemonSetInfo);
+
 #[tauri::command]
 pub async fn get_daemonset(
     name: String,
@@ -110,6 +114,8 @@ pub async fn list_jobs(
     list_resource_infos::<Job, JobInfo>(filters, state).await
 }
 
+list_in_scope!(list_jobs_in, Job, JobInfo);
+
 #[tauri::command]
 pub async fn get_job(
     name: String,
@@ -130,13 +136,7 @@ pub async fn delete_job(
 
 // ============= CronJob =============
 
-#[tauri::command]
-pub async fn list_cronjobs(
-    filters: Option<ResourceFilters>,
-    state: State<'_, AppState>,
-) -> Result<Vec<CronJobInfo>> {
-    list_resource_infos::<CronJob, CronJobInfo>(filters, state).await
-}
+list_in_scope!(list_cronjobs_in, CronJob, CronJobInfo);
 
 #[tauri::command]
 pub async fn get_cronjob(

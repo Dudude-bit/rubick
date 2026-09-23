@@ -16,14 +16,19 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import {
+  joinScoped,
+  scopeCacheKey,
+  whole,
+  wireScope,
+} from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
 import {
   ResourceType,
   toPlural,
   type ResourceKind,
 } from "@/lib/resource-registry";
-import type { RouteInfo } from "@/generated/types";
+import type { RouteInfo, Scoped } from "@/generated/types";
 
 export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
   ResourceType.HTTPRoute,
@@ -38,8 +43,7 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
  *  kind's recovery must not stop the polling that covers another's still
  *  broken stream. */
 function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
-  // Several namespaces are read one apiece and polled; a watch covers none or
-  // one. See `listAcrossScope`.
+  // Several namespaces are polled; a watch covers none or one.
   const several = scope.length >= 2;
   const cacheKey = scopeCacheKey(scope);
   const watchNamespace = scope.length === 1 ? scope[0] : null;
@@ -56,11 +60,9 @@ function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
     queryKey,
     reportFailure: toPlural(kind),
   });
-  const query = useLiveQuery<RouteInfo[]>({
+  const query = useLiveQuery<Scoped<RouteInfo>>({
     queryKey,
-    queryFn: listAcrossScope(scope, (ns) =>
-      commands.listGatewayRoutes(kind, ns)
-    ),
+    queryFn: () => commands.listGatewayRoutesIn(kind, wireScope(scope)),
     enabled: served,
     staleTime: STALE_TIMES.resourceList,
     // The watch feeds the cache; polling is the fallback after it fails, and
@@ -116,11 +118,15 @@ export function useGatewayRoutes(scope: string[]) {
     [http, grpc, tls, tcp, udp]
   );
   const active = kinds.filter((entry) => entry.served);
-  const routes = useMemo(
+  // One answer from five: a namespace any kind could not read is unread for
+  // the page, and the rows beside it are not the scope's whole.
+  const { rows: routes, unread } = useMemo(
     () =>
-      kinds
-        .filter((entry) => entry.served)
-        .flatMap((entry) => entry.query.data ?? []),
+      joinScoped(
+        kinds
+          .filter((entry) => entry.served)
+          .map((entry) => entry.query.data ?? whole<RouteInfo>([]))
+      ),
     [kinds]
   );
 
@@ -130,6 +136,7 @@ export function useGatewayRoutes(scope: string[]) {
     detectionError: (scan.error as Error | null) ?? null,
     served,
     routes,
+    unread,
     isLoading:
       active.length > 0 && active.some((entry) => entry.query.isLoading),
     // An error only speaks when it hides rows: one kind failing while four

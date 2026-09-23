@@ -91,14 +91,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
 export const ServiceList = createResourceListPage<ServiceInfo>({
   resourceType: ResourceType.Service,
   title: "Services",
-  fetcher: ({ namespace }) =>
-    commands.listServices({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-      serviceType: null,
-    }),
+  fetcher: ({ scope }) => commands.listServicesIn(scope),
   watch: ({ namespace }) => commands.subscribeServiceWatch(namespace),
   deleter: (item) => commands.deleteService(item.name, item.namespace),
   columns,

@@ -80,7 +80,7 @@ const TONE_CLASS = {
 export const GatewayList = createResourceListPage<GatewayInfo>({
   resourceType: ResourceType.Gateway,
   title: "Gateways",
-  fetcher: ({ namespace }) => commands.listGateways(namespace),
+  fetcher: ({ scope }) => commands.listGatewaysIn(scope),
   deleter: (item) => commands.deleteGateway(item.name, item.namespace),
   watch: ({ namespace }) => commands.subscribeGatewayWatch(namespace),
   columns: () => [

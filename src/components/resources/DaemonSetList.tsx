@@ -61,13 +61,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
 export const DaemonSetList = createWorkloadListPage<DaemonSetInfo>({
   resourceType: ResourceType.DaemonSet,
   title: "DaemonSets",
-  fetchList: ({ namespace }) =>
-    commands.listDaemonsets({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetchList: ({ scope }) => commands.listDaemonsetsIn(scope),
   matchPods: matchDaemonSetPods,
   watch: ({ namespace }) => commands.subscribeDaemonsetWatch(namespace),
   deleter: (item) => commands.deleteDaemonset(item.name, item.namespace),

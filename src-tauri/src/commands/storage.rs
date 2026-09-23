@@ -12,7 +12,7 @@ use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
 use crate::commands::helpers::{
-    get_cluster_resource_info, get_resource_info, list_cluster_resource_infos, list_resource_infos,
+    get_cluster_resource_info, get_resource_info, list_cluster_resource_infos, list_in_scope,
 };
 
 /// List all `PersistentVolumes` in the cluster
@@ -24,14 +24,11 @@ pub async fn list_persistent_volumes(
     list_cluster_resource_infos::<PersistentVolume, PersistentVolumeInfo>(filters, state).await
 }
 
-/// List `PersistentVolumeClaims`
-#[tauri::command]
-pub async fn list_persistent_volume_claims(
-    filters: Option<ResourceFilters>,
-    state: State<'_, AppState>,
-) -> Result<Vec<PersistentVolumeClaimInfo>> {
-    list_resource_infos::<PersistentVolumeClaim, PersistentVolumeClaimInfo>(filters, state).await
-}
+list_in_scope!(
+    list_persistent_volume_claims_in,
+    PersistentVolumeClaim,
+    PersistentVolumeClaimInfo
+);
 
 /// List `StorageClasses`
 #[tauri::command]

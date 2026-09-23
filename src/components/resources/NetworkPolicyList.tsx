@@ -52,7 +52,7 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
 export const NetworkPolicyList = createResourceListPage<NetworkPolicyInfo>({
   resourceType: ResourceType.NetworkPolicy,
   title: "NetworkPolicies",
-  fetcher: ({ namespace }) => commands.listNetworkPolicies(namespace),
+  fetcher: ({ scope }) => commands.listNetworkPoliciesIn(scope),
   deleter: (item) =>
     commands.deleteNetworkPolicy(item.name, item.namespace ?? null),
   columns: () => networkPolicyColumns,

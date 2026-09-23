@@ -15,6 +15,7 @@ import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
+import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
 import { errorToShow } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -323,7 +324,7 @@ export function NodeList() {
         title="Nodes"
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
-        queryFn={() => commands.listNodes(null)}
+        queryFn={() => commands.listNodes(null).then(whole)}
         columns={nodeColumns}
         quickActions={quickActions}
         grouping={grouping}

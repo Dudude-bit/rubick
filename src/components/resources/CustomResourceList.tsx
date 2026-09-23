@@ -7,7 +7,7 @@ import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -56,8 +56,7 @@ export function CustomResourceList({
 
   const navigate = useNavigate();
   // A cluster-scoped CRD ignores the namespace selection; a namespaced one is
-  // read across it — several namespaces one apiece and polled, one or none as
-  // a single request/watch. See `listAcrossScope`.
+  // read across it — several namespaces polled, one or none watched.
   const isNamespaced = scope === "Namespaced";
   const namespaceScope = isNamespaced ? nsScope.scope : [];
   const watchNamespace =
@@ -218,18 +217,19 @@ export function CustomResourceList({
       }
       queryKey={queryKey}
       getRowId={getResourceRowId}
-      queryFn={listAcrossScope(namespaceScope, async (ns) => {
-        const result = await commands.listCustomResources(
+      queryFn={async () => {
+        const answer = await commands.listCustomResourcesIn(
           crdName,
-          ns,
-          null,
-          null
+          wireScope(namespaceScope)
         );
-        return result.map((r) => ({
-          ...r,
-          namespace: r.namespace || "",
-        }));
-      })}
+        return {
+          ...answer,
+          rows: answer.rows.map((r) => ({
+            ...r,
+            namespace: r.namespace || "",
+          })),
+        };
+      }}
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}

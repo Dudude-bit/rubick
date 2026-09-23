@@ -58,7 +58,7 @@ describe("what the releases tab does when the read fails", () => {
   it("names a refusal instead of showing an empty table", () => {
     mount({
       error:
-        "Tauri command 'listHelmReleasesNative' failed: secrets is forbidden (code: 403)",
+        "Tauri command 'listHelmReleasesIn' failed: secrets is forbidden (code: 403)",
     });
 
     expect(
