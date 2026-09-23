@@ -11,8 +11,8 @@ export interface NamespaceScope {
   /** `null` when the cluster-wide overview was refused or failed — the count
    *  is unknown, not zero. */
   podCount: number | null;
-  /** Problems the backend attributed to this namespace, cluster-wide. `null`
-   *  when the overview could not be read. */
+  /** Problems the backend attributed to this namespace, counted before its
+   *  list was capped. `null` when the overview could not be read. */
   problemCount: number | null;
 }
 
@@ -21,9 +21,8 @@ export interface ClusterSummary {
    *  shows "—", not "0", so a token without cluster read rights is never told
    *  its cluster is empty and healthy. */
   podCount: number | null;
+  /** Every problem, including the ones the backend's ranked list dropped. */
   problemCount: number | null;
-  /** Problems the backend dropped from its ranked list, if any. */
-  problemsTruncated: number;
   namespaces: NamespaceScope[];
   isLoading: boolean;
 }
@@ -57,29 +56,23 @@ export function useClusterSummary(): ClusterSummary {
     // no count to state, and a `0` there would tell a namespace-scoped user
     // their cluster is empty and healthy. `known` is what keeps that honest.
     const known = overview !== undefined;
-    const pods = new Map(
-      (overview?.namespaces ?? []).map((ns) => [ns.name, ns.podCount])
+    // Counted in Rust before the problem list is cut to fifty; counting the
+    // list here read "0" for any namespace whose problems the cut dropped.
+    const loads = new Map(
+      (overview?.namespaces ?? []).map((ns) => [ns.name, ns])
     );
-    const problems = new Map<string, number>();
-    for (const problem of overview?.problems ?? []) {
-      if (!problem.namespace) continue;
-      problems.set(
-        problem.namespace,
-        (problems.get(problem.namespace) ?? 0) + 1
-      );
-    }
 
     // listNamespaces is the authority on what exists — the overview only
     // reports namespaces that hold pods. It can still fail on a token
     // without cluster-wide list rights, hence the fallback.
     const names =
-      namespaceInfos?.map((ns) => ns.name) ?? [...pods.keys()].sort();
+      namespaceInfos?.map((ns) => ns.name) ?? [...loads.keys()].sort();
 
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: known ? (pods.get(name) ?? 0) : null,
-        problemCount: known ? (problems.get(name) ?? 0) : null,
+        podCount: known ? (loads.get(name)?.podCount ?? 0) : null,
+        problemCount: known ? (loads.get(name)?.problemCount ?? 0) : null,
       }))
       .sort(
         (a, b) =>
@@ -90,8 +83,9 @@ export function useClusterSummary(): ClusterSummary {
 
     return {
       podCount: overview ? overview.counts.pods : null,
-      problemCount: overview ? overview.problems.length : null,
-      problemsTruncated: overview?.problemsTruncated ?? 0,
+      problemCount: overview
+        ? overview.problems.length + overview.problemsTruncated
+        : null,
       namespaces,
       isLoading: overviewLoading || namespacesLoading,
     };

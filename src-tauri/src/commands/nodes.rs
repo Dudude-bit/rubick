@@ -119,7 +119,6 @@ pub async fn list_nodes(
 /// Get a single node by name
 #[tauri::command]
 pub async fn get_node(name: String, state: State<'_, AppState>) -> Result<NodeInfo> {
-    crate::validation::validate_dns_subdomain(&name)?;
     get_cluster_resource_info::<Node, NodeInfo>(name, state).await
 }
 

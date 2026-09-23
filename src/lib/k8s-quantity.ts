@@ -4,7 +4,9 @@
  * Unified module for parsing and formatting Kubernetes resource quantities.
  * Supports both CPU (cores/millicores) and Memory (bytes/Ki/Mi/Gi) formats.
  *
- * Source of truth: k8s-gui-common/src/quantities.rs
+ * The grammar is Kubernetes' own `resource.Quantity`, read the same way by
+ * `src-tauri/src/utils/quantities.rs`; `shared/quantity-conformance.json`
+ * is what keeps the two one answer.
  */
 
 // Binary unit multipliers (Ki, Mi, Gi, Ti, Pi, Ei)
@@ -17,10 +19,10 @@ export const BINARY_UNITS: Record<string, number> = {
   Ei: 1024 ** 6,
 };
 
-// Decimal unit multipliers (K, M, G, T, P, E)
+// Decimal unit multipliers. `k` in lower case only: `1K` is a string the API
+// server refuses, and the backend never read it as a thousand.
 export const DECIMAL_UNITS: Record<string, number> = {
   k: 1e3,
-  K: 1e3,
   M: 1e6,
   G: 1e9,
   T: 1e12,
@@ -34,45 +36,32 @@ export const CPU_UNITS: Record<string, number> = {
   m: 1e-3, // millicores
 };
 
+const QUANTITY = /^([+-]?(?:\d+\.?\d*|\.\d+))(.*)$/;
+
 /**
- * Parse a generic Kubernetes quantity string to a number
- * Handles both CPU and memory formats
+ * A quantity as Kubernetes reads it: a signed decimal number and then a
+ * binary suffix, a decimal one, or an exponent (`1e3`, `12E-3`). `null` for
+ * anything the API server would refuse.
  *
  * @param value - The quantity string (e.g., "500m", "1Gi", "2")
  * @returns Parsed number or null if invalid
  */
 export function parseQuantity(value: string | null | undefined): number | null {
   if (!value) return null;
-
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  // Match number with optional unit suffix
-  const match = trimmed.match(/^(-?\d+(?:\.\d+)?)([a-zA-Z]*)$/);
+  const match = value.trim().match(QUANTITY);
   if (!match) return null;
 
-  const amount = parseFloat(match[1]);
-  if (isNaN(amount)) return null;
+  const amount = Number(match[1]);
+  const suffix = match[2];
+  if (suffix === "") return amount;
 
-  const unit = match[2];
-  if (!unit) return amount;
+  // `1E` is an exabyte; `1E3` is a thousand.
+  const exponent = suffix.match(/^[eE]([+-]?\d+)$/);
+  if (exponent) return amount * 10 ** Number(exponent[1]);
 
-  // Check CPU units first (m, n, u)
-  if (unit in CPU_UNITS) {
-    return amount * CPU_UNITS[unit];
-  }
-
-  // Check binary units (Ki, Mi, Gi, etc.)
-  if (unit in BINARY_UNITS) {
-    return amount * BINARY_UNITS[unit];
-  }
-
-  // Check decimal units (K, M, G, etc.)
-  if (unit in DECIMAL_UNITS) {
-    return amount * DECIMAL_UNITS[unit];
-  }
-
-  return null;
+  const factor =
+    CPU_UNITS[suffix] ?? BINARY_UNITS[suffix] ?? DECIMAL_UNITS[suffix];
+  return factor === undefined ? null : amount * factor;
 }
 
 /**
@@ -83,31 +72,8 @@ export function parseQuantity(value: string | null | undefined): number | null {
  * @returns CPU in millicores (e.g., 500 for "500m")
  */
 export function parseCPU(cpuStr: string | null | undefined): number {
-  if (!cpuStr) return 0;
-
-  const trimmed = cpuStr.trim();
-
-  // Nanocores: "100000000n" -> 100 millicores
-  if (trimmed.endsWith("n")) {
-    const nanocores = parseFloat(trimmed.slice(0, -1));
-    return isNaN(nanocores) ? 0 : nanocores / 1e6;
-  }
-
-  // Microcores: "1000000u" -> 1000 millicores
-  if (trimmed.endsWith("u")) {
-    const microcores = parseFloat(trimmed.slice(0, -1));
-    return isNaN(microcores) ? 0 : microcores / 1e3;
-  }
-
-  // Millicores: "500m" -> 500 millicores
-  if (trimmed.endsWith("m")) {
-    const millicores = parseFloat(trimmed.slice(0, -1));
-    return isNaN(millicores) ? 0 : millicores;
-  }
-
-  // Cores: "2", "0.5", "2.5" -> millicores
-  const cores = parseFloat(trimmed);
-  return isNaN(cores) ? 0 : cores * 1000;
+  const cores = parseQuantity(cpuStr);
+  return cores === null ? 0 : cores * 1000;
 }
 
 /**

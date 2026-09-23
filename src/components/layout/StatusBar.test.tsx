@@ -6,7 +6,6 @@ vi.mock("@/hooks/useClusterSummary", () => ({
     namespaces: [],
     podCount: 3,
     problemCount: 0,
-    problemsTruncated: 0,
     isLoading: false,
   }),
 }));

@@ -226,6 +226,7 @@ export interface ResourceCounts {
 export interface NamespaceLoad {
   name: string;
   podCount: number;
+  problemCount: number;
 }
 
 export interface WarningGroup {

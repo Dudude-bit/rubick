@@ -10,11 +10,12 @@ use crate::state::{
     StreamFailureKind,
 };
 use chrono::Utc;
+use futures::AsyncReadExt;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::Api, Client};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::sync::{broadcast, oneshot};
 use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -60,10 +61,16 @@ impl LogStreamer {
             .clone()
             .unwrap_or_else(|| "main".to_string());
 
-        let logs = api
-            .logs(&config.pod, &params)
+        // As bytes: `logs()` decodes the whole body at once and fails it on
+        // the first byte that is not UTF-8, taking the history with it.
+        let mut body = Vec::new();
+        api.log_stream(&config.pod, &params)
             .await
-            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?;
+            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?
+            .read_to_end(&mut body)
+            .await
+            .map_err(|e| Error::LogStream(format!("Log read failed: {e}")))?;
+        let logs = String::from_utf8_lossy(&body);
 
         // A 200 whose body is the kubelet refusing; parsed, it is a fake line.
         if is_runtime_dropped_log(&logs) {
@@ -148,8 +155,8 @@ impl LogStreamer {
             }
         };
 
-        let reader = BufReader::new(stream.compat());
-        let mut lines = reader.lines();
+        let mut reader = BufReader::new(stream.compat());
+        let mut pending = Vec::new();
         let mut first = FirstLine::default();
         let mut refusal: Option<String> = None;
 
@@ -179,7 +186,7 @@ impl LogStreamer {
                         flush_batch(&self.event_tx, &stream_id, &mut buffer);
                     }
                 }
-                result = lines.next_line() => {
+                result = next_line(&mut reader, &mut pending) => {
                     match result {
                         Ok(Some(line)) => {
                             for line in first.arriving(line) {
@@ -272,6 +279,32 @@ impl LogStreamer {
 
         Ok(())
     }
+}
+
+/// The next line, whatever bytes the container wrote.
+///
+/// `lines()` ends the whole stream with `InvalidData` at the first byte that
+/// is not UTF-8, and Reconnect then reads the same byte again; here it is a
+/// U+FFFD in its own line. A line cut short by another `select!` branch keeps
+/// its bytes in `pending` for the next call, as `read_until` promises.
+async fn next_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    pending: &mut Vec<u8>,
+) -> std::io::Result<Option<String>> {
+    reader.read_until(b'\n', pending).await?;
+    if pending.is_empty() {
+        return Ok(None);
+    }
+    let mut end = pending.len();
+    if pending.ends_with(b"\n") {
+        end -= 1;
+        if pending[..end].ends_with(b"\r") {
+            end -= 1;
+        }
+    }
+    let line = String::from_utf8_lossy(&pending[..end]).into_owned();
+    pending.clear();
+    Ok(Some(line))
 }
 
 /// The first line of a stream, held back while it could still be the
@@ -440,5 +473,39 @@ mod first_line_tests {
         assert_eq!(first.arriving("starting".to_string()), vec!["starting"]);
         assert_eq!(first.arriving(SAID.to_string()), vec![SAID.to_string()]);
         assert_eq!(first.ended(), None);
+    }
+}
+
+#[cfg(test)]
+mod next_line_tests {
+    use super::*;
+
+    async fn all_lines(bytes: &[u8]) -> Vec<String> {
+        let mut reader = BufReader::new(bytes);
+        let mut pending = Vec::new();
+        let mut lines = Vec::new();
+        while let Some(line) = next_line(&mut reader, &mut pending).await.unwrap() {
+            lines.push(line);
+        }
+        lines
+    }
+
+    /// One byte that is not UTF-8 used to end the stream with "the log
+    /// stream broke", and the lines after it were never read.
+    #[tokio::test]
+    async fn a_byte_that_is_not_utf8_costs_one_character_not_the_stream() {
+        assert_eq!(
+            all_lines(b"ok\n\xff\xfe\nafter\n").await,
+            vec!["ok", "\u{fffd}\u{fffd}", "after"]
+        );
+    }
+
+    /// The same line endings `lines()` stripped, and a last line with none.
+    #[tokio::test]
+    async fn a_line_ends_at_lf_or_crlf_and_the_last_needs_neither() {
+        assert_eq!(
+            all_lines(b"one\r\ntwo\nthree").await,
+            vec!["one", "two", "three"]
+        );
     }
 }

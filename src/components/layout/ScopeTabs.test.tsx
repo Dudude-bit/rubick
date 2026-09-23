@@ -29,7 +29,6 @@ const summary = vi.hoisted(() => ({
   }>,
   podCount: 0,
   problemCount: 0,
-  problemsTruncated: 0,
 }));
 
 vi.mock("@/hooks/useClusterSummary", () => ({

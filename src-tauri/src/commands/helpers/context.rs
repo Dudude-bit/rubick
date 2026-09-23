@@ -2,7 +2,7 @@
 //! optional namespace scope, plus convenience constructors over
 //! various namespaced/cluster `Api` shapes.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
 use kube::api::DynamicObject;
@@ -30,15 +30,7 @@ impl ResourceContext {
         namespace: Option<String>,
         require_namespace: bool,
     ) -> Result<Self> {
-        let context = state
-            .get_current_context()
-            .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-        let client = state
-            .client_manager
-            .get_client(&context)
-            .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))
-            .map(|c| (*c).clone())?;
+        let client = (*state.current_client()?).clone();
 
         let namespace = if require_namespace {
             Some(normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string()))

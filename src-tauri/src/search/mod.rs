@@ -513,8 +513,11 @@ async fn list_kind(
         }
     };
 
+    // Metadata only: a name is all that is matched, and a full list carried
+    // every Secret's values and every Helm release's manifest into memory on
+    // each keystroke.
     let list = api
-        .list(&ListParams::default().limit(plan::LIST_PAGE_LIMIT))
+        .list_metadata(&ListParams::default().limit(plan::LIST_PAGE_LIMIT))
         .await?;
 
     // A continue token means the page cap hid objects from us — the
