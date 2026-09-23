@@ -13,6 +13,7 @@
 //! emits before its first applied burst — could land in the void.
 //!
 //! - `event`:   kube watcher Events → batched `AppEvent::ResourceWatchEvent`
+//! - `scope`:   several namespaces, a watcher each, as one stream
 
 mod event;
 mod failure;

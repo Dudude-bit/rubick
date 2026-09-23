@@ -153,6 +153,7 @@ export function createWorkloadListPage<T extends Workload>(
         title={config.title}
         data={dataWithMetrics}
         unread={listQuery.data?.unread}
+        onRetry={() => void listQuery.refetch()}
         // A resync holds the rows it has until the new state is complete, so
         // there is normally something to show. With nothing to show, "still
         // finding out" is the skeleton — the empty state would be claiming the

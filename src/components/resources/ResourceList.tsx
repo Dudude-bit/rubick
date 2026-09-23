@@ -405,7 +405,12 @@ export function ResourceList<
       <UnreadNamespaces
         unread={unread}
         label={emptyStateLabel}
-        onRetry={onRetry ?? (() => void queryResult.refetch())}
+        // Not the placeholder query's refetch when the rows come from outside:
+        // that asks again under a key the page never reads.
+        onRetry={
+          onRetry ??
+          (data === undefined ? () => void queryResult.refetch() : undefined)
+        }
       />
       {showDelivery && (
         <DeliveryFilterControl
