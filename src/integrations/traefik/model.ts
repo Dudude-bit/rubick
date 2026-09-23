@@ -39,6 +39,9 @@ import {
   type Backing,
   type BackingSources,
   type SecretRef,
+  frontingIngressesOf,
+  proxyServicesBy,
+  terminatedUpstreamOf,
 } from "../ingress";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
 
@@ -696,13 +699,11 @@ function duplicateFindings(routes: TraefikRoute[]): Finding[] {
  * The label every Traefik chart puts on its own pods, which is how its own
  * Service is recognised without asking the cluster anything extra.
  */
-const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
+export const PROXY_LABEL = ["app.kubernetes.io/name", "traefik"] as const;
 
 /** The Services that send traffic to this Traefik's own pods. */
 export function proxyServices(sources: TraefikSources): ServiceInfo[] {
-  return sources.services.filter(
-    (service) => service.selector[PROXY_LABEL[0]] === PROXY_LABEL[1]
-  );
+  return proxyServicesBy(sources.services, PROXY_LABEL);
 }
 
 /**
@@ -721,20 +722,9 @@ export function proxyServices(sources: TraefikSources): ServiceInfo[] {
  * and is the `service.routes` capability's job, asked separately.
  */
 export function frontingIngresses(sources: TraefikSources): IngressInfo[] {
-  const proxies = proxyServices(sources);
-  if (proxies.length === 0) return [];
-  return sources.ingresses.filter((ingress) =>
-    proxies.some(
-      (service) =>
-        service.namespace === ingress.namespace &&
-        // `spec.defaultBackend` is the ordinary spelling on a managed
-        // cluster: the load balancer names no rules and sends everything
-        // to the proxy. Read through `rules` alone it fronts nothing.
-        (service.name === ingress.defaultBackend?.backendService ||
-          ingress.rules.some((rule) =>
-            rule.paths.some((path) => service.name === path.backendService)
-          ))
-    )
+  return frontingIngressesOf(
+    sources.ingresses,
+    proxyServicesBy(sources.services, PROXY_LABEL)
   );
 }
 
@@ -742,22 +732,7 @@ export function terminatedUpstream(
   host: string | null,
   sources: TraefikSources
 ): { kind: "Ingress"; name: string; namespace: string } | null {
-  if (host === null) return null;
-
-  for (const ingress of frontingIngresses(sources)) {
-    // It has to terminate TLS *for this host*, not merely somewhere.
-    const terminates =
-      ingress.hasCatchAllTls ||
-      covers(ingress.tlsHosts, host) ||
-      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
-    if (!terminates) continue;
-    return {
-      kind: "Ingress",
-      name: ingress.name,
-      namespace: ingress.namespace,
-    };
-  }
-  return null;
+  return terminatedUpstreamOf(host, frontingIngresses(sources));
 }
 
 /**

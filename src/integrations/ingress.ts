@@ -21,6 +21,7 @@ import {
 import { useCallback, useMemo } from "react";
 import { load } from "js-yaml";
 
+import type { en } from "@/i18n/catalogue";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
@@ -457,6 +458,75 @@ export function certificateProblems(
   });
 }
 
+/** What a stopped path says in the column, in four words or fewer. */
+export const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> =
+  {
+    backendMissing: "stopNoServiceToSendTo",
+    selectsNothing: "stopSelectorMatchesNothing",
+    publishesNothingYet: "stopNothingPublishedYet",
+    noneReady: "stopRunningNoneReady",
+    publishesNothing: "stopNoPortToSendTo",
+  };
+
+// --- what stands in front of the proxy ----------------------------------
+
+/** The proxy's own Services: the ones whose pods carry its chart label. */
+export function proxyServicesBy(
+  services: readonly ServiceInfo[],
+  [key, value]: readonly [string, string]
+): ServiceInfo[] {
+  return services.filter((service) => service.selector[key] === value);
+}
+
+/**
+ * Every Ingress whose backend is one of the proxy's own Services — what a
+ * cloud load balancer's Ingress looks like from in here.
+ */
+export function frontingIngressesOf(
+  ingresses: readonly IngressInfo[],
+  proxies: readonly ServiceInfo[]
+): IngressInfo[] {
+  if (proxies.length === 0) return [];
+  return ingresses.filter((ingress) =>
+    proxies.some(
+      (service) =>
+        service.namespace === ingress.namespace &&
+        // `spec.defaultBackend` is the ordinary spelling on a managed
+        // cluster: the load balancer names no rules and sends everything
+        // to the proxy. Read through `rules` alone it fronts nothing.
+        (service.name === ingress.defaultBackend?.backendService ||
+          ingress.rules.some((rule) =>
+            rule.paths.some((path) => service.name === path.backendService)
+          ))
+    )
+  );
+}
+
+/**
+ * The fronting Ingress that terminates TLS for this host before the proxy
+ * sees it — for *this* host, not merely somewhere.
+ */
+export function terminatedUpstreamOf(
+  host: string | null,
+  fronting: readonly IngressInfo[]
+): { kind: "Ingress"; name: string; namespace: string } | null {
+  if (host === null) return null;
+  for (const ingress of fronting) {
+    const terminates =
+      ingress.hasCatchAllTls ||
+      covers(ingress.tlsHosts, host) ||
+      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
+    if (terminates) {
+      return {
+        kind: "Ingress",
+        name: ingress.name,
+        namespace: ingress.namespace,
+      };
+    }
+  }
+  return null;
+}
+
 // --- ordering by trouble ------------------------------------------------
 
 export const SEVERITY_RANK = { err: 2, warn: 1 } as const;
@@ -567,4 +637,63 @@ export async function listOrRefusal<T>(
 export function refusalOf(...reads: ListRead<unknown>[]): string | null {
   if (reads.some((read) => read.items.length > 0)) return null;
   return reads.find((read) => read.error !== null)?.error ?? null;
+}
+
+/** The workload running a proxy's controller, found by its chart label. */
+export interface ControllerWorkload {
+  kind: "Deployment" | "DaemonSet";
+  name: string;
+  namespace: string;
+  image: string | null;
+  ready: number;
+  desired: number;
+}
+
+/**
+ * The controller's workload, whichever kind it runs as, or why none was
+ * found. Both charts can install a DaemonSet; reading Deployments alone
+ * called a running ingress-nginx DaemonSet "no controller".
+ */
+export async function findControllerWorkload(
+  labelSelector: string
+): Promise<{ workload: ControllerWorkload | null; refused: string | null }> {
+  const filters = {
+    namespace: null,
+    labelSelector,
+    fieldSelector: null,
+    limit: null,
+  };
+  const [deployments, daemonSets] = await Promise.all([
+    listOrRefusal(commands.listDeployments(filters)),
+    listOrRefusal(commands.listDaemonsets(filters)),
+  ]);
+  const deployment = deployments.items[0];
+  if (deployment) {
+    return {
+      workload: {
+        kind: "Deployment",
+        name: deployment.name,
+        namespace: deployment.namespace,
+        image: deployment.containers[0]?.image ?? null,
+        ready: deployment.replicas.ready,
+        desired: deployment.replicas.desired,
+      },
+      refused: null,
+    };
+  }
+  const daemonSet = daemonSets.items[0];
+  if (daemonSet) {
+    return {
+      workload: {
+        kind: "DaemonSet",
+        name: daemonSet.name,
+        namespace: daemonSet.namespace,
+        image: daemonSet.containerImages[0]?.image ?? null,
+        ready: daemonSet.ready,
+        desired: daemonSet.desired,
+      },
+      refused: null,
+    };
+  }
+  return { workload: null, refused: refusalOf(deployments, daemonSets) };
 }

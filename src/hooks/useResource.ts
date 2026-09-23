@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
@@ -146,7 +146,7 @@ export function useResourceMutation<
       options.onSuccess?.(data, variables);
     },
     onError: (error, variables) => {
-      const errorMessage = normalizeTauriError(error);
+      const errorMessage = errorToShow(error);
       toast({
         title: t("action", "error"),
         description: `${options.toast.errorPrefix}: ${errorMessage}`,

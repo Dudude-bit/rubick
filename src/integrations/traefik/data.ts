@@ -29,12 +29,12 @@ import type {
 } from "@/generated/types";
 import {
   BACKING_NOT_READ,
-  listOrRefusal,
-  refusalOf,
   useBackingLists,
   type BackingLists,
   workloadArgs,
   type BackingSources,
+  findControllerWorkload,
+  type ControllerWorkload,
 } from "../ingress";
 import {
   allRoutes,
@@ -164,14 +164,7 @@ export const useBacking = useBackingLists;
 export type Backing = BackingLists;
 
 export interface ControllerInfo {
-  workload: {
-    kind: "Deployment" | "DaemonSet";
-    name: string;
-    namespace: string;
-    image: string | null;
-    ready: number;
-    desired: number;
-  } | null;
+  workload: ControllerWorkload | null;
   args: string[];
   entryPoints: EntryPoint[];
   /** Why there is nothing above, in words rather than an empty object. */
@@ -195,22 +188,9 @@ export async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const filters = {
-    namespace: null,
-    labelSelector: CONTROLLER_SELECTOR,
-    fieldSelector: null,
-    limit: null,
-  };
-
-  const [deployments, daemonSets] = await Promise.all([
-    listOrRefusal(commands.listDeployments(filters)),
-    listOrRefusal(commands.listDaemonsets(filters)),
-  ]);
-
-  const deployment = deployments.items[0];
-  const daemonSet = daemonSets.items[0];
-  if (!deployment && !daemonSet) {
-    const refused = refusalOf(deployments, daemonSets);
+  const { workload, refused } =
+    await findControllerWorkload(CONTROLLER_SELECTOR);
+  if (!workload) {
     return none(
       refused
         ? { key: "controllerUnread", values: { why: refused } }
@@ -220,24 +200,6 @@ export async function fetchController(): Promise<ControllerInfo> {
           }
     );
   }
-
-  const workload = deployment
-    ? {
-        kind: "Deployment" as const,
-        name: deployment.name,
-        namespace: deployment.namespace,
-        image: deployment.containers[0]?.image ?? null,
-        ready: deployment.replicas.ready,
-        desired: deployment.replicas.desired,
-      }
-    : {
-        kind: "DaemonSet" as const,
-        name: daemonSet.name,
-        namespace: daemonSet.namespace,
-        image: null,
-        ready: daemonSet.ready,
-        desired: daemonSet.desired,
-      };
 
   let args: string[];
   try {

@@ -15,7 +15,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
 import { useT, type T } from "@/i18n/useT";
 import { cn, formatSince } from "@/lib/utils";
-import { crdObjectPath } from "../../kit";
+import { crdObjectPath, hourMinute } from "../../kit";
 import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { integrationSettingsPath } from "../../paths";
 import { usePicture, type Picture } from "../monitors/data";
@@ -489,9 +489,6 @@ const ICON: Record<RowTone, typeof X> = {
   mut: HelpCircle,
 };
 
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
 function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
   const t = useT();
   const now = useNow();
@@ -885,7 +882,7 @@ function RuleCard({
                 <span className="text-[11px] tabular-nums text-fg-fnt">
                   {alert.activeAt
                     ? t("alerts", "since", {
-                        time: clock(alert.activeAt),
+                        time: hourMinute(alert.activeAt),
                         ago: formatSince(Date.parse(alert.activeAt), now),
                       })
                     : "–"}

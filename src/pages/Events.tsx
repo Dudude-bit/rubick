@@ -20,7 +20,7 @@ import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { StoryCard } from "@/components/events/StoryCard";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
 import {
@@ -405,7 +405,7 @@ export function Events() {
                   {t("empty", "eventsRefused", { scope: scope.inWords })}
                 </p>
                 <p className="select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-                  {normalizeTauriError(failed)}
+                  {errorToShow(failed)}
                 </p>
               </div>
             </div>

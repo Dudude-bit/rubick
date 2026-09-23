@@ -23,7 +23,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { renderReport, reportFileName, type Report } from "@/lib/report";
 import {
   needsAcknowledgement,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/share-targets";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /**
  * Saving is always here; publishing only where the reader configured a
@@ -107,12 +108,7 @@ export function ShareDialog({
         description: result.url ?? t("share", "publishedNoLink"),
       });
     },
-    onError: (error) =>
-      toast({
-        title: t("share", "publishFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      }),
+    onError: (error) => toastError(t("share", "publishFailed"), error),
   });
 
   const handleSave = async () => {
@@ -127,11 +123,7 @@ export function ShareDialog({
         title: t("share", "saved", { path: destination }),
       });
     } catch (error) {
-      toast({
-        title: t("share", "saveFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("share", "saveFailed"), error);
     } finally {
       setSaving(false);
     }
@@ -214,7 +206,7 @@ export function ShareDialog({
               // target they already have.
               <p className="text-warn">
                 {t("share", "targetsUnread", {
-                  reason: normalizeTauriError(targets.error),
+                  reason: errorToShow(targets.error),
                 })}
               </p>
             ) : (targets.data ?? []).length === 0 ? (

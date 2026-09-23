@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type { DeclaredPoint, UsageRange } from "@/integrations";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   nodeTrends,
@@ -154,7 +154,7 @@ export function NodeUtilisation({
         <p className="px-1 pb-2 text-[11px] text-warn" role="status">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.state === "ready" ? power.vendor : "",
-            reason: normalizeTauriError(query.error),
+            reason: errorToShow(query.error),
           })}
         </p>
       )}

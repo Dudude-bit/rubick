@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
+
+import { renderWithProviders } from "@/test/render";
 
 const getReplicaset = vi.fn();
 const getJob = vi.fn();
@@ -24,16 +24,8 @@ const owner = (kind: string, name: string, controller = true) => ({
   controller,
 });
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement) =>
+  renderWithProviders(ui, { initialEntries: ["/"] });
 
 describe("RelatedResources", () => {
   beforeEach(() => vi.clearAllMocks());

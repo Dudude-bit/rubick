@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TONE_TEXT, type Tone } from "@/lib/tone";
 
 /**
  * The data behind a metadata block. Kept apart from the components that
@@ -6,15 +7,10 @@ import type { ReactNode } from "react";
  * module, and so the render file stays exclusively components.
  */
 
-export type KeyValueTone = "ok" | "warn" | "err" | "info";
+export type KeyValueTone = Exclude<Tone, "unknown">;
 
 /** The one place a tone becomes a colour, shared by every block that takes one. */
-export const TONE_CLASS: Record<KeyValueTone, string> = {
-  ok: "text-ok",
-  warn: "text-warn",
-  err: "text-err",
-  info: "text-info",
-};
+export const TONE_CLASS: Record<KeyValueTone, string> = TONE_TEXT;
 
 export interface KeyValue {
   /**

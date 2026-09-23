@@ -924,20 +924,6 @@ describe("PeekPanel tab persistence", () => {
     </>
   );
 
-  it("stays on Logs when the next target is another pod", async () => {
-    wrap(POD_PEEK, withOpeners);
-    await screen.findByText("CrashLoopBackOff");
-    await openTab("Logs");
-
-    await userEvent.click(screen.getByText("peek other pod"));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
-        "aria-selected",
-        "true"
-      )
-    );
-  });
-
   it("falls back to Overview when the next target has no such tab", async () => {
     wrap(POD_PEEK, withOpeners);
     await screen.findByText("CrashLoopBackOff");

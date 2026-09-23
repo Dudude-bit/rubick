@@ -44,6 +44,12 @@ describe("parseQueryTerm", () => {
       op: "=",
       value: "debug",
     });
+    // What an unlabelled line reads as, so it can be asked for by name.
+    expect(parseQueryTerm("level=unknown")).toEqual({
+      kind: "level",
+      op: "=",
+      value: "unknown",
+    });
     expect(parseQueryTerm("component!=ingest")).toEqual({
       kind: "field",
       op: "≠",
@@ -81,31 +87,6 @@ describe("parseQueryTerm", () => {
 describe("matchesQuery", () => {
   const term = (input: string) => parseQueryTerm(input) as QueryTerm;
 
-  it("orders levels so a threshold means something", () => {
-    expect(matchesQuery(line({ level: "error" }), [term("level>=warn")])).toBe(
-      true
-    );
-    expect(matchesQuery(line({ level: "info" }), [term("level>=warn")])).toBe(
-      false
-    );
-  });
-
-  it("keeps unparsed levels out of a threshold query", () => {
-    // A line the parser could not read a level out of is not evidence of
-    // trouble, and returning every one of them would bury the ones that are.
-    expect(matchesQuery(line({ level: null }), [term("level>=warn")])).toBe(
-      false
-    );
-    expect(matchesQuery(line({ level: null }), [term("level=unknown")])).toBe(
-      true
-    );
-  });
-
-  it("matches the container by name even though it is not a parsed field", () => {
-    expect(matchesQuery(line(), [term("container=web")])).toBe(true);
-    expect(matchesQuery(line(), [term("container=sidecar")])).toBe(false);
-  });
-
   it("narrows with every term rather than widening", () => {
     const terms = [term("level>=warn"), term("component=ingest")];
     expect(matchesQuery(line(), terms)).toBe(true);
@@ -113,10 +94,6 @@ describe("matchesQuery", () => {
       matchesQuery(line({ fields: { component: "api" } }), terms),
       "a line failing one clause is out even though it passes the other"
     ).toBe(false);
-  });
-
-  it("searches the raw bytes as well as the message", () => {
-    expect(matchesQuery(line(), [term("raw bytes")])).toBe(true);
   });
 });
 

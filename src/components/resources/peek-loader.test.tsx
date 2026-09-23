@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { renderWithProviders } from "@/test/render";
 
 vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: () => () => new Promise(() => {}) }),
@@ -11,16 +11,7 @@ const POD_PEEK = "/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
 
 async function panel() {
   const { PeekPanel } = await import("./PeekPanel");
-  const { TooltipProvider } = await import("@/components/ui/tooltip");
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <TooltipProvider>
-        <MemoryRouter initialEntries={[POD_PEEK]}>
-          <PeekPanel />
-        </MemoryRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
+  renderWithProviders(<PeekPanel />, { initialEntries: [POD_PEEK] });
 }
 
 describe("the peek panel's body, loaded apart from the window", () => {

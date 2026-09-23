@@ -6,12 +6,12 @@ import { FolderOpen, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useToast } from "@/components/ui/use-toast";
 import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { SettingRow } from "../settings-row";
 import { useT, type T } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
@@ -36,8 +36,8 @@ function availabilityHint(
   }
   const searched = tool.searchedPaths?.length ?? 0;
   return searched > 0
-    ? `Not on PATH — ${searched} location${searched === 1 ? "" : "s"} searched, including ${tool.searchedPaths[0]}. Set the path below.`
-    : `${label} is not on PATH. Set the path below.`;
+    ? t("settings", "notOnPathSearched", { n: searched })
+    : t("settings", "notOnPath", { label });
 }
 
 /**
@@ -53,7 +53,6 @@ function availabilityHint(
  */
 export function ToolPathsPanel() {
   const t = useT();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const {
     helm,
@@ -89,12 +88,7 @@ export function ToolPathsPanel() {
       queryClient.invalidateQueries({ queryKey: ["cli-paths"] });
       await Promise.all([checkHelmAvailability(), checkKubectlAvailability()]);
     },
-    onError: (error) =>
-      toast({
-        title: t("settings", "toolPathsSaveFailed"),
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      }),
+    onError: (error) => toastError(t("settings", "toolPathsSaveFailed"), error),
   });
 
   const browseFor = async (title: string, setter: (value: string) => void) => {

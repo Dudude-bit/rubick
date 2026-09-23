@@ -24,6 +24,7 @@ import { useResourceYaml } from "./useResourceYaml";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -205,7 +206,7 @@ export function useResourceDetail<T>(
         description: t("action", "deleteFailed", {
           kind: resourceKind.toLowerCase(),
           name: name ?? "",
-          error: String(err),
+          error: errorToShow(err),
         }),
         variant: "destructive",
       });

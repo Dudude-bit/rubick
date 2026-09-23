@@ -6,7 +6,7 @@ import type {
   LogScope,
   UsageRange,
 } from "@/integrations";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 
 import { groupKeyFor } from "../normalize";
 import type { StreamedLogLine } from "../types";
@@ -133,7 +133,7 @@ export function useLogHistory(
         // A failed page is a failed page and not an empty range: an empty
         // pane where a reader asked for six hours reads as "this workload
         // was silent", which is the one thing it must never say by accident.
-        setState({ state: "failed", reason: normalizeTauriError(error) });
+        setState({ state: "failed", reason: errorToShow(error) });
       } finally {
         if (ticket === request.current) setIsPaging(false);
       }

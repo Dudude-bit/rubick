@@ -15,7 +15,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { matchMultiple } from "../kit";
+import { matchMultiple, dash } from "../kit";
 import type { CrdView } from "../registry";
 import {
   backendConfigSummary,
@@ -26,9 +26,6 @@ import {
   frontendConfigSummary,
   healthCheckOf,
 } from "./model";
-
-const dash = (value: unknown) =>
-  value === null || value === undefined || value === "" ? "—" : String(value);
 
 const backendConfigColumns: CrdColumn[] = [
   {

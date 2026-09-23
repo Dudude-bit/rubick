@@ -3,9 +3,7 @@ import type { ReactNode } from "react";
 import type { T } from "@/i18n/useT";
 import type { MonitorRow } from "./model";
 import { selectorWords } from "./model";
-
-const clock = (at: number) =>
-  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+import { hourMinute } from "../../kit";
 
 /**
  * The sentence the card leads with. Exported for its own test: it is the
@@ -54,7 +52,7 @@ export function verdictOf(
             ? t("monitors", "verdictDownSince", {
                 down: worst.down,
                 total: worst.total,
-                since: clock(since),
+                since: hourMinute(since),
               })
             : t("monitors", "verdictDown", {
                 down: worst.down,

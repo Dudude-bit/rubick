@@ -20,7 +20,7 @@ import {
   type Verdict,
 } from "@/lib/checks";
 import { offeredContainers, whyNoShell } from "@/lib/container-sequence";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type { Check, CheckOutcome, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
@@ -209,7 +209,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
         ) : null}
         {run.error ? (
           <p className="text-xs text-err" role="alert">
-            {t("checks", "failed", { error: normalizeTauriError(run.error) })}
+            {t("checks", "failed", { error: errorToShow(run.error) })}
           </p>
         ) : null}
       </Section>

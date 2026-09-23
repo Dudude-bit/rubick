@@ -49,6 +49,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 export function CrdDetail() {
   const t = useT();
@@ -122,11 +123,7 @@ export function CrdDetail() {
       navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
     },
     onError: (err: Error) => {
-      toast({
-        title: t("action", "deleteKindFailed", { kind: "CRD" }),
-        description: err.message,
-        variant: "destructive",
-      });
+      toastError(t("action", "deleteKindFailed", { kind: "CRD" }), err);
     },
   });
 

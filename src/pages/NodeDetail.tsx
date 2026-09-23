@@ -35,7 +35,7 @@ import {
 } from "@/components/resources/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "@/hooks/useNodeActions";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import {
   KeyValueSection,
@@ -279,7 +279,7 @@ export function NodeDetail() {
 
           <NodeResources
             budget={budget.data}
-            error={budget.error ? normalizeTauriError(budget.error) : null}
+            error={budget.error ? errorToShow(budget.error) : null}
             onRetry={() => void budget.refetch()}
             usage={
               nodeWithMetrics

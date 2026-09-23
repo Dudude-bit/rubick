@@ -23,8 +23,8 @@ import { useToast } from "@/components/ui/use-toast";
 import type { ContextBinding } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const NONE = "__none__";
 const EMPTY: ContextBinding = {
@@ -78,12 +78,7 @@ export function BindingDialog({
   const setBinding = (next: (prev: ContextBinding) => ContextBinding) =>
     setEdited({ for: context ?? "", value: next(binding) });
 
-  const failed = (error: unknown) =>
-    toast({
-      title: t("action", "error"),
-      description: normalizeTauriError(error),
-      variant: "destructive",
-    });
+  const failed = (error: unknown) => toastError(t("action", "error"), error);
 
   const done = (title: string) => {
     queryClient.invalidateQueries({ queryKey: queryKeys.contextBindings() });

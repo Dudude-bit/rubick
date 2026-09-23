@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+
+import { SOURCE_FILES } from "@/test/source-files";
 
 /**
  * `kindCount` renders its plural as `{kind}s`. That is right for `Gateway`
@@ -15,23 +16,21 @@ import { join } from "node:path";
  */
 describe("the shared kind counter", () => {
   it("is handed only kinds an `s` actually pluralises", () => {
-    const root = join(import.meta.dirname);
     const wrong: string[] = [];
+    const facts = SOURCE_FILES.filter((path) =>
+      /^src\/integrations\/[^/]+\/facts\.ts$/.test(path)
+    );
+    expect(facts.length).toBeGreaterThan(0);
 
-    for (const vendor of readdirSync(root, { withFileTypes: true })) {
-      if (!vendor.isDirectory()) continue;
-      const facts = join(root, vendor.name, "facts.ts");
-      let source: string;
-      try {
-        source = readFileSync(facts, "utf8");
-      } catch {
-        continue;
-      }
+    for (const path of facts) {
+      const vendor = path.split("/")[2];
       // `key: "kindCount"…` and the `kind: "X"` that follows it.
-      for (const block of source.split('"kindCount"').slice(1)) {
+      for (const block of readFileSync(path, "utf8")
+        .split('"kindCount"')
+        .slice(1)) {
         const kind = /kind:\s*"([^"]+)"/.exec(block.slice(0, 200))?.[1];
         if (kind && /[^aeiou]y$/i.test(kind)) {
-          wrong.push(`${vendor.name}: ${kind} → ${kind}s`);
+          wrong.push(`${vendor}: ${kind} → ${kind}s`);
         }
       }
     }

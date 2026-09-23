@@ -64,7 +64,7 @@ import minikube from "./minikube";
 import prometheus from "./prometheus";
 import traefik from "./traefik";
 import { gatewayCrd } from "./gateway-crd";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   CapabilityKey,
   CapabilityState,
@@ -305,7 +305,7 @@ function useConnections(): Map<string, ConnectionState> {
           {
             state: "unreachable",
             saved: connection.data,
-            reason: normalizeTauriError(probe.error),
+            reason: errorToShow(probe.error),
           },
         ];
       }
@@ -779,7 +779,7 @@ function factsStateOf(
   // through a failed refetch and a count nobody could re-read is not a
   // count worth printing.
   if (result.error) {
-    return { state: "failed", reason: normalizeTauriError(result.error) };
+    return { state: "failed", reason: errorToShow(result.error) };
   }
   if (result.data) return { state: "ready", facts: result.data };
   return { state: "loading" };
@@ -1163,12 +1163,7 @@ export {
   useBackingLists,
   ROUTING_STALE,
 } from "./ingress";
-export type {
-  BackendRef as RouteBackendRef,
-  Backing,
-  BackingSources,
-  ServiceStop,
-} from "./ingress";
+export type { Backing, BackingSources, ServiceStop } from "./ingress";
 export { RoutingMap } from "./routing-map";
 export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 

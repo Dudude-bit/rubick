@@ -100,6 +100,9 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
+import { errorToShow } from "@/lib/error-utils";
+import { TONE_TEXT } from "@/lib/tone";
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -358,7 +361,7 @@ export function PodDetail() {
   const { report } = usePodReport(
     pod,
     podEvents.data ?? [],
-    podEvents.error ? normalizeTauriError(podEvents.error) : null,
+    podEvents.error ? errorToShow(podEvents.error) : null,
     connections,
     `${window.location.hash.replace(/^#/, "") || `/pods/${namespace}/${name}`}`
   );
@@ -419,7 +422,9 @@ export function PodDetail() {
     onError: (err) => {
       toast({
         title: t("action", "error"),
-        description: t("action", "failedToRestartPod", { error: String(err) }),
+        description: t("action", "failedToRestartPod", {
+          error: errorToShow(err),
+        }),
         variant: "destructive",
       });
     },
@@ -498,11 +503,7 @@ export function PodDetail() {
                 });
                 navigate(-1);
               } catch (err) {
-                toast({
-                  title: t("action", "failedToDelete"),
-                  description: normalizeTauriError(err),
-                  variant: "destructive",
-                });
+                toastError(t("action", "failedToDelete"), err);
               }
             }}
           >
@@ -684,9 +685,7 @@ export function PodDetail() {
           // the tail of it — printing both is the same word twice with a
           // prefix.
           !pod?.status.display?.endsWith(problem.reason) && (
-            <span
-              className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
-            >
+            <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
               {problem.reason}
             </span>
           )
@@ -768,9 +767,7 @@ export function PodDetail() {
                     pod={pod}
                     events={podEvents.data ?? []}
                     eventsError={
-                      podEvents.error
-                        ? normalizeTauriError(podEvents.error)
-                        : null
+                      podEvents.error ? errorToShow(podEvents.error) : null
                     }
                     // The log tab opened on the current run with no
                     // container selected, so the row that says "read the

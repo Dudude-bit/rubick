@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
@@ -69,7 +69,7 @@ export function AlertsAbout({
     return (
       <p className={cn("text-[11.5px] text-warn", className)}>
         {t("alerts", "aboutUnread", {
-          reason: normalizeTauriError(alerts.error),
+          reason: errorToShow(alerts.error),
         })}
       </p>
     );

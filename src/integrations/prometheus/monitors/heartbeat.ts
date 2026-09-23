@@ -1,6 +1,6 @@
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { lanesOf, upQuery, type Lane, type MonitorRow } from "./model";
 
@@ -46,7 +46,7 @@ export function useHeartbeat(row: MonitorRow): Heartbeat {
           unread: null,
         };
       } catch (error) {
-        return { from, to, lanes: null, unread: normalizeTauriError(error) };
+        return { from, to, lanes: null, unread: errorToShow(error) };
       }
     },
     staleTime: STEP,

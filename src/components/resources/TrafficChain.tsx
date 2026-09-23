@@ -52,6 +52,7 @@ import type {
   TlsCertificate,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { TONE_TEXT } from "@/lib/tone";
 
 /**
  * A name at a hop. A missing object keeps its glyph and its hue and loses
@@ -244,11 +245,7 @@ function EdgeNote({
           )}{" "}
           {joinSayings(config.summary, t)}
           {config.problem && (
-            <span
-              className={
-                config.problem.tone === "err" ? "text-err" : "text-warn"
-              }
-            >
+            <span className={TONE_TEXT[config.problem.tone]}>
               {" — "}
               {sayWords(config.problem.text, t)}
             </span>

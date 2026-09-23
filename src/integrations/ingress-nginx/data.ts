@@ -29,12 +29,13 @@ import type {
 import {
   BACKING_NOT_READ,
   expandEnv,
-  listOrRefusal,
   ROUTING_STALE,
   useBackingLists,
   workloadArgs,
   workloadEnv,
   type BackingSources,
+  findControllerWorkload,
+  type ControllerWorkload,
 } from "../ingress";
 import { allRoutes, type NginxSources } from "./model";
 
@@ -97,13 +98,7 @@ export interface GlobalConfig {
 }
 
 export interface ControllerInfo {
-  workload: {
-    name: string;
-    namespace: string;
-    image: string | null;
-    ready: number;
-    desired: number;
-  } | null;
+  workload: ControllerWorkload | null;
   args: string[];
   /** The class names this controller was told to answer for, from its flags. */
   watching: { controllerClass: string | null; ingressClass: string | null };
@@ -121,7 +116,7 @@ function flagValue(args: string[], flag: string): string | null {
   return null;
 }
 
-async function fetchController(): Promise<ControllerInfo> {
+export async function fetchController(): Promise<ControllerInfo> {
   const none = (problem: Saying): ControllerInfo => ({
     workload: null,
     args: [],
@@ -130,20 +125,12 @@ async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const deployments = await listOrRefusal(
-    commands.listDeployments({
-      namespace: null,
-      labelSelector: CONTROLLER_SELECTOR,
-      fieldSelector: null,
-      limit: null,
-    })
-  );
-
-  const deployment = deployments.items[0];
-  if (!deployment) {
+  const { workload, refused } =
+    await findControllerWorkload(CONTROLLER_SELECTOR);
+  if (!workload) {
     return none(
-      deployments.error
-        ? { key: "controllerUnread", values: { why: deployments.error } }
+      refused
+        ? { key: "controllerUnread", values: { why: refused } }
         : {
             key: "nginxNoController",
             values: { selector: CONTROLLER_SELECTOR },
@@ -151,18 +138,10 @@ async function fetchController(): Promise<ControllerInfo> {
     );
   }
 
-  const workload = {
-    name: deployment.name,
-    namespace: deployment.namespace,
-    image: deployment.containers[0]?.image ?? null,
-    ready: deployment.replicas.ready,
-    desired: deployment.replicas.desired,
-  };
-
   let manifest: string;
   try {
     manifest = await commands.getManifest(
-      "Deployment",
+      workload.kind,
       "apps/v1",
       workload.name,
       workload.namespace

@@ -38,7 +38,7 @@ import {
   type FileEntry,
   type SortKey,
 } from "@/lib/container-files";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
 import { cn, formatSince } from "@/lib/utils";
@@ -46,6 +46,8 @@ import type { PodInfo, Via } from "@/generated/types";
 import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
+import { toastError } from "@/lib/toast-error";
+import { TONE_TEXT } from "@/lib/tone";
 
 const ROW_PX = 26;
 
@@ -235,11 +237,10 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           });
         }
       } catch (error) {
-        toast({
-          title: t("files", "downloadFailed", { name: selectedEntry.name }),
-          description: normalizeTauriError(error),
-          variant: "destructive",
-        });
+        toastError(
+          t("files", "downloadFailed", { name: selectedEntry.name }),
+          error
+        );
       }
     },
     [selectedEntry, container, pod.name, pod.namespace, path, via, toast, t]
@@ -527,7 +528,7 @@ function Notice({
       role="status"
       className={cn(
         "border-b border-hair px-3 py-1.5 text-[11px]",
-        tone === "warn" ? "text-warn" : "text-err"
+        TONE_TEXT[tone]
       )}
     >
       {children}
@@ -1041,7 +1042,7 @@ function Preview({
         {query.isPending ? (
           <span className="text-fg-fnt">{t("action", "readingInline")}</span>
         ) : query.error ? (
-          <span className="text-err">{normalizeTauriError(query.error)}</span>
+          <span className="text-err">{errorToShow(query.error)}</span>
         ) : read?.state === "noTools" ? (
           <span className="text-fg-mut">{t("files", "noHeadInImage")}</span>
         ) : read?.state === "failed" ? (
