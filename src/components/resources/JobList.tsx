@@ -44,7 +44,7 @@ export const JobList = createWorkloadListPage<JobInfo>({
   title: "Jobs",
   fetchList: ({ scope }) => commands.listJobsIn(scope),
   matchPods: matchJobPods,
-  watch: ({ namespace }) => commands.subscribeJobWatch(namespace),
+  watch: ({ scope }) => commands.subscribeJobWatch(scope),
   deleter: (item) => commands.deleteJob(item.name, item.namespace),
   columns,
 });

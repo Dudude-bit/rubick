@@ -7,7 +7,7 @@ import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -56,13 +56,11 @@ export function CustomResourceList({
 
   const navigate = useNavigate();
   // A cluster-scoped CRD ignores the namespace selection; a namespaced one is
-  // read across it — several namespaces polled, one or none watched.
+  // read and watched across it.
   const isNamespaced = scope === "Namespaced";
-  const namespaceScope = isNamespaced ? nsScope.scope : [];
-  const watchNamespace =
-    isNamespaced && nsScope.scope.length === 1 ? nsScope.scope[0] : null;
+  const wire = isNamespaced ? nsScope.wire : null;
+  const oneNamespace = wire?.length === 1 ? wire[0] : null;
   const cacheKey = isNamespaced ? scopeCacheKey(nsScope.scope) : null;
-  const watchEnabled = !(isNamespaced && nsScope.several);
 
   // Generate detail path for a custom resource. Wrapped in
   // `useCallback` so the two `useMemo` blocks below can list it as a
@@ -196,12 +194,12 @@ export function CustomResourceList({
         crdVersion,
         crdKind,
         crdPlural,
-        watchNamespace
+        wire
       ),
-    [crdGroup, crdVersion, crdKind, crdPlural, watchNamespace]
+    [crdGroup, crdVersion, crdKind, crdPlural, wire]
   );
   const { live, refresh, resyncing } = useWatchedList<CustomResourceListItem>({
-    enabled: watchEnabled,
+    enabled: true,
     subscribe: subscribeCustomResource,
     // The memoised array itself, not a copy of it: the watch effect has this
     // in its dependencies, and a fresh array on every render tore the subscription
@@ -218,10 +216,7 @@ export function CustomResourceList({
       queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={async () => {
-        const answer = await commands.listCustomResourcesIn(
-          crdName,
-          wireScope(namespaceScope)
-        );
+        const answer = await commands.listCustomResourcesIn(crdName, wire);
         return {
           ...answer,
           rows: answer.rows.map((r) => ({
@@ -238,10 +233,10 @@ export function CustomResourceList({
       // message a CRD list must not show: the whole question a reader
       // opens it with is whether this kind exists on the cluster at all.
       emptyMessage={
-        watchNamespace
+        oneNamespace
           ? t("empty", "crdNoInstancesInNamespace", {
               kind: crdKind,
-              namespace: watchNamespace,
+              namespace: oneNamespace,
             })
           : t("empty", "crdNoInstances", { kind: crdKind })
       }

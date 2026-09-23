@@ -1147,14 +1147,14 @@ export async function subscribeCustomResourceWatch(
   version: string,
   kind: string,
   plural: string,
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
   return invoke<string>("subscribe_custom_resource_watch", {
     group,
     version,
     kind,
     plural,
-    namespace,
+    scope,
   });
 }
 
@@ -1195,16 +1195,16 @@ export async function unsubscribeResourceWatch(
 }
 
 export async function subscribeGatewayWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_gateway_watch", { namespace });
+  return invoke<string>("subscribe_gateway_watch", { scope });
 }
 
 export async function subscribeGatewayRouteWatch(
   kind: string,
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_gateway_route_watch", { kind, namespace });
+  return invoke<string>("subscribe_gateway_route_watch", { kind, scope });
 }
 
 export async function nodeResourceBudget(name: string): Promise<NodeBudget> {
@@ -1776,75 +1776,75 @@ export async function listPersistentVolumeClaimsIn(
 }
 
 export async function subscribeConfigmapWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_configmap_watch", { namespace });
+  return invoke<string>("subscribe_configmap_watch", { scope });
 }
 
 export async function subscribeSecretWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_secret_watch", { namespace });
+  return invoke<string>("subscribe_secret_watch", { scope });
 }
 
 export async function subscribeServiceWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_service_watch", { namespace });
+  return invoke<string>("subscribe_service_watch", { scope });
 }
 
 export async function subscribeEndpointsWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_endpoints_watch", { namespace });
+  return invoke<string>("subscribe_endpoints_watch", { scope });
 }
 
 export async function subscribeIngressWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_ingress_watch", { namespace });
+  return invoke<string>("subscribe_ingress_watch", { scope });
 }
 
 export async function subscribePvcWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_pvc_watch", { namespace });
+  return invoke<string>("subscribe_pvc_watch", { scope });
 }
 
 export async function subscribePodRowWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_pod_row_watch", { namespace });
+  return invoke<string>("subscribe_pod_row_watch", { scope });
 }
 
 export async function subscribeDeploymentWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_deployment_watch", { namespace });
+  return invoke<string>("subscribe_deployment_watch", { scope });
 }
 
 export async function subscribeStatefulsetWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_statefulset_watch", { namespace });
+  return invoke<string>("subscribe_statefulset_watch", { scope });
 }
 
 export async function subscribeDaemonsetWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_daemonset_watch", { namespace });
+  return invoke<string>("subscribe_daemonset_watch", { scope });
 }
 
 export async function subscribeJobWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_job_watch", { namespace });
+  return invoke<string>("subscribe_job_watch", { scope });
 }
 
 export async function subscribeCronjobWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_cronjob_watch", { namespace });
+  return invoke<string>("subscribe_cronjob_watch", { scope });
 }
 
 export async function subscribeNamespaceWatch(): Promise<string> {

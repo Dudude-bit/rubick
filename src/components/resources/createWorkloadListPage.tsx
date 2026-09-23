@@ -19,7 +19,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { ResourceList } from "./ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
@@ -68,7 +68,7 @@ export interface WorkloadListPageConfig<T extends Workload> {
    * cache via real-time `resource-event` Tauri events instead.
    * Pod metrics on the side keep their own usePodsWithMetrics path.
    */
-  watch?: (params: { namespace: string | null }) => Promise<string>;
+  watch?: (params: { scope: string[] | null }) => Promise<string>;
 }
 
 export function createWorkloadListPage<T extends Workload>(
@@ -83,23 +83,20 @@ export function createWorkloadListPage<T extends Workload>(
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
     const { data: pods, podStatus } = usePodsWithMetrics();
 
-    // Several namespaces are polled; a watch covers none or one.
-    const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
     const cacheKey = scopeCacheKey(scope.scope);
     const watchFactory = config.watch;
-    const watchEnabled = !!watchFactory && !scope.several;
 
     const queryKey = useMemo(
       () => queryKeys.resources(config.resourceType, cacheKey),
       [cacheKey]
     );
     const subscribe = useCallback(
-      () => watchFactory!({ namespace: watchNamespace }),
-      [watchFactory, watchNamespace]
+      () => watchFactory!({ scope: scope.wire }),
+      [watchFactory, scope.wire]
     );
 
     const { live, refresh, resyncing } = useWatchedList<T>({
-      enabled: watchEnabled,
+      enabled: !!watchFactory,
       subscribe,
       queryKey,
       reportFailure: config.title,
@@ -107,7 +104,7 @@ export function createWorkloadListPage<T extends Workload>(
 
     const listQuery = useResourceList(
       queryKey,
-      () => config.fetchList({ scope: wireScope(scope.scope) }),
+      () => config.fetchList({ scope: scope.wire }),
       { refresh }
     );
 

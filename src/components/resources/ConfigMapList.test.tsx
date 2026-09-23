@@ -9,18 +9,19 @@ import type { ConfigMapInfo } from "@/generated/types";
 // Zustand selector-aware mock — components use both
 // `useClusterStore()` (whole state) and `useClusterStore((s) => s.x)` (selector).
 // Apply the selector function ourselves so both forms work.
-vi.mock("@/stores/clusterStore", () => {
-  const state = {
+const store = vi.hoisted(() => ({
+  state: {
     currentNamespace: "default",
     namespaceScope: ["default"],
     isConnected: true,
-  };
-  return {
-    useClusterStore: vi.fn(<T,>(selector?: (s: typeof state) => T) =>
-      typeof selector === "function" ? selector(state) : state
-    ),
-  };
-});
+  },
+}));
+
+vi.mock("@/stores/clusterStore", () => ({
+  useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
+    typeof selector === "function" ? selector(store.state) : store.state
+  ),
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -29,7 +30,13 @@ vi.mock("@/lib/commands", () => ({
       unread: [],
     })),
     deleteConfigmap: vi.fn(async () => undefined),
+    subscribeConfigmapWatch: vi.fn(async () => "rw-1"),
+    resourceWatchSubscribed: vi.fn(async () => undefined),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
 }));
 
 import { commands } from "@/lib/commands";
@@ -67,6 +74,7 @@ function renderList() {
 
 describe("ConfigMapList", () => {
   beforeEach(() => {
+    store.state.namespaceScope = ["default"];
     vi.mocked(commands.listConfigmapsIn).mockResolvedValue({
       rows: [],
       unread: [],
@@ -85,6 +93,26 @@ describe("ConfigMapList", () => {
     });
     expect(vi.mocked(commands.listConfigmapsIn).mock.calls[0]?.[0]).toEqual([
       "default",
+    ]);
+  });
+
+  /**
+   * Several namespaces used to be polled, never watched: a watch was one
+   * namespace or the whole cluster, and the whole cluster is refused to a
+   * namespace-scoped token. One stream over the selection replaces the poll.
+   */
+  it("watches the whole selection when several namespaces are selected", async () => {
+    store.state.namespaceScope = ["default", "staging"];
+    renderList();
+    await waitFor(() => {
+      expect(commands.subscribeConfigmapWatch).toHaveBeenCalledWith([
+        "default",
+        "staging",
+      ]);
+    });
+    expect(commands.listConfigmapsIn).toHaveBeenCalledWith([
+      "default",
+      "staging",
     ]);
   });
 

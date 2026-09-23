@@ -30,7 +30,7 @@ export const StatefulSetList = createWorkloadListPage<StatefulSetInfo>({
   title: "StatefulSets",
   fetchList: ({ scope }) => commands.listStatefulsetsIn(scope),
   matchPods: matchStatefulSetPods,
-  watch: ({ namespace }) => commands.subscribeStatefulsetWatch(namespace),
+  watch: ({ scope }) => commands.subscribeStatefulsetWatch(scope),
   deleter: (item) => commands.deleteStatefulset(item.name, item.namespace),
   columns,
 });

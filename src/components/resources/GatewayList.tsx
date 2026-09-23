@@ -82,7 +82,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
   title: "Gateways",
   fetcher: ({ scope }) => commands.listGatewaysIn(scope),
   deleter: (item) => commands.deleteGateway(item.name, item.namespace),
-  watch: ({ namespace }) => commands.subscribeGatewayWatch(namespace),
+  watch: ({ scope }) => commands.subscribeGatewayWatch(scope),
   columns: () => [
     createNameColumn<GatewayInfo>(ResourceType.Gateway),
     createNamespaceColumn<GatewayInfo>(),

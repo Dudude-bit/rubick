@@ -92,7 +92,7 @@ export const ServiceList = createResourceListPage<ServiceInfo>({
   resourceType: ResourceType.Service,
   title: "Services",
   fetcher: ({ scope }) => commands.listServicesIn(scope),
-  watch: ({ namespace }) => commands.subscribeServiceWatch(namespace),
+  watch: ({ scope }) => commands.subscribeServiceWatch(scope),
   deleter: (item) => commands.deleteService(item.name, item.namespace),
   columns,
 });

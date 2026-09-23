@@ -8,7 +8,7 @@ import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
@@ -39,10 +39,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const scope = useNamespaceScope();
   const enabled = isConnected && options?.enabled !== false;
 
-  // The one namespace a watch or metrics call is scoped to. Several is
-  // polled instead — a cluster-wide watch needs rights a namespace-scoped
-  // user may not have.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  // The one namespace the metrics call is scoped to; several read it all.
+  const metricsNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
 
   // Fetch pods - cached by TanStack Query. Real-time updates after
@@ -52,12 +50,11 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const queryKey = useMemo(() => queryKeys.podRows(cacheKey), [cacheKey]);
 
   const subscribePods = useCallback(
-    () => commands.subscribePodRowWatch(watchNamespace),
-    [watchNamespace]
+    () => commands.subscribePodRowWatch(scope.wire),
+    [scope.wire]
   );
-  // A watch covers none or one namespace; several is polled.
   const { live, refresh, resyncing } = useWatchedList<PodRow>({
-    enabled: enabled && !scope.several,
+    enabled,
     subscribe: subscribePods,
     queryKey,
     reportFailure: toPlural(ResourceType.Pod),
@@ -76,7 +73,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     // full pod is three kilobytes a row and the table reads a dozen fields.
     // The signal stops a stream the screen has stopped waiting for.
     queryFn: async ({ signal }) => {
-      const wire = wireScope(scope.scope);
+      const wire = scope.wire;
       try {
         return await listPodRows(wire, signal);
       } catch (err) {
@@ -93,7 +90,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const unread = answer?.unread ?? NOTHING_UNREAD;
 
   const { podMetrics, podStatus } = useMetrics({
-    namespace: watchNamespace,
+    namespace: metricsNamespace,
     enabled,
     includeNodes: false,
   });

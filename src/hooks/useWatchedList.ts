@@ -19,7 +19,8 @@ export interface WatchedList {
  *
  * A refused or broken watch falls back to polling and says so once; a
  * recovered one stops the polling again. `enabled` is whether a watch can
- * run at all — several namespaces are polled, never watched.
+ * run at all. Several namespaces are one stream, which fails when any of
+ * them does.
  *
  * `reportFailure` is the name the toast gives the list, or a function for a
  * caller that reports several watches as one.

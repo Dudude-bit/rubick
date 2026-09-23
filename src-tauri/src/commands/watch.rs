@@ -24,7 +24,6 @@ use crate::resources::{
     SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
-use crate::utils::normalize_optional_namespace;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
@@ -57,19 +56,20 @@ macro_rules! subscribe_namespaced {
         // A sync command lands on a plain worker thread with no reactor,
         // where `tokio::spawn` panics — and, being called across the IPC
         // FFI boundary, that panic aborts the process instead of unwinding.
+        //
+        // `scope` is the list command's: `None` for the whole cluster, or
+        // the namespaces, several of them watched behind one barrier.
         #[tauri::command]
         pub async fn $cmd_name(
-            namespace: Option<String>,
+            scope: Option<Vec<String>>,
             state: State<'_, AppState>,
         ) -> Result<String> {
             let client = current_client(&state)?;
-            let namespace = normalize_optional_namespace(namespace);
-            Ok(state.watch_manager.subscribe::<$k8s_type, _, _>(
-                client,
-                $kind_label,
-                namespace,
-                |o| Some(<$info_type>::from(o)),
-            ))
+            state
+                .watch_manager
+                .subscribe::<$k8s_type, _, _>(client, $kind_label, scope, |o| {
+                    Some(<$info_type>::from(o))
+                })
         }
     };
 }
@@ -177,25 +177,21 @@ pub async fn subscribe_custom_resource_watch(
     version: String,
     kind: String,
     plural: String,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
 
     let api_resource = kube::discovery::ApiResource::from_gvk_with_plural(
         &kube::api::GroupVersionKind::gvk(&group, &version, &kind),
         &plural,
     );
 
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        &kind,
-        namespace,
-        None,
-        |obj| Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj)),
-    ))
+    state
+        .watch_manager
+        .subscribe_custom_list(client, &api_resource, &kind, scope, |obj| {
+            Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj))
+        })
 }
 
 // ----- One object -----
@@ -325,27 +321,21 @@ pub fn unsubscribe_resource_watch(stream_id: String, state: State<'_, AppState>)
 /// count is re-read with the next list, not recomputed per event.
 #[tauri::command]
 pub async fn subscribe_gateway_watch(
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
     let api_resource = crate::commands::gateway::served_api_resource("Gateway", &state).await?;
     let stamp = api_resource.clone();
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        "Gateway",
-        namespace,
-        None,
-        move |obj| {
+    state
+        .watch_manager
+        .subscribe_custom_list(client, &api_resource, "Gateway", scope, move |obj| {
             // Watch events strip apiVersion/kind like list items do; put
             // them back so the payload matches what the fetcher returned.
             Some(crate::resources::GatewayInfo::read(
                 &crate::commands::gateway::with_types(obj.clone(), &stamp),
             ))
-        },
-    ))
+        })
 }
 
 /// Subscribe to one route kind, `RouteInfo` payload — the shape all five
@@ -353,24 +343,18 @@ pub async fn subscribe_gateway_watch(
 #[tauri::command]
 pub async fn subscribe_gateway_route_watch(
     kind: String,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     crate::commands::gateway::require_route_kind(&kind)?;
     let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
     let api_resource = crate::commands::gateway::served_api_resource(&kind, &state).await?;
     let stamp = api_resource.clone();
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        &kind,
-        namespace,
-        None,
-        move |obj| {
+    state
+        .watch_manager
+        .subscribe_custom_list(client, &api_resource, &kind, scope, move |obj| {
             Some(crate::resources::RouteInfo::read(
                 &crate::commands::gateway::with_types(obj.clone(), &stamp),
             ))
-        },
-    ))
+        })
 }

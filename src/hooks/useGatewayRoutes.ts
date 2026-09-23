@@ -43,30 +43,27 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
  *  kind's recovery must not stop the polling that covers another's still
  *  broken stream. */
 function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
-  // Several namespaces are polled; a watch covers none or one.
-  const several = scope.length >= 2;
   const cacheKey = scopeCacheKey(scope);
-  const watchNamespace = scope.length === 1 ? scope[0] : null;
+  const wire = useMemo(() => wireScope(scope), [scope]);
   const queryKey = useMemo(
     () => queryKeys.resources(kind, cacheKey),
     [kind, cacheKey]
   );
   const { live, refresh, resyncing } = useWatchedList<RouteInfo>({
-    enabled: served && !several,
+    enabled: served,
     subscribe: useCallback(
-      () => commands.subscribeGatewayRouteWatch(kind, watchNamespace),
-      [kind, watchNamespace]
+      () => commands.subscribeGatewayRouteWatch(kind, wire),
+      [kind, wire]
     ),
     queryKey,
     reportFailure: toPlural(kind),
   });
   const query = useLiveQuery<Scoped<RouteInfo>>({
     queryKey,
-    queryFn: () => commands.listGatewayRoutesIn(kind, wireScope(scope)),
+    queryFn: () => commands.listGatewayRoutesIn(kind, wire),
     enabled: served,
     staleTime: STALE_TIMES.resourceList,
-    // The watch feeds the cache; polling is the fallback after it fails, and
-    // the mode for a multi-namespace scope (no cluster-wide watch).
+    // The watch feeds the cache; polling is the fallback after it fails.
     refresh,
   });
   return { query, resyncing, served, live };
@@ -149,8 +146,6 @@ export function useGatewayRoutes(scope: string[]) {
       0,
       ...active.map((entry) => entry.query.dataUpdatedAt ?? 0)
     ),
-    // A multi-namespace scope polls rather than watches, so it is not "live"
-    // even though no watch failed.
     live: active.length > 0 && active.every((entry) => entry.live),
     resyncing: active.some((entry) => entry.resyncing),
   };

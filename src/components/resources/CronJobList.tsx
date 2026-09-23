@@ -76,7 +76,7 @@ export const CronJobList = createWorkloadListPage<CronJobInfo>({
   title: "CronJobs",
   fetchList: ({ scope }) => commands.listCronjobsIn(scope),
   matchPods: matchCronJobPods,
-  watch: ({ namespace }) => commands.subscribeCronjobWatch(namespace),
+  watch: ({ scope }) => commands.subscribeCronjobWatch(scope),
   deleter: (item) => commands.deleteCronjob(item.name, item.namespace),
   columns,
 });

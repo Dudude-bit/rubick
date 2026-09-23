@@ -2,7 +2,7 @@ import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -219,23 +219,20 @@ export function IngressList() {
   const scope = useNamespaceScope();
   const navigate = useNavigate();
 
-  // Several namespaces are polled; a watch covers none or one.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
-  const watchEnabled = !scope.several;
-  const listIngresses = () => commands.listIngressesIn(wireScope(scope.scope));
+  const listIngresses = () => commands.listIngressesIn(scope.wire);
 
   const queryKey = useMemo(
     () => queryKeys.resources(ResourceType.Ingress, cacheKey),
     [cacheKey]
   );
   const subscribe = useCallback(
-    () => commands.subscribeIngressWatch(watchNamespace),
-    [watchNamespace]
+    () => commands.subscribeIngressWatch(scope.wire),
+    [scope.wire]
   );
 
   const { live, refresh, resyncing } = useWatchedList<IngressInfo>({
-    enabled: watchEnabled,
+    enabled: true,
     subscribe,
     queryKey,
     reportFailure: toPlural(ResourceType.Ingress),

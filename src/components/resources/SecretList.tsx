@@ -37,7 +37,7 @@ export const SecretList = createResourceListPage<SecretInfo>({
   resourceType: ResourceType.Secret,
   title: "Secrets",
   fetcher: ({ scope }) => commands.listSecretsIn(scope),
-  watch: ({ namespace }) => commands.subscribeSecretWatch(namespace),
+  watch: ({ scope }) => commands.subscribeSecretWatch(scope),
   deleter: (item) => commands.deleteSecret(item.name, item.namespace),
   columns,
 });

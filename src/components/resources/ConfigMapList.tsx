@@ -33,7 +33,7 @@ export const ConfigMapList = createResourceListPage<ConfigMapInfo>({
   // Tauri events and applied to the cache via `setQueryData`. The
   // factory switches the poll `refresh` rate off automatically when `watch` is
   // set so we don't double-load.
-  watch: ({ namespace }) => commands.subscribeConfigmapWatch(namespace),
+  watch: ({ scope }) => commands.subscribeConfigmapWatch(scope),
   deleter: (item) => commands.deleteConfigmap(item.name, item.namespace),
   columns: configMapColumns,
 });
