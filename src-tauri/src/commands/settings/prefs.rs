@@ -1,11 +1,7 @@
-//! Application preferences — theme, YAML editor history, infrastructure
-//! builder canvas state, recent items, updater settings, cluster
-//! preferences, and the trivial `AppInfo` command.
+//! Application preferences — theme, YAML editor history, recent items,
+//! updater settings, cluster preferences, and the trivial `AppInfo` command.
 
-use crate::config::{
-    ClusterPreferences, InfrastructureBuilderState as ConfigBuilderState, RecentItem,
-    UpdaterConfig, YamlHistoryEntry,
-};
+use crate::config::{ClusterPreferences, RecentItem, UpdaterConfig, YamlHistoryEntry};
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 
@@ -122,64 +118,6 @@ pub fn add_yaml_history_entry(resource_key: String, entry: YamlHistoryEntryDto) 
         // Add to front, limit to 20 entries
         entries.insert(0, history_entry);
         entries.truncate(20);
-    })
-}
-
-// ============================================================================
-// Infrastructure builder canvas state
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfrastructureBuilderStateDto {
-    pub nodes: Vec<serde_json::Value>,
-    pub edges: Vec<serde_json::Value>,
-    pub yaml_text: String,
-    pub extra_manifests: Vec<serde_json::Value>,
-}
-
-#[tauri::command]
-pub fn get_infrastructure_state(context: String) -> Result<InfrastructureBuilderStateDto> {
-    read_config(|config| {
-        let state = config
-            .infrastructure_builder
-            .contexts
-            .get(&context)
-            .cloned()
-            .unwrap_or_default();
-        InfrastructureBuilderStateDto {
-            nodes: state.nodes,
-            edges: state.edges,
-            yaml_text: state.yaml_text,
-            extra_manifests: state.extra_manifests,
-        }
-    })
-}
-
-#[tauri::command]
-pub fn save_infrastructure_state(
-    context: String,
-    state: InfrastructureBuilderStateDto,
-) -> Result<()> {
-    let builder_state = ConfigBuilderState {
-        nodes: state.nodes,
-        edges: state.edges,
-        yaml_text: state.yaml_text,
-        extra_manifests: state.extra_manifests,
-    };
-
-    with_config(|config| {
-        config
-            .infrastructure_builder
-            .contexts
-            .insert(context, builder_state);
-    })
-}
-
-#[tauri::command]
-pub fn clear_infrastructure_state(context: String) -> Result<()> {
-    with_config(|config| {
-        config.infrastructure_builder.contexts.remove(&context);
     })
 }
 

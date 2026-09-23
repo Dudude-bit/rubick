@@ -2,14 +2,13 @@
 //! optional namespace scope, plus convenience constructors over
 //! various namespaced/cluster `Api` shapes.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
 use kube::api::DynamicObject;
 use kube::discovery::ApiResource;
 use kube::Resource;
 use kube::{Api, Client};
-use tauri::State;
 
 /// Context for Kubernetes API access with optional namespace scope.
 pub struct ResourceContext {
@@ -30,15 +29,7 @@ impl ResourceContext {
         namespace: Option<String>,
         require_namespace: bool,
     ) -> Result<Self> {
-        let context = state
-            .get_current_context()
-            .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-        let client = state
-            .client_manager
-            .get_client(&context)
-            .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))
-            .map(|c| (*c).clone())?;
+        let client = (*state.current_client()?).clone();
 
         let namespace = if require_namespace {
             Some(normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string()))
@@ -59,12 +50,12 @@ impl ResourceContext {
     }
 
     /// For single-resource commands (get/delete) - requires namespace, defaults to "default"
-    pub fn for_command(state: &State<'_, AppState>, namespace: Option<String>) -> Result<Self> {
+    pub fn for_command(state: &AppState, namespace: Option<String>) -> Result<Self> {
         Self::from_app_state(state, namespace, true)
     }
 
     /// For list commands - namespace is optional (None = all namespaces)
-    pub fn for_list(state: &State<'_, AppState>, namespace: Option<String>) -> Result<Self> {
+    pub fn for_list(state: &AppState, namespace: Option<String>) -> Result<Self> {
         Self::from_app_state(state, namespace, false)
     }
 

@@ -1,20 +1,18 @@
 //! Files inside a container: list, preview, download. Read-only by design.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tauri::State;
-use tokio::sync::oneshot;
 
 use crate::error::{Error, Result};
 
 /// How long a preview may take before it is given up on. A FIFO or a device
 /// node never ends on its own.
 const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
-use crate::files::{self, Exit, FilePreview, Listing, Via};
-use crate::state::{AppEvent, AppState, LogStream, RemoveOnDrop};
+use crate::files::{self, Exit, FilePreview, Listing, ListingFailure, Via};
+use crate::state::streams::SUBSCRIBE_TIMEOUT;
+use crate::state::{AppEvent, AppState};
 use crate::utils::normalize_optional_namespace;
-
-const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
 
 fn check_path(path: &str) -> Result<()> {
     if !path.starts_with('/') || path.contains('\0') {
@@ -34,27 +32,20 @@ fn check_via(via: Option<&Via>) -> Result<()> {
 }
 
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
-    Ok((*client).clone())
+    Ok((*state.current_client()?).clone())
 }
 
-/// Why a listing ended without rows, in words the frontend switches on.
-fn failure_reason(error: &Error) -> &'static str {
+/// Why a listing ended without rows.
+fn failure_reason(error: &Error) -> ListingFailure {
     if error.is_refusal() {
-        "refused"
+        ListingFailure::Refused
     } else if matches!(error, Error::KubeApi(kube::Error::Api(r)) if r.code == 400 || r.code == 404)
     {
         // The API answers 400 for a container that is not running and 404
         // for a pod that is gone; both mean there is nothing to exec into.
-        "notRunning"
+        ListingFailure::NotRunning
     } else {
-        "failed"
+        ListingFailure::Failed
     }
 }
 
@@ -69,7 +60,7 @@ pub async fn list_container_files(
     via: Option<Via>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;
@@ -78,137 +69,150 @@ pub async fn list_container_files(
 
     let stream_id = crate::utils::generate_id("files");
     let event_tx = state.event_tx.clone();
-    let (cancel_tx, mut cancel_rx) = oneshot::channel();
-    let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
-    let streams = state.log_streams.clone();
-    streams.insert(
-        stream_id.clone(),
-        LogStream {
-            id: stream_id.clone(),
-            pod: pod.clone(),
-            container: container.clone(),
-            namespace: namespace.clone(),
-            cancel_tx,
-            subscribe_tx: Some(subscribe_tx),
-        },
-    );
+    let opened = state.file_listings.open(stream_id.clone());
 
-    let id = stream_id.clone();
-    tokio::spawn(async move {
-        let _cleanup = RemoveOnDrop {
-            map: streams,
-            key: id.clone(),
-        };
-        let started = tokio::select! {
-            biased;
-            _ = &mut cancel_rx => false,
-            subscribed = subscribe_rx => subscribed.is_ok(),
-            () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => true,
-        };
-        if !started {
-            return;
-        }
-        let began = Instant::now();
-        let emit_batch = |entries: Vec<files::FileEntry>| {
-            let _ = event_tx.send(AppEvent::FilesBatch {
-                stream_id: id.clone(),
-                entries,
-            });
-        };
-        let outcome = files::list_dir(
-            client,
-            files::Target {
-                namespace: &namespace,
-                pod: &pod,
-                container: &container,
-                via: via.as_ref(),
-                path: &path,
-            },
-            emit_batch,
-            &mut cancel_rx,
-        )
-        .await;
-        let elapsed_ms = began.elapsed().as_millis() as u64;
-        let terminal = match outcome {
-            Ok(Listing::Listed {
-                with,
-                entries,
-                partial,
-                unreadable,
-            }) => AppEvent::FilesDone {
-                stream_id: id.clone(),
-                with,
-                entries,
-                partial,
-                unreadable,
-                elapsed_ms,
-            },
-            // No code, and no sentence. A rung counts as missing on `exit
-            // 127` *or* on the runtime's own "executable file not found",
-            // which carries no code at all — so `Some(127)` was a number
-            // this side made up. The words are built from `tried` on the
-            // other side, where a scanner can see them.
-            Ok(Listing::NoTools { tried }) => AppEvent::FilesFailed {
-                stream_id: id.clone(),
-                reason: "noTools".into(),
-                message: String::new(),
-                exit_code: None,
-                stderr: String::new(),
-                tried,
-            },
-            // Our own script's exit 2. The words are the frontend's; this
-            // side carries only which of the ladder's contracts was hit.
-            Ok(Listing::Unopenable) => AppEvent::FilesFailed {
-                stream_id: id.clone(),
-                reason: "unopenable".into(),
-                message: String::new(),
-                exit_code: None,
-                stderr: String::new(),
-                tried: Vec::new(),
-            },
-            Ok(Listing::Failed { exit, stderr }) => AppEvent::FilesFailed {
-                stream_id: id.clone(),
-                reason: "failed".into(),
-                message: exit
-                    .message
-                    .clone()
-                    .unwrap_or_else(|| stderr.trim().to_string()),
-                exit_code: exit.code,
-                stderr,
-                tried: Vec::new(),
-            },
-            Err(error) => AppEvent::FilesFailed {
-                stream_id: id.clone(),
-                reason: failure_reason(&error).into(),
-                message: error.to_string(),
-                exit_code: None,
-                stderr: String::new(),
-                tried: Vec::new(),
-            },
-        };
-        let _ = event_tx.send(terminal);
-    });
+    let listing = ListingTarget {
+        namespace,
+        pod,
+        container,
+        path,
+        via,
+    };
+    tokio::spawn(run_listing(
+        opened,
+        event_tx,
+        client,
+        listing,
+        SUBSCRIBE_TIMEOUT,
+    ));
 
     Ok(stream_id)
+}
+
+/// What one listing reads.
+struct ListingTarget {
+    namespace: String,
+    pod: String,
+    container: String,
+    path: String,
+    via: Option<Via>,
+}
+
+/// The listing task: the gate, the ladder, and exactly one terminal event.
+async fn run_listing(
+    mut opened: crate::state::streams::Opened,
+    event_tx: tokio::sync::broadcast::Sender<AppEvent>,
+    client: kube::Client,
+    listing: ListingTarget,
+    gate: std::time::Duration,
+) {
+    let id = opened.id.clone();
+    if !opened.wait_for_subscriber(gate).await {
+        // The terminal event on this path too: a listener that went up
+        // and was then stopped waits on it, and events have no replay.
+        let _ = event_tx.send(AppEvent::FilesDone {
+            stream_id: id.clone(),
+            with: None,
+            entries: 0,
+            partial: true,
+            unreadable: 0,
+            elapsed_ms: 0,
+        });
+        return;
+    }
+    let (cancel, _held) = opened.split();
+    let began = Instant::now();
+    let emit_batch = |entries: Vec<files::FileEntry>| {
+        let _ = event_tx.send(AppEvent::FilesBatch {
+            stream_id: id.clone(),
+            entries,
+        });
+    };
+    let outcome = files::list_dir(
+        client,
+        files::Target {
+            namespace: &listing.namespace,
+            pod: &listing.pod,
+            container: &listing.container,
+            via: listing.via.as_ref(),
+            path: &listing.path,
+        },
+        emit_batch,
+        &cancel,
+    )
+    .await;
+    let elapsed_ms = began.elapsed().as_millis() as u64;
+    let terminal = match outcome {
+        Ok(Listing::Listed {
+            with,
+            entries,
+            partial,
+            unreadable,
+        }) => AppEvent::FilesDone {
+            stream_id: id.clone(),
+            with: Some(with),
+            entries,
+            partial,
+            unreadable,
+            elapsed_ms,
+        },
+        // No code, and no sentence. A rung counts as missing on `exit
+        // 127` *or* on the runtime's own "executable file not found",
+        // which carries no code at all — so `Some(127)` was a number
+        // this side made up. The words are built from `tried` on the
+        // other side, where a scanner can see them.
+        Ok(Listing::NoTools { tried }) => AppEvent::FilesFailed {
+            stream_id: id.clone(),
+            reason: ListingFailure::NoTools,
+            message: String::new(),
+            exit_code: None,
+            stderr: String::new(),
+            tried,
+        },
+        // Our own script's exit 2. The words are the frontend's; this
+        // side carries only which of the ladder's contracts was hit.
+        Ok(Listing::Unopenable) => AppEvent::FilesFailed {
+            stream_id: id.clone(),
+            reason: ListingFailure::Unopenable,
+            message: String::new(),
+            exit_code: None,
+            stderr: String::new(),
+            tried: Vec::new(),
+        },
+        Ok(Listing::Failed { exit, stderr }) => AppEvent::FilesFailed {
+            stream_id: id.clone(),
+            reason: ListingFailure::Failed,
+            message: exit
+                .message
+                .clone()
+                .unwrap_or_else(|| stderr.trim().to_string()),
+            exit_code: exit.code,
+            stderr,
+            tried: Vec::new(),
+        },
+        Err(error) => AppEvent::FilesFailed {
+            stream_id: id.clone(),
+            reason: failure_reason(&error),
+            message: error.to_string(),
+            exit_code: None,
+            stderr: String::new(),
+            tried: Vec::new(),
+        },
+    };
+    let _ = event_tx.send(terminal);
 }
 
 /// The frontend's listener is up; let the rows flow.
 #[tauri::command]
 pub fn files_subscribed(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some(mut entry) = state.log_streams.get_mut(&stream_id) {
-        if let Some(tx) = entry.subscribe_tx.take() {
-            let _ = tx.send(());
-        }
-    }
+    let _ = state.file_listings.subscribed(&stream_id);
     Ok(())
 }
 
 /// Stop a listing that is still arriving. What arrived stays.
 #[tauri::command]
 pub fn stop_files_listing(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some((_, stream)) = state.log_streams.remove(&stream_id) {
-        let _ = stream.cancel_tx.send(());
-    }
+    let _ = state.file_listings.stop(&stream_id);
     Ok(())
 }
 
@@ -256,7 +260,7 @@ pub async fn read_container_file(
     via: Option<Via>,
     state: State<'_, AppState>,
 ) -> Result<FileRead> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;
@@ -312,7 +316,7 @@ pub async fn download_container_file(
     destination: String,
     state: State<'_, AppState>,
 ) -> Result<FileRead> {
-    crate::validation::validate_dns_label(&pod)?;
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod)?;
     crate::validation::validate_dns_label(&container)?;
     check_path(&path)?;
     check_via(via.as_ref())?;
@@ -367,5 +371,49 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    /// A listing stopped before its listener was up still ends: listeners
+    /// that went up and then asked it to stop wait on exactly one terminal
+    /// event, and events have no replay. It says no rung ran, not which.
+    #[tokio::test]
+    async fn a_listing_stopped_before_it_starts_still_says_it_ended() {
+        let streams = crate::state::streams::Streams::default();
+        let opened = streams.open("files-1".into());
+        let _ = streams.stop("files-1");
+        let (event_tx, mut rx) = tokio::sync::broadcast::channel(8);
+        let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = kube::Client::try_from(config).expect("a client that never connects");
+        let target = ListingTarget {
+            namespace: "default".into(),
+            pod: "p".into(),
+            container: "c".into(),
+            path: "/".into(),
+            via: None,
+        };
+
+        run_listing(
+            opened,
+            event_tx,
+            client,
+            target,
+            std::time::Duration::from_secs(5),
+        )
+        .await;
+
+        match rx.try_recv().expect("a terminal event") {
+            AppEvent::FilesDone {
+                stream_id,
+                with,
+                partial,
+                ..
+            } => {
+                assert_eq!(stream_id, "files-1");
+                assert_eq!(with, None, "no rung ran");
+                assert!(partial);
+            }
+            other => panic!("expected files-done, got {other:?}"),
+        }
     }
 }

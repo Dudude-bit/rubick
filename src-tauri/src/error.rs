@@ -1,8 +1,8 @@
 //! Error handling for Rubick application
 //!
-//! An `Error` reaches the frontend as its `Display` string and nothing else —
-//! see the custom `Serialize` impl below, and the wire-format note in
-//! `src/lib/credentials.ts`.
+//! An `Error` reaches the frontend as `{ code, message }`: a code from
+//! `shared/error-codes.json` and its `Display` string — see the custom
+//! `Serialize` impl below, and the wire-format note in `src/lib/credentials.ts`.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -11,8 +11,6 @@ use thiserror::Error;
 pub mod messages {
     /// No cluster connected
     pub const NO_CLUSTER: &str = "No cluster connected";
-    /// Client not found for context
-    pub const NO_CLIENT: &str = "Client not found";
 }
 
 /// Application-wide result type
@@ -132,10 +130,16 @@ pub enum Error {
     /// Its own variant, and not `Timeout`, because the frontend acts on it:
     /// a list that ran out of time on a large cluster is offered a narrower
     /// scope before it is offered a retry. The `READ_DEADLINE:` prefix is the
-    /// wire format the frontend matches, the way `CREDENTIALS_EXPIRED:` is;
-    /// errors cross the IPC boundary as this string and nothing else.
+    /// wire format the frontend matches, the way `CREDENTIALS_EXPIRED:` is,
+    /// beside the `READ_DEADLINE` code.
     #[error("READ_DEADLINE: the cluster did not answer within {after_secs} s")]
     ReadDeadline { after_secs: u64 },
+
+    /// The current context has no live client: disconnected, or between two
+    /// connections. It used to read "Client not found", and every matcher on
+    /// "not found" drew the object on screen as deleted.
+    #[error("Not connected to {0}")]
+    NotConnected(String),
 
     /// Internal errors
     #[error("Internal error: {0}")]
@@ -177,18 +181,59 @@ pub enum PluginError {
     ExecutionFailed(String),
 }
 
+/// `{ code, message }`: the variant as a code the frontend switches on,
+/// and the `Display` string unchanged — the `CREDENTIALS_EXPIRED:` and
+/// `READ_DEADLINE:` prefixes in it are still a wire format.
 impl Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        // A string, not an object, so Tauri converts it and the frontend
-        // displays it.
-        serializer.serialize_str(&self.to_string())
+        use serde::ser::SerializeStruct;
+        let mut wire = serializer.serialize_struct("Error", 2)?;
+        wire.serialize_field("code", self.code())?;
+        wire.serialize_field("message", &self.to_string())?;
+        wire.end()
     }
 }
 
 impl Error {
+    /// What the frontend switches on instead of reading the sentence. One of
+    /// `shared/error-codes.json`.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Error::KubeApi(kube::Error::Api(response))
+                if response.code == 403 || response.reason == "Forbidden" =>
+            {
+                "PERMISSION_DENIED"
+            }
+            Error::KubeApi(kube::Error::Api(response))
+                if response.code == 404 || response.reason == "NotFound" =>
+            {
+                "NOT_FOUND"
+            }
+            Error::KubeApi(_) => "KUBE_API_ERROR",
+            Error::CredentialsExpired(_) => "CREDENTIALS_EXPIRED",
+            Error::Config(_) => "CONFIG_ERROR",
+            Error::Auth(_) => "AUTH_ERROR",
+            Error::Connection(_) => "NETWORK_ERROR",
+            Error::NotFound { .. } => "NOT_FOUND",
+            Error::PermissionDenied(_) => "PERMISSION_DENIED",
+            Error::InvalidInput(_) => "VALIDATION_ERROR",
+            Error::Serialization(_) | Error::Io(_) | Error::Internal(_) => "INTERNAL_ERROR",
+            Error::Plugin(_) => "PLUGIN_ERROR",
+            Error::Terminal(_) => "TERMINAL_ERROR",
+            Error::LogStream(_) => "LOG_STREAM_ERROR",
+            Error::NoPreviousRun { .. } => "NO_PREVIOUS_RUN",
+            Error::ListUnread { .. } => "LIST_UNREAD",
+            Error::LogNotKept { .. } => "LOG_NOT_KEPT",
+            Error::Timeout(_) => "TIMEOUT_ERROR",
+            Error::ReadDeadline { .. } => "READ_DEADLINE",
+            Error::NotConnected(_) => "NOT_CONNECTED",
+        }
+    }
+
     /// Create a not found error
     pub fn not_found(
         kind: impl Into<String>,
@@ -264,6 +309,28 @@ impl KubeErrorExt for kube::Error {
             kube::Error::Api(status) => format!("ApiError: {}", status.message),
             other => other.to_string(),
         }
+    }
+}
+
+/// A watcher's failure in the same words, `Status` dump left off.
+pub(crate) fn watch_failure(error: &kube::runtime::watcher::Error) -> String {
+    use kube::runtime::watcher::Error as Watch;
+    match error {
+        Watch::InitialListFailed(e) => format!(
+            "failed to perform initial object list: {}",
+            e.display_clean()
+        ),
+        Watch::WatchStartFailed(e) => {
+            format!("failed to start watching object: {}", e.display_clean())
+        }
+        Watch::WatchFailed(e) => format!("watch stream failed: {}", e.display_clean()),
+        Watch::WatchError(status) => {
+            format!(
+                "error returned by apiserver during watch: {}",
+                status.message
+            )
+        }
+        other @ Watch::NoResourceVersion => other.to_string(),
     }
 }
 
@@ -349,14 +416,108 @@ impl Error {
 mod tests {
     use super::*;
 
+    /// Would break the frontend twice over: a `message` that is no longer the
+    /// Display string loses the wire-format prefixes, and a missing `code`
+    /// sends it back to reading "not found" out of the sentence.
     #[test]
-    fn test_error_serialization() {
+    fn an_error_crosses_as_its_code_and_its_sentence() {
         let err = Error::not_found("Pod", "nginx", "default");
-        let json = serde_json::to_string(&err).unwrap();
-        // Error is serialized as its Display string
-        assert!(json.contains("Resource not found"));
-        assert!(json.contains("Pod"));
-        assert!(json.contains("nginx"));
+        let wire = serde_json::to_value(&err).unwrap();
+        assert_eq!(wire["code"], "NOT_FOUND");
+        assert_eq!(wire["message"], err.to_string());
+    }
+
+    /// A refused list is not a missing object, and a previous run that never
+    /// happened is not a deleted pod: both used to read as "not found" to
+    /// every substring match on the frontend.
+    #[test]
+    fn codes_tell_apart_what_the_sentences_blur() {
+        assert_eq!(
+            Error::from(api_error(403, "Forbidden")).code(),
+            "PERMISSION_DENIED"
+        );
+        assert_eq!(Error::from(api_error(404, "NotFound")).code(), "NOT_FOUND");
+        assert_eq!(
+            Error::from(api_error(500, "InternalError")).code(),
+            "KUBE_API_ERROR"
+        );
+        assert_eq!(
+            Error::NoPreviousRun {
+                container: "app".into()
+            }
+            .code(),
+            "NO_PREVIOUS_RUN"
+        );
+        assert_eq!(
+            Error::ListUnread {
+                kind: "Service".into(),
+                name: "web".into(),
+                said: "forbidden".into()
+            }
+            .code(),
+            "LIST_UNREAD"
+        );
+    }
+
+    /// Would let the two sides drift: a code Rust sends that the frontend's
+    /// table does not know reads as an unknown error there.
+    #[test]
+    fn every_code_is_in_the_shared_list() {
+        const LIST: &str = include_str!("../../shared/error-codes.json");
+        let list: serde_json::Value = serde_json::from_str(LIST).unwrap();
+        let known: Vec<&str> = list["codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|code| code.as_str().unwrap())
+            .collect();
+        let samples = [
+            Error::from(api_error(403, "Forbidden")),
+            Error::from(api_error(404, "NotFound")),
+            Error::from(api_error(500, "InternalError")),
+            Error::from(api_error(401, "Unauthorized")),
+            Error::Config(String::new()),
+            Error::Auth(AuthError::Kubeconfig(String::new())),
+            Error::Connection(String::new()),
+            Error::not_found("Pod", "p", "n"),
+            Error::PermissionDenied(String::new()),
+            Error::InvalidInput(String::new()),
+            Error::Serialization(String::new()),
+            Error::Io(std::io::Error::other("x")),
+            Error::Plugin(PluginError::NotFound(String::new())),
+            Error::Terminal(String::new()),
+            Error::LogStream(String::new()),
+            Error::NoPreviousRun {
+                container: String::new(),
+            },
+            Error::ListUnread {
+                kind: String::new(),
+                name: String::new(),
+                said: String::new(),
+            },
+            Error::LogNotKept {
+                container: String::new(),
+                said: String::new(),
+            },
+            Error::Timeout(String::new()),
+            Error::ReadDeadline { after_secs: 1 },
+            Error::NotConnected(String::new()),
+            Error::Internal(String::new()),
+        ];
+        let mut used = std::collections::BTreeSet::new();
+        for sample in &samples {
+            assert!(
+                known.contains(&sample.code()),
+                "{} is not in the list",
+                sample.code()
+            );
+            used.insert(sample.code());
+        }
+        assert_eq!(
+            used.len(),
+            known.len(),
+            "the list names a code nothing sends"
+        );
     }
 
     fn api_error(code: u16, reason: &str) -> kube::Error {
@@ -393,10 +554,20 @@ mod tests {
         );
     }
 
+    /// A refused watch reaches the reader as the toast over the list it falls
+    /// back from, and it carried the same `Status` dump there.
+    #[test]
+    fn a_refused_watch_is_shown_without_the_status_struct_dump() {
+        let err = kube::runtime::watcher::Error::InitialListFailed(api_error(403, "Forbidden"));
+        let shown = watch_failure(&err);
+        assert!(shown.starts_with("failed to perform initial object list: "));
+        assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
+        assert!(!shown.contains("Status {"), "the dump leaked: {shown}");
+    }
+
     /// Would send the reader back to a screen that says the cluster is empty.
     /// A 401 is the session being over, not an answer about one request, and
-    /// the frontend can only tell from this sentence — errors cross the IPC
-    /// boundary as their `Display` string and nothing else.
+    /// the frontend tells from the prefix of this sentence.
     #[test]
     fn a_401_is_expired_credentials_and_says_so_on_the_wire() {
         let err = Error::from(api_error(401, "Unauthorized"));

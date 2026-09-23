@@ -4,7 +4,7 @@ use k8s_openapi::api::core::v1::Service;
 use tauri::State;
 
 use crate::commands::filters::ServiceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_in_scope, list_resource_infos};
 use crate::error::Result;
 use crate::resources::ServiceInfo;
 use crate::state::AppState;
@@ -27,6 +27,8 @@ pub async fn list_services(
     Ok(services)
 }
 
+list_in_scope!(list_services_in, Service, ServiceInfo);
+
 /// Get a single service by name
 #[tauri::command]
 pub async fn get_service(
@@ -34,7 +36,6 @@ pub async fn get_service(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<ServiceInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<Service, ServiceInfo>(name, namespace, state).await
 }
 
@@ -45,6 +46,5 @@ pub async fn delete_service(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<Service>(name, namespace, state, None).await
 }

@@ -10,11 +10,6 @@ use k8s_gui_lib::{commands, integrations, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
-/// Emitted when the frontend event bridge drops events it could not keep up
-/// with. Every surface fed by a watch treats it as that watch failing, because
-/// from the surface's point of view it is: updates it needed are gone.
-const EVENT_BRIDGE_LAGGED: &str = "event-bridge-lagged";
-
 /// Whether this build registers `rubick://` itself at startup.
 ///
 /// Not inside a Flatpak: the exported .desktop file declares
@@ -27,6 +22,8 @@ fn registers_its_own_scheme(flatpak_id: Option<&std::ffi::OsStr>) -> bool {
 }
 
 fn main() {
+    let started = std::time::Instant::now();
+
     // Install rustls crypto provider before any TLS operations
     rustls::crypto::ring::default_provider()
         .install_default()
@@ -48,7 +45,9 @@ fn main() {
         "rubick: asking the login shell for its environment (up to {}s)",
         shell::SHELL_ENV_TIMEOUT.as_secs()
     );
+    let shell_started = std::time::Instant::now();
     let shell_env = shell::import_login_shell_env();
+    let shell_env_ms = shell_started.elapsed().as_millis();
 
     // Initialize tracing. The file is what a reader can hand over: a
     // packaged Windows build is a GUI-subsystem binary with no console, so
@@ -61,7 +60,11 @@ fn main() {
         Some(file) => tracing::info!(path = %file.display(), "writing this run's log"),
         None => tracing::warn!("no log file this run; this run leaves nothing to send"),
     }
-    tracing::info!(?shell_env, "login shell environment");
+    tracing::info!(?shell_env, shell_env_ms, "login shell environment");
+    tracing::info!(
+        since_start_ms = started.elapsed().as_millis(),
+        "building the window"
+    );
 
     tauri::Builder::default()
         // Registered first: a second launch (a `rubick://` link opened while
@@ -79,7 +82,8 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .setup(move |app| {
+            tracing::info!(since_start_ms = started.elapsed().as_millis(), "setting up");
             // A packaged build registers `rubick://` through its installer
             // (Info.plist, the Windows registry, the .desktop file); a dev
             // build has no installer, so it registers itself on the platforms
@@ -94,17 +98,15 @@ fn main() {
 
             // Initialize application state
             let state = AppState::new()?;
+            tracing::info!(
+                since_start_ms = started.elapsed().as_millis(),
+                "application state built"
+            );
 
             // Subscribe to events and forward to frontend.
             //
-            // The per-variant `event.channel()` and `event.payload()` are
-            // defined alongside the `AppEvent` enum in `state::events`.
-            // Inlining the routing here previously diverged from the enum
-            // — a new `AuthTerminalSessionCreated` variant got an
-            // `event_name` mapping but no explicit payload, falling
-            // through to a `serde_json::to_value(&event)` default that
-            // wrapped the data under `{ "type": ..., "data": {...} }` and
-            // silently broke the frontend modal (v2.1.0 bug).
+            // `event.channel()` and `event.to_json()` live beside `AppEvent`
+            // in `state::events`; each event is serialised once, here.
             let mut event_rx = state.subscribe();
             let app_handle = app.handle().clone();
             let perf = state.perf.clone();
@@ -136,27 +138,35 @@ fn main() {
                             // list is on `refresh: false`. So the frontend is
                             // told, and it treats this exactly as a watch
                             // failure: drop the "live" badge, resume polling.
-                            let _ = app_handle.emit(EVENT_BRIDGE_LAGGED, missed);
+                            let lagged = k8s_gui_lib::state::AppEvent::EventBridgeLagged { missed };
+                            if let Ok(payload) = lagged.to_json() {
+                                let _ = app_handle.emit_str(lagged.channel(), payload);
+                            }
                             continue;
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
                     };
 
                     let event_name = event.channel();
-                    let payload = event.payload();
+                    let payload = match event.to_json() {
+                        Ok(payload) => payload,
+                        Err(e) => {
+                            tracing::error!("Failed to serialise event {event_name}: {e}");
+                            continue;
+                        }
+                    };
 
                     if perf.is_recording() {
-                        let bytes = serde_json::to_vec(&payload).map_or(0, |v| v.len());
                         let changes = match &event {
                             k8s_gui_lib::state::AppEvent::ResourceWatchEvent {
                                 changes, ..
                             } => changes.len(),
                             _ => 0,
                         };
-                        perf.observe(bytes, changes);
+                        perf.observe(payload.len(), changes);
                     }
 
-                    if let Err(e) = app_handle.emit(event_name, payload) {
+                    if let Err(e) = app_handle.emit_str(event_name, payload) {
                         tracing::error!("Failed to emit event {}: {}", event_name, e);
                     }
                 }
@@ -164,7 +174,10 @@ fn main() {
 
             app.manage(state);
 
-            tracing::info!("Application state initialized");
+            tracing::info!(
+                since_start_ms = started.elapsed().as_millis(),
+                "Application state initialized"
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -179,10 +192,10 @@ fn main() {
             commands::cluster::get_kubeconfig_source,
             commands::access::check_list_access,
             commands::access::check_access,
-            commands::access::check_crd_read_access,
             commands::access::check_namespace_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
+            commands::app_events::app_event_types,
             commands::perf::perf_set_recording,
             commands::perf::perf_counters,
             // Namespace management
@@ -198,6 +211,7 @@ fn main() {
             commands::crds::get_crd_yaml,
             commands::crds::delete_crd,
             commands::crds::list_custom_resources,
+            commands::crds::list_custom_resources_in,
             commands::crds::get_custom_resource,
             commands::crds::get_custom_resource_yaml,
             commands::crds::delete_custom_resource,
@@ -223,6 +237,7 @@ fn main() {
             commands::debug::extend_debug_timeout,
             // Deployment commands
             commands::deployments::list_deployments,
+            commands::deployments::list_deployments_in,
             commands::deployments::get_deployment,
             commands::deployments::delete_deployment,
             commands::deployments::scale_deployment,
@@ -240,6 +255,7 @@ fn main() {
             commands::revisions::get_controller_revisions,
             // Service commands
             commands::services::list_services,
+            commands::services::list_services_in,
             commands::services::get_service,
             commands::services::delete_service,
             // Port-forward commands
@@ -251,13 +267,13 @@ fn main() {
             commands::port_forward::update_port_forward_config,
             commands::port_forward::delete_port_forward_config,
             // ConfigMap commands
-            commands::config_resources::list_configmaps,
+            commands::config_resources::list_configmaps_in,
             commands::config_resources::get_configmap,
             commands::config_resources::get_configmap_data,
             commands::config_resources::delete_configmap,
             commands::config_resources::set_configmap_key,
             // Secret commands
-            commands::config_resources::list_secrets,
+            commands::config_resources::list_secrets_in,
             commands::config_resources::get_secret,
             commands::config_resources::get_secret_data,
             commands::config_resources::delete_secret,
@@ -296,6 +312,7 @@ fn main() {
             commands::events::list_events,
             // Log commands
             commands::logs::get_pod_logs,
+            commands::logs::save_pod_log,
             commands::logs::stop_log_stream,
             commands::logs::stream_pod_logs,
             commands::logs::log_stream_subscribed,
@@ -323,10 +340,8 @@ fn main() {
             commands::watch::subscribe_service_watch,
             commands::watch::subscribe_endpoints_watch,
             commands::watch::subscribe_ingress_watch,
-            commands::watch::subscribe_gateway_watch,
             commands::watch::subscribe_gateway_route_watch,
             commands::watch::subscribe_pvc_watch,
-            commands::watch::subscribe_pod_watch,
             commands::watch::subscribe_pod_row_watch,
             commands::watch::subscribe_deployment_watch,
             commands::watch::subscribe_statefulset_watch,
@@ -346,7 +361,7 @@ fn main() {
             commands::kubectl::check_kubectl_availability,
             // Helm commands (native + CLI)
             commands::helm::check_helm_availability,
-            commands::helm::list_helm_releases_native,
+            commands::helm::list_helm_releases_in,
             commands::helm::get_helm_release_detail,
             commands::helm::get_helm_history,
             commands::helm::helm_rollback,
@@ -384,20 +399,12 @@ fn main() {
             commands::settings::set_kubeconfig_paths,
             commands::settings::get_kubeconfig_paths,
             commands::settings::clear_kubeconfig_path,
-            // Registry configurations
-            commands::settings::list_registry_configs,
-            commands::settings::save_registry_config,
-            commands::settings::delete_registry_config,
             // Theme configuration
             commands::settings::get_theme_config,
             commands::settings::save_theme_config,
             // YAML editor history
             commands::settings::get_yaml_history,
             commands::settings::add_yaml_history_entry,
-            // Infrastructure builder state
-            commands::settings::get_infrastructure_state,
-            commands::settings::save_infrastructure_state,
-            commands::settings::clear_infrastructure_state,
             // Recent items
             commands::settings::get_recent_items,
             commands::settings::add_recent_item,
@@ -408,16 +415,13 @@ fn main() {
             // Cluster preferences
             commands::settings::get_cluster_preferences,
             commands::settings::save_cluster_preferences,
-            // Registry commands
-            commands::registry::import_docker_config,
-            commands::registry::search_registry_images,
             // Authentication commands
             commands::auth::cancel_auth_session,
             // Storage commands
             commands::storage::list_persistent_volumes,
             commands::storage::get_persistent_volume,
             commands::storage::delete_persistent_volume,
-            commands::storage::list_persistent_volume_claims,
+            commands::storage::list_persistent_volume_claims_in,
             commands::storage::get_persistent_volume_claim,
             commands::storage::delete_persistent_volume_claim,
             commands::storage::list_storage_classes,
@@ -425,14 +429,16 @@ fn main() {
             commands::storage::delete_storage_class,
             // Network commands
             commands::network::list_ingresses,
-            commands::network::list_network_policies,
+            commands::network::list_ingresses_in,
+            commands::network::list_network_policies_in,
             commands::network::get_network_policy,
             commands::network::delete_network_policy,
             commands::network::get_ingress,
             commands::network::resolve_ingress_class,
             commands::network::delete_ingress,
-            commands::network::list_endpoints,
+            commands::network::list_endpoints_in,
             commands::network::list_service_endpoints,
+            commands::network::list_service_backing,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Gateway API commands
@@ -441,9 +447,11 @@ fn main() {
             commands::gateway::get_gateway_class,
             commands::gateway::delete_gateway_class,
             commands::gateway::list_gateways,
+            commands::gateway::list_gateways_in,
             commands::gateway::get_gateway,
             commands::gateway::delete_gateway,
             commands::gateway::list_gateway_routes,
+            commands::gateway::list_gateway_routes_in,
             commands::gateway::get_gateway_route,
             commands::gateway::delete_gateway_route,
             commands::gateway::list_backend_tls_policies,
@@ -453,19 +461,23 @@ fn main() {
             commands::overview::get_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
+            commands::metrics::get_pods_metrics_in,
             commands::metrics::get_nodes_metrics,
             // Workloads commands
             commands::workloads::list_statefulsets,
+            commands::workloads::list_statefulsets_in,
             commands::workloads::get_statefulset,
             commands::workloads::scale_statefulset,
             commands::workloads::delete_statefulset,
             commands::workloads::list_daemonsets,
+            commands::workloads::list_daemonsets_in,
             commands::workloads::get_daemonset,
             commands::workloads::delete_daemonset,
             commands::workloads::list_jobs,
+            commands::workloads::list_jobs_in,
             commands::workloads::get_job,
             commands::workloads::delete_job,
-            commands::workloads::list_cronjobs,
+            commands::workloads::list_cronjobs_in,
             commands::workloads::get_cronjob,
             commands::workloads::delete_cronjob,
             commands::workloads::trigger_cronjob,
@@ -474,6 +486,7 @@ fn main() {
             commands::manifest::apply_manifest,
             commands::manifest::dry_run_manifest,
             commands::manifest::get_manifest,
+            commands::manifest::get_object_metadata,
             // Logging commands
             commands::logging::log_frontend_events_batch,
         ])
@@ -497,6 +510,38 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
     use std::path::Path;
+
+    /// A capability's `remote` block hands its permissions to any page on
+    /// those URLs. Ours said `https://*`, so a page the window was taken to
+    /// could read the clipboard, open programs and emit the app's events;
+    /// and every command's scope was resolved against those patterns at
+    /// startup, a quarter of a second. Logins open in the browser, so no
+    /// remote page here needs IPC, and `auth-*` named a window that never
+    /// existed.
+    #[test]
+    fn no_capability_reaches_a_remote_page_or_a_window_we_do_not_open() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+        let mut read = 0;
+        for entry in fs::read_dir(&dir).expect("the capabilities folder") {
+            let path = entry.expect("an entry").path();
+            let json: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).expect("read a capability"))
+                    .expect("a capability is JSON");
+            assert!(
+                json.get("remote").is_none(),
+                "{} grants remote pages IPC",
+                path.display()
+            );
+            assert_eq!(
+                json["windows"],
+                serde_json::json!(["main"]),
+                "{} names a window the app does not open",
+                path.display()
+            );
+            read += 1;
+        }
+        assert!(read > 0, "no capability was read");
+    }
 
     /// A Flatpak's exported .desktop file is its registration of `rubick://`,
     /// and the sandbox has no `xdg-mime`: registering from inside put an

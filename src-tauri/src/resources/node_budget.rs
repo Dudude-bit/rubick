@@ -2,8 +2,7 @@
 //! what the pods may burst to: one table, every resource the kubelet
 //! reports, extended ones included.
 //!
-//! The sums are the scheduler's own rule (`max(init) + Σ containers +
-//! overhead`, pod-level resources overriding), over the pods on the node
+//! The sums are the scheduler's own rule (`resources::reservation`), over the pods on the node
 //! that still hold a reservation. They are numbers or they are nothing:
 //! a namespace whose pods could not be listed makes the whole column
 //! unknown, because a total over the readable namespaces is a smaller
@@ -72,7 +71,7 @@ fn unit_of(name: &str) -> BudgetUnit {
 /// `None` when the quantity will not parse: an unreadable value is unknown,
 /// never a confident zero. A present-but-unparseable capacity is `Some(None)`
 /// to the caller — a resource the node has, in an amount we could not read.
-fn parse(name: &str, quantity: &str) -> Option<f64> {
+pub(super) fn parse(name: &str, quantity: &str) -> Option<f64> {
     match unit_of(name) {
         BudgetUnit::Cpu => parse_cpu_checked(quantity),
         // A device count is an integer, but a vendor may still write `1k`.
@@ -88,131 +87,7 @@ fn holds_reservation(pod: &Pod) -> bool {
         .is_some_and(|p| p == "Succeeded" || p == "Failed")
 }
 
-type Sums = BTreeMap<String, f64>;
-
-fn add_all(
-    into: &mut Sums,
-    from: Option<&BTreeMap<String, k8s_openapi::apimachinery::pkg::api::resource::Quantity>>,
-    ok: &mut bool,
-) {
-    let Some(map) = from else { return };
-    for (key, q) in map {
-        match parse(key, &q.0) {
-            Some(value) => *into.entry(key.clone()).or_insert(0.0) += value,
-            // A summed value we could not read makes the total a lie; the
-            // caller turns `!ok` into an unknown column, not a smaller number.
-            None => *ok = false,
-        }
-    }
-}
-
-fn max_all(
-    into: &mut Sums,
-    from: Option<&BTreeMap<String, k8s_openapi::apimachinery::pkg::api::resource::Quantity>>,
-    ok: &mut bool,
-) {
-    let Some(map) = from else { return };
-    for (key, q) in map {
-        let Some(value) = parse(key, &q.0) else {
-            *ok = false;
-            continue;
-        };
-        let slot = into.entry(key.clone()).or_insert(0.0);
-        if value > *slot {
-            *slot = value;
-        }
-    }
-}
-
-/// The scheduler's reservation for one pod, per resource: requests and limits.
-fn pod_reservation(pod: &Pod) -> (Sums, Sums, bool) {
-    let Some(spec) = pod.spec.as_ref() else {
-        return (Sums::new(), Sums::new(), true);
-    };
-    let mut requests = Sums::new();
-    let mut limits = Sums::new();
-    let mut init_requests = Sums::new();
-    let mut init_limits = Sums::new();
-    let mut ok = true;
-
-    for container in &spec.containers {
-        let resources = container.resources.as_ref();
-        add_all(
-            &mut requests,
-            resources.and_then(|r| r.requests.as_ref()),
-            &mut ok,
-        );
-        add_all(
-            &mut limits,
-            resources.and_then(|r| r.limits.as_ref()),
-            &mut ok,
-        );
-    }
-    for init in spec.init_containers.as_deref().unwrap_or_default() {
-        let resources = init.resources.as_ref();
-        // A sidecar (restartPolicy: Always) runs for the pod's whole life
-        // and counts with the app containers; a plain init container only
-        // has to fit before them, so the largest one is what is reserved.
-        if init.restart_policy.as_deref() == Some("Always") {
-            add_all(
-                &mut requests,
-                resources.and_then(|r| r.requests.as_ref()),
-                &mut ok,
-            );
-            add_all(
-                &mut limits,
-                resources.and_then(|r| r.limits.as_ref()),
-                &mut ok,
-            );
-        } else {
-            max_all(
-                &mut init_requests,
-                resources.and_then(|r| r.requests.as_ref()),
-                &mut ok,
-            );
-            max_all(
-                &mut init_limits,
-                resources.and_then(|r| r.limits.as_ref()),
-                &mut ok,
-            );
-        }
-    }
-    for (key, value) in init_requests {
-        let slot = requests.entry(key).or_insert(0.0);
-        if value > *slot {
-            *slot = value;
-        }
-    }
-    for (key, value) in init_limits {
-        let slot = limits.entry(key).or_insert(0.0);
-        if value > *slot {
-            *slot = value;
-        }
-    }
-    // KEP-2837: a pod-level figure replaces the container arithmetic for
-    // that resource; the overview and the pod page apply the same rule.
-    if let Some(pod_level) = spec.resources.as_ref() {
-        for (key, q) in pod_level.requests.iter().flatten() {
-            match parse(key, &q.0) {
-                Some(v) => {
-                    requests.insert(key.clone(), v);
-                }
-                None => ok = false,
-            }
-        }
-        for (key, q) in pod_level.limits.iter().flatten() {
-            match parse(key, &q.0) {
-                Some(v) => {
-                    limits.insert(key.clone(), v);
-                }
-                None => ok = false,
-            }
-        }
-    }
-    add_all(&mut requests, spec.overhead.as_ref(), &mut ok);
-    add_all(&mut limits, spec.overhead.as_ref(), &mut ok);
-    (requests, limits, ok)
-}
+use super::reservation::{pod_reservation, Reservation, Sums};
 
 /// The table, from the node and the pods on it. `pods` is `None` when they
 /// could not all be read, and then no sum is shown for any resource.
@@ -235,7 +110,15 @@ pub fn budget(
             let mut limited = Sums::new();
             let mut ok = true;
             for pod in list {
-                let (r, l, pod_ok) = pod_reservation(pod);
+                let Reservation {
+                    requests: r,
+                    limits: l,
+                    known: pod_ok,
+                    ..
+                } = pod
+                    .spec
+                    .as_ref()
+                    .map_or_else(Reservation::nothing, pod_reservation);
                 ok &= pod_ok;
                 for (k, v) in r {
                     *requested.entry(k).or_insert(0.0) += v;

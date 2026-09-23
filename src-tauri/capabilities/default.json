@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for Rubick",
-  "windows": ["main", "auth-*"],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -23,8 +23,5 @@
     "updater:default",
     "process:allow-restart",
     "notification:default"
-  ],
-  "remote": {
-    "urls": ["https://*", "http://127.0.0.1:*", "http://localhost:*"]
-  }
+  ]
 }

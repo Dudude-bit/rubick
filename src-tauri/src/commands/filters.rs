@@ -105,20 +105,3 @@ impl std::ops::Deref for ServiceFilters {
         &self.base
     }
 }
-
-/// Secret-specific filters
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SecretFilters {
-    #[serde(flatten)]
-    pub base: ResourceFilters,
-    pub secret_type: Option<String>,
-}
-
-impl std::ops::Deref for SecretFilters {
-    type Target = ResourceFilters;
-
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}

@@ -24,7 +24,6 @@ use crate::resources::{
     SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
-use crate::utils::normalize_optional_namespace;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
@@ -35,18 +34,10 @@ use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::api::storage::v1::StorageClass;
 use tauri::State;
 
-/// Resolve the `(context, client)` pair for a watch command. Returns
-/// the standard `NO_CLUSTER` / `NO_CLIENT` errors so the frontend hook
-/// can report a real failure instead of a wedged stream.
+/// The client for a watch command, or the error saying why there is none, so
+/// the frontend hook reports a real failure instead of a wedged stream.
 fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
-    Ok((*client).clone())
+    Ok((*state.current_client()?).clone())
 }
 
 /// Macro to stamp out a typed namespace-scoped subscribe command.
@@ -65,19 +56,20 @@ macro_rules! subscribe_namespaced {
         // A sync command lands on a plain worker thread with no reactor,
         // where `tokio::spawn` panics — and, being called across the IPC
         // FFI boundary, that panic aborts the process instead of unwinding.
+        //
+        // `scope` is the list command's: `None` for the whole cluster, or
+        // the namespaces, several of them watched behind one barrier.
         #[tauri::command]
         pub async fn $cmd_name(
-            namespace: Option<String>,
+            scope: Option<Vec<String>>,
             state: State<'_, AppState>,
         ) -> Result<String> {
             let client = current_client(&state)?;
-            let namespace = normalize_optional_namespace(namespace);
-            Ok(state.watch_manager.subscribe::<$k8s_type, _, _>(
-                client,
-                $kind_label,
-                namespace,
-                |o| Some(<$info_type>::from(o)),
-            ))
+            state
+                .watch_manager
+                .subscribe::<$k8s_type, _, _>(client, $kind_label, scope, |o| {
+                    Some(<$info_type>::from(o))
+                })
         }
     };
 }
@@ -126,7 +118,6 @@ subscribe_namespaced!(
     PersistentVolumeClaimInfo,
     "PersistentVolumeClaim"
 );
-subscribe_namespaced!(subscribe_pod_watch, Pod, PodInfo, "Pod");
 subscribe_namespaced!(subscribe_pod_row_watch, Pod, PodRow, "Pod");
 subscribe_namespaced!(
     subscribe_deployment_watch,
@@ -186,32 +177,21 @@ pub async fn subscribe_custom_resource_watch(
     version: String,
     kind: String,
     plural: String,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
 
-    let api_resource = kube::discovery::ApiResource {
-        group: group.clone(),
-        version: version.clone(),
-        api_version: if group.is_empty() {
-            version.clone()
-        } else {
-            format!("{group}/{version}")
-        },
-        kind: kind.clone(),
-        plural,
-    };
+    let api_resource = kube::discovery::ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk(&group, &version, &kind),
+        &plural,
+    );
 
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        &kind,
-        namespace,
-        None,
-        |obj| Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj)),
-    ))
+    state
+        .watch_manager
+        .subscribe_custom_list(client, &api_resource, &kind, scope, |obj| {
+            Some(crate::commands::crds::dynamic_object_to_custom_resource_info(obj))
+        })
 }
 
 // ----- One object -----
@@ -241,35 +221,35 @@ pub async fn subscribe_object_watch(
         "Pod" => manager.subscribe_object::<Pod, _, _>(
             client,
             "Pod",
-            namespaced(namespace)?,
+            &namespaced(namespace)?,
             name,
             |o| Some(PodInfo::from(o)),
         ),
         "Deployment" => manager.subscribe_object::<Deployment, _, _>(
             client,
             "Deployment",
-            namespaced(namespace)?,
+            &namespaced(namespace)?,
             name,
             |o| Some(DeploymentInfo::from(o)),
         ),
         "StatefulSet" => manager.subscribe_object::<StatefulSet, _, _>(
             client,
             "StatefulSet",
-            namespaced(namespace)?,
+            &namespaced(namespace)?,
             name,
             |o| Some(StatefulSetInfo::from(o)),
         ),
         "DaemonSet" => manager.subscribe_object::<DaemonSet, _, _>(
             client,
             "DaemonSet",
-            namespaced(namespace)?,
+            &namespaced(namespace)?,
             name,
             |o| Some(DaemonSetInfo::from(o)),
         ),
         "Job" => manager.subscribe_object::<Job, _, _>(
             client,
             "Job",
-            namespaced(namespace)?,
+            &namespaced(namespace)?,
             name,
             |o| Some(JobInfo::from(o)),
         ),
@@ -302,17 +282,10 @@ pub async fn subscribe_custom_object_watch(
         crate::validation::validate_namespace(ns)?;
     }
     let client = current_client(&state)?;
-    let api_resource = kube::discovery::ApiResource {
-        group: group.clone(),
-        version: version.clone(),
-        api_version: if group.is_empty() {
-            version.clone()
-        } else {
-            format!("{group}/{version}")
-        },
-        kind: kind.clone(),
-        plural,
-    };
+    let api_resource = kube::discovery::ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk(&group, &version, &kind),
+        &plural,
+    );
     Ok(state.watch_manager.subscribe_custom_resource(
         client,
         &api_resource,
@@ -342,58 +315,23 @@ pub fn unsubscribe_resource_watch(stream_id: String, state: State<'_, AppState>)
 
 // ----- Gateway API (runtime-discovered served versions) -----
 
-/// Subscribe to Gateways, at the served version detection picks, with the
-/// same `GatewayInfo` payload the list command answers — `ListenerSet`
-/// merging excluded: a watch event refreshes a row, and the row's listener
-/// count is re-read with the next list, not recomputed per event.
-#[tauri::command]
-pub async fn subscribe_gateway_watch(
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
-    let api_resource = crate::commands::gateway::served_api_resource("Gateway", &state).await?;
-    let stamp = api_resource.clone();
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        "Gateway",
-        namespace,
-        None,
-        move |obj| {
-            // Watch events strip apiVersion/kind like list items do; put
-            // them back so the payload matches what the fetcher returned.
-            Some(crate::resources::GatewayInfo::read(
-                &crate::commands::gateway::with_types(obj.clone(), &stamp),
-            ))
-        },
-    ))
-}
-
 /// Subscribe to one route kind, `RouteInfo` payload — the shape all five
 /// list pages share.
 #[tauri::command]
 pub async fn subscribe_gateway_route_watch(
     kind: String,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     crate::commands::gateway::require_route_kind(&kind)?;
     let client = current_client(&state)?;
-    let namespace = normalize_optional_namespace(namespace);
     let api_resource = crate::commands::gateway::served_api_resource(&kind, &state).await?;
     let stamp = api_resource.clone();
-    Ok(state.watch_manager.subscribe_custom_resource(
-        client,
-        &api_resource,
-        &kind,
-        namespace,
-        None,
-        move |obj| {
+    state
+        .watch_manager
+        .subscribe_custom_list(client, &api_resource, &kind, scope, move |obj| {
             Some(crate::resources::RouteInfo::read(
                 &crate::commands::gateway::with_types(obj.clone(), &stamp),
             ))
-        },
-    ))
+        })
 }

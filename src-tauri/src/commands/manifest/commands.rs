@@ -265,13 +265,7 @@ pub async fn dry_run_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DryRun> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
     // One client for the whole manifest, unlike `apply_manifest` which
     // re-reads it per document. The loop here is bounded by the documents
     // in one buffer and two requests each, and a token that expires inside
@@ -350,23 +344,40 @@ pub async fn get_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
+    crate::validation::validate_path_segment(&name)?;
+    manifest_of(&state, &kind, &api_version, &name, namespace).await
+}
+
+async fn manifest_of(
+    state: &AppState,
+    kind: &str,
+    api_version: &str,
+    name: &str,
+    namespace: Option<String>,
+) -> Result<String> {
     // Gateway API kinds are pinned to /v1 by the frontend registry, but a
     // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
     // negotiation every gateway command does, so the YAML tab matches the
     // Overview it sits beside instead of 404ing.
-    let api_resource = if api_version.starts_with("gateway.networking.k8s.io/") {
-        crate::commands::gateway::served_api_resource(&kind, &state)
+    let gateway = api_version.starts_with("gateway.networking.k8s.io/");
+    let api_resource = if gateway {
+        crate::commands::gateway::served_api_resource(kind, state)
             .await
-            .unwrap_or_else(|_| api_resource_for(&kind, &api_version))
+            .unwrap_or_else(|_| api_resource_for(kind, api_version))
     } else {
-        api_resource_for(&kind, &api_version)
+        api_resource_for(kind, api_version)
     };
 
     let ns = namespace.unwrap_or_else(|| "default".to_string());
-    let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
+    let ctx = ResourceContext::for_command(state, Some(ns))?;
     let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
 
-    let resource = api.get(&name).await?;
+    let resource = api.get(name).await;
+    let resource = if gateway {
+        crate::commands::gateway::answered(state, resource)?
+    } else {
+        resource?
+    };
 
     // Every detail page's YAML tab comes through here, Secrets included, and
     // base64 is not a control: `tls.key` in a manifest is one `base64 -d`
@@ -378,6 +389,37 @@ pub async fn get_manifest(
     let yaml = serde_yaml::to_string(&object).map_err(|e| Error::Serialization(e.to_string()))?;
 
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
+}
+
+/// An object's labels and annotations.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectMetadata {
+    pub labels: std::collections::BTreeMap<String, String>,
+    pub annotations: std::collections::BTreeMap<String, String>,
+}
+
+/// One object's labels and annotations, for a reader that wants an
+/// annotation rather than a manifest to parse for it. A metadata-only read:
+/// no spec, and for a Secret no data.
+#[tauri::command]
+pub async fn get_object_metadata(
+    kind: String,
+    api_version: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ObjectMetadata> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let api_resource = api_resource_for(&kind, &api_version);
+    let ns = namespace.unwrap_or_else(|| "default".to_string());
+    let ctx = ResourceContext::for_command(&state, Some(ns))?;
+    let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
+    let meta = api.get_metadata(&name).await?.metadata;
+    Ok(ObjectMetadata {
+        labels: meta.labels.unwrap_or_default(),
+        annotations: meta.annotations.unwrap_or_default(),
+    })
 }
 
 #[cfg(test)]
@@ -656,5 +698,51 @@ mod dry_run_tests {
                 }
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::client::served::test_server::{connected, failure, groups, resources};
+    use crate::client::served::ServedIndex;
+
+    /// Would keep the YAML tab of a route read at a version the cluster
+    /// stopped serving on "not found" until discovery aged out, while the
+    /// Overview beside it recovered on its next poll: its get was the one
+    /// request on a Gateway API kind no test went through.
+    #[tokio::test]
+    async fn a_404_on_a_gateway_kind_sends_discovery_back() {
+        let served = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        );
+        let (state, hits) = connected(served, |path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            "/apis/gateway.networking.k8s.io/v1" => {
+                (200, resources("v1", &[("httproutes", "HTTPRoute", true)]))
+            }
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let yaml = || {
+            super::manifest_of(
+                &state,
+                "HTTPRoute",
+                "gateway.networking.k8s.io/v1",
+                "gone",
+                Some("default".to_string()),
+            )
+        };
+
+        assert!(yaml().await.is_err());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(yaml().await.is_err());
+        assert_eq!(asked(), Some(1));
+        assert!(yaml().await.is_err());
+        assert_eq!(asked(), Some(2), "the YAML tab's 404 sent discovery back");
     }
 }

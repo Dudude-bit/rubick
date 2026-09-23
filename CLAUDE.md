@@ -68,24 +68,24 @@ carrying both the cluster's words and ours.
 
 Claims here are settled by running things, not by reasoning about them.
 
-- **`cargo test --workspace`.** Never `--lib`: it does not build the binary,
-  which is how v2.1.0 shipped with 90 `__cmd__X not found` errors.
+- **`cargo test --workspace`.** Never `--lib` on its own: it does not build
+  the binary, which is how v2.1.0 shipped with 90 `__cmd__X not found` errors.
+  A filtered run adds `--bins`, as the Windows console job does.
 - **Sabotage your own test.** Break the code and confirm it fails _for the right
   reason_. A test that passes against broken code is worse than none.
 - **There is no pre-push hook.** Run `bun run test` and `bunx tsc --noEmit`
-  yourself. Prettier and rustfmt run in the pre-commit hook and again in
-  `ci.yml`, as the `Frontend formatting` and `Rust formatting` steps of
-  Lint + Test — a squash merge runs neither hook, so main arrived at 4.18.0
-  red on both, and every open PR inherited the failure. The hook also stashes
-  what is not staged, so formatting a file after `git add` leaves the old
-  bytes staged and the hook fails on content the working tree no longer has.
+  yourself. The pre-commit hook formats what you stage with prettier and
+  rustfmt and stages the result; `ci.yml` checks both again, in the Frontend
+  and Rust jobs — a squash merge runs no hook, so main arrived at 4.18.0 red
+  on both, and every open PR inherited the failure.
 - **Open the application** when the change is about what a person sees.
   `make apply-test-manifests` puts one of everything into the current context;
   `make dev` runs it. Before drawing a conclusion from a screenshot, check
   `ps -eo pid,command | grep Rubick` — an installed `/Applications/Rubick.app`
   looks exactly like your build and is not it.
-- Some behaviour only exists on a cluster. `src-tauri/tests/live_*.rs` and
+- Some behaviour only exists on a cluster. `src-tauri/tests/live/` and
   `test-manifests/` are the harnesses; a `kind` cluster is enough for most.
+  They are one test binary: `cargo test --test live live_drain:: -- --ignored`.
 
 ## Frontend
 
@@ -153,14 +153,20 @@ Claims here are settled by running things, not by reasoning about them.
   `Error::KubeApi`; only 401 has its own variant.
 - Do not touch the text of `Error::CredentialsExpired` — the `CREDENTIALS_EXPIRED:`
   prefix _is_ the wire format the frontend matches on.
+- An `Error` crosses IPC as `{ code, message }`. Branch on `errorCode(error)`
+  on the frontend, never on words in the message: "not found" is also in a
+  refused list and a container with no previous run. A new variant needs its
+  code in `shared/error-codes.json`; both sides test against it.
 - Inside a long-running task, get the client per attempt from
   `state.client_manager`; a held `kube::Client` carries a token that expires.
 - A spawned operation that emits events waits on its subscribe gate, exposes a
   `<thing>_subscribed` command to release it, and **always** emits its terminal
   event — including on cancel and on early error. Tauri events have no replay.
-- Event payloads are hand-written flat `serde_json::json!` arms with snake_case
-  keys; command return types are camelCase via serde. The two halves of the IPC
-  boundary use opposite casing on purpose.
+- An event is a variant of `AppEvent`, serialised flat with its `channel` as
+  the tag and snake_case fields; command return types are camelCase via
+  serde. Listen through `listenEvent` from `@/lib/events`, which takes the
+  payload's type from the generated union — a hand-written `listen<T>` is
+  the copy nothing compares, and `events.test.ts` refuses it.
 
 ## Connections and traces
 
@@ -178,6 +184,11 @@ each has a contract nothing checks for you.
   a cluster-read step tagged that way silently claims a verdict is knowable.
 - A `ConnRow` whose group claims anything that depends on the object existing
   must set `verifiable: true`; the render site hides `notChecked` otherwise.
+- A route's status about one parent is read through `verdictOf` /
+  `verdict_of` and nothing else, held together by
+  `shared/route-verdict-conformance.json`. The graph read the first entry and
+  the trace the first `Accepted`, so a route two controllers disagreed about
+  was green on one screen and red on the next.
 - Implementations of `delivery.source` and `ingress.tls` answer **positionally**
   — same length as the input, a hole rather than a dropped element. The caller
   indexes the answer by row.
@@ -232,8 +243,14 @@ the recorder; the rules that fail silently are these.
 - A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/`.
   A `__tests__/` folder or any other suffix is collected by nothing and reports
   nothing.
+- A `.test.tsx` runs under jsdom and a `.test.ts` under node. A `.test.ts`
+  that needs a DOM starts with `// @vitest-environment jsdom` — and so does
+  one whose subject checks `typeof window`, which under node passes quietly
+  through the other branch.
 - Rust unit tests go in an inline `#[cfg(test)] mod tests` in the file they
-  cover. `src-tauri/tests/` is reserved for the `#[ignore]`d live harnesses.
+  cover. `src-tauri/tests/live/` is reserved for the `#[ignore]`d live
+  harnesses — a module each in one test crate, because every file under
+  `tests/` is a binary that every `cargo test` links.
 - Name a test as a sentence stating the behaviour, with a doc comment above
   saying what would break. No `should`, no bare function names — nothing in
   1918 test names here starts with "should".
@@ -247,8 +264,10 @@ the recorder; the rules that fail silently are these.
   nothing else states. When one fails, the code is wrong, not the table.
 - Touch a log query term and both evaluators must agree: add the cases to
   `shared/log-query-conformance.json` and run the Rust and the TypeScript side.
-  The same holds for the pod status the builder derives from a pasted manifest —
-  `shared/pod-status-conformance.json`, against `pod_display::display_status`.
+  The same holds for a resource quantity: `shared/quantity-conformance.json`,
+  against `utils::quantities::parse_quantity` and `parseQuantity` — and for a
+  log line as text (Download in Rust, Copy in TS): `shared/log-text-conformance.json`.
+  So does a label selector, `null` included: `shared/label-selector-conformance.json`.
   Where one question has two evaluators, the corpus is what makes them one
   answer; a doc comment listing what the second one does not implement is a
   record of the drift, not a check on it.
@@ -283,19 +302,18 @@ bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies
 
 Half-done is invisible: each of these fails by the kind simply not appearing.
 
-`RESOURCE_REGISTRY` entry · a route file under the right section · the item in
-the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+`RESOURCE_REGISTRY` entry · its group, version, plural and scope in
+`shared/kinds.json`, which the registry reads them from and a Rust test holds
+to `k8s-openapi` · a route file under the right section · the item in the
+Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
-Then three tables keyed by kind, each of which fails by staying quiet rather
-than by breaking. `API_GROUPS` in `lib/delivery.ts` — a kind absent from it
-answers `null`, which every caller reads as "no delivery to speak of", so the
-column, the detail block and the peek marks go silent together. `ROUTABLE` in
-`ResourceRef.tsx` — absent, and every reference to the kind renders as text
-instead of a link. `peek-actions.ts` — absent, and the peek offers no Delete
-even though the command exists. All three have guards now; the guards are what
-noticed.
+Then two tables keyed by kind, each of which fails by staying quiet rather
+than by breaking. `ROUTABLE` in `ResourceRef.tsx` — absent, and every
+reference to the kind renders as text instead of a link. `peek-actions.ts` —
+absent, and the peek offers no Delete even though the command exists. Both
+have guards now; the guards are what noticed.
 
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in

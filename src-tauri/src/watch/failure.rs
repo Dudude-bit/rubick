@@ -13,6 +13,7 @@
 //! emit-once latch, so a recovered stream is free to fail again later
 //! and trigger another `Failed` event after another full streak.
 
+use futures::{Stream, StreamExt};
 use kube::runtime::watcher::Event;
 use std::time::Duration;
 
@@ -46,6 +47,31 @@ pub(crate) fn backoff_for(errors: u32) -> Duration {
     BACKOFF_BASE
         .saturating_mul(1u32 << doublings)
         .min(BACKOFF_CAP)
+}
+
+/// A watcher that waits before each attempt following a failure, by its own
+/// streak. One per namespace of a scope stream, so a refused namespace backing
+/// off does not hold up the ones answering.
+pub(super) fn paced<S, K, E, W>(stream: S, wait: W) -> impl Stream<Item = Result<Event<K>, E>>
+where
+    S: Stream<Item = Result<Event<K>, E>> + Unpin,
+    W: Fn(u32) -> Duration + Copy,
+{
+    futures::stream::unfold(
+        (stream, 0u32, false),
+        move |(mut stream, errors, failed)| async move {
+            if failed {
+                tokio::time::sleep(wait(errors)).await;
+            }
+            let item = stream.next().await?;
+            let (errors, failed) = match &item {
+                Err(_) => (errors + 1, true),
+                Ok(event) if answered(event) => (0, false),
+                Ok(_) => (errors, false),
+            };
+            Some((item, (stream, errors, failed)))
+        },
+    )
 }
 
 /// State machine for the watcher's "should we emit Failed yet?" decision.
@@ -168,6 +194,28 @@ mod tests {
         latch.record_error();
         latch.saw(&Event::Apply(Pod::default()));
         assert_eq!(latch.consecutive_errors(), 0);
+    }
+
+    /// Waits only after a failure, by the streak the marker does not reset.
+    /// Waiting after `Init` doubles every retry's delay; resetting on it
+    /// keeps a refused namespace on the first rung for ever.
+    #[tokio::test]
+    async fn a_paced_watcher_waits_after_a_failure_by_its_streak() {
+        static ASKED: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
+        let events: Vec<Result<Event<Pod>, &str>> = vec![
+            Err("refused"),
+            Ok(Event::Init),
+            Err("refused"),
+            Ok(Event::InitApply(Pod::default())),
+            Err("refused"),
+            Ok(Event::InitDone),
+        ];
+        let paced = paced(futures::stream::iter(events), |streak| {
+            ASKED.lock().unwrap().push(streak);
+            Duration::ZERO
+        });
+        assert_eq!(paced.collect::<Vec<_>>().await.len(), 6);
+        assert_eq!(*ASKED.lock().unwrap(), [1, 2, 1]);
     }
 
     #[test]

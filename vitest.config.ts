@@ -8,10 +8,26 @@ export default defineConfig({
     },
   },
   test: {
-    // jsdom for component tests; pure-function tests run fine on it too.
-    environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     exclude: ["node_modules", "dist", "src-tauri"],
+    // `.test.ts` under node unless it says `// @vitest-environment jsdom`.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "dom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+    ],
   },
 });

@@ -1,0 +1,388 @@
+{
+  "about": "A metav1.LabelSelector as both halves read it: `Selector::matches` in src-tauri/src/resources/selector.rs and `labelSelectorMatches` in src/lib/label-selector.ts. `matches` is null where the selector cannot be evaluated, and that line is Kubernetes' own: `metav1.LabelSelectorAsSelector` refuses to build a selector from an operator outside In, NotIn, Exists and DoesNotExist, from In or NotIn with no values, or from Exists or DoesNotExist with values, and the API server rejects all of them on every built-in kind. `NotIn` with empty values is where the three old evaluators split: Rust said it matches nothing, the Prometheus and Cilium pages said it matches everything. The second is what `labels.Requirement.Matches` would answer, but no requirement like that can be built, so no Kubernetes component ever gives that answer. A custom resource's schema rarely checks, which leaves each controller to guess, and this app does not guess for them: both sides answer null. The conversion fails as a whole, so one requirement that cannot be built makes the whole selector null, even where another requirement has already failed. An empty key, or a shape that is not a key, an operator and a list of strings, is null for the same reason. Key and value syntax beyond that is not checked.",
+  "cases": [
+    {
+      "name": "an empty selector matches everything",
+      "selector": {},
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "an empty selector matches an object with no labels",
+      "selector": {},
+      "labels": {},
+      "matches": true
+    },
+    {
+      "name": "empty lists are an empty selector",
+      "selector": { "matchLabels": {}, "matchExpressions": [] },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "null lists are an empty selector",
+      "selector": { "matchLabels": null, "matchExpressions": null },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "matchLabels matches the same value",
+      "selector": { "matchLabels": { "app": "shop" } },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": true
+    },
+    {
+      "name": "matchLabels does not match another value",
+      "selector": { "matchLabels": { "app": "shop" } },
+      "labels": { "app": "cart" },
+      "matches": false
+    },
+    {
+      "name": "matchLabels does not match a missing key",
+      "selector": { "matchLabels": { "app": "shop" } },
+      "labels": { "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "an empty value matches a label whose value is empty",
+      "selector": { "matchLabels": { "blank": "" } },
+      "labels": { "blank": "" },
+      "matches": true
+    },
+    {
+      "name": "an empty value does not match a missing key",
+      "selector": { "matchLabels": { "blank": "" } },
+      "labels": {},
+      "matches": false
+    },
+    {
+      "name": "In matches a listed value",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": ["web", "api"] }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": true
+    },
+    {
+      "name": "In does not match a value that is not listed",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": ["api"] }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "In does not match a missing key",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": ["web"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": false
+    },
+    {
+      "name": "In with empty values cannot be evaluated",
+      "selector": {
+        "matchExpressions": [{ "key": "tier", "operator": "In", "values": [] }]
+      },
+      "labels": { "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "In with no values field cannot be evaluated",
+      "selector": {
+        "matchExpressions": [{ "key": "tier", "operator": "In" }]
+      },
+      "labels": { "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "NotIn matches a value that is not listed",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": ["api", "worker"] }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": true
+    },
+    {
+      "name": "NotIn does not match a listed value",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": ["web"] }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "NotIn matches a missing key, so it is not the negation of In",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": ["web"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "NotIn with empty values cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": [] }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "NotIn with empty values cannot be evaluated on a missing key either",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": [] }
+        ]
+      },
+      "labels": {},
+      "matches": null
+    },
+    {
+      "name": "NotIn with null values cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": null }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "Exists matches a key that is there",
+      "selector": {
+        "matchExpressions": [{ "key": "app", "operator": "Exists" }]
+      },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "Exists matches a key whose value is empty",
+      "selector": {
+        "matchExpressions": [{ "key": "blank", "operator": "Exists" }]
+      },
+      "labels": { "blank": "" },
+      "matches": true
+    },
+    {
+      "name": "Exists does not match a missing key",
+      "selector": {
+        "matchExpressions": [{ "key": "app", "operator": "Exists" }]
+      },
+      "labels": { "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "Exists with empty values is Exists",
+      "selector": {
+        "matchExpressions": [
+          { "key": "app", "operator": "Exists", "values": [] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "Exists with values cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "app", "operator": "Exists", "values": ["shop"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "DoesNotExist matches a missing key",
+      "selector": {
+        "matchExpressions": [{ "key": "legacy", "operator": "DoesNotExist" }]
+      },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "DoesNotExist does not match a key that is there",
+      "selector": {
+        "matchExpressions": [{ "key": "app", "operator": "DoesNotExist" }]
+      },
+      "labels": { "app": "shop" },
+      "matches": false
+    },
+    {
+      "name": "DoesNotExist with empty values is DoesNotExist",
+      "selector": {
+        "matchExpressions": [
+          { "key": "legacy", "operator": "DoesNotExist", "values": [] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": true
+    },
+    {
+      "name": "DoesNotExist with values cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "legacy", "operator": "DoesNotExist", "values": ["x"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "an operator Kubernetes does not define cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "app", "operator": "Equals", "values": ["shop"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "operators are matched with their case",
+      "selector": {
+        "matchExpressions": [
+          { "key": "app", "operator": "in", "values": ["shop"] }
+        ]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "a node selector operator is not a label selector operator",
+      "selector": {
+        "matchExpressions": [
+          { "key": "replicas", "operator": "Gt", "values": ["1"] }
+        ]
+      },
+      "labels": { "replicas": "3" },
+      "matches": null
+    },
+    {
+      "name": "matchLabels and matchExpressions must both hold",
+      "selector": {
+        "matchLabels": { "app": "shop" },
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": ["web", "api"] }
+        ]
+      },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": true
+    },
+    {
+      "name": "one requirement that fails fails the selector",
+      "selector": {
+        "matchLabels": { "app": "cart" },
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": ["web"] }
+        ]
+      },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "every expression must hold",
+      "selector": {
+        "matchExpressions": [
+          { "key": "app", "operator": "Exists" },
+          { "key": "tier", "operator": "NotIn", "values": ["web"] }
+        ]
+      },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": false
+    },
+    {
+      "name": "a requirement that cannot be built voids the selector even after another has failed",
+      "selector": {
+        "matchLabels": { "app": "cart" },
+        "matchExpressions": [
+          { "key": "tier", "operator": "NotIn", "values": [] }
+        ]
+      },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "a requirement that cannot be built voids the selector wherever it sits",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "Bogus" },
+          { "key": "app", "operator": "In", "values": ["cart"] }
+        ]
+      },
+      "labels": { "app": "shop", "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "an expression without an operator cannot be evaluated",
+      "selector": { "matchExpressions": [{ "key": "app" }] },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "an expression without a key cannot be evaluated",
+      "selector": {
+        "matchExpressions": [{ "operator": "DoesNotExist" }]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "an empty key cannot be evaluated",
+      "selector": {
+        "matchExpressions": [{ "key": "", "operator": "DoesNotExist" }]
+      },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "an empty key in matchLabels cannot be evaluated",
+      "selector": { "matchLabels": { "": "shop" } },
+      "labels": { "app": "shop" },
+      "matches": null
+    },
+    {
+      "name": "values that are not a list cannot be evaluated",
+      "selector": {
+        "matchExpressions": [
+          { "key": "tier", "operator": "In", "values": "web" }
+        ]
+      },
+      "labels": { "tier": "web" },
+      "matches": null
+    },
+    {
+      "name": "values that are not strings cannot be evaluated",
+      "selector": {
+        "matchExpressions": [{ "key": "tier", "operator": "In", "values": [1] }]
+      },
+      "labels": { "tier": "1" },
+      "matches": null
+    },
+    {
+      "name": "a matchLabels value that is not a string cannot be evaluated",
+      "selector": { "matchLabels": { "replicas": 1 } },
+      "labels": { "replicas": "1" },
+      "matches": null
+    },
+    {
+      "name": "matchExpressions that is not a list cannot be evaluated",
+      "selector": { "matchExpressions": {} },
+      "labels": { "app": "shop" },
+      "matches": null
+    }
+  ]
+}

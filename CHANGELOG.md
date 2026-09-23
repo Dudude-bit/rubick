@@ -5,6 +5,135 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.0] - 2026-09-23
+
+### Security
+
+- **Web pages opened inside the app's window get no access to it.** The app
+  gave any `https://` page the same plugin permissions as its own interface:
+  the clipboard, opening programs, its events, its windows, a restart. No
+  page here ever needed them — sign-ins open in your browser — and they are
+  gone.
+
+- **One TLS stack.** Every connection the app makes — to the cluster,
+  Prometheus, Loki, an identity provider — now goes through rustls with your
+  system's certificate store, and OpenSSL is no longer linked on Linux.
+  **On Linux**, a server certificate that names its host only in the Common
+  Name, with no Subject Alternative Name, is now refused, as it already was
+  on macOS and Windows and in every browser since 2017; TLS below 1.2 is not
+  spoken. An integration set to skip verification still connects.
+
+### Changed
+
+- **Several namespaces at once, honestly.** Picking more than one namespace
+  used to poll each list and, when one namespace refused, draw the others'
+  rows as the whole selection. Every list now asks for the selection in one
+  read, names each namespace it could not read — in the cluster's words, with
+  the RBAC rule to copy — and says "none" only of the namespaces that
+  answered. Lists stay live over several namespaces instead of polling, and
+  pod usage is read in each namespace too, so a token with rights in a few
+  namespaces keeps its metrics. A route kind the token cannot read is named
+  too, where it used to count as a kind with no routes.
+
+- **Startup.** The window draws after 1.56 MB of script instead of 2.34 MB —
+  the Russian catalogue, the peek panel, charts and the YAML editor load when
+  they are first used — without the two-second wait for the system before the
+  first frame, and a quarter of a second less spent resolving permissions.
+
+- **A pod's requests and limits are what the scheduler reserves**, on every
+  screen: the Pods column, the pod page, the node budget, the overview's
+  headroom and a workload's Usage ceilings. Pods with sidecars (Istio,
+  Linkerd), a large init container or a RuntimeClass overhead show larger
+  numbers than before, and the right ones.
+
+- **Fewer reads of the cluster.** Several namespaces' overview is one call
+  that reads cluster-wide facts once. Connection panels and "My services"
+  cards in one namespace share one read of it instead of seven lists each.
+  Custom kinds are found through discovery, cached per cluster, instead of
+  reading whole CRDs (12 MB → 1 MB on a cluster with 54 of them). Prometheus
+  and Loki reuse their connections. Search reads names, not Secret values and
+  Helm manifests, on every keystroke.
+
+- **A pod shell keeps up.** `seq 1 300000` took 117 s to print and takes a
+  quarter of a second; Cyrillic no longer breaks at chunk boundaries.
+
+- **Downloading logs** writes the file straight into Downloads and says
+  where; a second download of the same log no longer overwrites the first.
+
+### Removed
+
+- **Infrastructure Builder**, which had no menu entry since 2.0, and
+  Settings › Registries, which fed only its image search. Saved canvases and
+  stored registry credentials leave `config.toml` on the next settings save.
+
+### Fixed
+
+- **A read the cluster refused says so, in the cluster's words.** Fifteen
+  vendor pages (Traefik, ingress-nginx, Istio, Argo CD, Flux, cert-manager,
+  CloudNativePG, Scylla, the clouds, Loki, Prometheus) said nothing, or
+  "reading…" forever, when their objects could not be read; each now says
+  why, with Retry and, for a refusal, the RBAC rule to copy. The same holds
+  for the Services behind a route, a controller that could not be looked
+  for ("unknown", not "not installed"), the peek's namespace contents and
+  traffic path, a CronJob's runs, and the "Used by" panel, which no longer
+  loses everything to one refused kind.
+
+- **"Not connected" is not "deleted".** A detail page with no live client, a
+  container with no previous run, or a list the token cannot read used to be
+  drawn as "the object was deleted".
+
+- **Where a path into a Service stops is one rule**, the same on the
+  connections graph, the routing pages and "My services". "My services" no
+  longer says "not read yet" about a Service with more than one replica. The
+  Gateway map counts the pods behind each backend instead of "1 of 1 ready"
+  for any number.
+
+- **A route two controllers disagree about reads the same on every screen.**
+  The connections graph and the route trace called it accepted while the
+  Gateway page and the map called it refused. One refusal decides now,
+  everywhere, and a controller that is still deciding is not "Accepted".
+
+- **Label selectors answer the same everywhere.** A selector Kubernetes would
+  refuse to build — `NotIn` with no values, an unknown operator — is "cannot
+  be evaluated" on every page, instead of matching every object on the
+  Prometheus and Cilium pages and nothing elsewhere.
+
+- **Search finds** TLSRoute, TCPRoute, UDPRoute, ListenerSet and
+  BackendTLSPolicy on Gateway API 1.6 clusters, where it reported them
+  unreadable.
+
+- **Names with dots.** Pods, nodes and workloads named as DNS subdomains —
+  static pods on nodes with a full hostname, every EKS node — open, delete
+  and debug.
+
+- **Logs.** A byte that is not UTF-8 no longer breaks the stream or the
+  download; it shows as `�`.
+
+- **ingress-nginx** installed as a DaemonSet is found, and one behind a cloud
+  load balancer with `spec.defaultBackend` no longer reads every host as
+  served in the clear. The AKS page no longer says a pod has no Azure
+  identity when its ServiceAccount could not be read.
+
+- **Stale screens.** Deleting a CRD updates every link to it at once;
+  Helm rollback, upgrade and uninstall refresh the history; a ConfigMap edit
+  reaches the pod's environment tab; restarting a pod refreshes its events.
+  A watch of custom resources with a large status no longer sends
+  multi-megabyte events.
+
+- **Quantities.** `1k` reads as a thousand in the capacity view instead of
+  dropping the node; `1K` is refused as the API server refuses it.
+
+- **Russian.** Ages on a Russian screen no longer read "5m ago"; routing maps,
+  the peek and the tool-path hint no longer print English words; picking two
+  languages in a row no longer snaps back to the first.
+
+- **A hidden window rests.** Age columns and counters stop ticking while the
+  window is hidden, and a refused read backs off to 30 s instead of retrying
+  every 2 s forever.
+
+- **Error messages read as the server wrote them**, without
+  "Tauri command 'x' failed:" in front.
+
 ## [4.19.1] - 2026-09-23
 
 ### Fixed

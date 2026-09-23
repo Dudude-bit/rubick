@@ -10,7 +10,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
     template_container_images, ConditionInfo, ContainerImage, DeploymentContainerInfo,
-    DeploymentContainerResources, OptionTimeExt, TemplateContainers,
+    DeploymentContainerResources, OptionTimeExt, ReplicaReservation, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -79,6 +79,8 @@ pub struct DaemonSetDetailInfo {
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
     pub pod_resources: DeploymentContainerResources,
+    /// One replica, as numbers; see `ReplicaReservation`.
+    pub replica: ReplicaReservation,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     /// `spec.selector` in the API's own text form — `app=demo`, and
@@ -125,6 +127,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
             pod_resources: template.pod_resources,
+            replica: template.replica,
             labels: ds.labels().clone(),
             annotations: ds.annotations().clone(),
             selector,

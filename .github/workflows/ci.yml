@@ -4,8 +4,22 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    # Prose and the site: nothing any job here builds or reads. Never
+    # CHANGELOG.md — What's New embeds it — and never a blanket **/*.md.
+    paths-ignore: &docs
+      - 'web/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CLAUDE.md'
+      - 'SECURITY.md'
+      - 'habr-*.md'
+      - 'LICENSE*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
   pull_request:
     branches: [main]
+    paths-ignore: *docs
 
 permissions:
   contents: read
@@ -15,13 +29,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-and-test:
-    name: Lint + Test
+  frontend:
+    name: Frontend
     runs-on: ubuntu-24.04
-
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
 
     steps:
       - name: Checkout
@@ -33,22 +43,86 @@ jobs:
           # lets the three-dot diff find where this branch left main.
           fetch-depth: 0
 
-      - name: Setup Tauri build environment
-        uses: ./.github/actions/setup-tauri
-        with:
-          target: x86_64-unknown-linux-gnu
-          is_linux: 'true'
-          install_tauri_cli: 'false'
+      # The cheap checks first: they are most of what fails, and they used to
+      # wait six minutes behind the Rust build to say so.
+      - name: Comment budget
+        # Only on a pull request, and only over what the patch adds: nothing
+        # already in the tree is judged. A doc comment on a test is exempt —
+        # CLAUDE.md requires one. Label a PR `comments` to skip it, which is
+        # for the rare change that is only about comments.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'comments')
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          python3 scripts/comment-budget.py "origin/${{ github.base_ref }}" HEAD
+
+      - name: Tauri versions agree
+        # What build.yml found most often, twenty minutes into a macOS job.
+        run: python3 scripts/check-tauri-versions.py
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Frontend formatting
+        # Prettier ran in the pre-commit hook and in no CI job at all, so a
+        # commit made with --no-verify put unformatted code on a green main.
+        # Same glob as the hook in lefthook.yml, or the two would disagree.
+        run: bunx prettier --check "src/**/*.{ts,tsx,css,json,md}"
+
+      - name: Frontend lint
+        run: bun run lint
+
+      - name: Frontend type check
+        run: bunx tsc --noEmit
+
+      - name: Frontend build
+        # vite alone: `bun run build` would run tsc a second time.
+        run: bunx vite build
+
+      - name: Frontend tests
+        run: bun run test
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-24.04
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      # File and line in a backtrace is all CI reads; full debug info doubled
+      # the cache this job restores and slowed every link.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Rust formatting
         run: cargo fmt --all --check
 
-      - name: Build frontend
-        # Required so `tauri::generate_context!()` can read ../dist during
-        # cargo clippy / cargo test. (build.yml goes through cargo tauri
-        # build which runs bun run build via beforeBuildCommand; here we
-        # don't, so we do it explicitly.)
-        run: bun run build
+      - uses: ./.github/actions/setup-rust
+        with:
+          target: x86_64-unknown-linux-gnu
+          is_linux: 'true'
+
+      - name: Stub the frontend
+        # `tauri::generate_context!()` reads ../dist while the binary
+        # compiles, and nothing here serves it: an empty page is enough. The
+        # real one is built and tested in the Frontend job.
+        run: |
+          mkdir -p dist
+          echo '<!doctype html><html><head></head><body></body></html>' > dist/index.html
+
+      - name: One TLS stack
+        # rustls on ring is the only TLS in the app. aws-lc and OpenSSL used
+        # to be compiled beside it — minutes of every cold build — through
+        # default features nobody chose; one creeping back fails here.
+        run: |
+          for crate in aws-lc-sys openssl-sys native-tls; do
+            if cargo tree -e normal -i "$crate" >/dev/null 2>&1; then
+              echo "::error::$crate is back in the dependency tree"
+              cargo tree -e normal -i "$crate"
+              exit 1
+            fi
+          done
 
       - name: Rust clippy
         # The tree is quiet: every finding is either fixed or allowed where it
@@ -61,31 +135,6 @@ jobs:
         # tests and doctests that a manifest-scoped run never reaches.
         run: cargo test --workspace
 
-      - name: Frontend type check
-        run: bunx tsc --noEmit
-
-      - name: Frontend tests
-        run: bun run test
-
-      - name: Frontend lint
-        run: bun run lint
-
-      - name: Comment budget
-        # Only on a pull request, and only over what the patch adds: nothing
-        # already in the tree is judged. A doc comment on a test is exempt —
-        # CLAUDE.md requires one. Label a PR `comments` to skip it, which is
-        # for the rare change that is only about comments.
-        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'comments')
-        run: |
-          git fetch --no-tags origin "${{ github.base_ref }}"
-          python3 scripts/comment-budget.py "origin/${{ github.base_ref }}" HEAD
-
-      - name: Frontend formatting
-        # Prettier ran in the pre-commit hook and in no CI job at all, so a
-        # commit made with --no-verify put unformatted code on a green main.
-        # Same glob as the hook in lefthook.yml, or the two would disagree.
-        run: bunx prettier --check "src/**/*.{ts,tsx,css,json,md}"
-
   windows-console:
     name: Windows console
     runs-on: windows-2025
@@ -93,20 +142,22 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - name: Setup Tauri build environment
-        uses: ./.github/actions/setup-tauri
+      - uses: ./.github/actions/setup-rust
         with:
           target: x86_64-pc-windows-msvc
-          install_tauri_cli: 'false'
 
-      - name: Build frontend
-        # `tauri::generate_context!()` reads ../dist while the crate compiles.
-        run: bun run build
+      - name: Stub the frontend
+        # `tauri::generate_context!()` reads ../dist while the binary compiles.
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Set-Content dist/index.html '<!doctype html><html><head></head><body></body></html>'
 
       - name: Console tests
         # Filtered, not the whole suite: the rest of the Rust tests spawn
@@ -115,21 +166,24 @@ jobs:
         # rather than the child's bytes, and no other runner can tell us what
         # that does to a credential.
         #
-        # Counted, because a filter matching nothing exits 0. Every test in
-        # `terminal::adapters::auth_exec` was `#[cfg(unix)]`, so this job ran
-        # zero of them and stayed green while the ConPTY fix it exists to
-        # cover went out untested — twice.
+        # --bins as well as --lib: the binary is where the handler list and
+        # its cfg(windows) arms compile, and a --lib run never builds it.
+        #
+        # Counted per filter, because a filter matching nothing exits 0.
+        # Every test in `terminal::adapters::auth_exec` was `#[cfg(unix)]`,
+        # so this job ran zero of them and stayed green while the ConPTY fix
+        # it exists to cover went out untested — twice. `--list` would count
+        # `#[ignore]`d tests too, which is existence and not execution.
+        # No --nocapture: a test's own output would split its result line,
+        # and a failing test prints what it captured anyway.
         shell: pwsh
         run: |
-          foreach ($filter in @('auth::interactive::cred::tests', 'terminal::adapters::auth_exec')) {
-            $out = cargo test --workspace $filter -- --nocapture 2>&1 | Tee-Object -Variable lines
-            $out | Out-Host
-            if ($LASTEXITCODE -ne 0) { throw "$filter failed" }
-            # `--list` would count `#[ignore]`d tests, which is existence and
-            # not execution. Count what actually ran.
-            $ran = ($lines | Select-String '^test result: ok\. (\d+) passed' |
-                    ForEach-Object { [int]$_.Matches[0].Groups[1].Value } |
-                    Measure-Object -Sum).Sum
+          $filters = @('auth::interactive::cred::tests', 'terminal::adapters::auth_exec')
+          cargo test -p k8s-gui --lib --bins -- @filters 2>&1 | Tee-Object -Variable lines | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "console tests failed" }
+          foreach ($filter in $filters) {
+            $pattern = '^test ' + [regex]::Escape($filter) + '::\S+ \.\.\. ok'
+            $ran = @($lines | Select-String $pattern).Count
             Write-Host "$filter -> $ran tests ran"
             if (-not $ran) { throw "no tests ran for $filter — this job proves nothing" }
           }

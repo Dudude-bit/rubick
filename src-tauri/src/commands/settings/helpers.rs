@@ -14,8 +14,8 @@ pub fn save_config(config: &AppConfig) -> Result<()> {
     let toml_str = toml::to_string_pretty(config)
         .map_err(|e| Error::Config(format!("Failed to serialize config: {e}")))?;
 
-    // Not `std::fs::write`: this file holds bearer tokens and the registry
-    // password, and that call would leave them at the umask's mercy.
+    // Not `std::fs::write`: this file holds bearer tokens, and that call
+    // would leave them at the umask's mercy.
     crate::config::private_file::write(&config_path, toml_str.as_bytes())
         .map_err(|e| Error::Config(format!("Failed to write config file: {e}")))?;
 

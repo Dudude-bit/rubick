@@ -1,23 +1,15 @@
 //! Log streaming commands
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::logs::{LogConfig, LogLine, LogStreamer, QueryTerm};
-use crate::state::{AppState, LogStream};
+use crate::state::streams::SUBSCRIBE_TIMEOUT;
+use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::State;
-use tokio::sync::oneshot;
-
-/// How long the stream waits to hear that someone is listening before
-/// giving up and streaming anyway. Long enough that a slow first render
-/// never loses a batch; short enough that a frontend which crashed
-/// between starting a stream and subscribing to it does not pin one open
-/// for the life of the process.
-const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// How many lines to read when the caller does not say.
 ///
@@ -30,23 +22,6 @@ pub const DEFAULT_TAIL_LINES: i64 = 1000;
 /// The one place the default is applied.
 fn tail_or_default(tail_lines: Option<i64>) -> i64 {
     tail_lines.unwrap_or(DEFAULT_TAIL_LINES)
-}
-
-/// RAII guard that removes a log stream's entry from the global map
-/// when dropped — including on panic-unwind inside the spawned task.
-/// Without this, a panicking `streamer.stream_logs(...)` call leaves a
-/// zombie entry in `state.log_streams` forever, and the natural Ok/Err
-/// return path also leaks because the frontend has no way to know the
-/// stream ended without an explicit notification.
-struct LogStreamCleanup {
-    map: Arc<DashMap<String, LogStream>>,
-    key: String,
-}
-
-impl Drop for LogStreamCleanup {
-    fn drop(&mut self) {
-        self.map.remove(&self.key);
-    }
 }
 
 /// Log stream configuration from frontend
@@ -80,14 +55,7 @@ pub async fn stream_pod_logs(
     config: StreamLogConfig,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
 
     let namespace = normalize_optional_namespace(config.namespace.clone())
         .unwrap_or_else(|| "default".to_string());
@@ -116,89 +84,25 @@ pub async fn stream_pod_logs(
 
     let streamer = LogStreamer::new(Arc::new((*client).clone()), event_tx);
 
-    let (cancel_tx, mut cancel_rx) = oneshot::channel();
-    let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
-    let stream_id_clone = stream_id.clone();
-    let log_streams = state.log_streams.clone();
+    let mut opened = state.log_streams.open(stream_id.clone());
 
-    // Store the log stream info
-    let log_stream = LogStream {
-        id: stream_id.clone(),
-        pod: config.pod_name.clone(),
-        container: config.container.unwrap_or_default(),
-        namespace: namespace.clone(),
-        cancel_tx,
-        subscribe_tx: Some(subscribe_tx),
-    };
-    state.log_streams.insert(stream_id.clone(), log_stream);
-
-    // Spawn background task to stream logs.
-    //
-    // `streamer.stream_logs(...)` IS the read+emit loop, so the gate
-    // covers the entire call. Without it, log-batch events emitted
-    // between this command returning and the frontend's `listen()`
-    // installing are dropped — same race that bit the terminal-auth
-    // modal. The RAII cleanup guard handles entry removal on every
-    // exit path: explicit cancel, natural Ok/Err return, and panic
-    // unwind. The `stop_log_stream` command remains a no-op on the
-    // already-removed entry in those cases.
+    // `streamer.stream_logs(...)` IS the read+emit loop, so the gate covers
+    // the entire call: log-batch events emitted before the frontend's
+    // `listen()` is installed are dropped. The entry leaves with the task,
+    // so `stop_log_stream` is a no-op on a stream that already ended.
     tokio::spawn(async move {
-        let _cleanup = LogStreamCleanup {
-            map: log_streams,
-            key: stream_id_clone.clone(),
-        };
-
-        if !wait_for_subscriber(&stream_id_clone, subscribe_rx, &mut cancel_rx).await {
+        if !opened.wait_for_subscriber(SUBSCRIBE_TIMEOUT).await {
+            tracing::debug!("Log stream {} stopped before subscribe", opened.id);
             return;
         }
-
-        if let Err(e) = streamer
-            .stream_logs(stream_id_clone.clone(), log_config, cancel_rx)
-            .await
-        {
-            tracing::error!("Log stream {} error: {}", stream_id_clone, e);
+        let id = opened.id.clone();
+        let (cancel, _held) = opened.split();
+        if let Err(e) = streamer.stream_logs(id.clone(), log_config, cancel).await {
+            tracing::error!("Log stream {} error: {}", id, e);
         }
     });
 
     Ok(stream_id)
-}
-
-/// Hold a stream shut until someone is listening.
-///
-/// Returns `false` when it should not start at all. Cancel is checked
-/// first and wins outright: a reader flipping three chips in a row
-/// starts and drops two streams before either is ever subscribed to, and
-/// the unbiased `select!` this replaces gave a cancelled stream a coin
-/// flip's chance of opening a connection to the apiserver anyway — only
-/// to abandon it one line later. A dropped subscribe sender counts as
-/// cancelled for the same reason: the only thing that drops it is the
-/// stream's entry leaving the map, which means nobody is waiting.
-async fn wait_for_subscriber(
-    stream_id: &str,
-    subscribe_rx: oneshot::Receiver<()>,
-    cancel_rx: &mut oneshot::Receiver<()>,
-) -> bool {
-    tokio::select! {
-        biased;
-        _ = cancel_rx => {
-            tracing::debug!("Log stream {} cancelled before subscribe", stream_id);
-            false
-        }
-        subscribed = subscribe_rx => {
-            if subscribed.is_err() {
-                tracing::debug!("Log stream {} dropped before subscribe", stream_id);
-            }
-            subscribed.is_ok()
-        }
-        () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => {
-            tracing::warn!(
-                "Log stream {} subscribe gate timed out after {}s; starting stream anyway",
-                stream_id,
-                SUBSCRIBE_TIMEOUT.as_secs()
-            );
-            true
-        }
-    }
 }
 
 /// Signal that the frontend has registered its `log-batch` listener and
@@ -210,13 +114,7 @@ async fn wait_for_subscriber(
 /// viewer had to be taught to ignore.
 #[tauri::command]
 pub fn log_stream_subscribed(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some(mut entry) = state.log_streams.get_mut(&stream_id) {
-        if let Some(tx) = entry.subscribe_tx.take() {
-            // Receiver may already have been dropped (stream cancelled
-            // during startup). That's fine — nothing to release.
-            let _ = tx.send(());
-        }
-    } else {
+    if !state.log_streams.subscribed(&stream_id) {
         tracing::debug!("Log stream {} subscribed after it ended", stream_id);
     }
     Ok(())
@@ -233,14 +131,7 @@ pub async fn get_pod_logs(
     previous: bool,
     state: State<'_, AppState>,
 ) -> Result<Vec<LogLine>> {
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-    let client = state
-        .client_manager
-        .get_client(&context)
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLIENT.to_string()))?;
+    let client = state.current_client()?;
 
     let namespace =
         normalize_optional_namespace(namespace).unwrap_or_else(|| "default".to_string());
@@ -265,11 +156,60 @@ pub async fn get_pod_logs(
     Ok(logs)
 }
 
+/// Save a container's log into the Downloads folder, and say where.
+///
+/// Written here rather than handed to the webview to write: ten thousand
+/// parsed lines, about six fields each, made one IPC answer of well over a
+/// megabyte for a file that needs only the text of each line.
+#[tauri::command]
+pub async fn save_pod_log(
+    pod_name: String,
+    namespace: Option<String>,
+    container: String,
+    tail_lines: Option<i64>,
+    previous: bool,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    // Both names become the file's name: validated, nothing in them can
+    // reach outside the folder.
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod_name)?;
+    crate::validation::validate_dns_label(&container)?;
+    let lines = get_pod_logs(
+        pod_name.clone(),
+        namespace,
+        Some(container.clone()),
+        tail_lines,
+        None,
+        previous,
+        state,
+    )
+    .await?;
+    let dir = save_dir(dirs::download_dir(), dirs::home_dir());
+    let stem = format!(
+        "{pod_name}-{container}{}",
+        if previous { "-previous" } else { "" }
+    );
+    let path = crate::logs::text::unused_path(&dir, &stem, "log");
+    tokio::fs::write(&path, crate::logs::text::log_text(&lines)).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Where a saved log goes: Downloads where there is one, else home.
+///
+/// On Linux `download_dir` is only what `user-dirs.dirs` says, and a desktop
+/// without xdg-user-dirs has none; that failed the whole Download over a
+/// home directory the answer could have been written into.
+fn save_dir(downloads: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
+    downloads
+        .filter(|dir| dir.is_dir())
+        .or(home)
+        .unwrap_or_else(std::env::temp_dir)
+}
+
 /// Stop log streaming
 #[tauri::command]
 pub fn stop_log_stream(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some((_, log_stream)) = state.log_streams.remove(&stream_id) {
-        let _ = log_stream.cancel_tx.send(());
+    if state.log_streams.stop(&stream_id) {
         tracing::info!("Log stream {} stopped", stream_id);
     }
     Ok(())
@@ -278,19 +218,6 @@ pub fn stop_log_stream(stream_id: String, state: State<'_, AppState>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn make_test_log_stream(id: &str) -> LogStream {
-        let (cancel_tx, _cancel_rx) = oneshot::channel::<()>();
-        let (subscribe_tx, _subscribe_rx) = oneshot::channel::<()>();
-        LogStream {
-            id: id.to_string(),
-            pod: "p".to_string(),
-            container: "c".to_string(),
-            namespace: "n".to_string(),
-            cancel_tx,
-            subscribe_tx: Some(subscribe_tx),
-        }
-    }
 
     #[test]
     fn both_log_commands_default_to_the_same_tail() {
@@ -301,68 +228,29 @@ mod tests {
         assert_eq!(tail_or_default(Some(42)), 42);
     }
 
+    /// A Linux desktop without xdg-user-dirs has no Downloads folder, and
+    /// Download failed with nothing written although home was writable.
     #[test]
-    fn cleanup_guard_removes_entry_on_drop() {
-        let map: Arc<DashMap<String, LogStream>> = Arc::new(DashMap::new());
-        map.insert("k".to_string(), make_test_log_stream("k"));
-        assert_eq!(map.len(), 1);
+    fn a_log_with_no_downloads_folder_is_saved_in_home() {
+        let home = tempfile::tempdir().unwrap();
+        let home = home.path().to_path_buf();
+        assert_eq!(save_dir(None, Some(home.clone())), home);
+    }
 
-        {
-            let _guard = LogStreamCleanup {
-                map: map.clone(),
-                key: "k".to_string(),
-            };
-        }
-
+    /// `user-dirs.dirs` can name a folder that was since deleted; writing
+    /// into it failed the same way.
+    #[test]
+    fn a_downloads_folder_that_is_not_there_falls_back_to_home() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_path_buf();
         assert_eq!(
-            map.len(),
-            0,
-            "guard's Drop must remove the entry — same path runs on panic-unwind in tokio::spawn"
+            save_dir(Some(home.join("Downloads")), Some(home.clone())),
+            home
         );
-    }
-
-    /// Coalescing: flipping chips starts a stream and drops it again
-    /// before anyone subscribes. Nothing may run in that window — one
-    /// `log_stream` call is one HTTP request to the apiserver and one
-    /// source of `log-batch` events for a stream nobody is listening to.
-    #[tokio::test]
-    async fn cancel_before_subscribe_never_starts_the_stream() {
-        for _ in 0..64 {
-            let (cancel_tx, mut cancel_rx) = oneshot::channel::<()>();
-            let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
-
-            // What `stop_log_stream` does: take the entry out of the map
-            // (dropping its subscribe sender) and signal cancel. Both
-            // futures are ready at once — the gate must not flip a coin.
-            let _ = cancel_tx.send(());
-            drop(subscribe_tx);
-
-            assert!(
-                !wait_for_subscriber("s", subscribe_rx, &mut cancel_rx).await,
-                "a cancelled stream must not start"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn subscribing_releases_the_gate() {
-        let (_cancel_tx, mut cancel_rx) = oneshot::channel::<()>();
-        let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
-        let _ = subscribe_tx.send(());
-        assert!(wait_for_subscriber("s", subscribe_rx, &mut cancel_rx).await);
-    }
-
-    #[test]
-    fn cleanup_guard_drop_is_safe_when_entry_already_removed() {
-        // Race: stop_log_stream removes the entry while the spawn task
-        // is still running. The guard's Drop must not panic when the
-        // key is no longer in the map.
-        let map: Arc<DashMap<String, LogStream>> = Arc::new(DashMap::new());
-        let guard = LogStreamCleanup {
-            map: map.clone(),
-            key: "missing".to_string(),
-        };
-        drop(guard); // must not panic
-        assert_eq!(map.len(), 0);
+        std::fs::create_dir(home.join("Downloads")).unwrap();
+        assert_eq!(
+            save_dir(Some(home.join("Downloads")), Some(home.clone())),
+            home.join("Downloads")
+        );
     }
 }

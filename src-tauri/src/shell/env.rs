@@ -1015,15 +1015,19 @@ mod tests {
             dir.path(),
             &format!("sleep 30 & echo $! > {}; wait", pid_file.display()),
         );
-        // Three seconds, not five hundred milliseconds. The deadline has to
-        // outlast the shell's own startup, and under the parallel test binary
-        // on a loaded machine it did not: the group was killed before the
-        // profile reached `echo $!`, the pid file was never written, and this
-        // failed four runs out of five — but only when run beside its
-        // neighbours, which is why it looked green alone. Nothing here is
-        // waiting on the deadline being short; it is waiting on it passing.
-        let report = unix::capture(&shell, Duration::from_secs(3));
-        assert!(matches!(report, Err(ShellEnvReport::TimedOut { .. })));
+        // The deadline has to outlast the shell's own startup, and on a
+        // loaded machine no fixed one did: the group was killed before the
+        // profile reached `echo $!`, and there was no child to test. So the
+        // run is repeated with longer deadlines until the child exists —
+        // nothing here depends on the deadline being short, only on it
+        // passing after the child has started.
+        for seconds in [3, 10, 30] {
+            let report = unix::capture(&shell, Duration::from_secs(seconds));
+            assert!(matches!(report, Err(ShellEnvReport::TimedOut { .. })));
+            if pid_file.exists() {
+                break;
+            }
+        }
 
         let child = helper_pid(&pid_file);
         let gone = std::time::Instant::now();

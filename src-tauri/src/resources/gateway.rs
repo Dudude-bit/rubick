@@ -139,6 +139,81 @@ pub struct RouteInfo {
     pub created_at: Option<String>,
 }
 
+/// What a route's status says about one condition of one parent, read as
+/// `src/lib/route-verdict.ts` reads it; `shared/route-verdict-conformance.json`
+/// holds the two to one answer.
+#[derive(Debug, Clone, Copy)]
+pub enum Verdict<'a> {
+    /// No entry for this parent at all.
+    None,
+    /// Entries, none of which carries the condition.
+    Undecided,
+    False(&'a ConditionInfo),
+    Pending(&'a ConditionInfo),
+    True(&'a ConditionInfo),
+}
+
+impl RouteInfo {
+    /// The entries that answer for one parentRef: those naming it, narrowed
+    /// to the ones echoing its sectionName when any do. A controller that
+    /// did not echo the section answers for every listener.
+    #[must_use]
+    pub fn statuses_for(&self, parent: &ParentRefInfo) -> Vec<&RouteParentStatusInfo> {
+        let ns_of = |ns: &Option<String>| ns.clone().unwrap_or_else(|| self.namespace.clone());
+        let named: Vec<&RouteParentStatusInfo> = self
+            .parents
+            .iter()
+            .filter(|entry| {
+                entry.parent.name == parent.name
+                    && ns_of(&entry.parent.namespace) == ns_of(&parent.namespace)
+            })
+            .collect();
+        let exact: Vec<&RouteParentStatusInfo> = named
+            .iter()
+            .copied()
+            .filter(|entry| entry.parent.section_name == parent.section_name)
+            .collect();
+        if exact.is_empty() {
+            named
+        } else {
+            exact
+        }
+    }
+}
+
+/// One refusal decides, wherever it sits; True only when every entry says
+/// True, and then the one about the oldest generation speaks. Reading the
+/// first entry alone drew a route two controllers disagreed about as
+/// accepted here and refused on the Gateway page.
+#[must_use]
+pub fn verdict_of<'a>(entries: &[&'a RouteParentStatusInfo], condition: &str) -> Verdict<'a> {
+    if entries.is_empty() {
+        return Verdict::None;
+    }
+    let said: Vec<&ConditionInfo> = entries
+        .iter()
+        .flat_map(|entry| entry.conditions.iter())
+        .filter(|c| c.type_ == condition)
+        .collect();
+    if said.is_empty() {
+        return Verdict::Undecided;
+    }
+    if let Some(refused) = said.iter().find(|c| c.status == "False") {
+        return Verdict::False(refused);
+    }
+    if let Some(undecided) = said.iter().find(|c| c.status != "True") {
+        return Verdict::Pending(undecided);
+    }
+    let oldest = said.iter().copied().fold(said[0], |sofar, c| {
+        match (c.observed_generation, sofar.observed_generation) {
+            (Some(this), Some(that)) if this < that => c,
+            (Some(_), None) => c,
+            _ => sofar,
+        }
+    });
+    Verdict::True(oldest)
+}
+
 /// The group every kind here belongs to, and the `parentRefs[].group`
 /// default the spec declares.
 pub const GATEWAY_API_GROUP: &str = "gateway.networking.k8s.io";
@@ -277,13 +352,10 @@ impl ServedGatewayKind {
     /// The dynamic-API coordinates for this kind at [`Self::read_version`].
     #[must_use]
     pub fn api_resource(&self) -> kube::discovery::ApiResource {
-        kube::discovery::ApiResource {
-            group: GATEWAY_API_GROUP.to_string(),
-            api_version: format!("{GATEWAY_API_GROUP}/{}", self.read_version),
-            version: self.read_version.clone(),
-            kind: self.kind.clone(),
-            plural: self.plural.clone(),
-        }
+        kube::discovery::ApiResource::from_gvk_with_plural(
+            &kube::api::GroupVersionKind::gvk(GATEWAY_API_GROUP, &self.read_version, &self.kind),
+            &self.plural,
+        )
     }
 }
 
@@ -478,7 +550,7 @@ impl GatewayClassInfo {
 }
 
 /// The versions this app has fixtures for, best first.
-const READ_PREFERENCE: [&str; 3] = ["v1", "v1beta1", "v1alpha2"];
+pub const READ_PREFERENCE: [&str; 3] = ["v1", "v1beta1", "v1alpha2"];
 
 const BUNDLE_VERSION_ANNOTATION: &str = "gateway.networking.k8s.io/bundle-version";
 const CHANNEL_ANNOTATION: &str = "gateway.networking.k8s.io/channel";
@@ -499,54 +571,76 @@ fn agreed<'a>(values: impl Iterator<Item = Option<&'a str>>) -> (Option<String>,
     }
 }
 
+/// Read it from the cluster: the group's CRDs by name and annotation —
+/// not a megabyte of schema each — and what discovery says is served.
+///
+/// # Errors
+///
+/// Where either read failed; "not installed" is an answer, not an error.
+pub async fn discover_gateway_api(
+    client: &kube::Client,
+    index: &crate::client::served::ServedIndex,
+    context: &str,
+) -> crate::error::Result<GatewayApiDetection> {
+    use kube::ResourceExt;
+    let crds: kube::Api<
+        k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
+    > = kube::Api::all(client.clone());
+    let params = kube::api::ListParams::default();
+    let (metas, served) = tokio::join!(
+        crds.list_metadata(&params),
+        index.kinds(context, client, GATEWAY_API_GROUP),
+    );
+    let metas = metas?;
+    let suffix = format!(".{GATEWAY_API_GROUP}");
+    let stamps = metas
+        .items
+        .iter()
+        .filter(|crd| crd.name_any().ends_with(&suffix))
+        .map(ResourceExt::annotations);
+    Ok(GatewayApiDetection::read(
+        stamps,
+        &served?.unwrap_or_default(),
+    ))
+}
+
 impl GatewayApiDetection {
-    /// Read the answer off a CRD list the app already fetches — no extra
-    /// request, one scan per cluster.
+    /// The kinds discovery lists as served, and the bundle stamps on the
+    /// group's CRDs. Served versions come from the API server rather than
+    /// from each CRD's own list: that is what a request will actually reach.
     #[must_use]
-    pub fn from_crds(
-        crds: &[k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition],
+    pub fn read<'a>(
+        stamps: impl IntoIterator<Item = &'a std::collections::BTreeMap<String, String>>,
+        served: &[crate::client::served::ServedKind],
     ) -> Self {
-        use kube::ResourceExt;
-
-        let ours: Vec<_> = crds
+        let kinds: Vec<ServedGatewayKind> = served
             .iter()
-            .filter(|crd| crd.spec.group == GATEWAY_API_GROUP)
-            .collect();
-
-        let kinds: Vec<ServedGatewayKind> = ours
-            .iter()
-            .filter_map(|crd| {
-                let versions: Vec<String> = crd
-                    .spec
-                    .versions
-                    .iter()
-                    .filter(|v| v.served)
-                    .map(|v| v.name.clone())
-                    .collect();
+            .filter_map(|served| {
                 let read_version = READ_PREFERENCE
                     .iter()
-                    .find(|p| versions.iter().any(|v| v == *p))
+                    .find(|p| served.versions.iter().any(|v| v == *p))
                     .map(|p| (*p).to_string())
-                    .or_else(|| versions.first().cloned())?;
+                    .or_else(|| served.versions.first().cloned())?;
                 Some(ServedGatewayKind {
-                    kind: crd.spec.names.kind.clone(),
-                    plural: crd.spec.names.plural.clone(),
-                    versions,
+                    kind: served.kind.clone(),
+                    plural: served.plural.clone(),
+                    versions: served.versions.clone(),
                     read_version,
                 })
             })
             .collect();
 
-        let (bundle_version, mixed_bundle) = agreed(ours.iter().map(|crd| {
-            crd.annotations()
-                .get(BUNDLE_VERSION_ANNOTATION)
-                .map(String::as_str)
-        }));
-        let (channel, _) = agreed(ours.iter().map(|crd| {
-            crd.annotations()
-                .get(CHANNEL_ANNOTATION)
-                .map(String::as_str)
-        }));
+        let stamps: Vec<_> = stamps.into_iter().collect();
+        let (bundle_version, mixed_bundle) = agreed(
+            stamps
+                .iter()
+                .map(|s| s.get(BUNDLE_VERSION_ANNOTATION).map(String::as_str)),
+        );
+        let (channel, _) = agreed(
+            stamps
+                .iter()
+                .map(|s| s.get(CHANNEL_ANNOTATION).map(String::as_str)),
+        );
 
         Self {
             installed: !kinds.is_empty(),
@@ -1043,6 +1137,89 @@ mod tests {
         serde_yaml::from_str(yaml).expect("fixture parses")
     }
 
+    /// The corpus writes parents short; group, kind and port are the same
+    /// for every case.
+    fn parent_of(short: &serde_json::Value) -> ParentRefInfo {
+        let mut full = serde_json::json!({
+            "group": GATEWAY_API_GROUP, "kind": "Gateway",
+            "namespace": null, "sectionName": null, "port": null,
+        });
+        for (key, value) in short.as_object().expect("a parent") {
+            full[key] = value.clone();
+        }
+        serde_json::from_value(full).expect("a parentRef")
+    }
+
+    fn answer(verdict: Verdict<'_>) -> serde_json::Value {
+        let (state, said) = match verdict {
+            Verdict::None => ("none", None),
+            Verdict::Undecided => ("undecided", None),
+            Verdict::False(c) => ("false", Some(c)),
+            Verdict::Pending(c) => ("pending", Some(c)),
+            Verdict::True(c) => ("true", Some(c)),
+        };
+        let mut out = serde_json::json!({ "state": state });
+        if let Some(reason) = said.and_then(|c| c.reason.clone()) {
+            out["reason"] = reason.into();
+        }
+        if let Some(generation) = said.and_then(|c| c.observed_generation) {
+            out["observedGeneration"] = generation.into();
+        }
+        out
+    }
+
+    /// The trace, the routes list, the Gateway page, the map and the peek
+    /// read this in TypeScript and the connections graph here. The graph
+    /// read the first entry alone, so a route two controllers disagreed
+    /// about had no stop in the graph and was red on the Gateway page.
+    #[test]
+    fn a_routes_status_reads_as_the_shared_corpus_says() {
+        let corpus: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../shared/route-verdict-conformance.json"
+        ))
+        .expect("the corpus parses");
+        let cases = corpus["cases"].as_array().expect("cases");
+        assert!(cases.len() > 10);
+        for case in cases {
+            let name = case["name"].as_str().expect("a name");
+            let parents = case["entries"]
+                .as_array()
+                .expect("entries")
+                .iter()
+                .map(|entry| RouteParentStatusInfo {
+                    parent: parent_of(&entry["parent"]),
+                    controller_name: entry["controllerName"].as_str().unwrap_or("").into(),
+                    conditions: serde_json::from_value(entry["conditions"].clone())
+                        .expect("conditions"),
+                })
+                .collect();
+            let route = RouteInfo {
+                kind: "HTTPRoute".into(),
+                api_version: format!("{GATEWAY_API_GROUP}/v1"),
+                name: "r".into(),
+                namespace: case["routeNamespace"].as_str().expect("a namespace").into(),
+                hostnames: vec![],
+                parent_refs: vec![],
+                rules: vec![],
+                parents,
+                generation: None,
+                labels: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+                created_at: None,
+            };
+            let entries = route.statuses_for(&parent_of(&case["parent"]));
+            for (condition, key) in [("Accepted", "accepted"), ("ResolvedRefs", "resolvedRefs")] {
+                let mut got = answer(verdict_of(&entries, condition));
+                if case[key].get("observedGeneration").is_none() {
+                    got.as_object_mut()
+                        .expect("an object")
+                        .remove("observedGeneration");
+                }
+                assert_eq!(got, case[key], "{name}: {condition}");
+            }
+        }
+    }
+
     const BACKEND_TLS_POLICY_V1: &str = r#"
 apiVersion: gateway.networking.k8s.io/v1
 kind: BackendTLSPolicy
@@ -1483,49 +1660,20 @@ status:
         assert_eq!(claimed.accepted, Some(true));
     }
 
-    fn crd(
-        name: &str,
-        kind: &str,
-        plural: &str,
-        versions: &[(&str, bool)],
-        annotations: &[(&str, &str)],
-    ) -> k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition
-    {
-        use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::{
-            CustomResourceDefinition, CustomResourceDefinitionNames, CustomResourceDefinitionSpec,
-            CustomResourceDefinitionVersion,
-        };
-        CustomResourceDefinition {
-            metadata: kube::core::ObjectMeta {
-                name: Some(name.to_string()),
-                annotations: Some(
-                    annotations
-                        .iter()
-                        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                        .collect(),
-                ),
-                ..Default::default()
-            },
-            spec: CustomResourceDefinitionSpec {
-                group: GATEWAY_API_GROUP.to_string(),
-                names: CustomResourceDefinitionNames {
-                    kind: kind.to_string(),
-                    plural: plural.to_string(),
-                    ..Default::default()
-                },
-                versions: versions
-                    .iter()
-                    .map(|(version, served)| CustomResourceDefinitionVersion {
-                        name: (*version).to_string(),
-                        served: *served,
-                        storage: *version == "v1",
-                        ..Default::default()
-                    })
-                    .collect(),
-                ..Default::default()
-            },
-            status: None,
+    fn served(kind: &str, plural: &str, versions: &[&str]) -> crate::client::served::ServedKind {
+        crate::client::served::ServedKind {
+            kind: kind.to_string(),
+            plural: plural.to_string(),
+            versions: versions.iter().map(ToString::to_string).collect(),
+            namespaced: kind != "GatewayClass",
         }
+    }
+
+    fn stamps(pairs: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
     }
 
     const BUNDLE: (&str, &str) = ("gateway.networking.k8s.io/bundle-version", "v1.6.1");
@@ -1533,22 +1681,13 @@ status:
 
     #[test]
     fn detection_reads_served_kinds_and_bundle() {
-        let detection = GatewayApiDetection::from_crds(&[
-            crd(
-                "gateways.gateway.networking.k8s.io",
-                "Gateway",
-                "gateways",
-                &[("v1", true), ("v1beta1", true)],
-                &[BUNDLE, CHANNEL],
-            ),
-            crd(
-                "httproutes.gateway.networking.k8s.io",
-                "HTTPRoute",
-                "httproutes",
-                &[("v1", true), ("v1beta1", true)],
-                &[BUNDLE, CHANNEL],
-            ),
-        ]);
+        let detection = GatewayApiDetection::read(
+            &[stamps(&[BUNDLE, CHANNEL]), stamps(&[BUNDLE, CHANNEL])],
+            &[
+                served("Gateway", "gateways", &["v1", "v1beta1"]),
+                served("HTTPRoute", "httproutes", &["v1", "v1beta1"]),
+            ],
+        );
 
         assert!(detection.installed);
         assert_eq!(detection.bundle_version.as_deref(), Some("v1.6.1"));
@@ -1567,24 +1706,19 @@ status:
 
     #[test]
     fn detection_prefers_newest_served_version_and_reports_mixed_bundles() {
-        let detection = GatewayApiDetection::from_crds(&[
-            // An old bundle: v1beta1 only, annotated with its own release.
-            crd(
-                "gateways.gateway.networking.k8s.io",
-                "Gateway",
-                "gateways",
-                &[("v1beta1", true)],
-                &[("gateway.networking.k8s.io/bundle-version", "v0.8.0")],
-            ),
-            // The trio pre-graduation: v1alpha2 served, v1 present but off.
-            crd(
-                "tcproutes.gateway.networking.k8s.io",
-                "TCPRoute",
-                "tcproutes",
-                &[("v1", false), ("v1alpha2", true)],
-                &[BUNDLE],
-            ),
-        ]);
+        let detection = GatewayApiDetection::read(
+            &[
+                // An old bundle, annotated with its own release.
+                stamps(&[("gateway.networking.k8s.io/bundle-version", "v0.8.0")]),
+                stamps(&[BUNDLE]),
+            ],
+            &[
+                served("Gateway", "gateways", &["v1beta1"]),
+                // The trio pre-graduation: v1 present in the CRD but not
+                // served, so discovery does not list it.
+                served("TCPRoute", "tcproutes", &["v1alpha2"]),
+            ],
+        );
 
         let gateway = detection
             .kinds
@@ -1607,7 +1741,7 @@ status:
 
     #[test]
     fn detection_on_a_cluster_without_gateway_api() {
-        let detection = GatewayApiDetection::from_crds(&[]);
+        let detection = GatewayApiDetection::read(&[], &[]);
         assert!(!detection.installed);
         assert!(detection.kinds.is_empty());
         assert_eq!(detection.bundle_version, None);

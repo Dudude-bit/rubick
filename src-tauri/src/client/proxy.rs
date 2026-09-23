@@ -137,7 +137,7 @@ impl KubectlProxy {
     /// `/version` through the proxy, which proves both that the proxy is up
     /// and that kubectl's credentials are accepted behind it.
     async fn wait_ready(&mut self) -> std::result::Result<(), String> {
-        let http = reqwest::Client::builder()
+        let http = crate::tls::builder()
             .timeout(Duration::from_secs(3))
             .build()
             .map_err(|e| e.to_string())?;

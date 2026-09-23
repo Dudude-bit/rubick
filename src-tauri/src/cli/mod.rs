@@ -15,7 +15,7 @@
 //!
 //! ## Implementing a new CLI tool
 //!
-//! ```rust
+//! ```text
 //! use std::path::PathBuf;
 //! use std::time::Duration;
 //! use k8s_gui_lib::cli::{CliTool, CliToolManager, paths::PathResolver};
@@ -41,7 +41,7 @@
 //!
 //! ## Discovering plugins
 //!
-//! ```rust
+//! ```text
 //! use k8s_gui_lib::cli::plugins::PluginDiscovery;
 //!
 //! let mut discovery = PluginDiscovery::new("kubectl-");

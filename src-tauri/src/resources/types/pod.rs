@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::resources::serialization::OwnerReference;
-use crate::utils::{format_cpu, parse_cpu, parse_memory};
+use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{display_status, restarts};
@@ -219,80 +219,27 @@ pub struct ResourceTotals {
     pub memory_limits: Option<String>,
 }
 
+/// The pod's requests and limits as the pods column and the pod page show
+/// them, from the same rule the node budget and the overview use. The limit
+/// is the running containers' ceiling, what their usage is drawn against.
 #[must_use]
 pub fn resource_totals(spec: &PodSpec) -> ResourceTotals {
-    let mut total_cpu_requests_millicores = 0.0f64;
-    let mut total_cpu_limits_millicores = 0.0f64;
-    let mut total_memory_requests_bytes = 0u64;
-    let mut total_memory_limits_bytes = 0u64;
-
-    for container in &spec.containers {
-        if let Some(resources) = &container.resources {
-            if let Some(requests) = &resources.requests {
-                if let Some(cpu) = requests.get("cpu") {
-                    total_cpu_requests_millicores += parse_cpu(&cpu.0);
-                }
-                if let Some(memory) = requests.get("memory") {
-                    total_memory_requests_bytes += parse_memory(&memory.0);
-                }
-            }
-            if let Some(limits) = &resources.limits {
-                if let Some(cpu) = limits.get("cpu") {
-                    total_cpu_limits_millicores += parse_cpu(&cpu.0);
-                }
-                if let Some(memory) = limits.get("memory") {
-                    total_memory_limits_bytes += parse_memory(&memory.0);
-                }
-            }
-        }
-    }
-
-    let mut cpu_requests = if total_cpu_requests_millicores > 0.0 {
-        Some(format_cpu(total_cpu_requests_millicores))
-    } else {
-        None
+    let held = crate::resources::reservation::pod_reservation(spec);
+    let cpu = |sums: &crate::resources::reservation::Sums| {
+        sums.get("cpu")
+            .filter(|v| **v > 0.0)
+            .map(|v| format_cpu(*v))
     };
-    let mut cpu_limits = if total_cpu_limits_millicores > 0.0 {
-        Some(format_cpu(total_cpu_limits_millicores))
-    } else {
-        None
+    let memory = |sums: &crate::resources::reservation::Sums| {
+        sums.get("memory")
+            .filter(|v| **v > 0.0)
+            .map(|v| format!("{}", *v as u64))
     };
-    let mut memory_requests = if total_memory_requests_bytes > 0 {
-        Some(format!("{total_memory_requests_bytes}"))
-    } else {
-        None
-    };
-    let mut memory_limits = if total_memory_limits_bytes > 0 {
-        Some(format!("{total_memory_limits_bytes}"))
-    } else {
-        None
-    };
-
-    // KEP-2837: a pod-level request or limit, where set, is the
-    // pod's own — the scheduler reserves it in place of the
-    // container sum, per resource, so the display follows. Parsed
-    // through the same formatters, so a pod-level `1`/`1Gi` reads
-    // exactly as a summed one. `overview::pod_requests` does the
-    // same for the cluster totals — both readers of one fact.
-    if let Some(pod_level) = &spec.resources {
-        if let Some(cpu) = pod_level.requests.as_ref().and_then(|m| m.get("cpu")) {
-            cpu_requests = Some(format_cpu(parse_cpu(&cpu.0)));
-        }
-        if let Some(mem) = pod_level.requests.as_ref().and_then(|m| m.get("memory")) {
-            memory_requests = Some(format!("{}", parse_memory(&mem.0)));
-        }
-        if let Some(cpu) = pod_level.limits.as_ref().and_then(|m| m.get("cpu")) {
-            cpu_limits = Some(format_cpu(parse_cpu(&cpu.0)));
-        }
-        if let Some(mem) = pod_level.limits.as_ref().and_then(|m| m.get("memory")) {
-            memory_limits = Some(format!("{}", parse_memory(&mem.0)));
-        }
-    }
     ResourceTotals {
-        cpu_requests,
-        cpu_limits,
-        memory_requests,
-        memory_limits,
+        cpu_requests: cpu(&held.requests),
+        cpu_limits: cpu(&held.ceiling),
+        memory_requests: memory(&held.requests),
+        memory_limits: memory(&held.ceiling),
     }
 }
 
@@ -415,6 +362,7 @@ impl PodStatusInfo {
 mod tests {
     use super::*;
     use crate::resources::{ContainerPhase, ContainerState};
+    use crate::utils::{parse_cpu, parse_memory};
     use k8s_openapi::api::core::v1::{
         ConfigMapProjection, ConfigMapVolumeSource, Container, ContainerState as K8sContainerState,
         ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus,

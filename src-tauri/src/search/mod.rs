@@ -25,16 +25,16 @@ pub use types::{
 
 use crate::client::K8sClientManager;
 use crate::error::{Error, Result};
+use crate::state::streams::Streams;
 use crate::state::AppEvent;
 use crate::utils::generate_id;
-use dashmap::DashMap;
 use futures::StreamExt;
 use kube::api::{Api, DynamicObject, ListParams};
 use kube::{Client, ResourceExt};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, oneshot, watch};
+use tokio::sync::broadcast;
 use types::SearchableKind;
 
 /// Budget for establishing a client for a cold cluster. Long enough
@@ -50,32 +50,11 @@ const CONTEXT_BUDGET: Duration = Duration::from_secs(15);
 /// listener before starting anyway.
 const SUBSCRIBE_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 
-struct SearchSession {
-    /// Dropping or firing this cancels every context task. Cancellation
-    /// is a `watch` rather than a `oneshot` because one search has many
-    /// consumers — one per cluster.
-    cancel_tx: watch::Sender<bool>,
-    subscribe_tx: Option<oneshot::Sender<()>>,
-}
-
-/// Removes the session row on every exit path of the fan-out task,
-/// including a panic unwind.
-struct SearchCleanup {
-    sessions: Arc<DashMap<String, SearchSession>>,
-    key: String,
-}
-
-impl Drop for SearchCleanup {
-    fn drop(&mut self) {
-        self.sessions.remove(&self.key);
-    }
-}
-
 /// Owns every in-flight search.
 pub struct SearchManager {
     event_tx: broadcast::Sender<AppEvent>,
     client_manager: Arc<K8sClientManager>,
-    sessions: Arc<DashMap<String, SearchSession>>,
+    streams: Streams,
 }
 
 impl SearchManager {
@@ -87,23 +66,20 @@ impl SearchManager {
         Self {
             event_tx,
             client_manager,
-            sessions: Arc::new(DashMap::new()),
+            streams: Streams::default(),
         }
     }
 
     #[must_use]
     pub fn active_searches(&self) -> usize {
-        self.sessions.len()
+        self.streams.len()
     }
 
     /// Release the gate once the frontend's listener is installed.
     /// Erroring on unknown ids keeps a caller from poking at searches
     /// it does not own. Idempotent.
     pub fn mark_subscribed(&self, search_id: &str) -> Result<()> {
-        if let Some(mut entry) = self.sessions.get_mut(search_id) {
-            if let Some(tx) = entry.subscribe_tx.take() {
-                let _ = tx.send(());
-            }
+        if self.streams.subscribed(search_id) || self.streams.contains(search_id) {
             Ok(())
         } else {
             Err(Error::Internal(format!("Search {search_id} not found")))
@@ -112,17 +88,12 @@ impl SearchManager {
 
     /// Stop a search. Idempotent, and safe to race with completion.
     pub fn cancel(&self, search_id: &str) {
-        if let Some((_, session)) = self.sessions.remove(search_id) {
-            let _ = session.cancel_tx.send(true);
-        }
+        let _ = self.streams.stop(search_id);
     }
 
     /// Stop every in-flight search.
     pub fn cancel_all(&self) {
-        let ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
-        for id in ids {
-            self.cancel(&id);
-        }
+        self.streams.stop_all();
     }
 
     /// Plan a search from a frontend request and start it.
@@ -183,16 +154,7 @@ impl SearchManager {
         self.cancel_all();
 
         let search_id = generate_id("search");
-        let (cancel_tx, cancel_rx) = watch::channel(false);
-        let (subscribe_tx, subscribe_rx) = oneshot::channel();
-
-        self.sessions.insert(
-            search_id.clone(),
-            SearchSession {
-                cancel_tx,
-                subscribe_tx: Some(subscribe_tx),
-            },
-        );
+        let mut opened = self.streams.open(search_id.clone());
 
         let active: Vec<String> = targets
             .iter()
@@ -201,24 +163,14 @@ impl SearchManager {
             .collect();
         let event_tx = self.event_tx.clone();
         let client_manager = self.client_manager.clone();
-        let sessions = self.sessions.clone();
         let id = search_id.clone();
         let kinds = Arc::new(kinds);
 
         tokio::spawn(async move {
-            let _cleanup = SearchCleanup {
-                sessions,
-                key: id.clone(),
-            };
-
-            let mut cancel_rx = cancel_rx;
-            tokio::select! {
-                _ = subscribe_rx => {}
-                () = cancelled(&mut cancel_rx) => return,
-                () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
-                    tracing::warn!("Search {id} subscribe gate timed out; emitting anyway");
-                }
+            if !opened.wait_for_subscriber(SUBSCRIBE_GATE_TIMEOUT).await {
+                return;
             }
+            let (cancel, _held) = opened.split();
 
             // One task per cluster behind a permit, rather than one
             // future chain: an aborted task drops its in-flight HTTP
@@ -275,7 +227,7 @@ impl SearchManager {
             }
 
             tokio::select! {
-                () = cancelled(&mut cancel_rx) => {
+                () = cancel.cancelled() => {
                     tracing::debug!("Search {id} cancelled; aborting {} cluster tasks", tasks.len());
                     tasks.shutdown().await;
                 }
@@ -284,19 +236,6 @@ impl SearchManager {
         });
 
         search_id
-    }
-}
-
-/// Resolves when the search has been cancelled — either explicitly or
-/// because its session row (and with it the sender) went away.
-async fn cancelled(rx: &mut watch::Receiver<bool>) {
-    loop {
-        if *rx.borrow_and_update() {
-            return;
-        }
-        if rx.changed().await.is_err() {
-            return;
-        }
     }
 }
 
@@ -339,10 +278,11 @@ async fn search_context(
         let namespace = namespace.clone();
         let query = query.clone();
         let context = context.to_string();
+        let client_manager = client_manager.clone();
         kind_futures.push(async move {
             (
                 kind.label,
-                list_kind(client, kind, namespace, query, context).await,
+                list_kind(client, &client_manager, kind, namespace, query, context).await,
             )
         });
     }
@@ -498,12 +438,26 @@ async fn resolve_client(
 /// plus whether the cluster had more objects than one page.
 async fn list_kind(
     client: Client,
+    client_manager: &K8sClientManager,
     kind: &'static SearchableKind,
     namespace: Option<String>,
     query: String,
     context: String,
 ) -> Result<(Vec<SearchHit>, bool)> {
-    let api_resource = kind.api_resource();
+    let (api_resource, served_in) = match &kind.coordinates {
+        types::Coordinates::Typed(resource) => (resource(), None),
+        types::Coordinates::Served { group, plural } => {
+            // Not installed is an answer: there is nothing of it to match.
+            match client_manager
+                .served()
+                .resource(&context, &client, group, plural)
+                .await?
+            {
+                Some(served) => (served.resource, Some(*group)),
+                None => return Ok((Vec::new(), false)),
+            }
+        }
+    };
     let api: Api<DynamicObject> = if kind.cluster_scoped {
         Api::all_with(client, &api_resource)
     } else {
@@ -513,9 +467,16 @@ async fn list_kind(
         }
     };
 
+    // Metadata only: a name is all that is matched, and a full list carried
+    // every Secret's values and every Helm release's manifest into memory on
+    // each keystroke.
     let list = api
-        .list(&ListParams::default().limit(plan::LIST_PAGE_LIMIT))
-        .await?;
+        .list_metadata(&ListParams::default().limit(plan::LIST_PAGE_LIMIT))
+        .await;
+    let list = match served_in {
+        Some(group) => client_manager.served().answered(&context, group, list),
+        None => list,
+    }?;
 
     // A continue token means the page cap hid objects from us — the
     // caller has to say "first N scanned", not "no matches".
@@ -579,6 +540,105 @@ mod tests {
 
     fn target(name: &str) -> SearchTarget {
         SearchTarget::searching(name.to_string())
+    }
+
+    fn gateway_kind(label: &str) -> &'static SearchableKind {
+        SEARCHABLE_KINDS
+            .iter()
+            .find(|kind| kind.label == label)
+            .expect("a searchable kind")
+    }
+
+    /// A kind the cluster does not serve has no objects to match, and says
+    /// so without a list; the cluster answering "no such path" used to come
+    /// back as "Could not read `TCPRoute`" on every Gateway API 1.6 cluster.
+    /// A discovery that failed is still a failure, not "none".
+    #[tokio::test]
+    async fn a_kind_the_cluster_does_not_serve_is_no_matches_and_a_refusal_is_not() {
+        use crate::client::served::test_server::{groups, resources, server};
+
+        let (client, hits) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("httproutes", "HTTPRoute", true)]),
+            ),
+        ])
+        .await;
+        let client_manager = K8sClientManager::new();
+        let answer = list_kind(
+            client,
+            &client_manager,
+            gateway_kind("TCPRoute"),
+            None,
+            "api".to_string(),
+            "kind".to_string(),
+        )
+        .await
+        .expect("an answer");
+        assert!(answer.0.is_empty() && !answer.1);
+        assert!(
+            !hits
+                .lock()
+                .unwrap()
+                .keys()
+                .any(|path| path.ends_with("/tcproutes")),
+            "nothing to list where nothing is served"
+        );
+
+        let (refused, _) = server(vec![("/apis", 403, "{}".to_string())]).await;
+        assert!(list_kind(
+            refused,
+            &K8sClientManager::new(),
+            gateway_kind("TCPRoute"),
+            None,
+            "api".to_string(),
+            "kind".to_string(),
+        )
+        .await
+        .is_err());
+    }
+
+    /// Would list a kind at a version the cluster stopped serving for every
+    /// query until discovery aged out, filing it among the unreadable ones,
+    /// while the pages beside it recovered on their next poll.
+    #[tokio::test]
+    async fn a_404_from_a_discovered_kind_sends_discovery_back() {
+        use crate::client::served::test_server::{answering, failure, groups, resources};
+        use crate::client::served::ServedIndex;
+
+        let (client, hits) = answering(|path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            "/apis/gateway.networking.k8s.io/v1" => {
+                (200, resources("v1", &[("httproutes", "HTTPRoute", true)]))
+            }
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let client_manager = K8sClientManager::with_served(ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        ));
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let search = || {
+            list_kind(
+                client.clone(),
+                &client_manager,
+                gateway_kind("HTTPRoute"),
+                None,
+                "api".to_string(),
+                "kind".to_string(),
+            )
+        };
+
+        assert!(search().await.is_err());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(search().await.is_err());
+        assert_eq!(asked(), Some(1));
+        assert!(search().await.is_err());
+        assert_eq!(asked(), Some(2), "the list's 404 sent discovery back");
     }
 
     #[tokio::test]

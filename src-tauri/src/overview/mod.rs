@@ -5,7 +5,7 @@
 //! with a cluster-wide one beside every namespaced one for the scheduler
 //! view: four namespaces was five full lists a round on a cluster of ten
 //! thousand pods. A watch per kind, kept in a store, answers the same
-//! question from memory; a request only projects its namespace out.
+//! question from memory; a request only projects its namespaces out.
 //!
 //! The store serves only while every watch it holds is healthy. A refused or
 //! broken watch is not stale data quietly served as fresh: the request falls
@@ -136,17 +136,19 @@ impl Health {
     }
 }
 
+fn namespace_and_name<K: kube::Resource>(object: &K) -> (&str, &str) {
+    let meta = object.meta();
+    (
+        meta.namespace.as_deref().unwrap_or_default(),
+        meta.name.as_deref().unwrap_or_default(),
+    )
+}
+
 /// The apiserver's own order, which is by namespace then name.
 fn by_name<K: kube::Resource>(mut items: Vec<Arc<K>>) -> Vec<Arc<K>> {
-    items.sort_by(|a, b| {
-        let key = |o: &Arc<K>| {
-            (
-                o.meta().namespace.clone().unwrap_or_default(),
-                o.meta().name.clone().unwrap_or_default(),
-            )
-        };
-        key(a).cmp(&key(b))
-    });
+    // Borrowed keys: cloning both strings on every comparison was four
+    // allocations per compare across every pod in the cluster.
+    items.sort_by(|a, b| namespace_and_name(a.as_ref()).cmp(&namespace_and_name(b.as_ref())));
     items
 }
 

@@ -98,7 +98,7 @@ node it is allowed to empty and a second one to be the control plane.
 kind create cluster --config test-manifests/drain-kind.yaml
 kubectl apply -f test-manifests/drain-scene.yaml
 K8S_GUI_DRAIN_CONTEXT=kind-rubick-drain \
-  cargo test --test live_drain -- --ignored --nocapture
+  cargo test --test live live_drain:: -- --ignored --nocapture
 ```
 
 Every specimen is there for a rule that is otherwise unobservable:

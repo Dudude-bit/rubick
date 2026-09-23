@@ -5,17 +5,19 @@
 
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
+use crate::state::perf::{wire_len, IPC_TARGET_BYTES};
 use crate::state::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, LogLineEvent,
     StreamFailureKind,
 };
 use chrono::Utc;
+use futures::AsyncReadExt;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{api::Api, Client};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{broadcast, oneshot};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
+use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
@@ -60,10 +62,16 @@ impl LogStreamer {
             .clone()
             .unwrap_or_else(|| "main".to_string());
 
-        let logs = api
-            .logs(&config.pod, &params)
+        // As bytes: `logs()` decodes the whole body at once and fails it on
+        // the first byte that is not UTF-8, taking the history with it.
+        let mut body = Vec::new();
+        api.log_stream(&config.pod, &params)
             .await
-            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?;
+            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?
+            .read_to_end(&mut body)
+            .await
+            .map_err(|e| Error::LogStream(format!("Log read failed: {e}")))?;
+        let logs = String::from_utf8_lossy(&body);
 
         // A 200 whose body is the kubelet refusing; parsed, it is a fake line.
         if is_runtime_dropped_log(&logs) {
@@ -88,7 +96,7 @@ impl LogStreamer {
         &self,
         stream_id: String,
         config: LogConfig,
-        mut cancel_rx: oneshot::Receiver<()>,
+        cancel: tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let ctx = ResourceContext::from_client((*self.client).clone(), config.namespace.clone());
         let api: Api<Pod> = ctx.namespaced_api();
@@ -148,14 +156,14 @@ impl LogStreamer {
             }
         };
 
-        let reader = BufReader::new(stream.compat());
-        let mut lines = reader.lines();
+        let mut reader = BufReader::new(stream.compat());
+        let mut pending = Vec::new();
         let mut first = FirstLine::default();
         let mut refusal: Option<String> = None;
 
-        // Buffer + periodic flush. Triggers: timer tick, buffer hits
-        // MAX_BATCH_SIZE, cancel, or EOF.
-        let mut buffer: Vec<LogLineEvent> = Vec::with_capacity(MAX_BATCH_SIZE);
+        // Buffer + periodic flush. Triggers: timer tick, a full batch,
+        // cancel, or EOF.
+        let mut buffer = LineBatch::new(self.event_tx.clone(), stream_id.clone());
         let mut ended_because_gone = false;
         let mut flush_timer = interval(FLUSH_INTERVAL);
         // First tick fires immediately; skip it so an empty buffer
@@ -166,7 +174,7 @@ impl LogStreamer {
         loop {
             tokio::select! {
                 biased;
-                _ = &mut cancel_rx => {
+                () = cancel.cancelled() => {
                     tracing::debug!("Log stream {} cancelled", stream_id);
                     break;
                 }
@@ -175,19 +183,17 @@ impl LogStreamer {
                         take_line(&line, &pod, &container, &namespace, &intake,
                                   &mut epoch_ms, &mut buffer);
                     }
-                    if !buffer.is_empty() {
-                        flush_batch(&self.event_tx, &stream_id, &mut buffer);
-                    }
+                    buffer.flush();
                 }
-                result = lines.next_line() => {
+                result = next_line(&mut reader, &mut pending) => {
                     match result {
                         Ok(Some(line)) => {
                             for line in first.arriving(line) {
                                 take_line(&line, &pod, &container, &namespace, &intake,
                                           &mut epoch_ms, &mut buffer);
                             }
-                            if buffer.len() >= MAX_BATCH_SIZE {
-                                flush_batch(&self.event_tx, &stream_id, &mut buffer);
+                            if buffer.full() {
+                                buffer.flush();
                             }
                         }
                         Ok(None) => {
@@ -244,9 +250,7 @@ impl LogStreamer {
         // Final flush on exit so trailing lines don't get dropped —
         // and it has to land before the failure, or the panel replaces
         // the last lines the pod ever wrote with an error.
-        if !buffer.is_empty() {
-            flush_batch(&self.event_tx, &stream_id, &mut buffer);
-        }
+        buffer.flush();
 
         if let Some(said) = refusal {
             emit_failure(
@@ -272,6 +276,32 @@ impl LogStreamer {
 
         Ok(())
     }
+}
+
+/// The next line, whatever bytes the container wrote.
+///
+/// `lines()` ends the whole stream with `InvalidData` at the first byte that
+/// is not UTF-8, and Reconnect then reads the same byte again; here it is a
+/// U+FFFD in its own line. A line cut short by another `select!` branch keeps
+/// its bytes in `pending` for the next call, as `read_until` promises.
+async fn next_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    pending: &mut Vec<u8>,
+) -> std::io::Result<Option<String>> {
+    reader.read_until(b'\n', pending).await?;
+    if pending.is_empty() {
+        return Ok(None);
+    }
+    let mut end = pending.len();
+    if pending.ends_with(b"\n") {
+        end -= 1;
+        if pending[..end].ends_with(b"\r") {
+            end -= 1;
+        }
+    }
+    let line = String::from_utf8_lossy(&pending[..end]).into_owned();
+    pending.clear();
+    Ok(Some(line))
 }
 
 /// The first line of a stream, held back while it could still be the
@@ -321,7 +351,7 @@ fn take_line(
     namespace: &str,
     intake: &IntakeFilter,
     epoch_ms: &mut i64,
-    buffer: &mut Vec<LogLineEvent>,
+    buffer: &mut LineBatch,
 ) {
     let log_line = parser::parse_log_line(line, pod, container, namespace);
     if let Some(ts) = log_line.timestamp {
@@ -373,18 +403,52 @@ fn emit_failure(
     });
 }
 
-/// Drain the per-stream buffer into a single `AppEvent::LogBatch`.
-/// Caller guarantees the buffer is non-empty.
-fn flush_batch(
-    event_tx: &broadcast::Sender<AppEvent>,
-    stream_id: &str,
-    buffer: &mut Vec<LogLineEvent>,
-) {
-    let lines = std::mem::take(buffer);
-    let _ = event_tx.send(AppEvent::LogBatch {
-        stream_id: stream_id.to_string(),
-        lines,
-    });
+/// The lines waiting for the next `AppEvent::LogBatch`, and what they come
+/// to on the wire. A count alone let a hundred JSON lines with stack traces
+/// leave as one event of several megabytes.
+struct LineBatch {
+    event_tx: broadcast::Sender<AppEvent>,
+    stream_id: String,
+    lines: Vec<LogLineEvent>,
+    bytes: usize,
+}
+
+impl LineBatch {
+    fn new(event_tx: broadcast::Sender<AppEvent>, stream_id: String) -> Self {
+        Self {
+            event_tx,
+            stream_id,
+            lines: Vec::with_capacity(MAX_BATCH_SIZE),
+            bytes: 0,
+        }
+    }
+
+    /// Sends what is held first when this line would take it past the
+    /// budget; a line over the budget on its own still goes, alone.
+    fn push(&mut self, line: LogLineEvent) {
+        let bytes = wire_len(&line) + 1;
+        if !self.lines.is_empty() && self.bytes + bytes > IPC_TARGET_BYTES {
+            self.flush();
+        }
+        self.bytes += bytes;
+        self.lines.push(line);
+    }
+
+    fn full(&self) -> bool {
+        self.lines.len() >= MAX_BATCH_SIZE || self.bytes >= IPC_TARGET_BYTES
+    }
+
+    /// No-op when empty, so every exit path can call it.
+    fn flush(&mut self) {
+        if self.lines.is_empty() {
+            return;
+        }
+        self.bytes = 0;
+        let _ = self.event_tx.send(AppEvent::LogBatch {
+            stream_id: self.stream_id.clone(),
+            lines: std::mem::take(&mut self.lines),
+        });
+    }
 }
 
 #[cfg(test)]
@@ -440,5 +504,109 @@ mod first_line_tests {
         assert_eq!(first.arriving("starting".to_string()), vec!["starting"]);
         assert_eq!(first.arriving(SAID.to_string()), vec![SAID.to_string()]);
         assert_eq!(first.ended(), None);
+    }
+}
+
+#[cfg(test)]
+mod next_line_tests {
+    use super::*;
+
+    async fn all_lines(bytes: &[u8]) -> Vec<String> {
+        let mut reader = BufReader::new(bytes);
+        let mut pending = Vec::new();
+        let mut lines = Vec::new();
+        while let Some(line) = next_line(&mut reader, &mut pending).await.unwrap() {
+            lines.push(line);
+        }
+        lines
+    }
+
+    /// One byte that is not UTF-8 used to end the stream with "the log
+    /// stream broke", and the lines after it were never read.
+    #[tokio::test]
+    async fn a_byte_that_is_not_utf8_costs_one_character_not_the_stream() {
+        assert_eq!(
+            all_lines(b"ok\n\xff\xfe\nafter\n").await,
+            vec!["ok", "\u{fffd}\u{fffd}", "after"]
+        );
+    }
+
+    /// The same line endings `lines()` stripped, and a last line with none.
+    #[tokio::test]
+    async fn a_line_ends_at_lf_or_crlf_and_the_last_needs_neither() {
+        assert_eq!(
+            all_lines(b"one\r\ntwo\nthree").await,
+            vec!["one", "two", "three"]
+        );
+    }
+}
+
+#[cfg(test)]
+mod line_batch_tests {
+    use super::*;
+
+    /// Each event the lines leave as: its size on the wire and the lines in it.
+    fn sent(lines: &[String]) -> Vec<(usize, Vec<String>)> {
+        let (tx, mut rx) = broadcast::channel(1024);
+        let mut batch = LineBatch::new(tx, "s1".to_string());
+        let intake = IntakeFilter::new(&[]);
+        let mut epoch_ms = 0;
+        for line in lines {
+            take_line(
+                line,
+                "api",
+                "app",
+                "shop",
+                &intake,
+                &mut epoch_ms,
+                &mut batch,
+            );
+            if batch.full() {
+                batch.flush();
+            }
+        }
+        batch.flush();
+        drop(batch);
+        let mut out = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            let size = event.to_json().unwrap().len();
+            if let AppEvent::LogBatch { lines, .. } = event {
+                out.push((size, lines.into_iter().map(|l| l.raw).collect()));
+            }
+        }
+        out
+    }
+
+    /// A hundred JSON lines with 20 kB stack traces left as one event of
+    /// about 4 MB, four times the IPC limit, because only lines were counted.
+    #[test]
+    fn a_burst_of_large_lines_is_cut_by_bytes_before_the_count() {
+        let stack = "at com.shop.Payments.charge(Payments.java:42)\\n".repeat(400);
+        let lines: Vec<String> = (0..100)
+            .map(|i| format!(r#"{{"level":"error","msg":"charge {i} failed","stack":"{stack}"}}"#))
+            .collect();
+        let sent = sent(&lines);
+        for (size, _) in &sent {
+            assert!(*size <= IPC_TARGET_BYTES + 128, "{size} bytes in one event");
+        }
+        let back: Vec<String> = sent.into_iter().flat_map(|(_, l)| l).collect();
+        assert_eq!(back, lines, "every line arrives, in order");
+    }
+
+    /// A line over the budget on its own is still output, and the lines
+    /// around it do not ride along in its event.
+    #[test]
+    fn a_line_over_the_budget_goes_alone_and_is_not_dropped() {
+        let big = "x".repeat(IPC_TARGET_BYTES + 1);
+        let lines = vec!["before".to_string(), big.clone(), "after".to_string()];
+        let batches: Vec<Vec<String>> = sent(&lines).into_iter().map(|(_, l)| l).collect();
+        assert_eq!(
+            batches,
+            vec![
+                vec!["before".to_string()],
+                vec![big],
+                vec!["after".to_string()]
+            ]
+        );
     }
 }

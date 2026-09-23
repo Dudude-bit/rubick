@@ -1,7 +1,9 @@
 //! Deployment-specific commands
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
+use crate::commands::helpers::{
+    get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
+};
 use crate::error::Result;
 use crate::resources::{DeploymentCondition, DeploymentInfo, PodInfo, RolloutStatus};
 use crate::state::AppState;
@@ -19,6 +21,8 @@ pub async fn list_deployments(
     list_resource_infos::<Deployment, DeploymentInfo>(filters, state).await
 }
 
+list_in_scope!(list_deployments_in, Deployment, DeploymentInfo);
+
 /// Get a single deployment by name
 #[tauri::command]
 pub async fn get_deployment(
@@ -26,7 +30,6 @@ pub async fn get_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DeploymentInfo> {
-    crate::validation::validate_dns_label(&name)?;
     get_resource_info::<Deployment, DeploymentInfo>(name, namespace, state).await
 }
 
@@ -37,7 +40,6 @@ pub async fn delete_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::delete_resource::<Deployment>(name, namespace, state, None).await
 }
 
@@ -49,7 +51,6 @@ pub async fn scale_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::scale_resource::<Deployment>(name, replicas, namespace, state).await
 }
 
@@ -60,7 +61,6 @@ pub async fn restart_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_label(&name)?;
     crate::commands::helpers::restart_resource::<Deployment>(name, namespace, state).await
 }
 

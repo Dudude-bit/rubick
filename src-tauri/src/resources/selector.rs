@@ -30,25 +30,40 @@ pub enum Selector<'a> {
 }
 
 impl Selector<'_> {
-    /// Whether one object's labels satisfy this query.
+    /// Whether one object's labels satisfy this query, or `None` where it
+    /// cannot be evaluated: a `LabelSelector` Kubernetes would refuse to
+    /// build. An equality selector always answers.
+    ///
+    /// `shared/label-selector-conformance.json` holds the answers, and
+    /// `src/lib/label-selector.ts` owes the same ones.
     #[must_use]
-    pub fn matches(&self, labels: &BTreeMap<String, String>) -> bool {
+    pub fn matches(&self, labels: &BTreeMap<String, String>) -> Option<bool> {
         match self {
             Self::Equality(selector) => {
-                !selector.is_empty() && selector.iter().all(|(k, v)| labels.get(k) == Some(v))
+                Some(!selector.is_empty() && selector.iter().all(|(k, v)| labels.get(k) == Some(v)))
             }
-            Self::Query(None) => false,
+            Self::Query(None) => Some(false),
             Self::Query(Some(selector)) => {
-                selector
-                    .match_labels
+                let pairs = selector.match_labels.as_ref();
+                if pairs.is_some_and(|pairs| pairs.contains_key("")) {
+                    return None;
+                }
+                // Every requirement is checked before any answer counts: the
+                // conversion fails whole, even after another one has failed.
+                let expressions = selector
+                    .match_expressions
                     .iter()
                     .flatten()
-                    .all(|(k, v)| labels.get(k) == Some(v))
-                    && selector
-                        .match_expressions
-                        .iter()
-                        .flatten()
-                        .all(|req| requirement_matches(req, labels))
+                    .try_fold(true, |all, req| {
+                        requirement_matches(req, labels).map(|hit| all && hit)
+                    })?;
+                Some(
+                    expressions
+                        && pairs
+                            .into_iter()
+                            .flatten()
+                            .all(|(k, v)| labels.get(k) == Some(v)),
+                )
             }
         }
     }
@@ -93,25 +108,29 @@ impl Selector<'_> {
 }
 
 /// One `matchExpressions` entry, tested as `labels.Requirement.Matches` tests
-/// it.
+/// it, or `None` for one `labels.NewRequirement` would refuse.
 ///
-/// The two asymmetries are the whole reason this is not a subset check.
-/// `NotIn` is satisfied by a key the object does not carry — it is not the
-/// negation of `In` — and a requirement the API server would refuse matches
-/// nothing rather than being skipped: a query this app cannot read the way
-/// the cluster reads it must not be answered with a guess.
-fn requirement_matches(req: &LabelSelectorRequirement, labels: &BTreeMap<String, String>) -> bool {
+/// `NotIn` is satisfied by a key the object does not carry: it is not the
+/// negation of `In`. A set operator with no values, a presence test with
+/// some, an empty key and an unknown operator are refused, and a query this
+/// app cannot read the way the cluster reads it is not answered with a guess.
+fn requirement_matches(
+    req: &LabelSelectorRequirement,
+    labels: &BTreeMap<String, String>,
+) -> Option<bool> {
+    if req.key.is_empty() {
+        return None;
+    }
     let values = req.values.as_deref().unwrap_or_default();
+    let value = labels.get(&req.key);
     match req.operator.as_str() {
-        // An empty values list is invalid for both set operators; the API
-        // server rejects it and so does every controller that reads one.
-        "In" => !values.is_empty() && labels.get(&req.key).is_some_and(|v| values.contains(v)),
-        "NotIn" => !values.is_empty() && labels.get(&req.key).is_none_or(|v| !values.contains(v)),
-        // Presence, and only presence — the values are never compared. A
-        // values list is invalid here for exactly that reason.
-        "Exists" => values.is_empty() && labels.contains_key(&req.key),
-        "DoesNotExist" => values.is_empty() && !labels.contains_key(&req.key),
-        _ => false,
+        "In" | "NotIn" if values.is_empty() => None,
+        "Exists" | "DoesNotExist" if !values.is_empty() => None,
+        "In" => Some(value.is_some_and(|v| values.contains(v))),
+        "NotIn" => Some(value.is_none_or(|v| !values.contains(v))),
+        "Exists" => Some(value.is_some()),
+        "DoesNotExist" => Some(value.is_none()),
+        _ => None,
     }
 }
 
@@ -179,47 +198,27 @@ mod tests {
         }
     }
 
-    /// The operator table, against what `kubectl get pods -l …` returns for
-    /// the same requirement. Every row is a rule the old subset test had no
-    /// way to express.
+    /// The corpus is the answer both halves owe. Three evaluators gave three
+    /// answers for `NotIn ()` — this one said no, the Prometheus and Cilium
+    /// pages said yes to every object — and a case that drifts here drifts
+    /// from the frontend too.
     #[test]
-    fn every_operator_answers_what_kubectl_answers() {
-        let pod = labels(&[("app", "shop"), ("tier", "web"), ("blank", "")]);
-
-        // key, operator, values, expected
-        let table: &[(&str, &str, &[&str], bool)] = &[
-            ("tier", "In", &["web", "api"], true),
-            ("tier", "In", &["api"], false),
-            // A key the object does not carry is in no set at all.
-            ("missing", "In", &["web"], false),
-            ("tier", "NotIn", &["api", "worker"], true),
-            ("tier", "NotIn", &["web"], false),
-            // NotIn is not the negation of In: an absent key satisfies it.
-            ("missing", "NotIn", &["web"], true),
-            ("app", "Exists", &[], true),
-            ("missing", "Exists", &[], false),
-            // A label with an empty value is still a label that is there.
-            ("blank", "Exists", &[], true),
-            ("missing", "DoesNotExist", &[], true),
-            ("app", "DoesNotExist", &[], false),
-            // The API server refuses an empty values list on a set operator,
-            // so neither form may quietly match.
-            ("tier", "In", &[], false),
-            ("tier", "NotIn", &[], false),
-            // …and refuses values on a presence test, for the same reason.
-            ("app", "Exists", &["shop"], false),
-            ("missing", "DoesNotExist", &["shop"], false),
-            // An operator no version of the API defines matches nothing.
-            ("app", "Equals", &["shop"], false),
-        ];
-
-        for (key, operator, values, expected) in table {
-            let selector = query(&[], vec![requirement(key, operator, values)]);
-            assert_eq!(
-                Selector::Query(Some(&selector)).matches(&pod),
-                *expected,
-                "{key} {operator} {values:?}"
-            );
+    fn every_selector_in_the_shared_corpus_answers_the_same() {
+        const CORPUS: &str = include_str!("../../../shared/label-selector-conformance.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+        let cases = corpus["cases"].as_array().unwrap();
+        assert!(cases.len() > 30, "the corpus lost its cases");
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let labels: BTreeMap<String, String> =
+                serde_json::from_value(case["labels"].clone()).unwrap();
+            let want = case["matches"].as_bool();
+            // A shape the typed reader cannot take is a selector nothing here
+            // can evaluate; the object carrying it would not have been read.
+            let got = serde_json::from_value::<LabelSelector>(case["selector"].clone())
+                .ok()
+                .and_then(|selector| Selector::Query(Some(&selector)).matches(&labels));
+            assert_eq!(got, want, "{name}");
         }
     }
 
@@ -230,20 +229,20 @@ mod tests {
             &[("app", "shop")],
             vec![requirement("tier", "In", &["web", "api"])],
         );
-        assert!(Selector::Query(Some(&both)).matches(&pod));
+        assert_eq!(Selector::Query(Some(&both)).matches(&pod), Some(true));
 
         let disagrees = query(
             &[("app", "other")],
             vec![requirement("tier", "In", &["web"])],
         );
-        assert!(!Selector::Query(Some(&disagrees)).matches(&pod));
+        assert_eq!(Selector::Query(Some(&disagrees)).matches(&pod), Some(false));
     }
 
     #[test]
     fn a_label_with_an_empty_value_is_matched_by_an_empty_value() {
         let pod = labels(&[("blank", "")]);
         let selector = query(&[("blank", "")], vec![]);
-        assert!(Selector::Query(Some(&selector)).matches(&pod));
+        assert_eq!(Selector::Query(Some(&selector)).matches(&pod), Some(true));
         assert_eq!(
             Selector::Query(Some(&selector)).query_text().as_deref(),
             Some("blank=")
@@ -257,12 +256,15 @@ mod tests {
         let pod = labels(&[("app", "shop")]);
 
         // A Service with no selector publishes nothing it worked out itself.
-        assert!(!Selector::Equality(&BTreeMap::new()).matches(&pod));
+        assert_eq!(
+            Selector::Equality(&BTreeMap::new()).matches(&pod),
+            Some(false)
+        );
         assert_eq!(Selector::Equality(&BTreeMap::new()).query_text(), None);
 
         // A budget with `selector: {}` covers every pod in its namespace.
         let empty = query(&[], vec![]);
-        assert!(Selector::Query(Some(&empty)).matches(&pod));
+        assert_eq!(Selector::Query(Some(&empty)).matches(&pod), Some(true));
         assert_eq!(
             Selector::Query(Some(&empty)).query_text().as_deref(),
             Some("")
@@ -273,7 +275,7 @@ mod tests {
         );
 
         // A budget with no selector at all matches no pods.
-        assert!(!Selector::Query(None).matches(&pod));
+        assert_eq!(Selector::Query(None).matches(&pod), Some(false));
         assert_eq!(Selector::Query(None).query_text(), None);
     }
 
@@ -306,11 +308,17 @@ mod tests {
             Selector::Equality(&selector).query_text().as_deref(),
             Some("app=shop,tier=web")
         );
-        assert!(Selector::Equality(&selector).matches(&labels(&[
-            ("app", "shop"),
-            ("tier", "web"),
-            ("pod-template-hash", "abc")
-        ])));
-        assert!(!Selector::Equality(&selector).matches(&labels(&[("app", "shop")])));
+        assert_eq!(
+            Selector::Equality(&selector).matches(&labels(&[
+                ("app", "shop"),
+                ("tier", "web"),
+                ("pod-template-hash", "abc")
+            ])),
+            Some(true)
+        );
+        assert_eq!(
+            Selector::Equality(&selector).matches(&labels(&[("app", "shop")])),
+            Some(false)
+        );
     }
 }

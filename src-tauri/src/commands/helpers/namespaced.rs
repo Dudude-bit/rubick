@@ -23,6 +23,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     ctx.namespaced_api::<K>()
         .get(&name)
@@ -44,6 +45,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let params = delete_params.unwrap_or_default();
     ctx.namespaced_api::<K>().delete(&name, &params).await?;
@@ -69,6 +71,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let patch = serde_json::json!({ "spec": { "replicas": replicas } });
     ctx.namespaced_api::<K>()
@@ -95,6 +98,7 @@ where
         + serde::de::DeserializeOwned,
     K::DynamicType: Default,
 {
+    crate::validation::validate_name::<K>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
     let patch = serde_json::json!({
         "spec": {

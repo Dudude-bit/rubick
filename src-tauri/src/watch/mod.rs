@@ -12,19 +12,17 @@
 //! Without the gate the initial `restarted` event — which the watcher always
 //! emits before its first applied burst — could land in the void.
 //!
-//! - `session`: `WatchSession` bookkeeping + RAII cleanup guard
 //! - `event`:   kube watcher Events → batched `AppEvent::ResourceWatchEvent`
+//! - `scope`:   several namespaces, a watcher each, as one stream
 
 mod event;
 mod failure;
-mod session;
+mod scope;
 
-pub use session::WatchSession;
-
-use crate::error::{Error, Result};
-use crate::state::AppEvent;
+use crate::commands::helpers::{api_in, scope_of};
+use crate::error::{watch_failure, Error, Result};
+use crate::state::{AppEvent, WatchOp};
 use crate::utils::generate_id;
-use dashmap::DashMap;
 use futures::StreamExt;
 use k8s_openapi::{ClusterResourceScope, NamespaceResourceScope};
 use kube::core::DynamicObject;
@@ -32,20 +30,19 @@ use kube::discovery::ApiResource;
 use kube::runtime::watcher::{watcher, Config as WatcherConfig};
 use kube::{Api, Client};
 use serde::Serialize;
-use std::sync::Arc;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 
 use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
-use failure::{backoff_for, FailureLatch};
-use session::WatchCleanup;
+use failure::{backoff_for, paced, FailureLatch};
+use scope::{Out, ScopeSync};
 
 pub(crate) use failure::answered;
 
 /// Manages all active resource watches.
 pub struct WatchManager {
     event_tx: broadcast::Sender<AppEvent>,
-    sessions: Arc<DashMap<String, WatchSession>>,
+    sessions: crate::state::streams::Streams,
 }
 
 /// What the API server is asked to hold a watch open for, in seconds. Just
@@ -57,7 +54,7 @@ impl WatchManager {
     pub fn new(event_tx: broadcast::Sender<AppEvent>) -> Self {
         Self {
             event_tx,
-            sessions: Arc::new(DashMap::new()),
+            sessions: crate::state::streams::Streams::default(),
         }
     }
 
@@ -71,8 +68,8 @@ impl WatchManager {
     /// unknown ids so a malicious caller cannot release arbitrary
     /// streams. Idempotent.
     pub fn mark_subscribed(&self, id: &str) -> Result<()> {
-        if let Some(mut entry) = self.sessions.get_mut(id) {
-            entry.mark_subscribed();
+        if self.sessions.contains(id) {
+            let _ = self.sessions.subscribed(id);
             Ok(())
         } else {
             Err(Error::Internal(format!("Resource watch {id} not found")))
@@ -83,9 +80,7 @@ impl WatchManager {
     /// already-removed session is a no-op so racing `unsubscribe`
     /// calls don't fail.
     pub fn unsubscribe(&self, id: &str) {
-        if let Some((_, mut session)) = self.sessions.remove(id) {
-            session.close();
-        }
+        let _ = self.sessions.stop(id);
     }
 
     /// Subscribe to changes on a typed Kubernetes resource list and
@@ -98,14 +93,17 @@ impl WatchManager {
     /// `PodInfo`). Returning `None` drops the event — used for
     /// resources the UI doesn't care about (system pods, etc.).
     ///
-    /// `kind_label` is a debug-only string stored on the session.
+    /// `kind_label` names the kind in the log lines about this watch.
+    ///
+    /// `scope` is `None` for the whole cluster, one namespace, or several —
+    /// each watched on its own behind one resync barrier (`scope.rs`).
     pub fn subscribe<K, F, U>(
         &self,
         client: Client,
         kind_label: &str,
-        namespace: Option<String>,
+        scope: Option<Vec<String>>,
         transform: F,
-    ) -> String
+    ) -> Result<String>
     where
         K: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>
             + Clone
@@ -117,11 +115,72 @@ impl WatchManager {
         F: Fn(&K) -> Option<U> + Send + Sync + 'static,
         U: Serialize,
     {
-        let api: Api<K> = match &namespace {
-            Some(ns) => Api::namespaced(client, ns),
-            None => Api::all(client),
-        };
-        self.spawn_watcher(api, kind_label, namespace, None, transform)
+        self.subscribe_across(
+            move |reach| api_in::<K>(&client, reach),
+            kind_label,
+            scope,
+            transform,
+        )
+    }
+
+    /// A runtime-discovered kind's list across `scope`; see `subscribe`.
+    pub fn subscribe_custom_list<F, U>(
+        &self,
+        client: Client,
+        api_resource: &ApiResource,
+        kind_label: &str,
+        scope: Option<Vec<String>>,
+        transform: F,
+    ) -> Result<String>
+    where
+        F: Fn(&DynamicObject) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        self.subscribe_across(
+            move |reach| match reach {
+                Some(ns) => Api::namespaced_with(client.clone(), ns, api_resource),
+                None => Api::all_with(client.clone(), api_resource),
+            },
+            kind_label,
+            scope,
+            transform,
+        )
+    }
+
+    fn subscribe_across<K, F, U>(
+        &self,
+        api: impl Fn(Option<&str>) -> Api<K>,
+        kind_label: &str,
+        scope: Option<Vec<String>>,
+        transform: F,
+    ) -> Result<String>
+    where
+        K: kube::Resource
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        Ok(match scope_of(scope)? {
+            None => self.spawn_watcher(api(None), kind_label, None, transform),
+            Some(names) if names.len() == 1 => {
+                self.spawn_watcher(api(Some(&names[0])), kind_label, None, transform)
+            }
+            Some(names) => {
+                let members = names
+                    .into_iter()
+                    .map(|name| {
+                        let api = api(Some(&name));
+                        (name, api)
+                    })
+                    .collect();
+                self.spawn_scope_watcher(members, kind_label, transform)
+            }
+        })
     }
 
     /// One namespaced object by name. The API server does the narrowing
@@ -131,7 +190,7 @@ impl WatchManager {
         &self,
         client: Client,
         kind_label: &str,
-        namespace: String,
+        namespace: &str,
         name: String,
         transform: F,
     ) -> String
@@ -146,8 +205,8 @@ impl WatchManager {
         F: Fn(&K) -> Option<U> + Send + Sync + 'static,
         U: Serialize,
     {
-        let api: Api<K> = Api::namespaced(client, &namespace);
-        self.spawn_watcher(api, kind_label, Some(namespace), Some(name), transform)
+        let api: Api<K> = Api::namespaced(client, namespace);
+        self.spawn_watcher(api, kind_label, Some(name), transform)
     }
 
     /// One cluster-scoped object by name; see `subscribe_object`.
@@ -170,7 +229,7 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::all(client);
-        self.spawn_watcher(api, kind_label, None, Some(name), transform)
+        self.spawn_watcher(api, kind_label, Some(name), transform)
     }
 
     /// Subscribe to changes on a runtime-discovered custom resource.
@@ -191,11 +250,11 @@ impl WatchManager {
         F: Fn(&DynamicObject) -> Option<U> + Send + Sync + 'static,
         U: Serialize,
     {
-        let api: Api<DynamicObject> = match &namespace {
-            Some(ns) => Api::namespaced_with(client, ns, api_resource),
+        let api: Api<DynamicObject> = match namespace {
+            Some(ns) => Api::namespaced_with(client, &ns, api_resource),
             None => Api::all_with(client, api_resource),
         };
-        self.spawn_watcher(api, kind_label, namespace, name, transform)
+        self.spawn_watcher(api, kind_label, name, transform)
     }
 
     /// Cluster-scoped sibling of `subscribe`. For resources like
@@ -219,7 +278,7 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::all(client);
-        self.spawn_watcher(api, kind_label, None, None, transform)
+        self.spawn_watcher(api, kind_label, None, transform)
     }
 
     /// Shared spawn loop for both subscribe variants: the session-table
@@ -235,7 +294,6 @@ impl WatchManager {
         &self,
         api: Api<K>,
         kind_label: &str,
-        namespace: Option<String>,
         name: Option<String>,
         transform: F,
     ) -> String
@@ -252,51 +310,23 @@ impl WatchManager {
     {
         let stream_id = generate_id("rw");
         let stream_id_clone = stream_id.clone();
+        // What every log line about this watch says it is.
+        let label = format!("{stream_id} ({kind_label})");
 
-        let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
-        let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
         let event_tx = self.event_tx.clone();
-        let sessions = self.sessions.clone();
-
-        self.sessions.insert(
-            stream_id.clone(),
-            WatchSession {
-                id: stream_id.clone(),
-                kind: kind_label.to_string(),
-                namespace,
-                cancel_tx: Some(cancel_tx),
-                subscribe_tx: Some(subscribe_tx),
-            },
-        );
+        let mut opened = self.sessions.open(stream_id.clone());
 
         tokio::spawn(async move {
-            // RAII: removes the session entry on every exit path.
-            let _cleanup = WatchCleanup {
-                sessions: sessions.clone(),
-                key: stream_id_clone.clone(),
-            };
-
-            // Wait for the frontend to install its listener (or for
-            // an early cancel / 60s safety timeout). Mirrors the
-            // terminal-auth and log-stream gates.
-            let mut cancel_rx = cancel_rx;
-            tokio::select! {
-                _ = subscribe_rx => {}
-                _ = &mut cancel_rx => {
-                    tracing::debug!(
-                        "Resource watch {} cancelled before subscribe",
-                        stream_id_clone
-                    );
-                    return;
-                }
-                () = tokio::time::sleep(std::time::Duration::from_mins(1)) => {
-                    tracing::warn!(
-                        "Resource watch {} subscribe gate timed out after 60s; \
-                         starting watcher anyway",
-                        stream_id_clone
-                    );
-                }
+            // Wait for the frontend to install its listener, or for an early
+            // cancel, which wins; after the timeout it starts anyway.
+            if !opened
+                .wait_for_subscriber(crate::state::streams::SUBSCRIBE_TIMEOUT)
+                .await
+            {
+                tracing::debug!("Resource watch {} cancelled before subscribe", label);
+                return;
             }
+            let (cancel, _held) = opened.split();
 
             // The API server closes the watch at this limit and the watcher
             // re-lists, which is what recycles one that has gone quiet. Until
@@ -326,8 +356,8 @@ impl WatchManager {
             loop {
                 tokio::select! {
                     biased;
-                    _ = &mut cancel_rx => {
-                        tracing::debug!("Resource watch {} cancelled", stream_id_clone);
+                    () = cancel.cancelled() => {
+                        tracing::debug!("Resource watch {} cancelled", label);
                         break;
                     }
                     _ = flush_timer.tick() => {
@@ -347,7 +377,7 @@ impl WatchManager {
                                 let should_emit = latch.record_error();
                                 tracing::error!(
                                     "Resource watch {} error ({} in a row): {}",
-                                    stream_id_clone,
+                                    label,
                                     latch.consecutive_errors(),
                                     e
                                 );
@@ -357,17 +387,17 @@ impl WatchManager {
                                     // failure so the list the reader falls back
                                     // on is not needlessly behind.
                                     batch.flush(&event_tx);
-                                    emit_failure(&event_tx, &stream_id_clone, e.to_string());
+                                    emit_failure(&event_tx, &stream_id_clone, watch_failure(&e));
                                 }
                                 // Cancel still wins, or a closing window
                                 // waits out the whole sleep.
                                 let wait = backoff_for(latch.consecutive_errors());
                                 tokio::select! {
                                     biased;
-                                    _ = &mut cancel_rx => {
+                                    () = cancel.cancelled() => {
                                         tracing::debug!(
                                             "Resource watch {} cancelled while backing off",
-                                            stream_id_clone
+                                            label
                                         );
                                         break;
                                     }
@@ -377,7 +407,7 @@ impl WatchManager {
                             None => {
                                 tracing::debug!(
                                     "Resource watch {} stream ended",
-                                    stream_id_clone
+                                    label
                                 );
                                 break;
                             }
@@ -393,48 +423,116 @@ impl WatchManager {
 
         stream_id
     }
+
+    /// One stream over several namespaces, a watcher each: the same gate,
+    /// batching and cancel as `spawn_watcher`, with `ScopeSync` deciding what
+    /// the page is told.
+    fn spawn_scope_watcher<K, F, U>(
+        &self,
+        members: Vec<(String, Api<K>)>,
+        kind_label: &str,
+        transform: F,
+    ) -> String
+    where
+        K: kube::Resource
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        let stream_id = generate_id("rw");
+        let id = stream_id.clone();
+        let label = format!("{stream_id} ({kind_label})");
+        let event_tx = self.event_tx.clone();
+        let mut opened = self.sessions.open(stream_id.clone());
+
+        tokio::spawn(async move {
+            if !opened
+                .wait_for_subscriber(crate::state::streams::SUBSCRIBE_TIMEOUT)
+                .await
+            {
+                tracing::debug!("Resource watch {} cancelled before subscribe", label);
+                return;
+            }
+            let (cancel, _held) = opened.split();
+
+            let config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
+            let (namespaces, apis): (Vec<_>, Vec<_>) = members.into_iter().unzip();
+            let mut merged =
+                futures::stream::select_all(apis.into_iter().enumerate().map(|(at, api)| {
+                    paced(watcher(api, config.clone()).boxed(), backoff_for)
+                        .map(move |event| (at, event))
+                        .boxed()
+                }));
+            let mut sync = ScopeSync::new(namespaces);
+            let mut out = Vec::new();
+
+            let mut batch = WatchBatch::new(id.clone());
+            let mut flush_timer = interval(FLUSH_INTERVAL);
+            flush_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            flush_timer.tick().await;
+
+            loop {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => {
+                        tracing::debug!("Resource watch {} cancelled", label);
+                        break;
+                    }
+                    _ = flush_timer.tick() => batch.flush(&event_tx),
+                    next = merged.next() => {
+                        let Some((at, event)) = next else {
+                            tracing::debug!("Resource watch {} stream ended", label);
+                            break;
+                        };
+                        if let Err(e) = &event {
+                            tracing::error!(
+                                "Resource watch {} in {} error ({} in a row): {}",
+                                label,
+                                sync.namespace(at),
+                                sync.streak(at) + 1,
+                                e
+                            );
+                        }
+                        let event = event.map_err(|e| watch_failure(&e));
+                        sync.on(at, event, &transform, &mut out);
+                        for said in out.drain(..) {
+                            match said {
+                                Out::Change(op, raw) => {
+                                    if batch.push_raw(op, raw) {
+                                        batch.flush(&event_tx);
+                                    }
+                                }
+                                Out::Marker(op) => {
+                                    batch.marker(op);
+                                    if op == WatchOp::Synced {
+                                        batch.flush(&event_tx);
+                                    }
+                                }
+                                Out::Failed(message) => {
+                                    batch.flush(&event_tx);
+                                    emit_failure(&event_tx, &id, message);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            batch.flush(&event_tx);
+        });
+
+        stream_id
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn make_session(
-        id: &str,
-        kind: &str,
-    ) -> (WatchSession, oneshot::Receiver<()>, oneshot::Receiver<()>) {
-        let (cancel_tx, cancel_rx) = oneshot::channel();
-        let (subscribe_tx, subscribe_rx) = oneshot::channel();
-        let session = WatchSession {
-            id: id.to_string(),
-            kind: kind.to_string(),
-            namespace: None,
-            cancel_tx: Some(cancel_tx),
-            subscribe_tx: Some(subscribe_tx),
-        };
-        (session, cancel_rx, subscribe_rx)
-    }
-
-    #[test]
-    fn watch_cleanup_guard_removes_entry_on_drop() {
-        let sessions: Arc<DashMap<String, WatchSession>> = Arc::new(DashMap::new());
-        let (session, _crx, _srx) = make_session("k", "ConfigMap");
-        sessions.insert("k".to_string(), session);
-        assert_eq!(sessions.len(), 1);
-
-        {
-            let _guard = WatchCleanup {
-                sessions: sessions.clone(),
-                key: "k".to_string(),
-            };
-        }
-
-        assert_eq!(
-            sessions.len(),
-            0,
-            "guard's Drop must remove the entry — same path runs on panic-unwind"
-        );
-    }
 
     #[test]
     fn mark_subscribed_unknown_id_errors() {

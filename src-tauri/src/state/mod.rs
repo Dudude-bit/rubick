@@ -4,20 +4,20 @@
 //! channel.
 //!
 //! - `events`:   `AppEvent` enum + `LogLineEvent` + `WatchOp`
-//! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl` /
-//!   `LogStream` bookkeeping types
+//! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl`
+//!   bookkeeping types
+//! - `streams`:  the table, gate and cancel every frontend stream shares
 
 mod events;
 pub mod perf;
 mod sessions;
+pub mod streams;
 
 pub use events::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, AuthOutcome,
-    LogLineEvent, StreamFailureKind, WatchChange, WatchOp,
+    LogLineEvent, RawJson, StreamFailureKind, WatchChange, WatchOp,
 };
-pub use sessions::{
-    AuthSessionControl, ListStream, LogStream, PortForwardSession, RemoveOnDrop, Session,
-};
+pub use sessions::{AuthSessionControl, PortForwardSession, Session};
 
 use crate::client::K8sClientManager;
 use crate::config::AppConfig;
@@ -61,6 +61,9 @@ pub struct AppState {
     /// the same way `search_manager` owns a fan-out.
     pub drain_manager: Arc<crate::drain::DrainManager>,
 
+    /// Neighbourhood snapshots shared by the calls that arrive together.
+    pub neighbourhoods: crate::commands::connections::Snapshots,
+
     /// Credential renewals waiting on a deadline, one per connected context.
     pub renew_manager: Arc<crate::auth::renew::RenewManager>,
 
@@ -75,11 +78,14 @@ pub struct AppState {
     /// the session that owned them.
     pub port_forward_controls: Arc<DashMap<String, tokio_util::sync::CancellationToken>>,
 
-    /// Active log streams
-    pub log_streams: Arc<DashMap<String, LogStream>>,
+    /// Log streams.
+    pub log_streams: streams::Streams,
 
-    /// Lists arriving in chunks
-    pub list_streams: Arc<DashMap<String, ListStream>>,
+    /// Pod lists arriving in chunks.
+    pub pod_row_streams: streams::Streams,
+
+    /// Directory listings arriving in chunks.
+    pub file_listings: streams::Streams,
 
     /// Event broadcaster
     pub event_tx: broadcast::Sender<AppEvent>,
@@ -123,6 +129,7 @@ impl AppState {
             client_manager,
             search_manager,
             drain_manager,
+            neighbourhoods: crate::commands::connections::Snapshots::default(),
             renew_manager,
             sessions: DashMap::new(),
             current_context: Arc::new(RwLock::new(None)),
@@ -130,8 +137,9 @@ impl AppState {
             watch_manager: Arc::new(crate::watch::WatchManager::new(event_tx.clone())),
             port_forward_sessions: Arc::new(DashMap::new()),
             port_forward_controls: Arc::new(DashMap::new()),
-            log_streams: Arc::new(DashMap::new()),
-            list_streams: Arc::new(DashMap::new()),
+            log_streams: streams::Streams::default(),
+            pod_row_streams: streams::Streams::default(),
+            file_listings: streams::Streams::default(),
             event_tx,
             auth_sessions: DashMap::new(),
             connect_generation: AtomicU64::new(0),
@@ -219,6 +227,76 @@ impl AppState {
         self.current_context.read().clone()
     }
 
+    /// The current context's client, or why there is none.
+    pub fn current_client(&self) -> Result<Arc<kube::Client>> {
+        let context = self.get_current_context().ok_or_else(|| {
+            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+        })?;
+        self.client_manager
+            .get_client(&context)
+            .ok_or(crate::error::Error::NotConnected(context))
+    }
+
+    /// Where `plural` in `group` is served on the current cluster; `None`
+    /// where it is not installed.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::Served>> {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .resource(&context, &client, group, plural)
+            .await
+    }
+
+    /// `plural` in `group` on the current cluster, with every version that
+    /// serves it; `None` where it is not installed.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served_kind(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::ServedKind>> {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .kind(&context, &client, group, plural)
+            .await
+    }
+
+    /// A request's answer from where discovery put a kind of `group` on the
+    /// current cluster, a 404 sending discovery back: see
+    /// [`crate::client::served::ServedIndex::answered`].
+    pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
+        match self.get_current_context() {
+            Some(context) => self
+                .client_manager
+                .served()
+                .answered(&context, group, answer),
+            None => answer,
+        }
+    }
+
+    fn current(&self) -> Result<(String, Arc<kube::Client>)> {
+        let context = self.get_current_context().ok_or_else(|| {
+            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+        })?;
+        let client = self
+            .client_manager
+            .get_client(&context)
+            .ok_or_else(|| crate::error::Error::NotConnected(context.clone()))?;
+        Ok((context, client))
+    }
+
     /// Set current context
     pub fn set_current_context(&self, context: Option<String>) {
         *self.current_context.write() = context;
@@ -268,8 +346,8 @@ mod tests {
         let state = AppState::new().unwrap();
         let mut rx = state.subscribe();
 
-        state.emit(AppEvent::Error {
-            code: "TEST".to_string(),
+        state.emit(AppEvent::PodRowsFailed {
+            stream_id: "rows-1".to_string(),
             message: "test".to_string(),
         });
 

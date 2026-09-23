@@ -3,7 +3,8 @@
 //! op-tag mapping (Apply / Delete / Init* / `InitDone`) and the batching
 //! rule live in one place.
 
-use crate::state::{AppEvent, WatchChange, WatchOp};
+use crate::state::perf::IPC_TARGET_BYTES;
+use crate::state::{AppEvent, RawJson, WatchChange, WatchOp};
 use kube::runtime::watcher::Event;
 use serde::Serialize;
 use std::time::Duration;
@@ -28,6 +29,10 @@ const MAX_BATCH_SIZE: usize = 200;
 pub(super) struct WatchBatch {
     stream_id: String,
     changes: Vec<WatchChange>,
+    /// What the buffered resources come to on the wire. A count alone let
+    /// two hundred custom resources with 50 kB statuses leave as one 10 MB
+    /// event.
+    bytes: usize,
 }
 
 impl WatchBatch {
@@ -35,6 +40,7 @@ impl WatchBatch {
         Self {
             stream_id,
             changes: Vec::new(),
+            bytes: 0,
         }
     }
 
@@ -71,17 +77,24 @@ impl WatchBatch {
             }
         };
 
-        let Some(resource) = transform(&obj).and_then(|r| serde_json::to_value(&r).ok()) else {
+        let Some(resource) = transform(&obj).and_then(|r| serde_json::value::to_raw_value(&r).ok())
+        else {
             return false;
         };
+        self.push_raw(op, resource)
+    }
+
+    /// One change already serialised. `true` when the batch is full.
+    pub(super) fn push_raw(&mut self, op: WatchOp, resource: RawJson) -> bool {
+        self.bytes += resource.get().len();
         self.changes.push(WatchChange {
             op,
             resource: Some(resource),
         });
-        self.changes.len() >= MAX_BATCH_SIZE
+        self.changes.len() >= MAX_BATCH_SIZE || self.bytes >= IPC_TARGET_BYTES
     }
 
-    fn marker(&mut self, op: WatchOp) {
+    pub(super) fn marker(&mut self, op: WatchOp) {
         self.changes.push(WatchChange { op, resource: None });
     }
 
@@ -91,6 +104,7 @@ impl WatchBatch {
         if self.changes.is_empty() {
             return;
         }
+        self.bytes = 0;
         let _ = event_tx.send(AppEvent::ResourceWatchEvent {
             stream_id: self.stream_id.clone(),
             changes: std::mem::take(&mut self.changes),
@@ -202,6 +216,28 @@ mod tests {
         assert_eq!(batches.len(), 2, "one full batch, then the remainder");
         assert_eq!(batches[0].len(), MAX_BATCH_SIZE);
         assert_eq!(batches[1].last(), Some(&WatchOp::Synced));
+    }
+
+    /// Would break if the batch counted only changes: two hundred objects
+    /// with large statuses left as one event of several megabytes, past the
+    /// 1 MiB an IPC message may be.
+    #[test]
+    fn large_objects_flush_by_size_before_the_count() {
+        let big = |i: usize| {
+            let mut map = named(&format!("cm-{i}"));
+            map.data = Some(std::collections::BTreeMap::from([(
+                "blob".to_string(),
+                "x".repeat(64 * 1024),
+            )]));
+            map
+        };
+        let events = (0..20).map(|i| Event::Apply(big(i))).collect();
+
+        let batches = batches_with(events, |c: &ConfigMap| Some(c.clone()));
+        assert!(batches.len() >= 4, "cut by size: {} batches", batches.len());
+        assert!(batches
+            .iter()
+            .all(|batch| batch.len() <= IPC_TARGET_BYTES / (64 * 1024) + 1));
     }
 
     /// A transform that drops the resource (system pods, kinds the UI

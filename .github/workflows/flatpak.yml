@@ -66,7 +66,7 @@ jobs:
       # it existed has no `packaging/` at all — which is exactly how the
       # first run of this failed. The .deb comes from the tag below.
       - name: Checkout the packaging recipe
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install flatpak-builder
         run: |
@@ -234,7 +234,7 @@ jobs:
         gnome: ${{ fromJSON(github.event.inputs.diagnose == 'true' && '["50","51"]' || '["manifest"]') }}
     steps:
       - name: Checkout the smoke check
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Take the bundle
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
