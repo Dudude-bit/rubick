@@ -6,6 +6,7 @@ import type {
 } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 
 type MetricsQueryOptions<T> = Omit<
@@ -15,6 +16,8 @@ type MetricsQueryOptions<T> = Omit<
 
 export interface UseMetricsOptions {
   namespace?: string | null;
+  /** A selection of namespaces, read one at a time; wins over `namespace`. */
+  scope?: readonly string[];
   enabled?: boolean;
   includePods?: boolean;
   includeNodes?: boolean;
@@ -27,11 +30,15 @@ export function useMetrics(options?: UseMetricsOptions) {
   const includePods = options?.includePods ?? true;
   const includeNodes = options?.includeNodes ?? true;
 
+  const scope = options?.scope;
   const podMetricsQuery = useLiveQuery({
-    queryKey: queryKeys.metrics.pods(options?.namespace),
-    queryFn: async () => {
-      return await commands.getPodsMetrics(options?.namespace ?? null);
-    },
+    queryKey: queryKeys.metrics.pods(
+      scope ? scopeCacheKey(scope) : options?.namespace
+    ),
+    queryFn: async () =>
+      scope
+        ? await commands.getPodsMetricsIn(wireScope(scope))
+        : await commands.getPodsMetrics(options?.namespace ?? null),
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.metrics,

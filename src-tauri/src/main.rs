@@ -462,6 +462,7 @@ fn main() {
             commands::overview::get_cluster_overview,
             // Metrics API
             commands::metrics::get_pods_metrics,
+            commands::metrics::get_pods_metrics_in,
             commands::metrics::get_nodes_metrics,
             // Workloads commands
             commands::workloads::list_statefulsets,
