@@ -23,7 +23,8 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
-use super::connections::{Existence, ObjectFacts, ObjectRef};
+use super::connections::{ChainStop, Existence, ObjectFacts, ObjectRef};
+use super::selector::Selector;
 use super::types::condition_is_true;
 
 /// The label the endpoint controllers put on every slice they write, and the
@@ -149,6 +150,9 @@ pub struct ServicePublished {
     /// the pods were read — the second list on the Service page, and the
     /// reason the first one is worth drawing.
     pub unpublished: Vec<UnpublishedPod>,
+    /// Where a path into this Service stops, by [`service_stop`]; `None`
+    /// where it reaches something.
+    pub stop: Option<ChainStop>,
 }
 
 impl ServicePublished {
@@ -164,6 +168,13 @@ impl ServicePublished {
     #[must_use]
     pub fn any(&self) -> bool {
         self.ready + self.draining + self.not_ready > 0
+    }
+
+    /// This answer with [`service_stop`] filled in.
+    #[must_use]
+    pub fn with_stop(mut self, service: &Service, pods: Option<&[&Pod]>) -> Self {
+        self.stop = service_stop(service, &self, pods);
+        self
     }
 
     /// Trim to what a chain hop needs: the counts, and one name.
@@ -388,6 +399,7 @@ pub fn from_slices(
         endpoints,
         whole: true,
         unpublished,
+        stop: None,
     }
 }
 
@@ -475,6 +487,7 @@ pub fn from_legacy(
         endpoints,
         whole: true,
         unpublished: Vec::new(),
+        stop: None,
     }
 }
 
@@ -526,6 +539,7 @@ pub fn from_pod_readiness(
         endpoints,
         whole: true,
         unpublished: Vec::new(),
+        stop: None,
     }
 }
 
@@ -555,6 +569,105 @@ pub fn legacy_addresses(endpoints: &Endpoints) -> usize {
                 + subset.not_ready_addresses.as_ref().map_or(0, Vec::len)
         })
         .sum()
+}
+
+/// Where a path into this Service stops, or `None` where it reaches
+/// something: the one rule, for the connections graph and the routing pages.
+///
+/// `pods` is the selected pods where the reader listed them. A reader that
+/// holds the endpoints alone passes `None` and gets what the endpoints can
+/// say: it cannot tell a selector matching nothing from pods not yet given an
+/// address, so it says `PublishesNothingYet` rather than blame the labels.
+#[must_use]
+pub fn service_stop(
+    service: &Service,
+    published: &ServicePublished,
+    pods: Option<&[&Pod]>,
+) -> Option<ChainStop> {
+    // Neither the endpoints nor the pods were read: the zero is nobody's.
+    if pods.is_none() && published.source == EndpointSource::PodReadiness {
+        return None;
+    }
+    let spec = service.spec.as_ref();
+    // A DNS alias: no pods by design, so no endpoints and no stop.
+    if spec.and_then(|s| s.type_.as_deref()) == Some("ExternalName") {
+        return None;
+    }
+    let selector = spec.and_then(|s| s.selector.clone()).unwrap_or_default();
+    // No selector: endpoints managed by hand, nothing these objects can judge.
+    let text = Selector::Equality(&selector).says()?;
+    // A draining address still takes traffic when nothing ready is left.
+    if published.serving() > 0 {
+        return None;
+    }
+    let at = published.service.clone();
+    let count = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
+    let Some(selected) = pods else {
+        if published.unrouted > 0 {
+            return Some(ChainStop::PublishesNothing {
+                service: at,
+                selector: text,
+                pods: published.unrouted,
+                ready_pods: published.unrouted,
+                unnamed_ports: named_target_ports(service),
+            });
+        }
+        if published.not_ready > 0 {
+            return Some(ChainStop::NoneReady {
+                service: at,
+                selector: text,
+                pods: published.not_ready,
+            });
+        }
+        return Some(ChainStop::PublishesNothingYet {
+            service: at,
+            selector: text,
+        });
+    };
+    if selected.is_empty() {
+        return Some(ChainStop::SelectsNothing {
+            service: at,
+            selector: text,
+        });
+    }
+    let ready_pods = selected
+        .iter()
+        .filter(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
+        .count();
+    if published.not_ready > 0 || ready_pods == 0 {
+        return Some(ChainStop::NoneReady {
+            service: at,
+            selector: text,
+            pods: count(selected.len()),
+        });
+    }
+    Some(ChainStop::PublishesNothing {
+        service: at,
+        selector: text,
+        pods: count(selected.len()),
+        ready_pods: count(ready_pods),
+        unnamed_ports: unresolved_target_ports(service, selected),
+    })
+}
+
+/// The `targetPort` names not one selected container declares — only the
+/// ones that resolve on no pod at all. One pod out of six missing a name is a
+/// different finding from a Service asking for a name that exists nowhere.
+fn unresolved_target_ports(service: &Service, selected: &[&Pod]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for pod in selected {
+        for name in unnamed_ports_of(service, pod) {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    names.retain(|name| {
+        selected
+            .iter()
+            .all(|pod| unnamed_ports_of(service, pod).contains(name))
+    });
+    names
 }
 
 #[cfg(test)]
@@ -1001,5 +1114,157 @@ mod tests {
             ports: None,
         }]);
         assert!(!legacy_over_capacity(&endpoints));
+    }
+
+    fn selecting(name: &str) -> Service {
+        let mut svc = service(
+            name,
+            vec![port("http", IntOrString::String("http".to_string()))],
+        );
+        if let Some(spec) = svc.spec.as_mut() {
+            spec.selector = Some([("app".to_string(), "web".to_string())].into());
+        }
+        svc
+    }
+
+    fn ready(mut pod: Pod) -> Pod {
+        pod.status = Some(k8s_openapi::api::core::v1::PodStatus {
+            conditions: Some(vec![k8s_openapi::api::core::v1::PodCondition {
+                type_: "Ready".to_string(),
+                status: "True".to_string(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        });
+        pod
+    }
+
+    fn stop_of(
+        svc: &Service,
+        slices: &[EndpointSlice],
+        pods: Option<&[&Pod]>,
+    ) -> Option<ChainStop> {
+        let name = svc.name_any();
+        let published = from_slices(
+            svc,
+            svc_ref(&name),
+            &slices_of(slices, &name),
+            pods.unwrap_or_default(),
+        );
+        service_stop(svc, &published, pods)
+    }
+
+    /// Endpoints alone cannot tell a selector matching nothing from pods not
+    /// yet given an address, so the routing pages must not blame the labels;
+    /// the graph, which listed the pods and found none, must. Swapping the
+    /// two branches, or dropping the `pods` split, fails one side.
+    #[test]
+    fn an_empty_service_selects_nothing_only_where_the_pods_were_listed() {
+        let svc = selecting("web");
+
+        assert!(matches!(
+            stop_of(&svc, &[], None),
+            Some(ChainStop::PublishesNothingYet { .. })
+        ));
+        assert!(matches!(
+            stop_of(&svc, &[], Some(&[])),
+            Some(ChainStop::SelectsNothing { .. })
+        ));
+    }
+
+    /// With neither the endpoints nor the pods read, the zeros come from
+    /// nothing. Deleting the `PodReadiness` guard says "publishes nothing
+    /// yet" about a Service nobody could look at.
+    #[test]
+    fn a_service_with_nothing_read_has_no_stop() {
+        let svc = selecting("web");
+        let published = from_pod_readiness(&svc, svc_ref("web"), &[]);
+
+        assert!(service_stop(&svc, &published, None).is_none());
+    }
+
+    /// The portless slice says the same thing to both readers: Ready pods,
+    /// no address:port. Endpoints alone name every named `targetPort`; the
+    /// pods narrow it to the ones no container declares.
+    #[test]
+    fn a_portless_slice_publishes_nothing_to_either_reader() {
+        let svc = selecting("web");
+        let slices = [slice(
+            "web-x",
+            "web",
+            None,
+            vec![endpoint(
+                "10.0.0.1",
+                "a",
+                EndpointConditions {
+                    ready: Some(true),
+                    serving: Some(true),
+                    terminating: Some(false),
+                },
+            )],
+        )];
+        let pods = [ready(pod("a", Some("web")))];
+        let refs: Vec<&Pod> = pods.iter().collect();
+
+        for answer in [
+            stop_of(&svc, &slices, None),
+            stop_of(&svc, &slices, Some(&refs)),
+        ] {
+            let Some(ChainStop::PublishesNothing {
+                ready_pods,
+                unnamed_ports,
+                ..
+            }) = answer
+            else {
+                panic!("expected PublishesNothing, got {answer:?}");
+            };
+            assert_eq!(ready_pods, 1);
+            assert_eq!(unnamed_ports, vec!["http".to_string()]);
+        }
+    }
+
+    /// A draining address is what kube-proxy falls back to, so a Service
+    /// down to one is a restart rather than an outage; `ExternalName` and a
+    /// selector-less Service are not judged at all.
+    #[test]
+    fn draining_external_name_and_selectorless_services_have_no_stop() {
+        let svc = selecting("web");
+        let draining = [slice(
+            "web-x",
+            "web",
+            Some(vec![http_port()]),
+            vec![endpoint(
+                "10.0.0.1",
+                "a",
+                EndpointConditions {
+                    ready: Some(false),
+                    serving: Some(true),
+                    terminating: Some(true),
+                },
+            )],
+        )];
+        assert!(stop_of(&svc, &draining, None).is_none());
+
+        let mut alias = selecting("alias");
+        if let Some(spec) = alias.spec.as_mut() {
+            spec.type_ = Some("ExternalName".to_string());
+        }
+        assert!(stop_of(&alias, &[], None).is_none());
+
+        let manual = service("manual", vec![]);
+        assert!(stop_of(&manual, &[], Some(&[])).is_none());
+    }
+
+    /// Pods listed and none Ready is the old stop, not "selects nothing".
+    #[test]
+    fn listed_pods_with_none_ready_are_none_ready() {
+        let svc = selecting("web");
+        let pods = [pod("a", Some("http"))];
+        let refs: Vec<&Pod> = pods.iter().collect();
+
+        assert!(matches!(
+            stop_of(&svc, &[], Some(&refs)),
+            Some(ChainStop::NoneReady { pods: 1, .. })
+        ));
     }
 }

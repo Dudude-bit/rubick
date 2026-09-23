@@ -195,6 +195,7 @@ const published = (name: string, ready: number): ServicePublished => ({
   endpoints: [],
   whole: true,
   unpublished: [],
+  stop: null,
 });
 
 const sources = (over: Partial<Parameters<typeof routesBoard>[1]> = {}) => ({

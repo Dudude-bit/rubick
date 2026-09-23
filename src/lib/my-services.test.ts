@@ -13,10 +13,14 @@ import {
   waitingFor,
 } from "./my-services";
 import { REFRESH_INTERVALS } from "./refresh";
-import type { ChainPath } from "./connections";
+import type { ChainHop, ChainPath } from "./connections";
 import type { JournalEntry } from "./changes";
 import type { Watch } from "./tell-me-when";
-import type { ObjectRef, ResourceConnections } from "@/generated/types";
+import type {
+  ObjectRef,
+  ResourceConnections,
+  ServicePublished,
+} from "@/generated/types";
 
 function ref(kind: string, name: string): ObjectRef {
   return { kind, name, namespace: "shop", existence: "present", facts: null };
@@ -364,6 +368,7 @@ describe("entryPointsOf", () => {
             endpoints: [],
             whole: true,
             unpublished: [],
+            stop: null,
           },
           first: null,
           address: null,
@@ -482,40 +487,62 @@ describe("more ways in", () => {
   });
 
   /**
-   * `whole` is the endpoints read admitting it saw all of them. A partial
-   * read with nothing ready is not a Service with nothing behind it, and
-   * the card says "nothing behind it" in warning colours on that bit alone.
+   * A card's neighbourhood is a summary: three ready addresses arrive as one
+   * with `whole: false`. Reading `whole` as "the counts were partial" put
+   * "not read yet" on every Service with more than one replica.
    */
-  it("does not claim to know what is behind a service from a partial read", () => {
+  it("knows a service with several replicas is serving from its summary", () => {
     const { entries } = entryPointsOf(
       conns(),
-      chain([
-        {
-          at: "published",
-          published: {
-            service: ref("Service", "payments"),
-            source: "slices",
-            slices: 1,
-            ready: 0,
-            draining: 0,
-            notReady: 0,
-            unrouted: 0,
-            ports: [],
-            endpoints: [],
-            whole: false,
-            unpublished: [],
-          },
-          first: null,
-          address: null,
-          summary: "",
-          tone: "warn",
-        },
-      ])
+      chain([publishedHop({ ready: 3, whole: false })])
     );
-    expect(entries[0].serving).toBe(false);
-    expect(entries[0].servingKnown).toBe(false);
+    expect(entries[0]).toMatchObject({ serving: true, servingKnown: true });
+  });
+
+  /** Down to draining addresses is a restart: kube-proxy still sends there,
+   *  and the traffic chain beside the card says so. */
+  it("calls a service with only draining addresses still serving", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([publishedHop({ draining: 1 })])
+    );
+    expect(entries[0].serving).toBe(true);
+  });
+
+  /** Neither the endpoints nor the pods answered: the zeros are nobody's. */
+  it("does not claim nothing is behind a service nobody could read", () => {
+    const { entries } = entryPointsOf(
+      conns(),
+      chain([publishedHop({ source: "podReadiness" })])
+    );
+    expect(entries[0]).toMatchObject({ serving: false, servingKnown: false });
   });
 });
+
+function publishedHop(over: Partial<ServicePublished>): ChainHop {
+  return {
+    at: "published",
+    published: {
+      service: ref("Service", "payments"),
+      source: "slices",
+      slices: 1,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      ports: [],
+      endpoints: [],
+      whole: true,
+      unpublished: [],
+      stop: null,
+      ...over,
+    },
+    first: null,
+    address: null,
+    summary: "",
+    tone: "on",
+  };
+}
 
 describe("what is still open", () => {
   it("passes on every kind the read admits it did not look at", () => {

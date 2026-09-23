@@ -213,6 +213,22 @@ const published = (name: string, ready: number): ServicePublished => ({
   endpoints: [],
   whole: true,
   unpublished: [],
+  // What `service_stop` sends for one pod published and not ready.
+  stop:
+    ready === 0
+      ? {
+          reason: "noneReady",
+          service: {
+            kind: "Service",
+            name,
+            namespace: "gwtest",
+            existence: "present",
+            facts: null,
+          },
+          selector: `app=${name}`,
+          pods: 1,
+        }
+      : null,
 });
 
 const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({

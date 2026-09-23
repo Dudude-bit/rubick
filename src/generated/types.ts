@@ -322,6 +322,11 @@ export interface IngressClassSummary {
   isDefault: boolean;
 }
 
+export interface ServiceBacking {
+  services: ServiceInfo[];
+  published: ServicePublished[];
+}
+
 export interface ServicePublished {
   service: ObjectRef;
   source: EndpointSource;
@@ -334,6 +339,7 @@ export interface ServicePublished {
   endpoints: PublishedEndpoint[];
   whole: boolean;
   unpublished: UnpublishedPod[];
+  stop: ChainStop | null;
 }
 
 export interface UnpublishedPod {
@@ -1949,6 +1955,34 @@ export type ProblemDetail =
 
 export type ProblemSeverity = "critical" | "warning";
 
+export type ChainStop =
+  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | {
+      reason: "routeNotAccepted";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "routeRefsUnresolved";
+      route: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
+  | { reason: "selectsNothing"; service: ObjectRef; selector: string }
+  | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
+  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
+  | {
+      reason: "publishesNothing";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      readyPods: number;
+      unnamedPorts: string[];
+    };
+
 export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
 
 export type ObjectFacts =
@@ -2063,34 +2097,6 @@ export type Unread =
   | { says: "unanswered"; version: string; said: string }
   | { says: "nodeClaimsNotRead" }
   | { says: "volumeMountsNotRead" };
-
-export type ChainStop =
-  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
-  | {
-      reason: "routeNotAccepted";
-      route: ObjectRef;
-      gateway: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | {
-      reason: "routeRefsUnresolved";
-      route: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
-  | { reason: "selectsNothing"; service: ObjectRef; selector: string }
-  | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
-  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
-  | {
-      reason: "publishesNothing";
-      service: ObjectRef;
-      selector: string;
-      pods: number;
-      readyPods: number;
-      unnamedPorts: string[];
-    };
 
 export type Relation =
   | { verb: "owns"; controller: boolean }

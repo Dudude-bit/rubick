@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::error::Result;
 use crate::resources::{
     published, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo, ObjectRef, Selector,
-    ServicePublished,
+    ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
@@ -15,6 +15,7 @@ use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
 use kube::ResourceExt;
+use serde::Serialize;
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
@@ -129,6 +130,33 @@ pub async fn list_service_endpoints(
     state: State<'_, AppState>,
 ) -> Result<Vec<ServicePublished>> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    Ok(published_in(&ctx).await?.1)
+}
+
+/// Every Service in scope and what each publishes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceBacking {
+    pub services: Vec<ServiceInfo>,
+    pub published: Vec<ServicePublished>,
+}
+
+/// The Services and their answers from one list of each — what every routing
+/// page reads to say what is behind a route, without listing Services twice.
+#[tauri::command]
+pub async fn list_service_backing(
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ServiceBacking> {
+    let ctx = ResourceContext::for_list(&state, namespace)?;
+    let (services, published) = published_in(&ctx).await?;
+    Ok(ServiceBacking {
+        services: services.iter().map(ServiceInfo::from).collect(),
+        published,
+    })
+}
+
+async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
     let slices_api = ctx.namespaced_or_cluster_api::<EndpointSlice>();
@@ -143,7 +171,7 @@ pub async fn list_service_endpoints(
             .list(&params)
             .await?
             .items;
-        return Ok(services
+        let published = services
             .iter()
             .map(|svc| {
                 published::from_legacy(
@@ -153,9 +181,11 @@ pub async fn list_service_endpoints(
                         ep.name_any() == svc.name_any() && ep.namespace() == svc.namespace()
                     }),
                 )
+                .with_stop(svc, None)
                 .summary()
             })
-            .collect());
+            .collect();
+        return Ok((services, published));
     };
 
     let mut by_service: HashMap<(String, String), Vec<&EndpointSlice>> = HashMap::new();
@@ -169,7 +199,7 @@ pub async fn list_service_endpoints(
             .push(slice);
     }
 
-    Ok(services
+    let published = services
         .iter()
         .map(|svc| {
             let key = (svc.namespace().unwrap_or_default(), svc.name_any());
@@ -179,9 +209,11 @@ pub async fn list_service_endpoints(
                 by_service.get(&key).map_or(&[][..], Vec::as_slice),
                 &[],
             )
+            .with_stop(svc, None)
             .summary()
         })
-        .collect())
+        .collect();
+    Ok((services, published))
 }
 
 fn service_ref(svc: &Service) -> ObjectRef {

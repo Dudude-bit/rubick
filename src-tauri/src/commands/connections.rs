@@ -501,94 +501,22 @@ fn note_reach(
         .filter(|pod| query.matches(pod.labels()))
         .collect();
 
-    let published = snapshot.published_of(svc, svc_ref.clone(), &selected);
-    let serving = published.serving();
-    let not_ready = published.not_ready;
+    // Empty because nothing matched, or because nobody could read the pods?
+    // Only the first is "no pod carries this"; for the second the rule gets
+    // `None` and says what the endpoints alone can.
+    let pods = snapshot.pods.is_ok().then_some(selected.as_slice());
+    let published = snapshot
+        .published_of(svc, svc_ref.clone(), &selected)
+        .with_stop(svc, pods);
+    let stop = published.stop.clone();
     out.published.push(if detail {
         published
     } else {
         published.summary()
     });
-
-    let Some(text) = query.says() else {
-        return;
-    };
-
-    if selected.is_empty() {
-        // Empty because nothing matched, or empty because nobody could read
-        // the pods? `SelectsNothing` is the first: it renders in red as "No
-        // pod carries <selector>" beside "there is simply nothing behind
-        // it". Saying that about a list the cluster refused is the defect
-        // this whole change exists to remove, told about the reader's own
-        // Service. The refusal is named in `not_looked_at` instead.
-        if snapshot.pods.is_err() {
-            return;
-        }
-        out.stops.push(ChainStop::SelectsNothing {
-            service: svc_ref.clone(),
-            selector: text,
-        });
-        return;
+    if let Some(stop) = stop {
+        out.stops.push(stop);
     }
-    // A draining address counts here. `serving: true, ready: false` is a pod
-    // finishing its open connections, and kube-proxy falls back to exactly
-    // those when no ready endpoint is left — announcing an outage through a
-    // rolling restart is the defect this replaces.
-    if serving > 0 {
-        return;
-    }
-
-    let ready_pods = selected
-        .iter()
-        .filter(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
-        .count();
-    let count = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
-
-    // Pods that are in the answer and not passing their probes are the old
-    // stop, and it is still the right repair. Pods that are Ready and in no
-    // published address are the new one.
-    if not_ready > 0 || ready_pods == 0 {
-        out.stops.push(ChainStop::NoneReady {
-            service: svc_ref.clone(),
-            selector: text,
-            pods: count(selected.len()),
-        });
-        return;
-    }
-
-    out.stops.push(ChainStop::PublishesNothing {
-        service: svc_ref.clone(),
-        selector: text,
-        pods: count(selected.len()),
-        ready_pods: count(ready_pods),
-        unnamed_ports: unresolved_target_ports(svc, &selected),
-    });
-}
-
-/// The `targetPort` names not one selected container declares.
-///
-/// The whole of the app's inference about *why* a Service publishes nothing,
-/// and it is derived from two things the call already holds: the names the
-/// Service asks for, and the names the containers have. A pod missing for any
-/// other reason gets no explanation, because none is written down.
-fn unresolved_target_ports(svc: &Service, selected: &[&Pod]) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-    for pod in selected {
-        for name in published::unnamed_ports_of(svc, pod) {
-            if !names.contains(&name) {
-                names.push(name);
-            }
-        }
-    }
-    // Only the names that resolve on no pod at all. One pod out of six
-    // missing a port name is a different finding from a Service asking for a
-    // name that exists nowhere.
-    names.retain(|name| {
-        selected
-            .iter()
-            .all(|pod| published::unnamed_ports_of(svc, pod).contains(name))
-    });
-    names
 }
 
 fn ingress_ref(ing: &Ingress, ns: &str) -> ObjectRef {

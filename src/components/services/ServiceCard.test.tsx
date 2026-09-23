@@ -122,6 +122,7 @@ describe("what a card says about a way in", () => {
               endpoints: [],
               whole: true,
               unpublished: [],
+              stop: null,
             },
             first: null,
             address: null,

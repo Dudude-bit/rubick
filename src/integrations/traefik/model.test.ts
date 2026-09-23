@@ -136,6 +136,7 @@ function published(
     endpoints: [],
     whole: true,
     unpublished: [],
+    stop: null,
     ...extra,
   };
 }
@@ -268,7 +269,16 @@ describe("the findings", () => {
           ingress("promo", "promo.example.com", { service: "promo-web" }),
         ],
         services: [service("promo-web", { app: "promo" })],
-        published: [published("promo-web", 0, 2)],
+        published: [
+          published("promo-web", 0, 2, {
+            stop: {
+              reason: "noneReady",
+              service: published("promo-web", 0).service,
+              selector: "app=promo",
+              pods: 2,
+            },
+          }),
+        ],
       })
     );
 

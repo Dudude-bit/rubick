@@ -107,6 +107,7 @@ import type {
   SearchRequest,
   SecretFilters,
   SecretInfo,
+  ServiceBacking,
   ServiceFilters,
   ServiceInfo,
   ServicePublished,
@@ -1388,6 +1389,12 @@ export async function listServiceEndpoints(
   namespace: string | null
 ): Promise<ServicePublished[]> {
   return invoke<ServicePublished[]>("list_service_endpoints", { namespace });
+}
+
+export async function listServiceBacking(
+  namespace: string | null
+): Promise<ServiceBacking> {
+  return invoke<ServiceBacking>("list_service_backing", { namespace });
 }
 
 export async function getIngress(
