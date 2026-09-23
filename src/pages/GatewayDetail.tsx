@@ -49,6 +49,7 @@ import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
@@ -275,7 +276,7 @@ export function GatewayDetail() {
   // carries the controller that answers for it, and Accepted is that
   // controller's signature. Unknown or absent is the honest third state.
   const classes = useQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     enabled: !!gateway,

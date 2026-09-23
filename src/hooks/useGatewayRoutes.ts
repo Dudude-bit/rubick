@@ -15,6 +15,7 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
 import {
@@ -40,11 +41,10 @@ function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
   // Several namespaces are read one apiece and polled; a watch covers none or
   // one. See `listAcrossScope`.
   const several = scope.length >= 2;
-  // `null` keys the whole cluster — not `"all"`, a name a namespace can carry.
   const cacheKey = scopeCacheKey(scope);
   const watchNamespace = scope.length === 1 ? scope[0] : null;
   const queryKey = useMemo(
-    () => ["gateway-routes", kind, cacheKey],
+    () => queryKeys.resources(kind, cacheKey),
     [kind, cacheKey]
   );
   const { live, refresh, resyncing } = useWatchedList<RouteInfo>({

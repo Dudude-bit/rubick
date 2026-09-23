@@ -45,6 +45,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { useCopyToClipboard } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
@@ -112,7 +113,7 @@ export function HelmDetail() {
     refetch,
     error,
   } = useQuery({
-    queryKey: ["helm-release-detail", namespace, name],
+    queryKey: queryKeys.helm.release(namespace, name),
     queryFn: async () => {
       if (!namespace || !name) throw new Error("Missing parameters");
       return await commands.getHelmReleaseDetail(name, namespace, null);
@@ -121,7 +122,7 @@ export function HelmDetail() {
   });
 
   const { data: history = [], isLoading: historyLoading } = useQuery({
-    queryKey: ["helm-history", name, namespace],
+    queryKey: queryKeys.helm.history(namespace, name),
     queryFn: async () => {
       if (!namespace || !name) return [];
       return await commands.getHelmHistory(name, namespace);
@@ -139,8 +140,9 @@ export function HelmDetail() {
         title: t("action", "rollbackInitiated"),
         description: t("action", "rollbackInitiatedDetail"),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-release-detail"] });
-      queryClient.invalidateQueries({ queryKey: ["helm-history"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setRollbackTarget(null);
     },
     onError: (error) => {

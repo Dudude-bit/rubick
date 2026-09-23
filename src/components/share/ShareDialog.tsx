@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { renderReport, reportFileName, type Report } from "@/lib/report";
 import {
@@ -68,7 +69,7 @@ export function ShareDialog({
 
   const html = report ? renderReport(report) : "";
   const targets = useQuery({
-    queryKey: ["share-targets"],
+    queryKey: queryKeys.shareTargets(),
     queryFn: () => commands.listShareTargets(),
     enabled: open,
   });

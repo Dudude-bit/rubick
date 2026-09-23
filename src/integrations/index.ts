@@ -37,6 +37,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useCrdReadDenied } from "@/hooks/useListAccess";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
@@ -261,7 +262,7 @@ function useConnections(): Map<string, ConnectionState> {
 
   const saved = useQueries({
     queries: CONNECTED.map((vendor) => ({
-      queryKey: ["integration-connection", vendor.id, context],
+      queryKey: queryKeys.integrationConnection(vendor.id, context),
       queryFn: () => vendor.connect.read(),
       enabled: context !== null && isConnected,
       staleTime: CONNECTION_STALE_TIME,
@@ -270,7 +271,7 @@ function useConnections(): Map<string, ConnectionState> {
 
   const probes = useQueries({
     queries: CONNECTED.map((vendor, index) => ({
-      queryKey: ["integration-probe", vendor.id, context],
+      queryKey: queryKeys.integrationProbe(vendor.id, context),
       queryFn: () => vendor.connect.probe(),
       // The same connected gate the read above has, and it matters more
       // here: a probe fired between sessions comes back as an *answer* —
@@ -709,10 +710,10 @@ export function useConnectionEditor(vendorId: string): {
   const refresh = () =>
     Promise.all([
       client.invalidateQueries({
-        queryKey: ["integration-connection", vendorId, context],
+        queryKey: queryKeys.integrationConnection(vendorId, context),
       }),
       client.invalidateQueries({
-        queryKey: ["integration-probe", vendorId, context],
+        queryKey: queryKeys.integrationProbe(vendorId, context),
       }),
     ]).then(() => undefined);
 
@@ -726,7 +727,7 @@ export function useConnectionEditor(vendorId: string): {
   });
 
   const { data: saved = null } = useQuery({
-    queryKey: ["integration-connection", vendorId, context],
+    queryKey: queryKeys.integrationConnection(vendorId, context),
     queryFn: () => vendor!.connect.read(),
     enabled: vendor !== undefined && context !== null,
     staleTime: CONNECTION_STALE_TIME,
@@ -752,7 +753,7 @@ export function useConnectionEditor(vendorId: string): {
               saved.insecureTls === draft.insecureTls
             ) {
               client.setQueryData(
-                ["integration-probe", vendorId, context],
+                queryKeys.integrationProbe(vendorId, context),
                 result
               );
             }

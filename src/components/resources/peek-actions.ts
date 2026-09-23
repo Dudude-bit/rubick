@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import {
   podContainers,
   podPorts,
@@ -18,8 +19,8 @@ import {
 } from "@/lib/container-sequence";
 import {
   isScalable,
+  ResourceType,
   toKind,
-  toPlural,
   type ResourceKind,
   type ScalableKind,
 } from "@/lib/resource-registry";
@@ -532,23 +533,24 @@ export function describeBareRestart(
  *
  * The panel is not modal: the list it was opened from is still on screen
  * behind it, so a row keeping its old state after a delete is the first thing
- * anyone notices. Both key shapes are covered — the lists and
- * `queryKeys.resourceDetail` are plural-first, the detail pages'
- * `useResourceDetail` is singular-first — plus the panel's own queries.
+ * anyone notices. Both key shapes are covered — the lists are plural-first,
+ * the objects singular-first, and the panel's Overview is the object's own
+ * entry — plus what the panel reads besides.
  */
 export function peekMutationKeys(kind: string): string[][] {
   const resolved = toKind(kind) ?? kind;
   return [
-    [toPlural(resolved as ResourceKind)],
-    [resolved.toLowerCase()],
+    queryKeys.lists(resolved as ResourceKind),
+    queryKeys.details(resolved),
     // Every mutation the panel offers ends in pods changing, and the pod list
     // is the one most likely to be the view behind it.
-    ["pods"],
-    ["pod-rows"],
+    queryKeys.lists(ResourceType.Pod),
+    queryKeys.everyPodRows(),
+    queryKeys.details(ResourceType.Pod),
+    queryKeys.everyOwnedPods(),
+    queryKeys.everyManifest(),
     ["peek"],
-    ["peek-pods"],
     ["peek-jobs"],
     ["peek-events"],
-    ["peek-yaml"],
   ];
 }

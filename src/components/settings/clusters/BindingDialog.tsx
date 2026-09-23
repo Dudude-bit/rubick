@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import type { ContextBinding } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 
@@ -57,17 +58,17 @@ export function BindingDialog({
   } | null>(null);
 
   const { data: gcpProfiles } = useQuery({
-    queryKey: ["gcpProfiles"],
+    queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
     enabled: context !== null,
   });
   const { data: azureProfiles } = useQuery({
-    queryKey: ["azureProfiles"],
+    queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
     enabled: context !== null,
   });
   const { data: existing } = useQuery({
-    queryKey: ["contextBinding", context],
+    queryKey: queryKeys.contextBinding(context),
     queryFn: () => commands.getContextBinding(context ?? ""),
     enabled: context !== null,
   });
@@ -85,8 +86,7 @@ export function BindingDialog({
     });
 
   const done = (title: string) => {
-    queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
-    queryClient.invalidateQueries({ queryKey: ["contextBinding"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.contextBindings() });
     onOpenChange(false);
     toast({ title });
   };

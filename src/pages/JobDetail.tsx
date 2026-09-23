@@ -40,6 +40,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
@@ -87,7 +88,7 @@ export function JobDetail() {
   // reads as "this Job ran no pods", which is the one thing the pane may not
   // say on a read that did not happen.
   const { data: pods = [], error: podsError } = useLiveQuery({
-    queryKey: ["job-pods", namespace, name],
+    queryKey: queryKeys.ownedPods(ResourceType.Job, namespace, name),
     queryFn: async () => {
       if (!name || !namespace) return [];
       return await commands.listPods({

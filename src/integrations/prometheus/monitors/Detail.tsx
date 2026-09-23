@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Check,
@@ -15,12 +14,11 @@ import { Link } from "react-router-dom";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT, type T } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
-import { useClusterStore } from "@/stores/clusterStore";
 import { crdObjectPath } from "../../kit";
 import { OutLink } from "../../page-kit";
 import type { Picture } from "./data";
+import { useSavedConnection } from "../saved-connection";
 import { useHeartbeat, STEP } from "./heartbeat";
 import { Strip } from "./Strip";
 import { useNow } from "@/hooks/useNow";
@@ -78,7 +76,6 @@ export function Detail({
   picture: Picture;
 }) {
   const t = useT();
-  const context = useClusterStore((state) => state.currentContext);
   const copy = useCopyToClipboard();
   const { monitor, scrape } = row;
   const tone = rowTone(row);
@@ -88,11 +85,7 @@ export function Detail({
     beat.lanes !== null && beat.window !== null
       ? downSince(beat.lanes, beat.window.from, STEP)
       : null;
-  const saved = useQuery({
-    queryKey: [context, "prometheus", "page-address"],
-    queryFn: () => commands.getPrometheusConnection(),
-    staleTime: 60_000,
-  });
+  const saved = useSavedConnection(60_000);
   const base = saved.data?.url.replace(/\/+$/, "") ?? null;
   const crd =
     monitor.kind === "ServiceMonitor" ? SERVICE_MONITORS_CRD : POD_MONITORS_CRD;

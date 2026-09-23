@@ -22,6 +22,7 @@ import { useCallback, useMemo } from "react";
 import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
@@ -525,7 +526,7 @@ export function useRouteCertificates(
 
   return useQueries({
     queries: batches.map((batch) => ({
-      queryKey: ["tls-certificates", batch.namespace, batch.names.join(",")],
+      queryKey: queryKeys.tlsCertificates(batch.namespace, batch.names),
       queryFn: async (): Promise<Map<string, TlsCertificate>> => {
         const read = await commands.getTlsCertificates(
           batch.namespace,

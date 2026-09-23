@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { GcpProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 
@@ -41,7 +42,7 @@ export function GcpProfilesSection() {
   const [newProfileName, setNewProfileName] = useState("");
 
   const { data: profiles, isLoading } = useQuery({
-    queryKey: ["gcpProfiles"],
+    queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
   });
 
@@ -56,7 +57,7 @@ export function GcpProfilesSection() {
       await commands.saveGcpProfile(name, profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.gcpProfiles() });
       setDialogOpen(false);
       toast({ title: t("settings", "gcpProfileSaved") });
     },
@@ -72,8 +73,10 @@ export function GcpProfilesSection() {
   const deleteMutation = useMutation({
     mutationFn: commands.deleteGcpProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
-      queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.gcpProfiles() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contextBindings(),
+      });
       toast({ title: t("settings", "gcpProfileDeleted") });
     },
     onError: (error) => {

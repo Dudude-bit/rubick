@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -37,14 +38,13 @@ export interface ClusterSummary {
  * is already on "all namespaces", so the common case costs one request.
  */
 export function useClusterSummary(): ClusterSummary {
-  const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
 
   const { data: overview, isLoading: overviewLoading } =
     useClusterOverview(null);
 
   const { data: namespaceInfos, isLoading: namespacesLoading } = useQuery({
-    queryKey: ["namespaces", currentContext],
+    queryKey: queryKeys.namespaces(),
     queryFn: () => commands.listNamespaces(),
     enabled: isConnected,
     staleTime: STALE_TIMES.slow,

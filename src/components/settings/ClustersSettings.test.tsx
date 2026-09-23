@@ -192,6 +192,29 @@ describe("Clusters settings", () => {
       ).not.toBeInTheDocument();
     });
 
+    /**
+     * The rows come from the pane's own read of the contexts, and applying a
+     * file is what re-reads it. Fails if the pane keys that read where the
+     * kubeconfig change does not reach: the rows stay the old file's.
+     */
+    it("lists the new file's contexts once it applies", async () => {
+      const user = userEvent.setup();
+      renderPane();
+      await screen.findByText(/Client certificate/);
+
+      listContexts.mockResolvedValue([{ ...CONTEXTS[0], name: "other-file" }]);
+      await user.click(
+        screen.getByRole("button", { name: "Use another file" })
+      );
+      await user.type(
+        screen.getByRole("textbox", { name: "Kubeconfig file" }),
+        "/tmp/other-kubeconfig"
+      );
+      await user.tab();
+
+      expect(await screen.findByText("other-file")).toBeInTheDocument();
+    });
+
     it("offers no Save anywhere on the pane", async () => {
       renderPane();
       await screen.findByText(/Client certificate/);

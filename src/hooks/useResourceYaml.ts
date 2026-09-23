@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiVersion } from "@/lib/resource-registry";
 
 /**
@@ -29,7 +30,7 @@ export function useResourceYaml(
   activeTab: string
 ) {
   return useQuery({
-    queryKey: [`${resourceKind.toLowerCase()}-yaml`, namespace, name],
+    queryKey: queryKeys.manifest(resourceKind, namespace, name),
     queryFn: () => fetchResourceYaml(resourceKind, name!, namespace),
     enabled: activeTab === "yaml" && !!name,
   });

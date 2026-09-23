@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { AzureProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 
@@ -42,7 +43,7 @@ export function AzureProfilesSection() {
   const [newProfileName, setNewProfileName] = useState("");
 
   const { data: profiles, isLoading } = useQuery({
-    queryKey: ["azureProfiles"],
+    queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
   });
 
@@ -57,7 +58,7 @@ export function AzureProfilesSection() {
       await commands.saveAzureProfile(name, profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.azureProfiles() });
       setDialogOpen(false);
       toast({ title: t("settings", "azureProfileSaved") });
     },
@@ -73,8 +74,10 @@ export function AzureProfilesSection() {
   const deleteMutation = useMutation({
     mutationFn: commands.deleteAzureProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
-      queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.azureProfiles() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contextBindings(),
+      });
       toast({ title: t("settings", "azureProfileDeleted") });
     },
     onError: (error) => {

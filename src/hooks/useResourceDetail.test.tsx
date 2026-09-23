@@ -31,6 +31,7 @@ vi.mock("./useResourceYaml", () => ({
   }),
 }));
 
+import { queryKeys } from "@/lib/query-keys";
 import { useResourceDetail } from "./useResourceDetail";
 
 interface Pod {
@@ -69,7 +70,8 @@ function detail(fetchResource: (name: string) => Promise<Pod>) {
      * whole point. Asserting on the hook alone would pass before the fix too:
      * the mock rejecting is not the same instant as the query settling.
      */
-    settled: () => client.getQueryState(["pod", "default", "api-7bcd"]),
+    settled: () =>
+      client.getQueryState(queryKeys.detail("Pod", "default", "api-7bcd")),
   };
 }
 
@@ -94,6 +96,21 @@ describe("what a detail page calls an error", () => {
     await waitFor(() => expect(settled()?.error).not.toBeNull());
     expect(result.current.resource).toEqual({ name: "api-7bcd" });
     expect(result.current.error).toBeNull();
+  });
+
+  /**
+   * The peek, the events timeline and a pod's node placement read this entry
+   * rather than asking again, and every mutation invalidates it by the same
+   * builder. Fails if the page keys its object anywhere else.
+   */
+  it("keeps the object where every other reader of it looks", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValue({ name: "api-7bcd" });
+
+    const { result, settled } = detail(fetch);
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+    expect(settled()?.data).toEqual({ name: "api-7bcd" });
   });
 
   /** Nothing has ever been read here, so the failure is all there is to say. */

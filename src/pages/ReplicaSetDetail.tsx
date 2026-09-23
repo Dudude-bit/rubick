@@ -35,6 +35,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -88,7 +89,7 @@ export function ReplicaSetDetail() {
   // Without it a page that is empty because it was superseded looks exactly
   // like a page that is empty because nothing ever ran.
   const { data: siblings = [] } = useLiveQuery({
-    queryKey: ["deployment-replicasets", namespace, owner?.name],
+    queryKey: queryKeys.deploymentReplicaSets(namespace, owner?.name),
     queryFn: () => commands.getDeploymentReplicasets(owner!.name, namespace!),
     enabled: !!owner && !!namespace,
     staleTime: STALE_TIMES.resourceList,

@@ -106,6 +106,7 @@ status:
 `;
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -314,6 +315,7 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  wrap.client = client;
   return render(
     <QueryClientProvider client={client}>
       {/* The shell mounts one of these around the whole app; a disabled
@@ -327,6 +329,8 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
     </QueryClientProvider>
   );
 };
+
+wrap.client = null as unknown as QueryClient;
 
 const location = () => screen.getByTestId("location").textContent;
 const POD_PEEK = "/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
@@ -587,6 +591,80 @@ describe("PeekPanel", () => {
 });
 
 const CONFIGMAP_PEEK = "/events?peek=configmaps/k8s-gui-test/app-config";
+
+/**
+ * The panel asks the same questions the detail pages ask, and keeps each
+ * answer where the page keeps it: opening the page after the peek costs
+ * nothing, and an action on either reaches the other. Each fails if the
+ * panel keys that answer apart from the page again.
+ */
+describe("PeekPanel reads what the detail pages read", () => {
+  beforeEach(mockCluster);
+
+  const POD = ["k8s-gui-test", "crash-demo-56588f6b8c-8bj9v"] as const;
+
+  it("keeps the object itself in the pod page's entry", async () => {
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    expect(wrap.client.getQueryData(queryKeys.detail("Pod", ...POD))).toEqual(
+      buildPod()
+    );
+  });
+
+  it("keeps the manifest in the pod page's entry", async () => {
+    vi.mocked(commands.getManifest).mockResolvedValue("kind: Pod\n");
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    await openTab("YAML");
+    await screen.findByTestId("yaml-editor");
+    expect(wrap.client.getQueryData(queryKeys.manifest("Pod", ...POD))).toBe(
+      "kind: Pod\n"
+    );
+  });
+
+  it("keeps a ConfigMap's values where its page and a pod's env read them", async () => {
+    wrap(CONFIGMAP_PEEK);
+    await openTab("Data");
+    await screen.findByText("worker_processes 1;");
+    expect(
+      wrap.client.getQueryData(
+        queryKeys.configMapData("k8s-gui-test", "app-config")
+      )
+    ).toMatchObject({ values: { "nginx.conf": "worker_processes 1;" } });
+  });
+
+  it("keeps a Deployment's pods in its page's entry", async () => {
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "api",
+      namespace: "shop",
+      uid: "deploy-uid",
+      replicas: { desired: 1, ready: 1, current: 1, updated: 1, available: 1 },
+      strategy: "RollingUpdate",
+      containers: [],
+      initContainers: [],
+      serviceAccountName: null,
+      podResources: { requests: {}, limits: {} },
+      labels: {},
+      annotations: {},
+      templateAnnotations: {},
+      generation: 1,
+      observedGeneration: 1,
+      createdAt: null,
+      conditions: [],
+      ownerReferences: [],
+    } as never);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
+    wrap("/events?peek=deployments/shop/api");
+    await openTab("Pods");
+    await waitFor(() =>
+      expect(
+        wrap.client.getQueryData(
+          queryKeys.ownedPods("Deployment", "shop", "api")
+        )
+      ).toEqual([buildPod()])
+    );
+  });
+});
 
 describe("PeekPanel tab strip", () => {
   beforeEach(mockCluster);

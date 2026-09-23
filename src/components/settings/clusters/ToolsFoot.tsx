@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useSettingSearchMatch } from "../settings-search";
@@ -37,11 +38,11 @@ export function ToolsFoot({
   }, [helm, kubectl, isChecking, checkAllDependencies]);
 
   const { data: gcpProfiles } = useQuery({
-    queryKey: ["gcpProfiles"],
+    queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
   });
   const { data: azureProfiles } = useQuery({
-    queryKey: ["azureProfiles"],
+    queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
   });
 

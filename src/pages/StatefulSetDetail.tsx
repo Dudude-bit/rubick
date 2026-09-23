@@ -63,6 +63,7 @@ import {
 import { AlertsAbout } from "@/components/resources/AlertsAbout";
 import { PinAction } from "@/components/services/PinAction";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -96,7 +97,7 @@ export function StatefulSetDetail() {
   // The failure travels rather than becoming an empty list; see the same
   // change on the DaemonSet page.
   const { data: pods = [], error: podsError } = useLiveQuery({
-    queryKey: ["statefulset-pods", namespace, name],
+    queryKey: queryKeys.ownedPods(ResourceType.StatefulSet, namespace, name),
     queryFn: async () => {
       if (!name || !namespace) return [];
       try {
@@ -153,7 +154,9 @@ export function StatefulSetDetail() {
         }),
       },
       invalidateQueryKeys:
-        namespace && name ? [["statefulset", namespace, name]] : [],
+        namespace && name
+          ? [queryKeys.detail(ResourceType.StatefulSet, namespace, name)]
+          : [],
       onSuccess: () => {
         if (!name) return;
         asking.ask(
@@ -189,7 +192,9 @@ export function StatefulSetDetail() {
         }),
       },
       invalidateQueryKeys:
-        namespace && name ? [["statefulset", namespace, name]] : [],
+        namespace && name
+          ? [queryKeys.detail(ResourceType.StatefulSet, namespace, name)]
+          : [],
       onSuccess: (_data, replicas) => {
         setScaleOpen(false);
         if (name) {
