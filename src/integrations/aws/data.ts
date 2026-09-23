@@ -16,7 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -52,7 +52,7 @@ const listKind = async (
     if (errorCode(error) !== ERROR_CODES.NOT_FOUND) {
       unread.push({
         crd,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: errorToShow(error),
       });
     }
     return [];

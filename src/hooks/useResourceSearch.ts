@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { listenEvent } from "@/lib/events";
 import type {
   SearchContextStatus,
@@ -253,7 +254,7 @@ export function useResourceSearch({
           hits: [],
           clusters: [],
           isSearching: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorToShow(error),
         });
       }
     }, debounceMs);

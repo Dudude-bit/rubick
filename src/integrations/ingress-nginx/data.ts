@@ -20,6 +20,7 @@ import type { T } from "@/i18n/useT";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   DeploymentContainerInfo,
@@ -150,7 +151,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "nginxManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };
@@ -207,7 +208,7 @@ export async function fetchController(): Promise<ControllerInfo> {
           key: "nginxConfigMapUnreadable",
           values: {
             where: `${namespace}/${name}`,
-            why: error instanceof Error ? error.message : String(error),
+            why: errorToShow(error),
           },
         },
       },

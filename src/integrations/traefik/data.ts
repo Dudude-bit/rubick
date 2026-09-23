@@ -20,6 +20,7 @@ import type { Saying } from "@/i18n/say";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -211,7 +212,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "traefikManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };

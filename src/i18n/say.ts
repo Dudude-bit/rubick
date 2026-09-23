@@ -14,6 +14,8 @@
  * @module i18n/say
  */
 
+import { errorToShow } from "@/lib/error-utils";
+
 import type { en } from "./catalogue";
 import type { T } from "./useT";
 
@@ -88,7 +90,7 @@ export class SaidError extends Error {
 /** What to show a reader about a caught error. */
 export function errorWords(error: unknown, t: T): string {
   if (error instanceof SaidError) return sayWords(error.saying, t);
-  return error instanceof Error ? error.message : String(error);
+  return errorToShow(error);
 }
 
 /** Several sayings on one line, the way a summary reads them. */

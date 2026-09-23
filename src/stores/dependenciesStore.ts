@@ -9,6 +9,7 @@
 
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type { CliAvailability } from "@/generated/types";
 
 /** Dependencies store state */
@@ -44,7 +45,7 @@ export const useDependenciesStore = create<DependenciesState>((set, get) => ({
         helm: {
           available: false,
           version: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorToShow(error),
           path: null,
           searchedPaths: [],
         },
@@ -68,7 +69,7 @@ export const useDependenciesStore = create<DependenciesState>((set, get) => ({
         kubectl: {
           available: false,
           version: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorToShow(error),
           path: null,
           searchedPaths: [],
         },

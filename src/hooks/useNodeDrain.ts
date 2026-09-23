@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   DrainOptions,
   DrainOutcome,
@@ -174,7 +175,7 @@ export function useNodeDrain({
         setState({
           phase: "failed",
           node,
-          message: error instanceof Error ? error.message : String(error),
+          message: errorToShow(error),
         });
       }
     },
