@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::commands::helpers::UnreadNamespace;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MetricsStatusKind {
@@ -25,6 +27,9 @@ pub struct MetricsStatus {
 pub struct PodMetricsResponse {
     pub status: MetricsStatus,
     pub data: Vec<PodMetrics>,
+    /// Namespaces of a selection that were not read while others were: their
+    /// pods have no sample, and `status` speaks only for the ones that answered.
+    pub unread: Vec<UnreadNamespace>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

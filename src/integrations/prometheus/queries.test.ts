@@ -312,11 +312,27 @@ describe("what was declared", () => {
   /** kube-state-metrics writes cores; the chart reads millicores like everything else on it. */
   it("asks kube-state-metrics for the pod's requests in the chart's units", () => {
     expect(declaredQuery(pod, "cpu", "requests")).toBe(
-      'sum(kube_pod_container_resource_requests{resource="cpu",namespace="shop",pod="payments-0"}) * 1000'
+      'sum(kube_pod_container_resource_requests{resource="cpu",namespace="shop",pod="payments-0"} or (kube_pod_init_container_resource_requests{resource="cpu",namespace="shop",pod="payments-0"} * on (namespace, pod, container) group_left () max by (namespace, pod, container) (kube_pod_init_container_info{restart_policy="Always",namespace="shop",pod="payments-0"}))) * 1000'
     );
     expect(declaredQuery(pod, "memory", "limits")).toBe(
-      'sum(kube_pod_container_resource_limits{resource="memory",namespace="shop",pod="payments-0"})'
+      'sum(kube_pod_container_resource_limits{resource="memory",namespace="shop",pod="payments-0"} or (kube_pod_init_container_resource_limits{resource="memory",namespace="shop",pod="payments-0"} * on (namespace, pod, container) group_left () max by (namespace, pod, container) (kube_pod_init_container_info{restart_policy="Always",namespace="shop",pod="payments-0"})))'
     );
+  });
+
+  /**
+   * The live limit beside the line counts a native sidecar's and not a
+   * plain init container's. The line counted app containers only, so an
+   * Istio pod in native-sidecar mode drew its limit a whole proxy below the
+   * figure the bar was coloured against. Checked against promtool with
+   * both kinds of init container and a restarted sidecar's two info series.
+   */
+  it("counts a native sidecar's declared figure and not a plain init container's", () => {
+    const query = declaredQuery(pod, "memory", "limits");
+    expect(query).toContain("kube_pod_init_container_resource_limits{");
+    expect(query).toContain(
+      'kube_pod_init_container_info{restart_policy="Always"'
+    );
+    expect(query).toContain("max by (namespace, pod, container)");
   });
 
   /** A declared value is a step function; peaking over it would invent nothing but also gain nothing. */
@@ -330,9 +346,17 @@ describe("what was declared", () => {
   });
 
   it("scopes a node's declared figures by the node label", () => {
-    expect(
-      declaredQuery({ kind: "node", node: "ip-10-0-1-2" }, "cpu", "requests")
-    ).toContain('node="ip-10-0-1-2"');
+    const query = declaredQuery(
+      { kind: "node", node: "ip-10-0-1-2" },
+      "cpu",
+      "requests"
+    );
+    expect(query).toContain('node="ip-10-0-1-2"');
+    // The info series has no node label: selecting it by one matches nothing
+    // and drops every sidecar on the node.
+    expect(query).toContain(
+      'kube_pod_init_container_info{restart_policy="Always"}'
+    );
   });
 });
 

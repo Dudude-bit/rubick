@@ -64,6 +64,11 @@ async fn a_client_through_kubectl_proxy_reads_and_watches() {
     // Disconnecting kills the proxy: the port stops answering.
     manager.disconnect(&context);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    let gone = reqwest::get(format!("http://127.0.0.1:{port}/version")).await;
+    let gone = k8s_gui_lib::tls::builder()
+        .build()
+        .expect("client")
+        .get(format!("http://127.0.0.1:{port}/version"))
+        .send()
+        .await;
     assert!(gone.is_err(), "proxy still answering after disconnect");
 }

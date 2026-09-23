@@ -1,5 +1,5 @@
 //! Where a kind is served, per context: one API group's discovery, read once
-//! and shared by every command that asks.
+//! and shared by every command that asks while it is fresh.
 //!
 //! Every custom-resource command used to GET the whole CRD — its schema runs
 //! to a megabyte — to learn a group, a version and a scope, and a page polling
@@ -8,6 +8,7 @@
 //! answers for every kind in the group at once.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use kube::discovery::{self, ApiGroup, ApiResource, Scope};
@@ -33,16 +34,51 @@ pub struct ServedKind {
     pub namespaced: bool,
 }
 
-type Entry = Arc<OnceCell<Option<Arc<ApiGroup>>>>;
+/// One group's discovery, and when it was read.
+#[derive(Clone)]
+struct Discovered {
+    at: Instant,
+    group: Option<Arc<ApiGroup>>,
+}
+
+type Entry = Arc<OnceCell<Discovered>>;
+
+/// How long an answer that holds what was asked for is kept. A kind added to
+/// a group in use, or a version dropped from it, shows up within this.
+const FRESH_FOR: Duration = Duration::from_secs(60);
+
+/// How long an answer that lacks what was asked for is kept. A miss is what
+/// most clusters say about most kinds, asked on every poll; a group in use
+/// is read again by its hits anyway, so this paces only groups nobody has.
+const MISSING_FOR: Duration = Duration::from_mins(2);
+
+/// How old an answer has to be for a 404 to send it back: a deleted
+/// object's open page 404s on every poll.
+const RECHECK_AFTER: Duration = Duration::from_secs(30);
 
 /// Discovered groups by (context, group).
 ///
 /// One `OnceCell` per key, so callers that arrive together wait on one
 /// request. A failed read is never kept: a refusal cached as "not served"
-/// would say a kind is not installed for as long as the app runs.
-#[derive(Default)]
+/// would say a kind is not installed for as long as the app runs. Nor is an
+/// answer kept for good: a kind installed after it was read would stay
+/// "not installed" until the next connection.
 pub struct ServedIndex {
     groups: DashMap<(String, String), Entry>,
+    fresh_for: Duration,
+    missing_for: Duration,
+    recheck_after: Duration,
+}
+
+impl Default for ServedIndex {
+    fn default() -> Self {
+        Self {
+            groups: DashMap::new(),
+            fresh_for: FRESH_FOR,
+            missing_for: MISSING_FOR,
+            recheck_after: RECHECK_AFTER,
+        }
+    }
 }
 
 impl ServedIndex {
@@ -59,10 +95,41 @@ impl ServedIndex {
         group: &str,
         plural: &str,
     ) -> Result<Option<Served>> {
-        let Some(api_group) = self.group(context, client, group).await? else {
+        let Some(api_group) = self
+            .group(context, client, group, |found| {
+                find(found, plural).is_some()
+            })
+            .await?
+        else {
             return Ok(None);
         };
         Ok(find(&api_group, plural))
+    }
+
+    /// `plural` in `group` with every version that serves it; `None` where
+    /// the cluster serves no such kind. A miss asks again, as `resource`
+    /// does — `kinds` cannot, not knowing what was wanted of it.
+    ///
+    /// # Errors
+    ///
+    /// Where discovery could not be read.
+    pub async fn kind(
+        &self,
+        context: &str,
+        client: &Client,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<ServedKind>> {
+        Ok(self
+            .group(context, client, group, |found| {
+                find(found, plural).is_some()
+            })
+            .await?
+            .and_then(|api_group| {
+                kinds_of(&api_group)
+                    .into_iter()
+                    .find(|kind| kind.plural == plural)
+            }))
     }
 
     /// Every kind `group` serves; `None` where the cluster serves no such
@@ -78,41 +145,81 @@ impl ServedIndex {
         group: &str,
     ) -> Result<Option<Vec<ServedKind>>> {
         Ok(self
-            .group(context, client, group)
+            .group(context, client, group, |_| true)
             .await?
             .map(|api_group| kinds_of(&api_group)))
     }
 
+    /// The group as discovered, read again where the answer held is too old
+    /// for what `answers` wanted of it.
     async fn group(
         &self,
         context: &str,
         client: &Client,
         group: &str,
+        answers: impl Fn(&ApiGroup) -> bool,
     ) -> Result<Option<Arc<ApiGroup>>> {
-        let cell = self
-            .groups
-            .entry((context.to_string(), group.to_string()))
-            .or_default()
-            .clone();
-        let found = cell
-            .get_or_try_init(|| async {
-                match discovery::group(client, group).await {
-                    Ok(found) => Ok(Some(Arc::new(found))),
-                    Err(kube::Error::Discovery(kube::error::DiscoveryError::MissingApiGroup(
-                        _,
-                    ))) => Ok(None),
-                    Err(e) => Err(crate::error::Error::from(e)),
-                }
-            })
-            .await?;
-        Ok(found.clone())
+        let key = (context.to_string(), group.to_string());
+        let (cell, found) = self.read(&key, client).await?;
+        let kept_for = if found.group.as_deref().is_some_and(answers) {
+            self.fresh_for
+        } else {
+            self.missing_for
+        };
+        if found.at.elapsed() < kept_for {
+            return Ok(found.group);
+        }
+        // Only the answer this call judged: one a caller beside it already
+        // replaced is the re-read, and is joined rather than thrown away.
+        self.groups
+            .remove_if(&key, |_, held| Arc::ptr_eq(held, &cell));
+        Ok(self.read(&key, client).await?.1.group)
     }
 
-    /// Forget one group, after a 404 says what was discovered has moved: a
-    /// CRD reinstalled without the version this app was asking for.
-    pub fn forget_group(&self, context: &str, group: &str) {
+    async fn read(&self, key: &(String, String), client: &Client) -> Result<(Entry, Discovered)> {
+        let cell = self.groups.entry(key.clone()).or_default().clone();
+        let found = cell
+            .get_or_try_init(|| async {
+                let group = match discovery::group(client, &key.1).await {
+                    Ok(found) => Some(Arc::new(found)),
+                    Err(kube::Error::Discovery(kube::error::DiscoveryError::MissingApiGroup(
+                        _,
+                    ))) => None,
+                    Err(e) => return Err(crate::error::Error::from(e)),
+                };
+                Ok(Discovered {
+                    at: Instant::now(),
+                    group,
+                })
+            })
+            .await?
+            .clone();
+        Ok((cell, found))
+    }
+
+    /// A request's answer from where this index put a kind of `group`. A 404
+    /// is taken as discovery having moved on — a CRD reinstalled without the
+    /// version asked for — and the next caller looks again.
+    pub fn answered<T>(
+        &self,
+        context: &str,
+        group: &str,
+        answer: kube::Result<T>,
+    ) -> kube::Result<T> {
+        if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
+            self.forget_group(context, group);
+        }
+        answer
+    }
+
+    /// Forget one group. An answer read since the one a 404 came from is
+    /// kept: it has already said where the kind is.
+    fn forget_group(&self, context: &str, group: &str) {
         self.groups
-            .remove(&(context.to_string(), group.to_string()));
+            .remove_if(&(context.to_string(), group.to_string()), |_, held| {
+                held.get()
+                    .is_some_and(|found| found.at.elapsed() >= self.recheck_after)
+            });
     }
 
     /// Forget a context, when its client goes.
@@ -122,6 +229,28 @@ impl ServedIndex {
 
     pub fn clear(&self) {
         self.groups.clear();
+    }
+}
+
+#[cfg(test)]
+impl ServedIndex {
+    /// An index whose answers age as fast as a test can wait.
+    pub(crate) fn aged(
+        fresh_for: Duration,
+        missing_for: Duration,
+        recheck_after: Duration,
+    ) -> Self {
+        Self {
+            fresh_for,
+            missing_for,
+            recheck_after,
+            ..Self::default()
+        }
+    }
+
+    /// The real floors, `by` times shorter.
+    pub(crate) fn scaled(by: u32) -> Self {
+        Self::aged(FRESH_FOR / by, MISSING_FOR / by, RECHECK_AFTER / by)
     }
 }
 
@@ -185,16 +314,80 @@ pub(crate) mod test_server {
     /// An API server that answers discovery for one group from a table:
     /// `(path, status, body)`. Anything else is a 404.
     pub(crate) async fn server(routes: Vec<(&'static str, u16, String)>) -> (Client, Hits) {
+        answering(move |path, _| {
+            routes
+                .iter()
+                .find(|(route, _, _)| *route == path)
+                .map_or((404, "{}".to_string()), |(_, status, body)| {
+                    (*status, body.clone())
+                })
+        })
+        .await
+    }
+
+    /// An API server whose answer to a path may change with each time it is
+    /// asked: `answer(path, nth)`, counting from 1.
+    pub(crate) async fn answering(
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (Client, Hits) {
+        let (url, hits) = listening(answer).await;
+        let config = kube::Config::new(url.parse().expect("cluster url"));
+        (Client::try_from(config).expect("client"), hits)
+    }
+
+    /// The app's own state, its current context connected to an API server
+    /// answering as `answering` does, and discovery read through `served`.
+    pub(crate) async fn connected(
+        served: super::ServedIndex,
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (crate::state::AppState, Hits) {
+        let (url, hits) = listening(answer).await;
+        let mut state = crate::state::AppState::new().expect("state");
+        state.client_manager = Arc::new(crate::client::K8sClientManager::with_served(served));
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(&format!(
+            "apiVersion: v1\nkind: Config\ncurrent-context: fake\n\
+             clusters: [{{name: fake, cluster: {{server: '{url}'}}}}]\n\
+             users: [{{name: fake, user: {{}}}}]\n\
+             contexts: [{{name: fake, context: {{cluster: fake, user: fake}}}}]\n"
+        ))
+        .expect("kubeconfig");
+        state
+            .client_manager
+            .connect_with_kubeconfig("fake", kubeconfig)
+            .await
+            .expect("connected");
+        state.set_current_context(Some("fake".to_string()));
+        (state, hits)
+    }
+
+    /// A failure as the API server words it.
+    pub(crate) fn failure(code: u16, reason: &str) -> (u16, String) {
+        (
+            code,
+            serde_json::json!({
+                "kind": "Status",
+                "apiVersion": "v1",
+                "status": "Failure",
+                "reason": reason,
+                "code": code,
+            })
+            .to_string(),
+        )
+    }
+
+    async fn listening(
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (String, Hits) {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind");
         let port = listener.local_addr().expect("addr").port();
         let hits: Hits = Arc::default();
         let seen = hits.clone();
-        let routes = Arc::new(routes);
+        let answer = Arc::new(answer);
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
-                let routes = routes.clone();
+                let answer = answer.clone();
                 let seen = seen.clone();
                 tokio::spawn(async move {
                     let mut buf = vec![0u8; 8192];
@@ -208,15 +401,15 @@ pub(crate) mod test_server {
                         .next()
                         .unwrap_or("")
                         .to_string();
-                    *seen.lock().unwrap().entry(path.clone()).or_default() += 1;
+                    let nth = {
+                        let mut seen = seen.lock().unwrap();
+                        let count = seen.entry(path.clone()).or_default();
+                        *count += 1;
+                        *count
+                    };
                     // Slow enough that callers arriving together overlap.
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    let (status, body) = routes
-                        .iter()
-                        .find(|(route, _, _)| *route == path)
-                        .map_or((404, "{}".to_string()), |(_, status, body)| {
-                            (*status, body.clone())
-                        });
+                    let (status, body) = answer(&path, nth);
                     let reply = format!(
                         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                         body.len()
@@ -225,12 +418,7 @@ pub(crate) mod test_server {
                 });
             }
         });
-        let config = kube::Config::new(
-            format!("http://127.0.0.1:{port}")
-                .parse()
-                .expect("cluster url"),
-        );
-        (Client::try_from(config).expect("client"), hits)
+        (format!("http://127.0.0.1:{port}"), hits)
     }
 
     pub(crate) fn groups(preferred: &str, versions: &[&str]) -> String {
@@ -278,10 +466,14 @@ pub(crate) mod test_server {
 
 #[cfg(test)]
 mod tests {
-    use super::test_server::{groups, resources, server};
+    use super::test_server::{answering, groups, resources, server};
     use super::*;
 
     const GROUP: &str = "gateway.networking.k8s.io";
+
+    fn groups_none() -> String {
+        serde_json::json!({ "kind": "APIGroupList", "apiVersion": "v1", "groups": [] }).to_string()
+    }
 
     /// The case that 404'd search on Gateway API 1.6: the route trio is
     /// served at `v1` only. A kind the preferred version lacks is still found
@@ -381,13 +573,7 @@ mod tests {
     /// discovery that failed is not, and must not come back as one.
     #[tokio::test]
     async fn a_missing_group_is_none_and_a_refused_one_is_an_error() {
-        let (client, _) = server(vec![(
-            "/apis",
-            200,
-            serde_json::json!({ "kind": "APIGroupList", "apiVersion": "v1", "groups": [] })
-                .to_string(),
-        )])
-        .await;
+        let (client, _) = server(vec![("/apis", 200, groups_none())]).await;
         let index = ServedIndex::default();
         assert!(index
             .resource("kind", &client, GROUP, "tcproutes")
@@ -433,6 +619,188 @@ mod tests {
             .resource("kind", &client, GROUP, "tcproutes")
             .await
             .expect("read");
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    fn aged(fresh_for: u64, missing_for: u64) -> ServedIndex {
+        ServedIndex::aged(
+            Duration::from_millis(fresh_for),
+            Duration::from_millis(missing_for),
+            RECHECK_AFTER,
+        )
+    }
+
+    fn gateways_only() -> Vec<(&'static str, u16, String)> {
+        vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("gateways", "Gateway", true)]),
+            ),
+        ]
+    }
+
+    /// Would have the Gateway pages read `/apis` and the whole group again
+    /// every few seconds on most clusters, for a `ListenerSet` nobody
+    /// installed: a miss was kept 5 s. The real floors, scaled down — at the
+    /// age a hit is read again, a miss is still kept.
+    #[tokio::test]
+    async fn a_miss_is_kept_after_a_hit_has_aged_out() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = ServedIndex::scaled(300);
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let listener_sets = || index.resource("kind", &client, GROUP, "listenersets");
+
+        assert!(listener_sets().await.expect("read").is_none());
+        tokio::time::sleep(FRESH_FOR / 200).await;
+        assert!(listener_sets().await.expect("read").is_none());
+        assert_eq!(asked(), Some(1), "a miss is kept past a hit's age");
+
+        index
+            .resource("kind", &client, GROUP, "gateways")
+            .await
+            .expect("read");
+        assert_eq!(asked(), Some(2), "a hit this old is read again");
+    }
+
+    /// Would send a discovery read per caller where one answers them all:
+    /// a page's burst of requests arrives together once the answer is old.
+    #[tokio::test]
+    async fn callers_together_share_one_read_again() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = aged(100, 100);
+        index
+            .resource("kind", &client, GROUP, "gateways")
+            .await
+            .expect("read");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        let asks = (0..10).map(|_| index.resource("kind", &client, GROUP, "gateways"));
+        for answer in futures::future::join_all(asks).await {
+            assert!(answer.expect("read").is_some());
+        }
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    /// Would read discovery on every poll of a deleted object's page: each
+    /// 404 sent back an answer read moments before, which had already said
+    /// where the kind is served. An older one still goes.
+    #[tokio::test]
+    async fn a_404_sends_back_only_an_answer_older_than_the_floor() {
+        let (client, hits) = server(gateways_only()).await;
+        let index = ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        );
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let read = || index.resource("kind", &client, GROUP, "gateways");
+
+        let a_404 = || {
+            let status = kube::core::Status::failure("gone", "NotFound").with_code(404);
+            index.answered::<()>("kind", GROUP, Err(kube::Error::Api(Box::new(status))))
+        };
+
+        read().await.expect("read");
+        assert!(a_404().is_err());
+        read().await.expect("read");
+        assert_eq!(asked(), Some(1), "an answer this young is kept");
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(a_404().is_err());
+        read().await.expect("read");
+        assert_eq!(asked(), Some(2), "an older one is read again");
+    }
+
+    /// Gateway API installed under a connected window. "Not served" was kept
+    /// for the whole connection, so the Routes pages said no CRDs were
+    /// installed until the reader reconnected.
+    #[tokio::test]
+    async fn a_group_installed_after_it_was_read_missing_is_found() {
+        let (client, hits) = answering(|path, nth| match path {
+            "/apis" if nth == 1 => (200, groups_none()),
+            "/apis" => (200, groups("v1", &["v1"])),
+            _ => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
+        })
+        .await;
+        let index = aged(60_000, 100);
+
+        assert!(index
+            .kinds("kind", &client, GROUP)
+            .await
+            .expect("read")
+            .is_none());
+        assert!(index
+            .kinds("kind", &client, GROUP)
+            .await
+            .expect("read")
+            .is_none());
+        assert_eq!(
+            hits.lock().unwrap().get("/apis"),
+            Some(&1),
+            "a miss this young is kept"
+        );
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let kinds = index.kinds("kind", &client, GROUP).await.expect("read");
+        assert_eq!(kinds.expect("installed now")[0].kind, "HTTPRoute");
+    }
+
+    /// An operator upgrade adds a kind to a group already read. Its CRD page
+    /// said the CRD did not exist, because nothing asked discovery again.
+    #[tokio::test]
+    async fn a_kind_added_to_a_group_already_read_is_found() {
+        let (client, _) = answering(|path, nth| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            _ if nth == 1 => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
+            _ => (
+                200,
+                resources(
+                    "v1",
+                    &[
+                        ("httproutes", "HTTPRoute", true),
+                        ("listenersets", "ListenerSet", true),
+                    ],
+                ),
+            ),
+        })
+        .await;
+        let index = aged(60_000, 100);
+
+        assert!(index
+            .resource("kind", &client, GROUP, "listenersets")
+            .await
+            .expect("read")
+            .is_none());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(index
+            .resource("kind", &client, GROUP, "listenersets")
+            .await
+            .expect("read")
+            .is_some());
+    }
+
+    /// Even an answer that has what was asked for ages out: a version the
+    /// cluster stopped serving, or a kind `kinds` could not know to miss.
+    #[tokio::test]
+    async fn an_answer_that_holds_the_kind_is_read_again_once_old() {
+        let (client, hits) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("tcproutes", "TCPRoute", true)]),
+            ),
+        ])
+        .await;
+        let index = aged(100, 100);
+
+        index.kinds("kind", &client, GROUP).await.expect("read");
+        index.kinds("kind", &client, GROUP).await.expect("read");
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&1));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        index.kinds("kind", &client, GROUP).await.expect("read");
         assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
     }
 

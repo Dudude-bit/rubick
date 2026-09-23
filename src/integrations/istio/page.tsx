@@ -16,7 +16,7 @@
  */
 
 import { useMemo } from "react";
-import { backingFrom, STOP_UNDER } from "../ingress";
+import { backingFrom, hostSeverity, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -41,7 +41,6 @@ import {
   Column,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
   VendorReadFailure,
   FindingList,
 } from "../page-kit";
@@ -50,6 +49,7 @@ import { describeMatch, fullyRead, type MatchReading } from "./match";
 import {
   backingOf,
   hostGroups,
+  hostState,
   subsetsFor,
   type Destination,
   type Finding,
@@ -102,8 +102,9 @@ export default function IstioPage() {
       label: t("nav", "routes"),
       glyph: viewGlyph(Waypoints),
       mark: troubleMark(
-        groups.map((group) => group.worst),
-        (n, total) => t("count", "hostsNeedAttention", { n, total })
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (
         <RoutesTab
@@ -288,7 +289,7 @@ function RoutesTab({
   );
 }
 
-const severityOfGroup = (group: IstioHostGroup) => group.worst;
+const severityOfGroup = hostSeverity;
 
 const searchableGroup = (group: IstioHostGroup) => [
   group.host,
@@ -297,27 +298,6 @@ const searchableGroup = (group: IstioHostGroup) => [
     ...route.destinations.map((destination) => destination.host),
   ]),
 ];
-
-function hostState(
-  group: IstioHostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  if (group.findings.some((finding) => finding.kind === "noGateway")) {
-    return { text: t("empty", "noGatewayServesIt"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "noSubset")) {
-    return { text: t("empty", "subsetNotDefined"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
-  if (group.findings.some((finding) => finding.kind === "weights")) {
-    return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
-  }
-  if (group.findings.length > 0)
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  return { text: t("empty", "routingState"), tone: "ok" };
-}
 
 function HostRow({
   group,
@@ -344,7 +324,7 @@ function HostRow({
               : ` · ${t("count", "gatewaysNamed", { n: group.gateways.length })}`}
         </>
       }
-      state={hostState(group, t)}
+      state={hostState(group, sources?.backingError ?? null, t)}
       openByDefault={openByDefault}
       brief={
         group.findings.length > 0 ? <Findings group={group} brief /> : undefined

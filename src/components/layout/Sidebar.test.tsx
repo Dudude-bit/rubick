@@ -14,7 +14,6 @@ const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
 const listIngresses = vi.fn().mockResolvedValue([]);
 const listCustomResources = vi.fn().mockResolvedValue([]);
 const checkListAccess = vi.fn().mockResolvedValue([]);
-const checkCrdReadAccess = vi.fn().mockResolvedValue(null);
 const resolveIngressClass = vi.fn().mockResolvedValue({
   requested: null,
   resolved: null,
@@ -66,7 +65,9 @@ vi.mock("@/lib/commands", () => ({
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
     checkListAccess: () => checkListAccess(),
-    checkCrdReadAccess: () => checkCrdReadAccess(),
+    // The CRD `get` review left with its lock. It answers "refused" so that a
+    // lock brought back marks the rows, rather than failing unseen.
+    checkCrdReadAccess: () => Promise.resolve(false),
     detectGatewayApi: () => detectGatewayApi(),
     listGatewayRoutesIn: (kind: string, scope: string[] | null) =>
       across(scope, (ns) => listGatewayRoutes(kind, ns)),
@@ -114,7 +115,6 @@ beforeEach(() => {
   listCustomResources.mockResolvedValue([]);
   detectInClusterExtensions.mockResolvedValue([]);
   checkListAccess.mockResolvedValue([]);
-  checkCrdReadAccess.mockResolvedValue(null);
   detectGatewayApi.mockResolvedValue({ installed: false, kinds: [] });
   listGatewayRoutes.mockResolvedValue([]);
   listGateways.mockResolvedValue([]);
@@ -391,29 +391,25 @@ describe("the Integrations category", () => {
   });
 
   /**
-   * The gap #138's reporter hit: the reader can list the vendor's own CRs but
-   * cannot get `customresourcedefinitions` cluster-wide — which the page
-   * resolves first, so it can never open. The CR review alone said "allowed"
-   * and left the row unlocked; the CRD review has to lock it. Fails if the
-   * CRD-access gate is dropped from the vendor's forbidden state.
+   * The vendor pages find their kinds through discovery since #275 and never
+   * get a CRD, so a reader who may list the vendor's objects but not get
+   * `customresourcedefinitions` opens the page fine. The row used to be
+   * marked forbidden for a read the page no longer makes; fails if that
+   * review comes back, since the mock answers it "refused".
    */
-  it("locks a CRD-based vendor the reader may list but whose CRD it cannot read", async () => {
+  it("leaves a CRD-based vendor open to a reader who may list its objects", async () => {
     detectInClusterExtensions.mockResolvedValue([
       { id: "flux", installed: true, version: "v2.3.0" },
     ]);
-    // The reader may list flux's own CRs — so the gate below says "allowed" —
-    // but cannot get the CRD the page resolves first.
     checkListAccess.mockResolvedValue([
       { resource: "kustomizations", allowed: true },
     ]);
-    checkCrdReadAccess.mockResolvedValue(false);
 
     wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /Flux/ });
-    expect(
-      await screen.findByLabelText(/permission to list Flux/i)
-    ).toBeInTheDocument();
+    await waitFor(() => expect(checkListAccess).toHaveBeenCalled());
+    expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
   });
 
   /**
@@ -705,13 +701,12 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
   });
 
   /**
-   * Same gap as the vendor rows: the route pages resolve each kind's CRD
-   * first — a cluster-scoped get on `customresourcedefinitions` — so a reader
-   * who may list httproutes/gateways but cannot read CRDs still cannot open
-   * them. Both rows must lock. Fails if the CRD gate is dropped from
-   * routesDenied / gatewaysDenied.
+   * The route pages find their kinds through discovery since #275, so the
+   * list reviews are the whole question. Checking a CRD `get` the pages no
+   * longer make marked both rows denied and switched off the route count;
+   * fails if that review comes back, since the mock answers it "refused".
    */
-  it("locks Routes and Gateways when the reader cannot read CRDs", async () => {
+  it("keeps Routes and Gateways open and counted for a reader who may list them", async () => {
     detectGatewayApi.mockResolvedValue({
       installed: true,
       kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
@@ -722,24 +717,24 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
       namespaceScope: [],
     });
     listGateways.mockResolvedValue([]);
-    listGatewayRoutes.mockResolvedValue([]);
-    // The reader may list the routes and gateways themselves, but cannot get
-    // the CRD each page resolves first.
+    listGatewayRoutes.mockResolvedValue([routeIn("team-a")]);
     checkListAccess.mockResolvedValue([
       { resource: "httproutes", allowed: true },
       { resource: "gateways", allowed: true },
     ]);
-    checkCrdReadAccess.mockResolvedValue(false);
 
     wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
+    await waitFor(() =>
+      expect(within(routes).getByText("1")).toBeInTheDocument()
+    );
     expect(
-      within(routes).getByLabelText(/permission to list these/i)
-    ).toBeInTheDocument();
+      within(routes).queryByLabelText(/permission to list these/i)
+    ).toBeNull();
     const gateways = await screen.findByRole("link", { name: /gateways/i });
     expect(
-      within(gateways).getByLabelText(/permission to list these/i)
-    ).toBeInTheDocument();
+      within(gateways).queryByLabelText(/permission to list these/i)
+    ).toBeNull();
   });
 });

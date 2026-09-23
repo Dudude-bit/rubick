@@ -43,6 +43,9 @@ export interface IngressTlsAnswers {
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
 
+const rank = (terminated: IngressTls["terminated"]) =>
+  terminated === true ? 2 : terminated === null ? 1 : 0;
+
 export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
   const suppliers = useCapabilities("ingress.tls");
 
@@ -108,10 +111,9 @@ export function useIngressTls(ingresses: IngressRef[]): IngressTlsAnswers {
         // A vendor saying it *is* terminated wins over one saying it is not:
         // two controllers both claiming an Ingress is already a
         // misconfiguration, and of the two answers the encrypted one is the
-        // one a client can actually get.
-        .sort(
-          (left, right) => Number(right.terminated) - Number(left.terminated)
-        );
+        // one a client can actually get. One that could not tell has not
+        // said no, so it outranks a no.
+        .sort((left, right) => rank(right.terminated) - rank(left.terminated));
       return answers[0] ?? null;
     },
     isPending: enabled && results.some((result) => result.isPending),

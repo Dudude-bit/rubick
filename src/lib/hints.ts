@@ -155,7 +155,7 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
     return {
       reason: "oomKilled",
       container: oom.name,
-      limit: limitOf(pod),
+      limit: limitOf(pod, oom),
       restarts: oom.restartCount,
     };
   }
@@ -248,8 +248,18 @@ const STALE_TROUBLE_MS = 30 * 60_000;
  * added up — so the panel printed "1073741824" and called it this
  * container's limit. `ContainerInfo` carries no resources, so the number
  * stays the pod's; the sentence says whose it is.
+ *
+ * Only where the killed container is all that runs. The figure adds up the
+ * running containers that declare a limit, and nothing here says whether
+ * this one did: an app with none, beside a proxy's 1Gi, was told the pod's
+ * limits add up to 1Gi.
  */
-function limitOf(pod: PodInfo): string | null {
+function limitOf(pod: PodInfo, killed: ContainerInfo): string | null {
+  const running = [
+    ...pod.containers,
+    ...pod.initContainers.filter((c) => c.phase === "sidecar"),
+  ];
+  if (running.length !== 1 || running[0].name !== killed.name) return null;
   const raw = pod.memoryLimits;
   if (!raw) return null;
   const bytes = Number(raw);

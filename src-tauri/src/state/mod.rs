@@ -255,28 +255,34 @@ impl AppState {
             .await
     }
 
-    /// Every kind `group` serves on the current cluster; `None` where the
-    /// group is not installed.
+    /// `plural` in `group` on the current cluster, with every version that
+    /// serves it; `None` where it is not installed.
     ///
     /// # Errors
     ///
     /// No cluster, or discovery could not be read.
-    pub async fn served_kinds(
+    pub async fn served_kind(
         &self,
         group: &str,
-    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        plural: &str,
+    ) -> Result<Option<crate::client::served::ServedKind>> {
         let (context, client) = self.current()?;
         self.client_manager
             .served()
-            .kinds(&context, &client, group)
+            .kind(&context, &client, group, plural)
             .await
     }
 
-    /// Forget what was discovered about `group` on the current cluster —
-    /// after a 404 from where discovery said it was served.
-    pub fn forget_served(&self, group: &str) {
-        if let Some(context) = self.get_current_context() {
-            self.client_manager.served().forget_group(&context, group);
+    /// A request's answer from where discovery put a kind of `group` on the
+    /// current cluster, a 404 sending discovery back: see
+    /// [`crate::client::served::ServedIndex::answered`].
+    pub fn served_answer<T>(&self, group: &str, answer: kube::Result<T>) -> kube::Result<T> {
+        match self.get_current_context() {
+            Some(context) => self
+                .client_manager
+                .served()
+                .answered(&context, group, answer),
+            None => answer,
         }
     }
 

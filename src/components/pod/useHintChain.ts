@@ -146,7 +146,7 @@ export function useHintChain(
       notRead.push(
         t("hints", "notReadLogs", {
           container: logContainer,
-          reason: logs.error.message,
+          reason: errorToShow(logs.error),
         })
       );
     if (services.error)

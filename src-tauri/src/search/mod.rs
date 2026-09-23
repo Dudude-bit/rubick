@@ -444,8 +444,8 @@ async fn list_kind(
     query: String,
     context: String,
 ) -> Result<(Vec<SearchHit>, bool)> {
-    let api_resource = match &kind.coordinates {
-        types::Coordinates::Typed(resource) => resource(),
+    let (api_resource, served_in) = match &kind.coordinates {
+        types::Coordinates::Typed(resource) => (resource(), None),
         types::Coordinates::Served { group, plural } => {
             // Not installed is an answer: there is nothing of it to match.
             match client_manager
@@ -453,7 +453,7 @@ async fn list_kind(
                 .resource(&context, &client, group, plural)
                 .await?
             {
-                Some(served) => served.resource,
+                Some(served) => (served.resource, Some(*group)),
                 None => return Ok((Vec::new(), false)),
             }
         }
@@ -472,7 +472,11 @@ async fn list_kind(
     // each keystroke.
     let list = api
         .list_metadata(&ListParams::default().limit(plan::LIST_PAGE_LIMIT))
-        .await?;
+        .await;
+    let list = match served_in {
+        Some(group) => client_manager.served().answered(&context, group, list),
+        None => list,
+    }?;
 
     // A continue token means the page cap hid objects from us — the
     // caller has to say "first N scanned", not "no matches".
@@ -594,6 +598,47 @@ mod tests {
         )
         .await
         .is_err());
+    }
+
+    /// Would list a kind at a version the cluster stopped serving for every
+    /// query until discovery aged out, filing it among the unreadable ones,
+    /// while the pages beside it recovered on their next poll.
+    #[tokio::test]
+    async fn a_404_from_a_discovered_kind_sends_discovery_back() {
+        use crate::client::served::test_server::{answering, failure, groups, resources};
+        use crate::client::served::ServedIndex;
+
+        let (client, hits) = answering(|path, _| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            "/apis/gateway.networking.k8s.io/v1" => {
+                (200, resources("v1", &[("httproutes", "HTTPRoute", true)]))
+            }
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        let client_manager = K8sClientManager::with_served(ServedIndex::aged(
+            Duration::from_mins(1),
+            Duration::from_mins(2),
+            Duration::from_millis(100),
+        ));
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+        let search = || {
+            list_kind(
+                client.clone(),
+                &client_manager,
+                gateway_kind("HTTPRoute"),
+                None,
+                "api".to_string(),
+                "kind".to_string(),
+            )
+        };
+
+        assert!(search().await.is_err());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(search().await.is_err());
+        assert_eq!(asked(), Some(1));
+        assert!(search().await.is_err());
+        assert_eq!(asked(), Some(2), "the list's 404 sent discovery back");
     }
 
     #[tokio::test]

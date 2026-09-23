@@ -1178,6 +1178,13 @@ export const ru: Catalogue = {
       many: "Сохранено {n} логов",
       other: "Сохранено {n} лога",
     },
+    logsPartlySaved: {
+      one: "Сохранён {n} лог из {total}",
+      few: "Сохранено {n} лога из {total}",
+      many: "Сохранено {n} логов из {total}",
+      other: "Сохранено {n} лога из {total}",
+    },
+    notSaved: "Не сохранены:",
     downloadFailedDetail: "Не удалось прочитать лог из API",
     confirm: "Подтвердить",
     processing: "Выполняется…",
@@ -1774,6 +1781,19 @@ export const ru: Catalogue = {
       few: "· {n} строки прочитать не удалось, строк не хватает",
       many: "· {n} строк прочитать не удалось, строк не хватает",
       other: "· {n} строк прочитать не удалось, строк не хватает",
+    },
+    lostOnTheWay: {
+      one: "· {n} строка потерялась по дороге, это не весь каталог",
+      few: "· {n} строки потерялись по дороге, это не весь каталог",
+      many: "· {n} строк потерялись по дороге, это не весь каталог",
+      other: "· {n} строк потерялись по дороге, это не весь каталог",
+    },
+    nothingArrived: {
+      one: "Инструмент перечислил {n} строку, и она потерялась по дороге — что здесь лежит, неизвестно.",
+      few: "Инструмент перечислил {n} строки, и ни одна не дошла — что здесь лежит, неизвестно.",
+      many: "Инструмент перечислил {n} строк, и ни одна не дошла — что здесь лежит, неизвестно.",
+      other:
+        "Инструмент перечислил {n} строк, и ни одна не дошла — что здесь лежит, неизвестно.",
     },
     cannotSwitchViaDebug:
       "Пока чтение идёт через debug-контейнер, строки приходят из того контейнера, на который он нацелен — остановите, чтобы выбрать другой.",
@@ -2836,6 +2856,10 @@ export const ru: Catalogue = {
     certIssuerNotNamed: "издатель не указан",
     controllerUnread:
       "Установлен ли контроллер, неизвестно: кластер отказал в списках, где его можно найти — {why}",
+    controllerLookupFailed:
+      "Установлен ли контроллер, неизвестно: списки, где его можно найти, прочитать не удалось — {why}",
+    controllerLookupDeadline:
+      "Установлен ли контроллер, неизвестно: кластер не ответил на списки, где его можно найти, за {seconds} с.",
     argoNoWorkloads:
       "Ничто в этом кластере не несёт {selector}, поэтому собственные рабочие нагрузки Argo найти не удалось. Его Applications по-прежнему читаются из API-сервера.",
     traefikNoController:
@@ -3273,6 +3297,12 @@ export const ru: Catalogue = {
       few: "{n} сверщика",
       many: "{n} сверщиков",
       other: "{n} сверщика",
+    },
+    factKindsUnread: {
+      one: "{n} вид перечислить не удалось",
+      few: "{n} вида перечислить не удалось",
+      many: "{n} видов перечислить не удалось",
+      other: "{n} вида перечислить не удалось",
     },
     factNotReconciled: {
       one: "{n} не сверен",
@@ -3844,6 +3874,7 @@ export const ru: Catalogue = {
     metricsError: "Ошибка API метрик",
     metricsErrorBody: "Не удалось получить метрики из кластера.",
     metricsDetails: "Подробности: {details}",
+    podMetricsLabel: "метрики подов",
     markBroken: "сломано",
     markUnchecked: "не проверено",
     markWorthALook: "стоит взглянуть",
@@ -4599,6 +4630,12 @@ export const ru: Catalogue = {
     readingSources: "Читаем источники…",
     fluxNoSources:
       "Объектов-источников нет. Ничего не загружается, значит и применять нечего.",
+    fluxSourcesUnread:
+      "Источников тех видов, что удалось прочитать, нет. Виды выше перечислить не удалось, поэтому что загружает этот кластер, здесь неизвестно.",
+    fluxReconcilersUnread:
+      "Kustomization нет, а HelmRelease перечислить не удалось, поэтому применяет ли Flux что-нибудь, здесь неизвестно.",
+    fluxUnreadNote:
+      "Всё ниже, что ссылается на один из них, показано как непрочитанное, а не как отсутствующее.",
     fluxSourcesDescription:
       "Источник загружается один раз, и его применяет всё, что на него ссылается. Это та половина Flux, которая ломается тихо: если источник перестал загружаться, каждый реконсилятор под ним продолжает показывать последнюю ревизию, которую успел применить.",
     noUrlDeclared: "URL не задан",
@@ -4625,6 +4662,9 @@ export const ru: Catalogue = {
     },
     fluxSourceUnaffected:
       "На этот источник никто не ссылается, поэтому ничего не затронуто.",
+    fluxFrozenUnread:
+      "HelmRelease перечислить не удалось, поэтому собранные из этого источника здесь не учтены.",
+    fluxHelmReleasesNotRead: "HelmRelease не прочитаны",
     readingFluxWorkloads: "Читаем собственные нагрузки Flux…",
     fluxWorkloadsTitle: "Собственные нагрузки Flux",
     fluxWorkloadsDescription:
@@ -4717,11 +4757,11 @@ export const ru: Catalogue = {
         "Запрошено и лимит неизвестны: список подов в {n} пространствах имён отклонён ({namespaces}). Сумма по остальным была бы меньшим числом, выданным за целое, поэтому её нет.",
     },
     nodeBudgetRule: {
-      one: "requested: max(init, Σ containers) + overhead по {n} поду, занимающему место здесь",
-      few: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
-      many: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} поду, занимающему место здесь",
+      few: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
+      many: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
       other:
-        "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
     },
     unknownWord: "неизвестно",
     noUsageSource: "источника нет",
@@ -4853,6 +4893,9 @@ export const ru: Catalogue = {
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
+    tlsNotChecked: "TLS не проверен",
+    relatedShortBy:
+      "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopNothingPublishedYet: "пока ничего не опубликовано",
@@ -4984,6 +5027,8 @@ export const ru: Catalogue = {
       "То, что лежит в их emptyDir, переезда не переживёт.",
     waitingOnTheseExplained:
       "Они уедут сами, как только кластер позволит. Если закрыть окно, освобождение не прервётся.",
+    drainReportsMissed:
+      "Часть сообщений этого освобождения потерялась по дороге в окно, так что оно, возможно, уже закончилось. Здесь показано последнее, что дошло.",
     stoppedExplained:
       "Здесь ожидание ничего не изменит: на каждого нужен ответ, который можете дать только вы.",
     notNowExplained:
@@ -5181,15 +5226,15 @@ export const ru: Catalogue = {
     lokiNamespacesTitle: "Пространства имён, по которым у него есть строки",
     lokiOneLineProof:
       "Одной строки достаточно как доказательства, поэтому запрашивается ровно одна. Пространство имён, ничего не писавшее за это окно, не доказывает ни того, ни другого — поэтому пустой ответ показан как вопрос, а не как приговор.",
-    lokiRefusedQuery: "отклонил запрос",
+    lokiQueryFailed: "запрос не удался",
     lokiHasLines: "строки есть",
     lokiNothingInWindow: "в этом окне ничего",
     lokiHoldsNone:
       "Этот Loki не хранит ни одного пространства имён этого кластера",
     lokiHoldsNoneBody:
       "Ни у одного из опрошенных пространств имён нет ни строки за последний час. Адрес отвечает на LogQL — это всё, что доказала проверка подключения, — значит за ним, скорее всего, логи другого кластера, и предложение истории в просмотрщике логов так и будет отвечать пустотой.",
-    lokiRefusalNotAbsence:
-      "Отказ — это не отсутствие. Об этих пространствах имён здесь не утверждается ничего.",
+    lokiFailureNotAbsence:
+      "Неудавшийся запрос — это не отсутствие. Об этих пространствах имён здесь не утверждается ничего.",
     integrationsNoCluster:
       "Подключите кластер, и здесь будет видно, что у него есть. Каждое расширение определяется запросом CRD к API-серверу, а спрашивать сейчас некого.",
     yamlNoteDefault: "объект в том виде, в каком его хранит API-сервер",
@@ -5280,6 +5325,7 @@ export const ru: Catalogue = {
     nothingBehindIt: "за ним ничего нет",
     certificateFailed: "сертификат не выдан",
     namesSomethingAbsent: "ссылается на отсутствующее",
+    namesSomethingUnread: "ссылается на непрочитанное",
     worthALook: "стоит посмотреть",
     everyHost: "любой хост",
     anyHostNotMatched: "любой хост, не подошедший выше",
@@ -5288,6 +5334,7 @@ export const ru: Catalogue = {
     httpAndHttps: "HTTP и HTTPS",
     httpsOnly: "только HTTPS",
     nameAbsent: "{name} — отсутствует",
+    nameUnread: "{name} — не прочитан",
     noFrontendConfig: "нет FrontendConfig",
     nothingTerminatesTls: "TLS никто не терминирует",
     uploadedToGoogle: "загружен в Google, не в этом кластере",
@@ -5363,6 +5410,12 @@ export const ru: Catalogue = {
       "Строка на ALB, а не на Ingress — потому что именно этот контроллер сажает несколько Ingress из разных пространств имён на один балансировщик.",
     ciliumPageDescription:
       "Каждый эндпоинт с политиками, которые его выбирают, и те, которых не выбирает ничего",
+    couldNotReadCilium: "Не удалось прочитать эндпоинты и политики Cilium",
+    couldNotReadCiliumBody:
+      "Покрытие — это два списка, сведённые вместе, и один из них не вернулся, поэтому здесь нельзя сказать, до каких подов дотягивается политика.",
+    readingCilium: "Читаем эндпоинты и политики…",
+    ciliumNoEndpoints:
+      "В этом кластере нет ни одного CiliumEndpoint. Cilium пишет по одному на каждый управляемый под, значит здесь он не управляет ни одним.",
     crdCouldNotBeListed: "Не удалось перечислить {crd}",
     albUnreadNote:
       "Группы всё равно строятся по самим Ingress; не хватает того, что настроил для них класс.",
@@ -6310,6 +6363,12 @@ export const ru: Catalogue = {
       many: "{n} реконсиляторов из {sources}",
       other: "{n} реконсиляторов из {sources}",
     },
+    reconcilersSomeUnread: {
+      one: "{n} реконсилятор · часть видов не прочитана",
+      few: "{n} реконсилятора · часть видов не прочитана",
+      many: "{n} реконсиляторов · часть видов не прочитана",
+      other: "{n} реконсиляторов · часть видов не прочитана",
+    },
     sources: {
       one: "{n} источник",
       few: "{n} источника",
@@ -6809,6 +6868,7 @@ export const ru: Catalogue = {
     nNotRead: "не разобрано {n}",
     worthALook: "на {n} стоит взглянуть",
     worthALookOfTotal: "на {n} из {total} стоит взглянуть",
+    notCheckedOfTotal: "{n} из {total} без проверки",
     hostsAcrossNamespaces: {
       one: "{n} хост во всех пространствах имён",
       few: "{n} хоста во всех пространствах имён",
@@ -7083,11 +7143,11 @@ export const ru: Catalogue = {
       many: "{n} балансировщиков",
       other: "{n} балансировщика",
     },
-    queriesRefused: {
-      one: "{n} запрос отклонён",
-      few: "{n} запроса отклонены",
-      many: "{n} запросов отклонено",
-      other: "{n} запроса отклонены",
+    queriesFailed: {
+      one: "{n} запрос не удался",
+      few: "{n} запроса не удались",
+      many: "{n} запросов не удалось",
+      other: "{n} запроса не удались",
     },
     failedPods: {
       one: "{n} упавший под",

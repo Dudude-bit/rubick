@@ -117,6 +117,23 @@ describe("the routing map", () => {
   });
 
   /**
+   * #246 greyed the Service node and left the host in front of it green, so
+   * the map still said the host was fine on the strength of an unread list.
+   */
+  it("draws the host in front of unread backends as unknown too", () => {
+    const map = mapOf({
+      ingresses: [
+        ingress("shop", "shop.example.com", { secretName: "shop-tls" }),
+      ],
+      services: [service("web")],
+      backingKnown: false,
+      backingError: "endpointslices is forbidden",
+    });
+
+    expect(map.columns[1].nodes[0].tone).toBe("unknown");
+  });
+
+  /**
    * The shape the chain cannot show and the reason this view exists: two
    * hostnames landing on one Service is invisible in a list however it is
    * ordered, and it is exactly what somebody is looking for when one of the
@@ -165,6 +182,31 @@ describe("the routing map", () => {
     expect(byLabel.get("promo.example.com")?.tag).toEqual({
       text: "no TLS",
       tone: "warn",
+    });
+  });
+
+  /** TLS ending at a load balancer in front is TLS; the page row said so and the map beside it said "no TLS" in warn. */
+  it("tags a host TLS when something in front terminates it", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => true,
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({ text: "TLS", tone: "mute" });
+  });
+
+  /** A supplier in front that could not say is not "no TLS"; fails if the unknown is read as none. */
+  it("tags a host as not checked when what is in front could not say", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => "unknown",
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
     });
   });
 

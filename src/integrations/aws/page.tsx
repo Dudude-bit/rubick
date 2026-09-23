@@ -31,11 +31,17 @@ import {
   Finding,
   TroubleList,
   TroubleRow,
-  type Tone,
+  type RowTone,
   VendorReadFailure,
 } from "../page-kit";
 import { useAlbSources } from "./data";
-import { albGroups, type AlbFinding, type AlbGroup } from "./groups";
+import {
+  albGroups,
+  groupSeverity,
+  groupsKnown,
+  type AlbFinding,
+  type AlbGroup,
+} from "./groups";
 import { useT } from "@/i18n/useT";
 import {
   INGRESS_CLASS_PARAMS_CRD,
@@ -61,9 +67,13 @@ export default function AwsLoadBalancerPage() {
             params: sources.data.params,
             classParams: sources.data.classParams,
             ownClasses: sources.data.ownClasses,
+            unread: sources.data.unread,
           })
         : [],
     [sources.data]
+  );
+  const bindingsKnown = !sources.data?.unread.some(
+    (read) => read.crd === TARGET_GROUP_BINDING_CRD
   );
 
   if (sources.error) {
@@ -81,7 +91,7 @@ export default function AwsLoadBalancerPage() {
       <SectionHeader
         title="AWS Load Balancer Controller"
         count={
-          sources.isPending
+          sources.isPending || !groupsKnown(groups)
             ? undefined
             : t("count", "loadBalancers", { n: groups.length })
         }
@@ -126,6 +136,7 @@ export default function AwsLoadBalancerPage() {
               <GroupRow
                 group={group}
                 bindings={sources.data?.bindings ?? []}
+                bindingsKnown={bindingsKnown}
                 openByDefault={openByDefault}
                 last={last}
               />
@@ -137,7 +148,7 @@ export default function AwsLoadBalancerPage() {
   );
 }
 
-const severityOfGroup = (group: AlbGroup) => group.worst;
+const severityOfGroup = groupSeverity;
 
 const searchableGroup = (group: AlbGroup) => [
   group.name,
@@ -150,7 +161,7 @@ const searchableGroup = (group: AlbGroup) => [
 
 function groupState(group: AlbGroup): {
   key: keyof typeof en.empty;
-  tone: Tone;
+  tone: RowTone;
 } {
   if (group.findings.some((finding) => finding.kind === "no-params")) {
     return { key: "namesSomethingAbsent", tone: "err" };
@@ -164,17 +175,22 @@ function groupState(group: AlbGroup): {
   if (group.findings.some((finding) => finding.kind === "shared")) {
     return { key: "sharedAcrossNamespaces", tone: "warn" };
   }
+  if (!group.paramsKnown) {
+    return { key: "namesSomethingUnread", tone: "unknown" };
+  }
   return { key: "serving", tone: "ok" };
 }
 
 function GroupRow({
   group,
   bindings,
+  bindingsKnown,
   openByDefault,
   last,
 }: {
   group: AlbGroup;
   bindings: Parameters<typeof bindingSummary>[0][];
+  bindingsKnown: boolean;
   openByDefault: boolean;
   last: boolean;
 }) {
@@ -203,7 +219,9 @@ function GroupRow({
           {namespaces.length > 1 &&
             ` ${t("count", "acrossNamespaces", { n: namespaces.length })}`}
           {hosts.length > 0 && ` · ${t("count", "hosts", { n: hosts.length })}`}
-          {group.name === null && ` · ${t("action", "itsOwnAlb")}`}
+          {group.name === null &&
+            group.paramsKnown &&
+            ` · ${t("action", "itsOwnAlb")}`}
         </>
       }
       state={{ text: t("empty", state.key), tone: state.tone }}
@@ -212,7 +230,11 @@ function GroupRow({
     >
       <div className="flex flex-col gap-3">
         {group.params && <ParamsBlock group={group} />}
-        <MembersBlock group={group} bindings={bindings} />
+        <MembersBlock
+          group={group}
+          bindings={bindings}
+          bindingsKnown={bindingsKnown}
+        />
         {group.findings.map((finding, index) => (
           <FindingLine key={index} finding={finding} />
         ))}
@@ -272,9 +294,11 @@ function ParamsBlock({ group }: { group: AlbGroup }) {
 function MembersBlock({
   group,
   bindings,
+  bindingsKnown,
 }: {
   group: AlbGroup;
   bindings: Parameters<typeof bindingSummary>[0][];
+  bindingsKnown: boolean;
 }) {
   const t = useT();
   return (
@@ -371,7 +395,12 @@ function MembersBlock({
                         </ObjectLink>
                       ) : (
                         <span className="text-fg-fnt">
-                          {t("empty", "noTargetGroupBinding")}
+                          {t(
+                            "empty",
+                            bindingsKnown
+                              ? "noTargetGroupBinding"
+                              : "notReadLower"
+                          )}
                         </span>
                       )}
                     </Cell>

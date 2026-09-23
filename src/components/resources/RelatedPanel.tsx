@@ -20,6 +20,7 @@ import { useT } from "@/i18n/useT";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import type { RelatedObjects, RelatedRef } from "@/hooks/useRelatedObjects";
 import { ResourceRef } from "./ResourceRef";
 
@@ -97,9 +98,10 @@ export function RelatedPanel({
     <div className="flex flex-col gap-[18px]">
       {query.error && (
         <p className="max-w-[64ch] text-[11.5px] text-warn">
-          An integration that reads {kind} objects could not answer, so what is
-          below is short by an unknown amount.{" "}
-          <span className="font-mono text-fg-mut">{query.error.message}</span>
+          {t("empty", "relatedShortBy", { kind })}{" "}
+          <span className="font-mono text-fg-mut">
+            {errorToShow(query.error)}
+          </span>
         </p>
       )}
 

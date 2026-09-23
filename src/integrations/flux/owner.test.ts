@@ -66,6 +66,20 @@ describe("the inventory is the fact, the label is the claim", () => {
     expect(answer).not.toHaveProperty("source");
   });
 
+  /**
+   * A refused Kustomizations list came back empty, and every labelled object
+   * was "claimed by an owner nobody answers to" — a verdict on a list nobody
+   * read.
+   */
+  it("fails rather than calls the owner missing when its list was refused", async () => {
+    listCustomResources.mockRejectedValue(
+      new Error("kustomizations.kustomize.toolkit.fluxcd.io is forbidden", {
+        cause: { code: "PERMISSION_DENIED", message: "forbidden" },
+      })
+    );
+    await expect(ownerOf([podinfo()])).rejects.toThrow(/forbidden/);
+  });
+
   it("reports delivery once the inventory names the object back", async () => {
     listCustomResources.mockResolvedValue([kustomization([INVENTORY_ID])]);
     const [answer] = await ownerOf([podinfo()]);

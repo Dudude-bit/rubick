@@ -95,6 +95,18 @@ pub fn validate_config_key(key: &str) -> Result<()> {
     Ok(())
 }
 
+/// A name as the API server holds every kind to it, whatever else its kind
+/// asks: one path segment. RBAC names such as `system:controller:x` are not
+/// subdomains, so a reader of any kind can check no more than this.
+pub fn validate_path_segment(name: &str) -> Result<()> {
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '%']) {
+        return Err(Error::InvalidInput(format!(
+            "'{name}' cannot be an object name"
+        )));
+    }
+    Ok(())
+}
+
 /// Validate a Kubernetes namespace name (DNS-1123 label)
 pub fn validate_namespace(name: &str) -> Result<()> {
     if name.is_empty() {
@@ -120,6 +132,18 @@ pub fn validate_namespace(name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// The YAML tab reads any kind by the name it is handed. A `/` or a `..`
+    /// in it would address another path on the API server.
+    #[test]
+    fn an_object_name_is_one_path_segment() {
+        for good in ["web-0", "system:controller:node", "node.example.com"] {
+            assert!(validate_path_segment(good).is_ok(), "{good}");
+        }
+        for bad in ["", ".", "..", "a/b", "../secrets", "a%2Fb"] {
+            assert!(validate_path_segment(bad).is_err(), "{bad}");
+        }
+    }
+
     use super::*;
 
     /// A static pod is named after its node, and a node on EKS, kOps or

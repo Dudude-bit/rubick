@@ -36,10 +36,13 @@ import {
   type Backing,
   type BackingSources,
   type SecretRef,
+  edgeTlsOf,
   frontingIngressesOf,
   proxyServicesBy,
   terminatedUpstreamOf,
+  type EdgeTls,
 } from "../ingress";
+import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
 
 export type { Backing } from "../ingress";
@@ -138,6 +141,8 @@ export interface NginxHostGroup {
   split: HostSplit | null;
   tlsSecrets: SecretRef[];
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 export interface NginxSources extends BackingSources {
@@ -154,7 +159,7 @@ export interface NginxSources extends BackingSources {
    * finds. Absent on a cluster with no such vendor, where
    * {@link terminatedUpstream} is the whole answer.
    */
-  upstreamTls?: (host: string | null) => boolean;
+  upstreamTls?: (host: string | null) => boolean | "unknown";
 }
 
 /** The label an ingress-nginx chart puts on its own pods. */
@@ -182,6 +187,10 @@ export function terminatedUpstream(
   sources: NginxSources
 ): { kind: "Ingress"; name: string; namespace: string } | null {
   return terminatedUpstreamOf(host, frontingIngresses(sources));
+}
+
+export function edgeTls(host: string | null, sources: NginxSources): EdgeTls {
+  return edgeTlsOf(host, sources, frontingIngresses(sources));
 }
 
 /** The IngressClasses whose controller is this nginx. */
@@ -355,10 +364,9 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
-  // Something in front holds the certificate; the hop into the cluster is
-  // plaintext by design and is not a fault to report per host.
-  if (terminatedUpstream(host, sources)) return null;
-  if (sources.upstreamTls?.(host)) return null;
+  // Something in front holds the certificate, and the hop into the cluster is
+  // plaintext by design; or what is in front could not be read.
+  if (edgeTls(host, sources).at !== "none") return null;
   const redirectAnyway = routes.some((route) =>
     route.annotations.some(
       (reading) =>
@@ -498,10 +506,50 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       split,
       tlsSecrets,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown || !own.some((route) => route.service !== null),
     };
   });
 
   return groups.sort(compareGroups);
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: NginxHostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stop = group.findings.find((finding) => finding.kind === "stop");
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate) {
+    return {
+      text:
+        certificate.kind === "certificate" && certificate.expiry?.expired
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
+      tone: "err",
+    };
+  }
+  if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
+    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function compareGroups(a: NginxHostGroup, b: NginxHostGroup): number {

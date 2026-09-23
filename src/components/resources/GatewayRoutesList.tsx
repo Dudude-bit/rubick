@@ -60,7 +60,7 @@ import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { cn } from "@/lib/utils";
-import { verbatim } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type { RouteInfo } from "@/generated/types";
 
 // Radix refuses an empty string as an item value, so the "no filter"
@@ -561,7 +561,7 @@ export function GatewayRoutesList() {
               {t("empty", "gwCouldNotReadRoutes")}
             </p>
             <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-              {verbatim(error.message)}
+              {errorToShow(error)}
             </p>
           </div>
         ) : isLoading && routes.length === 0 ? (
@@ -578,7 +578,7 @@ export function GatewayRoutesList() {
               {t("empty", "gwCouldNotCheckInstall")}
             </p>
             <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-              {verbatim(detectionError.message)}
+              {errorToShow(detectionError)}
             </p>
           </div>
         ) : detectionLoading ? (

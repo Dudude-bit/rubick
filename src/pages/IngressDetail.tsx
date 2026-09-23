@@ -62,7 +62,8 @@ interface AccessUrl {
   backendService: string;
   backendPort: string;
   resourceBackend: string | null;
-  isHttps: boolean;
+  /** `null` where the controller holding the certificate could not tell. */
+  isHttps: boolean | null;
   /** `true` when TLS covers the host only through a catch-all entry. */
   viaCatchAll: boolean;
 }
@@ -78,9 +79,9 @@ function generateAccessUrls(
    * three managed clouds keep the certificate off the Ingress — an ACM ARN,
    * a `ManagedCertificate`, one installed on an Application Gateway — so
    * without this every HTTPS site on a managed cluster was offered as
-   * `http://`.
+   * `http://`. `null` where it could not tell.
    */
-  vendorTls: (host: string) => boolean | null = () => null
+  vendorTls: (host: string) => boolean | null
 ): AccessUrl[] {
   const urls: AccessUrl[] = [];
 
@@ -89,15 +90,15 @@ function generateAccessUrls(
     // A wildcard entry in `spec.tls` serves this host; comparing literally
     // handed the reader an http:// URL for a host that refuses it.
     const explicit = covers(tlsHosts, rule.host);
-    const isHttps = explicit || hasCatchAllTls || vendorTls(rule.host) === true;
-    const scheme = isHttps ? "https" : "http";
+    const isHttps = explicit || hasCatchAllTls || vendorTls(rule.host);
+    const scheme = isHttps === null ? "" : isHttps ? "https://" : "http://";
     const actualHost = isWildcard ? "" : rule.host;
 
     for (const path of rule.paths) {
       urls.push({
         fullUrl: actualHost
-          ? `${scheme}://${actualHost}${path.path}`
-          : `${scheme}://<host>${path.path}`,
+          ? `${scheme}${actualHost}${path.path}`
+          : `${scheme}<host>${path.path}`,
         host: rule.host,
         displayHost: isWildcard ? allHosts : rule.host,
         path: path.path,
@@ -105,7 +106,7 @@ function generateAccessUrls(
         backendPort: path.backendPort,
         resourceBackend: path.resourceBackend,
         isHttps,
-        viaCatchAll: isHttps && !explicit,
+        viaCatchAll: isHttps === true && !explicit,
       });
     }
   }
@@ -201,13 +202,16 @@ export function IngressDetail() {
     [ingress]
   );
   const vendorTls = useIngressTls(asked);
-  const terminatedByVendor = (host: string) =>
-    ingress
-      ? (vendorTls.of(
-          { namespace: ingress.namespace, name: ingress.name },
-          host
-        )?.terminated ?? null)
-      : null;
+  // `null` where the vendor could not tell, or has not answered yet.
+  const terminatedByVendor = (host: string): boolean | null => {
+    if (!ingress || !host) return false;
+    const said = vendorTls.of(
+      { namespace: ingress.namespace, name: ingress.name },
+      host
+    )?.terminated;
+    if (said !== undefined) return said;
+    return vendorTls.isPending || vendorTls.error !== null ? null : false;
+  };
   const accessUrls = generateAccessUrls(
     rules,
     tlsHosts,
@@ -220,9 +224,15 @@ export function IngressDetail() {
   const vendorTerminates = rules.some(
     (rule) => rule.host && terminatedByVendor(rule.host) === true
   );
-  const hasTls =
-    tlsHosts.length > 0 || tlsConfigs.length > 0 || vendorTerminates;
-  const plainHttp = accessUrls.filter((url) => !url.isHttps).length;
+  const tls: "yes" | "no" | "unknown" =
+    tlsHosts.length > 0 || tlsConfigs.length > 0 || vendorTerminates
+      ? "yes"
+      : rules.some(
+            (rule) => rule.host && terminatedByVendor(rule.host) === null
+          )
+        ? "unknown"
+        : "no";
+  const plainHttp = accessUrls.filter((url) => url.isHttps === false).length;
 
   const connections = useConnections(ResourceType.Ingress, name, namespace);
   const tlsSecretNames = tlsConfigs.flatMap((config) =>
@@ -321,16 +331,22 @@ export function IngressDetail() {
       // Once the certificate has been read, how long it has left is a more
       // useful answer than how many hosts it covers — the host count is a
       // shape, and the expiry is a date somebody has to act on.
-      value: !hasTls
-        ? t("empty", "noneTrafficUnencrypted")
-        : soonest
-          ? expiryText(soonest, t)
-          : hasCatchAllTls
-            ? t("empty", "catchAllCertificate")
-            : t("count", "hosts", { n: tlsHosts.length }),
-      tone: !hasTls
-        ? "warn"
-        : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
+      value:
+        tls === "no"
+          ? t("empty", "noneTrafficUnencrypted")
+          : tls === "unknown"
+            ? t("empty", "tlsNotChecked")
+            : soonest
+              ? expiryText(soonest, t)
+              : hasCatchAllTls
+                ? t("empty", "catchAllCertificate")
+                : t("count", "hosts", { n: tlsHosts.length }),
+      tone:
+        tls === "no"
+          ? "warn"
+          : tls === "unknown"
+            ? undefined
+            : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
     },
   ];
 
@@ -383,10 +399,19 @@ export function IngressDetail() {
                   <span
                     className={cn(
                       "text-[11px] font-medium",
-                      url.isHttps ? "text-fg-fnt" : "text-warn"
+                      url.isHttps === false ? "text-warn" : "text-fg-fnt"
                     )}
+                    title={
+                      url.isHttps === null
+                        ? t("empty", "tlsNotChecked")
+                        : undefined
+                    }
                   >
-                    {url.isHttps ? "HTTPS" : "HTTP"}
+                    {url.isHttps === null
+                      ? "?"
+                      : url.isHttps
+                        ? "HTTPS"
+                        : "HTTP"}
                   </span>
                   <span className="min-w-0 break-all font-mono text-fg">
                     <span className="text-fg-mut">{url.displayHost}</span>
@@ -419,7 +444,7 @@ export function IngressDetail() {
                         )
                       }
                     />
-                    {url.host && url.host !== "*" && (
+                    {url.host && url.host !== "*" && url.isHttps !== null && (
                       <IconAction
                         label={t("action", "openInBrowser")}
                         icon={ExternalLink}
@@ -497,9 +522,9 @@ export function IngressDetail() {
                 {rules.map((rule, ruleIdx) => {
                   const isWildcard = rule.host === "*" || !rule.host;
                   const covered =
-                    covers(tlsHosts, rule.host) ||
-                    hasCatchAllTls ||
-                    terminatedByVendor(rule.host) === true;
+                    covers(tlsHosts, rule.host) || hasCatchAllTls
+                      ? true
+                      : terminatedByVendor(rule.host);
                   return [
                     // The host is context for the paths under it, so it is
                     // said once above them instead of on every row.
@@ -515,11 +540,14 @@ export function IngressDetail() {
                         <span className="font-mono text-fg-mut">
                           {isWildcard ? t("empty", "allHosts") : rule.host}
                         </span>
-                        {!covered && (
+                        {covered === false && (
                           <span className="text-warn">
                             {" "}
                             · {t("empty", "noTls")}
                           </span>
+                        )}
+                        {covered === null && (
+                          <span> · {t("empty", "tlsNotChecked")}</span>
                         )}
                       </TableCell>
                     </TableRow>,
@@ -714,16 +742,18 @@ export function IngressDetail() {
           <span
             className={cn(
               "text-[11px]",
-              !hasTls
+              tls === "no"
                 ? "text-warn"
-                : soonest?.tone
+                : tls === "yes" && soonest?.tone
                   ? TONE_CLASS[soonest.tone]
                   : "text-fg-fnt"
             )}
           >
-            {!hasTls
+            {tls === "no"
               ? t("empty", "noTls")
-              : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
+              : tls === "unknown"
+                ? t("empty", "tlsNotChecked")
+                : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
           </span>
         </>
       }

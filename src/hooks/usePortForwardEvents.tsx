@@ -18,6 +18,17 @@ export function usePortForwardEvents() {
     {}
   );
 
+  // A lag can drop a forward's `stopped`; the backend's list is the only
+  // other place that knows it ended.
+  useEffect(() => {
+    const off = listenEvent("event-bridge-lagged", () => {
+      void refreshSessions().catch(() => {});
+    });
+    return () => {
+      void off.then((stop) => stop());
+    };
+  }, [refreshSessions]);
+
   useEffect(() => {
     let unlisten: null | (() => void) = null;
 

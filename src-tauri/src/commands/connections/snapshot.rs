@@ -81,6 +81,18 @@ impl Snapshots {
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Arc<Snapshot>> {
+        Ok(self.take(context, ctx, gateway, false).await?.0)
+    }
+
+    /// The snapshot, and whether its read began before this call asked;
+    /// `fresh` starts one that begins now, for the callers after it to share.
+    async fn take(
+        &self,
+        context: &str,
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+        fresh: bool,
+    ) -> Result<(Arc<Snapshot>, bool)> {
         let key = (
             context.to_string(),
             ctx.namespace.clone().unwrap_or_default(),
@@ -98,12 +110,14 @@ impl Snapshots {
         let now = std::time::Instant::now();
         self.entries
             .retain(|_, (at, cell)| !cell.initialized() || now.duration_since(*at) < self.kept_for);
-        let cell = self
-            .entries
-            .entry(key.clone())
-            .or_insert_with(|| (now, Arc::default()))
-            .1
-            .clone();
+        let (cell, joined) = match self.entries.entry(key.clone()) {
+            dashmap::Entry::Occupied(held) if !fresh => (held.get().1.clone(), true),
+            entry => {
+                let cell = SnapshotCell::default();
+                entry.insert((now, cell.clone()));
+                (cell, false)
+            }
+        };
         let snapshot = cell
             .get_or_try_init(|| async { Snapshot::of(ctx, gateway).await.map(Arc::new) })
             .await?
@@ -112,7 +126,7 @@ impl Snapshots {
             self.entries
                 .remove_if(&key, |_, (_, held)| Arc::ptr_eq(held, &cell));
         }
-        Ok(snapshot)
+        Ok((snapshot, joined))
     }
 }
 
@@ -141,6 +155,30 @@ impl<'a> Source<'a> {
             None => Snapshot::of(ctx, gateway).await.map(Arc::new),
         }
     }
+
+    /// The snapshot a subject is read out of. A shared read that began before
+    /// this call and lacks the subject is no word on it — the object may be
+    /// newer than the read — so one that begins now answers instead.
+    pub(super) async fn subject_snapshot(
+        self,
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+        lacks_subject: impl Fn(&Snapshot) -> bool,
+    ) -> Result<Arc<Snapshot>> {
+        let Some((snapshots, context)) = self.shared else {
+            return Snapshot::of(ctx, gateway).await.map(Arc::new);
+        };
+        let (snapshot, joined) = snapshots.take(context, ctx, gateway, false).await?;
+        if joined && lacks_subject(&snapshot) {
+            return Ok(snapshots.take(context, ctx, gateway, true).await?.0);
+        }
+        Ok(snapshot)
+    }
+}
+
+/// Whether a list that answered holds nothing `is_it` picks.
+pub(super) fn lacks<K>(list: &Read<K>, is_it: impl Fn(&K) -> bool) -> bool {
+    list.as_ref().is_ok_and(|items| !items.iter().any(is_it))
 }
 
 /// A list whose failure is part of the answer rather than the end of it, and
@@ -196,6 +234,26 @@ pub(super) fn found<'a, K>(
         .iter()
         .find(|item| is_it(item))
         .ok_or_else(|| Error::not_found(kind, name, namespace))
+}
+
+/// The subject, out of its own GET, gone in the same words [`found`] uses.
+///
+/// Only a 404 that names this object is its absence. One that names nothing
+/// is a path the cluster does not serve, and keeps the cluster's words.
+pub(super) fn got<K>(
+    answer: kube::Result<K>,
+    kind: &str,
+    namespace: &str,
+    name: &str,
+) -> Result<K> {
+    answer.map_err(|err| match err {
+        kube::Error::Api(status)
+            if status.code == 404 && status.details.as_ref().is_some_and(|d| d.name == name) =>
+        {
+            Error::not_found(kind, name, namespace)
+        }
+        other => Error::from(other),
+    })
 }
 
 impl Snapshot {
@@ -716,7 +774,7 @@ mod read_live_tests {
 #[cfg(test)]
 mod shared_tests {
     use super::*;
-    use crate::client::served::test_server::server;
+    use crate::client::served::test_server::{answering, server};
 
     const NS: &str = "shop";
 
@@ -820,5 +878,58 @@ mod shared_tests {
         );
         snapshots.get("kind", &ctx, None).await.expect("again");
         assert_eq!(pod_lists(&hits), 2);
+    }
+
+    const SERVICES: &str = "/api/v1/namespaces/shop/services";
+
+    /// Service `b` created while another card's read was in flight. Joining
+    /// that read handed `b` a Services list from before it existed, and its
+    /// page said "Service b not found" about an object that is there.
+    #[tokio::test]
+    async fn a_subject_newer_than_the_read_it_joined_is_read_again() {
+        let table = routes((200, empty()));
+        let (client, hits) = answering(move |path, nth| {
+            if path == SERVICES && nth > 1 {
+                let b = serde_json::json!({ "metadata": { "name": "b", "namespace": NS } });
+                let list = serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [b] });
+                return (200, list.to_string());
+            }
+            table
+                .iter()
+                .find(|(route, _, _)| *route == path)
+                .map_or((404, "{}".to_string()), |(_, status, body)| {
+                    (*status, body.clone())
+                })
+        })
+        .await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots::default();
+
+        let (first, b) = tokio::join!(snapshots.get("kind", &ctx, None), async {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            let source = Source::shared(&snapshots, "kind");
+            connections_through(source, &ctx, "Service", "b", None).await
+        });
+        assert!(first
+            .expect("read")
+            .services
+            .as_ref()
+            .is_ok_and(Vec::is_empty));
+        assert_eq!(b.expect("b is there").subject.name, "b");
+        assert_eq!(hits.lock().unwrap().get(SERVICES), Some(&2));
+    }
+
+    /// Only a read that began before the call is asked again: one of its own
+    /// that lacks the subject is the subject gone, for one list's price.
+    #[tokio::test]
+    async fn a_subject_missing_from_its_own_read_is_not_found_at_once() {
+        let (client, hits) = server(routes((200, empty()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots::default();
+
+        let source = Source::shared(&snapshots, "kind");
+        let gone = connections_through(source, &ctx, "Service", "b", None).await;
+        assert!(matches!(gone, Err(Error::NotFound { .. })), "{gone:?}");
+        assert_eq!(hits.lock().unwrap().get(SERVICES), Some(&1));
     }
 }

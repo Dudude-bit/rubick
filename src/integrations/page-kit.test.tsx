@@ -224,6 +224,26 @@ describe("a list ordered by trouble", () => {
     list([{ name: "blog", severity: null }]);
     expect(screen.getByText("all 1 well")).toBeInTheDocument();
   });
+
+  /**
+   * A host whose backends were never read summed to "all well": the line
+   * counted only what was found wrong, and nothing is found where nothing
+   * is looked at.
+   */
+  it("does not call rows it could not check well", () => {
+    list([
+      { name: "blog", severity: "unknown" },
+      { name: "shop", severity: null },
+    ]);
+    expect(screen.getByText("1 of 2 not checked")).toBeInTheDocument();
+    expect(screen.queryByText(/well/)).not.toBeInTheDocument();
+  });
+
+  /** An unchecked row is not a finding to open for. */
+  it("does not open a row it could not check", () => {
+    list([{ name: "blog", severity: "unknown" }], "/", 2, "any");
+    expect(screen.getByText("blog closed")).toBeInTheDocument();
+  });
 });
 
 describe("a vendor page whose read failed", () => {

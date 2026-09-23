@@ -11,6 +11,24 @@ use parking_lot::Mutex;
 pub const IPC_TARGET_BYTES: usize = 262_144;
 pub const IPC_LIMIT_BYTES: usize = 1_048_576;
 
+/// What `value` comes to as JSON, counted without keeping the bytes.
+#[must_use]
+pub fn wire_len<T: serde::Serialize>(value: &T) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0 += buf.len();
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Count(0);
+    let _ = serde_json::to_writer(&mut count, value);
+    count.0
+}
+
 /// `rows`, grouped so that each group serialises to at most `budget` bytes.
 /// Order is kept; a single row over the budget travels alone rather than
 /// being dropped. Every row is serialised once here to be measured, which
@@ -21,7 +39,7 @@ pub fn chunks_within<T: serde::Serialize>(rows: Vec<T>, budget: usize) -> Vec<Ve
     let mut chunk = Vec::new();
     let mut used = 0;
     for row in rows {
-        let bytes = serde_json::to_vec(&row).map_or(0, |v| v.len()) + 1;
+        let bytes = wire_len(&row) + 1;
         if !chunk.is_empty() && used + bytes > budget {
             chunks.push(std::mem::take(&mut chunk));
             used = 0;

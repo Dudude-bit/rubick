@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import type {
   DrainOptions,
   DrainOutcome,
@@ -37,7 +38,14 @@ export type DrainState =
   | { phase: "idle" }
   /** Started, and nothing has come back yet. */
   | { phase: "starting"; node: string }
-  | { phase: "running"; node: string; attempt: number; report: DrainReport }
+  | {
+      phase: "running";
+      node: string;
+      attempt: number;
+      report: DrainReport;
+      /** The event bridge fell behind since this report; the ending may have been dropped. */
+      missed: boolean;
+    }
   | {
       phase: "done";
       node: string;
@@ -106,6 +114,12 @@ export function useNodeDrain({
    * The wish is remembered and spent the moment the handle arrives.
    */
   const wantsStop = useRef(false);
+  /**
+   * The finish listener is up. A stop sent before it is answered with a
+   * `drain-finished` nobody hears, and the gate it took with it makes the
+   * subscribe fail as "not found".
+   */
+  const listening = useRef(false);
 
   const detach = useCallback(() => {
     while (unlisteners.current.length > 0) unlisteners.current.pop()?.();
@@ -127,21 +141,25 @@ export function useNodeDrain({
       detach();
       drainId.current = null;
       wantsStop.current = false;
+      listening.current = false;
       setState({ phase: "starting", node });
 
       try {
         const handle = await commands.startNodeDrain(node, options);
-        if (disposed.current || wantsStop.current) {
+        if (disposed.current) {
           await commands.cancelNodeDrain(handle.drainId).catch(() => {});
-          // Still subscribe below when it was only a stop: the backend
-          // answers a cancel with `drain-finished`, and that is the event
-          // that gets the dialog out of "starting".
-          if (disposed.current) return;
+          return;
         }
         drainId.current = handle.drainId;
-        setState({ phase: "running", node, attempt: 0, report: EMPTY });
+        setState({
+          phase: "running",
+          node,
+          attempt: 0,
+          report: EMPTY,
+          missed: false,
+        });
 
-        const [offProgress, offFinished] = await Promise.all([
+        const [offProgress, offFinished, offLagged] = await Promise.all([
           listenEvent("drain-progress", (event) => {
             if (event.payload.drain_id !== drainId.current) return;
             setState({
@@ -149,6 +167,7 @@ export function useNodeDrain({
               node: event.payload.node,
               attempt: event.payload.attempt,
               report: event.payload.report,
+              missed: false,
             });
           }),
           listenEvent("drain-finished", (event) => {
@@ -158,23 +177,40 @@ export function useNodeDrain({
             setState({ phase: "done", node: ended, outcome, report, message });
             finished.current?.({ node: ended, outcome, report, message });
           }),
+          listenEvent("event-bridge-lagged", () => {
+            if (drainId.current === null) return;
+            setState((now) =>
+              now.phase === "running" ? { ...now, missed: true } : now
+            );
+          }),
         ]);
 
         if (disposed.current) {
           offProgress();
           offFinished();
+          offLagged();
           return;
         }
-        unlisteners.current.push(offProgress, offFinished);
+        unlisteners.current.push(offProgress, offFinished, offLagged);
+        listening.current = true;
 
-        // Listeners installed — release the backend's gate.
-        await commands.nodeDrainSubscribed(handle.drainId);
+        // A stop pressed while nothing was listening is spent now; the
+        // `drain-finished` it is answered with is what ends the dialog.
+        if (wantsStop.current) {
+          await commands.cancelNodeDrain(handle.drainId).catch(() => {});
+          return;
+        }
+        // Listeners installed — release the backend's gate. A stop that won
+        // the race took the gate with it, and its ending is on the way.
+        await commands.nodeDrainSubscribed(handle.drainId).catch((error) => {
+          if (!wantsStop.current) throw error;
+        });
       } catch (error) {
         if (disposed.current) return;
         setState({
           phase: "failed",
           node,
-          message: error instanceof Error ? error.message : String(error),
+          message: errorToShow(error),
         });
       }
     },
@@ -183,12 +219,10 @@ export function useNodeDrain({
 
   /** Stop asking. What has already been evicted stays evicted. */
   const cancel = useCallback(() => {
+    wantsStop.current = true;
     const id = drainId.current;
-    if (!id) {
-      // Nothing to cancel yet; `start` will spend this the moment there is.
-      wantsStop.current = true;
-      return;
-    }
+    // Nothing to cancel yet, or nobody to hear it end; `start` spends it.
+    if (!id || !listening.current) return;
     commands.cancelNodeDrain(id).catch(() => {});
   }, []);
 

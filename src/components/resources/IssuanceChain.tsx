@@ -18,6 +18,7 @@
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { cn } from "@/lib/utils";
+import { errorToShow } from "@/lib/error-utils";
 import { stalledWords, stepNoteWords } from "@/lib/certificates";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import type { IssuanceStep, IssuanceStory } from "@/generated/types";
@@ -106,7 +107,7 @@ export function IssuanceSection({
         <SectionHeader title={t("nav", "renewal")} />
         <p className="text-xs text-warn">
           {t("empty", "renewalNotReadable", {
-            error: issuance.error.message,
+            error: errorToShow(issuance.error),
           })}
         </p>
       </Section>

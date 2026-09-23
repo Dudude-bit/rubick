@@ -32,7 +32,7 @@ import {
   Chain,
   Column,
   Finding,
-  type Tone,
+  BackingUnread,
   TroubleList,
   TroubleRow,
   VendorReadFailure,
@@ -52,8 +52,10 @@ import {
 } from "./model";
 import {
   backingFor,
+  hostState,
   hostsOf,
   ignoredByClassName,
+  severityOfHost,
   type GkeFinding,
   type GkeFront,
   type GkeHost,
@@ -168,6 +170,16 @@ export default function GkeIngressPage() {
             }}
             autoOpen={{ when: "err", upTo: AUTO_OPEN }}
             noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            aside={
+              <>
+                {backing.isPending && (
+                  <span className="text-[11px] text-fg-fnt">
+                    {t("empty", "checkingWhatIsBehind")}
+                  </span>
+                )}
+                <BackingUnread error={joined?.backingError ?? null} />
+              </>
+            }
             keyOf={(host, index) => host.host ?? `catch-all-${index}`}
             renderRow={(host, { openByDefault, last, shown }) => (
               <HostRow
@@ -185,33 +197,10 @@ export default function GkeIngressPage() {
   );
 }
 
-const severityOfHost = (host: GkeHost) => host.worst;
-
 const searchableHost = (host: GkeHost) => [
   host.host,
   ...host.routes.flatMap((route) => [route.backend?.name, route.ingress.name]),
 ];
-
-/** The word at the right of a host line: what is true of it right now. */
-function hostState(
-  host: GkeHost,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  if (host.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
-  const certificate = host.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate)
-    return { text: t("empty", "certificateFailed"), tone: "err" };
-  if (host.findings.some((finding) => finding.kind === "missing-object")) {
-    return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
-  }
-  if (host.findings.length > 0)
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  return { text: t("empty", "serving"), tone: "ok" };
-}
 
 function HostRow({
   host,
@@ -246,7 +235,7 @@ function HostRow({
           {front && !front.allowsHttp && t("empty", "noHttpListener")}
         </>
       }
-      state={hostState(host, t)}
+      state={hostState(host, sources?.backingError ?? null, t)}
       openByDefault={openByDefault}
       last={last}
     >
@@ -311,7 +300,7 @@ function FrontBlock({ front }: { front: GkeFront }) {
       <Column label={t("columns", "frontend")}>
         {front.frontendConfig ? (
           <Cell
-            bad={!front.frontendConfig.found}
+            bad={front.frontendConfig.known && !front.frontendConfig.found}
             title={
               front.frontendConfig.found
                 ? joinSayings(
@@ -335,7 +324,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
                 )}
               </ObjectLink>
             ) : (
-              t("empty", "nameAbsent", { name: front.frontendConfig.name })
+              t(
+                "empty",
+                front.frontendConfig.known ? "nameAbsent" : "nameUnread",
+                { name: front.frontendConfig.name }
+              )
             )}
           </Cell>
         ) : (
@@ -359,7 +352,11 @@ function FrontBlock({ front }: { front: GkeFront }) {
               key={certificate.name}
               bad={certificateTone(certificate.status) === "err"}
               warn={certificateTone(certificate.status) === "warn"}
-              under={certificate.status ?? t("empty", "noStatusYet")}
+              under={
+                certificate.found
+                  ? (certificate.status ?? t("empty", "noStatusYet"))
+                  : undefined
+              }
             >
               {certificate.found ? (
                 <ResourceRef
@@ -370,7 +367,9 @@ function FrontBlock({ front }: { front: GkeFront }) {
                   showKind={false}
                 />
               ) : (
-                t("empty", "nameAbsent", { name: certificate.name })
+                t("empty", certificate.known ? "nameAbsent" : "nameUnread", {
+                  name: certificate.name,
+                })
               )}
             </Cell>
           ))
@@ -412,9 +411,14 @@ function RouteChain({
           <Cell
             bad={backing?.stop !== null && backing?.stop !== undefined}
             under={
-              route.neg
-                ? t("empty", "containerNativeNeg")
-                : t("empty", "throughKubeProxy")
+              !backing?.known
+                ? t(
+                    "empty",
+                    backing?.error ? "endpointsUnread" : "readingEndpoints"
+                  )
+                : route.neg
+                  ? t("empty", "containerNativeNeg")
+                  : t("empty", "throughKubeProxy")
             }
           >
             <ResourceRef
@@ -433,13 +437,17 @@ function RouteChain({
       <Column label={t("columns", "backendConfig")}>
         {route.configs.length === 0 ? (
           <Cell>
-            <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
+            <span className="text-fg-fnt">
+              {route.backend && !backing?.known
+                ? t("empty", "notReadLower")
+                : t("empty", "gkeDefaults")}
+            </span>
           </Cell>
         ) : (
           route.configs.map((config) => (
             <Cell
               key={`${config.name}/${config.port ?? "default"}`}
-              bad={!config.found}
+              bad={config.known && !config.found}
               under={
                 config.port === null
                   ? t("empty", "everyPort")
@@ -468,7 +476,9 @@ function RouteChain({
                   )}
                 </ObjectLink>
               ) : (
-                t("empty", "nameAbsent", { name: config.name })
+                t("empty", config.known ? "nameAbsent" : "nameUnread", {
+                  name: config.name,
+                })
               )}
             </Cell>
           ))

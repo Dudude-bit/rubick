@@ -168,10 +168,32 @@ async fn the_https_clients_answer_as_the_one_tls_stack_should() {
     );
     signed(dir, "san", true);
     signed(dir, "cn", false);
+    // `openssl req -x509` marks what it makes `CA:TRUE`, a server's own too.
+    openssl(
+        dir,
+        &[
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            "self.key",
+            "-subj",
+            "/CN=localhost",
+            "-addext",
+            "subjectAltName=DNS:localhost,IP:127.0.0.1",
+            "-days",
+            "2",
+            "-out",
+            "self.crt",
+        ],
+    );
     let ca = std::fs::read(dir.join("ca.crt")).expect("ca");
 
     let (_san, san_port) = serve(dir, "san").await;
     let (_cn, cn_port) = serve(dir, "cn").await;
+    let (_self, self_port) = serve(dir, "self").await;
     let get = |insecure: bool, port: u16| async move {
         wire::client(insecure)
             .expect("client")
@@ -229,6 +251,26 @@ async fn the_https_clients_answer_as_the_one_tls_stack_should() {
         cn_only.is_err(),
         "a certificate without a SAN names no host"
     );
+
+    // A provider serving the very certificate the kubeconfig names. webpki and
+    // macOS refuse this shape even when it is the trusted one; kubectl does not.
+    let pinned = OidcAuth::new(
+        format!("https://localhost:{self_port}"),
+        "rubick".into(),
+        None,
+        vec![],
+    )
+    .with_idp_ca(Some(std::fs::read(dir.join("self.crt")).expect("self")))
+    .generate_auth_url("http://localhost:8000/callback")
+    .await;
+    assert!(pinned.is_ok(), "self-signed and pinned: {:?}", pinned.err());
+    assert!(get(false, self_port).await.is_err(), "secure, not pinned");
+    // The same host, in date, but not the certificate the kubeconfig names:
+    // pinning is to those bytes, not to anything that looks like them.
+    let impostor = issuer(self_port)
+        .generate_auth_url("http://localhost:8000/callback")
+        .await;
+    assert!(impostor.is_err(), "self-signed, another one pinned");
 
     // The machine's own roots, through the platform verifier.
     let public = wire::client(false)

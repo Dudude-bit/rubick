@@ -1,4 +1,5 @@
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { perf } from "@/lib/perf";
 import type { PerfRecorder } from "@/lib/perf";
 import { startFrameWatch } from "@/lib/perf-frames";
@@ -66,7 +67,7 @@ export class PerfSession {
     try {
       await this.backend.setRecording(true);
     } catch (error) {
-      this.set({ phase: "idle", error: String(error) });
+      this.set({ phase: "idle", error: errorToShow(error) });
       return;
     }
     this.recorder.start();
@@ -83,7 +84,7 @@ export class PerfSession {
     try {
       this.recorder.backend = await this.backend.counters();
     } catch (e) {
-      error = String(e);
+      error = errorToShow(e);
     }
     this.recorder.stop();
     try {
@@ -91,7 +92,7 @@ export class PerfSession {
     } catch (e) {
       // The backend may still be serialising every event; the panel offers
       // to try again rather than pretending the run is over.
-      error = String(e);
+      error = errorToShow(e);
     }
     this.set({ phase: "stopped", error });
   }
@@ -103,7 +104,7 @@ export class PerfSession {
       await this.backend.setRecording(false);
       this.set({ phase: "stopped", error: null });
     } catch (e) {
-      this.set({ phase: "stopped", error: String(e) });
+      this.set({ phase: "stopped", error: errorToShow(e) });
     }
   }
 

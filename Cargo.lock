@@ -2749,6 +2749,8 @@ dependencies = [
  "reqwest",
  "rustls",
  "rustls-pemfile",
+ "rustls-platform-verifier 0.7.0",
+ "rustls-webpki",
  "secrecy",
  "serde",
  "serde_json",

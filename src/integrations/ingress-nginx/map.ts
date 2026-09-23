@@ -11,17 +11,21 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
+import { edgeTlsTag, hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
-import { backingOf, type NginxHostGroup, type NginxSources } from "./model";
+import {
+  backingOf,
+  edgeTls,
+  type NginxHostGroup,
+  type NginxSources,
+} from "./model";
 
 /** Where clicking a host goes: its own routes, filtered to it. */
 export const hostFilterPath = (host: string | null) =>
   `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
 
 function toneOf(group: NginxHostGroup): MapTone {
-  if (group.worst === "err") return "err";
-  if (group.worst === "warn") return "warn";
-  return "ok";
+  return hostSeverity(group) ?? "ok";
 }
 
 export function routingMap(
@@ -113,7 +117,7 @@ export function routingMap(
           }
         : group.tlsSecrets.length > 0
           ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-          : { text: t("empty", "noTls"), tone: "warn" },
+          : edgeTlsTag(edgeTls(group.host, sources), t),
     };
   });
 

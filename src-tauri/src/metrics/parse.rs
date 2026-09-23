@@ -141,16 +141,25 @@ pub(super) async fn fetch_metrics<T>(
     kind: &str,
     parse: impl Fn(&DynamicObject) -> Option<T>,
 ) -> Result<(MetricsStatus, Vec<T>)> {
+    Ok(match list_metrics(state, namespace, kind, parse).await? {
+        Ok(metrics) => (metrics_status_available(), metrics),
+        Err(err) => (metrics_status_from_error(&err), vec![]),
+    })
+}
+
+/// The samples, or the API's refusal or fault kept whole.
+pub(super) async fn list_metrics<T>(
+    state: &AppState,
+    namespace: Option<&str>,
+    kind: &str,
+    parse: impl Fn(&DynamicObject) -> Option<T>,
+) -> Result<std::result::Result<Vec<T>, kube::Error>> {
     let ctx = ResourceContext::for_list_from_app_state(state, namespace.map(str::to_string))?;
     let api = metrics_api(&ctx, kind);
-
-    let list = match api.list(&ListParams::default()).await {
-        Ok(list) => list,
-        Err(err) => return Ok((metrics_status_from_error(&err), vec![])),
-    };
-
-    let metrics = list.items.iter().filter_map(parse).collect();
-    Ok((metrics_status_available(), metrics))
+    Ok(api
+        .list(&ListParams::default())
+        .await
+        .map(|list| list.items.iter().filter_map(parse).collect()))
 }
 
 #[cfg(test)]

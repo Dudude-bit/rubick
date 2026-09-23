@@ -921,6 +921,7 @@ export interface MetricsStatus {
 export interface PodMetricsResponse {
   status: MetricsStatus;
   data: PodMetrics[];
+  unread: UnreadNamespace[];
 }
 
 export interface PodMetrics {

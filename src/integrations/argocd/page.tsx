@@ -152,7 +152,14 @@ export default function ArgoCdPage() {
         sets.data && sets.data.length > 0
           ? countMark(sets.data.length)
           : undefined,
-      content: <AppSetsTab sets={sets.data ?? []} apps={apps} />,
+      content: (
+        <AppSetsTab
+          sets={sets.data}
+          error={sets.error}
+          onRetry={() => void sets.refetch()}
+          apps={apps}
+        />
+      ),
     },
     {
       id: "projects",
@@ -162,7 +169,14 @@ export default function ArgoCdPage() {
         projects.data && projects.data.length > 0
           ? countMark(projects.data.length)
           : undefined,
-      content: <ProjectsTab projects={projects.data ?? []} apps={apps} />,
+      content: (
+        <ProjectsTab
+          projects={projects.data}
+          error={projects.error}
+          onRetry={() => void projects.refetch()}
+          apps={apps}
+        />
+      ),
     },
     {
       id: "controller",
@@ -774,12 +788,27 @@ function describeFinding(
 
 function AppSetsTab({
   sets,
+  error,
+  onRetry,
   apps,
 }: {
-  sets: CustomResourceInfo[];
+  sets: CustomResourceInfo[] | undefined;
+  error: unknown;
+  onRetry: () => void;
   apps: ArgoApp[];
 }) {
   const t = useT();
+  if (!sets) {
+    return error ? (
+      <VendorReadFailure
+        title={t("empty", "crdCouldNotBeListed", { crd: APPLICATIONSETS_CRD })}
+        error={error}
+        onRetry={onRetry}
+      />
+    ) : (
+      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+    );
+  }
   if (sets.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
@@ -800,7 +829,7 @@ function AppSetsTab({
           const generated = apps.filter(
             (app) => app.generatedBy?.name === set.name
           );
-          const error = conditionsOf(set).find(
+          const failing = conditionsOf(set).find(
             (condition) =>
               condition.type === "ErrorOccurred" && condition.status === "True"
           );
@@ -831,9 +860,9 @@ function AppSetsTab({
                   })}
                 </span>
               </div>
-              {error && (
+              {failing && (
                 <p className="mt-1 border-l-2 border-err pl-2.5 font-mono text-[11px] text-err">
-                  {error.message}
+                  {failing.message}
                 </p>
               )}
             </div>
@@ -848,12 +877,27 @@ function AppSetsTab({
 
 function ProjectsTab({
   projects,
+  error,
+  onRetry,
   apps,
 }: {
-  projects: CustomResourceInfo[];
+  projects: CustomResourceInfo[] | undefined;
+  error: unknown;
+  onRetry: () => void;
   apps: ArgoApp[];
 }) {
   const t = useT();
+  if (!projects) {
+    return error ? (
+      <VendorReadFailure
+        title={t("empty", "crdCouldNotBeListed", { crd: PROJECTS_CRD })}
+        error={error}
+        onRetry={onRetry}
+      />
+    ) : (
+      <p className="text-xs text-fg-fnt">{t("action", "readingEllipsis")}</p>
+    );
+  }
   if (projects.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">

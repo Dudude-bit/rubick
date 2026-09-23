@@ -141,8 +141,11 @@ export function FindingList<F>({
   );
 }
 
-/** How bad an item in a list ordered by trouble is; nothing is fine. */
-export type Severity = "err" | "warn" | null | undefined;
+/**
+ * How bad an item in a list ordered by trouble is; nothing is fine, and
+ * `unknown` is an item whose verdict could not be reached.
+ */
+export type Severity = "err" | "warn" | "unknown" | null | undefined;
 
 export interface TroubleListProps<T> {
   items: readonly T[];
@@ -211,11 +214,18 @@ export function TroubleList<T>({
 
   const broken = items.filter((item) => severityOf(item) === "err").length;
   const worthALook = items.filter((item) => severityOf(item) === "warn").length;
+  const unchecked = items.filter(
+    (item) => severityOf(item) === "unknown"
+  ).length;
+  const notChecked =
+    unchecked > 0
+      ? t("count", "notCheckedOfTotal", { n: unchecked, total: items.length })
+      : null;
   const opening = autoOpen.when === "err" ? broken : broken + worthALook;
   const opens = (item: T) => {
     const severity = severityOf(item);
     const eligible =
-      autoOpen.when === "err" ? severity === "err" : Boolean(severity);
+      severity === "err" || (autoOpen.when === "any" && severity === "warn");
     return eligible && opening <= autoOpen.upTo;
   };
 
@@ -243,7 +253,11 @@ export function TroubleList<T>({
                   }`
                 : worthALook > 0
                   ? `${summary.nothingBroken} · ${t("count", "worthALookOfTotal", { n: worthALook, total: items.length })}`
-                  : summary.allWell(items.length)}
+                  : (notChecked ?? summary.allWell(items.length))}
+            {needle === "" &&
+              notChecked &&
+              (broken > 0 || worthALook > 0) &&
+              ` · ${notChecked}`}
           </span>
         )}
         {aside}
@@ -268,7 +282,10 @@ export function TroubleList<T>({
 /** How a row reads at a glance. Anything not `ok` is a reason to open it. */
 export type Tone = "ok" | "warn" | "err";
 
-const toneText = (tone: Tone) => TONE_TEXT[tone];
+/** A row's state may also be a verdict that could not be reached. */
+export type RowTone = Tone | "unknown";
+
+const toneText = (tone: RowTone) => TONE_TEXT[tone];
 
 /**
  * A row in a list ordered by trouble.
@@ -324,7 +341,7 @@ export function TroubleRow({
     crd?: string;
   };
   meta?: ReactNode;
-  state: { text: string; tone: Tone };
+  state: { text: string; tone: RowTone };
   openByDefault?: boolean;
   brief?: ReactNode;
   children: ReactNode;

@@ -20,6 +20,7 @@ import type { T } from "@/i18n/useT";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   DeploymentContainerInfo,
@@ -127,16 +128,14 @@ export async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const { workload, refused } =
+  const { workload, unread } =
     await findControllerWorkload(CONTROLLER_SELECTOR);
   if (!workload) {
     return none(
-      refused
-        ? { key: "controllerUnread", values: { why: refused } }
-        : {
-            key: "nginxNoController",
-            values: { selector: CONTROLLER_SELECTOR },
-          }
+      unread ?? {
+        key: "nginxNoController",
+        values: { selector: CONTROLLER_SELECTOR },
+      }
     );
   }
 
@@ -152,7 +151,7 @@ export async function fetchController(): Promise<ControllerInfo> {
       problem: {
         key: "nginxManifestUnreadable",
         values: {
-          why: error instanceof Error ? error.message : String(error),
+          why: errorToShow(error),
         },
       },
     };
@@ -209,7 +208,7 @@ export async function fetchController(): Promise<ControllerInfo> {
           key: "nginxConfigMapUnreadable",
           values: {
             where: `${namespace}/${name}`,
-            why: error instanceof Error ? error.message : String(error),
+            why: errorToShow(error),
           },
         },
       },

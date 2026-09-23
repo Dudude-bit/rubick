@@ -142,12 +142,28 @@ describe("confirming a drain", () => {
 describe("watching a drain run", () => {
   const running = (
     over: Partial<DrainReport> = {},
-    attempt = 3
+    attempt = 3,
+    missed = false
   ): DrainState => ({
     phase: "running",
     node: "node-7",
     attempt,
     report: report(over),
+    missed,
+  });
+
+  /** A lag can drop the drain's ending; the dialog kept saying it was running, with nothing to say the report was stale. Fails if `missed` is not drawn. */
+  it("says reports were lost, and that the drain may already be over", () => {
+    wrap(dialog(running({}, 3, true)));
+
+    expect(screen.getByText(/may already have finished/i)).toBeInTheDocument();
+  });
+
+  /** The other half: a drain that missed nothing must not claim it did. */
+  it("says nothing about lost reports when none were lost", () => {
+    wrap(dialog(running()));
+
+    expect(screen.queryByText(/may already have finished/i)).toBeNull();
   });
 
   /**

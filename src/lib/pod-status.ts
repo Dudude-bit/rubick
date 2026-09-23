@@ -18,6 +18,12 @@ import { formatAge, formatDate } from "@/lib/utils";
  * three hand-written versions of "exit 1 · Error" is how they drift apart.
  */
 
+/** `Succeeded` or `Failed` (an Evicted pod included): it runs nothing, is no
+ *  replica, and no Service publishes it. */
+export function hasTerminated(pod: { status: { phase: string } }): boolean {
+  return pod.status.phase === "Succeeded" || pod.status.phase === "Failed";
+}
+
 /** "Error · exit 1", "OOMKilled · signal 9", "exit 137". */
 export function describeTermination(termination: TerminationInfo): string {
   const how =
