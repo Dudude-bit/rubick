@@ -1,6 +1,6 @@
 import { useT } from "@/i18n/useT";
 import { covers } from "@/lib/certificates";
-import type { VendorTlsAnswer } from "./vendor-tls";
+import { TLS_NOT_CHECKED_TONE, type VendorTlsAnswer } from "./vendor-tls";
 import {
   Tooltip,
   TooltipContent,
@@ -24,7 +24,7 @@ interface TlsBadgeProps {
 /** "Not checked" is its own colour, or it reads as the "no" beside it. */
 const BARE_TONE: Record<"none" | "notChecked", string> = {
   none: "text-fg-fnt",
-  notChecked: "text-fg-mut",
+  notChecked: TLS_NOT_CHECKED_TONE,
 };
 
 /**

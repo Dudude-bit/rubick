@@ -4,6 +4,12 @@ import { covers } from "@/lib/certificates";
 import type { IngressInfo } from "@/generated/types";
 import type { IngressTlsAnswers } from "@/hooks/useIngressTls";
 
+/**
+ * The colour of "TLS not checked" wherever an Ingress's TLS is drawn: apart
+ * from both "has TLS" and "no TLS", or the words alone carry the difference.
+ */
+export const TLS_NOT_CHECKED_TONE = "text-fg-mut";
+
 /** What a cloud controller said about an Ingress's hosts. */
 export interface VendorTlsAnswer {
   /** The hosts it terminates. */
