@@ -46,7 +46,7 @@ export const NETWORK_SOURCES: PeekSources = {
             // number is the click, the target and protocol stay prose.
             value:
               service.ports.length === 0 ? (
-                "none"
+                t("empty", "none")
               ) : (
                 <span className="inline-flex flex-wrap items-baseline gap-x-2 font-mono">
                   {service.ports.map((port, index) => (
@@ -291,7 +291,12 @@ export const NETWORK_SOURCES: PeekSources = {
           title: "Pods",
           count: addresses.length,
           items: addresses.slice(0, 8).map((address) => ({
-            label: <CopyableAddress value={address.ip} label="Address" />,
+            label: (
+              <CopyableAddress
+                value={address.ip}
+                label={t("columns", "address")}
+              />
+            ),
             value: address.targetRef
               ? ref(
                   address.targetRef.kind,

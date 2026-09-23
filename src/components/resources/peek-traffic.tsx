@@ -339,7 +339,9 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
 
   // The object alone is not a chain; a Pod nothing routes stays quiet —
   // unless nobody could look, which is not the same as nothing routing it.
-  if (levels.length === 1 && !conns.error) return null;
+  // A refused vendor read is the same "nobody could look": the Service would
+  // otherwise draw as the top of the world.
+  if (levels.length === 1 && !conns.error && !routed.error) return null;
 
   return (
     <div>
@@ -348,6 +350,19 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
         <p className="py-1 text-xs text-warn">
           {t("empty", "couldNotReadConnections", {
             reason: errorToShow(conns.error),
+          })}
+        </p>
+      )}
+      {routed.error && (
+        <p className="py-1 text-xs text-warn">
+          {t("empty", "couldNotAskRoutes")}{" "}
+          <span className="text-fg-fnt">{errorToShow(routed.error)}</span>
+        </p>
+      )}
+      {gatewaysQuery.error && (
+        <p className="py-1 text-xs text-warn">
+          {t("empty", "couldNotReadGateways", {
+            message: errorToShow(gatewaysQuery.error),
           })}
         </p>
       )}

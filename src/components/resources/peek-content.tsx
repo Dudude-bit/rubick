@@ -24,7 +24,6 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { AlertsAbout } from "./AlertsAbout";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
-import {} from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";

@@ -91,7 +91,9 @@ export const WORKLOAD_SOURCES: PeekSources = {
           items: [
             {
               label: t("columns", "node"),
-              value: pod.nodeName ? ref("Node", pod.nodeName) : "unscheduled",
+              value: pod.nodeName
+                ? ref("Node", pod.nodeName)
+                : t("empty", "unscheduled"),
               tone: pod.nodeName ? undefined : "warn",
             },
             {
@@ -330,11 +332,11 @@ export const WORKLOAD_SOURCES: PeekSources = {
           },
           {
             label: t("columns", "lastRun"),
-            value: formatDate(cron.lastSchedule) ?? "never",
+            value: formatDate(cron.lastSchedule) ?? t("action", "never"),
           },
           {
             label: t("columns", "lastSuccess"),
-            value: formatDate(cron.lastSuccessfulTime) ?? "never",
+            value: formatDate(cron.lastSuccessfulTime) ?? t("action", "never"),
           },
           { label: t("columns", "activeJobs"), value: cron.active, mono: true },
           {

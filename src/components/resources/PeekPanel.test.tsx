@@ -53,6 +53,7 @@ vi.mock("@/hooks/useServiceRoutes", () => ({
       available: false,
       routes: new Map(),
       isPending: false,
+      error: null,
     },
   useProxyBehind: () => null,
 }));
@@ -1661,6 +1662,27 @@ describe("a peek block whose read was refused", () => {
 
     expect(
       await screen.findByText(/Could not read BackendTLSPolicies/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A vendor that did not answer "which of your routes reach this" left the
+   * Service drawn as the top of the chain, the same as nothing routing it.
+   */
+  it("says the integrations could not be asked, rather than that nothing routes it", async () => {
+    servicesRoutesSpy.mockReturnValue({
+      available: true,
+      routes: new Map(),
+      isPending: false,
+      error: new Error("ingressroutes.traefik.io is forbidden"),
+    });
+    wrap("/events?peek=services/storefront/frontend");
+
+    expect(
+      await screen.findByText(/Could not ask the integrations/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("ingressroutes.traefik.io is forbidden")
     ).toBeInTheDocument();
   });
 });

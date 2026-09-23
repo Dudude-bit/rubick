@@ -106,14 +106,14 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
               value: volume.claim ? (
                 <ClaimRef claim={volume.claim} />
               ) : (
-                "unbound"
+                t("action", "unbound")
               ),
             },
             {
               label: t("columns", "storageClass"),
               value: volume.storageClass
                 ? ref("StorageClass", volume.storageClass)
-                : "none",
+                : t("empty", "none"),
             },
             {
               label: t("columns", "reclaimPolicy"),
@@ -164,12 +164,14 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
             {
               label: t("columns", "expansion"),
               value: storageClass.allowVolumeExpansion
-                ? "allowed"
+                ? t("columns", "allowed")
                 : t("empty", "notAllowed"),
             },
             {
               label: t("cluster", "hueDefault"),
-              value: storageClass.isDefault ? "yes" : "no",
+              value: storageClass.isDefault
+                ? t("action", "yes")
+                : t("action", "no"),
             },
           ],
         },

@@ -13,6 +13,8 @@ import {
 import type { FocusReason } from "./focus";
 import type { ContainerFailure } from "./hooks/useLogStream";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
+import { useLocale } from "@/stores/localeStore";
 import type { LostLines } from "./hooks/log-buffer";
 import { formatCount, formatSpan, termLabel, type QueryTerm } from "./types";
 
@@ -286,6 +288,7 @@ export function IntakeQuietNotice({
   terms: QueryTerm[];
 }) {
   const t = useT();
+  const locale = useLocale();
   const now = useNowSeconds();
 
   const quiet = now - since;
@@ -300,11 +303,15 @@ export function IntakeQuietNotice({
       <span aria-hidden="true" className="text-info">
         ⇣{" "}
       </span>
-      {t("empty", "nothingHasMatched")}{" "}
-      <span className="font-mono text-info">
-        {terms.map(termLabel).join(" and ")}
-      </span>{" "}
-      {t("empty", "forSpan", { span: formatSpan(quiet) })}
+      {parts(t("empty", "nothingMatchedFor", { span: formatSpan(quiet) }), {
+        terms: (
+          <span className="font-mono text-info">
+            {new Intl.ListFormat(locale, { type: "conjunction" }).format(
+              terms.map(termLabel)
+            )}
+          </span>
+        ),
+      })}
       <span className="text-fg-fnt"> {t("empty", "intakeNarrowNote")}</span>
     </div>
   );

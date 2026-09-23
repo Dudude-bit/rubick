@@ -110,7 +110,10 @@ export const CLUSTER_SOURCES: PeekSources = {
         {
           title: t("columns", "machine"),
           items: [
-            { label: t("columns", "roles"), value: list(node.roles, "worker") },
+            {
+              label: t("columns", "roles"),
+              value: list(node.roles, t("empty", "workerRole")),
+            },
             { label: t("columns", "kubelet"), value: node.version, mono: true },
             {
               label: t("columns", "platform"),
@@ -152,7 +155,7 @@ export const CLUSTER_SOURCES: PeekSources = {
               label: t("columns", "taints"),
               value: node.taints.length
                 ? list(node.taints.map((taint) => taint.key))
-                : "none",
+                : t("empty", "none"),
               mono: node.taints.length > 0,
               tone: node.taints.length ? "warn" : undefined,
             },
@@ -179,14 +182,16 @@ export const CLUSTER_SOURCES: PeekSources = {
                 crd.versions
                   .filter((version) => version.served)
                   .map((version) =>
-                    version.storage ? `${version.name} (stored)` : version.name
+                    version.storage
+                      ? t("empty", "storedVersion", { version: version.name })
+                      : version.name
                   )
               ),
               mono: true,
             },
             {
               label: t("columns", "shortNames"),
-              value: list(crd.shortNames, "none"),
+              value: list(crd.shortNames, t("empty", "none")),
             },
           ],
         },
