@@ -70,9 +70,10 @@ pub(crate) async fn served_api_resource(
     Ok(served.api_resource())
 }
 
-/// A list's answer, and a 404 taken as discovery having moved on: the
-/// collection is gone from where it was served, so the next call looks again.
-fn listed<T>(state: &AppState, answer: kube::Result<T>) -> Result<T> {
+/// An answer from where discovery put the kind, and a 404 taken as discovery
+/// having moved on: the next call looks again rather than trusting a version
+/// the cluster may have stopped serving.
+fn answered<T>(state: &AppState, answer: kube::Result<T>) -> Result<T> {
     if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
         state.forget_served(GATEWAY_API_GROUP);
     }
@@ -131,7 +132,7 @@ pub async fn detect_gateway_api(state: State<'_, AppState>) -> Result<GatewayApi
 #[tauri::command]
 pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<GatewayClassInfo>> {
     let (api, api_resource) = gateway_api("GatewayClass", None, true, &state).await?;
-    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
+    let list = answered(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -148,7 +149,7 @@ pub async fn list_backend_tls_policies(
     state: State<'_, AppState>,
 ) -> Result<Vec<BackendTlsPolicyInfo>> {
     let (api, api_resource) = gateway_api("BackendTLSPolicy", namespace, true, &state).await?;
-    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
+    let list = answered(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -163,7 +164,7 @@ pub async fn get_gateway_class(
 ) -> Result<GatewayClassInfo> {
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, api_resource) = gateway_api("GatewayClass", None, false, &state).await?;
-    let obj = api.get(&name).await?;
+    let obj = answered(&state, api.get(&name).await)?;
     Ok(GatewayClassInfo::read(&with_types(obj, &api_resource)))
 }
 
@@ -171,7 +172,7 @@ pub async fn get_gateway_class(
 pub async fn delete_gateway_class(name: String, state: State<'_, AppState>) -> Result<()> {
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, _) = gateway_api("GatewayClass", None, false, &state).await?;
-    api.delete(&name, &DeleteParams::default()).await?;
+    answered(&state, api.delete(&name, &DeleteParams::default()).await)?;
     Ok(())
 }
 
@@ -187,7 +188,7 @@ async fn listener_sets(state: &State<'_, AppState>) -> Option<Vec<ListenerSetInf
     // could resolve its parent through this list: an unread list then reads
     // as "no set by that name", and the route's Gateway as missing.
     let (api, api_resource) = gateway_api("ListenerSet", None, true, state).await.ok()?;
-    let list = listed(state, api.list(&build_list_params(None, None, None)).await).ok()?;
+    let list = answered(state, api.list(&build_list_params(None, None, None)).await).ok()?;
     Some(
         list.items
             .into_iter()
@@ -206,7 +207,7 @@ pub async fn list_gateways(
     // reads race instead of queuing — one round trip of latency, not two.
     let params = build_list_params(None, None, None);
     let (list, sets) = tokio::join!(api.list(&params), listener_sets(&state));
-    let list = listed(&state, list)?;
+    let list = answered(&state, list)?;
     Ok(list
         .items
         .into_iter()
@@ -252,7 +253,7 @@ async fn read_in<T>(
         Some(namespace) => Api::namespaced_with(client.clone(), namespace, api_resource),
         None => Api::all_with(client.clone(), api_resource),
     };
-    let list = listed(state, api.list(&build_list_params(None, None, None)).await)?;
+    let list = answered(state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -268,7 +269,7 @@ pub async fn get_gateway(
 ) -> Result<GatewayInfo> {
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, api_resource) = gateway_api("Gateway", namespace, false, &state).await?;
-    let obj = api.get(&name).await?;
+    let obj = answered(&state, api.get(&name).await)?;
     let mut gateway = GatewayInfo::read(&with_types(obj, &api_resource));
     gateway.merge_listener_sets(listener_sets(&state).await.as_deref());
     Ok(gateway)
@@ -282,7 +283,7 @@ pub async fn delete_gateway(
 ) -> Result<()> {
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, _) = gateway_api("Gateway", namespace, false, &state).await?;
-    api.delete(&name, &DeleteParams::default()).await?;
+    answered(&state, api.delete(&name, &DeleteParams::default()).await)?;
     Ok(())
 }
 
@@ -304,7 +305,7 @@ pub async fn list_gateway_routes(
 ) -> Result<Vec<RouteInfo>> {
     require_route_kind(&kind)?;
     let (api, api_resource) = gateway_api(&kind, namespace, true, &state).await?;
-    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
+    let list = answered(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -338,7 +339,7 @@ pub async fn get_gateway_route(
     require_route_kind(&kind)?;
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, api_resource) = gateway_api(&kind, namespace, false, &state).await?;
-    let obj = api.get(&name).await?;
+    let obj = answered(&state, api.get(&name).await)?;
     Ok(RouteInfo::read(&with_types(obj, &api_resource)))
 }
 
@@ -352,7 +353,7 @@ pub async fn delete_gateway_route(
     require_route_kind(&kind)?;
     crate::validation::validate_dns_subdomain(&name)?;
     let (api, _) = gateway_api(&kind, namespace, false, &state).await?;
-    api.delete(&name, &DeleteParams::default()).await?;
+    answered(&state, api.delete(&name, &DeleteParams::default()).await)?;
     Ok(())
 }
 

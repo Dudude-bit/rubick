@@ -47,6 +47,18 @@ async fn crd_to_dynamic_api(
     Ok(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced))
 }
 
+/// An answer from where discovery put the kind, and a 404 taken as the CRD
+/// having moved on: the next call looks again rather than trusting a version
+/// the cluster may have stopped serving.
+fn answered<T>(state: &AppState, crd_name: &str, answer: kube::Result<T>) -> Result<T> {
+    if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
+        if let Some((_, group)) = crd_name.split_once('.') {
+            state.forget_served(group);
+        }
+    }
+    answer.map_err(Error::from)
+}
+
 /// List custom resource instances for a specific CRD
 #[tauri::command]
 pub async fn list_custom_resources(
@@ -90,14 +102,7 @@ async fn instances_in(
     state: &State<'_, AppState>,
 ) -> Result<Vec<CustomResourceInfo>> {
     let api = crd_to_dynamic_api(crd_name, namespace, true, state).await?;
-    let list = api.list(params).await;
-    // The collection gone from where discovery put it: the CRD moved on.
-    if matches!(&list, Err(kube::Error::Api(status)) if status.code == 404) {
-        if let Some((_, group)) = crd_name.split_once('.') {
-            state.forget_served(group);
-        }
-    }
-    Ok(list?
+    Ok(answered(state, crd_name, api.list(params).await)?
         .items
         .iter()
         .map(dynamic_object_to_custom_resource_info)
@@ -116,7 +121,7 @@ pub async fn get_custom_resource(
     crate::validation::validate_dns_subdomain(&name)?;
 
     let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
-    let obj = api.get(&name).await?;
+    let obj = answered(&state, &crd_name, api.get(&name).await)?;
 
     Ok(dynamic_object_to_detail_info(&obj))
 }
@@ -133,7 +138,7 @@ pub async fn get_custom_resource_yaml(
     crate::validation::validate_dns_subdomain(&name)?;
 
     let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
-    let obj = api.get(&name).await?;
+    let obj = answered(&state, &crd_name, api.get(&name).await)?;
 
     let yaml = serde_yaml::to_string(&obj).map_err(|e| Error::Serialization(e.to_string()))?;
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
@@ -163,8 +168,12 @@ pub async fn patch_custom_resource(
         ));
     }
     let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
-    api.patch(&name, &PatchParams::default(), &Patch::Merge(patch))
-        .await?;
+    answered(
+        &state,
+        &crd_name,
+        api.patch(&name, &PatchParams::default(), &Patch::Merge(patch))
+            .await,
+    )?;
     Ok(())
 }
 
@@ -203,8 +212,12 @@ pub async fn patch_custom_resource_json(
         ));
     }
     let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
-    api.patch(&name, &PatchParams::default(), &Patch::Json::<()>(patch))
-        .await?;
+    answered(
+        &state,
+        &crd_name,
+        api.patch(&name, &PatchParams::default(), &Patch::Json::<()>(patch))
+            .await,
+    )?;
     Ok(())
 }
 
@@ -223,7 +236,11 @@ pub async fn delete_custom_resource(
     }
 
     let api = crd_to_dynamic_api(&crd_name, namespace, false, &state).await?;
-    api.delete(&name, &DeleteParams::default()).await?;
+    answered(
+        &state,
+        &crd_name,
+        api.delete(&name, &DeleteParams::default()).await,
+    )?;
 
     Ok(())
 }
@@ -272,5 +289,57 @@ mod tests {
                 "a writing command took an unchecked namespace"
             );
         }
+    }
+
+    fn status(code: u16) -> kube::Error {
+        kube::Error::Api(Box::new(kube::core::Status {
+            code,
+            ..kube::core::Status::default()
+        }))
+    }
+
+    /// A version the cluster stopped serving 404s on a get as much as on a
+    /// list. Only a list's 404 used to send discovery back to the cluster, so
+    /// a detail page said "not found" about an object that is there.
+    #[tokio::test]
+    async fn a_404_from_a_discovered_kind_has_discovery_read_again() {
+        use crate::client::served::test_server::{groups, resources, server};
+        const GROUP: &str = "gateway.networking.k8s.io";
+        let (client, hits) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("httproutes", "HTTPRoute", true)]),
+            ),
+        ])
+        .await;
+        let state = crate::state::AppState::new().expect("state");
+        state.set_current_context(Some("kind".to_string()));
+        let index = state.client_manager.served();
+        let crd = "httproutes.gateway.networking.k8s.io";
+        let asked = || hits.lock().unwrap().get("/apis").copied();
+
+        index
+            .resource("kind", &client, GROUP, "httproutes")
+            .await
+            .expect("read");
+        assert!(super::answered::<()>(&state, crd, Err(status(403))).is_err());
+        index
+            .resource("kind", &client, GROUP, "httproutes")
+            .await
+            .expect("read");
+        assert_eq!(
+            asked(),
+            Some(1),
+            "a refusal says nothing about where it is served"
+        );
+
+        assert!(super::answered::<()>(&state, crd, Err(status(404))).is_err());
+        index
+            .resource("kind", &client, GROUP, "httproutes")
+            .await
+            .expect("read");
+        assert_eq!(asked(), Some(2));
     }
 }
