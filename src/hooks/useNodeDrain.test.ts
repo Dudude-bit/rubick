@@ -54,9 +54,14 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import type { DrainOptions } from "@/generated/types";
 import { useNodeDrain } from "./useNodeDrain";
 
-const OPTIONS = { evictUnmanagedPods: false, evictPodsWithEmptydir: false };
+const OPTIONS: DrainOptions = {
+  ignoreDaemonsets: true,
+  evictUnmanagedPods: false,
+  evictPodsWithEmptydir: false,
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
