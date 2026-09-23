@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   read: undefined as
     ((ctx: { signal: AbortSignal }) => Promise<unknown>) | undefined,
   fresh: { rows: [], unread: [] } as unknown,
+  metricsAsked: undefined as unknown,
   metrics: [] as PodMetrics[],
   silent: new Map<string, NodeSilence>(),
   cluster: {
@@ -66,7 +67,10 @@ const renderHook = <R>(hook: () => R) =>
       createElement(QueryClientProvider, { client }, children),
   });
 vi.mock("@/hooks/useMetrics", () => ({
-  useMetrics: () => ({ podMetrics: state.metrics, podStatus: null }),
+  useMetrics: (options: unknown) => {
+    state.metricsAsked = options;
+    return { podMetrics: state.metrics, podStatus: null };
+  },
 }));
 vi.mock("@/hooks/useSilentNodes", () => ({
   useSilentNodes: () => state.silent,
@@ -192,6 +196,21 @@ it("keeps a watched namespace's pods when a re-read misses it", async () => {
     })) as Scoped<PodRow>;
     expect(answer.rows).toContain(worker);
     expect(answer.unread).toEqual([]);
+  } finally {
+    state.cluster.namespaceScope = [];
+  }
+});
+
+/**
+ * Several namespaces asked for metrics cluster-wide, which a namespace-scoped
+ * token is refused, so its pods page lost every sample the same selection
+ * one namespace at a time would have shown.
+ */
+it("asks for metrics in each namespace of the selection, not the cluster", () => {
+  state.cluster.namespaceScope = ["team-a", "team-b"];
+  try {
+    renderHook(() => usePodsWithMetrics());
+    expect(state.metricsAsked).toMatchObject({ scope: ["team-a", "team-b"] });
   } finally {
     state.cluster.namespaceScope = [];
   }

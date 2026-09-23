@@ -40,7 +40,6 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const enabled = isConnected && options?.enabled !== false;
 
   // The one namespace the metrics call is scoped to; several read it all.
-  const metricsNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
 
   // Fetch pods - cached by TanStack Query. Real-time updates after
@@ -99,7 +98,9 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     : (answer?.unread ?? NOTHING_UNREAD);
 
   const { podMetrics, podStatus } = useMetrics({
-    namespace: metricsNamespace,
+    // Read per namespace, like the pods: a cluster-wide read is refused to a
+    // namespace-scoped token, which then lost every sample on the page.
+    scope: scope.scope,
     enabled,
     includeNodes: false,
   });

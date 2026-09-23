@@ -1082,6 +1082,12 @@ export async function getPodsMetrics(
   return invoke<PodMetricsResponse>("get_pods_metrics", { namespace });
 }
 
+export async function getPodsMetricsIn(
+  scope: string[] | null
+): Promise<PodMetricsResponse> {
+  return invoke<PodMetricsResponse>("get_pods_metrics_in", { scope });
+}
+
 export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
 }
