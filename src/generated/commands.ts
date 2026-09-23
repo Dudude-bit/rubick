@@ -697,20 +697,6 @@ export async function deletePortForwardConfig(id: string): Promise<void> {
   return invoke<void>("delete_port_forward_config", { id });
 }
 
-export async function getResourceConnections(
-  kind: string,
-  name: string,
-  namespace: string | null,
-  gateway: GatewayApiDetection | null
-): Promise<ResourceConnections> {
-  return invoke<ResourceConnections>("get_resource_connections", {
-    kind,
-    name,
-    namespace,
-    gateway,
-  });
-}
-
 export async function getControllerRevisions(
   kind: string,
   name: string,
@@ -1066,6 +1052,20 @@ export async function getPodsMetrics(
 
 export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
+}
+
+export async function getResourceConnections(
+  kind: string,
+  name: string,
+  namespace: string | null,
+  gateway: GatewayApiDetection | null
+): Promise<ResourceConnections> {
+  return invoke<ResourceConnections>("get_resource_connections", {
+    kind,
+    name,
+    namespace,
+    gateway,
+  });
 }
 
 export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
