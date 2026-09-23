@@ -39,8 +39,6 @@ export async function fetchPolicies(): Promise<PolicySources> {
   return { policies, clusterwide };
 }
 
-export const POLICY_KEY = ["cilium", "policies"] as const;
-
 /** The page's read: the two policy kinds and the endpoints to match them to. */
 export interface Picture extends PolicySources {
   endpoints: CustomResourceInfo[];

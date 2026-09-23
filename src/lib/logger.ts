@@ -45,5 +45,4 @@ export const logWarn = (message: string, options?: LogOptions) =>
 export const logError = (message: string, options?: LogOptions) =>
   logEvent("error", message, options);
 
-// Re-export queue utilities for diagnostics
-export { flushLogs, getLogQueueStatus } from "@/lib/log-queue";
+export { flushLogs } from "@/lib/log-queue";
