@@ -1836,8 +1836,6 @@ export const en = {
     controllerFact: "Controller",
     controllerNotFound:
       "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
-    controllerUnknown:
-      "the Deployments could not be read, so whether the operator's controller is running is unknown — not that it is absent",
     inNamespace: "in {namespace}",
     versionUnknown: "unknown: no controller image to read it from",
     fromImage: "from the Deployment image",
@@ -2754,7 +2752,9 @@ export const en = {
     azureSomeCertOnGateway: "a certificate on the Application Gateway",
     istioMeshOnly: "mesh only",
     mapEntryPoint: "Entry point",
-    mapZeroReady: "0 ready",
+    mapCanary: "canary",
+    mapCanaryShare: "{n}% canary",
+    mapOutsideMesh: "outside the mesh",
     traefikRouting: "Routing",
     traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
     traefikPriorityDefault: {
@@ -3704,6 +3704,7 @@ export const en = {
     toolsProfiles: "— {gcp}, {azure}.",
     toolsGcpCount: "{n} GCP",
     toolsAzureCount: "{n} Azure",
+    notOnPath: "{label} is not on PATH. Set the path below.",
     lookingForBinary: "Looking for the binary…",
     kubeconfigRestored: "Kubeconfig restored",
     kubeconfigUpdated: "Kubeconfig updated",
@@ -6168,6 +6169,7 @@ export const en = {
     fields: { one: "{n} field", other: "{n} fields" },
     settingsMatch: { one: "{n} setting matches", other: "{n} settings match" },
     paths: { one: "{n} path", other: "{n} paths" },
+    routeRules: { one: "{n} route", other: "{n} routes" },
     hosts: { one: "{n} host", other: "{n} hosts" },
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },

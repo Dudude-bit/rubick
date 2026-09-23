@@ -47,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parts } from "@/i18n/parts";
 
 export function ConnectIntegration({
   vendorId,
@@ -165,16 +166,9 @@ function ConnectForm({
             {/* One sentence in the catalogue, split here rather than there:
                 a translator moves the example wherever their word order wants
                 it, and the monospace still lands on it. */}
-            {splitAround(t("settings", "addressIsFromHere"), "{example}").map(
-              (part, i) =>
-                i === 1 ? (
-                  <span key="example" className="font-mono">
-                    prometheus.monitoring
-                  </span>
-                ) : (
-                  <span key={i}>{part}</span>
-                )
-            )}
+            {parts(t("settings", "addressIsFromHere"), {
+              example: <span className="font-mono">prometheus.monitoring</span>,
+            })}
           </p>
         </div>
 
@@ -218,28 +212,18 @@ function ConnectForm({
             <span>
               {t("settings", "openTunnelOnSwitch")}
               <span className="mt-0.5 block text-[11px] text-fg-fnt">
-                {splitAround(
-                  t("settings", "forwardingTunnelNote"),
-                  "{target}"
-                ).map((part, i) =>
-                  i === 1 ? (
-                    <span key="target" className="font-mono">
+                {parts(t("settings", "forwardingTunnelNote"), {
+                  target: (
+                    <span className="font-mono">
                       {saved.namespace}/{saved.service}:{saved.remotePort}
                     </span>
-                  ) : (
-                    <React.Fragment key={i}>
-                      {splitAround(part, "{local}").map((sub, j) =>
-                        j === 1 ? (
-                          <span key="local" className="font-mono">
-                            localhost:{saved.localPort}
-                          </span>
-                        ) : (
-                          <span key={j}>{sub}</span>
-                        )
-                      )}
-                    </React.Fragment>
-                  )
-                )}
+                  ),
+                  local: (
+                    <span className="font-mono">
+                      localhost:{saved.localPort}
+                    </span>
+                  ),
+                })}
               </span>
             </span>
           </label>
@@ -614,8 +598,3 @@ function TestResult({ result }: { result: ProbeResult }) {
  * language that puts the example first has nowhere to put it. One string with
  * a placeholder travels; the cut happens here.
  */
-function splitAround(text: string, token: string): string[] {
-  const at = text.indexOf(token);
-  if (at < 0) return [text];
-  return [text.slice(0, at), token, text.slice(at + token.length)];
-}

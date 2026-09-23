@@ -4,6 +4,7 @@ import { Copy, ExternalLink } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 interface ServiceAccessInfoProps {
   service: ServiceInfo;
@@ -113,14 +114,9 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
 
       {service.type === "ClusterIP" && (
         <p className="text-sm text-fg-mut">
-          {t("empty", "clusterIpOnlyInside")
-            .split("{type}")
-            .map((part, i) => (
-              <span key={i}>
-                {i > 0 && <strong>ClusterIP</strong>}
-                {part}
-              </span>
-            ))}
+          {parts(t("empty", "clusterIpOnlyInside"), {
+            type: <strong>ClusterIP</strong>,
+          })}
           <code className="ml-1 text-xs bg-hover px-1 rounded">
             kubectl port-forward svc/{service.name}{" "}
             {service.ports[0]?.port || 8080}:{service.ports[0]?.port || 8080}

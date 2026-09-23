@@ -68,9 +68,14 @@ export function routingMap(
               ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
               : undefined
             : backing.stop
-              ? { text: t("readings", "mapZeroReady"), tone: "err" }
+              ? {
+                  text: t("count", "nReady", { n: 0 }),
+                  tone: "err",
+                }
               : {
-                  text: `${backing.ready + backing.draining} ready`,
+                  text: t("count", "nReady", {
+                    n: backing.ready + backing.draining,
+                  }),
                   tone: backing.ready === 0 ? "warn" : "mute",
                 },
         });
@@ -91,7 +96,7 @@ export function routingMap(
     return {
       id,
       label: group.host ?? t("action", "anyHost"),
-      sub: `${group.routes.length} path${group.routes.length === 1 ? "" : "s"}`,
+      sub: t("count", "paths", { n: group.routes.length }),
       tone,
       to: hostFilterPath(group.host),
       // The split outranks TLS for the one word this node gets: a host
@@ -100,8 +105,10 @@ export function routingMap(
         ? {
             text:
               group.split.primaryShare === null
-                ? "canary"
-                : `${group.split.weightTotal - group.split.primaryShare}% canary`,
+                ? t("readings", "mapCanary")
+                : t("readings", "mapCanaryShare", {
+                    n: group.split.weightTotal - group.split.primaryShare,
+                  }),
             tone: "warn",
           }
         : group.tlsSecrets.length > 0

@@ -1162,12 +1162,7 @@ export {
   useBackingLists,
   ROUTING_STALE,
 } from "./ingress";
-export type {
-  BackendRef as RouteBackendRef,
-  Backing,
-  BackingSources,
-  ServiceStop,
-} from "./ingress";
+export type { Backing, BackingSources, ServiceStop } from "./ingress";
 export { RoutingMap } from "./routing-map";
 export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 

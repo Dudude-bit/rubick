@@ -58,7 +58,8 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import { troubleMark } from "../kit";
+import { troubleMark, summariseNames } from "../kit";
+import { parts } from "@/i18n/parts";
 
 /** Past this many troubled certificates, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -227,18 +228,11 @@ function CertificatesTab({
           {t("empty", "nothingAskedForCertificate")}
         </p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          {t("empty", "noCertificateObjectAnywhere")
-            .split("{annotation}")
-            .map((part, i) => (
-              <span key={i}>
-                {i > 0 && (
-                  <span className="font-mono">
-                    cert-manager.io/cluster-issuer
-                  </span>
-                )}
-                {part}
-              </span>
-            ))}
+          {parts(t("empty", "noCertificateObjectAnywhere"), {
+            annotation: (
+              <span className="font-mono">cert-manager.io/cluster-issuer</span>
+            ),
+          })}
         </p>
       </div>
     );
@@ -305,9 +299,9 @@ function CertificateRow({
       meta={
         <>
           {row.namespace}
-          {row.dnsNames.length > 0 && ` · ${summarise(row.dnsNames)}`}
+          {row.dnsNames.length > 0 && ` · ${summariseNames(row.dnsNames)}`}
           {row.use.hosts.length > 0 &&
-            ` · serving ${summarise([
+            ` · serving ${summariseNames([
               ...new Set(row.use.hosts.map((entry) => entry.host)),
             ])}`}
           {row.issuer && ` · ${row.issuer.name}`}
@@ -421,12 +415,6 @@ function ServingLine({ row }: { row: CertRow }) {
       )}
     </div>
   );
-}
-
-/** Three names and a tally: a row is a summary, not the whole list. */
-function summarise(names: string[]): string {
-  if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
 function Facts({ row }: { row: CertRow }) {
@@ -606,6 +594,11 @@ function Walk({ steps }: { steps: CertStep[] }) {
  */
 function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
   const t = useT();
+  const secret = (
+    <span className="font-mono">
+      {row.secretName ?? t("empty", "itsSecret")}
+    </span>
+  );
   return (
     <Finding
       tone="err"
@@ -618,39 +611,17 @@ function FailureLine({ row, brief }: { row: CertRow; brief?: boolean }) {
     >
       {!brief &&
         (row.neverIssued ? (
-          <>
-            {t("empty", "nothingServingTlsFrom")
-              .split("{secret}")
-              .map((part, i) => (
-                <span key={i}>
-                  {i > 0 && (
-                    <span className="font-mono">
-                      {row.secretName ?? t("empty", "itsSecret")}
-                    </span>
-                  )}
-                  {part}
-                </span>
-              ))}
-          </>
+          <>{parts(t("empty", "nothingServingTlsFrom"), { secret })}</>
         ) : (
           <>
-            {(row.expiry
-              ? t("empty", "certificateStillServedUntil", {
-                  expiry: expiryText(row.expiry, t),
-                })
-              : t("empty", "certificateStillServed")
-            )
-              .split("{secret}")
-              .map((part, i) => (
-                <span key={i}>
-                  {i > 0 && (
-                    <span className="font-mono">
-                      {row.secretName ?? t("empty", "itsSecret")}
-                    </span>
-                  )}
-                  {part}
-                </span>
-              ))}
+            {parts(
+              row.expiry
+                ? t("empty", "certificateStillServedUntil", {
+                    expiry: expiryText(row.expiry, t),
+                  })
+                : t("empty", "certificateStillServed"),
+              { secret }
+            )}
           </>
         ))}
     </Finding>

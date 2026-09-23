@@ -208,3 +208,26 @@ export function troubleMark(
     needAttention(troubled, worsts.length)
   );
 }
+
+/** A permission check's answer, with the third one it can have. */
+export function allowedWord(allowed: boolean | null, t: T): string {
+  return allowed === null
+    ? t("operators", "couldNotTell")
+    : allowed
+      ? t("operators", "allowed")
+      : t("operators", "refused");
+}
+
+/** Three names and a tally: a row is a summary, not the whole list. */
+export function summariseNames(names: readonly string[]): string {
+  if (names.length <= 3) return names.join(", ");
+  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
+}
+
+/** A field the object left empty, drawn as a dash rather than as nothing. */
+export const dash = (value: unknown) =>
+  value === null || value === undefined || value === "" ? "—" : String(value);
+
+/** `14:22` in the reader's own zone. */
+export const hourMinute = (at: number | string) =>
+  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

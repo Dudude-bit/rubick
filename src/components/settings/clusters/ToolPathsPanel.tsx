@@ -36,8 +36,8 @@ function availabilityHint(
   }
   const searched = tool.searchedPaths?.length ?? 0;
   return searched > 0
-    ? `Not on PATH — ${searched} location${searched === 1 ? "" : "s"} searched, including ${tool.searchedPaths[0]}. Set the path below.`
-    : `${label} is not on PATH. Set the path below.`;
+    ? t("settings", "notOnPathSearched", { n: searched })
+    : t("settings", "notOnPath", { label });
 }
 
 /**

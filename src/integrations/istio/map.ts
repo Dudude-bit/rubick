@@ -83,7 +83,7 @@ export function routingMap(
                 ]
                   .filter(Boolean)
                   .join(" · ")
-              : "outside the mesh",
+              : t("readings", "mapOutsideMesh"),
             tone: !service
               ? "mute"
               : !backing.known
@@ -105,9 +105,14 @@ export function routingMap(
                   ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
                   : undefined
                 : backing.stop
-                  ? { text: t("readings", "mapZeroReady"), tone: "err" }
+                  ? {
+                      text: t("count", "nReady", { n: 0 }),
+                      tone: "err",
+                    }
                   : {
-                      text: `${backing.ready + backing.draining} ready`,
+                      text: t("count", "nReady", {
+                        n: backing.ready + backing.draining,
+                      }),
                       tone: backing.ready === 0 ? "warn" : "mute",
                     },
           });
@@ -129,7 +134,7 @@ export function routingMap(
     return {
       id,
       label: group.host,
-      sub: `${group.routes.length} route${group.routes.length === 1 ? "" : "s"}`,
+      sub: t("count", "routeRules", { n: group.routes.length }),
       tone,
       to: hostFilterPath(group.host),
       tag: group.meshOnly

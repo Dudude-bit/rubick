@@ -83,35 +83,10 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
+import { parts } from "@/i18n/parts";
 
 /** Past this many broken applications, nothing opens itself. */
 const AUTO_OPEN = 8;
-
-/**
- * One catalogue sentence drawn around a monospace word. The word is a
- * Kubernetes or Argo identifier and stays as it is spelled; only where it
- * lands in the sentence changes with the language, which is why the string
- * stays whole in the catalogue and the cut happens here.
- */
-function Mono({
-  text,
-  slot,
-  word,
-}: {
-  text: string;
-  slot: string;
-  word: string;
-}) {
-  const at = text.indexOf(slot);
-  if (at < 0) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, at)}
-      <span className="font-mono">{word}</span>
-      {text.slice(at + slot.length)}
-    </>
-  );
-}
 
 export default function ArgoCdPage() {
   const t = useT();
@@ -143,11 +118,11 @@ export default function ArgoCdPage() {
       <VendorReadFailure
         title={t("empty", "couldNotReadApplications")}
         body={
-          <Mono
-            text={t("empty", "applicationsUnreadableBody")}
-            slot="{kind}"
-            word="Application"
-          />
+          <>
+            {parts(t("empty", "applicationsUnreadableBody"), {
+              kind: <span className="font-mono">Application</span>,
+            })}
+          </>
         }
         error={applications.error}
         onRetry={() => void applications.refetch()}
@@ -259,11 +234,11 @@ function ApplicationsTab({
       <div className="max-w-[64ch]">
         <p className="text-xs text-fg-mut">{t("empty", "argoOwnsNothing")}</p>
         <p className="mt-1.5 text-[11px] text-fg-fnt">
-          <Mono
-            text={t("empty", "argoNoApplicationsBody")}
-            slot="{kind}"
-            word="Application"
-          />
+          <>
+            {parts(t("empty", "argoNoApplicationsBody"), {
+              kind: <span className="font-mono">Application</span>,
+            })}
+          </>
         </p>
       </div>
     );
@@ -708,11 +683,11 @@ function DiffLink({ app, url }: { app: ArgoApp; url: string | null }) {
     return (
       <>
         {" "}
-        <Mono
-          text={t("empty", "argoDiffNoAddress")}
-          slot="{service}"
-          word={SERVER_SERVICE}
-        />
+        <>
+          {parts(t("empty", "argoDiffNoAddress"), {
+            service: <span className="font-mono">{SERVER_SERVICE}</span>,
+          })}
+        </>
       </>
     );
   }
@@ -883,7 +858,11 @@ function ProjectsTab({
   if (projects.length === 0) {
     return (
       <p className="max-w-[64ch] text-xs text-fg-mut">
-        <Mono text={t("empty", "noAppProjects")} slot="{name}" word="default" />
+        <>
+          {parts(t("empty", "noAppProjects"), {
+            name: <span className="font-mono">default</span>,
+          })}
+        </>
       </p>
     );
   }
@@ -1038,11 +1017,12 @@ function ControllerTab({
         {ui ? (
           <p className="text-[11.5px] text-fg-mut">
             {routed.via && !controller.ui ? (
-              <Mono
-                text={t("empty", "kindNameServes", { kind: routed.via.kind })}
-                slot="{name}"
-                word={routed.via.name}
-              />
+              <>
+                {parts(
+                  t("empty", "kindNameServes", { kind: routed.via.kind }),
+                  { name: <span className="font-mono">{routed.via.name}</span> }
+                )}
+              </>
             ) : (
               <>{t("empty", "anIngressServes")}</>
             )}{" "}
@@ -1055,24 +1035,29 @@ function ControllerTab({
           </p>
         ) : routes.isPending ? (
           <p className="text-[11.5px] text-fg-fnt">
-            <Mono
-              text={t("empty", "readingWhatRoutes")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
+            <>
+              {parts(t("empty", "readingWhatRoutes"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
           </p>
         ) : routed.host ? (
           // The middle state, and the whole reason `tls` may be `null`: the
           // host is known and the scheme is not, so the host is named and the
           // link withheld rather than guessed at.
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
-            <Mono
-              text={t("empty", "kindNameServes", {
-                kind: routed.via?.kind ?? t("empty", "somethingWord"),
-              })}
-              slot="{name}"
-              word={routed.via?.name ?? ""}
-            />{" "}
+            <>
+              {parts(
+                t("empty", "kindNameServes", {
+                  kind: routed.via?.kind ?? t("empty", "somethingWord"),
+                }),
+                {
+                  name: (
+                    <span className="font-mono">{routed.via?.name ?? ""}</span>
+                  ),
+                }
+              )}
+            </>{" "}
             <span className="font-mono">{SERVER_SERVICE}</span>{" "}
             {t("action", "atInline")}{" "}
             <span className="font-mono text-fg">{routed.host}</span>
@@ -1082,22 +1067,22 @@ function ControllerTab({
           <p className="max-w-[80ch] text-[11.5px] text-fg-mut">
             {/* Says what was read, not what the cluster contains: neither
                 the Ingresses nor the routing capability named a host. */}
-            <Mono
-              text={t("empty", "nothingRoutesServiceToHostname")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
+            <>
+              {parts(t("empty", "nothingRoutesServiceToHostname"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
             {routes.available ? "" : t("empty", "noIngressNoRoutingController")}
-            <Mono
-              text={t("empty", "serviceIsClusterIpNoRoute")}
-              slot="{service}"
-              word={SERVER_SERVICE}
-            />
-            <Mono
-              text={t("empty", "everythingReadFromObjects")}
-              slot="{kind}"
-              word="Application"
-            />
+            <>
+              {parts(t("empty", "serviceIsClusterIpNoRoute"), {
+                service: <span className="font-mono">{SERVER_SERVICE}</span>,
+              })}
+            </>
+            <>
+              {parts(t("empty", "everythingReadFromObjects"), {
+                kind: <span className="font-mono">Application</span>,
+              })}
+            </>
             {routes.error && (
               <>
                 {" "}
