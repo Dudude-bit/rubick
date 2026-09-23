@@ -43,7 +43,7 @@ import {
   SOURCE_KINDS,
   useControllers,
   usePicture,
-  type FluxController,
+  type FluxControllers,
 } from "./data";
 import {
   reconcilerState,
@@ -55,6 +55,7 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
 
 /** Past this many broken reconcilers, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -117,10 +118,10 @@ export default function FluxPage() {
       label: t("nav", "controllers"),
       glyph: viewGlyph(Box),
       mark:
-        controllers.data && controllers.data.length > 0
-          ? countMark(controllers.data.length)
+        controllers.data && controllers.data.controllers.length > 0
+          ? countMark(controllers.data.controllers.length)
           : undefined,
-      content: <ControllersTab controllers={controllers.data} />,
+      content: <ControllersTab read={controllers.data} />,
     },
   ];
 
@@ -696,19 +697,16 @@ function SourceFinding({
 
 // --- controllers --------------------------------------------------------
 
-function ControllersTab({
-  controllers,
-}: {
-  controllers: FluxController[] | undefined;
-}) {
+function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   const t = useT();
-  if (!controllers) {
+  if (!read) {
     return (
       <p className="text-xs text-fg-fnt">
         {t("empty", "readingFluxWorkloads")}
       </p>
     );
   }
+  const { controllers, unread } = read;
 
   return (
     <Section>
@@ -717,7 +715,11 @@ function ControllersTab({
         count={controllers.length || undefined}
         description={t("empty", "fluxWorkloadsDescription")}
       />
-      {controllers.length === 0 ? (
+      {unread ? (
+        <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+          {sayWords(unread, t)}
+        </p>
+      ) : controllers.length === 0 ? (
         <p className="max-w-[64ch] text-[11px] text-fg-fnt">
           {t("empty", "fluxNoControllersPre")}{" "}
           <span className="font-mono">app.kubernetes.io/part-of=flux</span>

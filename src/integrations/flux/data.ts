@@ -17,6 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
+import type { Saying } from "@/i18n/say";
+import { failureOf, listOrFailure } from "../ingress";
 import { fluxPicture, type FluxPicture } from "./model";
 
 export const KUSTOMIZATIONS_CRD = "kustomizations.kustomize.toolkit.fluxcd.io";
@@ -93,29 +95,40 @@ export interface FluxController {
   desired: number;
 }
 
+export interface FluxControllers {
+  controllers: FluxController[];
+  /** Why the list is empty when it could not be read; null when it was. */
+  unread: Saying | null;
+}
+
+export async function fetchControllers(): Promise<FluxControllers> {
+  const read = await listOrFailure(
+    commands.listDeployments({
+      namespace: null,
+      labelSelector: CONTROLLER_SELECTOR,
+      fieldSelector: null,
+      limit: null,
+    })
+  );
+  return {
+    controllers: read.items
+      .map((deployment) => ({
+        name: deployment.name,
+        namespace: deployment.namespace,
+        image: deployment.containers[0]?.image ?? null,
+        ready: deployment.replicas.ready,
+        desired: deployment.replicas.desired,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    unread: failureOf(read),
+  };
+}
+
 export function useControllers() {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
     queryKey: [context, "flux", "controllers"],
-    queryFn: async (): Promise<FluxController[]> => {
-      const deployments = await commands
-        .listDeployments({
-          namespace: null,
-          labelSelector: CONTROLLER_SELECTOR,
-          fieldSelector: null,
-          limit: null,
-        })
-        .catch(() => []);
-      return deployments
-        .map((deployment) => ({
-          name: deployment.name,
-          namespace: deployment.namespace,
-          image: deployment.containers[0]?.image ?? null,
-          ready: deployment.replicas.ready,
-          desired: deployment.replicas.desired,
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name));
-    },
+    queryFn: fetchControllers,
     staleTime: FLUX_STALE,
   });
 }
