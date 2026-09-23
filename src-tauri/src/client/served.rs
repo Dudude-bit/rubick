@@ -41,7 +41,11 @@ struct Discovered {
     group: Option<Arc<ApiGroup>>,
 }
 
-type Entry = Arc<OnceCell<Discovered>>;
+/// One read's answer, a failure included: everyone who joined the read gets
+/// it, and the next caller reads again.
+type Answer = std::result::Result<Discovered, Arc<kube::Error>>;
+
+type Entry = Arc<OnceCell<Answer>>;
 
 /// How long an answer that holds what was asked for is kept. A kind added to
 /// a group in use, or a version dropped from it, shows up within this.
@@ -59,10 +63,10 @@ const RECHECK_AFTER: Duration = Duration::from_secs(30);
 /// Discovered groups by (context, group).
 ///
 /// One `OnceCell` per key, so callers that arrive together wait on one
-/// request. A failed read is never kept: a refusal cached as "not served"
-/// would say a kind is not installed for as long as the app runs. Nor is an
-/// answer kept for good: a kind installed after it was read would stay
-/// "not installed" until the next connection.
+/// request, failed or not. A failed read is kept for no one after them: a
+/// refusal cached as "not served" would say a kind is not installed for as
+/// long as the app runs. Nor is an answer kept for good: a kind installed
+/// after it was read would stay "not installed" until the next connection.
 pub struct ServedIndex {
     groups: DashMap<(String, String), Entry>,
     fresh_for: Duration,
@@ -178,23 +182,30 @@ impl ServedIndex {
 
     async fn read(&self, key: &(String, String), client: &Client) -> Result<(Entry, Discovered)> {
         let cell = self.groups.entry(key.clone()).or_default().clone();
-        let found = cell
-            .get_or_try_init(|| async {
+        let answer = cell
+            .get_or_init(|| async {
                 let group = match discovery::group(client, &key.1).await {
                     Ok(found) => Some(Arc::new(found)),
                     Err(kube::Error::Discovery(kube::error::DiscoveryError::MissingApiGroup(
                         _,
                     ))) => None,
-                    Err(e) => return Err(crate::error::Error::from(e)),
+                    Err(e) => return Err(Arc::new(e)),
                 };
                 Ok(Discovered {
                     at: Instant::now(),
                     group,
                 })
             })
-            .await?
+            .await
             .clone();
-        Ok((cell, found))
+        match answer {
+            Ok(found) => Ok((cell, found)),
+            Err(failed) => {
+                self.groups
+                    .remove_if(key, |_, held| Arc::ptr_eq(held, &cell));
+                Err(crate::error::Error::from(again(&failed)))
+            }
+        }
     }
 
     /// A request's answer from where this index put a kind of `group`. A 404
@@ -217,8 +228,11 @@ impl ServedIndex {
     fn forget_group(&self, context: &str, group: &str) {
         self.groups
             .remove_if(&(context.to_string(), group.to_string()), |_, held| {
-                held.get()
-                    .is_some_and(|found| found.at.elapsed() >= self.recheck_after)
+                held.get().is_some_and(|answer| {
+                    answer
+                        .as_ref()
+                        .is_ok_and(|found| found.at.elapsed() >= self.recheck_after)
+                })
             });
     }
 
@@ -251,6 +265,55 @@ impl ServedIndex {
     /// The real floors, `by` times shorter.
     pub(crate) fn scaled(by: u32) -> Self {
         Self::aged(FRESH_FOR / by, MISSING_FOR / by, RECHECK_AFTER / by)
+    }
+}
+
+/// The same failure for each caller that shared it, told apart the way the
+/// original is: a status keeps its code, and anything else keeps its words
+/// and its causes, a deadline among them.
+fn again(failed: &Arc<kube::Error>) -> kube::Error {
+    match failed.as_ref() {
+        kube::Error::Api(status) => kube::Error::Api(status.clone()),
+        kube::Error::Service(inner) => kube::Error::Service(Box::new(Shared {
+            failed: failed.clone(),
+            shown: inner.to_string(),
+            cause: Cause::Inner,
+        })),
+        other => kube::Error::Service(Box::new(Shared {
+            failed: failed.clone(),
+            shown: other.to_string(),
+            cause: Cause::Itself,
+        })),
+    }
+}
+
+#[derive(Debug)]
+enum Cause {
+    /// A `Service` failure, standing in for what it wraps.
+    Inner,
+    /// Any other, standing in for itself.
+    Itself,
+}
+
+#[derive(Debug)]
+struct Shared {
+    failed: Arc<kube::Error>,
+    shown: String,
+    cause: Cause,
+}
+
+impl std::fmt::Display for Shared {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.shown)
+    }
+}
+
+impl std::error::Error for Shared {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self.cause {
+            Cause::Inner => self.failed.source(),
+            Cause::Itself => Some(self.failed.as_ref()),
+        }
     }
 }
 
@@ -620,6 +683,67 @@ mod tests {
             .await
             .expect("read");
         assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    /// Would read discovery once per caller, one after another, while it
+    /// kept failing: each waiter ran its own read when the one before it
+    /// failed. The refusal reaches every joiner as a refusal, and the next
+    /// caller asks again.
+    #[tokio::test]
+    async fn callers_together_share_one_failed_read_and_the_next_asks_again() {
+        let (client, hits) = server(vec![(
+            "/apis",
+            403,
+            super::test_server::failure(403, "Forbidden").1,
+        )])
+        .await;
+        let index = ServedIndex::default();
+
+        let asks = (0..10).map(|_| index.resource("kind", &client, GROUP, "gateways"));
+        for answer in futures::future::join_all(asks).await {
+            let error = answer.expect_err("a refused read is not an answer");
+            assert!(error.is_refusal(), "{error:?}");
+        }
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&1));
+
+        let again = index.resource("kind", &client, GROUP, "gateways").await;
+        assert!(again.is_err());
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    /// Would keep a page waiting one deadline per caller on a server that
+    /// hangs, and must not turn the deadline into some other failure for the
+    /// callers who joined it: the frontend offers a narrower read on it.
+    #[tokio::test]
+    async fn callers_waiting_on_a_hung_server_all_hear_one_deadline() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        let config = kube::Config::new(format!("http://127.0.0.1:{port}").parse().expect("url"));
+        let client =
+            super::super::client_with_deadline(config, Duration::from_millis(200)).expect("client");
+        let index = ServedIndex::default();
+
+        let started = Instant::now();
+        let asks = (0..5).map(|_| index.resource("kind", &client, GROUP, "gateways"));
+        for answer in futures::future::join_all(asks).await {
+            assert!(
+                matches!(answer, Err(crate::error::Error::ReadDeadline { .. })),
+                "{answer:?}"
+            );
+        }
+        assert!(
+            started.elapsed() < Duration::from_millis(800),
+            "{:?}",
+            started.elapsed()
+        );
     }
 
     fn aged(fresh_for: u64, missing_for: u64) -> ServedIndex {
