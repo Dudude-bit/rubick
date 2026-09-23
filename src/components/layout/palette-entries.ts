@@ -452,19 +452,25 @@ export function buildPaletteEntries({
     // "No results" while a cluster is still working is a lie, and so is
     // "no results" for a cluster nobody has connected to. The count is
     // the one thing a reader needs before believing an empty list.
+    // A failed cluster has answered and searched nothing: only `done` ones
+    // can say the query matches nothing there.
     const total = shownClusters.length;
-    const cold = shownClusters.filter(isCold).length;
+    const searched = shownClusters.filter(
+      (cluster) => cluster.status === "done"
+    ).length;
     out.push({
       id: "hint:empty",
       kind: "hint",
       text: working
         ? t("empty", "noMatchesYet", { answered, total })
-        : answered === 0
-          ? t("empty", "nothingSearchedNoCluster")
-          : cold > 0
+        : searched === 0
+          ? shownClusters.every(isCold)
+            ? t("empty", "nothingSearchedNoCluster")
+            : t("empty", "nothingSearchedAnywhere")
+          : searched < total
             ? t("empty", "nothingMatchesOnSearched", {
                 query,
-                answered,
+                answered: searched,
                 total,
               })
             : t("empty", "nothingMatchesQuery", { query }),

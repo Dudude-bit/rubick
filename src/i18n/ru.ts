@@ -5872,6 +5872,8 @@ export const ru: Catalogue = {
       "Совпадений пока нет — ответили {answered} из {total} кластеров.",
     nothingSearchedNoCluster:
       "Поиск не выполнялся: ни один кластер ещё не подключён.",
+    nothingSearchedAnywhere:
+      "Поиск не выполнен: ни на одном кластере здесь он не завершился.",
     nothingMatchesOnSearched:
       "По запросу «{query}» ничего не найдено на {answered} из {total} кластеров, где выполнялся поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",

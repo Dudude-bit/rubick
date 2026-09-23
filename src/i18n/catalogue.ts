@@ -5433,6 +5433,8 @@ export const en = {
       "No matches yet — {answered} of {total} clusters have answered.",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
+    nothingSearchedAnywhere:
+      "Nothing has been searched: the search did not complete on any cluster here.",
     nothingMatchesOnSearched:
       "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",
