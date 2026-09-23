@@ -229,6 +229,60 @@ impl AppState {
             .ok_or(crate::error::Error::NotConnected(context))
     }
 
+    /// Where `plural` in `group` is served on the current cluster; `None`
+    /// where it is not installed.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served(
+        &self,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<crate::client::served::Served>> {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .resource(&context, &client, group, plural)
+            .await
+    }
+
+    /// Every kind `group` serves on the current cluster; `None` where the
+    /// group is not installed.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served_kinds(
+        &self,
+        group: &str,
+    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .kinds(&context, &client, group)
+            .await
+    }
+
+    /// Forget what was discovered about `group` on the current cluster —
+    /// after a 404 from where discovery said it was served.
+    pub fn forget_served(&self, group: &str) {
+        if let Some(context) = self.get_current_context() {
+            self.client_manager.served().forget_group(&context, group);
+        }
+    }
+
+    fn current(&self) -> Result<(String, Arc<kube::Client>)> {
+        let context = self.get_current_context().ok_or_else(|| {
+            crate::error::Error::Internal(crate::error::messages::NO_CLUSTER.to_string())
+        })?;
+        let client = self
+            .client_manager
+            .get_client(&context)
+            .ok_or_else(|| crate::error::Error::NotConnected(context.clone()))?;
+        Ok((context, client))
+    }
+
     /// Set current context
     pub fn set_current_context(&self, context: Option<String>) {
         *self.current_context.write() = context;

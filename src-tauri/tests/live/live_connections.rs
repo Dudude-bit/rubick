@@ -24,8 +24,7 @@
 use k8s_gui_lib::commands::connections::connections_of;
 use k8s_gui_lib::commands::helpers::ResourceContext;
 use k8s_gui_lib::resources::{
-    ChainStop, ConnectionEdge, Existence, GatewayApiDetection, ObjectFacts, Relation,
-    ResourceConnections, Usage,
+    ChainStop, ConnectionEdge, Existence, ObjectFacts, Relation, ResourceConnections, Usage,
 };
 use k8s_gui_lib::state::AppState;
 
@@ -751,14 +750,13 @@ async fn a_route_through_a_listenerset_finds_its_gateway() {
     let ctx = context("apps").await;
     // Without a detection the gateway half of the snapshot returns early and
     // the very path under test never runs.
-    let crds: kube::Api<
-        k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
-    > = ctx.cluster_api();
-    let crds = crds
-        .list(&kube::api::ListParams::default())
-        .await
-        .expect("crds");
-    let detection = GatewayApiDetection::from_crds(&crds.items);
+    let detection = k8s_gui_lib::resources::discover_gateway_api(
+        &ctx.client,
+        &k8s_gui_lib::client::served::ServedIndex::default(),
+        "live",
+    )
+    .await
+    .expect("detection");
     assert!(detection.installed, "the scene needs Gateway API installed");
     assert!(
         detection.kinds.iter().any(|k| k.kind == "ListenerSet"),
