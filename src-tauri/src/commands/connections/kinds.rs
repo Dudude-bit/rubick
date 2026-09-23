@@ -180,7 +180,12 @@ pub(super) async fn fetch_template(
         "CronJob" => from_workload!(
             CronJob,
             obj,
-            BTreeMap::new(),
+            obj.spec
+                .as_ref()
+                .and_then(|s| s.job_template.spec.as_ref())
+                .and_then(|s| s.template.metadata.as_ref())
+                .and_then(|m| m.labels.clone())
+                .unwrap_or_default(),
             None,
             obj.spec
                 .as_ref()
@@ -960,6 +965,38 @@ mod subject_tests {
             "{err:?}"
         );
         assert!(err.to_string().contains("Deployment/payments"));
+    }
+
+    /// Would tell a CronJob page no Service selects its pods and no budget
+    /// covers them: the labels its Jobs' pods carry were read as none.
+    #[tokio::test]
+    async fn a_cron_job_s_pods_carry_the_labels_its_job_template_gives_them() {
+        let cron = serde_json::json!({
+            "apiVersion": "batch/v1", "kind": "CronJob",
+            "metadata": { "name": "backup", "namespace": "shop" },
+            "spec": {
+                "schedule": "0 * * * *",
+                "jobTemplate": { "spec": { "template": {
+                    "metadata": { "labels": { "app": "backup" } },
+                    "spec": { "containers": [{ "name": "main" }] },
+                } } },
+            },
+        });
+        let (client, _) = server(vec![(
+            "/apis/batch/v1/namespaces/shop/cronjobs/backup",
+            200,
+            cron.to_string(),
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let (template, _) = fetch_template(&ctx, "shop", "CronJob", "backup")
+            .await
+            .expect("the CronJob is there");
+        assert_eq!(
+            template.labels.get("app").map(String::as_str),
+            Some("backup")
+        );
     }
 
     /// A 404 naming no object is a path the cluster does not serve, not the
