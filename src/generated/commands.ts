@@ -60,7 +60,6 @@ import type {
   HelmReleaseDetail,
   HelmRepository,
   HelmRevision,
-  InfrastructureBuilderStateDto,
   IngressClassBinding,
   IngressInfo,
   IssuanceStory,
@@ -96,10 +95,6 @@ import type {
   PrometheusProbe,
   Published,
   RecentItem,
-  RegistryConfigInfo,
-  RegistryImageResult,
-  RegistryImportEntry,
-  RegistrySearchRequest,
   Renewal,
   ReplicaSetInfo,
   ResolveProbe,
@@ -288,21 +283,6 @@ export async function checkNamespaceAccess(
   return invoke<NamespaceAccess[]>("check_namespace_access", { namespaces });
 }
 
-export async function listRegistryConfigs(): Promise<RegistryConfigInfo[]> {
-  return invoke<RegistryConfigInfo[]>("list_registry_configs");
-}
-
-export async function saveRegistryConfig(
-  id: string,
-  configEntry: RegistryConfigInfo
-): Promise<void> {
-  return invoke<void>("save_registry_config", { id, configEntry });
-}
-
-export async function deleteRegistryConfig(id: string): Promise<void> {
-  return invoke<void>("delete_registry_config", { id });
-}
-
 export async function listGcpProfiles(): Promise<GcpProfileInfo[]> {
   return invoke<GcpProfileInfo[]>("list_gcp_profiles");
 }
@@ -413,25 +393,6 @@ export async function addYamlHistoryEntry(
   entry: YamlHistoryEntryDto
 ): Promise<void> {
   return invoke<void>("add_yaml_history_entry", { resourceKey, entry });
-}
-
-export async function getInfrastructureState(
-  context: string
-): Promise<InfrastructureBuilderStateDto> {
-  return invoke<InfrastructureBuilderStateDto>("get_infrastructure_state", {
-    context,
-  });
-}
-
-export async function saveInfrastructureState(
-  context: string,
-  state: InfrastructureBuilderStateDto
-): Promise<void> {
-  return invoke<void>("save_infrastructure_state", { context, state });
-}
-
-export async function clearInfrastructureState(context: string): Promise<void> {
-  return invoke<void>("clear_infrastructure_state", { context });
 }
 
 export async function getRecentItems(): Promise<RecentItem[]> {
@@ -1210,16 +1171,6 @@ export async function subscribeGatewayRouteWatch(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("subscribe_gateway_route_watch", { kind, namespace });
-}
-
-export async function importDockerConfig(): Promise<RegistryImportEntry[]> {
-  return invoke<RegistryImportEntry[]>("import_docker_config");
-}
-
-export async function searchRegistryImages(
-  request: RegistrySearchRequest
-): Promise<RegistryImageResult[]> {
-  return invoke<RegistryImageResult[]>("search_registry_images", { request });
 }
 
 export async function nodeResourceBudget(name: string): Promise<NodeBudget> {

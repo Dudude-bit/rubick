@@ -20,9 +20,6 @@ vi.mock("@/components/settings/ClustersSettings", () => ({
 }));
 // About is left real: its rows are what the cross-section count test
 // needs something to count.
-vi.mock("@/components/registry/RegistrySettings", () => ({
-  RegistrySettings: () => <div>registries pane</div>,
-}));
 vi.mock("@/lib/commands", () => ({
   commands: {
     getAppInfo: vi.fn(async () => ({
@@ -69,7 +66,6 @@ function open(section: string) {
 const PANE_MARK: Record<string, RegExp> = {
   appearance: /Resource colouring/,
   clusters: /clusters pane/,
-  registries: /registries pane/,
   diagnostics: /Nothing here needs attention|Search path/,
   sharing: /Reports are saved as files/,
   handoff: /Search engine/,
@@ -96,10 +92,13 @@ describe("SettingsOverlay", () => {
     );
 
     it("names the open section in the pane heading", async () => {
-      open("registries");
+      open("handoff");
       renderOver();
       expect(
-        await screen.findByRole("heading", { name: "Registries", level: 1 })
+        await screen.findByRole("heading", {
+          name: "Search and hand-off",
+          level: 1,
+        })
       ).toBeInTheDocument();
     });
 
@@ -256,7 +255,7 @@ describe("SettingsOverlay", () => {
       );
       // ...and the section holding nothing says so rather than going blank.
       expect(
-        screen.getByRole("button", { name: "Registries, 0 matching" })
+        screen.getByRole("button", { name: "Clusters, 0 matching" })
       ).toBeInTheDocument();
     });
 

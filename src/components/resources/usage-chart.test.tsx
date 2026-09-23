@@ -1,7 +1,28 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { beforeAll, describe, expect, it } from "vitest";
 import { UsageChart } from "@/components/resources/usage-chart";
 import type { UsageSample } from "@/lib/usage-history";
+
+// The band is loaded lazily; loaded once here, each render below resolves it
+// inside `act` instead of drawing the fallback.
+beforeAll(async () => {
+  await import("@/components/resources/usage-band");
+});
+
+async function draw(ui: ReactElement) {
+  let drawn!: ReturnType<typeof render>;
+  await act(async () => {
+    drawn = render(ui);
+  });
+  return drawn;
+}
 
 const series = (values: number[], from = 1_700_000_000_000): UsageSample[] =>
   values.map((cpuMillicores, index) => ({
@@ -49,8 +70,8 @@ const shares = (container: HTMLElement) =>
   );
 
 describe("UsageChart with no limit", () => {
-  it("says there is no limit instead of drawing a proportion of nothing", () => {
-    render(
+  it("says there is no limit instead of drawing a proportion of nothing", async () => {
+    await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -62,10 +83,10 @@ describe("UsageChart with no limit", () => {
     expect(screen.getByText(/No limit set/i)).toBeInTheDocument();
   });
 
-  it("offers the reader no percentage, because there is nothing to be a percentage of", () => {
+  it("offers the reader no percentage, because there is nothing to be a percentage of", async () => {
     // The bug this replaces: a caption promising "against this pod's limits"
     // over a full-width empty track, which reads as 0% used.
-    const { container } = render(
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -78,8 +99,8 @@ describe("UsageChart with no limit", () => {
     expect(container.textContent).not.toMatch(/\//);
   });
 
-  it("draws neither a track nor a threshold rule with no ceiling to put one at", () => {
-    const { container } = render(
+  it("draws neither a track nor a threshold rule with no ceiling to put one at", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -96,8 +117,8 @@ describe("UsageChart with no limit", () => {
     expect(container.textContent).not.toMatch(/limit \d/);
   });
 
-  it("tells a screen reader the scale is what was used, not a limit", () => {
-    render(
+  it("tells a screen reader the scale is what was used, not a limit", async () => {
+    await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -113,8 +134,8 @@ describe("UsageChart with no limit", () => {
 });
 
 describe("UsageChart with a limit", () => {
-  it("reads how close it is without the reader doing the arithmetic", () => {
-    const { container } = render(
+  it("reads how close it is without the reader doing the arithmetic", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -127,8 +148,8 @@ describe("UsageChart with a limit", () => {
     expect(screen.queryByText(/No limit set/i)).not.toBeInTheDocument();
   });
 
-  it("draws the ceiling as a dashed rule carrying its own value", () => {
-    const { container } = render(
+  it("draws the ceiling as a dashed rule carrying its own value", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -144,8 +165,8 @@ describe("UsageChart with a limit", () => {
     expect(container.querySelector("svg")!.textContent).toContain("limit 200m");
   });
 
-  it("names the limit in the description a screen reader gets", () => {
-    render(
+  it("names the limit in the description a screen reader gets", async () => {
+    await draw(
       <UsageChart
         label="Memory"
         type="memory"
@@ -174,8 +195,8 @@ describe("UsageChart with a limit", () => {
 });
 
 describe("UsageChart before there is a line", () => {
-  it("says the window starts now rather than showing an empty box", () => {
-    render(
+  it("says the window starts now rather than showing an empty box", async () => {
+    await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -189,8 +210,8 @@ describe("UsageChart before there is a line", () => {
     ).toBeInTheDocument();
   });
 
-  it("draws the one reading as a point, not as a line joining nothing", () => {
-    const { container } = render(
+  it("draws the one reading as a point, not as a line joining nothing", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -204,8 +225,8 @@ describe("UsageChart before there is a line", () => {
     );
   });
 
-  it("still shows the reading it does have", () => {
-    render(
+  it("still shows the reading it does have", async () => {
+    await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -217,11 +238,11 @@ describe("UsageChart before there is a line", () => {
     expect(screen.getByText("31")).toBeInTheDocument();
   });
 
-  it("says nothing is reporting rather than reporting zero", () => {
+  it("says nothing is reporting rather than reporting zero", async () => {
     // metrics-server is up — the block would not be drawing bands at all
     // otherwise — so the honest sentence is that it has no reading for
     // this object, not that the cluster lacks the server.
-    const { container } = render(
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -238,8 +259,8 @@ describe("UsageChart before there is a line", () => {
 });
 
 describe("UsageChart gaps", () => {
-  it("breaks the line rather than bridging a bucket nothing was sampled in", () => {
-    const { container } = render(
+  it("breaks the line rather than bridging a bucket nothing was sampled in", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -263,7 +284,7 @@ describe("UsageChart gaps", () => {
 
 describe("UsageChart hover", () => {
   it("gives the value and the wall-clock time of the point under the pointer", async () => {
-    const { container } = render(
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -280,7 +301,7 @@ describe("UsageChart hover", () => {
   });
 
   it("can be scrubbed from the keyboard, so the numbers are not hover-only", async () => {
-    const { container } = render(
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -304,8 +325,8 @@ describe("UsageChart restart marks", () => {
     { t: 7000, cpuMillicores: 30, memoryBytes: null, restarts: 1 },
   ];
 
-  it("describes a restart, since a drop to nothing and a climb back is the shape that matters", () => {
-    render(
+  it("describes a restart, since a drop to nothing and a climb back is the shape that matters", async () => {
+    await draw(
       <UsageChart
         label="Memory"
         type="cpu"
@@ -319,8 +340,8 @@ describe("UsageChart restart marks", () => {
     );
   });
 
-  it("marks it on the band as a vertical rule of its own", () => {
-    const { container } = render(
+  it("marks it on the band as a vertical rule of its own", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -338,7 +359,7 @@ describe("UsageChart restart marks", () => {
 
 describe("UsageChart on an object with a capacity rather than limits", () => {
   it("calls the ceiling what the caller calls it", async () => {
-    const { container } = render(
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"
@@ -353,8 +374,8 @@ describe("UsageChart on an object with a capacity rather than limits", () => {
 });
 
 describe("UsageChart motion", () => {
-  it("never animates: the poll is every few seconds and a band that redraws itself is noise", () => {
-    const { container } = render(
+  it("never animates: the poll is every few seconds and a band that redraws itself is noise", async () => {
+    const { container } = await draw(
       <UsageChart
         label="CPU"
         type="cpu"

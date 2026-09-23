@@ -30,37 +30,6 @@ pub struct YamlHistoryEntry {
 }
 
 // ============================================================================
-// Infrastructure Builder State
-// ============================================================================
-
-/// Infrastructure builder configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct InfrastructureBuilderConfig {
-    /// State per context
-    #[serde(default)]
-    pub contexts: std::collections::BTreeMap<String, InfrastructureBuilderState>,
-}
-
-/// Infrastructure builder state for a context
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct InfrastructureBuilderState {
-    /// `ReactFlow` nodes as JSON
-    #[serde(default)]
-    pub nodes: Vec<serde_json::Value>,
-    /// `ReactFlow` edges as JSON
-    #[serde(default)]
-    pub edges: Vec<serde_json::Value>,
-    /// YAML text content
-    #[serde(default)]
-    pub yaml_text: String,
-    /// Extra manifests that couldn't be parsed
-    #[serde(default)]
-    pub extra_manifests: Vec<serde_json::Value>,
-}
-
-// ============================================================================
 // Recent Items (Command Palette)
 // ============================================================================
 

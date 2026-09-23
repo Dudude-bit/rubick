@@ -7,8 +7,8 @@
 //!
 //! - `app`        — Theme / Kubernetes / Cache / Plugins / Logging
 //! - `cloud`      — GCP / Azure profiles, kubeconfig context bindings, CLI paths
-//! - `connection` — port-forward and registry persisted state
-//! - `editor`     — YAML editor history, infra builder canvas, Recent Items
+//! - `connection` — port-forward persisted state
+//! - `editor`     — YAML editor history, Recent Items
 //! - `integrations` — addresses and credentials for configured integrations
 //!
 //! Two singleton domains live here in `mod.rs` because they're each
@@ -30,13 +30,8 @@ use std::sync::OnceLock;
 
 pub use app::{default_true, KubernetesConfig, ThemeConfig};
 pub use cloud::{AzureProfile, CliPathsConfig, CloudConfig, ContextBinding, GcpProfile};
-pub use connection::{
-    PortForwardConfig, PortForwardConfigStore, RegistriesConfig, RegistryConfigEntry,
-};
-pub use editor::{
-    InfrastructureBuilderConfig, InfrastructureBuilderState, RecentItem, RecentItemsConfig,
-    YamlEditorConfig, YamlHistoryEntry,
-};
+pub use connection::{PortForwardConfig, PortForwardConfigStore};
+pub use editor::{RecentItem, RecentItemsConfig, YamlEditorConfig, YamlHistoryEntry};
 pub use integrations::{ConnectionEntry, IntegrationsConfig, LokiEntry, PrometheusEntry};
 pub use sharing::{ShareTarget, SharingConfig};
 
@@ -64,18 +59,12 @@ pub struct AppConfig {
     /// CLI tools paths
     #[serde(default)]
     pub cli_paths: CliPathsConfig,
-    /// Registry configurations, credentials included
-    #[serde(default)]
-    pub registries: RegistriesConfig,
     /// Integrations the reader configures, per kubeconfig context
     #[serde(default)]
     pub integrations: IntegrationsConfig,
     /// YAML editor history
     #[serde(default)]
     pub yaml_editor: YamlEditorConfig,
-    /// Infrastructure builder state per context
-    #[serde(default)]
-    pub infrastructure_builder: InfrastructureBuilderConfig,
     /// Recent items for command palette
     #[serde(default)]
     pub recent_items: RecentItemsConfig,
@@ -157,9 +146,8 @@ impl AppConfig {
                 Ok(path) if path.exists() => {
                     let (config, recovery) = Self::move_aside(&path, why.to_string());
                     // `toml` renders the offending source line, and the
-                    // line that fails to parse is as likely as any to be the
-                    // bearer token or the registry password this file exists
-                    // to hold. Diagnostics still shows `recovery.why` whole,
+                    // line that fails to parse is as likely as any to be a
+                    // bearer token this file exists to hold. Diagnostics still shows `recovery.why` whole,
                     // on the reader's own screen; the log file, which
                     // outlives the run and gets pasted into issues, does not.
                     let why = crate::auth::for_the_log(&recovery.why);

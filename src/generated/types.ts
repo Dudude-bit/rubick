@@ -741,45 +741,6 @@ export interface ResourceBudget {
   extended: boolean;
 }
 
-export interface RegistryImageResult {
-  id: string;
-  name: string;
-  description: string;
-  isOfficial: boolean;
-}
-
-export interface RegistrySearchRequest {
-  query: string;
-  registry: RegistryConfig;
-  auth: RegistryAuth | null;
-  useSavedAuth: boolean;
-}
-
-export interface RegistryAuth {
-  authType: string;
-  username: string | null;
-  password: string | null;
-  token: string | null;
-}
-
-export interface RegistryConfig {
-  id: string;
-  provider: string;
-  baseUrl: string | null;
-  host: string | null;
-  project: string | null;
-  accountId: string | null;
-  region: string | null;
-}
-
-export interface RegistryImportEntry {
-  server: string;
-  host: string;
-  baseUrl: string;
-  isDockerHub: boolean;
-  auth: RegistryAuth | null;
-}
-
 export interface CliAvailability {
   available: boolean;
   version: string | null;
@@ -1675,13 +1636,6 @@ export interface RecentItem {
   timestamp: number;
 }
 
-export interface InfrastructureBuilderStateDto {
-  nodes: unknown[];
-  edges: unknown[];
-  yamlText: string;
-  extraManifests: unknown[];
-}
-
 export interface YamlHistoryEntryDto {
   timestamp: number;
   content: string;
@@ -1744,21 +1698,6 @@ export interface GcpProfile {
 export interface GcpProfileInfo {
   name: string;
   profile: GcpProfile;
-}
-
-export interface RegistryConfigInfo {
-  id: string;
-  label: string;
-  provider: string;
-  baseUrl?: string;
-  host?: string;
-  project?: string;
-  accountId?: string;
-  region?: string;
-  authType: string;
-  username?: string;
-  password?: string;
-  token?: string;
 }
 
 export interface NamespaceAccess {

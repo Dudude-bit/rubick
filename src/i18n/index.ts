@@ -16,7 +16,6 @@
  */
 
 import { en, type Catalogue, type Plural } from "./catalogue";
-import { ru } from "./ru";
 
 /**
  * The languages the interface is offered in.
@@ -40,7 +39,35 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   zh: "中文",
 };
 
-const CATALOGUES: Partial<Record<Locale, Catalogue>> = { ru };
+/**
+ * Each translation, fetched when it is first needed. The Russian catalogue
+ * is a fifth of the JavaScript the window loaded before it could draw, for
+ * every reader, whichever language they read in.
+ */
+const LOADERS: Partial<Record<Locale, () => Promise<Catalogue>>> = {
+  ru: () => import("./ru").then((module) => module.ru),
+};
+
+/** The catalogues loaded so far; English is built in. */
+const CATALOGUES: Partial<Record<Locale, Catalogue>> = {};
+
+/**
+ * Loads a language's catalogue, before anything is drawn in it.
+ *
+ * `translate` falls back to English per key, so a language chosen before its
+ * catalogue arrived would render in English with nothing to say so. The
+ * window loads the reader's language before its first render, and the
+ * locale store loads a new one before it switches to it.
+ */
+export async function loadLocale(locale: Locale): Promise<void> {
+  const load = LOADERS[locale];
+  if (load && !CATALOGUES[locale]) CATALOGUES[locale] = await load();
+}
+
+/** Whether a language's catalogue has arrived. */
+export function isLoaded(locale: Locale): boolean {
+  return locale === "en" || locale in CATALOGUES;
+}
 
 type Section = keyof typeof en;
 type KeyOf<S extends Section> = keyof (typeof en)[S];
@@ -100,7 +127,7 @@ export function translate<S extends Section>(
 
 /** Whether this locale has a catalogue at all, for the picker to say so. */
 export function isTranslated(locale: Locale): boolean {
-  return locale === "en" || locale in CATALOGUES;
+  return locale === "en" || locale in LOADERS;
 }
 
 /**

@@ -18,12 +18,11 @@ import { useEffect, useRef } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
-import { RegistrySettings } from "@/components/registry/RegistrySettings";
 import { Kbd } from "@/components/ui/kbd";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { cn } from "@/lib/utils";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 import { AboutSettings } from "./AboutSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { HandoffSettings } from "./HandoffSettings";
@@ -31,7 +30,6 @@ import { SharingSettings } from "./SharingSettings";
 import { ClustersSettings } from "./ClustersSettings";
 import { DiagnosticsSettings } from "./DiagnosticsSettings";
 import { SettingsNav } from "./SettingsNav";
-import { SettingsSearchable } from "./settings-row";
 import {
   SettingsSearchProvider,
   SettingsSectionScope,
@@ -39,20 +37,12 @@ import {
 } from "./settings-search";
 import { SETTINGS_SECTIONS } from "./settings-sections";
 
-function sectionContent(id: string, t: T) {
+function sectionContent(id: string) {
   switch (id) {
     case "appearance":
       return <AppearanceSettings />;
     case "clusters":
       return <ClustersSettings />;
-    case "registries":
-      // Registries keeps its own editor, which is not built from rows, so
-      // the section is indexed as one thing.
-      return (
-        <SettingsSearchable keywords={t("settings", "searchRegistryWords")}>
-          <RegistrySettings />
-        </SettingsSearchable>
-      );
     case "diagnostics":
       return <DiagnosticsSettings />;
     case "sharing":
@@ -127,7 +117,7 @@ function SettingsShell() {
                 hidden={!isActive}
               >
                 <SettingsSectionScope id={section.id}>
-                  {sectionContent(section.id, t)}
+                  {sectionContent(section.id)}
                 </SettingsSectionScope>
               </div>
             );
