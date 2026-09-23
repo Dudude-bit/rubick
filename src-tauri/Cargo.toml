@@ -66,6 +66,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "for
 # Security
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 rustls-pemfile = "2.2"
+# The verifier reqwest would pick, built in `tls.rs` so it can be wrapped.
+rustls-platform-verifier = "0.7"
+webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["std"] }
 secrecy = "0.10"
 # X.509 is parsed here and never in the webview: a certificate's facts are
 # small, its bytes are not, and the private key beside it must never leave

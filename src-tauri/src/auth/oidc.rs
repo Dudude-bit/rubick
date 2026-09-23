@@ -69,15 +69,23 @@ impl OidcAuth {
     /// If the PEM cannot be read as a certificate.
     fn http(&self) -> Result<reqwest::Client> {
         let Some(pem) = &self.idp_ca else {
-            return Ok(reqwest::Client::new());
+            return crate::tls::builder().build().map_err(|e| {
+                Error::Auth(AuthError::Oidc(format!("Cannot build HTTP client: {e}")))
+            });
         };
-        let certificate = reqwest::Certificate::from_pem(pem).map_err(|e| {
+        let unusable = |why: String| {
             Error::Auth(AuthError::Oidc(format!(
-                "idp-certificate-authority is not a usable certificate: {e}"
+                "idp-certificate-authority is not a usable certificate: {why}"
             )))
-        })?;
-        reqwest::Client::builder()
-            .add_root_certificate(certificate)
+        };
+        let roots = rustls_pemfile::certs(&mut pem.as_slice())
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| unusable(e.to_string()))?;
+        if roots.is_empty() {
+            return Err(unusable("no certificate in it".into()));
+        }
+        crate::tls::trusting(roots)
+            .map_err(|e| unusable(e.to_string()))?
             .build()
             .map_err(|e| Error::Auth(AuthError::Oidc(format!("Cannot build HTTP client: {e}"))))
     }

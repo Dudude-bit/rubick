@@ -1,0 +1,6 @@
+disallowed-methods = [
+  { path = "reqwest::Client::new", reason = "build it with crate::tls, which installs the crypto provider reqwest panics without" },
+  { path = "reqwest::Client::builder", reason = "build it with crate::tls, which installs the crypto provider reqwest panics without" },
+  { path = "reqwest::ClientBuilder::new", reason = "build it with crate::tls, which installs the crypto provider reqwest panics without" },
+  { path = "reqwest::get", reason = "build it with crate::tls, which installs the crypto provider reqwest panics without" },
+]
