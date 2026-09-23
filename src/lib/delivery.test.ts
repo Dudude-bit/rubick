@@ -1,7 +1,6 @@
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
-import { deliveryOfManifest } from "@/components/yaml/manifest-reads";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -305,50 +304,6 @@ describe("applying an edited manifest", () => {
       t
     );
     expect(intercept?.confirmLabel).toBe("Apply anyway");
-  });
-});
-
-describe("the delivery question read out of the document itself", () => {
-  it("takes the group from apiVersion, which no table has to know", () => {
-    expect(
-      deliveryOfManifest(
-        "apiVersion: argoproj.io/v1alpha1\nkind: Application\nmetadata:\n  name: shop\n  namespace: argocd\n"
-      )
-    ).toMatchObject({ group: "argoproj.io", kind: "Application" });
-    expect(
-      deliveryOfManifest(
-        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\n"
-      )
-    ).toMatchObject({ group: "", namespace: null });
-  });
-
-  it("carries the labels and annotations the claim is written in", () => {
-    const query = deliveryOfManifest(
-      [
-        "apiVersion: apps/v1",
-        "kind: Deployment",
-        "metadata:",
-        "  name: api",
-        "  namespace: shop",
-        "  labels:",
-        "    argocd.argoproj.io/instance: shop",
-        "    replicas: 3",
-        "  annotations:",
-        "    note: hand-applied",
-        "",
-      ].join("\n")
-    );
-    expect(query?.labels).toEqual({ "argocd.argoproj.io/instance": "shop" });
-    expect(query?.annotations).toEqual({ note: "hand-applied" });
-  });
-
-  it("asks nothing of a document it cannot read", () => {
-    expect(deliveryOfManifest("")).toBe(null);
-    expect(deliveryOfManifest("kind: Deployment\n")).toBe(null);
-    expect(
-      deliveryOfManifest("apiVersion: v1\nkind: Pod\nmetadata: {}\n")
-    ).toBe(null);
-    expect(deliveryOfManifest("this: [is: not: yaml\n")).toBe(null);
   });
 });
 

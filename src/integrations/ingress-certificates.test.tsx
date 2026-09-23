@@ -8,7 +8,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
-import { useRouteCertificates } from "./ingress";
+import { certificateProblems, useRouteCertificates } from "./ingress";
 
 const read = vi.mocked(commands.getTlsCertificates);
 let client: QueryClient;
@@ -62,5 +62,32 @@ describe("the certificates a page's routes are served under", () => {
     expect(
       client.getQueryData(["tls-certificates", "shop", "shop-tls"])
     ).toBeInstanceOf(Map);
+  });
+
+  /**
+   * A read that failed whole left its Secrets out of the map, and
+   * `certificateProblems` skips a Secret it has no entry for — a host whose
+   * certificate nobody read showed no trouble at all. Fails if a failed
+   * batch is dropped again.
+   */
+  it("carries every Secret of a failed read as unread, not as fine", async () => {
+    read.mockRejectedValue(new Error("Not connected to prod"));
+    const { result } = renderHook(() => useRouteCertificates(routes), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.size).toBe(2));
+
+    const problems = certificateProblems(
+      [{ namespace: "shop", secretName: "shop-tls" }],
+      result.current
+    );
+    expect(problems).toEqual([
+      expect.objectContaining({
+        severity: "warn",
+        read: expect.objectContaining({
+          problem: { says: "secretUnreadable", said: "Not connected to prod" },
+        }),
+      }),
+    ]);
   });
 });

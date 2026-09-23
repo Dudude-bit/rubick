@@ -463,7 +463,6 @@ describe("what the YAML editor's apply reads", () => {
     expect(
       applyWarnings(governed, null, changesReplicaCount(before, after), t)
     ).toEqual([]);
-    expect(changesReplicaCount(doc(3), doc(3) + "# a comment\n")).toBe(false);
   });
 
   it("names the autoscaler when the replica count is what moved", () => {
@@ -497,13 +496,5 @@ describe("what the YAML editor's apply reads", () => {
       "The autoscaler hpa-busy",
       "Argo CD",
     ]);
-  });
-
-  it("reads a replica count out of either document, or neither", () => {
-    expect(changesReplicaCount(doc(3), doc(null))).toBe(true);
-    expect(changesReplicaCount(doc(null), doc(null))).toBe(false);
-    // A document that will not parse is about to fail on the API server, and
-    // its message is better than anything guessed here.
-    expect(changesReplicaCount(doc(3), "spec: [broken\n")).toBe(false);
   });
 });

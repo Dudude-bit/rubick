@@ -33,6 +33,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
+import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
 import {
   conditionsOf,
@@ -1012,10 +1013,26 @@ function ControllerTab({
           count={controller.components.length || undefined}
           description={t("empty", "argoWorkloadsDescription")}
         />
+        {controller.unread.length > 0 && (
+          <div className="mb-2 flex max-w-[64ch] flex-col gap-2">
+            {controller.unread.map(({ kind, failure }) => (
+              <Finding
+                key={kind}
+                tone="warn"
+                title={t("empty", "argoWorkloadsUnread", {
+                  kinds: toPlural(kind),
+                })}
+                verbatim={sayWords(failure, t)}
+              />
+            ))}
+          </div>
+        )}
         {controller.components.length === 0 ? (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem && sayWords(controller.problem, t)}
-          </p>
+          controller.problem && (
+            <p className="max-w-[64ch] text-[11px] text-fg-fnt">
+              {sayWords(controller.problem, t)}
+            </p>
+          )
         ) : (
           <div className="flex flex-col">
             {controller.components.map((component) => (

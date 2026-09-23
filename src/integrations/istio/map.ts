@@ -90,13 +90,17 @@ export function routingMap(
                 : backing.stop
                   ? "err"
                   : "ok",
-            object: service
-              ? {
-                  kind: ResourceType.Service,
-                  name: service.name,
-                  namespace: service.namespace,
-                }
-              : undefined,
+            // Only a Service this cluster was seen to have: unread, a
+            // `name.namespace` host may be a hostname, and a link would lead
+            // to a page for an object nobody knows exists.
+            object:
+              service && destination.external === false
+                ? {
+                    kind: ResourceType.Service,
+                    name: service.name,
+                    namespace: service.namespace,
+                  }
+                : undefined,
             tag: !service
               ? undefined
               : !backing.known

@@ -3298,6 +3298,12 @@ export const ru: Catalogue = {
       many: "{n} сверщиков",
       other: "{n} сверщика",
     },
+    factReconcilersRead: {
+      one: "прочитан {n} сверщик",
+      few: "прочитано {n} сверщика",
+      many: "прочитано {n} сверщиков",
+      other: "прочитано {n} сверщика",
+    },
     factKindsUnread: {
       one: "{n} вид перечислить не удалось",
       few: "{n} вида перечислить не удалось",
@@ -4804,6 +4810,7 @@ export const ru: Catalogue = {
     noRuleNamesThisHost: "ни одно правило не называет этот хост",
     outsideThisCluster: "вне этого кластера",
     notThisClustersPods: "это поды не этого кластера",
+    maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {
@@ -5118,6 +5125,8 @@ export const ru: Catalogue = {
     anyCluster: "любой кластер",
     namespaceOnCluster: "{namespace} в {cluster}",
     readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
+    argoWorkloadsUnread:
+      "Не удалось перечислить {kinds}, поэтому собственных рабочих нагрузок Argo среди них здесь нет.",
     argoWorkloadsDescription:
       "Где на самом деле диагностируется проблема Argo. Репозиторий, до которого он не достучался, и вебхук, который до него не дошёл, — в логах repo-server и контроллера, а не в статусе какого-либо Application.",
     argoUiDescription:
@@ -5992,6 +6001,7 @@ export const ru: Catalogue = {
     gwRefUnresolvedShort: "ссылка не разрешилась",
     gwRefsResolveQuiet: "Ссылки разрешаются — обратного никто не сообщил",
     gwRefsResolve: "Ссылки разрешаются",
+    gwRefsPending: "Контроллер ещё не решил, разрешаются ли ссылки",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
     gwFilterNamed:
@@ -6003,6 +6013,8 @@ export const ru: Catalogue = {
       "Во всех правилах нет backendRefs (и нет ни редиректа, ни фильтра-расширения). Совпавший запрос сразу получает ошибку от шлюза.",
     gwBackendsReading: "Бэкенд-Service — ещё читаются",
     gwEndpointsReading: "Эндпоинты — ещё читаются",
+    gwBackendsUnread: "Бэкенд-Service — прочитать не удалось",
+    gwEndpointsUnread: "Эндпоинты — прочитать не удалось",
     gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
     gwBackendMissingShort: "Service {name} не существует",
     gwWrongPortSay: "Service {name} не обслуживает порт {port}",

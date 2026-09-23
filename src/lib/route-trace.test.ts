@@ -361,6 +361,27 @@ describe("routeTraces", () => {
     expect(step?.say).not.toContain("accepts");
   });
 
+  /**
+   * `ResolvedRefs: Unknown` was checked for `False` only, so a controller
+   * still deciding read "References resolve", green. Fails if the pending
+   * verdict falls through to the resolved step again.
+   */
+  it("does not say the references resolve while the controller is still deciding", () => {
+    const pending = route("healthy", {
+      parents: [
+        parentStatus("edge", [
+          condition("Accepted", "True", "Accepted"),
+          condition("ResolvedRefs", "Unknown", "Pending"),
+        ]),
+      ],
+    });
+    const [trace] = routeTraces(pending, sources(), t);
+    const step = trace.steps.find((s) => s.id === "refs");
+
+    expect(step?.state).toBe("warn");
+    expect(step?.say).not.toBe(t("empty", "gwRefsResolve"));
+  });
+
   /** `Programmed: Unknown` is the API's third answer — the controller has
    *  taken the Gateway and not decided. There was no branch for it, so it
    *  fell through to the green one and the step read "is programmed" for a
@@ -932,6 +953,33 @@ describe("routeTraces", () => {
     expect(trace.steps[5].state).toBe("blind");
     expect(trace.steps[6].state).toBe("blind");
     expect(trace.serving).toBe(true);
+  });
+
+  /**
+   * A Service list that failed read "still being read" for as long as the
+   * page stayed open. Still blind — nobody looked, nothing is broken — but
+   * saying why. Fails if the failure is drawn as a read in flight.
+   */
+  it("says the backends could not be read when their read failed", () => {
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: "services is forbidden",
+        },
+      }),
+      t
+    );
+    const [backend, endpoints] = [trace.steps[5], trace.steps[6]];
+
+    expect(backend.state).toBe("blind");
+    expect(backend.say).toBe(t("empty", "gwBackendsUnread"));
+    expect(backend.detail?.body).toBe("services is forbidden");
+    expect(endpoints.say).toBe(t("empty", "gwEndpointsUnread"));
+    expect(trace.servingKnown).toBe(false);
   });
 
   it("keeps each listener's verdict on its own trace when one gateway is named twice", () => {

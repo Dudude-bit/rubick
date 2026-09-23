@@ -34,6 +34,49 @@ describe("a route with a proxy in front, settled", () => {
     expect(found.tls).toBeNull();
   });
 
+  /**
+   * A proxy whose routes could not be read has not said no. Nothing held
+   * this: deleting the failure from the verdict left every test passing and
+   * the Service page offering `http://` over a refused read.
+   */
+  it("could not say when the proxy's routes could not be read", async () => {
+    const [found] = await settleFrontedRoutes([route(false)], {
+      ingressTls: [],
+      serviceRoutes: [
+        () => Promise.reject(new Error("ingressroutes is forbidden")),
+      ],
+    });
+    expect(found.tls).toBeNull();
+  });
+
+  /**
+   * One proxy's refused read made every route unknown, including those
+   * behind a proxy that had answered plainly. Fails if the failure is shared
+   * across proxies again.
+   */
+  it("keeps one proxy's refused read off the routes behind another", async () => {
+    const behind = (proxy: string): ServiceRoute => ({
+      ...route(false),
+      source: { kind: "IngressRoute", name: proxy, namespace: "web" },
+      front: { ingresses: [], proxy: { namespace: "edge", name: proxy } },
+    });
+    const [refused, answered] = await settleFrontedRoutes(
+      [behind("traefik"), behind("nginx")],
+      {
+        ingressTls: [],
+        serviceRoutes: [
+          async (service) => {
+            if (service.name === "traefik")
+              throw new Error("ingressroutes is forbidden");
+            return [];
+          },
+        ],
+      }
+    );
+    expect(refused.tls).toBeNull();
+    expect(answered.tls).toBe(false);
+  });
+
   /** A route its own objects already serve over TLS needs nobody's word. */
   it("asks nobody about a route already served over TLS", async () => {
     const ask = vi.fn(async () => []);

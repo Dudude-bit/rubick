@@ -134,12 +134,17 @@ export function stateOf(
     // The code says the cluster answered "not there"; `Kind/name` says it
     // was about this object and not a namesake a chain walked into.
     // Escaped, because a name is data: `payments.v1` matched `paymentsXv1`.
+    // Bounded by name characters, not `\b`: `-` and `.` are inside a name,
+    // so `payments` matched `payments-worker`. A dot is only the sentence's
+    // when no name character follows it.
     const quoted = (text: string) =>
       text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const gone =
       errorCode(error) === ERROR_CODES.NOT_FOUND &&
       (!pin ||
-        new RegExp(`\\b${quoted(pin.kind)}/${quoted(pin.name)}\\b`).test(said));
+        new RegExp(
+          `(?<![\\w./-])${quoted(pin.kind)}/${quoted(pin.name)}(?![\\w-]|\\.[\\w-])`
+        ).test(said));
     return gone ? { state: "gone" } : { state: "unread", why: said };
   }
   // A read that has not answered yet is not a read that failed: the card

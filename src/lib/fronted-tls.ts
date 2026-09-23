@@ -65,24 +65,38 @@ export async function settleFrontedRoutes(
   if (proxies.size === 0) return routes;
   const wanted = [...ingresses.values()];
 
-  let unanswered = false;
-  const settled = <T>(promise: Promise<T>): Promise<T | null> =>
+  // A failure is kept with what it failed to answer: every supplier of
+  // `ingress.tls` is asked about every Ingress in front, but a proxy's routes
+  // are its own, and one proxy that could not be read is no reason to doubt
+  // another's answer.
+  let tlsUnanswered = false;
+  const proxiesUnanswered = new Set<string>();
+  const settled = <T>(
+    promise: Promise<T>,
+    failed: () => void
+  ): Promise<T | null> =>
     promise.catch(() => {
-      unanswered = true;
+      failed();
       return null;
     });
   const [tls, fronting] = await Promise.all([
     Promise.all(
       wanted.length === 0
         ? []
-        : ask.ingressTls.map((supplier) => settled(supplier(wanted)))
+        : ask.ingressTls.map((supplier) =>
+            settled(supplier(wanted), () => (tlsUnanswered = true))
+          )
     ),
     Promise.all(
       [...proxies.values()].map(async (proxy) => ({
         proxy: refKey(proxy),
         routes: (
           await Promise.all(
-            ask.serviceRoutes.map((supplier) => settled(supplier(proxy)))
+            ask.serviceRoutes.map((supplier) =>
+              settled(supplier(proxy), () =>
+                proxiesUnanswered.add(refKey(proxy))
+              )
+            )
           )
         ).flatMap((answer) => answer ?? []),
       }))
@@ -107,7 +121,9 @@ export async function settleFrontedRoutes(
       routes:
         fronting.find((entry) => entry.proxy === refKey(front.proxy))?.routes ??
         [],
-      unanswered,
+      unanswered:
+        (tlsUnanswered && fronts.size > 0) ||
+        proxiesUnanswered.has(refKey(front.proxy)),
     });
     if (verdict === true) return { ...route, tls: true };
     if (verdict === "unknown") return { ...route, tls: null };

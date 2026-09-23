@@ -101,6 +101,18 @@ describe("whether something in front terminates TLS", () => {
     expect(ask(undefined)).toBe("unknown");
   });
 
+  /**
+   * With the Ingresses unread nobody has looked for a load balancer in front,
+   * and the hook said `false` — every host of an ACM or Application Gateway
+   * certificate called served in the clear. Fails if the list is not waited for.
+   */
+  it("could not say while the Ingresses are unread", () => {
+    const { result } = renderHook(() =>
+      useFrontingTls(undefined, [proxy], LABEL, SERVED)
+    );
+    expect(result.current("shop.example.com")).toBe("unknown");
+  });
+
   /** A capability still being asked has not said no. */
   it("could not say while the proxy's routes are still being read", () => {
     answers.routes = { routes: [], isPending: true, error: null };

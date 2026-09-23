@@ -13,6 +13,7 @@ import {
   resolveHost,
   type IstioSources,
 } from "./model";
+import { routingMap } from "./map";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -181,16 +182,17 @@ describe("resolving a destination host", () => {
   /** The three spellings Istio takes for the same Service. */
   it("reads a short name, a namespaced one and an FQDN as the same Service", () => {
     const services = [service("shop")];
-    expect(resolveHost("shop", "mesh", services).service).toEqual({
+    expect(resolveHost("shop", "mesh", services, true).service).toEqual({
       name: "shop",
       namespace: "mesh",
     });
-    expect(resolveHost("shop.mesh", "other", services).service).toEqual({
+    expect(resolveHost("shop.mesh", "other", services, true).service).toEqual({
       name: "shop",
       namespace: "mesh",
     });
     expect(
-      resolveHost("shop.mesh.svc.cluster.local", "other", services).service
+      resolveHost("shop.mesh.svc.cluster.local", "other", services, true)
+        .service
     ).toEqual({ name: "shop", namespace: "mesh" });
   });
 
@@ -200,9 +202,71 @@ describe("resolving a destination host", () => {
    * a working ServiceEntry.
    */
   it("claims nothing about a host that is plainly not in this cluster", () => {
-    const outside = resolveHost("api.stripe.com", "mesh", [service("shop")]);
+    const outside = resolveHost(
+      "api.stripe.com",
+      "mesh",
+      [service("shop")],
+      true
+    );
     expect(outside.service).toBeNull();
     expect(outside.external).toBe(true);
+  });
+
+  /**
+   * `name.namespace` is told from a hostname by the Services list. Unread,
+   * it was resolved as "outside the cluster" — a claim about a list nobody
+   * got. Fails if an unread list decides it either way.
+   */
+  it("leaves a name.namespace host undecided while the Services are unread", () => {
+    expect(resolveHost("shop.payments", "mesh", [], false)).toEqual({
+      service: { name: "shop", namespace: "payments" },
+      external: null,
+    });
+    expect(resolveHost("api.stripe.com", "mesh", [], false).external).toBe(
+      true
+    );
+  });
+});
+
+describe("a subset on a host the Services list would decide", () => {
+  /**
+   * With the Services unread, `shop.mesh` was taken for a hostname, the
+   * DestinationRule written for the Service did not match it, and the host
+   * went red with "subset not defined" on a cluster that only refused this
+   * token the Services. Fails if the unread host stops resolving to the
+   * Service a rule can be written for.
+   */
+  it("does not report a missing subset the Service's rule defines", () => {
+    const qualified = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v1" } }] }],
+    });
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }],
+    });
+    const unread = {
+      ...sources({
+        virtualServices: [qualified],
+        destinationRules: [fqdnRule],
+      }),
+      ...backingFrom(undefined, new Error("services is forbidden")),
+    };
+    const groups = hostGroups(unread, t);
+    const [group] = groups;
+
+    expect(group.findings.map((finding) => finding.kind)).toEqual([]);
+    expect(group.backendsKnown).toBe(false);
+    expect(hostSeverity(group)).toBe("unknown");
+
+    // The map drew it "outside the mesh", quiet — and must not link a
+    // Service nobody has seen.
+    const node = routingMap(groups, unread, t)
+      .columns.flatMap((column) => column.nodes)
+      .find((candidate) => candidate.label === "shop");
+    expect(node?.tone).toBe("unknown");
+    expect(node?.object).toBeUndefined();
   });
 });
 

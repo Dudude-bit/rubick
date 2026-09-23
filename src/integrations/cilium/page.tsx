@@ -27,19 +27,20 @@ import {
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
-import type { Tone } from "../page-kit";
+import type { RowTone } from "../page-kit";
 import { coverageOf, type Coverage } from "./coverage";
 import { KINDS, usePicture } from "./data";
 import { enforcementOf } from "./model";
 
-const VERDICT_TONE: Record<Coverage["verdict"], Tone> = {
+const VERDICT_TONE: Record<Coverage["verdict"], RowTone> = {
   covered: "ok",
   // Not red: a pod nobody wrote a policy for is a choice, and most clusters
   // have made it for most of their pods. Red here would paint a default
   // cluster in failures and hide the row below, which is the real one.
   unrestricted: "warn",
   onlyRejected: "err",
-  cannotSay: "warn",
+  // Not warn: that is "nothing selects it", and this is "could not tell".
+  cannotSay: "unknown",
 };
 
 const VERDICT_WORD: Record<

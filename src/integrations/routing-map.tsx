@@ -112,6 +112,17 @@ const TONE_TEXT: Record<MapTone, string> = {
   unknown: "text-fg-fnt",
 };
 
+/**
+ * A tag's own colours. `unknown` is not `mute` with other words: "TLS" and
+ * "TLS not checked" both sat in the same faint grey. Dashed, the map's mark
+ * for what nobody read, as on the node's own border.
+ */
+const TAG_TEXT: Record<MapTone, string> = {
+  ...TONE_TEXT,
+  unknown:
+    "rounded-[3px] border border-dashed border-fg-fnt/60 px-1 text-fg-fnt",
+};
+
 const EDGE_TEXT: Record<MapTone, string> = {
   ok: "text-hair",
   warn: "text-warn/60",
@@ -450,7 +461,7 @@ function Node({
           <span
             className={cn(
               "flex-none text-[9.5px] uppercase tracking-wider",
-              node.tag.className ?? TONE_TEXT[node.tag.tone]
+              node.tag.className ?? TAG_TEXT[node.tag.tone]
             )}
           >
             {node.tag.text}

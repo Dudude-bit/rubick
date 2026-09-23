@@ -3024,6 +3024,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factReconcilersRead: {
+      one: "{n} reconciler read",
+      other: "{n} reconcilers read",
+    },
     factKindsUnread: {
       one: "{n} kind could not be listed",
       other: "{n} kinds could not be listed",
@@ -4401,6 +4405,7 @@ export const en = {
     noRuleNamesThisHost: "no rule names this host",
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
+    maybeThisClustersService: "Services not read — may be one here",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {
@@ -4690,6 +4695,8 @@ export const en = {
     anyCluster: "any cluster",
     namespaceOnCluster: "{namespace} on {cluster}",
     readingArgoWorkloads: "Reading Argo’s own workloads…",
+    argoWorkloadsUnread:
+      "Could not list {kinds}, so any of Argo's own workloads among them are missing here.",
     argoWorkloadsDescription:
       "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
     argoUiDescription:
@@ -5554,6 +5561,8 @@ export const en = {
     gwRefUnresolvedShort: "a reference did not resolve",
     gwRefsResolveQuiet: "References resolve — nothing reported otherwise",
     gwRefsResolve: "References resolve",
+    gwRefsPending:
+      "The controller has not decided whether the references resolve",
     gwRedirectsOnly: "This route redirects — no backends, and none needed",
     gwFilterNamed:
       "An extension filter is named and no backend is — what the filter does, this app does not read",
@@ -5565,6 +5574,8 @@ export const en = {
       "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
     gwBackendsReading: "Backend Services — still being read",
     gwEndpointsReading: "Endpoints — still being read",
+    gwBackendsUnread: "Backend Services — could not be read",
+    gwEndpointsUnread: "Endpoints — could not be read",
     gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
     gwBackendMissingShort: "Service {name} does not exist",
     gwWrongPortSay: "Service {name} does not serve port {port}",

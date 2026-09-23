@@ -30,7 +30,7 @@ import {
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
-import { useAksPicture } from "./data";
+import { accountsKnown, useAksPicture } from "./data";
 import {
   AZURE_IDENTITY_BINDING_CRD,
   AZURE_IDENTITY_CRD,
@@ -52,7 +52,8 @@ export default function AksAddonsPage() {
   );
 
   const orphans = picture.data?.workload.findings ?? [];
-  const legacy = picture.data?.legacyInstalled ?? false;
+  // Not `?? false`: `null` is the add-on's kinds unread, not "not installed".
+  const legacy = picture.data ? picture.data.legacyInstalled : null;
   const podsKnown = picture.data?.podsKnown ?? true;
   const unread = picture.data?.unread ?? [];
   const dangling = picture.data
@@ -74,7 +75,7 @@ export default function AksAddonsPage() {
       <SectionHeader
         title={t("nav", "integrations") === "" ? "" : "AKS add-ons"}
         count={
-          picture.isPending
+          picture.isPending || !picture.data || !accountsKnown(picture.data)
             ? undefined
             : t("count", "identities", { n: accounts.length })
         }

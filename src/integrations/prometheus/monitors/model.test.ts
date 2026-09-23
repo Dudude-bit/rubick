@@ -199,6 +199,23 @@ describe("selectedServices", () => {
       { port: "http", path: "/metrics", interval: "15s" },
     ]);
   });
+
+  /**
+   * The PodMonitor check ran first, so a selector Kubernetes would refuse to
+   * build read "not counted" on a PodMonitor and "cannot be evaluated" on a
+   * ServiceMonitor with the same selector. Fails if the order is swapped back.
+   */
+  it("carries a PodMonitor's unbuildable selector as unevaluable, not as uncounted", () => {
+    const pm = readMonitor(
+      cr("PodMonitor", "web", "shop", {
+        selector: {
+          matchExpressions: [{ key: "app", operator: "In", values: [] }],
+        },
+      }),
+      "PodMonitor"
+    );
+    expect(selectedServices(pm, services)).toEqual({ kind: "unevaluable" });
+  });
 });
 
 describe("pickedUpBy", () => {
