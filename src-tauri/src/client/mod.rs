@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 mod context;
 pub mod proxy;
+pub mod served;
 pub use context::{ContextAuth, ContextInfo};
 pub use proxy::{KubectlProxy, ProxyFailure};
 
@@ -111,6 +112,9 @@ pub struct K8sClientManager {
 
     /// What the last connect to each context found, both ways.
     attempts: DashMap<String, ConnectAttempt>,
+
+    /// Where custom kinds are served, per context.
+    served: served::ServedIndex,
 }
 
 /// The retry policy this app is willing to have applied under it.
@@ -178,6 +182,7 @@ impl K8sClientManager {
             proxies: DashMap::new(),
             paths: DashMap::new(),
             attempts: DashMap::new(),
+            served: served::ServedIndex::default(),
         }
     }
 
@@ -551,6 +556,7 @@ impl K8sClientManager {
     pub fn disconnect(&self, context: &str) {
         self.clients.remove(context);
         self.paths.remove(context);
+        self.served.forget(context);
         // Dropping it kills the process; nothing else talks to that port.
         self.proxies.remove(context);
         tracing::info!("Disconnected from cluster: {}", context);
@@ -563,6 +569,7 @@ impl K8sClientManager {
     pub fn disconnect_all(&self) {
         self.clients.clear();
         self.paths.clear();
+        self.served.clear();
         self.proxies.clear();
         tracing::info!("Disconnected from all clusters");
     }
@@ -580,6 +587,12 @@ impl K8sClientManager {
     }
 
     /// Get an existing client
+    /// Where custom kinds are served, per context.
+    #[must_use]
+    pub fn served(&self) -> &served::ServedIndex {
+        &self.served
+    }
+
     pub fn get_client(&self, context: &str) -> Option<Arc<Client>> {
         self.clients.get(context).map(|c| c.clone())
     }

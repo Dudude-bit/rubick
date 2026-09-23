@@ -130,11 +130,7 @@ const MARKERS: &[(&str, &[&str])] = &[
     ),
 ];
 
-fn detect_by_marker(
-    crds: &[CustomResourceDefinition],
-    id: &str,
-    markers: &[&str],
-) -> DetectedExtension {
+fn detect_by_marker<C: ResourceExt>(crds: &[C], id: &str, markers: &[&str]) -> DetectedExtension {
     let found = markers
         .iter()
         .find(|marker| crds.iter().any(|crd| crd.name_any() == **marker));
@@ -158,13 +154,14 @@ pub async fn detect_in_cluster_extensions(
     // Each source answers for itself. One refusal used to take the whole
     // screen with it: a reader without rights over IngressClasses lost
     // cert-manager, Traefik and everything else that had answered fine.
-    let crds = match crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
-        state.clone(),
-        None,
-        None,
-        None,
-    )
-    .await
+    // Names and labels are all the markers read; the whole list carried
+    // every CRD's schema, tens of megabytes on a cluster that has many.
+    let crds: kube::Api<CustomResourceDefinition> =
+        crate::commands::helpers::ResourceContext::for_list(&state, None)?.cluster_api();
+    let crds = match crds
+        .list_metadata(&kube::api::ListParams::default())
+        .await
+        .map_err(crate::error::Error::from)
     {
         Ok(list) => Some(list.items),
         // Only a refusal degrades. It is an answer about this account's
@@ -205,7 +202,7 @@ fn unknown(id: &str) -> DetectedExtension {
 /// Read off the object rather than off a Deployment's image tag: the CRDs
 /// are what detection already looked at, and an operator installed by Helm,
 /// by manifest or by an operator-of-operators labels them the same way.
-fn version_from(crds: &[CustomResourceDefinition], name: &str) -> Option<String> {
+fn version_from<C: ResourceExt>(crds: &[C], name: &str) -> Option<String> {
     crds.iter()
         .find(|crd| crd.name_any() == name)?
         .labels()

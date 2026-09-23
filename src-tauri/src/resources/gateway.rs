@@ -496,54 +496,76 @@ fn agreed<'a>(values: impl Iterator<Item = Option<&'a str>>) -> (Option<String>,
     }
 }
 
+/// Read it from the cluster: the group's CRDs by name and annotation —
+/// not a megabyte of schema each — and what discovery says is served.
+///
+/// # Errors
+///
+/// Where either read failed; "not installed" is an answer, not an error.
+pub async fn discover_gateway_api(
+    client: &kube::Client,
+    index: &crate::client::served::ServedIndex,
+    context: &str,
+) -> crate::error::Result<GatewayApiDetection> {
+    use kube::ResourceExt;
+    let crds: kube::Api<
+        k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
+    > = kube::Api::all(client.clone());
+    let params = kube::api::ListParams::default();
+    let (metas, served) = tokio::join!(
+        crds.list_metadata(&params),
+        index.kinds(context, client, GATEWAY_API_GROUP),
+    );
+    let metas = metas?;
+    let suffix = format!(".{GATEWAY_API_GROUP}");
+    let stamps = metas
+        .items
+        .iter()
+        .filter(|crd| crd.name_any().ends_with(&suffix))
+        .map(ResourceExt::annotations);
+    Ok(GatewayApiDetection::read(
+        stamps,
+        &served?.unwrap_or_default(),
+    ))
+}
+
 impl GatewayApiDetection {
-    /// Read the answer off a CRD list the app already fetches — no extra
-    /// request, one scan per cluster.
+    /// The kinds discovery lists as served, and the bundle stamps on the
+    /// group's CRDs. Served versions come from the API server rather than
+    /// from each CRD's own list: that is what a request will actually reach.
     #[must_use]
-    pub fn from_crds(
-        crds: &[k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition],
+    pub fn read<'a>(
+        stamps: impl IntoIterator<Item = &'a std::collections::BTreeMap<String, String>>,
+        served: &[crate::client::served::ServedKind],
     ) -> Self {
-        use kube::ResourceExt;
-
-        let ours: Vec<_> = crds
+        let kinds: Vec<ServedGatewayKind> = served
             .iter()
-            .filter(|crd| crd.spec.group == GATEWAY_API_GROUP)
-            .collect();
-
-        let kinds: Vec<ServedGatewayKind> = ours
-            .iter()
-            .filter_map(|crd| {
-                let versions: Vec<String> = crd
-                    .spec
-                    .versions
-                    .iter()
-                    .filter(|v| v.served)
-                    .map(|v| v.name.clone())
-                    .collect();
+            .filter_map(|served| {
                 let read_version = READ_PREFERENCE
                     .iter()
-                    .find(|p| versions.iter().any(|v| v == *p))
+                    .find(|p| served.versions.iter().any(|v| v == *p))
                     .map(|p| (*p).to_string())
-                    .or_else(|| versions.first().cloned())?;
+                    .or_else(|| served.versions.first().cloned())?;
                 Some(ServedGatewayKind {
-                    kind: crd.spec.names.kind.clone(),
-                    plural: crd.spec.names.plural.clone(),
-                    versions,
+                    kind: served.kind.clone(),
+                    plural: served.plural.clone(),
+                    versions: served.versions.clone(),
                     read_version,
                 })
             })
             .collect();
 
-        let (bundle_version, mixed_bundle) = agreed(ours.iter().map(|crd| {
-            crd.annotations()
-                .get(BUNDLE_VERSION_ANNOTATION)
-                .map(String::as_str)
-        }));
-        let (channel, _) = agreed(ours.iter().map(|crd| {
-            crd.annotations()
-                .get(CHANNEL_ANNOTATION)
-                .map(String::as_str)
-        }));
+        let stamps: Vec<_> = stamps.into_iter().collect();
+        let (bundle_version, mixed_bundle) = agreed(
+            stamps
+                .iter()
+                .map(|s| s.get(BUNDLE_VERSION_ANNOTATION).map(String::as_str)),
+        );
+        let (channel, _) = agreed(
+            stamps
+                .iter()
+                .map(|s| s.get(CHANNEL_ANNOTATION).map(String::as_str)),
+        );
 
         Self {
             installed: !kinds.is_empty(),
@@ -1480,49 +1502,20 @@ status:
         assert_eq!(claimed.accepted, Some(true));
     }
 
-    fn crd(
-        name: &str,
-        kind: &str,
-        plural: &str,
-        versions: &[(&str, bool)],
-        annotations: &[(&str, &str)],
-    ) -> k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition
-    {
-        use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::{
-            CustomResourceDefinition, CustomResourceDefinitionNames, CustomResourceDefinitionSpec,
-            CustomResourceDefinitionVersion,
-        };
-        CustomResourceDefinition {
-            metadata: kube::core::ObjectMeta {
-                name: Some(name.to_string()),
-                annotations: Some(
-                    annotations
-                        .iter()
-                        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                        .collect(),
-                ),
-                ..Default::default()
-            },
-            spec: CustomResourceDefinitionSpec {
-                group: GATEWAY_API_GROUP.to_string(),
-                names: CustomResourceDefinitionNames {
-                    kind: kind.to_string(),
-                    plural: plural.to_string(),
-                    ..Default::default()
-                },
-                versions: versions
-                    .iter()
-                    .map(|(version, served)| CustomResourceDefinitionVersion {
-                        name: (*version).to_string(),
-                        served: *served,
-                        storage: *version == "v1",
-                        ..Default::default()
-                    })
-                    .collect(),
-                ..Default::default()
-            },
-            status: None,
+    fn served(kind: &str, plural: &str, versions: &[&str]) -> crate::client::served::ServedKind {
+        crate::client::served::ServedKind {
+            kind: kind.to_string(),
+            plural: plural.to_string(),
+            versions: versions.iter().map(ToString::to_string).collect(),
+            namespaced: kind != "GatewayClass",
         }
+    }
+
+    fn stamps(pairs: &[(&str, &str)]) -> std::collections::BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
     }
 
     const BUNDLE: (&str, &str) = ("gateway.networking.k8s.io/bundle-version", "v1.6.1");
@@ -1530,22 +1523,13 @@ status:
 
     #[test]
     fn detection_reads_served_kinds_and_bundle() {
-        let detection = GatewayApiDetection::from_crds(&[
-            crd(
-                "gateways.gateway.networking.k8s.io",
-                "Gateway",
-                "gateways",
-                &[("v1", true), ("v1beta1", true)],
-                &[BUNDLE, CHANNEL],
-            ),
-            crd(
-                "httproutes.gateway.networking.k8s.io",
-                "HTTPRoute",
-                "httproutes",
-                &[("v1", true), ("v1beta1", true)],
-                &[BUNDLE, CHANNEL],
-            ),
-        ]);
+        let detection = GatewayApiDetection::read(
+            &[stamps(&[BUNDLE, CHANNEL]), stamps(&[BUNDLE, CHANNEL])],
+            &[
+                served("Gateway", "gateways", &["v1", "v1beta1"]),
+                served("HTTPRoute", "httproutes", &["v1", "v1beta1"]),
+            ],
+        );
 
         assert!(detection.installed);
         assert_eq!(detection.bundle_version.as_deref(), Some("v1.6.1"));
@@ -1564,24 +1548,19 @@ status:
 
     #[test]
     fn detection_prefers_newest_served_version_and_reports_mixed_bundles() {
-        let detection = GatewayApiDetection::from_crds(&[
-            // An old bundle: v1beta1 only, annotated with its own release.
-            crd(
-                "gateways.gateway.networking.k8s.io",
-                "Gateway",
-                "gateways",
-                &[("v1beta1", true)],
-                &[("gateway.networking.k8s.io/bundle-version", "v0.8.0")],
-            ),
-            // The trio pre-graduation: v1alpha2 served, v1 present but off.
-            crd(
-                "tcproutes.gateway.networking.k8s.io",
-                "TCPRoute",
-                "tcproutes",
-                &[("v1", false), ("v1alpha2", true)],
-                &[BUNDLE],
-            ),
-        ]);
+        let detection = GatewayApiDetection::read(
+            &[
+                // An old bundle, annotated with its own release.
+                stamps(&[("gateway.networking.k8s.io/bundle-version", "v0.8.0")]),
+                stamps(&[BUNDLE]),
+            ],
+            &[
+                served("Gateway", "gateways", &["v1beta1"]),
+                // The trio pre-graduation: v1 present in the CRD but not
+                // served, so discovery does not list it.
+                served("TCPRoute", "tcproutes", &["v1alpha2"]),
+            ],
+        );
 
         let gateway = detection
             .kinds
@@ -1604,7 +1583,7 @@ status:
 
     #[test]
     fn detection_on_a_cluster_without_gateway_api() {
-        let detection = GatewayApiDetection::from_crds(&[]);
+        let detection = GatewayApiDetection::read(&[], &[]);
         assert!(!detection.installed);
         assert!(detection.kinds.is_empty());
         assert_eq!(detection.bundle_version, None);

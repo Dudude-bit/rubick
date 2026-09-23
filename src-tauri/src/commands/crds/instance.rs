@@ -1,13 +1,9 @@
 //! Tauri commands operating on instances (custom resources) of a CRD.
 //!
-//! Each command does the same dance — load the CRD, find storage
-//! version, build a `kube::discovery::ApiResource`, then wrap a
-//! dynamic Api around it. `crd_to_dynamic_api` collapses that into
-//! a single helper.
+//! Each command needs the same dynamic Api — the kind at the version the
+//! cluster serves — and `crd_to_dynamic_api` is the one place it is built.
 
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
 use kube::api::{Api, DeleteParams, DynamicObject, Patch, PatchParams};
-use kube::discovery::ApiResource;
 use tauri::State;
 
 use crate::commands::helpers::{build_list_params, ResourceContext};
@@ -17,8 +13,9 @@ use crate::state::AppState;
 use super::convert::{dynamic_object_to_custom_resource_info, dynamic_object_to_detail_info};
 use super::types::{CustomResourceDetailInfo, CustomResourceInfo};
 
-/// Load the CRD by name and return a dynamic `Api<DynamicObject>`
-/// scoped to its storage version. Used by every instance command.
+/// A dynamic `Api<DynamicObject>` for a CRD's kind, at the version the
+/// cluster serves it — its name is `<plural>.<group>`, and discovery says the
+/// rest. Used by every instance command.
 ///
 /// `listing` is the difference between the two kinds of caller: a list
 /// with no namespace means every namespace, while a get or a delete with
@@ -31,28 +28,15 @@ async fn crd_to_dynamic_api(
     listing: bool,
     state: &State<'_, AppState>,
 ) -> Result<Api<DynamicObject>> {
-    let crd: CustomResourceDefinition =
-        crate::commands::helpers::get_cluster_resource(crd_name.to_string(), state.clone()).await?;
+    let not_served = || Error::NotFound {
+        kind: "CustomResourceDefinition".to_string(),
+        name: crd_name.to_string(),
+        namespace: String::new(),
+    };
+    let (plural, group) = crd_name.split_once('.').ok_or_else(not_served)?;
+    let served = state.served(group, plural).await?.ok_or_else(not_served)?;
 
-    let spec = &crd.spec;
-    let version = spec.versions.iter().find(|v| v.storage).map_or_else(
-        || {
-            spec.versions
-                .first()
-                .map(|v| v.name.clone())
-                .unwrap_or_default()
-        },
-        |v| v.name.clone(),
-    );
-
-    let api_resource = ApiResource::from_gvk_with_plural(
-        &kube::api::GroupVersionKind::gvk(&spec.group, &version, &spec.names.kind),
-        &spec.names.plural,
-    );
-
-    let is_namespaced = spec.scope == "Namespaced";
-
-    let ctx = if !is_namespaced {
+    let ctx = if !served.namespaced {
         ResourceContext::for_list(state, None)?
     } else if listing {
         ResourceContext::for_list(state, namespace)?
@@ -60,7 +44,7 @@ async fn crd_to_dynamic_api(
         ResourceContext::for_command(state, namespace)?
     };
 
-    Ok(ctx.dynamic_api_for_resource(&api_resource, !is_namespaced))
+    Ok(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced))
 }
 
 /// List custom resource instances for a specific CRD
@@ -76,7 +60,14 @@ pub async fn list_custom_resources(
 
     let api = crd_to_dynamic_api(&crd_name, namespace, true, &state).await?;
     let params = build_list_params(label_selector.as_deref(), None, limit);
-    let list = api.list(&params).await?;
+    let list = api.list(&params).await;
+    // The collection gone from where discovery put it: the CRD moved on.
+    if matches!(&list, Err(kube::Error::Api(status)) if status.code == 404) {
+        if let Some((_, group)) = crd_name.split_once('.') {
+            state.forget_served(group);
+        }
+    }
+    let list = list?;
 
     Ok(list
         .items

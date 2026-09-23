@@ -7,7 +7,6 @@
 //! baseline over all of them, so the commands' whole version job is picking
 //! the apiVersion to ask the server for.
 
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
 use kube::api::{Api, DeleteParams, DynamicObject, TypeMeta};
 use kube::discovery::ApiResource;
 use tauri::State;
@@ -55,18 +54,29 @@ pub(crate) async fn served_api_resource(
     state: &State<'_, AppState>,
 ) -> Result<ApiResource> {
     let plural = plural_of(kind)?;
-    let crd: CustomResourceDefinition = crate::commands::helpers::get_cluster_resource(
-        format!("{plural}.{GATEWAY_API_GROUP}"),
-        state.clone(),
-    )
-    .await?;
-
-    let detection = GatewayApiDetection::from_crds(std::slice::from_ref(&crd));
-    let served = detection
-        .kinds
-        .first()
-        .ok_or_else(|| Error::InvalidInput(format!("{kind} is installed but serves no version")))?;
+    let mine: Vec<_> = state
+        .served_kinds(GATEWAY_API_GROUP)
+        .await?
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|served| served.plural == plural)
+        .collect();
+    let detection = GatewayApiDetection::read([], &mine);
+    let served = detection.kinds.first().ok_or_else(|| Error::NotFound {
+        kind: "CustomResourceDefinition".to_string(),
+        name: format!("{plural}.{GATEWAY_API_GROUP}"),
+        namespace: String::new(),
+    })?;
     Ok(served.api_resource())
+}
+
+/// A list's answer, and a 404 taken as discovery having moved on: the
+/// collection is gone from where it was served, so the next call looks again.
+fn listed<T>(state: &AppState, answer: kube::Result<T>) -> Result<T> {
+    if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
+        state.forget_served(GATEWAY_API_GROUP);
+    }
+    answer.map_err(Error::from)
 }
 
 /// A dynamic API for one Gateway API kind, at the served version.
@@ -111,17 +121,17 @@ pub(crate) fn with_types(mut obj: DynamicObject, api_resource: &ApiResource) -> 
 /// every gateway surface reads the cached answer.
 #[tauri::command]
 pub async fn detect_gateway_api(state: State<'_, AppState>) -> Result<GatewayApiDetection> {
-    let crds = crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
-        state, None, None, None,
-    )
-    .await?;
-    Ok(GatewayApiDetection::from_crds(&crds.items))
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let client = state.current_client()?;
+    crate::resources::discover_gateway_api(&client, state.client_manager.served(), &context).await
 }
 
 #[tauri::command]
 pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<GatewayClassInfo>> {
     let (api, api_resource) = gateway_api("GatewayClass", None, true, &state).await?;
-    let list = api.list(&build_list_params(None, None, None)).await?;
+    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -138,7 +148,7 @@ pub async fn list_backend_tls_policies(
     state: State<'_, AppState>,
 ) -> Result<Vec<BackendTlsPolicyInfo>> {
     let (api, api_resource) = gateway_api("BackendTLSPolicy", namespace, true, &state).await?;
-    let list = api.list(&build_list_params(None, None, None)).await?;
+    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()
@@ -177,7 +187,7 @@ async fn listener_sets(state: &State<'_, AppState>) -> Option<Vec<ListenerSetInf
     // could resolve its parent through this list: an unread list then reads
     // as "no set by that name", and the route's Gateway as missing.
     let (api, api_resource) = gateway_api("ListenerSet", None, true, state).await.ok()?;
-    let list = api.list(&build_list_params(None, None, None)).await.ok()?;
+    let list = listed(state, api.list(&build_list_params(None, None, None)).await).ok()?;
     Some(
         list.items
             .into_iter()
@@ -196,7 +206,7 @@ pub async fn list_gateways(
     // reads race instead of queuing — one round trip of latency, not two.
     let params = build_list_params(None, None, None);
     let (list, sets) = tokio::join!(api.list(&params), listener_sets(&state));
-    let list = list?;
+    let list = listed(&state, list)?;
     Ok(list
         .items
         .into_iter()
@@ -252,7 +262,7 @@ pub async fn list_gateway_routes(
 ) -> Result<Vec<RouteInfo>> {
     require_route_kind(&kind)?;
     let (api, api_resource) = gateway_api(&kind, namespace, true, &state).await?;
-    let list = api.list(&build_list_params(None, None, None)).await?;
+    let list = listed(&state, api.list(&build_list_params(None, None, None)).await)?;
     Ok(list
         .items
         .into_iter()

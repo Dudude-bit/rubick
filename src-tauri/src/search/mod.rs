@@ -339,10 +339,11 @@ async fn search_context(
         let namespace = namespace.clone();
         let query = query.clone();
         let context = context.to_string();
+        let client_manager = client_manager.clone();
         kind_futures.push(async move {
             (
                 kind.label,
-                list_kind(client, kind, namespace, query, context).await,
+                list_kind(client, &client_manager, kind, namespace, query, context).await,
             )
         });
     }
@@ -498,12 +499,26 @@ async fn resolve_client(
 /// plus whether the cluster had more objects than one page.
 async fn list_kind(
     client: Client,
+    client_manager: &K8sClientManager,
     kind: &'static SearchableKind,
     namespace: Option<String>,
     query: String,
     context: String,
 ) -> Result<(Vec<SearchHit>, bool)> {
-    let api_resource = kind.api_resource();
+    let api_resource = match &kind.coordinates {
+        types::Coordinates::Typed(resource) => resource(),
+        types::Coordinates::Served { group, plural } => {
+            // Not installed is an answer: there is nothing of it to match.
+            match client_manager
+                .served()
+                .resource(&context, &client, group, plural)
+                .await?
+            {
+                Some(served) => served.resource,
+                None => return Ok((Vec::new(), false)),
+            }
+        }
+    };
     let api: Api<DynamicObject> = if kind.cluster_scoped {
         Api::all_with(client, &api_resource)
     } else {
@@ -582,6 +597,64 @@ mod tests {
 
     fn target(name: &str) -> SearchTarget {
         SearchTarget::searching(name.to_string())
+    }
+
+    fn gateway_kind(label: &str) -> &'static SearchableKind {
+        SEARCHABLE_KINDS
+            .iter()
+            .find(|kind| kind.label == label)
+            .expect("a searchable kind")
+    }
+
+    /// A kind the cluster does not serve has no objects to match, and says
+    /// so without a list; the cluster answering "no such path" used to come
+    /// back as "Could not read `TCPRoute`" on every Gateway API 1.6 cluster.
+    /// A discovery that failed is still a failure, not "none".
+    #[tokio::test]
+    async fn a_kind_the_cluster_does_not_serve_is_no_matches_and_a_refusal_is_not() {
+        use crate::client::served::test_server::{groups, resources, server};
+
+        let (client, hits) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("httproutes", "HTTPRoute", true)]),
+            ),
+        ])
+        .await;
+        let client_manager = K8sClientManager::new();
+        let answer = list_kind(
+            client,
+            &client_manager,
+            gateway_kind("TCPRoute"),
+            None,
+            "api".to_string(),
+            "kind".to_string(),
+        )
+        .await
+        .expect("an answer");
+        assert!(answer.0.is_empty() && !answer.1);
+        assert!(
+            !hits
+                .lock()
+                .unwrap()
+                .keys()
+                .any(|path| path.ends_with("/tcproutes")),
+            "nothing to list where nothing is served"
+        );
+
+        let (refused, _) = server(vec![("/apis", 403, "{}".to_string())]).await;
+        assert!(list_kind(
+            refused,
+            &K8sClientManager::new(),
+            gateway_kind("TCPRoute"),
+            None,
+            "api".to_string(),
+            "kind".to_string(),
+        )
+        .await
+        .is_err());
     }
 
     #[tokio::test]

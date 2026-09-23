@@ -13,7 +13,6 @@
 //! Nothing here is offered to the app by name. The frontend asks for the
 //! `certificate.issuance` capability and gets this or nothing.
 
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
 use kube::api::{Api, DynamicObject, ListParams};
 use kube::core::GroupVersionKind;
 use kube::discovery::ApiResource;
@@ -36,7 +35,7 @@ const MARKER_CRD: &str = "certificates.cert-manager.io";
 
 /// Is cert-manager installed, and which version.
 #[must_use]
-pub fn detect(crds: &[CustomResourceDefinition]) -> DetectedExtension {
+pub fn detect<C: kube::ResourceExt>(crds: &[C]) -> DetectedExtension {
     let installed = crds.iter().any(|crd| crd.name_any() == MARKER_CRD);
     DetectedExtension {
         id: ID.to_string(),
@@ -389,7 +388,9 @@ fn revision_of(request: &DynamicObject) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinitionSpec;
+    use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::{
+        CustomResourceDefinition, CustomResourceDefinitionSpec,
+    };
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     use std::collections::BTreeMap;
 

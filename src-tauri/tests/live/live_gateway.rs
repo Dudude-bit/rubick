@@ -12,10 +12,6 @@
 //!   cargo test --test live live_gateway:: -- --ignored --nocapture
 //! ```
 
-use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
-use kube::api::ListParams;
-use kube::Api;
-
 use k8s_gui_lib::commands::connections::connections_of;
 use k8s_gui_lib::commands::helpers::ResourceContext;
 use k8s_gui_lib::resources::{ChainStop, Existence, GatewayApiDetection, ObjectFacts, Relation};
@@ -41,9 +37,69 @@ fn namespace() -> String {
 }
 
 async fn detection(ctx: &ResourceContext) -> GatewayApiDetection {
-    let crds: Api<CustomResourceDefinition> = Api::all(ctx.client.clone());
-    let list = crds.list(&ListParams::default()).await.expect("crd list");
-    GatewayApiDetection::from_crds(&list.items)
+    k8s_gui_lib::resources::discover_gateway_api(
+        &ctx.client,
+        &k8s_gui_lib::client::served::ServedIndex::default(),
+        "live",
+    )
+    .await
+    .expect("detection")
+}
+
+/// Discovery against a real cluster: every kind detection reports is read
+/// at a version its CRD serves, whatever bundle the cluster runs. On a 1.6
+/// bundle the route trio is `v1` only; asking for `v1alpha2` there is a 404.
+#[tokio::test]
+#[ignore]
+async fn every_detected_kind_is_read_at_a_version_its_crd_serves() {
+    use k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition;
+    let ctx = context("default").await;
+    let detection = detection(&ctx).await;
+    assert!(detection.installed, "the CRDs are installed");
+
+    let crds: kube::Api<CustomResourceDefinition> = kube::Api::all(ctx.client.clone());
+    for kind in &detection.kinds {
+        let crd = crds
+            .get(&format!("{}.gateway.networking.k8s.io", kind.plural))
+            .await
+            .expect("the CRD behind a detected kind");
+        let served: Vec<_> = crd
+            .spec
+            .versions
+            .iter()
+            .filter(|v| v.served)
+            .map(|v| v.name.as_str())
+            .collect();
+        println!("{}: reads {} of {served:?}", kind.kind, kind.read_version);
+        assert!(
+            served.contains(&kind.read_version.as_str()),
+            "{}",
+            kind.kind
+        );
+        let list: kube::Api<kube::api::DynamicObject> =
+            kube::Api::all_with(ctx.client.clone(), &kind.api_resource());
+        list.list_metadata(&kube::api::ListParams::default().limit(1))
+            .await
+            .unwrap_or_else(|e| panic!("{} at {}: {e}", kind.kind, kind.read_version));
+
+        // What search and the custom-resource pages ask: the preferred
+        // version first, which has to be one the CRD serves too.
+        let found = k8s_gui_lib::client::served::ServedIndex::default()
+            .resource(
+                "live",
+                &ctx.client,
+                "gateway.networking.k8s.io",
+                &kind.plural,
+            )
+            .await
+            .expect("discovery")
+            .expect("served");
+        assert!(
+            served.contains(&found.resource.version.as_str()),
+            "{}",
+            kind.kind
+        );
+    }
 }
 
 /// The whole point of the release: a workload page on a Gateway API
