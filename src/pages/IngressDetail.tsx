@@ -262,7 +262,7 @@ export function IngressDetail() {
   const soonest = tlsConfigs
     .map((config) =>
       config.secretName
-        ? certificates.data?.get(config.secretName)?.certificate
+        ? certificates?.get(config.secretName)?.certificate
         : undefined
     )
     .filter((cert) => cert != null)
@@ -368,7 +368,7 @@ export function IngressDetail() {
 
           <TrafficChain
             query={connections}
-            certificates={certificates.data}
+            certificates={certificates}
             issuance={issuance}
             controller={controller}
           />
@@ -639,7 +639,7 @@ export function IngressDetail() {
                     </span>
                     {config.secretName && (
                       <CertificateLine
-                        read={certificates.data?.get(config.secretName)}
+                        read={certificates?.get(config.secretName)}
                         hosts={config.hosts}
                       />
                     )}

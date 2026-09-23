@@ -29,6 +29,7 @@ import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
+import { certificatesOf } from "@/hooks/useTlsCertificates";
 import type {
   ChainStop,
   DeploymentContainerInfo,
@@ -597,22 +598,9 @@ export function useRouteCertificates(
       const certificates = new Map<string, TlsCertificate>();
       results.forEach((result, index) => {
         const { namespace, names } = batches[index];
-        // A read that failed whole left its Secrets out of the map, and a
-        // Secret with no entry is one nothing is said about. Each is unread,
-        // which is what the backend answers for one Secret it could not get.
-        if (result.data === undefined && result.error) {
-          const said = errorToShow(result.error);
-          for (const secretName of names) {
-            certificates.set(`${namespace}/${secretName}`, {
-              secretName,
-              certificate: null,
-              problem: { says: "secretUnreadable", said },
-            });
-          }
-          return;
-        }
-        for (const [name, read] of result.data ?? []) {
-          certificates.set(`${namespace}/${name}`, read);
+        const read = certificatesOf(result.data, result.error, names);
+        for (const [name, certificate] of read ?? []) {
+          certificates.set(`${namespace}/${name}`, certificate);
         }
       });
       return certificates;

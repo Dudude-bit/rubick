@@ -209,7 +209,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                         ref.namespace === null ? (
                           <CertificateLine
                             key={ref.name}
-                            read={certificates.data?.get(ref.name)}
+                            read={certificates?.get(ref.name)}
                             hosts={listener.hostname ? [listener.hostname] : []}
                           />
                         ) : (
