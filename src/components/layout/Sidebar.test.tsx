@@ -65,6 +65,9 @@ vi.mock("@/lib/commands", () => ({
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
     checkListAccess: () => checkListAccess(),
+    // The CRD `get` review left with its lock. It answers "refused" so that a
+    // lock brought back marks the rows, rather than failing unseen.
+    checkCrdReadAccess: () => Promise.resolve(false),
     detectGatewayApi: () => detectGatewayApi(),
     listGatewayRoutesIn: (kind: string, scope: string[] | null) =>
       across(scope, (ns) => listGatewayRoutes(kind, ns)),
@@ -391,7 +394,8 @@ describe("the Integrations category", () => {
    * The vendor pages find their kinds through discovery since #275 and never
    * get a CRD, so a reader who may list the vendor's objects but not get
    * `customresourcedefinitions` opens the page fine. The row used to be
-   * marked forbidden for a read the page no longer makes.
+   * marked forbidden for a read the page no longer makes; fails if that
+   * review comes back, since the mock answers it "refused".
    */
   it("leaves a CRD-based vendor open to a reader who may list its objects", async () => {
     detectInClusterExtensions.mockResolvedValue([
@@ -699,7 +703,8 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
   /**
    * The route pages find their kinds through discovery since #275, so the
    * list reviews are the whole question. Checking a CRD `get` the pages no
-   * longer make marked both rows denied and switched off the route count.
+   * longer make marked both rows denied and switched off the route count;
+   * fails if that review comes back, since the mock answers it "refused".
    */
   it("keeps Routes and Gateways open and counted for a reader who may list them", async () => {
     detectGatewayApi.mockResolvedValue({
