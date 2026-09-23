@@ -60,6 +60,8 @@ const policyColumns: CrdColumn[] = [
           });
         case "all":
           return t("readings", "ciliumSelectsAll");
+        case "nodes":
+          return t("readings", "ciliumSelectsNodes");
         case "notHere":
           return t("readings", "ciliumNotOnTheWire");
       }

@@ -3782,6 +3782,7 @@ export const ru: Catalogue = {
     rolloutSeenRevision: "готово {ready} из {desired}, ревизия {revision}",
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumSelectsNodes: "узлы, по nodeSelector, — ни одного эндпоинта",
     ciliumCovered: "под политикой",
     ciliumUnrestricted: "его не выбирает ни одна политика",
     ciliumOnlyRejected: "только отвергнутые",

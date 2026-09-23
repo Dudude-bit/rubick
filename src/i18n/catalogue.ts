@@ -3458,6 +3458,7 @@ export const en = {
     rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
+    ciliumSelectsNodes: "nodes, by nodeSelector — no endpoint",
     ciliumCovered: "covered",
     ciliumUnrestricted: "nothing selects it",
     ciliumOnlyRejected: "only rejected policies",
