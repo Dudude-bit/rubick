@@ -2,7 +2,12 @@ import { Pin, PinOff } from "lucide-react";
 
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
-import { isPinned, MAX_PINNED_PER_CONTEXT, pinKey } from "@/lib/my-services";
+import {
+  isPinned,
+  MAX_PINNED_PER_CONTEXT,
+  pinKey,
+  type PinnableKind,
+} from "@/lib/my-services";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { useT } from "@/i18n/useT";
@@ -19,7 +24,7 @@ export function PinAction({
   namespace,
   name,
 }: {
-  kind: string;
+  kind: PinnableKind;
   /** Undefined while the route params are not resolved; nothing to pin yet. */
   namespace: string | undefined;
   name: string | undefined;

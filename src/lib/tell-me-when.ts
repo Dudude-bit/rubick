@@ -221,14 +221,6 @@ export function isOpen(watch: Watch): boolean {
   return watch.status.state === "watching" || watch.status.state === "lost";
 }
 
-export function watchKey(
-  kind: string,
-  namespace: string | null,
-  name: string
-): string {
-  return `${kind}/${namespace ?? ""}/${name}`;
-}
-
 /** The kinds a peek row can ask about; the rest are asked from their own controls. */
 export function askableKind(kind: string): WatchKind | null {
   switch (kind) {

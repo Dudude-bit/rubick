@@ -748,7 +748,6 @@ export const ru: Catalogue = {
     confirmByTyping: "Подтвердите действие, введя требуемый текст",
     typeWord: "Введите",
     toConfirm: "для подтверждения",
-    realtimeFallback: "{kind}: переходим на периодическое обновление. {error}",
     nodeCordoned: "Узел закрыт для планирования",
     nodeCordonedDetail:
       "На узел {name} больше не будут назначаться новые поды.",
@@ -1305,8 +1304,6 @@ export const ru: Catalogue = {
     hideMap: "Скрыть карту",
     map: "Карта",
     openGateways: "Открыть Gateways →",
-    liveUnavailableFor: "Живые обновления для {kind} недоступны",
-    fallsBackPolling: "{message} — список переходит на опрос.",
     copyListenerHostname: "Хост слушателя {host}",
     inInline: "в",
     probe: "Проверить",
@@ -1905,7 +1902,7 @@ export const ru: Catalogue = {
     allowed: "да",
     refused: "отказано",
     couldNotTell: "не удалось узнать",
-    checkedAgo: "проверено для вас, {ago}",
+    checkedAgo: "проверено для вас {ago} назад",
     phaseUnknown: "фаза не записана",
     primaryFact: "Primary",
     readyFact: "Готовы",
@@ -2094,9 +2091,8 @@ export const ru: Catalogue = {
       "Уведомление на рабочем столе, когда узел пуст или drain сдался.",
     askForward: "Скажи мне, если оборвётся",
     stopAsking: "Перестать наблюдать",
-    watchingSince: "наблюдаю · {ago}",
-    lostSince: "потерян из виду · {ago}",
-    answeredAgo: "{ago}",
+    watchingSince: "наблюдаю уже {ago}",
+    lostSince: "потерян из виду {ago} назад",
     expired: "Истекло: сутки без ответа",
     empty: "Ничего не наблюдается",
     emptyHint:
@@ -2727,7 +2723,7 @@ export const ru: Catalogue = {
     groupedByName:
       "Сгруппированы по сгенерированному суффиксу имён подов. Ни одно событие контроллера в этом окне не говорит, чьи они.",
     fromPodStatus: "из статуса пода, не событие",
-    lastSeen: "последнее {ago}",
+    lastSeen: "последнее {ago} назад",
     podStatusUnread: {
       one: "Статус {n} пода не прочитан; его завершения на этой шкале нет.",
       few: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
@@ -2819,7 +2815,7 @@ export const ru: Catalogue = {
       "Это объект, который управляющий слой пишет для совместимости. Он не умеет выражать «обслуживает» и «завершается» и обрывается на 1000 адресах — но здесь ни один EndpointSlice не ответил, так что читать больше нечего.",
     podPhase: "Фаза {phase}",
     nodeStoppedReportingAgo:
-      "Узел {node} перестал отчитываться {age}. Этот статус — последний, что он прислал, а не текущее состояние пода.",
+      "Узел {node} перестал отчитываться {age} назад. Этот статус — последний, что он прислал, а не текущее состояние пода.",
     nodeStoppedReporting:
       "Узел {node} перестал отчитываться. Этот статус — последний, что он прислал, а не текущее состояние пода.",
     allContainers: "все контейнеры",
@@ -2848,7 +2844,7 @@ export const ru: Catalogue = {
     lokiHoldsAll: "хранит этот кластер",
     connDidNotSayWhy: "он не сказал почему",
     connDidNotAnswer: "не ответил — {reason}",
-    connAnsweredAgo: "ответил {age}",
+    connAnsweredAgo: "ответил {age} назад",
     connKeeps: "хранит {retention}",
     connRanges: "диапазоны {ranges}",
     lokiPageLimit: {
@@ -5113,7 +5109,7 @@ export const ru: Catalogue = {
       "Замеры есть, но allocatable этого узла прочитать не удалось, поэтому долю от него не нарисовать.",
     nodeNoSeries: "в Prometheus нет серий по этому узлу",
     nodeNoSamplesYet:
-      "в окне нет замеров: новейшая серия {age}, окно просит {range}",
+      "в окне нет замеров: самому свежему {age}, окно просит {range}",
     noSeriesShort: "нет серий",
     historyWithoutMetricsServer:
       "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",

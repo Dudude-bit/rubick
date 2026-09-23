@@ -140,6 +140,7 @@ export function usePicture(): {
   data: CertPicture | undefined;
   isPending: boolean;
   error: Error | null;
+  refetch: () => void;
 } {
   const t = useT();
   // The context first, the page's key after — the same composed key the
@@ -187,5 +188,9 @@ export function usePicture(): {
     data,
     isPending: certificates.isPending || walk.isPending,
     error: certificates.error ?? walk.error,
+    refetch: () => {
+      void certificates.refetch();
+      void walk.refetch();
+    },
   };
 }

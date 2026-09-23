@@ -99,10 +99,6 @@ export function isPinned(
   );
 }
 
-export function isPinnable(kind: string): kind is PinnableKind {
-  return (PINNABLE_KINDS as readonly string[]).includes(kind);
-}
-
 /**
  * What the workload is doing, or why the app cannot say.
  *

@@ -35,6 +35,7 @@ import {
   type Tone,
   TroubleList,
   TroubleRow,
+  VendorReadFailure,
 } from "../page-kit";
 import { backingFrom } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
@@ -84,12 +85,11 @@ export default function GkeIngressPage() {
 
   if (sources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadIngresses")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{sources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadIngresses")}
+        error={sources.error}
+        onRetry={() => void sources.refetch()}
+      />
     );
   }
 

@@ -22,7 +22,7 @@ import {
 } from "@/lib/node-trends";
 import { nodePlacement } from "@/lib/node-pool";
 import { ResourceType } from "@/lib/resource-registry";
-import { agoOf } from "@/lib/usage-history";
+import { formatSince } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { NodeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -225,7 +225,7 @@ function Row({
               ? t("empty", "nodeNoAllocatable")
               : trend.newestAgoMs !== null
                 ? t("empty", "nodeNoSamplesYet", {
-                    age: agoOf(now - trend.newestAgoMs, now),
+                    age: formatSince(now - trend.newestAgoMs, now),
                     range,
                   })
                 : // Only where the staleness probe itself answered: a failed

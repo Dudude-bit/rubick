@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
-import { Section } from "@/components/ui/section";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
 import { useT, type T } from "@/i18n/useT";
@@ -20,7 +19,7 @@ import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { crdObjectPath } from "../../kit";
-import { FilterBox, Finding, OutLink } from "../../page-kit";
+import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { integrationSettingsPath } from "../../paths";
 import { usePicture, type Picture } from "../monitors/data";
 import {
@@ -129,12 +128,11 @@ export default function Alerts() {
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("alerts", "couldNotRead")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("alerts", "couldNotRead")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
   if (!picture.data) return <p className="text-[11px] text-fg-fnt">…</p>;

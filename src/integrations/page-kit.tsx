@@ -26,6 +26,8 @@ import {
 import { ChevronRight, ExternalLink, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import { Section } from "@/components/ui/section";
+import { Unknown } from "@/components/ui/unknown";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
@@ -60,6 +62,80 @@ export function FilterBox({
         aria-label={label}
         className="h-7 pl-7 text-xs"
       />
+    </div>
+  );
+}
+
+/**
+ * A vendor page whose one read failed: what could not be read, in the
+ * vendor's words, then the cluster's reason with a retry and — for a
+ * refusal — the RBAC rule to ask for.
+ */
+export function VendorReadFailure({
+  title,
+  body,
+  error,
+  onRetry,
+}: {
+  title: ReactNode;
+  body?: ReactNode;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <Section className="max-w-[64ch] py-8">
+      <Unknown
+        question={
+          body ? (
+            <>
+              <span className="block font-medium">{title}</span>
+              <span className="block text-fg-mut">{body}</span>
+            </>
+          ) : (
+            title
+          )
+        }
+        error={error}
+        onRetry={onRetry}
+      />
+    </Section>
+  );
+}
+
+/**
+ * A row's findings: all of them in the open row, and in a closed one the
+ * first that says more than the row's own state word, with a count of the
+ * rest.
+ */
+export function FindingList<F>({
+  findings,
+  brief,
+  worthRepeating,
+  render,
+}: {
+  findings: readonly F[];
+  brief?: boolean;
+  /** Left out, every finding is worth a line on a closed row. */
+  worthRepeating?: (finding: F) => boolean;
+  render: (finding: F) => ReactNode;
+}) {
+  const t = useT();
+  const worth =
+    brief && worthRepeating ? findings.filter(worthRepeating) : findings;
+  if (worth.length === 0) return null;
+  const shown = brief ? worth.slice(0, 1) : findings;
+  const hidden = brief ? worth.length - 1 : 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {shown.map((finding, index) => (
+        <Fragment key={index}>{render(finding)}</Fragment>
+      ))}
+      {hidden > 0 && (
+        <span className="text-[11px] text-fg-fnt">
+          {t("empty", "andMoreOpenRow", { n: hidden })}
+        </span>
+      )}
     </div>
   );
 }

@@ -14,10 +14,9 @@ import {
   YAxis,
 } from "recharts";
 import type { DeclaredPoint } from "@/integrations";
-import { cn } from "@/lib/utils";
+import { cn, formatSince } from "@/lib/utils";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
 import {
-  agoOf,
   clockOf,
   latestValue,
   limitInView,
@@ -403,7 +402,8 @@ function UsageTooltip({
       role="status"
     >
       <div className="font-mono text-[10px] tabular-nums text-fg-fnt">
-        {clockOf(point.t)} · {agoOf(point.t, now)}
+        {clockOf(point.t)} ·{" "}
+        {t("action", "agoSuffix", { age: formatSince(point.t, now) })}
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
         {formatQuantity(point.v, type)}

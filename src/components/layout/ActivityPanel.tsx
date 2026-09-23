@@ -20,7 +20,7 @@ import { TerminalsTab } from "./activity/TerminalsTab";
 import { WatchingTab } from "./activity/WatchingTab";
 import { isOpen } from "@/lib/tell-me-when";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
+import { useWatchesFor } from "@/stores/tellMeWhenStore";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -56,8 +56,8 @@ export function ActivityPanel() {
   // loop with React error #185 ("Maximum update depth exceeded").
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
   const terminalSessions = useTerminalSessionStore((state) => state.sessions);
-  const watches = useTellMeWhenStore((state) => state.watches);
   const currentContext = useClusterStore((state) => state.currentContext);
+  const watches = useWatchesFor(currentContext);
 
   const activeTerminals = terminalSessions.filter(
     (s) => s.status === "connected"
@@ -66,8 +66,7 @@ export function ActivityPanel() {
   const counts: Record<TabId, number> = {
     ports: portForwardSessions.length,
     terminals: activeTerminals,
-    watching: watches.filter((w) => w.context === currentContext && isOpen(w))
-      .length,
+    watching: watches.filter(isOpen).length,
   };
 
   const totalActive = counts.ports + counts.terminals + counts.watching;

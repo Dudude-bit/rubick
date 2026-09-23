@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useNowSeconds } from "@/hooks/useNow";
 import { useCapabilityState } from "@/integrations";
 import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
@@ -378,11 +379,7 @@ function IntakeQuietNotice({
   terms: QueryTerm[];
 }) {
   const t = useT();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useNowSeconds();
 
   const quiet = now - since;
   if (quiet < INTAKE_QUIET_MS) return null;

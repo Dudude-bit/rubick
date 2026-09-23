@@ -281,13 +281,6 @@ export function flushLogs(): Promise<void> {
 }
 
 /**
- * Get current queue status for diagnostics
- */
-export function getLogQueueStatus(): LogQueueStatus {
-  return logQueue.getStatus();
-}
-
-/**
  * Recover logs from previous session that may have been lost
  */
 export function recoverPendingLogs(): Promise<number> {

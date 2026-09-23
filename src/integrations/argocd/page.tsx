@@ -26,7 +26,6 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
-import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import {
   countMark,
@@ -50,6 +49,8 @@ import {
   OutLink,
   TroubleList,
   TroubleRow,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { useServiceRoutes, type ServiceRoutes } from "@/hooks/useServiceRoutes";
 import {
@@ -78,6 +79,8 @@ import {
   type ArgoResource,
   type ArgoSource,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
+import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
 
@@ -112,8 +115,7 @@ function Mono({
 
 export default function ArgoCdPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "applications";
+  const [tab, setTab] = useSearchParam("tab", "applications");
 
   const applications = useApplications();
   const sets = useApplicationSets();
@@ -138,19 +140,18 @@ export default function ArgoCdPage() {
 
   if (applications.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadApplications")}
-        </h2>
-        <p className="text-xs text-fg-mut">
+      <VendorReadFailure
+        title={t("empty", "couldNotReadApplications")}
+        body={
           <Mono
             text={t("empty", "applicationsUnreadableBody")}
             slot="{kind}"
             word="Application"
           />
-        </p>
-        <p className="text-[11px] text-fg-fnt">{applications.error.message}</p>
-      </Section>
+        }
+        error={applications.error}
+        onRetry={() => void applications.refetch()}
+      />
     );
   }
 
@@ -218,15 +219,7 @@ export default function ArgoCdPage() {
         }
         description={t("empty", "argoPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -661,28 +654,14 @@ function Findings({
   url: string | null;
   brief?: boolean;
 }) {
-  const t = useT();
-  if (app.findings.length === 0) return null;
-  const shown = brief ? app.findings.slice(0, 1) : app.findings;
-  const hidden = brief ? app.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
-        <FindingLine
-          key={index}
-          app={app}
-          finding={finding}
-          url={url}
-          brief={brief}
-        />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
+    <FindingList
+      findings={app.findings}
+      brief={brief}
+      render={(finding) => (
+        <FindingLine app={app} finding={finding} url={url} brief={brief} />
       )}
-    </div>
+    />
   );
 }
 
@@ -1123,7 +1102,7 @@ function ControllerTab({
               <>
                 {" "}
                 {t("empty", "oneRoutingControllerDidNotAnswer")}{" "}
-                <span className="font-mono">{routes.error.message}</span>
+                <span className="font-mono">{errorToShow(routes.error)}</span>
               </>
             )}
           </p>
