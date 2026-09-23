@@ -223,3 +223,18 @@ export function agoOf(t: number, now: number): string {
   if (minutes < 60) return `${minutes}m ago`;
   return `${Math.round(minutes / 60)}h ago`;
 }
+
+/**
+ * The highest reading in the window, or null where it holds none.
+ *
+ * What a stopped workload is summarised by. "What did it use when it ran" is
+ * a question about the worst moment, not the last one — and the last one is
+ * a value the reader would take for the current one.
+ */
+export function peakOf(points: readonly UsagePoint[]): number | null {
+  let peak: number | null = null;
+  for (const point of points) {
+    if (point.v !== null && (peak === null || point.v > peak)) peak = point.v;
+  }
+  return peak;
+}

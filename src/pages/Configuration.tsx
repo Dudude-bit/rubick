@@ -2,7 +2,6 @@ import { Routes, Route } from "react-router-dom";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { ConfigMapList } from "@/components/resources/ConfigMapList";
 import { SecretList } from "@/components/resources/SecretList";
-import { InfrastructureBuilder } from "@/pages/InfrastructureBuilder";
 
 export function Configuration() {
   return (
@@ -12,7 +11,6 @@ export function Configuration() {
         element={<ConfigMapList />}
       />
       <Route path={toPlural(ResourceType.Secret)} element={<SecretList />} />
-      <Route path="builder" element={<InfrastructureBuilder />} />
       <Route index element={<ConfigMapList />} />
     </Routes>
   );

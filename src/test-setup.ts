@@ -2,6 +2,11 @@
 // Stubs the @tauri-apps/api surface; the DOM half loads only under jsdom.
 
 import { vi } from "vitest";
+import { loadLocale } from "@/i18n";
+
+// Loaded as the window loads it before its first render; the one test of the
+// loading itself starts from a fresh module.
+await loadLocale("ru");
 
 if (typeof window !== "undefined") {
   await import("./test-setup-dom");

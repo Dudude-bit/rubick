@@ -66,6 +66,10 @@ fn main() {
         None => tracing::warn!("no log file this run; this run leaves nothing to send"),
     }
     tracing::info!(?shell_env, shell_env_ms, "login shell environment");
+    tracing::info!(
+        since_start_ms = started.elapsed().as_millis(),
+        "building the window"
+    );
 
     tauri::Builder::default()
         // Registered first: a second launch (a `rubick://` link opened while
@@ -84,6 +88,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
+            tracing::info!(since_start_ms = started.elapsed().as_millis(), "setting up");
             // A packaged build registers `rubick://` through its installer
             // (Info.plist, the Windows registry, the .desktop file); a dev
             // build has no installer, so it registers itself on the platforms
@@ -98,6 +103,10 @@ fn main() {
 
             // Initialize application state
             let state = AppState::new()?;
+            tracing::info!(
+                since_start_ms = started.elapsed().as_millis(),
+                "application state built"
+            );
 
             // Subscribe to events and forward to frontend.
             //
@@ -391,20 +400,12 @@ fn main() {
             commands::settings::set_kubeconfig_paths,
             commands::settings::get_kubeconfig_paths,
             commands::settings::clear_kubeconfig_path,
-            // Registry configurations
-            commands::settings::list_registry_configs,
-            commands::settings::save_registry_config,
-            commands::settings::delete_registry_config,
             // Theme configuration
             commands::settings::get_theme_config,
             commands::settings::save_theme_config,
             // YAML editor history
             commands::settings::get_yaml_history,
             commands::settings::add_yaml_history_entry,
-            // Infrastructure builder state
-            commands::settings::get_infrastructure_state,
-            commands::settings::save_infrastructure_state,
-            commands::settings::clear_infrastructure_state,
             // Recent items
             commands::settings::get_recent_items,
             commands::settings::add_recent_item,
@@ -415,9 +416,6 @@ fn main() {
             // Cluster preferences
             commands::settings::get_cluster_preferences,
             commands::settings::save_cluster_preferences,
-            // Registry commands
-            commands::registry::import_docker_config,
-            commands::registry::search_registry_images,
             // Authentication commands
             commands::auth::cancel_auth_session,
             // Storage commands

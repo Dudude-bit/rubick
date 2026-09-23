@@ -15,6 +15,8 @@ import {
 } from "@/stores/displaySettingsStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { useLocaleStore } from "@/stores/localeStore";
+import { useToast } from "@/components/ui/use-toast";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { isTranslated, LOCALES, LOCALE_NAMES, type Locale } from "@/i18n";
 import { useT } from "@/i18n/useT";
 import { SettingRow, SettingsGroup } from "./settings-row";
@@ -38,6 +40,7 @@ export function AppearanceSettings() {
   const { theme, setTheme } = useThemeStore();
   const { resourceColouring, setResourceColouring } = useDisplaySettingsStore();
   const { choice, setChoice } = useLocaleStore();
+  const { toast } = useToast();
   const t = useT();
 
   return (
@@ -55,7 +58,14 @@ export function AppearanceSettings() {
           <Select
             value={choice ?? "system"}
             onValueChange={(value) =>
-              setChoice(value === "system" ? null : (value as Locale))
+              setChoice(value === "system" ? null : (value as Locale)).catch(
+                (error: unknown) =>
+                  toast({
+                    title: t("action", "error"),
+                    description: normalizeTauriError(error),
+                    variant: "destructive",
+                  })
+              )
             }
           >
             <SelectTrigger id="setting-language" className="h-7 w-56 text-xs">

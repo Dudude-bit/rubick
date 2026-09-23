@@ -13,7 +13,7 @@ import type { en } from "@/i18n/catalogue";
 import { getResourceListUrl, ResourceType } from "@/lib/resource-registry";
 
 export type ShortcutSection =
-  "global" | "navigate" | "page" | "tabs" | "table" | "logs" | "builder";
+  "global" | "navigate" | "page" | "tabs" | "table" | "logs";
 
 export interface Shortcut {
   id: string;
@@ -206,25 +206,6 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keys: ["0"],
     labelKey: "allContainers",
   },
-
-  {
-    id: "deleteSelection",
-    section: "builder",
-    keys: ["del"],
-    labelKey: "deleteSelection",
-  },
-  {
-    id: "selectAll",
-    section: "builder",
-    keys: ["mod+a"],
-    labelKey: "selectAll",
-  },
-  {
-    id: "invertSelection",
-    section: "builder",
-    keys: ["mod+shift+i"],
-    labelKey: "invertSelection",
-  },
 ];
 
 export const SECTIONS: readonly ShortcutSection[] = [
@@ -234,7 +215,6 @@ export const SECTIONS: readonly ShortcutSection[] = [
   "tabs",
   "table",
   "logs",
-  "builder",
 ];
 
 /**
@@ -251,8 +231,6 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
   "src/hooks/useCopyLink.ts": "mod+shift+c",
   "src/hooks/useScopeTabs.ts": "ctrl+tab, mod+t, mod+w, mod+1..9",
   "src/components/logs/LogViewer.tsx": "0..9 solo a container",
-  "src/features/infrastructure/useBuilderKeyboardShortcuts.ts":
-    "del, mod+a, mod+shift+i",
   "src/components/cluster/ClusterList.tsx":
     "mod+f focuses the cluster filter, on the front door only",
   "src/components/layout/ScopeTabs.tsx":

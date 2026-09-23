@@ -10,8 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageRow } from "@/components/resources/detail-blocks";
-import { TrafficChart } from "@/components/resources/traffic-chart";
+import type { TrafficChartProps } from "@/components/resources/traffic-chart";
 import {
+  BAND_H,
   NO_LIMIT_NOTE,
   UsageChart,
   WATCHING_NOTE,
@@ -287,7 +288,21 @@ export function UsageBlock({
                 {t("empty", "declaredUnknown")}
               </p>
             )}
-            {past.traffic && <TrafficChart window={past.traffic} />}
+            {past.traffic && (
+              // A window with nothing drawable draws no row, so the space is
+              // held only for one that has something to draw.
+              <React.Suspense
+                fallback={
+                  past.traffic.points.some(
+                    (point) => point.rx !== null || point.tx !== null
+                  ) ? (
+                    <div style={{ height: BAND_H + 16 }} />
+                  ) : null
+                }
+              >
+                <TrafficChart window={past.traffic} />
+              </React.Suspense>
+            )}
             {shared && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
                 {shared}
@@ -446,9 +461,14 @@ interface RangedHistory {
 }
 
 type UsageSampleLike = Parameters<typeof watchedFor>[0][number];
-type TrafficLike = NonNullable<
-  React.ComponentProps<typeof TrafficChart>["window"]
->;
+type TrafficLike = NonNullable<TrafficChartProps["window"]>;
+
+/** recharts again, loaded with the first window that has traffic in it. */
+const TrafficChart = React.lazy(() =>
+  import("@/components/resources/traffic-chart").then((module) => ({
+    default: module.TrafficChart,
+  }))
+);
 
 /**
  * The past, where something can answer for it.
