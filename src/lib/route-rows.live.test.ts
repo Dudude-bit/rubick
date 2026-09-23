@@ -67,7 +67,7 @@ describe("a route through a ListenerSet, as the cluster reports it", () => {
     const board = routesBoard([scene.routes[0]], sources(), t);
 
     expect(board.mesh).toHaveLength(0);
-    const row = [...board.serving, ...board.notServing][0];
+    const row = [...board.serving, ...board.unknown, ...board.notServing][0];
     expect(row.via).toContain("shared");
     expect(row.viaRef?.name).toBe("shared");
     expect(row.viaGhost).toBe(null);
