@@ -22,8 +22,11 @@ export function vendorTlsAnswer(
   const unread = vendorTls.isPending || vendorTls.error !== null;
   const hosts: string[] = [];
   const unchecked: string[] = [];
+  // Several rules may name one host; it is still one host.
+  const seen = new Set<string>();
   for (const rule of ingress.rules) {
-    if (!rule.host) continue;
+    if (!rule.host || seen.has(rule.host)) continue;
+    seen.add(rule.host);
     const said = vendorTls.of(ingress, rule.host)?.terminated;
     if (said === true) hosts.push(rule.host);
     else if (said === null || (said === undefined && unread))
