@@ -21,6 +21,12 @@ interface TlsBadgeProps {
   vendor?: VendorTlsAnswer | null;
 }
 
+/** "Not checked" is its own colour, or it reads as the "no" beside it. */
+const BARE_TONE: Record<"none" | "notChecked", string> = {
+  none: "text-fg-fnt",
+  notChecked: "text-fg-mut",
+};
+
 /**
  * Whether an ingress terminates TLS.
  *
@@ -37,9 +43,10 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
     : (vendor?.unchecked ?? []).filter((host) => !covers(tlsHosts, host));
 
   if (explicitCount === 0 && !hasCatchAllTls && vendorHosts.length === 0) {
+    const bare = unchecked.length > 0 ? "notChecked" : "none";
     return (
-      <span className="text-fg-fnt">
-        {t("empty", unchecked.length > 0 ? "tlsNotChecked" : "noTls")}
+      <span className={BARE_TONE[bare]}>
+        {t("empty", bare === "notChecked" ? "tlsNotChecked" : "noTls")}
       </span>
     );
   }
