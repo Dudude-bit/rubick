@@ -206,6 +206,7 @@ export function PodList() {
     isLoading,
     error,
     unread,
+    isPlaceholderData,
     dataUpdatedAt,
     watchLive,
     resyncing,
@@ -258,6 +259,7 @@ export function PodList() {
       title="Pods"
       data={podsWithMetrics}
       unread={unread}
+      placeholder={isPlaceholderData}
       isLoading={isLoading}
       waitingSince={waitingSince}
       onRetry={() => void refetch()}
