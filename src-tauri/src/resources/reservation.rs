@@ -57,11 +57,12 @@ pub struct Reservation {
     pub requests: Sums,
     /// `PodLimits`, as `kubectl describe node` adds them up.
     pub limits: Sums,
-    /// The most the running containers may take, which is what usage is
-    /// measured against: app containers and sidecars, or the pod-level
-    /// limit. A plain init container's limit held only before any sample,
-    /// and overhead is the sandbox's. A resource that a running container
-    /// leaves unlimited is absent.
+    /// What usage is measured against: the running containers' declared
+    /// limits — app containers and sidecars — added up, the sum
+    /// kube-state-metrics records. A plain init container's limit held only
+    /// before any sample, and overhead is the sandbox's. A pod-level limit
+    /// caps the sum, and is the whole of it where a running container
+    /// declares none.
     pub ceiling: Sums,
     pub known: bool,
 }
@@ -109,7 +110,7 @@ fn containers_sum(
     sums
 }
 
-fn running_ceiling(spec: &PodSpec, ok: &mut bool) -> Sums {
+fn running_ceiling(spec: &PodSpec, pod_limits: &Sums, ok: &mut bool) -> Sums {
     let sidecars = spec
         .init_containers
         .iter()
@@ -125,7 +126,13 @@ fn running_ceiling(spec: &PodSpec, ok: &mut bool) -> Sums {
     for limits in &running {
         add(&mut ceiling, limits);
     }
-    ceiling.retain(|key, _| running.iter().all(|limits| limits.contains_key(key)));
+    for (key, whole) in pod_limits {
+        let every_one_capped = running.iter().all(|limits| limits.contains_key(key));
+        let slot = ceiling.entry(key.clone()).or_insert(*whole);
+        if !every_one_capped || *whole < *slot {
+            *slot = *whole;
+        }
+    }
     ceiling
 }
 
@@ -144,13 +151,12 @@ pub fn pod_reservation(spec: &PodSpec) -> Reservation {
     let mut ok = true;
     let mut requests = containers_sum(spec, |r| r.requests.as_ref(), &mut ok);
     let mut limits = containers_sum(spec, |r| r.limits.as_ref(), &mut ok);
-    let mut ceiling = running_ceiling(spec, &mut ok);
 
     let pod_level = spec.resources.as_ref();
     requests.extend(read(pod_level.and_then(|r| r.requests.as_ref()), &mut ok));
     let pod_limits = read(pod_level.and_then(|r| r.limits.as_ref()), &mut ok);
-    limits.extend(pod_limits.clone());
-    ceiling.extend(pod_limits);
+    let ceiling = running_ceiling(spec, &pod_limits, &mut ok);
+    limits.extend(pod_limits);
 
     let overhead = read(spec.overhead.as_ref(), &mut ok);
     add(&mut requests, &overhead);
@@ -318,9 +324,8 @@ mod tests {
     }
 
     /// Would draw a usage bar against a limit nothing running can reach: an
-    /// init container's limit held before any sample, overhead is not a
-    /// container's, and one unlimited running container leaves the pod
-    /// without a ceiling for that resource.
+    /// init container's limit held before any sample, and overhead is not a
+    /// container's.
     #[test]
     fn the_ceiling_is_what_the_running_containers_may_take() {
         let spec = PodSpec {
@@ -340,11 +345,7 @@ mod tests {
         let held = pod_reservation(&spec);
         assert_eq!(held.limits["cpu"], 510.0, "kubectl's figure is kept");
         assert_eq!(held.ceiling.get("cpu"), Some(&150.0));
-        assert_eq!(
-            held.ceiling.get("memory"),
-            None,
-            "the proxy may take any memory"
-        );
+        assert_eq!(held.ceiling.get("memory"), Some(&(256.0 * MIB)));
 
         let mut bounded = spec.clone();
         bounded.resources = Some(ResourceRequirements {
@@ -354,6 +355,97 @@ mod tests {
         assert_eq!(
             pod_reservation(&bounded).ceiling.get("memory"),
             Some(&(512.0 * MIB))
+        );
+    }
+
+    /// What the Prometheus line beside the live figure draws for a pod's
+    /// limit: each declared limit kube-state-metrics records for an app
+    /// container or a native sidecar, added up.
+    fn recorded(spec: &PodSpec, resource: &str) -> Option<f64> {
+        let sidecars = spec
+            .init_containers
+            .iter()
+            .flatten()
+            .filter(|c| is_sidecar(c));
+        let declared: Vec<f64> = spec
+            .containers
+            .iter()
+            .chain(sidecars)
+            .filter_map(|c| c.resources.as_ref()?.limits.as_ref()?.get(resource))
+            .filter_map(|q| parse(resource, &q.0))
+            .collect();
+        (!declared.is_empty()).then(|| declared.iter().sum())
+    }
+
+    /// Would read a partly limited pod as unlimited: a mesh proxy injected
+    /// without limits took the ceiling away from the app beside it, so the
+    /// pod said "unlimited" under a Prometheus line drawn at the app's 512Mi,
+    /// and its Deployment — whose template has no proxy — drew another.
+    #[test]
+    fn a_container_without_a_limit_leaves_the_others_as_the_ceiling() {
+        let app = sized("app", false, &[], &[("cpu", "500m"), ("memory", "512Mi")]);
+        let template = PodSpec {
+            containers: vec![app.clone()],
+            ..Default::default()
+        };
+        let injected = PodSpec {
+            containers: vec![app, sized("linkerd-proxy", false, &[("cpu", "100m")], &[])],
+            ..Default::default()
+        };
+
+        let pod = pod_reservation(&injected);
+        assert_eq!(pod.ceiling.get("cpu"), Some(&500.0));
+        assert_eq!(pod.ceiling.get("memory"), Some(&(512.0 * MIB)));
+        assert_eq!(pod_reservation(&template).ceiling, pod.ceiling);
+
+        let native = PodSpec {
+            init_containers: Some(vec![sized(
+                "istio-proxy",
+                true,
+                &[],
+                &[("memory", "128Mi")],
+            )]),
+            ..injected.clone()
+        };
+        for spec in [&injected, &native] {
+            for resource in ["cpu", "memory"] {
+                assert_eq!(
+                    pod_reservation(spec).ceiling.get(resource).copied(),
+                    recorded(spec, resource)
+                );
+            }
+        }
+    }
+
+    /// Would draw a 2Gi ceiling over two containers capped at 512Mi each, a
+    /// bar at half while both sit one step from being killed: a pod-level
+    /// limit caps what runs, and raises nothing that is already capped.
+    #[test]
+    fn a_pod_level_limit_caps_the_running_sum_and_never_raises_it() {
+        let capped = |name: &str| sized(name, false, &[], &[("memory", "512Mi")]);
+        let whole = Some(ResourceRequirements {
+            limits: quantities(&[("memory", "2Gi")]),
+            ..Default::default()
+        });
+        let both = PodSpec {
+            containers: vec![capped("app"), capped("worker")],
+            resources: whole.clone(),
+            ..Default::default()
+        };
+        assert_eq!(
+            pod_reservation(&both).ceiling.get("memory"),
+            Some(&(1024.0 * MIB))
+        );
+
+        let one = PodSpec {
+            containers: vec![capped("app"), sized("worker", false, &[], &[])],
+            resources: whole,
+            ..Default::default()
+        };
+        assert_eq!(
+            pod_reservation(&one).ceiling.get("memory"),
+            Some(&(2048.0 * MIB)),
+            "the worker may take whatever the pod has left"
         );
     }
 

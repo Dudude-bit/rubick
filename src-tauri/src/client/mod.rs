@@ -186,6 +186,16 @@ impl K8sClientManager {
         }
     }
 
+    /// A manager reading discovery through `served`, for a test that cannot
+    /// wait out the real ages.
+    #[cfg(test)]
+    pub(crate) fn with_served(served: served::ServedIndex) -> Self {
+        Self {
+            served,
+            ..Self::new()
+        }
+    }
+
     /// Load kubeconfig from default locations
     pub async fn load_kubeconfig(&self) -> Result<()> {
         // `$KUBECONFIG` naming several files is the same merge pinning

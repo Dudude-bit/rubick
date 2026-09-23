@@ -91,9 +91,9 @@ pub struct TemplateContainers {
     pub service_account_name: Option<String>,
     /// Pod-level requests/limits the template declares (KEP-2837), carried
     /// like `service_account_name` because it is a property of the `PodSpec`,
-    /// not of any container. Where set, it is the replica's own ceiling in
-    /// place of the container sum — the Usage block applies it exactly as
-    /// `PodInfo` does, so a controller and its pods do not disagree.
+    /// not of any container. Where set, it caps the replica's ceiling —
+    /// `replica` applies it by the rule `PodInfo` does, so a controller and
+    /// its pods do not disagree.
     pub pod_resources: DeploymentContainerResources,
     /// What one replica reserves, as numbers.
     pub replica: ReplicaReservation,
@@ -393,25 +393,62 @@ mod tests {
         assert_eq!(pod.cpu_limits.as_deref(), Some("150m"));
     }
 
-    /// A pod-level limit (KEP-2837) replaces the container sum for its
-    /// resource, and a template that sets nothing is sized at nothing.
+    /// A pod-level limit (KEP-2837) is the ceiling of a replica whose
+    /// containers declare none, caps one whose containers do, and a template
+    /// that sets nothing is sized at nothing.
     #[test]
     fn a_pod_level_limit_is_the_replicas_ceiling() {
         use k8s_openapi::api::core::v1::ResourceRequirements;
+        let whole = Some(ResourceRequirements {
+            limits: Some([("cpu".to_string(), Quantity("2".to_string()))].into()),
+            ..Default::default()
+        });
         let spec = PodSpec {
-            containers: vec![sized("app", None, "100m", "64Mi")],
-            resources: Some(ResourceRequirements {
-                limits: Some([("cpu".to_string(), Quantity("2".to_string()))].into()),
-                ..Default::default()
-            }),
+            containers: vec![container("app", None)],
+            resources: whole.clone(),
             ..Default::default()
         };
         assert_eq!(ReplicaReservation::of(Some(&spec)).cpu_limits, Some(2000.0));
+        let capped = PodSpec {
+            containers: vec![sized("app", None, "100m", "64Mi")],
+            resources: whole,
+            ..Default::default()
+        };
+        assert_eq!(
+            ReplicaReservation::of(Some(&capped)).cpu_limits,
+            Some(100.0)
+        );
         let bare = ReplicaReservation::of(Some(&PodSpec {
             containers: vec![container("app", None)],
             ..Default::default()
         }));
         assert_eq!((bare.cpu_limits, bare.memory_requests), (None, None));
+    }
+
+    /// Would print "No limits declared on this template" over an app capped
+    /// at 512Mi, because the cloudsql-proxy beside it declares none.
+    #[test]
+    fn a_template_with_one_unlimited_container_still_declares_the_others() {
+        let mib = 1024.0 * 1024.0;
+        let spec = PodSpec {
+            containers: vec![
+                Container {
+                    resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                        limits: Some(
+                            [("memory".to_string(), Quantity("512Mi".to_string()))].into(),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..container("app", None)
+                },
+                container("cloudsql-proxy", None),
+            ],
+            ..Default::default()
+        };
+        let replica = ReplicaReservation::of(Some(&spec));
+        assert_eq!(replica.memory_limits, Some(512.0 * mib));
+        let pod = crate::resources::types::pod::resource_totals(&spec);
+        assert_eq!(pod.memory_limits, Some(format!("{}", (512.0 * mib) as u64)));
     }
 
     /// KEP-2837: pod-level resources on the template are the replica's own —

@@ -255,20 +255,21 @@ impl AppState {
             .await
     }
 
-    /// Every kind `group` serves on the current cluster; `None` where the
-    /// group is not installed.
+    /// `plural` in `group` on the current cluster, with every version that
+    /// serves it; `None` where it is not installed.
     ///
     /// # Errors
     ///
     /// No cluster, or discovery could not be read.
-    pub async fn served_kinds(
+    pub async fn served_kind(
         &self,
         group: &str,
-    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        plural: &str,
+    ) -> Result<Option<crate::client::served::ServedKind>> {
         let (context, client) = self.current()?;
         self.client_manager
             .served()
-            .kinds(&context, &client, group)
+            .kind(&context, &client, group, plural)
             .await
     }
 

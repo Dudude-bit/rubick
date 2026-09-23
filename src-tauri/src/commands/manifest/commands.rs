@@ -348,7 +348,8 @@ pub async fn get_manifest(
     // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
     // negotiation every gateway command does, so the YAML tab matches the
     // Overview it sits beside instead of 404ing.
-    let api_resource = if api_version.starts_with("gateway.networking.k8s.io/") {
+    let gateway = api_version.starts_with("gateway.networking.k8s.io/");
+    let api_resource = if gateway {
         crate::commands::gateway::served_api_resource(&kind, &state)
             .await
             .unwrap_or_else(|_| api_resource_for(&kind, &api_version))
@@ -360,7 +361,12 @@ pub async fn get_manifest(
     let ctx = ResourceContext::for_command(&state, Some(ns.clone()))?;
     let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
 
-    let resource = api.get(&name).await?;
+    let resource = api.get(&name).await;
+    let resource = if gateway {
+        crate::commands::gateway::answered(&state, resource)?
+    } else {
+        resource?
+    };
 
     // Every detail page's YAML tab comes through here, Secrets included, and
     // base64 is not a control: `tls.key` in a manifest is one `base64 -d`

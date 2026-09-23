@@ -77,7 +77,7 @@ fn combined(
             Ok(mut part) => data.append(&mut part),
             Err(err) => {
                 refused.get_or_insert_with(|| metrics_status_from_error(&err));
-                unread.push(UnreadNamespace::of(name.clone(), &Error::KubeApi(err)));
+                unread.push(UnreadNamespace::of(name.clone(), &Error::from(err)));
             }
         }
     }
@@ -143,6 +143,25 @@ mod tests {
         assert_eq!(answer.unread.len(), 1);
         assert_eq!(answer.unread[0].namespace, "staging");
         assert_eq!(answer.unread[0].code, "PERMISSION_DENIED");
+    }
+
+    /// Would break if a namespace's unread samples skipped the mapping every
+    /// other unread namespace goes through: a read that ran out of time was
+    /// a generic API fault here, beside the pods notice naming the deadline
+    /// for the same namespace, and an expired session was not one.
+    #[test]
+    fn an_unread_namespace_says_why_as_every_other_read_does() {
+        let deadline = kube::Error::Service(Box::new(tower::timeout::error::Elapsed::new()));
+        let answer = combined(
+            &names(&["prod", "staging", "billing"]),
+            vec![
+                Ok(vec![sample("api")]),
+                Err(deadline),
+                Err(failure(401, "Unauthorized")),
+            ],
+        );
+        let codes: Vec<&str> = answer.unread.iter().map(|u| u.code.as_str()).collect();
+        assert_eq!(codes, ["READ_DEADLINE", "CREDENTIALS_EXPIRED"]);
     }
 
     /// With no namespace answering, the refusal is the answer, never an
