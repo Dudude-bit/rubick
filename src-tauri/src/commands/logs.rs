@@ -1,12 +1,13 @@
 //! Log streaming commands
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::logs::{LogConfig, LogLine, LogStreamer, QueryTerm};
 use crate::state::streams::SUBSCRIBE_TIMEOUT;
 use crate::state::AppState;
 use crate::utils::normalize_optional_namespace;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 
@@ -183,8 +184,7 @@ pub async fn save_pod_log(
         state,
     )
     .await?;
-    let dir = dirs::download_dir()
-        .ok_or_else(|| Error::Config("There is no Downloads folder to save into".to_string()))?;
+    let dir = save_dir(dirs::download_dir(), dirs::home_dir());
     let stem = format!(
         "{pod_name}-{container}{}",
         if previous { "-previous" } else { "" }
@@ -192,6 +192,18 @@ pub async fn save_pod_log(
     let path = crate::logs::text::unused_path(&dir, &stem, "log");
     tokio::fs::write(&path, crate::logs::text::log_text(&lines)).await?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Where a saved log goes: Downloads where there is one, else home.
+///
+/// On Linux `download_dir` is only what `user-dirs.dirs` says, and a desktop
+/// without xdg-user-dirs has none; that failed the whole Download over a
+/// home directory the answer could have been written into.
+fn save_dir(downloads: Option<PathBuf>, home: Option<PathBuf>) -> PathBuf {
+    downloads
+        .filter(|dir| dir.is_dir())
+        .or(home)
+        .unwrap_or_else(std::env::temp_dir)
 }
 
 /// Stop log streaming
@@ -214,5 +226,31 @@ mod tests {
         // answers depending on which command you asked.
         assert_eq!(tail_or_default(None), DEFAULT_TAIL_LINES);
         assert_eq!(tail_or_default(Some(42)), 42);
+    }
+
+    /// A Linux desktop without xdg-user-dirs has no Downloads folder, and
+    /// Download failed with nothing written although home was writable.
+    #[test]
+    fn a_log_with_no_downloads_folder_is_saved_in_home() {
+        let home = tempfile::tempdir().unwrap();
+        let home = home.path().to_path_buf();
+        assert_eq!(save_dir(None, Some(home.clone())), home);
+    }
+
+    /// `user-dirs.dirs` can name a folder that was since deleted; writing
+    /// into it failed the same way.
+    #[test]
+    fn a_downloads_folder_that_is_not_there_falls_back_to_home() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().to_path_buf();
+        assert_eq!(
+            save_dir(Some(home.join("Downloads")), Some(home.clone())),
+            home
+        );
+        std::fs::create_dir(home.join("Downloads")).unwrap();
+        assert_eq!(
+            save_dir(Some(home.join("Downloads")), Some(home.clone())),
+            home.join("Downloads")
+        );
     }
 }
