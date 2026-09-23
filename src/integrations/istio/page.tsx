@@ -16,7 +16,7 @@
  */
 
 import { useMemo } from "react";
-import { backingFrom, type ServiceStop } from "../ingress";
+import { backingFrom, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -59,7 +59,6 @@ import {
 } from "./model";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
 import { troubleMark } from "../kit";
 
 const AUTO_OPEN = 8;
@@ -632,14 +631,6 @@ function RawMatches({ matches }: { matches: MatchReading[] }) {
 }
 
 // --- findings -----------------------------------------------------------
-
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
 
 function Findings({
   group,

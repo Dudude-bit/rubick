@@ -17,15 +17,13 @@
  */
 
 import { sayWords } from "@/i18n/say";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
   useRouteCertificates,
-  type ServiceStop,
+  STOP_UNDER,
 } from "../ingress";
-import { useServiceRoutes } from "@/hooks/useServiceRoutes";
-import { useIngressTls } from "@/hooks/useIngressTls";
 import {
   Box,
   FileCode2,
@@ -48,6 +46,8 @@ import {
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
+import { useFrontingTls } from "../fronting-tls";
+import { ProxyControllerTab } from "../proxy-controller";
 import { routingMap } from "./map";
 import {
   BackingUnread,
@@ -71,8 +71,8 @@ import {
   type ControllerInfo,
 } from "./data";
 import {
-  frontingIngresses,
   allRoutes,
+  PROXY_LABEL,
   backingOf,
   hostGroups,
   nginxClasses,
@@ -83,9 +83,9 @@ import {
 } from "./model";
 import { problemWords } from "@/lib/certificates";
 import { T } from "@/i18n/T";
+import { parts } from "@/i18n/parts";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
 import { troubleMark } from "../kit";
 
 /** Past this many troubled hosts, nothing opens itself. */
@@ -108,61 +108,10 @@ export default function IngressNginxPage() {
   );
   const certificates = useRouteCertificates(routes);
 
-  // What is in front of nginx. The certificate is usually held by a cloud
-  // load balancer and named in an annotation, so `spec.tls` never sees it and
-  // every host read as served in the clear.
-  const proxy = useMemo(() => {
-    const found = (backing.data?.services ?? []).find(
-      (service) =>
-        service.selector["app.kubernetes.io/name"] === "ingress-nginx"
-    );
-    return found ? { namespace: found.namespace, name: found.name } : null;
-  }, [backing.data]);
-  // Every Ingress whose backend is the proxy's own Service, which is what a
-  // cloud load balancer's Ingress looks like from in here.
-  const frontAsked = useMemo(
-    () =>
-      frontingIngresses({
-        ingresses: routeSources.data?.ingresses ?? [],
-        services: backing.data?.services ?? [],
-      } as never).map(
-        (ingress: {
-          namespace: string;
-          name: string;
-          rules: Array<{ host: string }>;
-        }) => ({
-          namespace: ingress.namespace,
-          name: ingress.name,
-          hosts: ingress.rules.flatMap((rule: { host: string }) =>
-            rule.host ? [rule.host] : []
-          ),
-        })
-      ),
-    [routeSources.data, backing.data]
-  );
-
-  const fronting = useServiceRoutes(proxy);
-  // The certificate may be an ACM ARN or one installed on an Application
-  // Gateway, neither of which is a route and neither of which `spec.tls`
-  // knows about — so the Ingresses standing in front of the proxy are asked
-  // directly. Without this the fix above worked on GKE and nowhere else.
-  const front = useIngressTls(frontAsked);
-  const frontTls = useCallback(
-    (host: string | null) =>
-      host !== null &&
-      frontAsked.some(
-        (ingress) => front.of(ingress, host)?.terminated === true
-      ),
-    [front, frontAsked]
-  );
-  const upstreamTls = useCallback(
-    (host: string | null) =>
-      frontTls(host) ||
-      (host !== null &&
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        )),
-    [fronting.routes, frontTls]
+  const upstreamTls = useFrontingTls(
+    routeSources.data?.ingresses,
+    backing.data?.services,
+    PROXY_LABEL
   );
 
   const sources: NginxSources | null = useMemo(
@@ -914,14 +863,6 @@ function Findings({
 const saysMoreThanTheRow = (finding: NginxHostGroup["findings"][number]) =>
   finding.kind !== "clear";
 
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
-
 function describeFinding(
   finding: Finding,
   t: ReturnType<typeof useT>
@@ -1150,112 +1091,28 @@ function ControllerTab({
   sources: NginxSources | null;
 }) {
   const t = useT();
-  if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingController")}</p>
-    );
-  }
-  const classes = sources ? nginxClasses(sources.classes) : [];
-
+  const flag = controller?.watching.controllerClass;
   return (
-    <div className="flex flex-col gap-[22px]">
-      <Section>
-        <SectionHeader
-          title={t("empty", "theControllerTitle")}
-          description={t("empty", "theControllerDescription")}
-        />
-        {controller.workload ? (
-          <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <ResourceRef
-                kind="Deployment"
-                name={controller.workload.name}
-                namespace={controller.workload.namespace}
-                showKind={false}
-              />
-              <span className="text-fg-fnt">
-                {t("count", "ofTotalReady", {
-                  n: controller.workload.ready,
-                  total: controller.workload.desired,
-                })}{" "}
-                · {controller.workload.namespace}
-              </span>
-            </span>
-            {controller.workload.image && (
-              <span className="font-mono text-[11px] text-fg-fnt">
-                {controller.workload.image}
-              </span>
-            )}
-            {controller.problem && (
-              <p className="text-[11px] text-warn">
-                {sayWords(controller.problem, t)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem && sayWords(controller.problem, t)}
-          </p>
-        )}
-      </Section>
-
-      <Section>
-        <SectionHeader
-          title={t("empty", "classesItClaims")}
-          count={classes.length}
-          description={t("empty", "classesItClaimsDescription")}
-        />
-        {classes.length === 0 ? (
-          <p className="text-[11px] text-warn">
-            {t("empty", "nginxClaimsNoClass")}
-          </p>
-        ) : (
-          <div className="flex flex-col">
-            {classes.map((entry) => (
-              <div
-                key={entry.name}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
-              >
-                <span className="font-mono text-fg-mid">{entry.name}</span>
-                {entry.isDefault && (
-                  <span className="text-[11px] text-fg-fnt">
-                    {t("empty", "clustersDefault")}
-                  </span>
-                )}
-                <span className="ml-auto font-mono text-[11px] text-fg-fnt">
-                  {entry.controller}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        {controller.watching.controllerClass && (
+    <ProxyControllerTab
+      controller={controller}
+      classes={sources ? nginxClasses(sources.classes) : []}
+      words={{
+        reading: t("empty", "readingController"),
+        title: t("empty", "theControllerTitle"),
+        description: t("empty", "theControllerDescription"),
+        claimsNoClass: t("empty", "nginxClaimsNoClass"),
+      }}
+      classesNote={
+        flag && (
           <p className="text-[11px] text-fg-fnt">
-            {t("empty", "startedWithPre")}
-            <span className="font-mono">
-              --controller-class={controller.watching.controllerClass}
-            </span>
-            {t("empty", "startedWithPost")}
+            {parts(t("empty", "startedWithFlag"), {
+              flag: (
+                <span className="font-mono">--controller-class={flag}</span>
+              ),
+            })}
           </p>
-        )}
-      </Section>
-
-      {controller.args.length > 0 && (
-        <Section>
-          <SectionHeader
-            title={t("empty", "staticConfiguration")}
-            count={controller.args.length}
-            description={t("empty", "staticConfigurationDescription")}
-          />
-          <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
-            {controller.args.map((arg, index) => (
-              <span key={index} className="select-text break-all">
-                {arg}
-              </span>
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
+        )
+      }
+    />
   );
 }
