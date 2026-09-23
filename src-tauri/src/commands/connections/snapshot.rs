@@ -198,6 +198,26 @@ pub(super) fn found<'a, K>(
         .ok_or_else(|| Error::not_found(kind, name, namespace))
 }
 
+/// The subject, out of its own GET, gone in the same words [`found`] uses.
+///
+/// Only a 404 that names this object is its absence. One that names nothing
+/// is a path the cluster does not serve, and keeps the cluster's words.
+pub(super) fn got<K>(
+    answer: kube::Result<K>,
+    kind: &str,
+    namespace: &str,
+    name: &str,
+) -> Result<K> {
+    answer.map_err(|err| match err {
+        kube::Error::Api(status)
+            if status.code == 404 && status.details.as_ref().is_some_and(|d| d.name == name) =>
+        {
+            Error::not_found(kind, name, namespace)
+        }
+        other => Error::from(other),
+    })
+}
+
 impl Snapshot {
     /// The namespace's pods, Services, Ingresses, claims, autoscalers and
     /// disruption budgets, in six concurrent lists.

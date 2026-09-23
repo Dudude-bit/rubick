@@ -49,7 +49,35 @@ function conns(over: Partial<ResourceConnections> = {}): ResourceConnections {
   };
 }
 
+/** What the commands wrapper throws: the backend's `{code, message}` as the cause. */
+function failed(code: string, message: string): Error {
+  return new Error(
+    `Tauri command 'getResourceConnections' failed: ${message}`,
+    {
+      cause: { code, message },
+    }
+  );
+}
+
 describe("stateOf", () => {
+  /**
+   * The code decides, not the sentence. The card matched "resource not
+   * found" in English, and a deleted Deployment's 404 said something else,
+   * so it drew "could not read" over a service that is gone.
+   */
+  it("reads a deletion off the error's code", () => {
+    const pin = { kind: "Deployment", name: "payments" };
+    const said = "Resource not found: Deployment/payments in namespace shop";
+
+    expect(stateOf(undefined, failed("NOT_FOUND", said), pin).state).toBe(
+      "gone"
+    );
+    expect(stateOf(undefined, failed("LIST_UNREAD", said), pin)).toEqual({
+      state: "unread",
+      why: said,
+    });
+  });
+
   it("counts the replicas that are ready against the ones there are", () => {
     expect(stateOf(conns(), null)).toEqual({
       state: "ready",
@@ -86,15 +114,23 @@ describe("stateOf", () => {
    */
   it("tells a service that is gone from one it could not read", () => {
     expect(
-      stateOf(undefined, {
-        message: "Resource not found: Deployment/payments in namespace shop",
-      })
+      stateOf(
+        undefined,
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        )
+      )
     ).toEqual({
       state: "gone",
     });
-    const unread = stateOf(undefined, {
-      message: "Permission denied: deployments.apps is forbidden",
-    });
+    const unread = stateOf(
+      undefined,
+      failed(
+        "PERMISSION_DENIED",
+        "Permission denied: deployments.apps is forbidden"
+      )
+    );
     expect(unread.state).toBe("unread");
     expect(unread).toMatchObject({
       why: "Permission denied: deployments.apps is forbidden",
@@ -108,33 +144,31 @@ describe("stateOf", () => {
    */
   it("does not keep the last good answer when the next read failed", () => {
     expect(
-      stateOf(
-        conns(),
-        { message: "services is forbidden" },
-        {
-          kind: "Deployment",
-          name: "payments",
-        }
-      ).state
+      stateOf(conns(), failed("PERMISSION_DENIED", "services is forbidden"), {
+        kind: "Deployment",
+        name: "payments",
+      }).state
     ).toBe("unread");
   });
 
   /**
-   * "Client not found" and "Plugin not found" are this app failing, not the
-   * cluster answering. Reading them as a deleted workload sends somebody to
-   * rebuild something that is still running.
+   * A lost connection is this app failing, not the cluster answering.
+   * Reading it as a deleted workload sends somebody to rebuild something
+   * that is still running.
    */
   it("calls a workload gone only when the cluster said so about it", () => {
     const pin = { kind: "Deployment", name: "payments" };
-    expect(stateOf(undefined, { message: "Client not found" }, pin).state).toBe(
-      "unread"
-    );
+    expect(
+      stateOf(undefined, failed("NOT_CONNECTED", "Not connected to prod"), pin)
+        .state
+    ).toBe("unread");
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/payments in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -150,9 +184,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/checkout in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/checkout in namespace shop"
+        ),
         { kind: "Deployment", name: "payments" }
       ).state
     ).toBe("unread");
@@ -195,7 +230,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Service/payments in namespace shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Service/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("unread");
@@ -203,9 +241,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        {
-          message: "Resource not found: Deployment/payments in namespace shop",
-        },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments in namespace shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -222,7 +261,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/paymentsXv1 in shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/paymentsXv1 in shop"
+        ),
         pin
       ).state
     ).toBe("unread");
@@ -230,7 +272,10 @@ describe("stateOf", () => {
     expect(
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/payments.v1 in shop" },
+        failed(
+          "NOT_FOUND",
+          "Resource not found: Deployment/payments.v1 in shop"
+        ),
         pin
       ).state
     ).toBe("gone");
@@ -239,7 +284,7 @@ describe("stateOf", () => {
     expect(() =>
       stateOf(
         undefined,
-        { message: "Resource not found: Deployment/weird[ in shop" },
+        failed("NOT_FOUND", "Resource not found: Deployment/weird[ in shop"),
         { kind: "Deployment", name: "weird[" }
       )
     ).not.toThrow();

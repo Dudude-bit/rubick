@@ -73,12 +73,13 @@ pub(super) struct Template {
 
 pub(super) async fn fetch_template(
     ctx: &ResourceContext,
+    ns: &str,
     kind: &str,
     name: &str,
 ) -> Result<(Template, Option<String>)> {
     macro_rules! from_workload {
         ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr) => {{
-            let $obj: $ty = ctx.namespaced_api().get(name).await?;
+            let $obj: $ty = got(ctx.namespaced_api().get(name).await, kind, ns, name)?;
             let uid = $obj.uid();
             (
                 Template {
@@ -202,7 +203,7 @@ pub(super) async fn workload_connections(
 ) -> Result<()> {
     let (snapshot, template) = tokio::try_join!(
         source.snapshot(ctx, gateway),
-        fetch_template(ctx, kind, name)
+        fetch_template(ctx, ns, kind, name)
     )?;
     let (template, uid) = template;
 
@@ -527,7 +528,12 @@ pub(super) async fn claim_connections(
     name: &str,
     out: &mut Neighbourhood,
 ) -> Result<()> {
-    let claim: PersistentVolumeClaim = ctx.namespaced_api().get(name).await?;
+    let claim: PersistentVolumeClaim = got(
+        ctx.namespaced_api().get(name).await,
+        "PersistentVolumeClaim",
+        ns,
+        name,
+    )?;
     let subject = claim_ref(&claim, ns);
     out.subject = Some(subject.clone());
 
@@ -592,7 +598,7 @@ pub(super) async fn node_connections(
         pods_api.list(&params),
         budgets_api.list(&every)
     );
-    let node = node?;
+    let node = got(node, "Node", "", name)?;
     let pods = pods?.items;
     let budgets = read(budgets);
 
@@ -648,7 +654,7 @@ pub(super) async fn volume_connections(
     out: &mut Neighbourhood,
 ) -> Result<()> {
     let volumes: Api<PersistentVolume> = Api::all(ctx.client.clone());
-    let volume = volumes.get(name).await?;
+    let volume = got(volumes.get(name).await, "PersistentVolume", "", name)?;
     let subject = ObjectRef::new("PersistentVolume", name, None, Existence::Present);
     out.subject = Some(subject.clone());
 
@@ -918,5 +924,52 @@ mod users_tests {
         note_users("shop", &target, lists(Ok(Vec::new())), &mut out);
         assert!(out.not_looked_at.is_empty());
         assert_eq!(out.edges.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod subject_tests {
+    use super::*;
+    use crate::client::served::test_server::server;
+
+    const PAYMENTS: &str = "/apis/apps/v1/namespaces/shop/deployments/payments";
+
+    /// A pinned Deployment somebody deleted. Its GET 404s with the API's
+    /// sentence, which named no kind and no name the card could match, so
+    /// the card said "could not read" about a service that is gone.
+    #[tokio::test]
+    async fn a_deleted_workload_is_not_found_by_its_kind_and_name() {
+        let gone = serde_json::json!({
+            "kind": "Status", "apiVersion": "v1", "metadata": {}, "status": "Failure",
+            "message": "deployments.apps \"payments\" not found", "reason": "NotFound",
+            "details": { "name": "payments", "group": "apps", "kind": "deployments" },
+            "code": 404,
+        });
+        let (client, _) = server(vec![(PAYMENTS, 404, gone.to_string())]).await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let Err(err) = fetch_template(&ctx, "shop", "Deployment", "payments").await else {
+            panic!("a deleted Deployment has no template");
+        };
+        assert!(
+            matches!(&err, Error::NotFound { kind, name, namespace }
+                if kind == "Deployment" && name == "payments" && namespace == "shop"),
+            "{err:?}"
+        );
+        assert!(err.to_string().contains("Deployment/payments"));
+    }
+
+    /// A 404 naming no object is a path the cluster does not serve, not the
+    /// object gone: it keeps the cluster's words and is not about the subject.
+    #[tokio::test]
+    async fn a_404_that_names_no_object_is_not_the_subject_gone() {
+        let (client, _) = server(vec![(PAYMENTS, 404, "404 page not found".to_string())]).await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+        let Err(err) = fetch_template(&ctx, "shop", "Deployment", "payments").await else {
+            panic!("nothing served there");
+        };
+        assert!(matches!(err, Error::KubeApi(_)), "{err:?}");
+        assert!(!err.to_string().contains("Deployment/payments"));
     }
 }

@@ -52,7 +52,7 @@ export function ServiceCard({
 
   const state = stateOf(
     connections.data,
-    connections.error ? { message: connections.error.message } : null,
+    connections.error,
     pin,
     connections.isPending
   );
