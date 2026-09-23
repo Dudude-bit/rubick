@@ -374,6 +374,37 @@ pub async fn get_manifest(
     crate::commands::helpers::clean_yaml_for_editor(&yaml)
 }
 
+/// An object's labels and annotations.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectMetadata {
+    pub labels: std::collections::BTreeMap<String, String>,
+    pub annotations: std::collections::BTreeMap<String, String>,
+}
+
+/// One object's labels and annotations, for a reader that wants an
+/// annotation rather than a manifest to parse for it. A metadata-only read:
+/// no spec, and for a Secret no data.
+#[tauri::command]
+pub async fn get_object_metadata(
+    kind: String,
+    api_version: String,
+    name: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ObjectMetadata> {
+    crate::validation::validate_dns_subdomain(&name)?;
+    let api_resource = api_resource_for(&kind, &api_version);
+    let ns = namespace.unwrap_or_else(|| "default".to_string());
+    let ctx = ResourceContext::for_command(&state, Some(ns))?;
+    let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
+    let meta = api.get_metadata(&name).await?.metadata;
+    Ok(ObjectMetadata {
+        labels: meta.labels.unwrap_or_default(),
+        annotations: meta.annotations.unwrap_or_default(),
+    })
+}
+
 #[cfg(test)]
 mod dry_run_tests {
 

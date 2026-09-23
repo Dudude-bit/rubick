@@ -4,7 +4,8 @@ const { commands } = vi.hoisted(() => ({
   commands: {
     listDeployments: vi.fn(),
     listDaemonsets: vi.fn(),
-    getManifest: vi.fn(),
+    getDeployment: vi.fn(),
+    getDaemonset: vi.fn(),
     getConfigmapData: vi.fn(),
   },
 }));
@@ -34,9 +35,26 @@ beforeEach(() => {
   for (const fn of Object.values(commands)) fn.mockReset();
   commands.listDeployments.mockResolvedValue([]);
   commands.listDaemonsets.mockResolvedValue([daemonSet]);
-  commands.getManifest.mockResolvedValue(
-    "spec:\n  template:\n    spec:\n      containers:\n        - args: []\n"
-  );
+  commands.getDaemonset.mockResolvedValue({
+    containers: [
+      {
+        name: "controller",
+        command: ["/nginx-ingress-controller"],
+        args: [
+          "--configmap=$(POD_NAMESPACE)/ingress-nginx-controller",
+          "--controller-class=k8s.io/ingress-nginx",
+        ],
+        env: [
+          { name: "POD_NAMESPACE", value: null, valueFrom: null },
+          {
+            name: "LD_PRELOAD",
+            value: "/usr/local/lib/libmimalloc.so",
+            valueFrom: null,
+          },
+        ],
+      },
+    ],
+  });
 });
 
 describe("finding a proxy's controller", () => {
@@ -54,15 +72,22 @@ describe("finding a proxy's controller", () => {
     });
   });
 
-  it("reads the DaemonSet's own manifest for its flags", async () => {
+  /** The flags are the template's `command` and `args`, read from the
+   *  DaemonSet itself, not from a Deployment of the same name. */
+  it("reads the DaemonSet's own containers for its flags", async () => {
     const info = await fetchController();
     expect(info.workload?.kind).toBe("DaemonSet");
-    expect(commands.getManifest).toHaveBeenCalledWith(
-      "DaemonSet",
-      "apps/v1",
+    expect(commands.getDaemonset).toHaveBeenCalledWith(
       "ingress-nginx-controller",
       "ingress-nginx"
     );
+    expect(commands.getDeployment).not.toHaveBeenCalled();
+    expect(info.args).toEqual([
+      "/nginx-ingress-controller",
+      "--configmap=$(POD_NAMESPACE)/ingress-nginx-controller",
+      "--controller-class=k8s.io/ingress-nginx",
+    ]);
+    expect(info.watching.controllerClass).toBe("k8s.io/ingress-nginx");
   });
 
   /** One refused list and one empty one is "could not look", not "none". */

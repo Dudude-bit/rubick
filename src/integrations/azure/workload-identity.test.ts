@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { getManifest: vi.fn() },
+  commands: { getObjectMetadata: vi.fn() },
 }));
 
 import { commands } from "@/lib/commands";
@@ -24,16 +24,20 @@ const pod = (name: string, account: string | null, use = true) =>
     serviceAccountName: account,
   }) as never;
 
-const federated = (clientId: string) =>
-  `metadata:\n  annotations:\n    azure.workload.identity/client-id: ${clientId}\n`;
+const federated = (clientId: string) => ({
+  labels: {},
+  annotations: { "azure.workload.identity/client-id": clientId },
+});
 
 describe("which pods can become which identity", () => {
   beforeEach(() => {
-    vi.mocked(commands.getManifest).mockReset();
+    vi.mocked(commands.getObjectMetadata).mockReset();
   });
 
   it("joins the labelled pod to its ServiceAccount's client id", async () => {
-    vi.mocked(commands.getManifest).mockResolvedValue(federated("abcd-1234"));
+    vi.mocked(commands.getObjectMetadata).mockResolvedValue(
+      federated("abcd-1234")
+    );
 
     const found = await workloadIdentity([pod("api-1", "api")]);
 
@@ -54,7 +58,10 @@ describe("which pods can become which identity", () => {
    * there; the token is for no identity because the annotation is not.
    */
   it("names a labelled pod whose ServiceAccount grants nothing", async () => {
-    vi.mocked(commands.getManifest).mockResolvedValue("metadata: {}\n");
+    vi.mocked(commands.getObjectMetadata).mockResolvedValue({
+      labels: {},
+      annotations: {},
+    });
 
     const found = await workloadIdentity([pod("api-1", "api")]);
 
@@ -64,11 +71,35 @@ describe("which pods can become which identity", () => {
     );
   });
 
+  /**
+   * A ServiceAccount this token cannot read is not one that grants nothing.
+   * The failed read used to come back as "no annotation", and the page said
+   * in red that the pod's every Azure call fails.
+   */
+  it("says a ServiceAccount it could not read is unknown, not unannotated", async () => {
+    vi.mocked(commands.getObjectMetadata).mockRejectedValue(
+      new Error('serviceaccounts "api" is forbidden')
+    );
+
+    const found = await workloadIdentity([pod("api-1", "api")]);
+
+    expect(found.accounts).toEqual([]);
+    expect(found.findings).toEqual([
+      expect.objectContaining({
+        kind: "account-unread",
+        severity: "warn",
+        account: "api",
+      }),
+    ]);
+  });
+
   /** A pod naming no ServiceAccount runs as `default`, and so does the check. */
   it("reads the default ServiceAccount for a pod that names none", async () => {
-    vi.mocked(commands.getManifest).mockResolvedValue(federated("x"));
+    vi.mocked(commands.getObjectMetadata).mockResolvedValue(federated("x"));
     await workloadIdentity([pod("api-1", null)]);
-    expect(vi.mocked(commands.getManifest).mock.calls[0][2]).toBe("default");
+    expect(vi.mocked(commands.getObjectMetadata).mock.calls[0][2]).toBe(
+      "default"
+    );
   });
 
   /** Without the label the webhook does nothing, so neither does this. */
@@ -76,12 +107,12 @@ describe("which pods can become which identity", () => {
     const found = await workloadIdentity([pod("api-1", "api", false)]);
     expect(found.accounts).toEqual([]);
     expect(found.findings).toEqual([]);
-    expect(commands.getManifest).not.toHaveBeenCalled();
+    expect(commands.getObjectMetadata).not.toHaveBeenCalled();
   });
 
   /** One `get` per distinct ServiceAccount, not one per pod. */
   it("reads each ServiceAccount once for a whole Deployment", async () => {
-    vi.mocked(commands.getManifest).mockResolvedValue(federated("abcd"));
+    vi.mocked(commands.getObjectMetadata).mockResolvedValue(federated("abcd"));
 
     const found = await workloadIdentity([
       pod("api-1", "api"),
@@ -89,7 +120,7 @@ describe("which pods can become which identity", () => {
       pod("api-3", "api"),
     ]);
 
-    expect(commands.getManifest).toHaveBeenCalledTimes(1);
+    expect(commands.getObjectMetadata).toHaveBeenCalledTimes(1);
     expect(found.accounts[0].pods).toHaveLength(3);
   });
 });

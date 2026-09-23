@@ -39,6 +39,7 @@ import {
   danglingBindings,
 } from "./model";
 import type { FederatedAccount } from "./workload-identity";
+import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 
 export default function AksAddonsPage() {
@@ -52,6 +53,8 @@ export default function AksAddonsPage() {
 
   const orphans = picture.data?.workload.findings ?? [];
   const legacy = picture.data?.legacyInstalled ?? false;
+  const podsKnown = picture.data?.podsKnown ?? true;
+  const unread = picture.data?.unread ?? [];
   const dangling = picture.data
     ? danglingBindings(picture.data.bindings, picture.data.identities)
     : [];
@@ -78,28 +81,59 @@ export default function AksAddonsPage() {
         description={t("empty", "aksAddonsHint")}
       />
 
-      {orphans.map((finding, index) => (
+      {unread.map((read) => (
         <Finding
-          key={index}
-          tone="err"
-          title={
-            <>
-              <span className="font-mono">{finding.pod.name}</span>{" "}
-              {t("empty", "podAsksForIdentity")}
-            </>
-          }
+          key={read.what}
+          tone="warn"
+          title={t("empty", "crdCouldNotBeListed", { crd: read.what })}
+          verbatim={read.reason}
         >
-          {t("empty", "azureIdentityFinding1")}{" "}
-          <span className="font-mono">azure.workload.identity/use: true</span>
-          {t("empty", "azureIdentityFinding2")}{" "}
-          <span className="font-mono">{finding.account}</span>{" "}
-          {t("empty", "azureIdentityFinding3")}{" "}
-          <span className="font-mono">{finding.pod.namespace}</span>{" "}
-          {t("empty", "azureIdentityFinding4")}{" "}
-          <span className="font-mono">azure.workload.identity/client-id</span>
-          {t("empty", "azureIdentityFinding5")}
+          {t("empty", "azureUnreadNote")}
         </Finding>
       ))}
+
+      {orphans.map((finding, index) =>
+        finding.kind === "account-unread" ? (
+          <Finding
+            key={index}
+            tone="warn"
+            title={parts(t("empty", "azureAccountUnreadTitle"), {
+              pod: <span className="font-mono">{finding.pod.name}</span>,
+            })}
+          >
+            {parts(
+              t("empty", "azureAccountUnread", { reason: finding.reason }),
+              {
+                account: <span className="font-mono">{finding.account}</span>,
+                namespace: (
+                  <span className="font-mono">{finding.pod.namespace}</span>
+                ),
+              }
+            )}
+          </Finding>
+        ) : (
+          <Finding
+            key={index}
+            tone="err"
+            title={
+              <>
+                <span className="font-mono">{finding.pod.name}</span>{" "}
+                {t("empty", "podAsksForIdentity")}
+              </>
+            }
+          >
+            {t("empty", "azureIdentityFinding1")}{" "}
+            <span className="font-mono">azure.workload.identity/use: true</span>
+            {t("empty", "azureIdentityFinding2")}{" "}
+            <span className="font-mono">{finding.account}</span>{" "}
+            {t("empty", "azureIdentityFinding3")}{" "}
+            <span className="font-mono">{finding.pod.namespace}</span>{" "}
+            {t("empty", "azureIdentityFinding4")}{" "}
+            <span className="font-mono">azure.workload.identity/client-id</span>
+            {t("empty", "azureIdentityFinding5")}
+          </Finding>
+        )
+      )}
 
       <Section>
         {picture.isPending ? (
@@ -107,14 +141,22 @@ export default function AksAddonsPage() {
             {t("empty", "readingIdentities")}
           </p>
         ) : accounts.length === 0 ? (
-          <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
-            {t("empty", "noPodCarries")}{" "}
-            <span className="font-mono">azure.workload.identity/use: true</span>
-            {t("empty", "nothingFederatingToAzure")}
-            {legacy
-              ? t("empty", "legacyAddonInstalled")
-              : t("empty", "legacyAddonNotInstalled")}
-          </p>
+          // No pod carries the label — unless the pods were not read, and
+          // then the finding above says so and nothing here claims more.
+          podsKnown && (
+            <p className="max-w-[72ch] text-[11.5px] text-fg-mut">
+              {t("empty", "noPodCarries")}{" "}
+              <span className="font-mono">
+                azure.workload.identity/use: true
+              </span>
+              {t("empty", "nothingFederatingToAzure")}
+              {legacy === true
+                ? t("empty", "legacyAddonInstalled")
+                : legacy === false
+                  ? t("empty", "legacyAddonNotInstalled")
+                  : null}
+            </p>
+          )
         ) : (
           <TroubleList
             items={accounts}
@@ -136,7 +178,7 @@ export default function AksAddonsPage() {
         )}
       </Section>
 
-      {legacy && (
+      {legacy === true && (
         <Section>
           <SectionHeader
             title={t("empty", "podIdentityRetired")}
