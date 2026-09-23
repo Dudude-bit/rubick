@@ -38,7 +38,6 @@ import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { useCrdReadDenied } from "@/hooks/useListAccess";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   forwardsFor,
@@ -966,14 +965,6 @@ export function useIntegrationPages(): {
       page: VendorPage & { gate: Gate };
     } => vendor.page?.gate != null
   );
-  // A gated vendor's page reads its CRs by first resolving the CRD — a
-  // cluster-scoped get on `customresourcedefinitions`. A token refused that
-  // cannot open any of them, whatever its rights on the CRs themselves, so the
-  // review of the CR alone (the gate below) missed exactly this reader. The
-  // vendor appears at all only because detection *listed* the CRDs, so this is
-  // a token that may list them and not get one — the get review is the honest
-  // question. A mark, never a lock.
-  const crdDenied = useCrdReadDenied();
   const gateIds = (vendor: (typeof gated)[number]): string[] => {
     const crd = vendor.page.gate.crd;
     return typeof crd === "string" ? [crd] : [...crd];
@@ -1013,7 +1004,6 @@ export function useIntegrationPages(): {
   const forbidden = new Set(
     gated
       .filter((vendor) => {
-        if (crdDenied) return true;
         const answers = gateIds(vendor).map((id) =>
           allowedByResource.get(id.slice(0, id.indexOf(".")))
         );
