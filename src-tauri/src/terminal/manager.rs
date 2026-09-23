@@ -220,6 +220,7 @@ impl TerminalManager {
 
             // I/O loop
             let mut quiet_since: Option<tokio::time::Instant> = None;
+            let mut output = Output::default();
             loop {
                 tokio::select! {
                     _ = &mut cancel_rx => {
@@ -239,6 +240,11 @@ impl TerminalManager {
                                         break;
                                     }
                                     tracing::error!("Failed to write input: {}", e);
+                                    // What the shell said last goes before the
+                                    // failure: the pane stops listening on it.
+                                    if !output.is_empty() {
+                                        send_output(&event_tx, &session_id_clone, output.finish());
+                                    }
                                     emit_failure(
                                         &event_tx,
                                         &session_id_clone,
@@ -260,29 +266,49 @@ impl TerminalManager {
                             }
                         }
                     }
-                    () = tokio::time::sleep(tokio::time::Duration::from_millis(50)) => {
-                        match adapter.read_output().await {
-                            Ok(Some(data)) => {
+                    // Read as soon as there is something, not on a 50 ms
+                    // tick: the tick capped a busy shell at one 4 KB chunk
+                    // per tick, and put every echo up to a tick behind the
+                    // key. Every adapter's read waits briefly for data and is
+                    // cancel-safe, so a keystroke interrupts it without loss.
+                    read = timed(adapter.read_output()) => {
+                        match read {
+                            (Ok(Some(data)), _) => {
                                 quiet_since = None;
-                                let data_str = String::from_utf8_lossy(&data).to_string();
-                                let _ = event_tx.send(AppEvent::TerminalOutput {
-                                    session_id: session_id_clone.clone(),
-                                    data: data_str,
-                                });
-                            }
-                            Ok(None) if adapter.is_running() => quiet_since = None,
-                            Ok(None) if !adapter.may_still_deliver() => break,
-                            Ok(None) => {
-                                // Gone, but see `QUIET_AFTER_EXIT`: what the
-                                // console had left is still on its way.
-                                match quiet_since {
-                                    None => quiet_since = Some(tokio::time::Instant::now()),
-                                    Some(since) if since.elapsed() >= QUIET_AFTER_EXIT => break,
-                                    Some(_) => {}
+                                output.push(&data);
+                                if output.due() {
+                                    send_output(&event_tx, &session_id_clone, output.take());
                                 }
                             }
-                            Err(e) => {
+                            (Ok(None), waited) => {
+                                // Nothing more for now: what was gathered goes.
+                                if !output.is_empty() {
+                                    send_output(&event_tx, &session_id_clone, output.take());
+                                }
+                                if adapter.is_running() {
+                                    quiet_since = None;
+                                } else if !adapter.may_still_deliver() {
+                                    break;
+                                } else {
+                                    // Gone, but see `QUIET_AFTER_EXIT`: what the
+                                    // console had left is still on its way.
+                                    match quiet_since {
+                                        None => quiet_since = Some(tokio::time::Instant::now()),
+                                        Some(since) if since.elapsed() >= QUIET_AFTER_EXIT => break,
+                                        Some(_) => {}
+                                    }
+                                }
+                                // A read that answered "nothing" without waiting
+                                // would spin this loop; the real adapters wait.
+                                if waited < IDLE_READ {
+                                    tokio::time::sleep(IDLE_READ).await;
+                                }
+                            }
+                            (Err(e), _) => {
                                 tracing::error!("Failed to read output: {}", e);
+                                if !output.is_empty() {
+                                    send_output(&event_tx, &session_id_clone, output.finish());
+                                }
                                 emit_failure(
                                     &event_tx,
                                     &session_id_clone,
@@ -297,6 +323,11 @@ impl TerminalManager {
                         }
                     }
                 }
+            }
+            // Whatever is left, a cut-off character included, is the last of
+            // what the shell said.
+            if !output.is_empty() {
+                send_output(&event_tx, &session_id_clone, output.finish());
             }
 
             // Cleanup
@@ -313,6 +344,92 @@ impl TerminalManager {
 
         Ok(session_id)
     }
+}
+
+/// A read that answered in less than this is taken as not having waited.
+const IDLE_READ: tokio::time::Duration = tokio::time::Duration::from_millis(5);
+
+/// How much output is gathered before it goes out regardless.
+const OUTPUT_BATCH: usize = 64 * 1024;
+
+/// How long gathered output may wait for more before it goes out anyway.
+const OUTPUT_WAIT: tokio::time::Duration = tokio::time::Duration::from_millis(16);
+
+async fn timed<T>(read: impl std::future::Future<Output = T>) -> (T, tokio::time::Duration) {
+    let started = tokio::time::Instant::now();
+    let value = read.await;
+    (value, started.elapsed())
+}
+
+/// Output gathered between sends: one event per burst rather than per read,
+/// and never a character split across two events.
+#[derive(Default)]
+struct Output {
+    bytes: Vec<u8>,
+    since: Option<tokio::time::Instant>,
+}
+
+impl Output {
+    fn push(&mut self, data: &[u8]) {
+        self.since.get_or_insert_with(tokio::time::Instant::now);
+        self.bytes.extend_from_slice(data);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    fn due(&self) -> bool {
+        self.bytes.len() >= OUTPUT_BATCH
+            || self
+                .since
+                .is_some_and(|since| since.elapsed() >= OUTPUT_WAIT)
+    }
+
+    /// Everything up to a character a read cut in half, which stays for the
+    /// next send: decoded on its own, each half was a U+FFFD, and a line of
+    /// Cyrillic came out with holes in it wherever a read ended.
+    fn take(&mut self) -> String {
+        let keep = incomplete_tail(&self.bytes);
+        let tail = self.bytes.split_off(self.bytes.len() - keep);
+        let text = String::from_utf8_lossy(&self.bytes).into_owned();
+        self.bytes = tail;
+        self.since = (!self.bytes.is_empty()).then(tokio::time::Instant::now);
+        text
+    }
+
+    fn finish(&mut self) -> String {
+        self.since = None;
+        String::from_utf8_lossy(&std::mem::take(&mut self.bytes)).into_owned()
+    }
+}
+
+/// How many bytes at the end begin a UTF-8 character that has not finished.
+fn incomplete_tail(bytes: &[u8]) -> usize {
+    for back in 1..=bytes.len().min(3) {
+        let byte = bytes[bytes.len() - back];
+        if byte & 0b1100_0000 == 0b1000_0000 {
+            continue;
+        }
+        let needs = match byte {
+            0xF0..=0xF7 => 4,
+            0xE0..=0xEF => 3,
+            0xC0..=0xDF => 2,
+            _ => 1,
+        };
+        return if needs > back { back } else { 0 };
+    }
+    0
+}
+
+fn send_output(event_tx: &broadcast::Sender<AppEvent>, session_id: &str, data: String) {
+    if data.is_empty() {
+        return;
+    }
+    let _ = event_tx.send(AppEvent::TerminalOutput {
+        session_id: session_id.to_string(),
+        data,
+    });
 }
 
 /// Tell the frontend a session stopped on its own. Send failures are
@@ -339,6 +456,166 @@ mod tests {
 
     /// Fake adapter: counts `read_output` calls so the test can assert
     /// the read loop didn't start before the gate was released.
+    /// Hands over a burst of chunks as fast as it is asked, then ends.
+    struct Burst {
+        chunks: std::collections::VecDeque<Vec<u8>>,
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for Burst {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            Ok(self.chunks.pop_front())
+        }
+
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            !self.chunks.is_empty()
+        }
+    }
+
+    async fn everything_said(adapter: Burst) -> Vec<String> {
+        let (event_tx, mut event_rx) = broadcast::channel(4096);
+        let manager = TerminalManager::new(event_tx);
+        let session_id = manager
+            .create_session(Box::new(adapter))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut said = Vec::new();
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { data, .. } => said.push(data),
+                    AppEvent::TerminalClosed { .. } => return said,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends")
+    }
+
+    /// A read split "привет" between two bytes of one letter, and each half,
+    /// decoded on its own, became a U+FFFD.
+    #[tokio::test]
+    async fn a_character_split_between_two_reads_arrives_whole() {
+        let text = "привет, мир\n".repeat(3);
+        let bytes = text.as_bytes();
+        let chunks = bytes.chunks(5).map(<[u8]>::to_vec).collect();
+        let said = everything_said(Burst { chunks }).await.concat();
+        assert_eq!(said, text);
+    }
+
+    /// Output goes out in bursts, not one event per read: two thousand reads
+    /// of a busy shell were two thousand trips across the bridge, whose
+    /// buffer holds a thousand.
+    #[tokio::test]
+    async fn a_busy_shell_is_sent_in_bursts_and_in_order() {
+        let chunks: std::collections::VecDeque<Vec<u8>> = (0..2000)
+            .map(|i| format!("{i:05}\n").into_bytes())
+            .collect();
+        let said = everything_said(Burst { chunks }).await;
+        let joined = said.concat();
+        let expected = (0..2000)
+            .map(|i| format!("{i:05}\n"))
+            .collect::<Vec<_>>()
+            .concat();
+        assert_eq!(joined, expected);
+        assert!(said.len() < 200, "{} events for 2000 reads", said.len());
+    }
+
+    /// Says something, then the connection breaks.
+    struct TalksThenBreaks {
+        step: usize,
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for TalksThenBreaks {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            self.step += 1;
+            match self.step {
+                1 => Ok(Some(b"last words".to_vec())),
+                _ => Err(Error::Terminal("Read error: connection reset".to_string())),
+            }
+        }
+
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+
+        async fn close(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            true
+        }
+    }
+
+    /// The pane stops listening for output once it hears the session failed,
+    /// so what the shell said last has to arrive first.
+    #[tokio::test]
+    async fn the_last_output_arrives_before_the_failure() {
+        let (event_tx, mut event_rx) = broadcast::channel(64);
+        let manager = TerminalManager::new(event_tx);
+        let session_id = manager
+            .create_session(Box::new(TalksThenBreaks { step: 0 }))
+            .await
+            .expect("create_session");
+        manager.mark_subscribed(&session_id).expect("subscribed");
+
+        let order = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut order = Vec::new();
+            loop {
+                match event_rx.recv().await.expect("the bus stays open") {
+                    AppEvent::TerminalOutput { .. } => order.push("output"),
+                    AppEvent::StreamFailed { .. } => order.push("failed"),
+                    AppEvent::TerminalClosed { .. } => return order,
+                    _ => {}
+                }
+            }
+        })
+        .await
+        .expect("the session ends");
+        assert_eq!(order, vec!["output", "failed"]);
+    }
+
+    /// Where a character begins and has not finished.
+    #[test]
+    fn the_unfinished_end_of_a_buffer_is_measured_in_bytes() {
+        let letter = "и".as_bytes();
+        assert_eq!(incomplete_tail(&letter[..1]), 1);
+        assert_eq!(incomplete_tail(letter), 0);
+        let emoji = "😀".as_bytes();
+        assert_eq!(incomplete_tail(&emoji[..3]), 3);
+        assert_eq!(incomplete_tail(b"plain"), 0);
+        // Stray continuation bytes finish nothing; they are decoded as they are.
+        assert_eq!(incomplete_tail(&[0x80, 0x80, 0x80]), 0);
+    }
+
     struct CountingAdapter {
         connected: Arc<AtomicBool>,
         reads: Arc<AtomicUsize>,
