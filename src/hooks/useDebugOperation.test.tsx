@@ -63,6 +63,31 @@ describe("how long a debug container has been awaited", () => {
 
     expect(result.current.elapsedSeconds).toBe(11);
   });
+
+  /**
+   * The clock reads whole seconds and the start was kept to the millisecond,
+   * so a wait begun half a second past one read 0 a full second in, and
+   * stayed a second behind. Fails if the start is not read the same way.
+   */
+  it("counts a second once one has passed, however far into a second it began", async () => {
+    vi.setSystemTime(Date.parse("2026-09-23T12:00:00.500Z"));
+    const { result } = renderHook(() =>
+      useDebugOperation({
+        onReady: vi.fn(),
+        onError: vi.fn(),
+        onTimeout: vi.fn(),
+      })
+    );
+    await act(async () => {
+      await result.current.startEphemeral("web", "shop", {} as never);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+
+    expect(result.current.elapsedSeconds).toBe(1);
+  });
 });
 
 describe("a debug container the cluster refused", () => {
