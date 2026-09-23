@@ -7,7 +7,7 @@ import type { T } from "@/i18n/useT";
 const t = ((section, key, values) =>
   translate("en", section, key, values)) as T;
 
-import { boardMark, gatewaysMark, routesBoard } from "./route-rows";
+import { allServing, boardMark, gatewaysMark, routesBoard } from "./route-rows";
 import type {
   ConditionInfo,
   GatewayClassInfo,
@@ -663,6 +663,35 @@ describe("the sidebar marks", () => {
     expect(board.unknown[0].servingKnown).toBe(false);
     expect(board.serving.map((row) => row.name)).toEqual(["healthy"]);
     expect(boardMark(board)).toBe("unchecked");
+  });
+
+  /**
+   * The page's "all serving" line spoke whenever nothing was broken, over
+   * routes the trace could not vouch for.
+   */
+  it("says all serving only when every route was traced to serving", () => {
+    const direct = route("direct", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "x",
+            },
+          ],
+        },
+      ],
+    });
+    expect(allServing(routesBoard([route("healthy")], sources(), t))).toBe(
+      true
+    );
+    expect(
+      allServing(routesBoard([direct, route("healthy")], sources(), t))
+    ).toBe(false);
   });
 
   it("marks the gateways row from the pulse, then from silence", () => {

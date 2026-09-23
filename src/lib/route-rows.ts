@@ -87,6 +87,15 @@ export interface RoutesBoard {
   pulse: GatewayPulse[];
 }
 
+/** Every route traced to serving: nothing broken, nothing it cannot tell. */
+export function allServing(board: RoutesBoard): boolean {
+  return (
+    board.verdictsKnown &&
+    board.notServing.length === 0 &&
+    board.unknown.length === 0
+  );
+}
+
 /**
  * The routes row's one-pixel opinion for the sidebar: err while anything
  * is dead, warn while a verdict is stale or a host contested — and

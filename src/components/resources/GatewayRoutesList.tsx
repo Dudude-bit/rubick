@@ -54,7 +54,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { KIND_TONE } from "@/lib/route-kind-tone";
-import { routesBoard, type RouteRow } from "@/lib/route-rows";
+import { allServing, routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -421,7 +421,7 @@ export function GatewayRoutesList() {
 
   const total =
     board.notServing.length + board.unknown.length + board.serving.length;
-  const quietCluster = board.verdictsKnown && board.notServing.length === 0;
+  const quietCluster = allServing(board);
   const shown = brokenOnly ? [] : board.serving;
 
   return (
