@@ -63,7 +63,11 @@ export async function relatedTo(subject: {
       candidate.name === subject.name &&
       candidate.namespace === subject.namespace
   );
-  if (!reconciler) return [];
+  if (!reconciler) {
+    const unread = picture.unread.find((read) => read.kind === subject.kind);
+    if (unread) throw new Error(unread.reason);
+    return [];
+  }
 
   return [
     ...(reconciler.sourceRef

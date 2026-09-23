@@ -9,7 +9,8 @@
  *
  * Every source kind is optional — a source-only Flux install has no
  * `helmreleases` CRD at all — so a kind the API server does not serve reads
- * as none of that kind, not as a failed read.
+ * as none of that kind, not as a failed read. A kind it would not list is
+ * the opposite, and is carried as unread.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -18,8 +19,9 @@ import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo } from "@/generated/types";
 import type { Saying } from "@/i18n/say";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { failureOf, listOrFailure } from "../ingress";
-import { fluxPicture, type FluxPicture } from "./model";
+import { fluxPicture, type FluxPicture, type KindUnread } from "./model";
 
 export const KUSTOMIZATIONS_CRD = "kustomizations.kustomize.toolkit.fluxcd.io";
 export const HELM_RELEASES_CRD = "helmreleases.helm.toolkit.fluxcd.io";
@@ -43,23 +45,37 @@ const CONTROLLER_SELECTOR = "app.kubernetes.io/part-of=flux";
 
 export const FLUX_STALE = 60_000;
 
-/** A kind this API server does not serve is none of that kind, not a failure. */
-function listOptional(crd: string): Promise<CustomResourceInfo[]> {
-  return commands
-    .listCustomResources(crd, null, null, null)
-    .catch((): CustomResourceInfo[] => []);
+/**
+ * A kind this API server does not serve is none of that kind, not a failure.
+ * Any other failure — a refusal above all — is a list nobody read.
+ */
+async function listOptional(
+  kind: string,
+  crd: string,
+  unread: KindUnread[]
+): Promise<CustomResourceInfo[]> {
+  try {
+    return await commands.listCustomResources(crd, null, null, null);
+  } catch (error) {
+    if (errorCode(error) !== ERROR_CODES.NOT_FOUND) {
+      unread.push({ kind, crd, reason: errorToShow(error) });
+    }
+    return [];
+  }
 }
 
 export async function fetchPicture(): Promise<FluxPicture> {
+  const unread: KindUnread[] = [];
   const [kustomizations, helmReleases, ...sources] = await Promise.all([
     commands.listCustomResources(KUSTOMIZATIONS_CRD, null, null, null),
-    listOptional(HELM_RELEASES_CRD),
-    ...SOURCE_KINDS.map(([, crd]) => listOptional(crd)),
+    listOptional("HelmRelease", HELM_RELEASES_CRD, unread),
+    ...SOURCE_KINDS.map(([kind, crd]) => listOptional(kind, crd, unread)),
   ]);
   return fluxPicture(
     kustomizations,
     helmReleases,
-    SOURCE_KINDS.map(([kind], index) => ({ kind, objects: sources[index] }))
+    SOURCE_KINDS.map(([kind], index) => ({ kind, objects: sources[index] })),
+    unread
   );
 }
 
@@ -74,7 +90,8 @@ export const PICTURE_KEY = ["flux", "picture"] as const;
  * lists a minute where Flux is installed and nobody is looking at the page,
  * and nothing at all where somebody is — the page reads the same key.
  */
-export function countReconcilers(picture: FluxPicture): number {
+export function countReconcilers(picture: FluxPicture): number | null {
+  if (picture.unread.some((read) => read.kind === "HelmRelease")) return null;
   return picture.reconcilers.length;
 }
 

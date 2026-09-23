@@ -149,6 +149,9 @@ export interface FluxSource {
   artifact: { revision: FluxRevision | null; at: string | null } | null;
   /** Reconcilers that name this source. Filled in by {@link fluxPicture}. */
   usedBy: string[];
+  /** False where a reconciler kind could not be listed: then an empty
+   *  {@link usedBy} does not mean nobody uses it. */
+  usersKnown: boolean;
   findings: FluxFinding[];
   worst: "err" | "warn" | null;
 }
@@ -178,6 +181,8 @@ export interface FluxReconciler {
   /** Objects this reconciler owns, where the kind reports an inventory. */
   objects: number | null;
   source: FluxSource | null;
+  /** False where {@link source} is null because its kind was not listed. */
+  sourceKnown: boolean;
   findings: FluxFinding[];
   worst: "err" | "warn" | null;
 }
@@ -185,17 +190,29 @@ export interface FluxReconciler {
 const KUSTOMIZATION = "Kustomization";
 const HELM_RELEASE = "HelmRelease";
 
+/** A kind the cluster serves and would not list, and why. */
+export interface KindUnread {
+  kind: string;
+  crd: string;
+  reason: string;
+}
+
 /** Everything the page draws, with the two halves joined up. */
 export interface FluxPicture {
   reconcilers: FluxReconciler[];
   sources: FluxSource[];
+  /** Kinds that could not be listed: their objects are absent, not none. */
+  unread: KindUnread[];
 }
 
 export function fluxPicture(
   kustomizations: CustomResourceInfo[],
   helmReleases: CustomResourceInfo[],
-  sourceObjects: Array<{ kind: string; objects: CustomResourceInfo[] }>
+  sourceObjects: Array<{ kind: string; objects: CustomResourceInfo[] }>,
+  unread: KindUnread[]
 ): FluxPicture {
+  const unreadKinds = new Set(unread.map((read) => read.kind));
+  const usersKnown = !unreadKinds.has(HELM_RELEASE);
   const sources = sourceObjects.flatMap(({ kind, objects }) =>
     objects.map((object) => readSource(kind, object))
   );
@@ -212,12 +229,17 @@ export function fluxPicture(
   ];
 
   for (const reconciler of reconcilers) {
-    if (!reconciler.sourceRef) continue;
+    if (!reconciler.sourceRef) {
+      reconciler.sourceKnown = true;
+      continue;
+    }
     const source =
       byKey.get(
         `${reconciler.sourceRef.kind}/${reconciler.sourceRef.namespace}/${reconciler.sourceRef.name}`
       ) ?? null;
     reconciler.source = source;
+    reconciler.sourceKnown =
+      source !== null || !unreadKinds.has(reconciler.sourceRef.kind);
     if (source) source.usedBy.push(reconciler.key);
   }
 
@@ -226,6 +248,7 @@ export function fluxPicture(
     reconciler.worst = worstOf(reconciler.findings);
   }
   for (const source of sources) {
+    source.usersKnown = usersKnown;
     source.findings = sourceFindings(source, reconcilers);
     source.worst = worstOf(source.findings);
   }
@@ -233,6 +256,7 @@ export function fluxPicture(
   return {
     reconcilers: byTrouble(reconcilers),
     sources: sourcesByTrouble(sources),
+    unread,
   };
 }
 
@@ -265,6 +289,7 @@ function readSource(kind: string, object: CustomResourceInfo): FluxSource {
         }
       : null,
     usedBy: [],
+    usersKnown: false,
     findings: [],
     worst: null,
   };
@@ -364,6 +389,7 @@ function base(
         namespace: entry.namespace ?? namespace,
       })),
     source: null,
+    sourceKnown: false,
     findings: [],
     worst: null,
     ...rest,
@@ -461,7 +487,12 @@ function findingsFor(
         message: source.message,
       });
     }
-  } else if (reachedItsSource && reconciler.sourceRef && !source) {
+  } else if (
+    reachedItsSource &&
+    reconciler.sourceRef &&
+    !source &&
+    reconciler.sourceKnown
+  ) {
     findings.push({
       kind: "noSource",
       severity: "err",
@@ -532,7 +563,11 @@ function sourceFindings(
       everFetched: source.artifact !== null,
     });
   }
-  if (source.usedBy.length === 0 && source.ready !== false) {
+  if (
+    source.usedBy.length === 0 &&
+    source.usersKnown &&
+    source.ready !== false
+  ) {
     findings.push({ kind: "unused", severity: "warn" });
   }
   return findings;
@@ -595,7 +630,7 @@ export function sourceState(source: FluxSource, t: T): VendorVerdict {
   }
   if (source.ready === null)
     return { text: t("empty", "fluxNotFetchedYet"), tone: "warn" };
-  if (source.usedBy.length === 0)
+  if (source.usedBy.length === 0 && source.usersKnown)
     return { text: t("empty", "fluxFetchedUnused"), tone: "warn" };
   return { text: t("empty", "fluxFetched"), tone: "ok" };
 }

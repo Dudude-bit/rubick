@@ -48,6 +48,54 @@ beforeEach(() => {
   answers.crds.clear();
 });
 
+const GIT_REPOSITORIES = "gitrepositories.source.toolkit.fluxcd.io";
+const SOURCES_FORBIDDEN = `gitrepositories.source.toolkit.fluxcd.io is forbidden: User "dev" cannot list resource "gitrepositories"`;
+
+const refusedList = () =>
+  Promise.reject(
+    new Error(
+      `Tauri command 'listCustomResources' failed: ${SOURCES_FORBIDDEN}`,
+      {
+        cause: { code: "PERMISSION_DENIED", message: SOURCES_FORBIDDEN },
+      }
+    )
+  );
+
+const notServed = () =>
+  Promise.reject(
+    new Error("Tauri command 'listCustomResources' failed: not found", {
+      cause: { code: "NOT_FOUND", message: "not found" },
+    })
+  );
+
+describe("a source kind the reader may not list", () => {
+  /**
+   * `listOptional` caught every error as "kind not served", so a refused
+   * `gitrepositories` read as a cluster fetching nothing at all.
+   */
+  it("is named as unread rather than drawn as no sources", async () => {
+    answers.crds.set(GIT_REPOSITORIES, refusedList);
+
+    renderOn("sources");
+
+    await waitFor(() =>
+      expect(screen.getByText(SOURCES_FORBIDDEN)).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/^No source objects/)).not.toBeInTheDocument();
+  });
+
+  /** A kind the API server does not serve is still simply none. */
+  it("is none when the kind is not served", async () => {
+    answers.crds.set(GIT_REPOSITORIES, notServed);
+
+    renderOn("sources");
+
+    await waitFor(() =>
+      expect(screen.getByText(/^No source objects/)).toBeInTheDocument()
+    );
+  });
+});
+
 describe("the Controllers tab", () => {
   /**
    * The Deployments list went through `.catch(() => [])`, so a token that

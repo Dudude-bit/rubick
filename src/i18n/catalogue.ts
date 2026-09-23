@@ -3009,6 +3009,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factKindsUnread: {
+      one: "{n} kind could not be listed",
+      other: "{n} kinds could not be listed",
+    },
     factNotReconciled: {
       one: "{n} not reconciled",
       other: "{n} not reconciled",
@@ -4220,6 +4224,12 @@ export const en = {
     readingSources: "Reading the sources…",
     fluxNoSources:
       "No source objects. Nothing is being fetched, so nothing can be applied.",
+    fluxSourcesUnread:
+      "No source of the kinds that could be read. The kinds above could not be listed, so what this cluster fetches is not known here.",
+    fluxReconcilersUnread:
+      "No Kustomization, and HelmReleases could not be listed, so whether Flux is applying anything is not known here.",
+    fluxUnreadNote:
+      "Anything below that names one of these is shown as not read, not as missing.",
     fluxSourcesDescription:
       "A source is fetched once and applied by everything that names it. This is the half of Flux that fails quietly: a source that stops fetching leaves every reconciler under it reporting the last revision it managed to apply.",
     noUrlDeclared: "no URL declared",
@@ -5818,6 +5828,10 @@ export const en = {
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",
       other: "{n} reconcilers from {sources}",
+    },
+    reconcilersSomeUnread: {
+      one: "{n} reconciler · some kinds not read",
+      other: "{n} reconcilers · some kinds not read",
     },
     sources: { one: "{n} source", other: "{n} sources" },
     notReconcilingAndFirst: "{n} of {total} not reconciling, and first",
