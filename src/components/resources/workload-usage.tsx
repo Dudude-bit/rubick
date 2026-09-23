@@ -22,11 +22,7 @@ import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
 import type { UsageScope } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import type { PodInfo, ResourceConnections } from "@/generated/types";
-import {
-  templateCeiling,
-  templateRequests,
-  type WorkloadTemplate,
-} from "@/components/resources/workload-ceiling";
+import type { WorkloadTemplate } from "@/components/resources/workload-ceiling";
 
 /**
  * A pod that has terminated is not using anything, and metrics-server has
@@ -98,8 +94,15 @@ export function WorkloadUsage({
   // the reading is summed over — a workload halfway through a rollout is
   // measured against what is actually there rather than against what was
   // asked for.
-  const ceiling = templateCeiling(template);
-  const requests = templateRequests(template);
+  const replica = template?.replica;
+  const ceiling = {
+    cpu: replica?.cpuLimits ?? null,
+    memory: replica?.memoryLimits ?? null,
+  };
+  const requests = {
+    cpu: replica?.cpuRequests ?? null,
+    memory: replica?.memoryRequests ?? null,
+  };
 
   const scope: UsageScope | undefined =
     name && namespace

@@ -34,6 +34,8 @@ pub struct DeploymentInfo {
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
     pub pod_resources: DeploymentContainerResources,
+    /// One replica, as numbers; see `ReplicaReservation`.
+    pub replica: ReplicaReservation,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     /// The template's own annotations: where a chart puts its config checksum.
@@ -89,6 +91,44 @@ pub struct TemplateContainers {
     /// place of the container sum — the Usage block applies it exactly as
     /// `PodInfo` does, so a controller and its pods do not disagree.
     pub pod_resources: DeploymentContainerResources,
+    /// What one replica reserves, as numbers.
+    pub replica: ReplicaReservation,
+}
+
+/// One replica's requests and limits, by the rule every pod screen uses —
+/// `resources::reservation`: sidecars counted, the largest init container,
+/// pod-level resources. Millicores and bytes; `None` where the template sets
+/// none of it. A template carries no overhead: that is added at admission.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplicaReservation {
+    pub cpu_requests: Option<f64>,
+    pub cpu_limits: Option<f64>,
+    pub memory_requests: Option<f64>,
+    pub memory_limits: Option<f64>,
+    /// False when a quantity would not parse and the sums are unknown.
+    pub known: bool,
+}
+
+impl ReplicaReservation {
+    #[must_use]
+    pub fn of(spec: Option<&PodSpec>) -> Self {
+        let Some(spec) = spec else {
+            return Self {
+                known: true,
+                ..Self::default()
+            };
+        };
+        let held = crate::resources::reservation::pod_reservation(spec);
+        let some = |v: Option<&f64>| v.copied().filter(|v| *v > 0.0);
+        Self {
+            cpu_requests: some(held.requests.get("cpu")),
+            cpu_limits: some(held.limits.get("cpu")),
+            memory_requests: some(held.requests.get("memory")),
+            memory_limits: some(held.limits.get("memory")),
+            known: held.known,
+        }
+    }
 }
 
 impl TemplateContainers {
@@ -114,6 +154,7 @@ impl TemplateContainers {
                 requests: map_quantities(pod_level.and_then(|r| r.requests.as_ref())),
                 limits: map_quantities(pod_level.and_then(|r| r.limits.as_ref())),
             },
+            replica: ReplicaReservation::of(spec),
         }
     }
 }
@@ -215,6 +256,7 @@ impl From<&Deployment> for DeploymentInfo {
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
             pod_resources: template.pod_resources,
+            replica: template.replica,
             labels: deployment.labels().clone(),
             annotations: deployment.annotations().clone(),
             template_annotations: spec
@@ -274,6 +316,7 @@ fn map_quantities(input: Option<&BTreeMap<String, Quantity>>) -> BTreeMap<String
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -297,6 +340,67 @@ mod tests {
             containers: vec![container("app", None)],
             ..Default::default()
         }
+    }
+
+    fn sized(name: &str, restart: Option<&str>, cpu: &str, memory: &str) -> Container {
+        use k8s_openapi::api::core::v1::ResourceRequirements;
+        Container {
+            resources: Some(ResourceRequirements {
+                requests: Some(
+                    [
+                        ("cpu".to_string(), Quantity(cpu.to_string())),
+                        ("memory".to_string(), Quantity(memory.to_string())),
+                    ]
+                    .into(),
+                ),
+                limits: Some([("cpu".to_string(), Quantity(cpu.to_string()))].into()),
+                ..Default::default()
+            }),
+            ..container(name, restart)
+        }
+    }
+
+    /// Would put a workload's Usage chart on a different ceiling from its
+    /// pods: the frontend used to sum the template itself, counting sidecars
+    /// but not the largest init container, while the pods column counted both.
+    #[test]
+    fn a_replica_is_sized_by_the_rule_the_pods_are() {
+        let mib = 1024.0 * 1024.0;
+        let spec = PodSpec {
+            init_containers: Some(vec![
+                sized("migrate", None, "500m", "256Mi"),
+                sized("proxy", Some("Always"), "50m", "32Mi"),
+            ]),
+            containers: vec![sized("app", None, "100m", "64Mi")],
+            ..Default::default()
+        };
+        let replica = ReplicaReservation::of(Some(&spec));
+        assert!(replica.known);
+        assert_eq!(replica.cpu_requests, Some(500.0));
+        assert_eq!(replica.memory_requests, Some(256.0 * mib));
+        assert_eq!(replica.cpu_limits, Some(500.0));
+        assert_eq!(replica.memory_limits, None, "no container limits memory");
+    }
+
+    /// A pod-level limit (KEP-2837) replaces the container sum for its
+    /// resource, and a template that sets nothing is sized at nothing.
+    #[test]
+    fn a_pod_level_limit_is_the_replicas_ceiling() {
+        use k8s_openapi::api::core::v1::ResourceRequirements;
+        let spec = PodSpec {
+            containers: vec![sized("app", None, "100m", "64Mi")],
+            resources: Some(ResourceRequirements {
+                limits: Some([("cpu".to_string(), Quantity("2".to_string()))].into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(ReplicaReservation::of(Some(&spec)).cpu_limits, Some(2000.0));
+        let bare = ReplicaReservation::of(Some(&PodSpec {
+            containers: vec![container("app", None)],
+            ..Default::default()
+        }));
+        assert_eq!((bare.cpu_limits, bare.memory_requests), (None, None));
     }
 
     /// KEP-2837: pod-level resources on the template are the replica's own —

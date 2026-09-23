@@ -11,7 +11,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
     template_container_images, ConditionInfo, ContainerImage, DeploymentContainerInfo,
-    DeploymentContainerResources, OptionTimeExt, TemplateContainers,
+    DeploymentContainerResources, OptionTimeExt, ReplicaReservation, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -89,6 +89,8 @@ pub struct StatefulSetDetailInfo {
     /// The identity every replica will hold; see `TemplateContainers`.
     pub service_account_name: Option<String>,
     pub pod_resources: DeploymentContainerResources,
+    /// One replica, as numbers; see `ReplicaReservation`.
+    pub replica: ReplicaReservation,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
     pub conditions: Vec<ConditionInfo>,
@@ -131,6 +133,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             init_containers: template.init_containers,
             service_account_name: template.service_account_name,
             pod_resources: template.pod_resources,
+            replica: template.replica,
             labels: ss.labels().clone(),
             annotations: ss.annotations().clone(),
             conditions,

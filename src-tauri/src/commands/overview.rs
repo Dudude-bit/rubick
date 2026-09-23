@@ -334,44 +334,18 @@ fn is_terminal(pod: &Pod) -> bool {
         .is_some_and(|p| p == "Succeeded" || p == "Failed")
 }
 
-fn pod_requests(pod: &Pod) -> (f64, u64) {
+/// What the scheduler holds for this pod, by the one rule in
+/// `resources::reservation` — sidecars, the largest init container, overhead
+/// and pod-level requests included.
+pub(crate) fn pod_requests(pod: &Pod) -> (f64, u64) {
     let Some(spec) = pod.spec.as_ref() else {
         return (0.0, 0);
     };
-    // KEP-2837: a pod-level request, where set, is what the scheduler reserves
-    // for the pod, in place of the container sum and per resource. The pod
-    // detail page applies the same rule (`PodInfo`'s aggregation) — one fact,
-    // both readers.
-    let pod_level = spec.resources.as_ref().and_then(|r| r.requests.as_ref());
-    let pod_cpu = pod_level
-        .and_then(|m| m.get("cpu"))
-        .map(|q| parse_cpu(&q.0));
-    let pod_memory = pod_level
-        .and_then(|m| m.get("memory"))
-        .map(|q| parse_memory(&q.0));
-
-    let mut cpu = 0.0;
-    let mut memory = 0u64;
-    // Init containers run to completion before the app containers start, so
-    // the scheduler reserves max(init) rather than their sum — but the app
-    // containers' sum is what persists. Taking the running set alone is the
-    // closer approximation and avoids double counting.
-    for container in &spec.containers {
-        let Some(requests) = container
-            .resources
-            .as_ref()
-            .and_then(|r| r.requests.as_ref())
-        else {
-            continue;
-        };
-        if let Some(q) = requests.get("cpu") {
-            cpu += parse_cpu(&q.0);
-        }
-        if let Some(q) = requests.get("memory") {
-            memory += parse_memory(&q.0);
-        }
-    }
-    (pod_cpu.unwrap_or(cpu), pod_memory.unwrap_or(memory))
+    let held = crate::resources::reservation::pod_reservation(spec);
+    (
+        held.requests.get("cpu").copied().unwrap_or(0.0),
+        held.requests.get("memory").copied().unwrap_or(0.0) as u64,
+    )
 }
 
 fn node_is_ready(node: &Node) -> bool {
