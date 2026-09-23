@@ -1,8 +1,11 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { StreamFailureKind } from "@/generated/types";
+import { listenEvent } from "@/lib/events";
+
+export type { StreamFailureKind };
 
 /**
  * Why a backend stream stopped without the frontend closing it.
- * Mirrors `state::events::StreamFailureKind`.
  *
  * `gone` is a fact about the cluster — the pod was deleted, the
  * container exited — and no retry undoes it. `broken` is a transport
@@ -21,16 +24,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
  * can tell in advance: `container.lastTerminated` is set for exactly the
  * containers that have a previous run to read.
  */
-export type StreamFailureKind =
-  "gone" | "broken" | "no-previous-run" | "log-not-kept";
-
 export interface StreamFailure {
-  kind: StreamFailureKind;
-  message: string;
-}
-
-interface StreamFailedPayload {
-  stream_id: string;
   kind: StreamFailureKind;
   message: string;
 }
@@ -68,7 +62,7 @@ export function listenForStreamFailure(
 export function listenForStreamFailures(
   onFailure: (streamId: string, failure: StreamFailure) => void
 ): Promise<UnlistenFn> {
-  return listen<StreamFailedPayload>("stream-failed", (event) => {
+  return listenEvent("stream-failed", (event) => {
     if (!event.payload.stream_id) return;
     onFailure(event.payload.stream_id, {
       kind: event.payload.kind,

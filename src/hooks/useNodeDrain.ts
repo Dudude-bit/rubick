@@ -17,64 +17,21 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
-import type { DrainOptions } from "@/generated/types";
+import type {
+  DrainOptions,
+  DrainOutcome,
+  DrainReport,
+} from "@/generated/types";
+import { listenEvent } from "@/lib/events";
 
-/**
- * The event payloads, mirrored by hand.
- *
- * The generator only emits types a command's signature reaches, and these
- * live in `AppEvent` — the same reason `useResourceSearch` writes out
- * `SearchHit`. What that convention has always lacked is a way to notice
- * drift, so `drain::tests::the_shapes_the_frontend_mirrors_by_hand` pins
- * every name below on the Rust side and points back here when one moves.
- */
-
-/** Mirrors `drain::DrainRefusal`. */
-export type DrainRefusal =
-  "notNow" | "nothingWouldReplaceIt" | "holdsLocalData" | "other";
-
-/** Mirrors `drain::DrainOutcome`. */
-export type DrainOutcome = "drained" | "stopped" | "cancelled" | "failed";
-
-/** Mirrors `drain::RefusedPod`. */
-export interface RefusedPod {
-  namespace: string;
-  name: string;
-  refusal: DrainRefusal;
-  message: string | null;
-}
-
-/** Mirrors `drain::DrainReport`. */
-export interface DrainReport {
-  evicted: number;
-  alreadyGone: number;
-  /** Accepted, not yet gone. An eviction is a graceful delete. */
-  leaving: number;
-  daemonsetPodsLeft: number;
-  /** Static pods. The node's own, and no option moves them. */
-  staticPodsLeft: number;
-  refused: RefusedPod[];
-}
-
-/** `drain-progress` event payload. */
-interface DrainProgressEvent {
-  drain_id: string;
-  node: string;
-  attempt: number;
-  report: DrainReport;
-}
-
-/** `drain-finished` event payload. */
-interface DrainFinishedEvent {
-  drain_id: string;
-  node: string;
-  outcome: DrainOutcome;
-  report: DrainReport;
-  message: string | null;
-}
+export type {
+  DrainOutcome,
+  DrainRefusal,
+  DrainReport,
+  RefusedPod,
+} from "@/generated/types";
 
 export type DrainState =
   | { phase: "idle" }
@@ -185,7 +142,7 @@ export function useNodeDrain({
         setState({ phase: "running", node, attempt: 0, report: EMPTY });
 
         const [offProgress, offFinished] = await Promise.all([
-          listen<DrainProgressEvent>("drain-progress", (event) => {
+          listenEvent("drain-progress", (event) => {
             if (event.payload.drain_id !== drainId.current) return;
             setState({
               phase: "running",
@@ -194,7 +151,7 @@ export function useNodeDrain({
               report: event.payload.report,
             });
           }),
-          listen<DrainFinishedEvent>("drain-finished", (event) => {
+          listenEvent("drain-finished", (event) => {
             if (event.payload.drain_id !== drainId.current) return;
             drainId.current = null;
             const { node: ended, outcome, report, message } = event.payload;

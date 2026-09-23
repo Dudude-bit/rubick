@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
+import {
+  listenEvent,
+  listenResourceEvents,
+  type ResourceEvent,
+} from "@/lib/events";
 import { notify } from "@/lib/notify";
 import {
   Coalescer,
@@ -21,29 +25,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 import { useT, type T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
-
-interface WatchChange {
-  op: "applied" | "deleted" | "restarted" | "synced" | "failed";
-  resource: unknown;
-}
-
-interface ResourceEventPayload {
-  stream_id: string;
-  changes: WatchChange[];
-  error: string | null;
-}
-
-interface DrainFinished {
-  node: string;
-  outcome: "drained" | "stopped" | "cancelled" | "failed";
-  message: string | null;
-}
-
-interface ForwardStatus {
-  id: string;
-  status: string;
-  message?: string | null;
-}
+import type { DrainOutcome } from "@/generated/types";
 
 export interface Answer {
   watch: Watch;
@@ -76,7 +58,7 @@ export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
  * not failures — folding them into `drainFailed` painted an expected ending
  * red, the third state collapsing into the second.
  */
-const DRAIN_SAYS: Record<DrainFinished["outcome"], Says> = {
+const DRAIN_SAYS: Record<DrainOutcome, Says> = {
   drained: "drained",
   stopped: "drainStopped",
   cancelled: "drainCancelled",
@@ -255,13 +237,10 @@ export function useTellMeWhen() {
           return;
         }
         stream.id = id;
-        stream.off = await listen<ResourceEventPayload>(
-          "resource-event",
-          (event) => {
-            if (event.payload.stream_id !== id || stream.closed) return;
-            onEvent(watchId, stream, event.payload);
-          }
-        );
+        stream.off = await listenResourceEvents<unknown>((event) => {
+          if (event.payload.stream_id !== id || stream.closed) return;
+          onEvent(watchId, stream, event.payload);
+        });
         if (stream.closed) {
           stream.off();
           return;
@@ -277,7 +256,7 @@ export function useTellMeWhen() {
     function onEvent(
       watchId: string,
       stream: Stream,
-      payload: ResourceEventPayload
+      payload: ResourceEvent<unknown>
     ) {
       const store = useTellMeWhenStore.getState();
       const watch = store.watches.find((w) => w.id === watchId);
@@ -342,7 +321,7 @@ export function useTellMeWhen() {
   useEffect(() => {
     let offDrain: null | (() => void) = null;
     let offForward: null | (() => void) = null;
-    void listen<DrainFinished>("drain-finished", (event) => {
+    void listenEvent("drain-finished", (event) => {
       const { node, outcome, message } = event.payload;
       // No current-context filter: the payload carries no context and the
       // drain keeps running across a cluster switch, so match by identity
@@ -364,7 +343,7 @@ export function useTellMeWhen() {
     }).then((off) => {
       offDrain = off;
     });
-    void listen<ForwardStatus>("port-forward-status", (event) => {
+    void listenEvent("port-forward-status", (event) => {
       const { id, status, message } = event.payload;
       if (status !== "stopped" && status !== "error") return;
       const watch = useTellMeWhenStore

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listenEvent, listenResourceEvents } from "@/lib/events";
 
 import { commands } from "@/lib/commands";
 import {
@@ -14,21 +14,10 @@ import {
 } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
-type Op = "applied" | "deleted" | "restarted" | "synced" | "failed";
-
 interface Row {
   name: string;
   namespace: string;
 }
-
-interface Payload {
-  stream_id: string;
-  changes: Array<{ op: Op; resource: Row | null }>;
-  error: string | null;
-}
-
-/** Matches `EVENT_BRIDGE_LAGGED` in `src-tauri/src/main.rs`. */
-const EVENT_BRIDGE_LAGGED = "event-bridge-lagged";
 
 const KINDS: Array<{
   kind: string;
@@ -132,7 +121,7 @@ export function useChangeJournal() {
             return;
           }
           stream.id = id;
-          const off = await listen<Payload>("resource-event", (event) => {
+          const off = await listenResourceEvents<Row>((event) => {
             const payload = event.payload;
             if (payload.stream_id !== id) return;
             const now = Date.now();
@@ -273,7 +262,7 @@ export function useChangeJournal() {
     // The bridge dropping events blinds every watch at once: what it dropped
     // is unknown, so the stretch is a gap, and every watch is re-subscribed
     // rather than left waiting for a relist that may never come.
-    const lagged = listen<number>(EVENT_BRIDGE_LAGGED, () => {
+    const lagged = listenEvent("event-bridge-lagged", () => {
       for (const go of blind) go();
       if (active) setRestarts((n) => n + 1);
     });

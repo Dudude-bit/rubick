@@ -355,3 +355,28 @@ describe("useResourceSearch", () => {
     expect(result.current.clusters).toEqual([]);
   });
 });
+
+describe("the shortest query", () => {
+  /** The number the backend refuses below, read from the file its test reads. */
+  it("is the shared file's number", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const shared = JSON.parse(
+      readFileSync(resolve(process.cwd(), "shared/search-limits.json"), "utf8")
+    ) as { minQueryCharacters: number };
+    const { MIN_SEARCH_LENGTH } = await import("./useResourceSearch");
+    expect(MIN_SEARCH_LENGTH).toBe(shared.minQueryCharacters);
+  });
+
+  /**
+   * Rust counts characters and `.length` counts UTF-16 units, so one emoji
+   * was long enough here and too short there: the palette sent it and
+   * showed the backend's refusal as a failed search.
+   */
+  it("counts characters as the backend does, not UTF-16 units", async () => {
+    const { isSearchable } = await import("./useResourceSearch");
+    expect(isSearchable("😀")).toBe(false);
+    expect(isSearchable(" é ")).toBe(false);
+    expect(isSearchable("ab")).toBe(true);
+  });
+});

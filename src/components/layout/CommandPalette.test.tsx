@@ -20,8 +20,8 @@ const search = vi.hoisted(() => ({
   }[],
 }));
 
-vi.mock("@/hooks/useResourceSearch", () => ({
-  MIN_SEARCH_LENGTH: 2,
+vi.mock("@/hooks/useResourceSearch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useResourceSearch")>()),
   useResourceSearch: () => ({
     hits: search.hits,
     clusters: [
