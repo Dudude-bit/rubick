@@ -625,9 +625,16 @@ export function NodesPanel({
   );
 }
 
-export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
+export function WarningsPanel({
+  warnings,
+  known,
+}: {
+  warnings: WarningGroup[];
+  /** False when an events list failed: the rows are then only part. */
+  known: boolean;
+}) {
   const t = useT();
-  if (warnings.length === 0) return null;
+  if (known && warnings.length === 0) return null;
 
   return (
     <Section>
@@ -635,11 +642,18 @@ export function WarningsPanel({ warnings }: { warnings: WarningGroup[] }) {
         title={t("cluster", "warningEvents")}
         count={t("cluster", "warningEventsScope")}
       />
-      <SectionBody>
-        {warnings.map((warning) => (
-          <WarningRow key={warning.reason} warning={warning} />
-        ))}
-      </SectionBody>
+      {!known && (
+        <p className="py-1 text-xs text-fg-mut">
+          {t("cluster", "warningEventsUnread")}
+        </p>
+      )}
+      {warnings.length > 0 && (
+        <SectionBody>
+          {warnings.map((warning) => (
+            <WarningRow key={warning.reason} warning={warning} />
+          ))}
+        </SectionBody>
+      )}
     </Section>
   );
 }

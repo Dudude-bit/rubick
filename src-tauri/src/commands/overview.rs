@@ -301,6 +301,9 @@ pub struct ClusterOverview {
     /// the panels say so rather than drawing a cluster with zero headroom.
     pub nodes_known: bool,
     pub warnings: Vec<WarningGroup>,
+    /// False when an events list failed: `warnings` then holds only what
+    /// answered, and an empty one is not "no warnings".
+    pub warnings_known: bool,
     pub namespaces: Vec<NamespaceLoad>,
     /// Objects per kind in the requested scope, for the sidebar and the
     /// composition bars.
@@ -936,11 +939,10 @@ fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usiz
     (problems, truncated)
 }
 
-/// Warning events from the last pages the API will hand over cheaply.
-///
-/// Failures degrade to whatever was already collected: events are the one
-/// input this screen can lose without becoming wrong.
-async fn list_warning_events(events_api: &Api<Event>) -> Vec<Event> {
+/// Warning events from the last pages the API will hand over cheaply, and
+/// whether every page asked for answered: a failure keeps what was collected
+/// and says it is not the whole.
+async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
     let mut items = Vec::new();
     let mut token: Option<String> = None;
 
@@ -954,7 +956,7 @@ async fn list_warning_events(events_api: &Api<Event>) -> Vec<Event> {
             params = params.continue_token(token);
         }
         let Ok(mut page) = events_api.list(&params).await else {
-            break;
+            return (items, false);
         };
         token = page.metadata.continue_.take().filter(|t| !t.is_empty());
         items.append(&mut page.items);
@@ -963,7 +965,7 @@ async fn list_warning_events(events_api: &Api<Event>) -> Vec<Event> {
         }
     }
 
-    items
+    (items, true)
 }
 
 /// Borrowed from the watch stores or from a fresh list alike: `Arc`s so the
@@ -986,6 +988,8 @@ struct OverviewInputs<'a> {
     /// `None` when a namespace in scope refused its Job list.
     jobs: Option<&'a [Arc<Job>]>,
     events: &'a [Arc<Event>],
+    /// False when an events list failed.
+    events_known: bool,
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
     /// Counts for the kinds this query does not otherwise need to read.
     counts: ResourceCounts,
@@ -1042,6 +1046,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
         warnings: recent_warnings(refs(input.events)),
+        warnings_known: input.events_known,
         counts,
         pods: pod_composition(refs(input.scoped_pods)),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
@@ -1218,6 +1223,7 @@ fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) ->
         deployments_known: true,
         jobs: Some(&scoped.jobs),
         events: &scoped.events,
+        events_known: true,
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
         scope,
@@ -1236,6 +1242,7 @@ struct Listed {
     deployments: Option<Vec<Deployment>>,
     jobs: Option<Vec<Job>>,
     events: Vec<Event>,
+    events_known: bool,
 }
 
 async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
@@ -1250,11 +1257,13 @@ async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
         jobs_api.list(&params),
         list_warning_events(&events_api),
     );
+    let (events, events_known) = events;
     Listed {
         pods: pods.map(|list| list.items).map_err(Error::from),
         deployments: deployments.ok().map(|list| list.items),
         jobs: jobs.ok().map(|list| list.items),
         events,
+        events_known,
     }
 }
 
@@ -1265,6 +1274,7 @@ struct Gathered {
     deployments_known: bool,
     jobs: Option<Vec<Arc<Job>>>,
     events: Vec<Arc<Event>>,
+    events_known: bool,
 }
 
 /// Joins the reaches by the rule the counts follow: what one namespace
@@ -1273,7 +1283,8 @@ struct Gathered {
 /// Pods are the load-bearing read, so a namespace that refuses them fails the
 /// whole overview. Deployments feed problems as well as a count: the problems
 /// of the namespaces that answered stand, and the count goes unknown. Jobs are
-/// a count and a composition, both unknown when any namespace refused.
+/// a count and a composition, both unknown when any namespace refused. Events
+/// are the same as Deployments: what answered is shown, and said to be part.
 fn gather(parts: Vec<Listed>) -> Result<Gathered> {
     let deployments_known = parts.iter().all(|part| part.deployments.is_some());
     let jobs_known = parts.iter().all(|part| part.jobs.is_some());
@@ -1283,6 +1294,7 @@ fn gather(parts: Vec<Listed>) -> Result<Gathered> {
         deployments_known,
         jobs: jobs_known.then(Vec::new),
         events: Vec::new(),
+        events_known: parts.iter().all(|part| part.events_known),
     };
     for part in parts {
         gathered.pods.extend(arcs(part.pods?));
@@ -1355,6 +1367,7 @@ async fn by_listing(
         deployments_known: listed.deployments_known,
         jobs: listed.jobs.as_deref(),
         events: &listed.events,
+        events_known: listed.events_known,
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
         scope,
@@ -1481,6 +1494,7 @@ mod tests {
             deployments_known: true,
             jobs: Some(&[]),
             events: &[],
+            events_known: true,
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: scope.as_deref(),
@@ -1548,6 +1562,7 @@ mod tests {
             deployments_known: true,
             jobs: Some(&[]),
             events: &[],
+            events_known: true,
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: Some(&["team-a".to_string()]),
@@ -1621,6 +1636,7 @@ mod tests {
             deployments_known: true,
             jobs: Some(&[]),
             events: &[],
+            events_known: true,
             usage_by_node: usage_index(Some(node_metrics_response(
                 MetricsStatusKind::Available,
                 vec![],
@@ -1728,6 +1744,7 @@ mod tests {
             deployments_known: true,
             jobs: Some(&[]),
             events: &[],
+            events_known: true,
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: None,
@@ -2425,6 +2442,7 @@ mod tests {
             deployments_known: false,
             jobs: None,
             events: &[],
+            events_known: true,
             usage_by_node: None,
             counts: ResourceCounts {
                 services: Some(6),
@@ -2468,6 +2486,7 @@ mod tests {
             deployments_known: true,
             jobs: Some(&arcs(jobs)),
             events: &[],
+            events_known: true,
             usage_by_node: None,
             counts: ResourceCounts::default(),
             scope: Some(&["app".to_string()]),
@@ -2792,6 +2811,18 @@ mod across_namespaces {
             let deployments = format!("/apis/apps/v1/namespaces/{namespace}/deployments");
             assert_eq!(asked(&hits, &deployments), 1, "{deployments}");
         }
+    }
+
+    /// Would draw the warnings of the namespaces that answered as the
+    /// scope's, and a refused events list as a scope with none.
+    #[tokio::test]
+    async fn a_refused_events_list_leaves_the_warnings_unknown() {
+        assert!(Cluster::new().listed().await.warnings_known);
+        let refused = Cluster::new()
+            .refuse("/api/v1/namespaces/staging/events")
+            .listed()
+            .await;
+        assert!(!refused.warnings_known);
     }
 
     /// Would draw one `NotReady` node once per namespace in scope, under as

@@ -3625,6 +3625,8 @@ export const en = {
       "requests vs allocatable · no metrics-server, live usage unknown",
     warningEvents: "Warning events",
     warningEventsScope: "last hour, by reason",
+    warningEventsUnread:
+      "Not every events list could be read, so warnings may be missing here.",
     noCluster: "no cluster",
     missingBadge: "missing",
     missingTabHint:
