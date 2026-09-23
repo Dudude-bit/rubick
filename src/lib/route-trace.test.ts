@@ -483,6 +483,29 @@ describe("routeTraces", () => {
     );
   });
 
+  /**
+   * Two controllers wrote entries for one Gateway and disagree. The trace
+   * read the first `Accepted` it found and walked green while the Gateway
+   * page, the map and the connections graph drew the same route refused.
+   */
+  it("stops at the listener when a second controller refused what the first accepted", () => {
+    const contested = route("contested", {
+      parents: [
+        parentStatus("edge", [condition("Accepted", "True", "Accepted")]),
+        {
+          ...parentStatus("edge", [
+            condition("Accepted", "False", "NoMatchingListenerHostname"),
+          ]),
+          controllerName: "other.example.net/gw",
+        },
+      ],
+    });
+    const [trace] = routeTraces(contested, sources(), t);
+
+    expect(trace.serving).toBe(false);
+    expect(trace.steps[2].state).toBe("err");
+  });
+
   it("blames the namespace step, not the listener, when the listener refused the namespace", () => {
     const outsider = route("outsider", {
       parents: [

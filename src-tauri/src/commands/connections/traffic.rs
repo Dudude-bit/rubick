@@ -87,7 +87,7 @@ pub(super) fn gateway_traffic_into(
     gateways: Option<&[crate::resources::GatewayInfo]>,
     out: &mut Neighbourhood,
 ) {
-    use crate::resources::GATEWAY_API_GROUP;
+    use crate::resources::{verdict_of, Verdict, GATEWAY_API_GROUP};
 
     for route in routes {
         let backends: Vec<_> = route
@@ -204,44 +204,23 @@ pub(super) fn gateway_traffic_into(
                 },
             );
 
-            // A status parentRef echoes the spec's, sectionName included —
-            // a route attached to one gateway through two listeners has two
-            // verdicts, and each attachment must read its own. Loose match
-            // stays as the fallback for controllers that drop the section.
-            let named = |p: &&crate::resources::RouteParentStatusInfo| {
-                p.parent.name == parent.name
-                    && p.parent
-                        .namespace
-                        .clone()
-                        .unwrap_or_else(|| route.namespace.clone())
-                        == gw_ns
-            };
-            let status = route
-                .parents
-                .iter()
-                .find(|p| named(p) && p.parent.section_name == parent.section_name)
-                .or_else(|| route.parents.iter().find(named));
-            let Some(status) = status else {
-                continue;
-            };
-            for condition in &status.conditions {
-                if condition.status != "False" {
-                    continue;
-                }
-                match condition.type_.as_str() {
-                    "Accepted" => out.stops.push(ChainStop::RouteNotAccepted {
-                        route: route_ref.clone(),
-                        gateway: gw_ref.clone(),
-                        condition_reason: condition.reason.clone(),
-                        message: condition.message.clone(),
-                    }),
-                    "ResolvedRefs" => out.stops.push(ChainStop::RouteRefsUnresolved {
-                        route: route_ref.clone(),
-                        condition_reason: condition.reason.clone(),
-                        message: condition.message.clone(),
-                    }),
-                    _ => {}
-                }
+            // Every entry for this attachment, read by the one rule the
+            // trace and the Gateway page read it by.
+            let entries = route.statuses_for(parent);
+            if let Verdict::False(said) = verdict_of(&entries, "Accepted") {
+                out.stops.push(ChainStop::RouteNotAccepted {
+                    route: route_ref.clone(),
+                    gateway: gw_ref.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
+                });
+            }
+            if let Verdict::False(said) = verdict_of(&entries, "ResolvedRefs") {
+                out.stops.push(ChainStop::RouteRefsUnresolved {
+                    route: route_ref.clone(),
+                    condition_reason: said.reason.clone(),
+                    message: said.message.clone(),
+                });
             }
         }
     }
@@ -669,6 +648,54 @@ status:
             }
             other => panic!("expected RouteNotAccepted, got {other:?}"),
         }
+    }
+
+    /// Two controllers wrote entries for one Gateway and disagree. Reading
+    /// the first entry alone drew no stop here while the Gateway page, the
+    /// map and the trace said refused.
+    #[test]
+    fn a_refusal_in_the_second_controllers_entry_is_still_a_stop() {
+        let contested = r#"
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: { name: promo, namespace: shop }
+spec:
+  parentRefs:
+  - { name: edge }
+  rules:
+  - backendRefs:
+    - { name: promo, port: 8080 }
+status:
+  parents:
+  - parentRef: { name: edge }
+    controllerName: a.example.net/gw
+    conditions:
+    - { type: Accepted, status: "True", reason: Accepted, message: ok }
+    - { type: ResolvedRefs, status: "True", reason: ResolvedRefs, message: ok }
+  - parentRef: { name: edge }
+    controllerName: b.example.net/gw
+    conditions:
+    - { type: Accepted, status: "False", reason: NotAllowedByListeners, message: no }
+    - { type: ResolvedRefs, status: "False", reason: BackendNotFound, message: no }
+"#;
+        let mut out = Neighbourhood::new();
+        gateway_traffic_into(
+            "shop",
+            &service("shop", "promo"),
+            &[route(contested)],
+            Some(&[gateway(EDGE_GATEWAY)]),
+            &mut out,
+        );
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteNotAccepted { condition_reason, .. }
+                if condition_reason.as_deref() == Some("NotAllowedByListeners")
+        )));
+        assert!(out.stops.iter().any(|stop| matches!(
+            stop,
+            ChainStop::RouteRefsUnresolved { condition_reason, .. }
+                if condition_reason.as_deref() == Some("BackendNotFound")
+        )));
     }
 
     #[test]

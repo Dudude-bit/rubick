@@ -4,6 +4,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
+import { verdictOf } from "@/lib/route-verdict";
 import {
   redirectOnly,
   parentCarriesTraffic,
@@ -31,16 +32,15 @@ function gatewayRouteSource(kind: string): PeekSource {
   return source(
     (name, namespace) => commands.getGatewayRoute(kind, name, namespace),
     (route: RouteInfo, _target, t) => {
-      const verdicts = route.parents.flatMap((parent) => parent.conditions);
-      const refused = verdicts.some(
-        (c) => c.type === "Accepted" && c.status === "False"
-      );
-      const accepted = verdicts.some(
-        (c) => c.type === "Accepted" && c.status === "True"
-      );
+      const verdict = verdictOf(route.parents, "Accepted").state;
       const redirects = redirectOnly(route);
       return {
-        status: refused ? "Refused" : accepted ? "Accepted" : undefined,
+        status:
+          verdict === "false"
+            ? "Refused"
+            : verdict === "true"
+              ? "Accepted"
+              : undefined,
         createdAt: route.createdAt,
         groups: [
           {

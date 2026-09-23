@@ -1,0 +1,281 @@
+{
+  "about": "What a route's status says about one of its parentRefs, as both halves read it: RouteInfo::statuses_for and verdict_of in src-tauri/src/resources/gateway.rs (the connections graph) and statusesFor / verdictOf in src/lib/route-verdict.ts (the trace, the routes list, the Gateway page, the map and the peek). The entries for a parent are those naming it by name and namespace, narrowed to the ones echoing its sectionName when any do. Over those entries, one False decides; True only when every one says True, and then the one about the oldest generation speaks; anything else is pending. `none` is no entry at all, `undecided` entries without the condition. Parents are written short: group, kind and port are filled in by the tests.",
+  "cases": [
+    {
+      "name": "no controller wrote status",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [],
+      "accepted": { "state": "none" },
+      "resolvedRefs": { "state": "none" }
+    },
+    {
+      "name": "an entry about another Gateway is not this one's",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "internal" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "none" },
+      "resolvedRefs": { "state": "none" }
+    },
+    {
+      "name": "the same name in another namespace is another Gateway",
+      "routeNamespace": "shop",
+      "parent": { "name": "public", "namespace": "infra" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" }
+          ]
+        }
+      ],
+      "accepted": { "state": "none" },
+      "resolvedRefs": { "state": "none" }
+    },
+    {
+      "name": "an unset namespace on either side is the route's",
+      "routeNamespace": "shop",
+      "parent": { "name": "public", "namespace": "shop" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" },
+            {
+              "type": "ResolvedRefs",
+              "status": "True",
+              "reason": "ResolvedRefs"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "true", "reason": "Accepted" },
+      "resolvedRefs": { "state": "true", "reason": "ResolvedRefs" }
+    },
+    {
+      "name": "an entry without the condition is undecided, not accepted",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            {
+              "type": "ResolvedRefs",
+              "status": "True",
+              "reason": "ResolvedRefs"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "undecided" },
+      "resolvedRefs": { "state": "true", "reason": "ResolvedRefs" }
+    },
+    {
+      "name": "one refusal decides, wherever it sits",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" }
+          ]
+        },
+        {
+          "parent": { "name": "public" },
+          "controllerName": "b.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NoMatchingListenerHostname"
+            },
+            {
+              "type": "ResolvedRefs",
+              "status": "False",
+              "reason": "BackendNotFound"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "false", "reason": "NoMatchingListenerHostname" },
+      "resolvedRefs": { "state": "false", "reason": "BackendNotFound" }
+    },
+    {
+      "name": "a verdict in the second entry is still a verdict",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "a.example.com/gateway",
+          "conditions": []
+        },
+        {
+          "parent": { "name": "public" },
+          "controllerName": "b.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "false", "reason": "NotAllowedByListeners" },
+      "resolvedRefs": { "state": "undecided" }
+    },
+    {
+      "name": "one controller undecided is not accepted",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" }
+          ]
+        },
+        {
+          "parent": { "name": "public" },
+          "controllerName": "b.example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "Unknown", "reason": "Pending" }
+          ]
+        }
+      ],
+      "accepted": { "state": "pending", "reason": "Pending" },
+      "resolvedRefs": { "state": "undecided" }
+    },
+    {
+      "name": "every entry accepting speaks through the oldest generation",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "a.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "True",
+              "reason": "Accepted",
+              "observedGeneration": 3
+            }
+          ]
+        },
+        {
+          "parent": { "name": "public" },
+          "controllerName": "b.example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "True",
+              "reason": "Stale",
+              "observedGeneration": 1
+            }
+          ]
+        }
+      ],
+      "accepted": {
+        "state": "true",
+        "reason": "Stale",
+        "observedGeneration": 1
+      },
+      "resolvedRefs": { "state": "undecided" }
+    },
+    {
+      "name": "the entry for this listener, not the one for its neighbour",
+      "routeNamespace": "shop",
+      "parent": { "name": "public", "sectionName": "https" },
+      "entries": [
+        {
+          "parent": { "name": "public", "sectionName": "http" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        },
+        {
+          "parent": { "name": "public", "sectionName": "https" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" }
+          ]
+        }
+      ],
+      "accepted": { "state": "true", "reason": "Accepted" },
+      "resolvedRefs": { "state": "undecided" }
+    },
+    {
+      "name": "a controller that did not echo the section answers for every listener",
+      "routeNamespace": "shop",
+      "parent": { "name": "public", "sectionName": "https" },
+      "entries": [
+        {
+          "parent": { "name": "public" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        }
+      ],
+      "accepted": { "state": "false", "reason": "NotAllowedByListeners" },
+      "resolvedRefs": { "state": "undecided" }
+    },
+    {
+      "name": "a parent with no section reads the entries that name none",
+      "routeNamespace": "shop",
+      "parent": { "name": "public" },
+      "entries": [
+        {
+          "parent": { "name": "public", "sectionName": "http" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            {
+              "type": "Accepted",
+              "status": "False",
+              "reason": "NotAllowedByListeners"
+            }
+          ]
+        },
+        {
+          "parent": { "name": "public" },
+          "controllerName": "example.com/gateway",
+          "conditions": [
+            { "type": "Accepted", "status": "True", "reason": "Accepted" }
+          ]
+        }
+      ],
+      "accepted": { "state": "true", "reason": "Accepted" },
+      "resolvedRefs": { "state": "undecided" }
+    }
+  ]
+}
