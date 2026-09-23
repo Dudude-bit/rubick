@@ -54,10 +54,7 @@ where
     };
 
     let answer = request(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced)).await;
-    if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
-        state.forget_served(group);
-    }
-    answer.map_err(Error::from)
+    state.served_answer(group, answer).map_err(Error::from)
 }
 
 /// List custom resource instances for a specific CRD

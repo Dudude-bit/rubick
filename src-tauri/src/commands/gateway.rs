@@ -71,10 +71,9 @@ pub(crate) async fn served_api_resource(kind: &str, state: &AppState) -> Result<
 /// having moved on: the next call looks again rather than trusting a version
 /// the cluster may have stopped serving.
 pub(crate) fn answered<T>(state: &AppState, answer: kube::Result<T>) -> Result<T> {
-    if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
-        state.forget_served(GATEWAY_API_GROUP);
-    }
-    answer.map_err(Error::from)
+    state
+        .served_answer(GATEWAY_API_GROUP, answer)
+        .map_err(Error::from)
 }
 
 /// One request on a Gateway API kind, at the served version, and what it

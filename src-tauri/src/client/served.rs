@@ -197,10 +197,24 @@ impl ServedIndex {
         Ok((cell, found))
     }
 
-    /// Forget one group, after a 404 says what was discovered has moved: a
-    /// CRD reinstalled without the version this app was asking for. An
-    /// answer read since is kept: it has already said where the kind is.
-    pub fn forget_group(&self, context: &str, group: &str) {
+    /// A request's answer from where this index put a kind of `group`. A 404
+    /// is taken as discovery having moved on — a CRD reinstalled without the
+    /// version asked for — and the next caller looks again.
+    pub fn answered<T>(
+        &self,
+        context: &str,
+        group: &str,
+        answer: kube::Result<T>,
+    ) -> kube::Result<T> {
+        if matches!(&answer, Err(kube::Error::Api(status)) if status.code == 404) {
+            self.forget_group(context, group);
+        }
+        answer
+    }
+
+    /// Forget one group. An answer read since the one a 404 came from is
+    /// kept: it has already said where the kind is.
+    fn forget_group(&self, context: &str, group: &str) {
         self.groups
             .remove_if(&(context.to_string(), group.to_string()), |_, held| {
                 held.get()
@@ -683,13 +697,18 @@ mod tests {
         let asked = || hits.lock().unwrap().get("/apis").copied();
         let read = || index.resource("kind", &client, GROUP, "gateways");
 
+        let a_404 = || {
+            let status = kube::core::Status::failure("gone", "NotFound").with_code(404);
+            index.answered::<()>("kind", GROUP, Err(kube::Error::Api(Box::new(status))))
+        };
+
         read().await.expect("read");
-        index.forget_group("kind", GROUP);
+        assert!(a_404().is_err());
         read().await.expect("read");
         assert_eq!(asked(), Some(1), "an answer this young is kept");
 
         tokio::time::sleep(Duration::from_millis(150)).await;
-        index.forget_group("kind", GROUP);
+        assert!(a_404().is_err());
         read().await.expect("read");
         assert_eq!(asked(), Some(2), "an older one is read again");
     }
