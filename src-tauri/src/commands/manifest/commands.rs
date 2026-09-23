@@ -344,6 +344,7 @@ pub async fn get_manifest(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
+    crate::validation::validate_path_segment(&name)?;
     manifest_of(&state, &kind, &api_version, &name, namespace).await
 }
 
