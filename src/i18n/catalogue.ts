@@ -1312,6 +1312,7 @@ export const en = {
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
+    copyFailed: "Could not copy",
     openInBrowser: "Open in Browser",
     back: "Back",
     gwFilterPlaceholder: "name, host, gateway…",

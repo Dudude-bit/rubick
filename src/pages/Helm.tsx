@@ -25,12 +25,12 @@ import type {
   HelmChartSearchResult,
   HelmInstallOptions,
 } from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 export function Helm() {
   const t = useT();
@@ -161,11 +161,7 @@ export function Helm() {
       setRollbackTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "rollbackFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "rollbackFailed"), error);
     },
   });
 
@@ -186,11 +182,7 @@ export function Helm() {
       setUninstallTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "uninstallFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "uninstallFailed"), error);
     },
   });
 
@@ -210,11 +202,7 @@ export function Helm() {
       setNewRepoUrl("");
     },
     onError: (error) => {
-      toast({
-        title: t("action", "addRepositoryFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "addRepositoryFailed"), error);
     },
   });
 
@@ -229,11 +217,7 @@ export function Helm() {
       setDeleteRepoTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "removeRepositoryFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "removeRepositoryFailed"), error);
     },
   });
 
@@ -247,11 +231,7 @@ export function Helm() {
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "updateRepositoriesFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "updateRepositoriesFailed"), error);
     },
   });
 
@@ -262,11 +242,7 @@ export function Helm() {
       const results = await commands.helmSearchCharts(searchKeyword);
       setSearchResults(results);
     } catch (error) {
-      toast({
-        title: t("action", "searchFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "searchFailed"), error);
     } finally {
       setIsSearching(false);
     }
@@ -292,11 +268,7 @@ export function Helm() {
       setInstallWait(true);
     },
     onError: (error) => {
-      toast({
-        title: t("settings", "installationFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("settings", "installationFailed"), error);
     },
   });
 
@@ -317,11 +289,7 @@ export function Helm() {
       setUpgradeWait(true);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "upgradeFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "upgradeFailed"), error);
     },
   });
 

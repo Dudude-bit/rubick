@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, DeploymentInfo } from "@/generated/types";
 
@@ -39,7 +39,7 @@ async function read<T>(fetch: () => Promise<T[]>): Promise<Read<T>> {
   try {
     return { ok: true, items: await fetch() };
   } catch (error) {
-    return { ok: false, reason: normalizeTauriError(error) };
+    return { ok: false, reason: errorToShow(error) };
   }
 }
 

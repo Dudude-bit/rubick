@@ -31,6 +31,7 @@ import { cn, isK8sVersionAtLeast } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /** Debug mode - frontend only, backend has separate commands for each mode */
 type DebugMode = "ephemeralContainer" | "copyPod";
@@ -114,13 +115,9 @@ export function DebugPodDialog({
 
   const handleError = useCallback(
     (error: string) => {
-      toast({
-        title: t("action", "debugFailed"),
-        description: error,
-        variant: "destructive",
-      });
+      toastError(t("action", "debugFailed"), error);
     },
-    [t, toast]
+    [t]
   );
 
   const handleTimeout = useCallback((operation: DebugOperation) => {
@@ -211,11 +208,7 @@ export function DebugPodDialog({
           }),
         });
       } catch (err) {
-        toast({
-          title: t("action", "failedToDeletePod"),
-          description: String(err),
-          variant: "destructive",
-        });
+        toastError(t("action", "failedToDeletePod"), err);
       }
     }
     setShowTimeoutDialog(false);

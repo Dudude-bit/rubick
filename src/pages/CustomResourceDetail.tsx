@@ -30,6 +30,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /**
  * A custom resource is whatever its author decided it is, so nothing on this
@@ -242,13 +243,12 @@ export function CustomResourceDetail() {
       navigate(-1);
     },
     onError: (error: Error) => {
-      toast({
-        title: t("action", "deleteKindFailed", {
+      toastError(
+        t("action", "deleteKindFailed", {
           kind: crdInfo?.kind || t("action", "resourceNoun"),
         }),
-        description: error.message,
-        variant: "destructive",
-      });
+        error
+      );
     },
   });
 

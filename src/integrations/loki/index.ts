@@ -3,7 +3,7 @@ import { ScrollText } from "lucide-react";
 
 import { commands } from "@/lib/commands";
 import { explain, unreachable } from "../reachability";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   defineVendor,
   USAGE_RANGES,
@@ -129,7 +129,7 @@ export default defineVendor({
           at: Date.now(),
           reason: {
             key: "verbatimLine",
-            values: { said: normalizeTauriError(error) },
+            values: { said: errorToShow(error) },
           },
         };
       }

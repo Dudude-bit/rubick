@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import {
   helmReleaseOf,
   revisionOfController,
@@ -188,13 +188,13 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   if (revisions.error)
     unread.push(
       t("changes", "revisionsUnread", {
-        reason: normalizeTauriError(revisions.error),
+        reason: errorToShow(revisions.error),
       })
     );
   if (deliveries.error)
     unread.push(
       t("changes", "deliveriesUnread", {
-        reason: normalizeTauriError(deliveries.error),
+        reason: errorToShow(deliveries.error),
       })
     );
   if (histories.error)
@@ -203,7 +203,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         owner: listed
           .map(({ owner }) => `${owner.kind} ${owner.name}`)
           .join(", "),
-        reason: normalizeTauriError(histories.error),
+        reason: errorToShow(histories.error),
       })
     );
   for (const { owner } of claims.filter((claim) => !claim.listed))
@@ -214,7 +214,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     unread.push(
       t("changes", "helmUnread", {
         release: release.name,
-        reason: normalizeTauriError(helm.error),
+        reason: errorToShow(helm.error),
       })
     );
 

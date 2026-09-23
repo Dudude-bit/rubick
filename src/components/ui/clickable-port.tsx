@@ -7,7 +7,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
@@ -163,7 +163,7 @@ export function ClickableServicePort({
     } catch (error) {
       toast({
         title: t("empty", "gwCouldNotResolve", { name: serviceName }),
-        description: normalizeTauriError(error),
+        description: errorToShow(error),
         variant: "destructive",
       });
     } finally {

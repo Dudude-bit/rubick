@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-const toast = vi.fn();
-vi.mock("@/components/ui/use-toast", () => ({ useToast: () => ({ toast }) }));
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock("@/components/ui/use-toast", () => ({
+  toast,
+  useToast: () => ({ toast }),
+}));
 
 import { AppearanceSettings } from "./AppearanceSettings";
 import { useLocaleStore } from "@/stores/localeStore";

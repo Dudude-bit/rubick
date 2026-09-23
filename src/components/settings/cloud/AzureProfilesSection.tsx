@@ -18,8 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { AzureProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const EMPTY_PROFILE: AzureProfile = {
   description: undefined,
@@ -62,11 +62,7 @@ export function AzureProfilesSection() {
       toast({ title: t("settings", "azureProfileSaved") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 
@@ -78,11 +74,7 @@ export function AzureProfilesSection() {
       toast({ title: t("settings", "azureProfileDeleted") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 

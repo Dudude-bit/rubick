@@ -1,6 +1,6 @@
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   CustomResourceInfo,
@@ -32,7 +32,7 @@ async function read<T>(fetch: () => Promise<T[]>): Promise<Read<T>> {
   try {
     return { ok: true, items: await fetch() };
   } catch (error) {
-    return { ok: false, reason: normalizeTauriError(error) };
+    return { ok: false, reason: errorToShow(error) };
   }
 }
 
@@ -53,7 +53,7 @@ async function readKind(
       items: await commands.listCustomResources(crd, null, null, null),
     };
   } catch (error) {
-    return { state: "unread", reason: normalizeTauriError(error) };
+    return { state: "unread", reason: errorToShow(error) };
   }
 }
 
@@ -62,13 +62,13 @@ export async function readRules(): Promise<RulesRead> {
   try {
     configured = (await commands.getPrometheusConnection()) !== null;
   } catch (error) {
-    return { state: "unanswered", reason: normalizeTauriError(error) };
+    return { state: "unanswered", reason: errorToShow(error) };
   }
   if (!configured) return { state: "notConnected" };
   try {
     return { state: "read", rules: await commands.prometheusRules() };
   } catch (error) {
-    return { state: "unanswered", reason: normalizeTauriError(error) };
+    return { state: "unanswered", reason: errorToShow(error) };
   }
 }
 
@@ -77,13 +77,13 @@ async function readTargets(): Promise<TargetsRead> {
   try {
     configured = (await commands.getPrometheusConnection()) !== null;
   } catch (error) {
-    return { state: "unanswered", reason: normalizeTauriError(error) };
+    return { state: "unanswered", reason: errorToShow(error) };
   }
   if (!configured) return { state: "notConnected" };
   try {
     return { state: "read", targets: await commands.prometheusTargets() };
   } catch (error) {
-    return { state: "unanswered", reason: normalizeTauriError(error) };
+    return { state: "unanswered", reason: errorToShow(error) };
   }
 }
 

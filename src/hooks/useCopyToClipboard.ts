@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /**
  * Hook for copying text to clipboard with toast notification
@@ -21,15 +22,11 @@ export function useCopyToClipboard() {
       try {
         await navigator.clipboard.writeText(text);
         toast({
-          title: "Copied",
+          title: t("action", "copied"),
           description: successMessage,
         });
       } catch (error) {
-        toast({
-          title: "Error",
-          description: `Failed to copy: ${error}`,
-          variant: "destructive",
-        });
+        toastError(t("action", "copyFailed"), error);
       }
     },
     [toast, t]
