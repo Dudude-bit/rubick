@@ -27,6 +27,7 @@ import {
 } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import { labelSelectorMatches } from "@/lib/label-selector";
+import { hasTerminated } from "@/lib/pod-status";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
 import { verdictOf } from "@/lib/route-verdict";
@@ -343,6 +344,7 @@ export function gatewayTopology(
       >();
       for (const pod of podsIn.get(service.namespace) ?? []) {
         if (
+          hasTerminated(pod) ||
           labelSelectorMatches({ matchLabels: selector }, pod.labels) !== true
         )
           continue;
