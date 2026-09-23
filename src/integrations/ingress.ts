@@ -596,8 +596,23 @@ export function useRouteCertificates(
     (results: UseQueryResult<Map<string, TlsCertificate>>[]) => {
       const certificates = new Map<string, TlsCertificate>();
       results.forEach((result, index) => {
+        const { namespace, names } = batches[index];
+        // A read that failed whole left its Secrets out of the map, and a
+        // Secret with no entry is one nothing is said about. Each is unread,
+        // which is what the backend answers for one Secret it could not get.
+        if (result.data === undefined && result.error) {
+          const said = errorToShow(result.error);
+          for (const secretName of names) {
+            certificates.set(`${namespace}/${secretName}`, {
+              secretName,
+              certificate: null,
+              problem: { says: "secretUnreadable", said },
+            });
+          }
+          return;
+        }
         for (const [name, read] of result.data ?? []) {
-          certificates.set(`${batches[index].namespace}/${name}`, read);
+          certificates.set(`${namespace}/${name}`, read);
         }
       });
       return certificates;
