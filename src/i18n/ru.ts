@@ -2757,6 +2757,7 @@ export const ru: Catalogue = {
     warnUndoApply: "{count} вещи отменят это применение.",
     warnRevertCount: "{count} вещи вернут это число обратно.",
     rowsOfTotal: "{shown} из {total} — {label}",
+    rowsWhereAnswered: "{n} — {label}, из ответивших namespace",
     rowCount: {
       one: "{n} строка",
       few: "{n} строки",
@@ -5642,6 +5643,10 @@ export const ru: Catalogue = {
     readDeadlineHint:
       "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
+    couldNotReadInNamespace: "Не удалось прочитать {label} в {namespace}.",
+    noneWhereAnswered: "В {namespaces} ничего не найдено: {label}.",
+    gwNoRoutesOfKindsRead:
+      "Среди видов, которые удалось прочитать, маршрутов нет.",
     readDeadlineShort: "Чтение {label} не уложилось в {seconds} с.",
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
@@ -6332,7 +6337,7 @@ export const ru: Catalogue = {
       many: "и ещё {n} сертификатов в связке",
       other: "и ещё {n} сертификатов в связке",
     },
-    kindInstances: "Экземпляры {kind} ({n})",
+    kindInstances: "Экземпляры {kind}",
     otherRevisionsAtZero: {
       one: "ещё {n} ревизия масштабирована до нуля",
       few: "ещё {n} ревизии масштабированы до нуля",

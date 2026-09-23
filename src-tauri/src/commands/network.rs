@@ -19,7 +19,9 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos, ResourceContext};
+use crate::commands::helpers::{
+    across, api_in, get_resource_info, list_in_scope, list_resource_infos, ResourceContext, Scoped,
+};
 
 /// List Ingresses
 #[tauri::command]
@@ -30,27 +32,36 @@ pub async fn list_ingresses(
     list_resource_infos::<Ingress, IngressInfo>(filters, state).await
 }
 
+list_in_scope!(list_ingresses_in, Ingress, IngressInfo);
+
 /// Every `NetworkPolicy` in scope, with how many pods each one actually picks.
 ///
-/// The count is the whole reason this is not `list_resource_infos`. A policy
+/// The count is the whole reason this is not `list_in_scope!`. A policy
 /// whose `podSelector` matches nothing is accepted, listed, and protects
 /// nothing, and no other screen in this app can say so: the selector is in
-/// one object and the labels are in another. One pod list for the scope
-/// answers it for every policy at once, the same arithmetic
+/// one object and the labels are in another. One pod list per namespace read
+/// answers it for every policy there at once, the same arithmetic
 /// `list_service_endpoints` does above.
 ///
 /// **A refused pod list leaves the count `None`, never zero.** Zero is the
 /// finding this page exists for; a reader without `list pods` must not be
 /// handed it.
 #[tauri::command]
-pub async fn list_network_policies(
-    namespace: Option<String>,
+pub async fn list_network_policies_in(
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
+) -> Result<Scoped<NetworkPolicyInfo>> {
+    let client = (*state.current_client()?).clone();
+    across(scope, |reach| policies_in(client.clone(), reach)).await
+}
+
+async fn policies_in(
+    client: kube::Client,
+    reach: Option<String>,
 ) -> Result<Vec<NetworkPolicyInfo>> {
-    let ctx = ResourceContext::for_list(&state, namespace)?;
     let params = ListParams::default();
-    let policies_api = ctx.namespaced_or_cluster_api::<NetworkPolicy>();
-    let pods_api = ctx.namespaced_or_cluster_api::<Pod>();
+    let policies_api = api_in::<NetworkPolicy>(&client, reach.as_deref());
+    let pods_api = api_in::<Pod>(&client, reach.as_deref());
     // Metadata only: the question is which labels a pod carries, and the
     // bodies are the whole weight of a pod list on a cluster with ten
     // thousand of them — pulled on every poll of this page.
@@ -103,14 +114,7 @@ pub async fn delete_network_policy(
     crate::commands::helpers::delete_resource::<NetworkPolicy>(name, namespace, state, None).await
 }
 
-/// List Endpoints
-#[tauri::command]
-pub async fn list_endpoints(
-    filters: Option<ResourceFilters>,
-    state: State<'_, AppState>,
-) -> Result<Vec<EndpointsInfo>> {
-    list_resource_infos::<Endpoints, EndpointsInfo>(filters, state).await
-}
+list_in_scope!(list_endpoints_in, Endpoints, EndpointsInfo);
 
 /// What every Service in scope publishes, read off its own `EndpointSlices`.
 ///

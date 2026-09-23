@@ -312,6 +312,28 @@ impl KubeErrorExt for kube::Error {
     }
 }
 
+/// A watcher's failure in the same words, `Status` dump left off.
+pub(crate) fn watch_failure(error: &kube::runtime::watcher::Error) -> String {
+    use kube::runtime::watcher::Error as Watch;
+    match error {
+        Watch::InitialListFailed(e) => format!(
+            "failed to perform initial object list: {}",
+            e.display_clean()
+        ),
+        Watch::WatchStartFailed(e) => {
+            format!("failed to start watching object: {}", e.display_clean())
+        }
+        Watch::WatchFailed(e) => format!("watch stream failed: {}", e.display_clean()),
+        Watch::WatchError(status) => {
+            format!(
+                "error returned by apiserver during watch: {}",
+                status.message
+            )
+        }
+        other @ Watch::NoResourceVersion => other.to_string(),
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Error::Serialization(err.to_string())
@@ -530,6 +552,17 @@ mod tests {
             !shown.contains("ListMeta"),
             "the metadata dump leaked onto the screen: {shown}"
         );
+    }
+
+    /// A refused watch reaches the reader as the toast over the list it falls
+    /// back from, and it carried the same `Status` dump there.
+    #[test]
+    fn a_refused_watch_is_shown_without_the_status_struct_dump() {
+        let err = kube::runtime::watcher::Error::InitialListFailed(api_error(403, "Forbidden"));
+        let shown = watch_failure(&err);
+        assert!(shown.starts_with("failed to perform initial object list: "));
+        assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
+        assert!(!shown.contains("Status {"), "the dump leaked: {shown}");
     }
 
     /// Would send the reader back to a screen that says the cluster is empty.

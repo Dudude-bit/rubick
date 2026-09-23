@@ -1,22 +1,14 @@
 //! `ConfigMap` commands — list / get / get-data / set-key / delete.
 
 use super::data::ConfigData;
-use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_in_scope};
 use crate::error::Result;
 use crate::resources::ConfigMapInfo;
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::ConfigMap;
 use tauri::State;
 
-/// List `ConfigMaps`
-#[tauri::command]
-pub async fn list_configmaps(
-    filters: Option<ResourceFilters>,
-    state: State<'_, AppState>,
-) -> Result<Vec<ConfigMapInfo>> {
-    list_resource_infos::<ConfigMap, ConfigMapInfo>(filters, state).await
-}
+list_in_scope!(list_configmaps_in, ConfigMap, ConfigMapInfo);
 
 /// Get a `ConfigMap` by name
 #[tauri::command]

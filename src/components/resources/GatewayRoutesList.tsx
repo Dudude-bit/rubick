@@ -24,6 +24,9 @@ import {
 } from "@/components/ui/tooltip";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
+import { Unknown } from "@/components/ui/unknown";
+import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { Button } from "@/components/ui/button";
 import {
@@ -290,6 +293,8 @@ export function GatewayRoutesList() {
     detectionError,
     served,
     routes,
+    unread,
+    refusedKinds,
     isLoading,
     error,
     dataUpdatedAt,
@@ -371,15 +376,11 @@ export function GatewayRoutesList() {
     refresh: "overview",
     enabled: showMap,
   });
+  // The Deployments page's own entry for the whole cluster, so the answer is
+  // the same shape it keeps there.
   const deployments = useLiveQuery({
     queryKey: queryKeys.resources(ResourceType.Deployment, null),
-    queryFn: () =>
-      commands.listDeployments({
-        namespace: null,
-        labelSelector: null,
-        fieldSelector: null,
-        limit: null,
-      }),
+    queryFn: () => commands.listDeploymentsIn(null),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: showMap,
@@ -393,7 +394,7 @@ export function GatewayRoutesList() {
         backing.data ? backingFrom(backing.data, null) : undefined,
         t,
         pods.data && deployments.data
-          ? { pods: pods.data, deployments: deployments.data }
+          ? { pods: pods.data, deployments: deployments.data.rows }
           : undefined
       ),
     [gateways.data, filtered, backing.data, t, pods.data, deployments.data]
@@ -425,8 +426,12 @@ export function GatewayRoutesList() {
         count={
           // No count beside a refusal or a detection failure — the body shows
           // "could not read" there, and a "0" in the header would contradict
-          // it. These are the same states the body special-cases below.
-          (error && routes.length === 0) || detectionError ? undefined : (
+          // it. These are the same states the body special-cases below. Nor
+          // beside an unread namespace: the rows are not the scope's total.
+          (error && routes.length === 0) ||
+          detectionError ||
+          unread.length > 0 ||
+          refusedKinds.length > 0 ? undefined : (
             <span className="tabular-nums">
               {total + board.mesh.length}
               {board.verdictsKnown && board.notServing.length > 0 && (
@@ -498,6 +503,22 @@ export function GatewayRoutesList() {
         }
       />
 
+      <div className="mt-3 empty:hidden">
+        <UnreadNamespaces
+          unread={unread}
+          label={t("nav", "routes").toLowerCase()}
+        />
+        {!error &&
+          refusedKinds.map(({ kind: refused, error: why }) => (
+            <Unknown
+              key={refused}
+              className="mb-2"
+              question={t("empty", "couldNotReadInScope", { label: refused })}
+              error={why}
+            />
+          ))}
+      </div>
+
       {board.pulse.map((entry) => (
         <div
           key={`${entry.namespace}/${entry.gateway}`}
@@ -566,9 +587,18 @@ export function GatewayRoutesList() {
           </p>
         ) : total + board.mesh.length === 0 ? (
           <p className="py-8 text-xs text-fg-fnt">
-            {routes.length === 0
-              ? t("empty", "gwNoRoutesInScope")
-              : t("empty", "nothingMatchesFilter")}
+            {routes.length > 0
+              ? t("empty", "nothingMatchesFilter")
+              : unread.length > 0
+                ? noneWhereAnswered(
+                    t,
+                    t("nav", "routes").toLowerCase(),
+                    scope.scope,
+                    unread
+                  )
+                : refusedKinds.length > 0
+                  ? t("empty", "gwNoRoutesOfKindsRead")
+                  : t("empty", "gwNoRoutesInScope")}
           </p>
         ) : !board.verdictsKnown ? (
           <>

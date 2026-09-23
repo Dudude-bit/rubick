@@ -3,31 +3,14 @@
 //! private keys for every kind.
 
 use super::data::ConfigData;
-use crate::commands::filters::SecretFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_in_scope};
 use crate::error::Result;
 use crate::resources::SecretInfo;
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::Secret;
 use tauri::State;
 
-/// List Secrets
-#[tauri::command]
-pub async fn list_secrets(
-    filters: Option<SecretFilters>,
-    state: State<'_, AppState>,
-) -> Result<Vec<SecretInfo>> {
-    let filters = filters.unwrap_or_default();
-    let mut secrets: Vec<SecretInfo> =
-        list_resource_infos::<Secret, SecretInfo>(Some(filters.base.clone()), state).await?;
-
-    // Filter by type if specified
-    if let Some(secret_type) = &filters.secret_type {
-        secrets.retain(|s| s.type_.eq_ignore_ascii_case(secret_type));
-    }
-
-    Ok(secrets)
-}
+list_in_scope!(list_secrets_in, Secret, SecretInfo);
 
 /// Get a Secret by name
 #[tauri::command]

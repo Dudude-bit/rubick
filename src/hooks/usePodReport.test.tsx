@@ -16,7 +16,6 @@ vi.mock("@/lib/commands", () => ({
     getPodLogs: (...args: unknown[]) => getPodLogs(...args),
     listServices: vi.fn(async () => []),
     getEndpoints: vi.fn(async () => null),
-    listNetworkPolicies: vi.fn(async () => []),
   },
 }));
 

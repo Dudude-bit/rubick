@@ -11,7 +11,7 @@ use kube::api::{Api, DeleteParams, DynamicObject, TypeMeta};
 use kube::discovery::ApiResource;
 use tauri::State;
 
-use crate::commands::helpers::{build_list_params, ResourceContext};
+use crate::commands::helpers::{across, build_list_params, ResourceContext, Scoped};
 use crate::error::{Error, Result};
 use crate::resources::{
     BackendTlsPolicyInfo, GatewayApiDetection, GatewayClassInfo, GatewayInfo, ListenerSetInfo,
@@ -218,6 +218,48 @@ pub async fn list_gateways(
         .collect())
 }
 
+/// The Gateways page's read: one LIST per namespace of the scope, and the
+/// `ListenerSets` once for all of them.
+#[tauri::command]
+pub async fn list_gateways_in(
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Scoped<GatewayInfo>> {
+    let api_resource = served_api_resource("Gateway", &state).await?;
+    let client = (*state.current_client()?).clone();
+    let (gateways, sets) = tokio::join!(
+        across(scope, |reach| {
+            read_in(&state, &client, &api_resource, reach, GatewayInfo::read)
+        }),
+        listener_sets(&state),
+    );
+    let mut gateways = gateways?;
+    for gateway in &mut gateways.rows {
+        gateway.merge_listener_sets(sets.as_deref());
+    }
+    Ok(gateways)
+}
+
+/// One namespaced Gateway API kind in one reach, each object read by `read`.
+async fn read_in<T>(
+    state: &AppState,
+    client: &kube::Client,
+    api_resource: &ApiResource,
+    reach: Option<String>,
+    read: fn(&DynamicObject) -> T,
+) -> Result<Vec<T>> {
+    let api: Api<DynamicObject> = match reach.as_deref() {
+        Some(namespace) => Api::namespaced_with(client.clone(), namespace, api_resource),
+        None => Api::all_with(client.clone(), api_resource),
+    };
+    let list = listed(state, api.list(&build_list_params(None, None, None)).await)?;
+    Ok(list
+        .items
+        .into_iter()
+        .map(|obj| read(&with_types(obj, api_resource)))
+        .collect())
+}
+
 #[tauri::command]
 pub async fn get_gateway(
     name: String,
@@ -268,6 +310,22 @@ pub async fn list_gateway_routes(
         .into_iter()
         .map(|obj| RouteInfo::read(&with_types(obj, &api_resource)))
         .collect())
+}
+
+/// One route kind across the scope, one LIST per namespace.
+#[tauri::command]
+pub async fn list_gateway_routes_in(
+    kind: String,
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Scoped<RouteInfo>> {
+    require_route_kind(&kind)?;
+    let api_resource = served_api_resource(&kind, &state).await?;
+    let client = (*state.current_client()?).clone();
+    across(scope, |reach| {
+        read_in(&state, &client, &api_resource, reach, RouteInfo::read)
+    })
+    .await
 }
 
 #[tauri::command]

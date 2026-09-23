@@ -45,7 +45,12 @@ import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { inScope, listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import {
+  inScope,
+  joinScoped,
+  scopeCacheKey,
+  wireScope,
+} from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
@@ -324,31 +329,33 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // The rail's own count follows the window's namespaces, like every other
   // row — read per namespace so a token with rights in some and not the whole
   // cluster still gets a number instead of a blank (the routes page reads the
-  // same way). A whole-cluster window is one call.
+  // same way). A whole-cluster window is one call per kind.
   const routes = useLiveQuery({
     queryKey: [
       "gateway-rail-routes",
       cacheKey ?? EVERY_NAMESPACE,
       ...routeKinds,
     ],
-    queryFn: listAcrossScope(scope, async (ns) => {
+    queryFn: async () => {
       // Each served kind on its own: a token may list HTTPRoutes and not
-      // TCPRoutes, and one refused kind must not blank the whole count — the
-      // routes page reads each kind as its own query for the same reason. A
-      // kind that answered contributes its rows; only when every kind was
-      // refused is the refusal the answer, thrown for `listAcrossScope`.
+      // TCPRoutes, and the rows of the kinds that answered still feed the
+      // mark. A refused kind is not a kind with no routes, though, so the
+      // count stays blank beside one, as it does beside an unread namespace
+      // and as the routes page does. Every kind refused is the refusal.
       const settled = await Promise.allSettled(
-        routeKinds.map((kind) => commands.listGatewayRoutes(kind, ns))
+        routeKinds.map((kind) =>
+          commands.listGatewayRoutesIn(kind, wireScope(scope))
+        )
       );
-      const rows = settled.flatMap((r) =>
-        r.status === "fulfilled" ? r.value : []
+      const answered = settled.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : []
       );
       const refused = settled.find((r) => r.status === "rejected");
-      if (refused && settled.every((r) => r.status === "rejected")) {
+      if (refused && answered.length === 0) {
         throw (refused as PromiseRejectedResult).reason;
       }
-      return rows;
-    }),
+      return { ...joinScoped(answered), complete: refused === undefined };
+    },
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && routeKinds.length > 0 && !routesDenied,
@@ -358,7 +365,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // list, so this second read only runs once a namespace is selected.
   const gatewaysScoped = useLiveQuery({
     queryKey: ["gateway-rail-gateways", cacheKey ?? EVERY_NAMESPACE],
-    queryFn: listAcrossScope(scope, (ns) => commands.listGateways(ns)),
+    queryFn: () => commands.listGatewaysIn(wireScope(scope)),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled:
@@ -376,15 +383,16 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // (above): a route can attach to a Gateway in a namespace the window is not
   // on, and a verdict computed without it is wrong.
   const scopedRoutes = useMemo(
-    () => (routes.data ?? []).filter((r) => inScope(scope, r.namespace)),
+    () => (routes.data?.rows ?? []).filter((r) => inScope(scope, r.namespace)),
     [routes.data, scope]
   );
   // The count follows the scope; on a whole-cluster window the verdict read
   // already is that list, so reuse it and skip the second fetch.
-  const gatewayCount = scope.length === 0 ? gatewaysAll : gatewaysScoped;
+  const counted =
+    scope.length === 0 ? gatewaysAll.data : gatewaysScoped.data?.rows;
   const scopedGateways = useMemo(
-    () => (gatewayCount.data ?? []).filter((g) => inScope(scope, g.namespace)),
-    [gatewayCount.data, scope]
+    () => (counted ?? []).filter((g) => inScope(scope, g.namespace)),
+    [counted, scope]
   );
   const board = useMemo(
     () =>
@@ -426,7 +434,13 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={resource(ResourceType.Gateway)}
           overview={overview}
-          value={gatewayCount.data ? scopedGateways.length : null}
+          // No number where a namespace was not read: it would not be the
+          // scope's total.
+          value={
+            counted && !gatewaysScoped.data?.unread.length
+              ? scopedGateways.length
+              : null
+          }
           mark={gatewaysMark(
             scopedGateways,
             scopedPulse,
@@ -439,7 +453,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
           overview={overview}
-          value={routes.data ? scopedRoutes.length : null}
+          value={
+            routes.data?.complete && routes.data.unread.length === 0
+              ? scopedRoutes.length
+              : null
+          }
           mark={boardMark(board)}
           denied={routesDenied}
         />

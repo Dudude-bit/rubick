@@ -18,7 +18,8 @@ import {
   useNamespaceScope,
   type NamespaceScope,
 } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
+import type { Scoped } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -38,8 +39,12 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   resourceType: ResourceKind;
   /** Page title (also used as the empty-state label by default). */
   title: string;
-  /** Async fetch the list. `namespace` is `null` for cluster-scoped pages. */
-  fetcher: (params: { namespace: string | null }) => Promise<T[]>;
+  /**
+   * Read the list: the `list_*_in` command for a namespaced kind, given the
+   * selection (`null` for the whole cluster, and always for a cluster-scoped
+   * page); a cluster-scoped kind's list wrapped in `whole`.
+   */
+  fetcher: (params: { scope: string[] | null }) => Promise<Scoped<T>>;
   /**
    * Optional delete function. When provided a Trash2 quick action and the
    * confirm dialog wiring activate automatically.
@@ -66,16 +71,14 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    */
   description?:
     string | ((deps: { scope: NamespaceScope; t: Translator }) => string);
-  /** Search key (column accessor) for the in-page search box. */
   /**
    * Optional watch subscription factory. When supplied, the page subscribes to
    * backend `resource-event` updates and the polling `refresh` rate is
    * switched off — the cache is kept fresh by incremental setQueryData updates
-   * instead. Receives the resolved namespace (`null` for cluster-scoped pages
-   * or "all namespaces") and returns a stream id from the matching
-   * `subscribe_*_watch` Tauri command.
+   * instead. Receives the selection as `fetcher` does and returns a stream id
+   * from the matching `subscribe_*_watch` Tauri command.
    */
-  watch?: (params: { namespace: string | null }) => Promise<string>;
+  watch?: (params: { scope: string[] | null }) => Promise<string>;
 }
 
 export function createResourceListPage<T extends ListableResource>(
@@ -86,13 +89,7 @@ export function createResourceListPage<T extends ListableResource>(
     const scope = useNamespaceScope();
     const navigate = useNavigate();
     const isCluster = config.scope === "cluster";
-    // The single namespace a watch subscribes to. A watch runs only for a
-    // selection of none or one; several is read per namespace and polled.
-    const watchNamespace = isCluster
-      ? null
-      : scope.scope.length === 1
-        ? scope.scope[0]
-        : null;
+    const wire = isCluster ? null : scope.wire;
     // The cache key rides on the whole selection, not one namespace, so two
     // different multi-namespace scopes never read each other's rows.
     const cacheKey = isCluster ? null : scopeCacheKey(scope.scope);
@@ -133,14 +130,9 @@ export function createResourceListPage<T extends ListableResource>(
     );
 
     const watchFactory = config.watch;
-    // A watch is one cluster-wide or one single-namespace stream. A selection
-    // of several is polled per namespace instead (see `listAcrossScope`): a
-    // cluster-wide watch needs rights this user may lack and would stream
-    // namespaces they did not ask for.
-    const watchEnabled = !!watchFactory && (isCluster || !scope.several);
     const subscribe = useCallback(
-      () => watchFactory!({ namespace: watchNamespace }),
-      [watchFactory, watchNamespace]
+      () => watchFactory!({ scope: wire }),
+      [watchFactory, wire]
     );
     const queryKey = useMemo(
       () => queryKeys.resources(config.resourceType, cacheKey),
@@ -148,14 +140,10 @@ export function createResourceListPage<T extends ListableResource>(
     );
     // Rebuilt each render, which React Query is fine with — it keys on
     // `queryKey`, and `cacheKey` moves with the selection.
-    const queryFn = isCluster
-      ? () => config.fetcher({ namespace: null })
-      : listAcrossScope(scope.scope, (namespace) =>
-          config.fetcher({ namespace })
-        );
+    const queryFn = () => config.fetcher({ scope: wire });
 
     const { live, refresh, resyncing } = useWatchedList<T>({
-      enabled: watchEnabled,
+      enabled: !!watchFactory,
       subscribe,
       queryKey,
       reportFailure: config.title,

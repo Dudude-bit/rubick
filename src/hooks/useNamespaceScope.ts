@@ -18,7 +18,7 @@
 import { useT } from "@/i18n/useT";
 import { useMemo } from "react";
 
-import { inScope, scopeIn, scopeLabel } from "@/lib/namespace-scope";
+import { inScope, scopeIn, scopeLabel, wireScope } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 
 export interface NamespaceScope {
@@ -26,8 +26,10 @@ export interface NamespaceScope {
   scope: string[];
   /** Whether the whole cluster is in view. */
   isAll: boolean;
-  /** Whether the answer arrives cluster-wide and is narrowed on this side. */
+  /** Whether more than one namespace is selected. */
   several: boolean;
+  /** The selection as a list or watch command takes it; see `wireScope`. */
+  wire: string[] | null;
   /** "All namespaces", "prod", "prod, staging", "4 namespaces". */
   label: string;
   /** The same thing inside a sentence: "no events in …". */
@@ -46,6 +48,7 @@ export function useNamespaceScope(): NamespaceScope {
       scope,
       isAll: scope.length === 0,
       several,
+      wire: wireScope(scope),
       label: scopeLabel(scope, t),
       inWords: scopeIn(scope, t),
       matches: (namespace) => inScope(scope, namespace),

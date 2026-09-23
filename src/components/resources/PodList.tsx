@@ -203,6 +203,7 @@ export function PodList() {
     podStatus,
     isLoading,
     error,
+    unread,
     dataUpdatedAt,
     watchLive,
     resyncing,
@@ -254,6 +255,7 @@ export function PodList() {
     <ResourceList<PodWithMetrics>
       title="Pods"
       data={podsWithMetrics}
+      unread={unread}
       isLoading={isLoading}
       waitingSince={waitingSince}
       onRetry={() => void refetch()}

@@ -21,7 +21,7 @@ interface Row {
 
 const KINDS: Array<{
   kind: string;
-  subscribe: (namespace: string | null) => Promise<string>;
+  subscribe: (scope: string[] | null) => Promise<string>;
 }> = [
   { kind: "Deployment", subscribe: commands.subscribeDeploymentWatch },
   { kind: "StatefulSet", subscribe: commands.subscribeStatefulsetWatch },
@@ -115,7 +115,7 @@ export function useChangeJournal() {
 
       void (async () => {
         try {
-          const id = await subscribe(namespace);
+          const id = await subscribe(namespace === null ? null : [namespace]);
           if (!active) {
             await commands.unsubscribeResourceWatch(id).catch(() => {});
             return;

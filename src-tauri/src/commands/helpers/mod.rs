@@ -7,11 +7,13 @@
 //! - `cluster`:    same five generics for `ClusterResourceScope` kinds
 //! - `yaml`:       fetch + clean-for-editor (strips server-managed
 //!   metadata fields)
+//! - `scope`:      a list read across several namespaces, one LIST each
 
 mod cluster;
 mod context;
 mod namespaced;
 mod params;
+mod scope;
 mod yaml;
 
 pub use cluster::{
@@ -24,4 +26,6 @@ pub use namespaced::{
     restart_resource, scale_resource,
 };
 pub use params::{build_label_selector, build_list_params};
+pub(crate) use scope::list_in_scope;
+pub use scope::{across, api_in, gathered, infos_in, reaches, scope_of, Scoped, UnreadNamespace};
 pub use yaml::clean_yaml_for_editor;

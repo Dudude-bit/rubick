@@ -104,10 +104,10 @@ import type {
   ResourceFilters,
   RolloutStatus,
   RouteInfo,
+  Scoped,
   ScrapeTarget,
   SearchHandle,
   SearchRequest,
-  SecretFilters,
   SecretInfo,
   ServiceBacking,
   ServiceFilters,
@@ -452,6 +452,16 @@ export async function listCustomResources(
   });
 }
 
+export async function listCustomResourcesIn(
+  crdName: string,
+  scope: string[] | null
+): Promise<Scoped<CustomResourceInfo>> {
+  return invoke<Scoped<CustomResourceInfo>>("list_custom_resources_in", {
+    crdName,
+    scope,
+  });
+}
+
 export async function getCustomResource(
   crdName: string,
   name: string,
@@ -608,12 +618,6 @@ export async function deleteJob(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_job", { name, namespace });
-}
-
-export async function listCronjobs(
-  filters: ResourceFilters | null
-): Promise<CronJobInfo[]> {
-  return invoke<CronJobInfo[]>("list_cronjobs", { filters });
 }
 
 export async function getCronjob(
@@ -900,6 +904,12 @@ export async function listGateways(
   return invoke<GatewayInfo[]>("list_gateways", { namespace });
 }
 
+export async function listGatewaysIn(
+  scope: string[] | null
+): Promise<Scoped<GatewayInfo>> {
+  return invoke<Scoped<GatewayInfo>>("list_gateways_in", { scope });
+}
+
 export async function getGateway(
   name: string,
   namespace: string | null
@@ -919,6 +929,13 @@ export async function listGatewayRoutes(
   namespace: string | null
 ): Promise<RouteInfo[]> {
   return invoke<RouteInfo[]>("list_gateway_routes", { kind, namespace });
+}
+
+export async function listGatewayRoutesIn(
+  kind: string,
+  scope: string[] | null
+): Promise<Scoped<RouteInfo>> {
+  return invoke<Scoped<RouteInfo>>("list_gateway_routes_in", { kind, scope });
 }
 
 export async function getGatewayRoute(
@@ -1087,8 +1104,8 @@ export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("list_pods", { filters });
 }
 
-export async function listPodRows(namespace: string | null): Promise<string> {
-  return invoke<string>("list_pod_rows", { namespace });
+export async function listPodRows(scope: string[] | null): Promise<string> {
+  return invoke<string>("list_pod_rows", { scope });
 }
 
 export async function podRowsSubscribed(streamId: string): Promise<void> {
@@ -1130,14 +1147,14 @@ export async function subscribeCustomResourceWatch(
   version: string,
   kind: string,
   plural: string,
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
   return invoke<string>("subscribe_custom_resource_watch", {
     group,
     version,
     kind,
     plural,
-    namespace,
+    scope,
   });
 }
 
@@ -1177,17 +1194,11 @@ export async function unsubscribeResourceWatch(
   return invoke<void>("unsubscribe_resource_watch", { streamId });
 }
 
-export async function subscribeGatewayWatch(
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("subscribe_gateway_watch", { namespace });
-}
-
 export async function subscribeGatewayRouteWatch(
   kind: string,
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_gateway_route_watch", { kind, namespace });
+  return invoke<string>("subscribe_gateway_route_watch", { kind, scope });
 }
 
 export async function nodeResourceBudget(name: string): Promise<NodeBudget> {
@@ -1239,14 +1250,6 @@ export async function listPersistentVolumes(
   filters: ResourceFilters | null
 ): Promise<PersistentVolumeInfo[]> {
   return invoke<PersistentVolumeInfo[]>("list_persistent_volumes", { filters });
-}
-
-export async function listPersistentVolumeClaims(
-  filters: ResourceFilters | null
-): Promise<PersistentVolumeClaimInfo[]> {
-  return invoke<PersistentVolumeClaimInfo[]>("list_persistent_volume_claims", {
-    filters,
-  });
 }
 
 export async function listStorageClasses(
@@ -1375,10 +1378,12 @@ export async function listIngresses(
   return invoke<IngressInfo[]>("list_ingresses", { filters });
 }
 
-export async function listNetworkPolicies(
-  namespace: string | null
-): Promise<NetworkPolicyInfo[]> {
-  return invoke<NetworkPolicyInfo[]>("list_network_policies", { namespace });
+export async function listNetworkPoliciesIn(
+  scope: string[] | null
+): Promise<Scoped<NetworkPolicyInfo>> {
+  return invoke<Scoped<NetworkPolicyInfo>>("list_network_policies_in", {
+    scope,
+  });
 }
 
 export async function getNetworkPolicy(
@@ -1393,12 +1398,6 @@ export async function deleteNetworkPolicy(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_network_policy", { name, namespace });
-}
-
-export async function listEndpoints(
-  filters: ResourceFilters | null
-): Promise<EndpointsInfo[]> {
-  return invoke<EndpointsInfo[]>("list_endpoints", { filters });
 }
 
 export async function listServiceEndpoints(
@@ -1447,12 +1446,6 @@ export async function deleteEndpoints(
   return invoke<void>("delete_endpoints", { name, namespace });
 }
 
-export async function listConfigmaps(
-  filters: ResourceFilters | null
-): Promise<ConfigMapInfo[]> {
-  return invoke<ConfigMapInfo[]>("list_configmaps", { filters });
-}
-
 export async function getConfigmap(
   name: string,
   namespace: string | null
@@ -1483,12 +1476,6 @@ export async function deleteConfigmap(
   return invoke<void>("delete_configmap", { name, namespace });
 }
 
-export async function listSecrets(
-  filters: SecretFilters | null
-): Promise<SecretInfo[]> {
-  return invoke<SecretInfo[]>("list_secrets", { filters });
-}
-
 export async function getSecret(
   name: string,
   namespace: string | null
@@ -1516,10 +1503,10 @@ export async function getClusterOverview(
   return invoke<ClusterOverview>("get_cluster_overview", { scope });
 }
 
-export async function listHelmReleasesNative(
-  namespace: string | null
-): Promise<HelmRelease[]> {
-  return invoke<HelmRelease[]>("list_helm_releases_native", { namespace });
+export async function listHelmReleasesIn(
+  scope: string[] | null
+): Promise<Scoped<HelmRelease>> {
+  return invoke<Scoped<HelmRelease>>("list_helm_releases_in", { scope });
 }
 
 export async function getHelmReleaseDetail(
@@ -1737,76 +1724,121 @@ export async function cancelDebugOperation(operationId: string): Promise<void> {
   return invoke<void>("cancel_debug_operation", { operationId });
 }
 
+export async function listConfigmapsIn(
+  scope: string[] | null
+): Promise<Scoped<ConfigMapInfo>> {
+  return invoke<Scoped<ConfigMapInfo>>("list_configmaps_in", { scope });
+}
+
+export async function listSecretsIn(
+  scope: string[] | null
+): Promise<Scoped<SecretInfo>> {
+  return invoke<Scoped<SecretInfo>>("list_secrets_in", { scope });
+}
+
+export async function listDeploymentsIn(
+  scope: string[] | null
+): Promise<Scoped<DeploymentInfo>> {
+  return invoke<Scoped<DeploymentInfo>>("list_deployments_in", { scope });
+}
+
+export async function listIngressesIn(
+  scope: string[] | null
+): Promise<Scoped<IngressInfo>> {
+  return invoke<Scoped<IngressInfo>>("list_ingresses_in", { scope });
+}
+
+export async function listEndpointsIn(
+  scope: string[] | null
+): Promise<Scoped<EndpointsInfo>> {
+  return invoke<Scoped<EndpointsInfo>>("list_endpoints_in", { scope });
+}
+
+export async function listServicesIn(
+  scope: string[] | null
+): Promise<Scoped<ServiceInfo>> {
+  return invoke<Scoped<ServiceInfo>>("list_services_in", { scope });
+}
+
+export async function listPersistentVolumeClaimsIn(
+  scope: string[] | null
+): Promise<Scoped<PersistentVolumeClaimInfo>> {
+  return invoke<Scoped<PersistentVolumeClaimInfo>>(
+    "list_persistent_volume_claims_in",
+    { scope }
+  );
+}
+
 export async function subscribeConfigmapWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_configmap_watch", { namespace });
+  return invoke<string>("subscribe_configmap_watch", { scope });
 }
 
 export async function subscribeSecretWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_secret_watch", { namespace });
+  return invoke<string>("subscribe_secret_watch", { scope });
 }
 
 export async function subscribeServiceWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_service_watch", { namespace });
+  return invoke<string>("subscribe_service_watch", { scope });
 }
 
 export async function subscribeEndpointsWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_endpoints_watch", { namespace });
+  return invoke<string>("subscribe_endpoints_watch", { scope });
 }
 
 export async function subscribeIngressWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_ingress_watch", { namespace });
+  return invoke<string>("subscribe_ingress_watch", { scope });
 }
 
 export async function subscribePvcWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_pvc_watch", { namespace });
+  return invoke<string>("subscribe_pvc_watch", { scope });
 }
 
 export async function subscribePodRowWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_pod_row_watch", { namespace });
+  return invoke<string>("subscribe_pod_row_watch", { scope });
 }
 
 export async function subscribeDeploymentWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_deployment_watch", { namespace });
+  return invoke<string>("subscribe_deployment_watch", { scope });
 }
 
 export async function subscribeStatefulsetWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_statefulset_watch", { namespace });
+  return invoke<string>("subscribe_statefulset_watch", { scope });
 }
 
 export async function subscribeDaemonsetWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_daemonset_watch", { namespace });
+  return invoke<string>("subscribe_daemonset_watch", { scope });
 }
 
 export async function subscribeJobWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_job_watch", { namespace });
+  return invoke<string>("subscribe_job_watch", { scope });
 }
 
 export async function subscribeCronjobWatch(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<string> {
-  return invoke<string>("subscribe_cronjob_watch", { namespace });
+  return invoke<string>("subscribe_cronjob_watch", { scope });
 }
 
 export async function subscribeNamespaceWatch(): Promise<string> {
@@ -1823,4 +1855,28 @@ export async function subscribePersistentvolumeWatch(): Promise<string> {
 
 export async function subscribeStorageclassWatch(): Promise<string> {
   return invoke<string>("subscribe_storageclass_watch");
+}
+
+export async function listStatefulsetsIn(
+  scope: string[] | null
+): Promise<Scoped<StatefulSetInfo>> {
+  return invoke<Scoped<StatefulSetInfo>>("list_statefulsets_in", { scope });
+}
+
+export async function listDaemonsetsIn(
+  scope: string[] | null
+): Promise<Scoped<DaemonSetInfo>> {
+  return invoke<Scoped<DaemonSetInfo>>("list_daemonsets_in", { scope });
+}
+
+export async function listJobsIn(
+  scope: string[] | null
+): Promise<Scoped<JobInfo>> {
+  return invoke<Scoped<JobInfo>>("list_jobs_in", { scope });
+}
+
+export async function listCronjobsIn(
+  scope: string[] | null
+): Promise<Scoped<CronJobInfo>> {
+  return invoke<Scoped<CronJobInfo>>("list_cronjobs_in", { scope });
 }

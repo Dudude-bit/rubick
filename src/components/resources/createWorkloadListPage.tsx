@@ -19,7 +19,8 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { ResourceList } from "./ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
+import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
 import {
@@ -43,8 +44,8 @@ export interface WorkloadListPageConfig<T extends Workload> {
   resourceType: ResourceKind;
   /** Page title (also default empty-state label). */
   title: string;
-  /** Fetch the workload list (without metrics). */
-  fetchList: (params: { namespace: string | null }) => Promise<T[]>;
+  /** Read the workload list (without metrics) across the selection. */
+  fetchList: (params: { scope: string[] | null }) => Promise<Scoped<T>>;
   /**
    * Which pods belong to a workload of this kind, used to aggregate pod
    * CPU/memory up to the workload row. One of the `match*Pods` matchers
@@ -67,7 +68,7 @@ export interface WorkloadListPageConfig<T extends Workload> {
    * cache via real-time `resource-event` Tauri events instead.
    * Pod metrics on the side keep their own usePodsWithMetrics path.
    */
-  watch?: (params: { namespace: string | null }) => Promise<string>;
+  watch?: (params: { scope: string[] | null }) => Promise<string>;
 }
 
 export function createWorkloadListPage<T extends Workload>(
@@ -82,24 +83,20 @@ export function createWorkloadListPage<T extends Workload>(
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
     const { data: pods, podStatus } = usePodsWithMetrics();
 
-    // Several namespaces are read one apiece and polled; a watch covers none
-    // or one. See `listAcrossScope` / createResourceListPage.
-    const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
     const cacheKey = scopeCacheKey(scope.scope);
     const watchFactory = config.watch;
-    const watchEnabled = !!watchFactory && !scope.several;
 
     const queryKey = useMemo(
       () => queryKeys.resources(config.resourceType, cacheKey),
       [cacheKey]
     );
     const subscribe = useCallback(
-      () => watchFactory!({ namespace: watchNamespace }),
-      [watchFactory, watchNamespace]
+      () => watchFactory!({ scope: scope.wire }),
+      [watchFactory, scope.wire]
     );
 
     const { live, refresh, resyncing } = useWatchedList<T>({
-      enabled: watchEnabled,
+      enabled: !!watchFactory,
       subscribe,
       queryKey,
       reportFailure: config.title,
@@ -107,16 +104,14 @@ export function createWorkloadListPage<T extends Workload>(
 
     const listQuery = useResourceList(
       queryKey,
-      listAcrossScope(scope.scope, (namespace) =>
-        config.fetchList({ namespace })
-      ),
+      () => config.fetchList({ scope: scope.wire }),
       { refresh }
     );
 
     const dataWithMetrics = useMemo(
       () =>
         attachAggregatedPodMetrics<T>(
-          listQuery.data ?? [],
+          listQuery.data?.rows ?? [],
           pods,
           config.matchPods
         ),
@@ -157,6 +152,8 @@ export function createWorkloadListPage<T extends Workload>(
       <ResourceList<T & ResourceMetrics>
         title={config.title}
         data={dataWithMetrics}
+        unread={listQuery.data?.unread}
+        onRetry={() => void listQuery.refetch()}
         // A resync holds the rows it has until the new state is complete, so
         // there is normally something to show. With nothing to show, "still
         // finding out" is the skeleton — the empty state would be claiming the

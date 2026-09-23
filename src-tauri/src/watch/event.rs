@@ -4,7 +4,7 @@
 //! rule live in one place.
 
 use crate::state::perf::IPC_TARGET_BYTES;
-use crate::state::{AppEvent, WatchChange, WatchOp};
+use crate::state::{AppEvent, RawJson, WatchChange, WatchOp};
 use kube::runtime::watcher::Event;
 use serde::Serialize;
 use std::time::Duration;
@@ -81,6 +81,11 @@ impl WatchBatch {
         else {
             return false;
         };
+        self.push_raw(op, resource)
+    }
+
+    /// One change already serialised. `true` when the batch is full.
+    pub(super) fn push_raw(&mut self, op: WatchOp, resource: RawJson) -> bool {
         self.bytes += resource.get().len();
         self.changes.push(WatchChange {
             op,
@@ -89,7 +94,7 @@ impl WatchBatch {
         self.changes.len() >= MAX_BATCH_SIZE || self.bytes >= IPC_TARGET_BYTES
     }
 
-    fn marker(&mut self, op: WatchOp) {
+    pub(super) fn marker(&mut self, op: WatchOp) {
         self.changes.push(WatchChange { op, resource: None });
     }
 

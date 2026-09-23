@@ -10,6 +10,7 @@ import { createAgeColumn } from "./columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
+import { whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -136,7 +137,7 @@ export function NamespaceList() {
       <ResourceList<NamespaceInfo>
         title="Namespaces"
         queryKey={queryKey}
-        queryFn={() => commands.listNamespaces()}
+        queryFn={() => commands.listNamespaces().then(whole)}
         staleTime={STALE_TIMES.slow}
         refresh={refresh}
         live={live}

@@ -28,15 +28,9 @@ export const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
 export const StatefulSetList = createWorkloadListPage<StatefulSetInfo>({
   resourceType: ResourceType.StatefulSet,
   title: "StatefulSets",
-  fetchList: ({ namespace }) =>
-    commands.listStatefulsets({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetchList: ({ scope }) => commands.listStatefulsetsIn(scope),
   matchPods: matchStatefulSetPods,
-  watch: ({ namespace }) => commands.subscribeStatefulsetWatch(namespace),
+  watch: ({ scope }) => commands.subscribeStatefulsetWatch(scope),
   deleter: (item) => commands.deleteStatefulset(item.name, item.namespace),
   columns,
 });

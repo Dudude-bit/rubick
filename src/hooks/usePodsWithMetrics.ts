@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -8,17 +8,19 @@ import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { listPodRows, type PodRow } from "@/lib/pod-rows";
+import type { UnreadNamespace } from "@/generated/types";
 
 export type { PodWithMetrics } from "@/lib/metrics";
 
 const EMPTY_PODS: PodRow[] = [];
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 interface UsePodsWithMetricsOptions {
   /** Whether the query should be enabled (default: true when connected) */
@@ -37,10 +39,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const scope = useNamespaceScope();
   const enabled = isConnected && options?.enabled !== false;
 
-  // The one namespace a watch or metrics call is scoped to. Several is read
-  // per namespace and polled instead — a cluster-wide LIST needs rights a
-  // namespace-scoped user may not have. See `listAcrossScope`.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
+  // The one namespace the metrics call is scoped to; several read it all.
+  const metricsNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
 
   // Fetch pods - cached by TanStack Query. Real-time updates after
@@ -50,19 +50,20 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   const queryKey = useMemo(() => queryKeys.podRows(cacheKey), [cacheKey]);
 
   const subscribePods = useCallback(
-    () => commands.subscribePodRowWatch(watchNamespace),
-    [watchNamespace]
+    () => commands.subscribePodRowWatch(scope.wire),
+    [scope.wire]
   );
-  // A watch covers none or one namespace; several is polled.
   const { live, refresh, resyncing } = useWatchedList<PodRow>({
-    enabled: enabled && !scope.several,
+    enabled,
     subscribe: subscribePods,
     queryKey,
     reportFailure: toPlural(ResourceType.Pod),
   });
 
+  const queryClient = useQueryClient();
   const {
-    data: pods = EMPTY_PODS,
+    data: answer,
+    isPlaceholderData,
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
@@ -73,22 +74,32 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     // Rows, streamed in chunks, rather than `listPods` in one answer: the
     // full pod is three kilobytes a row and the table reads a dozen fields.
     // The signal stops a stream the screen has stopped waiting for.
-    queryFn: ({ signal }) =>
-      listAcrossScope(scope.scope, async (namespace) => {
-        try {
-          return await listPodRows(namespace, signal);
-        } catch (err) {
-          throw new Error(normalizeTauriError(err), { cause: err });
-        }
-      })(),
+    queryFn: async ({ signal }) => {
+      const wire = scope.wire;
+      try {
+        const read = await listPodRows(wire, signal);
+        return live
+          ? keepWatched(read, queryClient.getQueryData(queryKey))
+          : read;
+      } catch (err) {
+        throw new Error(normalizeTauriError(err), { cause: err });
+      }
+    },
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh,
   });
 
+  const pods = answer?.rows ?? EMPTY_PODS;
+  // The last scope's answer stands in while this one is read, and its unread
+  // namespaces are not this scope's.
+  const unread = isPlaceholderData
+    ? NOTHING_UNREAD
+    : (answer?.unread ?? NOTHING_UNREAD);
+
   const { podMetrics, podStatus } = useMetrics({
-    namespace: watchNamespace,
+    namespace: metricsNamespace,
     enabled,
     includeNodes: false,
   });
@@ -119,6 +130,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     isLoading: isLoadingPods,
     /** Why there are no pods, when there are none because the read failed. */
     error: podsError,
+    /** The namespaces of the scope whose pods could not be read. */
+    unread,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
     watchLive: live,

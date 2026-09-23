@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listDeployments: vi.fn(async () => []),
-    listServices: vi.fn(async () => []),
+    listDeploymentsIn: vi.fn(async () => ({ rows: [], unread: [] })),
+    listServicesIn: vi.fn(async () => ({ rows: [], unread: [] })),
     // The overview prefetch was added without its mock, so the hook's most
     // expensive warm-up threw into a swallowed promise and every assertion
     // about it would have passed over a hook that fetched nothing.
@@ -14,7 +14,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 vi.mock("@/lib/pod-rows", () => ({
-  listPodRows: vi.fn(async () => []),
+  listPodRows: vi.fn(async () => ({ rows: [], unread: [] })),
 }));
 
 import { commands } from "@/lib/commands";
@@ -52,6 +52,7 @@ describe("usePrefetchCoreLists", () => {
     useClusterStore.setState({
       currentContext: "prod-eu",
       currentNamespace: "",
+      namespaceScope: [],
       isConnected: true,
     });
   });
@@ -133,15 +134,40 @@ describe("usePrefetchCoreLists", () => {
         { counts: { pods: 3 } }
       );
     });
+    const nothing = { rows: [], unread: [] };
     await waitFor(() => {
-      expect(client.getQueryData(queryKeys.podRows(null))).toEqual([]);
+      expect(client.getQueryData(queryKeys.podRows(null))).toEqual(nothing);
     });
     expect(
       client.getQueryData(queryKeys.resources(ResourceType.Deployment, null))
-    ).toEqual([]);
+    ).toEqual(nothing);
     expect(
       client.getQueryData(queryKeys.resources(ResourceType.Service, null))
-    ).toEqual([]);
+    ).toEqual(nothing);
+  });
+
+  /**
+   * Several namespaces have no wire value, and the store's `""` for them
+   * warmed the whole cluster's lists: keys no page on that selection reads,
+   * and lists a namespace-scoped token is refused.
+   */
+  it("warms the selection's own keys when several namespaces are selected", async () => {
+    client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
+    useClusterStore.setState({ namespaceScope: ["shop", "staging"] });
+    renderHook(() => usePrefetchCoreLists(), { wrapper });
+
+    await waitFor(() => {
+      expect(
+        client.getQueryData(queryKeys.podRows("shop,staging"))
+      ).toBeDefined();
+    });
+    expect(commands.listDeploymentsIn).toHaveBeenCalledWith([
+      "shop",
+      "staging",
+    ]);
+    expect(
+      client.getQueryData(queryKeys.resources(ResourceType.Service, null))
+    ).toBeUndefined();
   });
 
   /**
@@ -151,15 +177,16 @@ describe("usePrefetchCoreLists", () => {
    * and the landing's most expensive request was spent for nothing.
    */
   it.each([
-    ["every namespace", "", []],
-    ["one namespace", "shop", ["shop"]],
+    ["every namespace", [], []],
+    ["one namespace", ["shop"], ["shop"]],
+    ["several namespaces", ["shop", "staging"], ["shop", "staging"]],
   ])(
     "opens the overview on the answer the landing asked for, for %s",
     async (_, storeSays, pageAsks) => {
       const getClusterOverview = vi.mocked(commands.getClusterOverview);
       getClusterOverview.mockClear();
       client.setDefaultOptions({ queries: { retry: false, gcTime: Infinity } });
-      useClusterStore.setState({ currentNamespace: storeSays });
+      useClusterStore.setState({ namespaceScope: storeSays });
       renderHook(() => usePrefetchCoreLists(), { wrapper });
       await waitFor(() =>
         expect(

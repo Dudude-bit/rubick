@@ -422,12 +422,14 @@ pub enum AppEvent {
         rows: Vec<crate::resources::PodRow>,
     },
     /// The list ended. `complete` is false when it was stopped, in which
-    /// case `rows` is how many arrived and not how many there are.
+    /// case `rows` is how many arrived and not how many there are. `rows`
+    /// counts every row sent, those of an `unread` namespace included.
     PodRowsDone {
         stream_id: String,
         rows: usize,
         complete: bool,
         elapsed_ms: u64,
+        unread: Vec<crate::commands::helpers::UnreadNamespace>,
     },
     /// The list ended without an answer; the message is the same text the
     /// unstreamed command would have failed with, so every reader of it
@@ -638,6 +640,7 @@ mod tests {
                 rows: 0,
                 complete: true,
                 elapsed_ms: 1,
+                unread: Vec::new(),
             },
             AppEvent::PodRowsFailed {
                 stream_id: "pods-1".into(),

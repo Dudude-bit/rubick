@@ -1,5 +1,5 @@
 import { startFrameWatch, type TaskSink } from "@/lib/perf-frames";
-import type { PerfReport, PerfSample } from "@/lib/perf";
+import { rowsOf, type PerfReport, type PerfSample } from "@/lib/perf";
 
 /** A main-thread stall: how long, and when it ended. */
 export interface Stall {
@@ -78,8 +78,9 @@ export class StallWatch {
 
   /** Costs an `Array.isArray` and a length: never a walk over the value. */
   noteAnswer(name: string, value: unknown, at: number = this.now()): void {
-    if (!Array.isArray(value) || value.length < BIG_ANSWER_ROWS) return;
-    this.answers.push({ name, rows: value.length, at });
+    const rows = rowsOf(value);
+    if (rows === undefined || rows < BIG_ANSWER_ROWS) return;
+    this.answers.push({ name, rows, at });
     if (this.answers.length > KEEP) this.answers.shift();
     this.notify();
   }

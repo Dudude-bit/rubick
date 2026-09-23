@@ -13,12 +13,15 @@
 //! emits before its first applied burst — could land in the void.
 //!
 //! - `event`:   kube watcher Events → batched `AppEvent::ResourceWatchEvent`
+//! - `scope`:   several namespaces, a watcher each, as one stream
 
 mod event;
 mod failure;
+mod scope;
 
-use crate::error::{Error, Result};
-use crate::state::AppEvent;
+use crate::commands::helpers::{api_in, scope_of};
+use crate::error::{watch_failure, Error, Result};
+use crate::state::{AppEvent, WatchOp};
 use crate::utils::generate_id;
 use futures::StreamExt;
 use k8s_openapi::{ClusterResourceScope, NamespaceResourceScope};
@@ -31,7 +34,8 @@ use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 
 use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
-use failure::{backoff_for, FailureLatch};
+use failure::{backoff_for, paced, FailureLatch};
+use scope::{Out, ScopeSync};
 
 pub(crate) use failure::answered;
 
@@ -90,13 +94,16 @@ impl WatchManager {
     /// resources the UI doesn't care about (system pods, etc.).
     ///
     /// `kind_label` names the kind in the log lines about this watch.
+    ///
+    /// `scope` is `None` for the whole cluster, one namespace, or several —
+    /// each watched on its own behind one resync barrier (`scope.rs`).
     pub fn subscribe<K, F, U>(
         &self,
         client: Client,
         kind_label: &str,
-        namespace: Option<String>,
+        scope: Option<Vec<String>>,
         transform: F,
-    ) -> String
+    ) -> Result<String>
     where
         K: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>
             + Clone
@@ -108,11 +115,72 @@ impl WatchManager {
         F: Fn(&K) -> Option<U> + Send + Sync + 'static,
         U: Serialize,
     {
-        let api: Api<K> = match namespace {
-            Some(ns) => Api::namespaced(client, &ns),
-            None => Api::all(client),
-        };
-        self.spawn_watcher(api, kind_label, None, transform)
+        self.subscribe_across(
+            move |reach| api_in::<K>(&client, reach),
+            kind_label,
+            scope,
+            transform,
+        )
+    }
+
+    /// A runtime-discovered kind's list across `scope`; see `subscribe`.
+    pub fn subscribe_custom_list<F, U>(
+        &self,
+        client: Client,
+        api_resource: &ApiResource,
+        kind_label: &str,
+        scope: Option<Vec<String>>,
+        transform: F,
+    ) -> Result<String>
+    where
+        F: Fn(&DynamicObject) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        self.subscribe_across(
+            move |reach| match reach {
+                Some(ns) => Api::namespaced_with(client.clone(), ns, api_resource),
+                None => Api::all_with(client.clone(), api_resource),
+            },
+            kind_label,
+            scope,
+            transform,
+        )
+    }
+
+    fn subscribe_across<K, F, U>(
+        &self,
+        api: impl Fn(Option<&str>) -> Api<K>,
+        kind_label: &str,
+        scope: Option<Vec<String>>,
+        transform: F,
+    ) -> Result<String>
+    where
+        K: kube::Resource
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        Ok(match scope_of(scope)? {
+            None => self.spawn_watcher(api(None), kind_label, None, transform),
+            Some(names) if names.len() == 1 => {
+                self.spawn_watcher(api(Some(&names[0])), kind_label, None, transform)
+            }
+            Some(names) => {
+                let members = names
+                    .into_iter()
+                    .map(|name| {
+                        let api = api(Some(&name));
+                        (name, api)
+                    })
+                    .collect();
+                self.spawn_scope_watcher(members, kind_label, transform)
+            }
+        })
     }
 
     /// One namespaced object by name. The API server does the narrowing
@@ -319,7 +387,7 @@ impl WatchManager {
                                     // failure so the list the reader falls back
                                     // on is not needlessly behind.
                                     batch.flush(&event_tx);
-                                    emit_failure(&event_tx, &stream_id_clone, e.to_string());
+                                    emit_failure(&event_tx, &stream_id_clone, watch_failure(&e));
                                 }
                                 // Cancel still wins, or a closing window
                                 // waits out the whole sleep.
@@ -350,6 +418,111 @@ impl WatchManager {
 
             // Nothing is left to trigger a flush for what the last tick
             // did not cover.
+            batch.flush(&event_tx);
+        });
+
+        stream_id
+    }
+
+    /// One stream over several namespaces, a watcher each: the same gate,
+    /// batching and cancel as `spawn_watcher`, with `ScopeSync` deciding what
+    /// the page is told.
+    fn spawn_scope_watcher<K, F, U>(
+        &self,
+        members: Vec<(String, Api<K>)>,
+        kind_label: &str,
+        transform: F,
+    ) -> String
+    where
+        K: kube::Resource
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        let stream_id = generate_id("rw");
+        let id = stream_id.clone();
+        let label = format!("{stream_id} ({kind_label})");
+        let event_tx = self.event_tx.clone();
+        let mut opened = self.sessions.open(stream_id.clone());
+
+        tokio::spawn(async move {
+            if !opened
+                .wait_for_subscriber(crate::state::streams::SUBSCRIBE_TIMEOUT)
+                .await
+            {
+                tracing::debug!("Resource watch {} cancelled before subscribe", label);
+                return;
+            }
+            let (mut cancel_rx, _held) = opened.split();
+
+            let config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
+            let (namespaces, apis): (Vec<_>, Vec<_>) = members.into_iter().unzip();
+            let mut merged =
+                futures::stream::select_all(apis.into_iter().enumerate().map(|(at, api)| {
+                    paced(watcher(api, config.clone()).boxed(), backoff_for)
+                        .map(move |event| (at, event))
+                        .boxed()
+                }));
+            let mut sync = ScopeSync::new(namespaces);
+            let mut out = Vec::new();
+
+            let mut batch = WatchBatch::new(id.clone());
+            let mut flush_timer = interval(FLUSH_INTERVAL);
+            flush_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            flush_timer.tick().await;
+
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = &mut cancel_rx => {
+                        tracing::debug!("Resource watch {} cancelled", label);
+                        break;
+                    }
+                    _ = flush_timer.tick() => batch.flush(&event_tx),
+                    next = merged.next() => {
+                        let Some((at, event)) = next else {
+                            tracing::debug!("Resource watch {} stream ended", label);
+                            break;
+                        };
+                        if let Err(e) = &event {
+                            tracing::error!(
+                                "Resource watch {} in {} error ({} in a row): {}",
+                                label,
+                                sync.namespace(at),
+                                sync.streak(at) + 1,
+                                e
+                            );
+                        }
+                        let event = event.map_err(|e| watch_failure(&e));
+                        sync.on(at, event, &transform, &mut out);
+                        for said in out.drain(..) {
+                            match said {
+                                Out::Change(op, raw) => {
+                                    if batch.push_raw(op, raw) {
+                                        batch.flush(&event_tx);
+                                    }
+                                }
+                                Out::Marker(op) => {
+                                    batch.marker(op);
+                                    if op == WatchOp::Synced {
+                                        batch.flush(&event_tx);
+                                    }
+                                }
+                                Out::Failed(message) => {
+                                    batch.flush(&event_tx);
+                                    emit_failure(&event_tx, &id, message);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             batch.flush(&event_tx);
         });
 

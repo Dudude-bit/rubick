@@ -2,6 +2,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { whole } from "@/lib/namespace-scope";
 import { createAgeColumn } from "./columns";
 import { ResourceType } from "@/lib/resource-registry";
 import {
@@ -111,7 +112,7 @@ export const StorageClassList = createResourceListPage<StorageClassInfo>({
   title: "Storage Classes",
   description: ({ t }) => t("empty", "storageClassesAre"),
   scope: "cluster",
-  fetcher: () => commands.listStorageClasses(null),
+  fetcher: () => commands.listStorageClasses(null).then(whole),
   watch: () => commands.subscribeStorageclassWatch(),
   deleter: (item) => commands.deleteStorageClass(item.name),
   columns,

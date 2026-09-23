@@ -76,15 +76,9 @@ const extraActions = ({
 export const DeploymentList = createWorkloadListPage<DeploymentInfo>({
   resourceType: ResourceType.Deployment,
   title: "Deployments",
-  fetchList: ({ namespace }) =>
-    commands.listDeployments({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetchList: ({ scope }) => commands.listDeploymentsIn(scope),
   matchPods: matchDeploymentPods,
-  watch: ({ namespace }) => commands.subscribeDeploymentWatch(namespace),
+  watch: ({ scope }) => commands.subscribeDeploymentWatch(scope),
   deleter: (item) => commands.deleteDeployment(item.name, item.namespace),
   columns,
   extraActions,

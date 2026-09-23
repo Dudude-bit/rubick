@@ -80,9 +80,11 @@ const TONE_CLASS = {
 export const GatewayList = createResourceListPage<GatewayInfo>({
   resourceType: ResourceType.Gateway,
   title: "Gateways",
-  fetcher: ({ namespace }) => commands.listGateways(namespace),
+  fetcher: ({ scope }) => commands.listGatewaysIn(scope),
   deleter: (item) => commands.deleteGateway(item.name, item.namespace),
-  watch: ({ namespace }) => commands.subscribeGatewayWatch(namespace),
+  // Polled, not watched: the listener count folds in the ListenerSets that
+  // attach to each Gateway, which a watch event cannot see from the object
+  // alone, and every status update replaced the merged row with a bare one.
   columns: () => [
     createNameColumn<GatewayInfo>(ResourceType.Gateway),
     createNamespaceColumn<GatewayInfo>(),

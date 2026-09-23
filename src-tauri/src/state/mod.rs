@@ -15,7 +15,7 @@ pub mod streams;
 
 pub use events::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, AuthOutcome,
-    LogLineEvent, StreamFailureKind, WatchChange, WatchOp,
+    LogLineEvent, RawJson, StreamFailureKind, WatchChange, WatchOp,
 };
 pub use sessions::{AuthSessionControl, PortForwardSession, Session};
 

@@ -4,7 +4,7 @@ use k8s_openapi::api::core::v1::Service;
 use tauri::State;
 
 use crate::commands::filters::ServiceFilters;
-use crate::commands::helpers::{get_resource_info, list_resource_infos};
+use crate::commands::helpers::{get_resource_info, list_in_scope, list_resource_infos};
 use crate::error::Result;
 use crate::resources::ServiceInfo;
 use crate::state::AppState;
@@ -26,6 +26,8 @@ pub async fn list_services(
 
     Ok(services)
 }
+
+list_in_scope!(list_services_in, Service, ServiceInfo);
 
 /// Get a single service by name
 #[tauri::command]

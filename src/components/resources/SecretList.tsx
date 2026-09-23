@@ -36,15 +36,8 @@ export const columns = (): ColumnDef<SecretInfo>[] => [
 export const SecretList = createResourceListPage<SecretInfo>({
   resourceType: ResourceType.Secret,
   title: "Secrets",
-  fetcher: ({ namespace }) =>
-    commands.listSecrets({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      secretType: null,
-      limit: null,
-    }),
-  watch: ({ namespace }) => commands.subscribeSecretWatch(namespace),
+  fetcher: ({ scope }) => commands.listSecretsIn(scope),
+  watch: ({ scope }) => commands.subscribeSecretWatch(scope),
   deleter: (item) => commands.deleteSecret(item.name, item.namespace),
   columns,
 });

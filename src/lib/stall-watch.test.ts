@@ -36,6 +36,19 @@ describe("StallWatch", () => {
     });
   });
 
+  /**
+   * A page's list answers `{ rows, unread }` now. Counted as an array only,
+   * every big list in the app went past with "nothing over a thousand rows".
+   */
+  it("counts a scoped list by its rows", () => {
+    const watch = new StallWatch(() => 1_000);
+    watch.noteAnswer("list_deployments_in", {
+      rows: new Array(5_000).fill(0),
+      unread: [],
+    });
+    expect(watch.report().largest?.rows).toBe(5_000);
+  });
+
   it("lists the big tables on screen, largest first, and forgets one that unmounts", () => {
     const watch = new StallWatch(() => 0);
     watch.noteList("pods", "pods", 10_400);

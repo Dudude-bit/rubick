@@ -10,20 +10,27 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import {
+  joinScoped,
+  keepWatched,
+  scopeCacheKey,
+  whole,
+  wireScope,
+} from "@/lib/namespace-scope";
 import { STALE_TIMES } from "@/lib/refresh";
 import {
   ResourceType,
   toPlural,
   type ResourceKind,
 } from "@/lib/resource-registry";
-import type { RouteInfo } from "@/generated/types";
+import type { RouteInfo, Scoped } from "@/generated/types";
 
 export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
   ResourceType.HTTPRoute,
@@ -38,36 +45,36 @@ export const GATEWAY_ROUTE_KINDS: ResourceKind[] = [
  *  kind's recovery must not stop the polling that covers another's still
  *  broken stream. */
 function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
-  // Several namespaces are read one apiece and polled; a watch covers none or
-  // one. See `listAcrossScope`.
-  const several = scope.length >= 2;
   const cacheKey = scopeCacheKey(scope);
-  const watchNamespace = scope.length === 1 ? scope[0] : null;
+  const wire = useMemo(() => wireScope(scope), [scope]);
   const queryKey = useMemo(
     () => queryKeys.resources(kind, cacheKey),
     [kind, cacheKey]
   );
   const { live, refresh, resyncing } = useWatchedList<RouteInfo>({
-    enabled: served && !several,
+    enabled: served,
     subscribe: useCallback(
-      () => commands.subscribeGatewayRouteWatch(kind, watchNamespace),
-      [kind, watchNamespace]
+      () => commands.subscribeGatewayRouteWatch(kind, wire),
+      [kind, wire]
     ),
     queryKey,
     reportFailure: toPlural(kind),
   });
-  const query = useLiveQuery<RouteInfo[]>({
+  const queryClient = useQueryClient();
+  const query = useLiveQuery<Scoped<RouteInfo>>({
     queryKey,
-    queryFn: listAcrossScope(scope, (ns) =>
-      commands.listGatewayRoutes(kind, ns)
-    ),
+    queryFn: async () => {
+      const answer = await commands.listGatewayRoutesIn(kind, wire);
+      return live
+        ? keepWatched(answer, queryClient.getQueryData(queryKey))
+        : answer;
+    },
     enabled: served,
     staleTime: STALE_TIMES.resourceList,
-    // The watch feeds the cache; polling is the fallback after it fails, and
-    // the mode for a multi-namespace scope (no cluster-wide watch).
+    // The watch feeds the cache; polling is the fallback after it fails.
     refresh,
   });
-  return { query, resyncing, served, live };
+  return { kind, query, resyncing, served, live };
 }
 
 export function useGatewayRoutes(scope: string[]) {
@@ -116,12 +123,25 @@ export function useGatewayRoutes(scope: string[]) {
     [http, grpc, tls, tcp, udp]
   );
   const active = kinds.filter((entry) => entry.served);
-  const routes = useMemo(
+  // One answer from five: a namespace any kind could not read is unread for
+  // the page, and the rows beside it are not the scope's whole.
+  const { rows: routes, unread } = useMemo(
     () =>
-      kinds
-        .filter((entry) => entry.served)
-        .flatMap((entry) => entry.query.data ?? []),
+      joinScoped(
+        kinds
+          .filter((entry) => entry.served)
+          .map((entry) => entry.query.data ?? whole<RouteInfo>([]))
+      ),
     [kinds]
+  );
+
+  // A kind that failed whole — refused in every namespace, or on a scope read
+  // in one call — has no rows to join and no namespace to name, and adding it
+  // as `whole([])` counted a kind nobody could read as a kind with no routes.
+  const refusedKinds = active.flatMap((entry) =>
+    entry.query.isError && entry.query.data === undefined
+      ? [{ kind: entry.kind, error: entry.query.error }]
+      : []
   );
 
   return {
@@ -130,6 +150,8 @@ export function useGatewayRoutes(scope: string[]) {
     detectionError: (scan.error as Error | null) ?? null,
     served,
     routes,
+    unread,
+    refusedKinds,
     isLoading:
       active.length > 0 && active.some((entry) => entry.query.isLoading),
     // An error only speaks when it hides rows: one kind failing while four
@@ -142,8 +164,6 @@ export function useGatewayRoutes(scope: string[]) {
       0,
       ...active.map((entry) => entry.query.dataUpdatedAt ?? 0)
     ),
-    // A multi-namespace scope polls rather than watches, so it is not "live"
-    // even though no watch failed.
     live: active.length > 0 && active.every((entry) => entry.live),
     resyncing: active.some((entry) => entry.resyncing),
   };

@@ -9,6 +9,7 @@ import {
 } from "@/lib/events";
 import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useT } from "@/i18n/useT";
+import type { Scoped } from "@/generated/types";
 
 interface UseResourceWatchOptions {
   /**
@@ -21,7 +22,7 @@ interface UseResourceWatchOptions {
    * the rest of the lifecycle (listen + gate release + unsubscribe).
    */
   subscribe: () => Promise<string>;
-  /** TanStack Query cache key the watch should keep up to date. */
+  /** The cache entry the watch keeps up to date: a list's `Scoped` answer. */
   queryKey: QueryKey;
   /**
    * Called on a backend `failed` event — typically RBAC `watch` denial or a
@@ -182,7 +183,12 @@ export function useResourceWatch<
               staged = null;
               setResyncing(false);
               if (rows) {
-                queryClient.setQueryData<T[]>(queryKey, [...rows.values()]);
+                // Synced is every namespace of the stream answering, so
+                // nothing in the scope is unread any more.
+                queryClient.setQueryData<Scoped<T>>(queryKey, {
+                  rows: [...rows.values()],
+                  unread: [],
+                });
                 positions.clear();
                 indexedList = undefined;
               }
@@ -197,15 +203,21 @@ export function useResourceWatch<
 
           if (live.length > 0) {
             const changes = live;
-            indexedList = queryClient.setQueryData<T[]>(queryKey, (prev) => {
-              if (prev !== indexedList) {
-                positions.clear();
-                prev?.forEach((item, index) =>
-                  positions.set(identify(item), index)
-                );
+            const stored = queryClient.setQueryData<Scoped<T>>(
+              queryKey,
+              (prev) => {
+                if (prev?.rows !== indexedList) {
+                  positions.clear();
+                  prev?.rows.forEach((item, index) =>
+                    positions.set(identify(item), index)
+                  );
+                }
+                const rows = applyChanges(prev?.rows ?? [], changes, positions);
+                if (prev && rows === prev.rows) return prev;
+                return { rows, unread: prev?.unread ?? [] };
               }
-              return applyChanges(prev ?? [], changes, positions);
-            });
+            );
+            indexedList = stored?.rows;
           }
         });
 
