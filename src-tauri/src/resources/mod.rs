@@ -28,6 +28,7 @@ mod gateway;
 mod network;
 pub mod node_budget;
 pub mod published;
+pub mod reservation;
 mod selector;
 mod serialization;
 mod storage;

@@ -531,6 +531,7 @@ export interface DeploymentInfo {
   initContainers: DeploymentContainerInfo[];
   serviceAccountName: string | null;
   podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   templateAnnotations: Record<string, string>;
@@ -548,6 +549,14 @@ export interface OwnerReference {
   uid: string;
   controller?: boolean;
   block_owner_deletion?: boolean;
+}
+
+export interface ReplicaReservation {
+  cpuRequests: number | null;
+  cpuLimits: number | null;
+  memoryRequests: number | null;
+  memoryLimits: number | null;
+  known: boolean;
 }
 
 export interface DeploymentContainerResources {
@@ -1368,6 +1377,7 @@ export interface CronJobDetailInfo {
   initContainers: DeploymentContainerInfo[];
   serviceAccountName: string | null;
   podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   ownerReferences: OwnerReference[];
@@ -1402,6 +1412,7 @@ export interface JobDetailInfo {
   initContainers: DeploymentContainerInfo[];
   serviceAccountName: string | null;
   podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
@@ -1434,6 +1445,7 @@ export interface DaemonSetDetailInfo {
   initContainers: DeploymentContainerInfo[];
   serviceAccountName: string | null;
   podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   selector: string;
@@ -1475,6 +1487,7 @@ export interface StatefulSetDetailInfo {
   initContainers: DeploymentContainerInfo[];
   serviceAccountName: string | null;
   podResources: DeploymentContainerResources;
+  replica: ReplicaReservation;
   labels: Record<string, string>;
   annotations: Record<string, string>;
   conditions: ConditionInfo[];
