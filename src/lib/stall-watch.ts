@@ -39,6 +39,8 @@ export const BIG_LIST_ROWS = 1_000;
 /** Under this an answer is not the reason for anything. */
 export const BIG_ANSWER_ROWS = 1_000;
 const KEEP = 200;
+/** How long a change waits for the rest of its burst before listeners hear of it. */
+export const REPAINT_MS = 250;
 
 /**
  * The cheap half of the performance recorder, always on: stalls of the
@@ -131,7 +133,7 @@ export class StallWatch {
     this.pending = setTimeout(() => {
       this.pending = null;
       for (const listener of this.listeners) listener();
-    }, 250);
+    }, REPAINT_MS);
   }
 }
 

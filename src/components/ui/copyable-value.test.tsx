@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CopyButton, CopyableValue } from "./copyable-value";
 
@@ -17,6 +17,10 @@ function stubClipboard(writeText = vi.fn(async () => {})) {
 }
 
 describe("CopyableValue", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("copies the value on a click", async () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();
@@ -25,19 +29,28 @@ describe("CopyableValue", () => {
     expect(writeText).toHaveBeenCalledWith("10.42.0.6");
   });
 
-  it("confirms in place, then goes back to resting", async () => {
-    // Real timers: userEvent's own scheduling deadlocks against fake ones
-    // here, and the whole point of the assertion is that the confirmation
-    // expires on its own.
+  /**
+   * A confirmation gone before it can be read says nothing, and one that
+   * never leaves stands in for the mark the next copy needs. Fails if it
+   * expires inside a second or is still there two and a half seconds on.
+   *
+   * `fireEvent` and no `findBy`: userEvent and `waitFor` both settle on a
+   * zero-delay timer, which a fake clock never fires on its own.
+   */
+  it("confirms in place long enough to read, then goes back to resting", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     stubClipboard();
-    fireEvent.click(
-      render(<CopyableValue value="10.42.0.6" />).container
-        .firstElementChild as HTMLElement
-    );
-    expect(await screen.findByTestId("copyable-confirmed")).toBeInTheDocument();
-    expect(
-      await screen.findByTestId("copyable-mark", {}, { timeout: 2500 })
-    ).toBeInTheDocument();
+    const { container } = render(<CopyableValue value="10.42.0.6" />);
+    await act(async () => {
+      fireEvent.click(container.firstElementChild as HTMLElement);
+    });
+    expect(screen.getByTestId("copyable-confirmed")).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(screen.getByTestId("copyable-confirmed")).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(1_500));
+    expect(screen.getByTestId("copyable-mark")).toBeInTheDocument();
   });
 
   // A row that navigates must not navigate because someone copied an address.
