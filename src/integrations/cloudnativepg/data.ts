@@ -12,7 +12,6 @@ export const CLUSTERS_CRD = `clusters.${GROUP}`;
 export const BACKUPS_CRD = `backups.${GROUP}`;
 export const SCHEDULED_BACKUPS_CRD = `scheduledbackups.${GROUP}`;
 export const POOLERS_CRD = `poolers.${GROUP}`;
-export const DATABASES_CRD = `databases.${GROUP}`;
 
 /** The operator labels its own Deployment; the namespace is the installer's choice. */
 const CONTROLLER_SELECTOR = "app.kubernetes.io/name=cloudnative-pg";
