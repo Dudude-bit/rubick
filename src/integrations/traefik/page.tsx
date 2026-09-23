@@ -427,7 +427,9 @@ function HostRow({
     sources && !tls ? terminatedUpstream(group.host, sources) : null;
   const upstreamNamed =
     upstream ??
-    (sources?.upstreamTls?.(group.host) ? t("empty", "theEdge") : null);
+    (sources?.upstreamTls?.(group.host) === true
+      ? t("empty", "theEdge")
+      : null);
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);

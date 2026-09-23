@@ -157,7 +157,7 @@ export interface NginxSources extends BackingSources {
    * finds. Absent on a cluster with no such vendor, where
    * {@link terminatedUpstream} is the whole answer.
    */
-  upstreamTls?: (host: string | null) => boolean;
+  upstreamTls?: (host: string | null) => boolean | "unknown";
 }
 
 /** The label an ingress-nginx chart puts on its own pods. */
@@ -358,10 +358,13 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
+  // Without the proxy's Services nothing in front can be ruled out.
+  if (!sources.backingKnown) return null;
   // Something in front holds the certificate; the hop into the cluster is
   // plaintext by design and is not a fault to report per host.
   if (terminatedUpstream(host, sources)) return null;
-  if (sources.upstreamTls?.(host)) return null;
+  const upstream = sources.upstreamTls?.(host);
+  if (upstream === true || upstream === "unknown") return null;
   const redirectAnyway = routes.some((route) =>
     route.annotations.some(
       (reading) =>

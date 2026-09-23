@@ -467,4 +467,33 @@ describe("a host whose TLS ends in front of nginx", () => {
     );
     expect(group.findings.some((f) => f.kind === "clear")).toBe(true);
   });
+
+  /**
+   * Without the Services the load balancer's Ingress in front cannot be
+   * recognised, and every host was "served in the clear" on a managed
+   * cluster whose token cannot list Services.
+   */
+  it("is not called clear while the Services are unread", () => {
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("shop", "shop.example.com"), edgeIngress()]),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
+
+  /** A capability that has not answered is not one that said no. */
+  it("is not called clear while the capability has not answered", () => {
+    const [group] = hostGroups(
+      {
+        ...fronted(),
+        ingresses: [ingress("shop", "shop.example.com"), plainIngress()],
+        upstreamTls: () => "unknown",
+      },
+      t
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
 });

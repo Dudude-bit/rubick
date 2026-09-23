@@ -204,7 +204,7 @@ export interface TraefikSources extends BackingSources {
    * about this model. Absent on a cluster with no such vendor, which is the
    * ordinary case and where {@link terminatedUpstream} is the whole answer.
    */
-  upstreamTls?: (host: string | null) => boolean;
+  upstreamTls?: (host: string | null) => boolean | "unknown";
 }
 
 // --- which Ingresses are this Traefik's ---------------------------------
@@ -758,10 +758,13 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
+  // Without the proxy's Services nothing in front can be ruled out.
+  if (!sources.backingKnown) return null;
   // Something in front of the proxy holds the certificate. The inside hop is
   // plaintext by design and is drawn as the fact it is, not as a fault.
   if (terminatedUpstream(host, sources)) return null;
-  if (sources.upstreamTls?.(host)) return null;
+  const upstream = sources.upstreamTls?.(host);
+  if (upstream === true || upstream === "unknown") return null;
   // Nothing is claimed about entry points the controller never told us about:
   // an empty list means the workload could not be read, not that it listens
   // on nothing.

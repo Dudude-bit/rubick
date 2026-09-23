@@ -1031,7 +1031,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
     classes: [TRAEFIK_CLASS],
     services: [proxyService()],
     published: [],
-    backingKnown: false,
+    backingKnown: true,
     backingError: null,
     entryPoints: [
       { name: "web", address: ":8000", tls: false, redirectTo: null },
@@ -1100,5 +1100,22 @@ describe("a host whose TLS ends in front of the proxy", () => {
       base({ upstreamTls: (host) => host === "shop.example.com" })
     );
     expect(group.findings.filter((f) => f.kind === "clear")).toEqual([]);
+  });
+
+  /**
+   * Without the proxy's Services no Ingress in front can be recognised, and
+   * "could not look at the edge" was reported as "nothing terminates it".
+   */
+  it("is not called clear while the Services are unread", () => {
+    const [group] = hostGroups(
+      base(backingFrom(undefined, new Error("services is forbidden")))
+    );
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
+
+  /** A capability that has not answered is not one that said no. */
+  it("is not called clear while the capability has not answered", () => {
+    const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
+    expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
   });
 });
