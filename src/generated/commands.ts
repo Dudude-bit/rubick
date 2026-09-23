@@ -6,6 +6,7 @@ import type {
   AccessAnswer,
   AccessQuery,
   AlertRule,
+  AppEvent,
   AppInfo,
   AzureProfile,
   AzureProfileInfo,
@@ -1656,6 +1657,10 @@ export async function savePodLog(
 
 export async function stopLogStream(streamId: string): Promise<void> {
   return invoke<void>("stop_log_stream", { streamId });
+}
+
+export async function appEventTypes(): Promise<AppEvent | null> {
+  return invoke<AppEvent | null>("app_event_types");
 }
 
 export async function debugPodEphemeral(

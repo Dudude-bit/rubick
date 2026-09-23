@@ -26,17 +26,94 @@ export interface DebugConfig {
   timeoutSeconds: number | null;
 }
 
-export interface LogLine {
-  timestamp: string | null;
+export interface PodRow {
+  name: string;
+  namespace: string;
+  uid: string;
+  status: PodRowStatus;
+  nodeName: string | null;
+  podIp: string | null;
+  containers: RowContainer[];
+  initContainers: RowContainer[];
+  labels: Record<string, string>;
+  createdAt: string | null;
+  restartCount: number;
+  lastRestartAt: string | null;
+  cpuRequests: string | null;
+  cpuLimits: string | null;
+  memoryRequests: string | null;
+  memoryLimits: string | null;
+}
+
+export interface RowContainer {
+  name: string;
+  ready: boolean;
+  started: boolean;
+  phase: ContainerPhase;
+  state: ContainerState;
+}
+
+export interface TerminationInfo {
+  exitCode: number;
+  signal: number | null;
+  reason: string | null;
+  message: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface PodRowStatus {
+  phase: string;
+  display: string;
+}
+
+export interface FileEntry {
+  name: string;
+  kind: FileKind;
+  mode: string;
+  size: number;
+  modified: number | null;
+  owner: string;
+  group: string;
+  target: string | null;
+}
+
+export interface DrainReport {
+  evicted: number;
+  alreadyGone: number;
+  leaving: number;
+  daemonsetPodsLeft: number;
+  staticPodsLeft: number;
+  refused: RefusedPod[];
+}
+
+export interface RefusedPod {
+  namespace: string;
+  name: string;
+  refusal: DrainRefusal;
+  message: string | null;
+}
+
+export interface SearchHit {
+  context: string;
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface WatchChange {
+  op: WatchOp;
+  resource: RawJson | null;
+}
+
+export interface LogLineEvent {
   message: string;
+  timestamp: string | null;
   level: LogLevel | null;
   format: LogFormat;
   fields: Record<string, string> | null;
   raw: string;
   segments?: StyledSegment[];
-  pod: string;
-  container: string;
-  namespace: string;
 }
 
 export interface StyledSegment {
@@ -53,6 +130,19 @@ export interface TextStyle {
   underline: boolean;
   inverse: boolean;
   strike: boolean;
+}
+
+export interface LogLine {
+  timestamp: string | null;
+  message: string;
+  level: LogLevel | null;
+  format: LogFormat;
+  fields: Record<string, string> | null;
+  raw: string;
+  segments?: StyledSegment[];
+  pod: string;
+  container: string;
+  namespace: string;
 }
 
 export interface StreamLogConfig {
@@ -1061,15 +1151,6 @@ export interface ContainerPortInfo {
   protocol: string;
 }
 
-export interface TerminationInfo {
-  exitCode: number;
-  signal: number | null;
-  reason: string | null;
-  message: string | null;
-  startedAt: string | null;
-  finishedAt: string | null;
-}
-
 export interface PodStatusInfo {
   phase: string;
   display: string;
@@ -1890,6 +1971,167 @@ export type DebugStatus =
 
 export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
 
+export type AppEvent =
+  | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }
+  | {
+      channel: "resource-event";
+      stream_id: string;
+      changes: WatchChange[];
+      error: string | null;
+    }
+  | {
+      channel: "stream-failed";
+      stream_id: string;
+      kind: StreamFailureKind;
+      message: string;
+    }
+  | {
+      channel: "search-hits";
+      search_id: string;
+      context: string;
+      hits: SearchHit[];
+    }
+  | {
+      channel: "search-status";
+      search_id: string;
+      context: string;
+      status: SearchContextStatus;
+      reason: SearchFailureKind | null;
+      message: string | null;
+      matched: number;
+      truncated: boolean;
+    }
+  | { channel: "terminal-output"; session_id: string; data: string }
+  | { channel: "terminal-closed"; session_id: string; status: string | null }
+  | {
+      channel: "port-forward-status";
+      id: string;
+      pod: string;
+      namespace: string;
+      local_port: number;
+      remote_port: number;
+      status: string;
+      message: string | null;
+      attempt: number | null;
+    }
+  | {
+      channel: "auth-url-requested";
+      context: string;
+      url: string;
+      flow: string;
+      session_id: string | null;
+      redirect_uri: string | null;
+    }
+  | {
+      channel: "auth-flow-completed";
+      session_id: string;
+      context: string;
+      success: boolean;
+      why: AuthOutcome | null;
+    }
+  | {
+      channel: "auth-flow-cancelled";
+      session_id: string;
+      context: string;
+      why: AuthOutcome | null;
+    }
+  | { channel: "credentials-renewed"; context: string }
+  | {
+      channel: "auth-terminal-session-created";
+      auth_session_id: string;
+      terminal_session_id: string;
+      context: string;
+      command: string;
+    }
+  | {
+      channel: "drain-progress";
+      drain_id: string;
+      node: string;
+      attempt: number;
+      report: DrainReport;
+    }
+  | {
+      channel: "drain-finished";
+      drain_id: string;
+      node: string;
+      outcome: DrainOutcome;
+      report: DrainReport;
+      message: string | null;
+    }
+  | { channel: "files-batch"; stream_id: string; entries: FileEntry[] }
+  | {
+      channel: "files-done";
+      stream_id: string;
+      with: ListedWith;
+      entries: number;
+      partial: boolean;
+      unreadable: number;
+      elapsed_ms: number;
+    }
+  | {
+      channel: "files-failed";
+      stream_id: string;
+      reason: ListingFailure;
+      message: string;
+      exit_code: number | null;
+      stderr: string;
+      tried: string[];
+    }
+  | { channel: "pod-rows-batch"; stream_id: string; rows: PodRow[] }
+  | {
+      channel: "pod-rows-done";
+      stream_id: string;
+      rows: number;
+      complete: boolean;
+      elapsed_ms: number;
+    }
+  | { channel: "pod-rows-failed"; stream_id: string; message: string }
+  | { channel: "event-bridge-lagged"; missed: number };
+
+export type ContainerState =
+  | { type: "running" }
+  | { type: "waiting"; reason: string | null }
+  | { type: "terminated"; termination: TerminationInfo }
+  | { type: "unknown" };
+
+export type ContainerPhase = "app" | "init" | "sidecar";
+
+export type ListingFailure =
+  "noTools" | "unopenable" | "refused" | "notRunning" | "failed";
+
+export type ListedWith = "gnuFind" | "busyboxStat";
+
+export type FileKind = "file" | "dir" | "symlink" | "other";
+
+export type DrainOutcome = "drained" | "stopped" | "cancelled" | "failed";
+
+export type DrainRefusal =
+  "notNow" | "nothingWouldReplaceIt" | "holdsLocalData" | "other";
+
+export type AuthOutcome =
+  | { says: "said"; text: string }
+  | { says: "timedOut" }
+  | { says: "noTokenInCredential" }
+  | { says: "stateMismatch" }
+  | { says: "superseded" }
+  | { says: "switchedAway" };
+
+export type SearchFailureKind =
+  | "not-connected"
+  | "unknown-context"
+  | "unreachable"
+  | "timeout"
+  | "forbidden"
+  | "other";
+
+export type SearchContextStatus =
+  "connecting" | "searching" | "done" | "failed" | "skipped";
+
+export type StreamFailureKind =
+  "gone" | "broken" | "no-previous-run" | "log-not-kept";
+
+export type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
+
 export type AnsiColor =
   | { kind: "named"; index: number }
   | { kind: "indexed"; index: number }
@@ -2048,19 +2290,6 @@ export type PolicySelects =
 export type EnvVarSourceType =
   "configMapKeyRef" | "secretKeyRef" | "fieldRef" | "resourceFieldRef";
 
-export type ContainerPhase = "app" | "init" | "sidecar";
-
-export type SearchFailureKind =
-  | "not-connected"
-  | "unknown-context"
-  | "unreachable"
-  | "timeout"
-  | "forbidden"
-  | "other";
-
-export type SearchContextStatus =
-  "connecting" | "searching" | "done" | "failed" | "skipped";
-
 export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
@@ -2073,12 +2302,6 @@ export type FileRead =
   | { state: "failed"; exit_code: number | null; message: string };
 
 export type TcpProbeReason = "refused" | "timedOut";
-
-export type ContainerState =
-  | { type: "running" }
-  | { type: "waiting"; reason: string | null }
-  | { type: "terminated"; termination: TerminationInfo }
-  | { type: "unknown" };
 
 export type DryRunOutcome =
   | { says: "created" }
@@ -2165,3 +2388,5 @@ export type Stalled =
   | { says: "requestNotIssued" }
   | { says: "challengePending"; kind: string; domain: string }
   | { says: "orderNotCompleted" };
+
+export type RawJson = RawValue;

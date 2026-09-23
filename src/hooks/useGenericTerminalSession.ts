@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { commands } from "@/lib/commands";
 import { useT } from "@/i18n/useT";
-import { listen } from "@tauri-apps/api/event";
+import { listenEvent } from "@/lib/events";
 
 export type SessionStatus =
   "idle" | "connecting" | "connected" | "closed" | "error";
@@ -154,10 +154,7 @@ export function useGenericTerminalSession({
       if (cleanupCalled) return;
 
       try {
-        const unlistenOutput = await listen<{
-          session_id: string;
-          data: string;
-        }>("terminal-output", (event) => {
+        const unlistenOutput = await listenEvent("terminal-output", (event) => {
           if (event.payload.session_id === sessionId && onOutputRef.current) {
             onOutputRef.current(event.payload.data);
           }
@@ -176,10 +173,7 @@ export function useGenericTerminalSession({
         }
 
         // Listen for close
-        const unlistenClosed = await listen<{
-          session_id: string;
-          status?: string | null;
-        }>("terminal-closed", (event) => {
+        const unlistenClosed = await listenEvent("terminal-closed", (event) => {
           if (event.payload.session_id === sessionId) {
             unlistenRef.current.forEach((u) => u());
             unlistenRef.current = [];

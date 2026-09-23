@@ -1,21 +1,10 @@
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useT } from "@/i18n/useT";
-
-interface PortForwardEventPayload {
-  id: string;
-  pod: string;
-  namespace: string;
-  local_port: number;
-  remote_port: number;
-  status: string;
-  message?: string | null;
-  attempt?: number | null;
-}
+import { listenEvent } from "@/lib/events";
 
 const DEDUPE_MS = 2500;
 
@@ -32,7 +21,7 @@ export function usePortForwardEvents() {
   useEffect(() => {
     let unlisten: null | (() => void) = null;
 
-    listen<PortForwardEventPayload>("port-forward-status", (event) => {
+    listenEvent("port-forward-status", (event) => {
       const payload = event.payload;
 
       setStatus({

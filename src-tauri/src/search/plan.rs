@@ -9,9 +9,10 @@ use super::types::{
 use crate::error::{Error, Result};
 use std::collections::BTreeSet;
 
-/// Shortest query that may be sent to a cluster. One character matches
-/// most of a namespace and turns every keystroke into a full list of
-/// every kind.
+/// Shortest query that may be sent to a cluster, in characters. One
+/// character matches most of a namespace and turns every keystroke into a
+/// full list of every kind. `shared/search-limits.json` holds the frontend
+/// to the same number.
 pub const MIN_QUERY_LEN: usize = 2;
 
 /// Hits kept per cluster before the search stops early. Past this the
@@ -285,5 +286,14 @@ mod tests {
         assert_eq!(clamp_limit(Some(0)), 1);
         assert_eq!(clamp_limit(Some(10_000)), MAX_LIMIT_PER_CONTEXT);
         assert_eq!(clamp_limit(Some(25)), 25);
+    }
+
+    /// The palette decides when to search from the same file; a constant
+    /// edited on one side only is a query one side sends and the other refuses.
+    #[test]
+    fn the_shortest_query_matches_the_shared_file() {
+        const LIMITS: &str = include_str!("../../../shared/search-limits.json");
+        let limits: serde_json::Value = serde_json::from_str(LIMITS).unwrap();
+        assert_eq!(limits["minQueryCharacters"], MIN_QUERY_LEN);
     }
 }
