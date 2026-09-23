@@ -26,13 +26,17 @@ interface LocaleState {
   setChoice: (choice: Locale | null) => Promise<void>;
 }
 
+/** The latest switch asked for; a slower load for an earlier one must not land after it. */
+let latest = 0;
+
 export const useLocaleStore = create<LocaleState>()(
   persist(
     (set) => ({
       choice: null,
       setChoice: async (choice) => {
+        const ticket = ++latest;
         await loadLocale(choice ?? systemLocale());
-        set({ choice });
+        if (ticket === latest) set({ choice });
       },
     }),
     { name: "locale", version: 1 }

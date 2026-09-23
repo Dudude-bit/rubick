@@ -28,6 +28,7 @@ import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { AlertsAbout } from "./AlertsAbout";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import {
@@ -462,6 +463,19 @@ function BackendPolicies({
     enabled: served,
     retry: false,
   });
+  if (policiesQuery.error) {
+    return (
+      <div>
+        <PeekHeading title={t("nav", "policies")} />
+        <p className="py-1 text-xs text-warn">
+          {t("empty", "couldNotReadInScope", { label: "BackendTLSPolicies" })}{" "}
+          <span className="text-fg-fnt">
+            {normalizeTauriError(policiesQuery.error)}
+          </span>
+        </p>
+      </div>
+    );
+  }
   const attached = policiesOnService(policiesQuery.data ?? [], service);
   if (attached.length === 0) return null;
   const crd =
@@ -601,23 +615,27 @@ function NamespaceContents({ namespace }: { namespace: string }) {
   );
 
   const count = (
-    data: unknown[] | undefined,
+    { data, error }: { data: unknown[] | undefined; error: Error | null },
     kind: ResourceKind,
     trouble?: string
   ): KeyValue => ({
     label: kindDoor(kind),
-    value:
-      data === undefined ? (
-        t("action", "readingInline")
-      ) : data.length === 0 ? (
-        t("empty", "noneCount")
-      ) : (
-        <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
-          {data.length}
-          {trouble && <span className="text-err">— {trouble}</span>}
-        </span>
-      ),
-    tone: trouble ? ("err" as const) : undefined,
+    value: error ? (
+      <span className="break-words">
+        {t("services", "couldNotRead")}{" "}
+        <span className="text-fg-fnt">{normalizeTauriError(error)}</span>
+      </span>
+    ) : data === undefined ? (
+      t("action", "readingInline")
+    ) : data.length === 0 ? (
+      t("empty", "noneCount")
+    ) : (
+      <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
+        {data.length}
+        {trouble && <span className="text-err">— {trouble}</span>}
+      </span>
+    ),
+    tone: error ? ("warn" as const) : trouble ? ("err" as const) : undefined,
   });
 
   return (
@@ -626,18 +644,18 @@ function NamespaceContents({ namespace }: { namespace: string }) {
       <KeyValueList
         items={[
           count(
-            pods.data,
+            pods,
             "Pod",
             notReady > 0 ? t("count", "nNotReady", { n: notReady }) : undefined
           ),
           count(
-            deployments.data,
+            deployments,
             "Deployment",
             starving && starving.length > 0
               ? t("count", "shortOfDesired", { n: starving.length })
               : undefined
           ),
-          count(services.data, "Service"),
+          count(services, "Service"),
         ]}
       />
     </div>
@@ -976,12 +994,20 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
     });
   }
 
-  // The object alone is not a chain; a Pod nothing routes stays quiet.
-  if (levels.length === 1) return null;
+  // The object alone is not a chain; a Pod nothing routes stays quiet —
+  // unless nobody could look, which is not the same as nothing routing it.
+  if (levels.length === 1 && !conns.error) return null;
 
   return (
     <div>
       <PeekHeading title={t("nav", "trafficPath")} />
+      {conns.error && (
+        <p className="py-1 text-xs text-warn">
+          {t("empty", "couldNotReadConnections", {
+            reason: normalizeTauriError(conns.error),
+          })}
+        </p>
+      )}
       <div className="pb-1">
         {levels.map((level, index) => {
           const last = index === levels.length - 1;

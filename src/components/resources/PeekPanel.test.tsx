@@ -87,6 +87,11 @@ vi.mock("@/lib/commands", () => ({
     getNamespace: vi.fn(),
     getGatewayRoute: vi.fn(),
     listNodes: vi.fn(),
+    listPods: vi.fn(),
+    listDeployments: vi.fn(),
+    listServices: vi.fn(),
+    detectGatewayApi: vi.fn(),
+    listBackendTlsPolicies: vi.fn(),
   },
 }));
 
@@ -1543,5 +1548,55 @@ describe("the peek tab as the detail page spells it", () => {
   /** Overview is where a page opens anyway; saying so in the URL is noise. */
   it("says nothing for the tab a page opens on", () => {
     expect(pageTab("overview", "Pod")).toBeNull();
+  });
+});
+
+describe("a peek block whose read was refused", () => {
+  const FORBIDDEN = "forbidden: cannot list resource";
+
+  beforeEach(mockCluster);
+  afterEach(() => {
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /** A refused neighbourhood read was the same silence as a pod nothing routes. */
+  it("says so where nothing routes a pod only because nobody could look", async () => {
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error(FORBIDDEN)
+    );
+    wrap(POD_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    expect(
+      screen.getByText(`Could not read what connects to this: ${FORBIDDEN}`)
+    ).toBeInTheDocument();
+  });
+
+  /** "reading…" forever beside a refused list, and "none" beside a read one. */
+  it("tells a refused count in a namespace from an empty one", async () => {
+    vi.mocked(commands.listPods).mockRejectedValue(new Error(FORBIDDEN));
+    vi.mocked(commands.listDeployments).mockResolvedValue([]);
+    vi.mocked(commands.listServices).mockResolvedValue([]);
+    wrap("/events?peek=namespaces/kube-system");
+
+    expect(await screen.findByText(FORBIDDEN)).toBeInTheDocument();
+    expect(screen.getByText("could not read")).toBeInTheDocument();
+    expect(screen.getAllByText("none")).toHaveLength(2);
+  });
+
+  /** An empty list is "no policy names this Service"; a refused one is not. */
+  it("does not drop the policies block when the policies were refused", async () => {
+    useClusterStore.setState({ currentContext: "kind", isConnected: true });
+    vi.mocked(commands.detectGatewayApi).mockResolvedValue({
+      kinds: [{ kind: "BackendTLSPolicy" }],
+    } as unknown as Awaited<ReturnType<typeof commands.detectGatewayApi>>);
+    vi.mocked(commands.listBackendTlsPolicies).mockRejectedValue(
+      new Error(FORBIDDEN)
+    );
+    wrap("/events?peek=services/storefront/frontend");
+
+    expect(
+      await screen.findByText(/Could not read BackendTLSPolicies/)
+    ).toBeInTheDocument();
   });
 });

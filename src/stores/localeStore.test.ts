@@ -28,6 +28,20 @@ describe("switching language", () => {
     );
   });
 
+  /**
+   * Russian picked, then "match the system" before its catalogue arrived.
+   * Recording each choice when its load settles put Russian back on screen
+   * a moment after the reader had taken it off.
+   */
+  it("keeps the last choice when an earlier load finishes after it", async () => {
+    const { useLocaleStore } = await import("./localeStore");
+    const toRussian = useLocaleStore.getState().setChoice("ru");
+    const toSystem = useLocaleStore.getState().setChoice(null);
+    await Promise.all([toSystem, toRussian]);
+
+    expect(useLocaleStore.getState().choice).toBeNull();
+  });
+
   /** The picker lists a language by whether it has one, not whether it is loaded yet. */
   it("offers a language before its catalogue is loaded", async () => {
     const i18n = await import("@/i18n");
