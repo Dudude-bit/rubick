@@ -85,7 +85,7 @@ Claims here are settled by running things, not by reasoning about them.
   looks exactly like your build and is not it.
 - Some behaviour only exists on a cluster. `src-tauri/tests/live/` and
   `test-manifests/` are the harnesses; a `kind` cluster is enough for most.
-  They are one test binary: `cargo test --test live live_drain:: -- --ignored`.
+  They are one test binary: `cargo test --test live live_tls:: -- --ignored`.
 
 ## Frontend
 
