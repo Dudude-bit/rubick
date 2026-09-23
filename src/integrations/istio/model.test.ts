@@ -13,6 +13,7 @@ import {
   resolveHost,
   subsetsFor,
   type IstioSources,
+  subsetUse,
 } from "./model";
 import { routingMap } from "./map";
 
@@ -276,6 +277,34 @@ describe("a subset on a host the Services list would decide", () => {
    * object's. Fails if a match through the unread list confirms the subset,
    * or if one that fails either way stops being a finding.
    */
+  /**
+   * The Subsets tab matched routes to a rule by the host's first label, so a
+   * subset reached only through a Service nobody read was either "used" or
+   * "nothing routes to" depending on how the names happened to split. It
+   * reads the chain's own rule now.
+   */
+  it("reads a subset routed only through an unread Service as maybe, not used or idle", () => {
+    const qualified = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v1" } }] }],
+    });
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }, { name: "v2" }],
+    });
+    const unread = {
+      ...sources({
+        virtualServices: [qualified],
+        destinationRules: [fqdnRule],
+      }),
+      ...backingFrom(undefined, new Error("services is forbidden")),
+    };
+    const use = subsetUse(fqdnRule, hostGroups(unread, t), unread);
+    expect([...use.used]).toEqual([]);
+    expect([...use.maybe]).toEqual(["v1"]);
+  });
+
   it("keeps a subset only a Service nobody read would define unconfirmed", () => {
     const fqdnRule = custom("DestinationRule", "shop-dr", {
       host: "shop.mesh.svc.cluster.local",

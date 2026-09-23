@@ -390,6 +390,37 @@ export function subsetsFor(
   };
 }
 
+/**
+ * Which of one DestinationRule's subsets the routes reach, through the same
+ * reading the chain and the findings use. A subset reached only through a
+ * host the unread Services would confirm is `maybe`: neither used nor idle.
+ */
+export function subsetUse(
+  rule: CustomResourceInfo,
+  groups: IstioHostGroup[],
+  sources: IstioSources
+): { used: Set<string>; maybe: Set<string> } {
+  const used = new Set<string>();
+  const maybe = new Set<string>();
+  for (const route of groups.flatMap((group) => group.routes)) {
+    for (const destination of route.destinations) {
+      if (!destination.subset) continue;
+      const { defined, unconfirmed } = subsetsFor(
+        destination,
+        route.source.namespace,
+        [rule],
+        sources.services,
+        sources.backingKnown
+      );
+      if (defined.includes(destination.subset)) used.add(destination.subset);
+      else if (unconfirmed.includes(destination.subset))
+        maybe.add(destination.subset);
+    }
+  }
+  for (const subset of used) maybe.delete(subset);
+  return { used, maybe };
+}
+
 // --- what is behind a route ---------------------------------------------
 
 export function backingOf(

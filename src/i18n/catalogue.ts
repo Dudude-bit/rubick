@@ -4413,6 +4413,8 @@ export const en = {
     notThisClustersPods: "not this cluster's pods",
     maybeThisClustersService: "Services not read — may be one here",
     subsetUnconfirmed: "defined if this is the Service — Services not read",
+    istioSubsetsMaybeRouted:
+      "{list} routed only through a host the unread Services would confirm",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {

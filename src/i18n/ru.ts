@@ -4821,6 +4821,8 @@ export const ru: Catalogue = {
     maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
     subsetUnconfirmed:
       "определён, если это тот Service, — Service не прочитаны",
+    istioSubsetsMaybeRouted:
+      "{list}: маршрут идёт через хост, который подтвердили бы непрочитанные Services",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {

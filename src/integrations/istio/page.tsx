@@ -51,6 +51,7 @@ import {
   hostGroups,
   hostState,
   subsetsFor,
+  subsetUse,
   type Destination,
   type Finding,
   type IstioHostGroup,
@@ -860,20 +861,6 @@ function SubsetsTab({
     );
   }
 
-  const routed = new Set(
-    groups.flatMap((group) =>
-      group.routes.flatMap((route) =>
-        route.destinations.flatMap((destination): string[] =>
-          destination.subset
-            ? [
-                `${destination.service?.name ?? destination.host}/${destination.subset}`,
-              ]
-            : []
-        )
-      )
-    )
-  );
-
   const missing = groups.flatMap((group) =>
     group.findings.flatMap((finding): Destination[] =>
       finding.kind === "noSubset" ? [finding.destination] : []
@@ -919,10 +906,9 @@ function SubsetsTab({
             const subsets = (spec.subsets ?? []).flatMap((subset) =>
               subset.name ? [subset.name] : []
             );
-            const short = (spec.host ?? "").split(".")[0];
-            const unused = subsets.filter(
-              (subset) => !routed.has(`${short}/${subset}`)
-            );
+            const use = sources ? subsetUse(rule, groups, sources) : null;
+            const idle =
+              use !== null && use.used.size === 0 && use.maybe.size === 0;
 
             return (
               <div
@@ -946,7 +932,7 @@ function SubsetsTab({
                     <span className="text-fg-fnt">
                       {t("empty", "noSubsetsTrafficPolicyOnly")}
                     </span>
-                  ) : unused.length === subsets.length ? (
+                  ) : idle ? (
                     <span className="text-warn">
                       {t("count", "subsetsNothingRoutesTo", {
                         n: subsets.length,
@@ -954,7 +940,17 @@ function SubsetsTab({
                       })}
                     </span>
                   ) : (
-                    subsets.join(", ")
+                    <>
+                      {subsets.join(", ")}
+                      {use !== null && use.maybe.size > 0 && (
+                        <span className="text-fg-fnt">
+                          {" · "}
+                          {t("empty", "istioSubsetsMaybeRouted", {
+                            list: [...use.maybe].join(", "),
+                          })}
+                        </span>
+                      )}
+                    </>
                   )}
                 </span>
               </div>
