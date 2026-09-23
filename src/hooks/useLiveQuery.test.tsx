@@ -307,6 +307,37 @@ describe("what a backed-off query says about itself", () => {
   });
 });
 
+/** A read the cluster refuses every time. */
+function Refused() {
+  useLiveQuery<string>({
+    queryKey: ["refused"],
+    queryFn: async () => {
+      reads++;
+      throw new Error("pods is forbidden");
+    },
+    refresh: "resourceList",
+    staleTime: 0,
+  });
+  return null;
+}
+
+describe("a read the cluster keeps refusing", () => {
+  /**
+   * A 403 moved no `dataUpdatedAt`, so nothing counted as "the same answer
+   * again" and a page the reader cannot fix polled the API every two seconds
+   * for as long as it stayed open.
+   */
+  it("backs off like an answer that stopped changing", async () => {
+    wrap(<Refused />);
+    await settle();
+    await advance(60_000);
+
+    const atFullRate = 60_000 / RATE;
+    expect(reads).toBeGreaterThan(BACKOFF.steadyAfter);
+    expect(reads).toBeLessThan(atFullRate / 2);
+  });
+});
+
 describe("one question asked of several namespaces", () => {
   /**
    * Would put the fan-out's whole cost back. A page reading four namespaces
