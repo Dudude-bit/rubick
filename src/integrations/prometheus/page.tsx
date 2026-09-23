@@ -1,8 +1,8 @@
 import { Activity, Bell, Plug } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
 import Connection from "./connection";
@@ -18,7 +18,7 @@ import { alertsMark, monitorMark, usePicture } from "./monitors/data";
  */
 export default function PrometheusPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
+  const [chosenTab, setTab] = useSearchParam("tab");
   // The tunnel died with the last app instance; opening this page is as
   // deliberate as pressing the sidebar row, so it wakes the saved forward.
   useWakeOnVisit("prometheus");
@@ -110,16 +110,6 @@ export default function PrometheusPage() {
     },
   ];
 
-  const tab = params.get("tab") ?? tabs[0].id;
-  return (
-    <DetailTabs
-      tabs={tabs}
-      activeTab={tab}
-      onTabChange={(next) => {
-        const updated = new URLSearchParams(params);
-        updated.set("tab", next);
-        setParams(updated, { replace: true });
-      }}
-    />
-  );
+  const tab = chosenTab || tabs[0].id;
+  return <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />;
 }

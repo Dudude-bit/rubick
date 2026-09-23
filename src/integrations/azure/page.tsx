@@ -28,6 +28,7 @@ import {
   type Tone,
   TroubleList,
   TroubleRow,
+  VendorReadFailure,
 } from "../page-kit";
 import { useAksPicture } from "./data";
 import {
@@ -57,12 +58,11 @@ export default function AksAddonsPage() {
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadIdentities")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadIdentities")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
 

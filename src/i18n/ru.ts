@@ -748,7 +748,6 @@ export const ru: Catalogue = {
     confirmByTyping: "Подтвердите действие, введя требуемый текст",
     typeWord: "Введите",
     toConfirm: "для подтверждения",
-    realtimeFallback: "{kind}: переходим на периодическое обновление. {error}",
     nodeCordoned: "Узел закрыт для планирования",
     nodeCordonedDetail:
       "На узел {name} больше не будут назначаться новые поды.",
@@ -1305,8 +1304,6 @@ export const ru: Catalogue = {
     hideMap: "Скрыть карту",
     map: "Карта",
     openGateways: "Открыть Gateways →",
-    liveUnavailableFor: "Живые обновления для {kind} недоступны",
-    fallsBackPolling: "{message} — список переходит на опрос.",
     copyListenerHostname: "Хост слушателя {host}",
     inInline: "в",
     probe: "Проверить",

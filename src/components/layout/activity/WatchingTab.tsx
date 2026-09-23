@@ -1,8 +1,7 @@
-import { useSyncExternalStore } from "react";
 import { Bell, Square, X } from "lucide-react";
 
-import { formatSince } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { useNow } from "@/hooks/useNow";
+import { cn, formatSince } from "@/lib/utils";
 import {
   ASK_SHORT,
   detailWords,
@@ -13,7 +12,7 @@ import {
 } from "@/lib/tell-me-when";
 import { SAYS_KEY } from "@/hooks/useTellMeWhen";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
+import { useTellMeWhenStore, useWatchesFor } from "@/stores/tellMeWhenStore";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { ACTIVITY_ROW, ActivityAction, ActivityEmpty } from "./primitives";
@@ -33,13 +32,10 @@ const AFTER_KEY: Record<After["action"], keyof typeof en.tell> = {
 export function WatchingTab() {
   const t = useT();
   const context = useClusterStore((s) => s.currentContext);
-  const watches = useTellMeWhenStore((s) => s.watches);
   const remove = useTellMeWhenStore((s) => s.remove);
   const now = useNow();
 
-  const rows = watches
-    .filter((w) => w.context === context)
-    .sort((a, b) => b.startedAt - a.startedAt);
+  const rows = useWatchesFor(context).sort((a, b) => b.startedAt - a.startedAt);
 
   if (rows.length === 0) {
     return (
@@ -57,30 +53,6 @@ export function WatchingTab() {
         <Row key={w.id} watch={w} now={now} onRemove={() => remove(w.id)} />
       ))}
     </div>
-  );
-}
-
-const TICK_MS = 30_000;
-const tickers = new Set<() => void>();
-let ticking: ReturnType<typeof setInterval> | null = null;
-
-function subscribeTick(onTick: () => void): () => void {
-  tickers.add(onTick);
-  ticking ??= setInterval(() => tickers.forEach((tick) => tick()), TICK_MS);
-  return () => {
-    tickers.delete(onTick);
-    if (tickers.size === 0 && ticking !== null) {
-      clearInterval(ticking);
-      ticking = null;
-    }
-  };
-}
-
-/** The wall clock to the half minute, so the "ago" lines move on their own. */
-function useNow(): number {
-  return useSyncExternalStore(
-    subscribeTick,
-    () => Math.floor(Date.now() / TICK_MS) * TICK_MS
   );
 }
 

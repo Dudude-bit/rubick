@@ -1,6 +1,6 @@
 import { commands } from "@/lib/commands";
 import type { en } from "@/i18n/catalogue";
-import { BACKUPS_CRD, CLUSTERS_CRD } from "./data";
+import { CLUSTERS_CRD } from "./data";
 import {
   FENCED,
   HIBERNATION,
@@ -211,6 +211,3 @@ export async function perform(
     }
   }
 }
-
-/** The Backup objects' CRD, for the page's link into the generic list. */
-export const BACKUPS_LIST_CRD = BACKUPS_CRD;

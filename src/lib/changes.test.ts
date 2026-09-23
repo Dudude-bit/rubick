@@ -4,6 +4,7 @@ import type { DeploymentContainerInfo } from "@/generated/types";
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
 import {
+  COMPARED_FIELDS,
   diffRevisions,
   diffSnapshots,
   gapsOf,
@@ -224,6 +225,61 @@ describe("diffRevisions, the fields it reads off a container", () => {
         to: "b",
       },
     ]);
+  });
+});
+
+describe("what two revisions are compared on", () => {
+  const everything = (n: number) =>
+    revision(
+      n,
+      [
+        container("app", `app:${n}`, {
+          ports: [8000 + n],
+          env: [{ name: "MODE", value: `m${n}`, valueFrom: null }],
+          envFrom: [
+            {
+              prefix: null,
+              configMapRef: `cfg-${n}`,
+              secretRef: null,
+              optional: null,
+            },
+          ],
+          resources: { requests: { cpu: `${n}00m` }, limits: {} },
+        }),
+      ],
+      { templateAnnotations: { "checksum/config": `c${n}` } }
+    );
+
+  /**
+   * The "nothing changed in what is compared" line is only true while the
+   * list it spells out is the list the diff reads. A field the diff starts
+   * reading without joining `COMPARED_FIELDS` goes unmentioned there, and one
+   * the diff stops reading is still promised to the reader.
+   */
+  it("reports a change under every compared field, and under no other", () => {
+    const roots = diffRevisions(everything(1), everything(2)).map(
+      (change) => change.field.split(".")[0]
+    );
+    expect(new Set(roots)).toEqual(new Set(COMPARED_FIELDS));
+  });
+
+  /**
+   * The sentence is written out by hand in each catalogue. The checksum
+   * annotations are described in the reader's language rather than named,
+   * so only the container's own field names are held to it.
+   */
+  it("names each compared container field in the unchanged-template line, in both languages", () => {
+    const named = COMPARED_FIELDS.filter((field) => field !== "annotations");
+    for (const line of [
+      en.changes.unchangedTemplate,
+      ru.changes.unchangedTemplate,
+    ]) {
+      const said = line
+        .split(":")[1]
+        .split(",")
+        .map((word) => word.trim());
+      for (const field of named) expect(said).toContain(field);
+    }
   });
 });
 

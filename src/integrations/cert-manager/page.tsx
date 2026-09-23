@@ -23,11 +23,10 @@
  * place.
  */
 
-import { useSearchParams } from "react-router-dom";
 import { ShieldCheck, Stamp } from "lucide-react";
 
 import { expiryText, overdueBy } from "@/lib/certificates";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import {
@@ -40,7 +39,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { Finding, TroubleList, TroubleRow } from "../page-kit";
+import {
+  Finding,
+  TroubleList,
+  TroubleRow,
+  VendorReadFailure,
+} from "../page-kit";
 import { usePicture } from "./data";
 import { uncovered } from "./serves";
 import {
@@ -52,6 +56,7 @@ import {
   type IssuerRow,
   type UnreadKind,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { troubleMark } from "../kit";
 
@@ -60,21 +65,17 @@ const AUTO_OPEN = 8;
 
 export default function CertManagerPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "certificates";
-  const { data, isPending, error } = usePicture();
+  const [tab, setTab] = useSearchParam("tab", "certificates");
+  const { data, isPending, error, refetch } = usePicture();
 
   if (error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadCertificates")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "couldNotReadCertificatesBody")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadCertificates")}
+        body={t("empty", "couldNotReadCertificatesBody")}
+        error={error}
+        onRetry={refetch}
+      />
     );
   }
 
@@ -131,15 +132,7 @@ export default function CertManagerPage() {
         }
         description={t("empty", "certManagerPageHint")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }

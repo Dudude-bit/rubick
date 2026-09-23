@@ -8,13 +8,12 @@ import { useQuery } from "@tanstack/react-query";
 import { NodeUtilisation } from "@/components/resources/NodeUtilisation";
 import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -32,7 +31,7 @@ import type { NodeInfo, NodeMetrics } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useNodeActions } from "@/hooks/useNodeActions";
 import { useT, type T as TranslateFn } from "@/i18n/useT";
 
@@ -172,7 +171,6 @@ export function NodeList() {
   const t = useT();
   const grouping = useMemo(() => poolGrouping(t), [t]);
   const { isConnected } = useClusterStore();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const queryKey = useMemo(
@@ -181,27 +179,11 @@ export function NodeList() {
   );
   const subscribeNodes = useCallback(() => commands.subscribeNodeWatch(), []);
 
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "realtimeFallback", {
-          kind: toPlural(ResourceType.Node),
-          error: err,
-        }),
-      });
-    },
-    [t, toast, watchFailed]
-  );
-  const { resyncing } = useResourceWatch<NodeInfo>({
+  const { live, refresh, resyncing } = useWatchedList<NodeInfo>({
     enabled: isConnected,
     subscribe: subscribeNodes,
     queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
+    reportFailure: toPlural(ResourceType.Node),
   });
 
   // In the URL, so a deep link can open the view and a reload keeps it.
@@ -349,8 +331,8 @@ export function NodeList() {
         grouping={grouping}
         emptyStateLabel={toPlural(ResourceType.Node)}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchFailed ? undefined : false}
-        live={!watchFailed}
+        refresh={refresh}
+        live={live}
         resyncing={resyncing}
         headerContent={
           <>
