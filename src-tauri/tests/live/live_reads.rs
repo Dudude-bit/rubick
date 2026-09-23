@@ -60,7 +60,8 @@ async fn a_one_shot_read_keeps_every_line_around_a_bad_byte() {
 async fn a_followed_stream_reads_past_a_bad_byte() {
     let (state, streamer) = streamer().await;
     let mut events = state.event_tx.subscribe();
-    let (cancel, cancelled) = tokio::sync::oneshot::channel();
+    let cancel = tokio_util::sync::CancellationToken::new();
+    let cancelled = cancel.clone();
     let task = tokio::spawn(async move {
         streamer
             .stream_logs("bytes".into(), config().with_follow(true), cancelled)
@@ -82,7 +83,7 @@ async fn a_followed_stream_reads_past_a_bad_byte() {
         }
     })
     .await;
-    let _ = cancel.send(());
+    cancel.cancel();
     task.await.expect("stream task").expect("stream");
 
     read.expect("three lines within 30 s");

@@ -326,7 +326,7 @@ impl WatchManager {
                 tracing::debug!("Resource watch {} cancelled before subscribe", label);
                 return;
             }
-            let (mut cancel_rx, _held) = opened.split();
+            let (cancel, _held) = opened.split();
 
             // The API server closes the watch at this limit and the watcher
             // re-lists, which is what recycles one that has gone quiet. Until
@@ -356,7 +356,7 @@ impl WatchManager {
             loop {
                 tokio::select! {
                     biased;
-                    _ = &mut cancel_rx => {
+                    () = cancel.cancelled() => {
                         tracing::debug!("Resource watch {} cancelled", label);
                         break;
                     }
@@ -394,7 +394,7 @@ impl WatchManager {
                                 let wait = backoff_for(latch.consecutive_errors());
                                 tokio::select! {
                                     biased;
-                                    _ = &mut cancel_rx => {
+                                    () = cancel.cancelled() => {
                                         tracing::debug!(
                                             "Resource watch {} cancelled while backing off",
                                             label
@@ -458,7 +458,7 @@ impl WatchManager {
                 tracing::debug!("Resource watch {} cancelled before subscribe", label);
                 return;
             }
-            let (mut cancel_rx, _held) = opened.split();
+            let (cancel, _held) = opened.split();
 
             let config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
             let (namespaces, apis): (Vec<_>, Vec<_>) = members.into_iter().unzip();
@@ -479,7 +479,7 @@ impl WatchManager {
             loop {
                 tokio::select! {
                     biased;
-                    _ = &mut cancel_rx => {
+                    () = cancel.cancelled() => {
                         tracing::debug!("Resource watch {} cancelled", label);
                         break;
                     }

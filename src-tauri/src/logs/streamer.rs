@@ -16,7 +16,7 @@ use kube::{api::Api, Client};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
@@ -95,7 +95,7 @@ impl LogStreamer {
         &self,
         stream_id: String,
         config: LogConfig,
-        mut cancel_rx: oneshot::Receiver<()>,
+        cancel: tokio_util::sync::CancellationToken,
     ) -> Result<()> {
         let ctx = ResourceContext::from_client((*self.client).clone(), config.namespace.clone());
         let api: Api<Pod> = ctx.namespaced_api();
@@ -173,7 +173,7 @@ impl LogStreamer {
         loop {
             tokio::select! {
                 biased;
-                _ = &mut cancel_rx => {
+                () = cancel.cancelled() => {
                     tracing::debug!("Log stream {} cancelled", stream_id);
                     break;
                 }

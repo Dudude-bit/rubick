@@ -298,7 +298,7 @@ pub async fn list_dir(
     client: Client,
     at: Target<'_>,
     mut emit: impl FnMut(Vec<FileEntry>),
-    cancel: &mut tokio::sync::oneshot::Receiver<()>,
+    cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<Listing> {
     let Target {
         namespace,
@@ -374,7 +374,7 @@ pub async fn list_dir(
         loop {
             tokio::select! {
                 biased;
-                _ = &mut *cancel => {
+                () = cancel.cancelled() => {
                     cancelled = true;
                     attached.abort();
                     reader.abort();

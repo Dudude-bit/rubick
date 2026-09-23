@@ -95,11 +95,8 @@ pub async fn stream_pod_logs(
             return;
         }
         let id = opened.id.clone();
-        let (cancel_rx, _held) = opened.split();
-        if let Err(e) = streamer
-            .stream_logs(id.clone(), log_config, cancel_rx)
-            .await
-        {
+        let (cancel, _held) = opened.split();
+        if let Err(e) = streamer.stream_logs(id.clone(), log_config, cancel).await {
             tracing::error!("Log stream {} error: {}", id, e);
         }
     });

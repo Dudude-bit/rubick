@@ -30,7 +30,7 @@ async fn a_busybox_image_lists_through_the_stat_rung() {
     let (pod, container) = pod_named(&client, "kube-system", "traefik-")
         .await
         .expect("a running traefik pod");
-    let (_cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    let cancel = tokio_util::sync::CancellationToken::new();
     let mut rows = Vec::new();
     let listing = list_dir(
         client.clone(),
@@ -42,7 +42,7 @@ async fn a_busybox_image_lists_through_the_stat_rung() {
             path: "/etc",
         },
         |batch| rows.extend(batch),
-        &mut cancel_rx,
+        &cancel,
     )
     .await
     .expect("listing runs");
@@ -90,7 +90,7 @@ async fn a_distroless_image_says_it_has_nothing_to_list_with() {
     let (pod, container) = pod_named(&client, "kube-system", "coredns-")
         .await
         .expect("a running coredns pod");
-    let (_cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+    let cancel = tokio_util::sync::CancellationToken::new();
     let mut rows = Vec::new();
     let listing = list_dir(
         client,
@@ -102,7 +102,7 @@ async fn a_distroless_image_says_it_has_nothing_to_list_with() {
             path: "/etc",
         },
         |batch| rows.extend(batch),
-        &mut cancel_rx,
+        &cancel,
     )
     .await
     .expect("listing runs");
