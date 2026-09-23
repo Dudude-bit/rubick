@@ -1,8 +1,7 @@
 import { Bell, Square, X } from "lucide-react";
 
 import { useNow } from "@/hooks/useNow";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
+import { cn, formatSince } from "@/lib/utils";
 import {
   ASK_SHORT,
   detailWords,
@@ -84,12 +83,12 @@ function Row({
     switch (status.state) {
       case "watching":
         return t("tell", "watchingSince", {
-          ago: agoOf(watch.startedAt, now),
+          ago: formatSince(watch.startedAt, now),
         });
       case "lost":
-        return t("tell", "lostSince", { ago: agoOf(status.since, now) });
+        return t("tell", "lostSince", { ago: formatSince(status.since, now) });
       case "done":
-        return `${t("tell", SAYS_KEY[status.verdict.says], { name: watch.name })} · ${agoOf(status.at, now)}`;
+        return `${t("tell", SAYS_KEY[status.verdict.says], { name: watch.name })} · ${t("action", "agoSuffix", { age: formatSince(status.at, now) })}`;
       case "expired":
         return t("tell", "expired");
     }

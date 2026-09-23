@@ -1846,7 +1846,7 @@ export const en = {
     allowed: "yes",
     refused: "refused",
     couldNotTell: "could not tell",
-    checkedAgo: "checked for you, {ago}",
+    checkedAgo: "checked for you {ago} ago",
     phaseUnknown: "phase not written",
     primaryFact: "Primary",
     readyFact: "Ready",
@@ -2028,9 +2028,8 @@ export const en = {
       "A desktop notification when the node is empty or the drain gives up.",
     askForward: "Tell me if it dies",
     stopAsking: "Stop watching",
-    watchingSince: "watching · {ago}",
-    lostSince: "lost sight · {ago}",
-    answeredAgo: "{ago}",
+    watchingSince: "watching for {ago}",
+    lostSince: "lost sight {ago} ago",
     expired: "Expired after a day with no answer",
     empty: "Nothing being watched",
     emptyHint:
@@ -2597,7 +2596,7 @@ export const en = {
     groupedByName:
       "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
     fromPodStatus: "from the pod status, not an event",
-    lastSeen: "last {ago}",
+    lastSeen: "last {ago} ago",
     podStatusUnread: {
       one: "The status of {n} pod could not be read; its exits are not on this clock.",
       other:
@@ -2666,7 +2665,7 @@ export const en = {
       "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
     podPhase: "Phase {phase}",
     nodeStoppedReportingAgo:
-      "Node {node} stopped reporting {age}. This status is the last one it sent, not the pod's state now.",
+      "Node {node} stopped reporting {age} ago. This status is the last one it sent, not the pod's state now.",
     nodeStoppedReporting:
       "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
     allContainers: "all containers",
@@ -2695,7 +2694,7 @@ export const en = {
     lokiHoldsAll: "holding this cluster",
     connDidNotSayWhy: "it did not say why",
     connDidNotAnswer: "did not answer — {reason}",
-    connAnsweredAgo: "answered {age}",
+    connAnsweredAgo: "answered {age} ago",
     connKeeps: "keeps {retention}",
     connRanges: "ranges {ranges}",
     lokiPageLimit: {
@@ -4694,7 +4693,7 @@ export const en = {
       "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
-      "no samples in the window: newest series is {age}, the window asks for {range}",
+      "no samples in the window: the newest is {age} old, the window asks for {range}",
     noSeriesShort: "no series",
     historyWithoutMetricsServer:
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",

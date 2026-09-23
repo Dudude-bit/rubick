@@ -17,8 +17,7 @@ import { useNow } from "@/hooks/useNow";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
-import { agoOf } from "@/lib/usage-history";
-import { cn } from "@/lib/utils";
+import { cn, formatSince } from "@/lib/utils";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
 import {
@@ -243,7 +242,7 @@ function OperatorStrip({
         {yesNo(operator.canPatchClusters)}
         <span className="ml-2 text-fg-fnt">
           {t("operators", "checkedAgo", {
-            ago: agoOf(operator.checkedAt, now),
+            ago: formatSince(operator.checkedAt, now),
           })}
         </span>
       </Fact>
