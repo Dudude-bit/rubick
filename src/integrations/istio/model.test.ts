@@ -11,6 +11,7 @@ import {
   hostGroups,
   hostState,
   resolveHost,
+  subsetsFor,
   type IstioSources,
 } from "./model";
 import { routingMap } from "./map";
@@ -264,9 +265,113 @@ describe("a subset on a host the Services list would decide", () => {
     // Service nobody has seen.
     const node = routingMap(groups, unread, t)
       .columns.flatMap((column) => column.nodes)
-      .find((candidate) => candidate.label === "shop");
+      .find((candidate) => candidate.label === "shop.mesh");
     expect(node?.tone).toBe("unknown");
     expect(node?.object).toBeUndefined();
+  });
+
+  /**
+   * The rule matched `shop.mesh` only by taking it for the Service, and the
+   * subset read as defined: if the host is a hostname, that rule is another
+   * object's. Fails if a match through the unread list confirms the subset,
+   * or if one that fails either way stops being a finding.
+   */
+  it("keeps a subset only a Service nobody read would define unconfirmed", () => {
+    const fqdnRule = custom("DestinationRule", "shop-dr", {
+      host: "shop.mesh.svc.cluster.local",
+      subsets: [{ name: "v1" }],
+    });
+    const destination = {
+      host: "shop.mesh",
+      ...resolveHost("shop.mesh", "mesh", [], false),
+      subset: "v1",
+      port: null,
+      weight: null,
+    };
+
+    expect(subsetsFor(destination, "mesh", [fqdnRule], [], false)).toEqual({
+      defined: [],
+      unconfirmed: ["v1"],
+      anyRule: true,
+    });
+
+    const read = {
+      ...destination,
+      ...resolveHost("shop.mesh", "mesh", [service("shop")], true),
+    };
+    expect(
+      subsetsFor(read, "mesh", [fqdnRule], [service("shop")], true)
+    ).toEqual({ defined: ["v1"], unconfirmed: [], anyRule: true });
+
+    const typo = custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [{ route: [{ destination: { host: "shop.mesh", subset: "v9" } }] }],
+    });
+    const [group] = hostGroups(
+      {
+        ...sources({ virtualServices: [typo], destinationRules: [fqdnRule] }),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(group.findings).toEqual([
+      expect.objectContaining({ kind: "noSubset", defined: ["v1"] }),
+    ]);
+  });
+});
+
+describe("a destination the unread Services list would have to confirm", () => {
+  const route = (hosts: string[]) =>
+    custom("VirtualService", "shop-vs", {
+      hosts: ["shop.mesh.test"],
+      gateways: ["edge"],
+      http: [
+        {
+          route: hosts.map((host) => ({
+            destination: { host },
+            weight: 100 / hosts.length,
+          })),
+        },
+      ],
+    });
+  const unread = (hosts: string[]) => ({
+    ...sources({ virtualServices: [route(hosts)] }),
+    ...backingFrom(undefined, new Error("services is forbidden")),
+  });
+  const reached = (hosts: string[]) => {
+    const data = routingMap(hostGroups(unread(hosts), t), unread(hosts), t);
+    const nodes = data.columns.flatMap((column) => column.nodes);
+    return data.edges
+      .filter((edge) => edge.from === "host/shop.mesh.test")
+      .map((edge) => nodes.find((node) => node.id === edge.to));
+  };
+
+  /**
+   * `shop` and `shop.mesh` shared the Service's node, which took its link
+   * from whichever came first: `shop.mesh` led to a Service page nobody knew
+   * existed, or `shop` lost the link it has by its form. Fails if the two
+   * are one node again, in either order.
+   */
+  it("draws it as its own node, whichever rule comes first", () => {
+    for (const hosts of [
+      ["shop", "shop.mesh"],
+      ["shop.mesh", "shop"],
+    ]) {
+      const nodes = reached(hosts);
+      const byName = nodes.find((node) => node?.label === "shop");
+      const unsure = nodes.find((node) => node?.label === "shop.mesh");
+
+      expect(nodes).toHaveLength(2);
+      expect(byName?.object).toEqual({
+        kind: "Service",
+        name: "shop",
+        namespace: "mesh",
+      });
+      expect(unsure?.object).toBeUndefined();
+      expect(unsure?.tone).toBe("unknown");
+      expect(unsure?.sub).toBe(t("empty", "maybeThisClustersService"));
+    }
   });
 });
 

@@ -88,7 +88,7 @@ export function SecretDetail() {
               Opaque Secret in the cluster would be worse than no tab. */}
           {isTls && name && (
             <>
-              <CertificateSection read={certificates.data?.get(name)} />
+              <CertificateSection read={certificates?.get(name)} />
               {/* Core first and whole; the extension adds why, or nothing. */}
               <IssuanceSection issuance={issuance} secretName={name} />
             </>

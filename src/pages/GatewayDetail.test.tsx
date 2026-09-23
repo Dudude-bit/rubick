@@ -100,6 +100,23 @@ describe("a Gateway's listener rows", () => {
     expect(screen.queryByText(/NoConflicts/)).toBeNull();
   });
 
+  /**
+   * `OverlappingTLSConfig=True` is set on listeners that go on serving, and
+   * the row called it broken, in red. Fails if it is drawn as a failure, or
+   * not drawn at all.
+   */
+  it("names an overlapping TLS config as a caution, not a break", () => {
+    open(
+      edge([
+        said("Accepted", "True", "Accepted"),
+        said("OverlappingTLSConfig", "True", "OverlappingHostnames"),
+      ])
+    );
+    const caution = screen.getByText(/OverlappingHostnames/);
+    expect(caution).toHaveClass("text-warn");
+    expect(caution).not.toHaveClass("text-err");
+  });
+
   it("still names the condition that broke it", () => {
     open(edge([said("ResolvedRefs", "False", "InvalidCertificateRef")]));
     expect(screen.getByText(/InvalidCertificateRef/)).toBeTruthy();

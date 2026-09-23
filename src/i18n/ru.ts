@@ -4819,6 +4819,8 @@ export const ru: Catalogue = {
     outsideThisCluster: "вне этого кластера",
     notThisClustersPods: "это поды не этого кластера",
     maybeThisClustersService: "Service не прочитаны — возможно, он здесь",
+    subsetUnconfirmed:
+      "определён, если это тот Service, — Service не прочитаны",
     matchShownAsWrittenBecause:
       "Это условие показано ровно так, как написано, потому что {reason}.",
     matchFieldsNotInterpreted: {
@@ -5134,7 +5136,7 @@ export const ru: Catalogue = {
     namespaceOnCluster: "{namespace} в {cluster}",
     readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
     argoWorkloadsUnread:
-      "Не удалось перечислить {kinds}, поэтому собственных рабочих нагрузок Argo среди них здесь нет.",
+      "Не удалось перечислить {kinds}, поэтому собственные рабочие нагрузки Argo среди них здесь не показаны.",
     argoWorkloadsDescription:
       "Где на самом деле диагностируется проблема Argo. Репозиторий, до которого он не достучался, и вебхук, который до него не дошёл, — в логах repo-server и контроллера, а не в статусе какого-либо Application.",
     argoUiDescription:
@@ -5316,7 +5318,7 @@ export const ru: Catalogue = {
     legacyAddonInstalled:
       " Снятое с поддержки дополнение pod-identity всё ещё установлено — что в нём есть, показано ниже.",
     legacyAddonNotInstalled:
-      " Снятое с поддержки дополнение pod-identity тоже не установлено — его три вида этот API-сервер не обслуживает.",
+      " Снятое с поддержки дополнение pod-identity тоже не установлено — ни один из двух его видов, AzureIdentity и AzureIdentityBinding, этот API-сервер не обслуживает.",
     podIdentityRetired: "Pod identity — снято с поддержки",
     podIdentityRetiredHint:
       "aad-pod-identity объявлен устаревшим в октябре 2022, заархивирован в сентябре 2023, а его дополнение для AKS вышло из поддержки в сентябре 2025. Всё это работает, пока работает; переезжать надо на Workload ID выше.",
@@ -6164,6 +6166,7 @@ export const ru: Catalogue = {
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     gwServingUnknown: "Непонятно — что-то не удалось прочитать",
+    gwServingUndecided: "Пока непонятно — контроллер ещё не решил",
     gwCheckingInstall: "Проверяем, установлен ли Gateway API…",
     gwCouldNotCheckInstall:
       "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",

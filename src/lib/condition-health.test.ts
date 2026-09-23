@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { conditionRole, failingCondition } from "./condition-health";
+import {
+  cautioningCondition,
+  conditionRole,
+  failingCondition,
+} from "./condition-health";
 import type { ConditionInfo } from "@/generated/types";
 
 function condition(
@@ -76,5 +80,27 @@ describe("failingCondition", () => {
 
   it("returns nothing when everything is satisfied", () => {
     expect(failingCondition([condition("Ready", "True")])).toBeNull();
+  });
+});
+
+describe("a Gateway listener's overlapping TLS config", () => {
+  /**
+   * `*.example.com` beside `foo.example.com` sets `OverlappingTLSConfig=True`
+   * on both listeners, and both serve; it read as a failure and painted two
+   * working listeners red. Fails if the caution is read as a fault again, or
+   * is dropped rather than said.
+   */
+  it("reads a reported overlap as a caution, not a failure", () => {
+    const overlap = condition("OverlappingTLSConfig", "True", {
+      reason: "OverlappingHostnames",
+    });
+    const conditions = [condition("Accepted", "True"), overlap];
+
+    expect(conditionRole(overlap)).toBe("warn");
+    expect(failingCondition(conditions)).toBeNull();
+    expect(cautioningCondition(conditions)).toBe(overlap);
+    expect(conditionRole(condition("OverlappingTLSConfig", "False"))).toBe(
+      "ok"
+    );
   });
 });

@@ -4412,6 +4412,7 @@ export const en = {
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
     maybeThisClustersService: "Services not read — may be one here",
+    subsetUnconfirmed: "defined if this is the Service — Services not read",
     matchShownAsWrittenBecause:
       "This match is shown exactly as written, because {reason}.",
     matchFieldsNotInterpreted: {
@@ -4877,7 +4878,7 @@ export const en = {
     legacyAddonInstalled:
       " The retired pod-identity add-on is still installed, and what it holds is below.",
     legacyAddonNotInstalled:
-      " The retired pod-identity add-on is not installed either — its three kinds are not served by this API server.",
+      " The retired pod-identity add-on is not installed either — neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
     podIdentityRetired: "Pod identity, which is retired",
     podIdentityRetiredHint:
       "aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes.",
@@ -5724,6 +5725,7 @@ export const en = {
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
     gwServingUnknown: "Can't tell — something here could not be read",
+    gwServingUndecided: "Can't tell yet — a controller has not decided",
     gwCheckingInstall: "Checking whether Gateway API is installed…",
     gwCouldNotCheckInstall:
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",

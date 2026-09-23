@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,5 +89,28 @@ describe("the certificates a page's routes are served under", () => {
         }),
       }),
     ]);
+  });
+
+  /**
+   * react-query keeps the last good answer beside a failed re-read, and only
+   * a read with no answer at all was counted as failed — so the certificate
+   * read before the failure went on being judged as if it had just been read.
+   */
+  it("marks a Secret unread once its re-read failed, over the answer it had", async () => {
+    const { result } = renderHook(() => useRouteCertificates(routes), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.size).toBe(2));
+    expect(result.current.get("shop/shop-tls")?.problem).toBeUndefined();
+
+    read.mockRejectedValue(new Error("Not connected to prod"));
+    await act(() => client.refetchQueries());
+
+    await waitFor(() =>
+      expect(result.current.get("shop/shop-tls")?.problem).toEqual({
+        says: "secretUnreadable",
+        said: "Not connected to prod",
+      })
+    );
   });
 });

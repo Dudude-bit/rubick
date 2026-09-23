@@ -7,6 +7,7 @@ import {
   answeredByItsController,
   selfAnswered,
   candidateListeners,
+  servingSay,
 } from "./route-trace";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -291,6 +292,7 @@ describe("routeTraces", () => {
     expect(trace.steps.some((step) => step.state === "blind")).toBe(true);
     expect(trace.steps.some((step) => step.state === "err")).toBe(false);
     expect(trace.servingKnown).toBe(false);
+    expect(servingSay(trace, t)).toBe(t("empty", "gwServingUnknown"));
   });
 
   /** A refusal is an answer: nothing unread makes it less of one. */
@@ -380,6 +382,78 @@ describe("routeTraces", () => {
 
     expect(step?.state).toBe("warn");
     expect(step?.say).not.toBe(t("empty", "gwRefsResolve"));
+  });
+
+  /**
+   * The pending step was a `warn`, and only `blind` steps kept the verdict
+   * unknown — so a controller that had not decided whether the references
+   * resolve left the header green, "Serving". Fails if any of the three
+   * `Unknown` verdicts stops holding the answer back.
+   */
+  it("gives no verdict while a controller has one to give", () => {
+    const deciding = (conditions: ConditionInfo[]) =>
+      route("healthy", { parents: [parentStatus("edge", conditions)] });
+    const traces = [
+      routeTraces(
+        deciding([
+          condition("Accepted", "True", "Accepted"),
+          condition("ResolvedRefs", "Unknown", "Pending"),
+        ]),
+        sources(),
+        t
+      )[0],
+      routeTraces(
+        deciding([condition("Accepted", "Unknown", "Pending")]),
+        sources(),
+        t
+      )[0],
+      routeTraces(
+        route("healthy"),
+        sources({
+          gateways: [
+            {
+              ...gateway("edge"),
+              conditions: [condition("Programmed", "Unknown", "Pending")],
+            },
+          ],
+        }),
+        t
+      )[0],
+    ];
+
+    for (const trace of traces) {
+      expect(trace.serving).toBe(true);
+      expect(trace.servingKnown).toBe(false);
+      expect(trace.unknownBecause).toBe("undecided");
+      expect(servingSay(trace, t)).toBe(t("empty", "gwServingUndecided"));
+    }
+  });
+
+  /** A break is an answer, whatever else is still being decided. */
+  it("still knows a route is not serving when a verdict is pending above the break", () => {
+    const [trace] = routeTraces(
+      route("healthy", {
+        parents: [
+          parentStatus("edge", [
+            condition("Accepted", "True", "Accepted"),
+            condition("ResolvedRefs", "Unknown", "Pending"),
+          ]),
+        ],
+      }),
+      sources({
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: true,
+          backingError: null,
+        },
+      }),
+      t
+    );
+
+    expect(trace.serving).toBe(false);
+    expect(trace.servingKnown).toBe(true);
+    expect(servingSay(trace, t)).toBe(t("empty", "gwNotServing"));
   });
 
   /** `Programmed: Unknown` is the API's third answer — the controller has

@@ -25,6 +25,7 @@ import { backingFrom, ROUTING_STALE, useBackingLists } from "@/integrations";
 import {
   routeTraces,
   probedReachable,
+  servingSay,
   type ProbeStep,
   type RouteTrace,
   type TraceStep,
@@ -656,13 +657,7 @@ function TraceCard({
                 : "bg-err shadow-[0_0_0_4px_hsl(var(--err)/0.18)]"
           }`}
         />
-        <span className="font-semibold text-fg">
-          {!trace.servingKnown
-            ? t("empty", "gwServingUnknown")
-            : trace.serving
-              ? t("empty", "gwServing")
-              : t("empty", "gwNotServing")}
-        </span>
+        <span className="font-semibold text-fg">{servingSay(trace, t)}</span>
         <span className="text-xs text-fg-mut">
           <CopyableAddresses
             values={route.hostnames}

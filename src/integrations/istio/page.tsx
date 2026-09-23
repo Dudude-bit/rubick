@@ -390,6 +390,15 @@ function RuleRow({
                   namespace={destination.service.namespace}
                   showKind={false}
                 />
+              ) : destination.external === null ? (
+                <span className="flex items-baseline gap-x-1">
+                  <span className="font-mono text-fg-fnt">
+                    {destination.host}
+                  </span>
+                  <span className="rounded-[3px] border border-dashed border-fg-fnt/60 px-1 text-[10px] text-fg-fnt">
+                    {t("empty", "maybeThisClustersService")}
+                  </span>
+                </span>
               ) : (
                 <span className="font-mono text-fg-mid">
                   {destination.host}
@@ -442,7 +451,7 @@ function HostChain({
         sources.services,
         sources.backingKnown
       )
-    : { defined: [], anyRule: false };
+    : { defined: [], unconfirmed: [], anyRule: false };
   const serving = group.gateways.filter((gateway) => gateway.serves);
   const unread = route.matches.filter((match) => !fullyRead(match));
 
@@ -505,16 +514,24 @@ function HostChain({
             </div>
           ) : (
             <Cell
-              bad={!subsets.defined.includes(destination.subset)}
+              bad={
+                !subsets.defined.includes(destination.subset) &&
+                !subsets.unconfirmed.includes(destination.subset)
+              }
+              unknown={subsets.unconfirmed.includes(destination.subset)}
               under={
                 subsets.defined.includes(destination.subset)
                   ? t("count", "ofN", { n: subsets.defined.join(", ") })
-                  : subsets.anyRule
-                    ? t("empty", "definesList", {
-                        list:
-                          subsets.defined.join(", ") || t("empty", "noSubsets"),
-                      })
-                    : t("empty", "noRuleNamesThisHost")
+                  : subsets.unconfirmed.includes(destination.subset)
+                    ? t("empty", "subsetUnconfirmed")
+                    : subsets.anyRule
+                      ? t("empty", "definesList", {
+                          list:
+                            [...subsets.defined, ...subsets.unconfirmed].join(
+                              ", "
+                            ) || t("empty", "noSubsets"),
+                        })
+                      : t("empty", "noRuleNamesThisHost")
               }
             >
               {destination.subset}
@@ -529,7 +546,7 @@ function HostChain({
               {destination.host}
             </Cell>
           ) : destination.external === null ? (
-            <Cell under={t("empty", "maybeThisClustersService")}>
+            <Cell unknown under={t("empty", "maybeThisClustersService")}>
               {destination.host}
             </Cell>
           ) : (
@@ -546,6 +563,7 @@ function HostChain({
             <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
             <Cell
+              unknown
               under={t(
                 "empty",
                 backing?.error ? "endpointsUnread" : "readingEndpoints"

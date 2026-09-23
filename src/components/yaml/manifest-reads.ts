@@ -81,12 +81,14 @@ export function changesReplicaCount(original: string, edited: string): boolean {
   const [subject] = documentsIn(original) ?? [];
   const docs = documentsIn(edited);
   if (subject === undefined || docs === null || docs.length === 0) return false;
-  // The apply takes every document in the buffer, so a second one added
-  // under `---` does not stop this one from moving the count.
-  const counterpart =
-    docs.length === 1 ? docs[0] : docs.find((doc) => sameObject(doc, subject));
-  if (counterpart === undefined) return false;
-  return replicaCountOf(subject) !== replicaCountOf(counterpart);
+  // The apply takes every document in the buffer, in order, so a second one
+  // added under `---` does not stop this one from moving the count — and
+  // each copy of this object sets its own count, the last one to stay.
+  const counterparts =
+    docs.length === 1 ? docs : docs.filter((doc) => sameObject(doc, subject));
+  return counterparts.some(
+    (doc) => replicaCountOf(subject) !== replicaCountOf(doc)
+  );
 }
 
 /** The buffer's documents, or `null` where it will not parse. */

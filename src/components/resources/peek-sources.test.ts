@@ -232,6 +232,23 @@ describe("the peek's Overview against the detail pages", () => {
     ).toBe("err");
   });
 
+  /**
+   * Listeners on `*.example.com` and `foo.example.com` both get
+   * `OverlappingTLSConfig=True` and both serve; the peek drew them red.
+   * Fails if the overlap is a break again, or says nothing.
+   */
+  it("reads an overlapping TLS config as a caution on the listener", () => {
+    const listenerTone = (conditions: object[]) =>
+      gatewayPeek(gateway([], conditions)).groups[1].items[0].tone;
+
+    expect(
+      listenerTone([
+        said("Accepted", "True", "Accepted"),
+        said("OverlappingTLSConfig", "True", "OverlappingHostnames"),
+      ])
+    ).toBe("warn");
+  });
+
   it("reads a CRD where the CRD page does", async () => {
     const peek = await peekOf({
       kind: "CustomResourceDefinition",
