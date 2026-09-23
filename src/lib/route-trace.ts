@@ -83,6 +83,9 @@ export interface TraceStep {
   detail?: TraceDetail;
   /** Set when the verdict is about an older spec generation. */
   freshness?: { observed: number; current: number };
+  /** The controller took this and wrote `Unknown`: nothing broke here, and
+   *  nothing said it works either. */
+  pending?: boolean;
 }
 
 export interface RouteTrace {
@@ -109,6 +112,11 @@ export interface RouteTrace {
    * the unprobed last mile, which is blind on every healthy trace.
    */
   servingKnown: boolean;
+  /**
+   * Why {@link servingKnown} is false, null where it is not: a source nobody
+   * could read, or a verdict a controller has taken and not given yet.
+   */
+  unknownBecause: "unread" | "undecided" | null;
   /** 1-based index of the first broken step, where one is. */
   stopStep: number | null;
   steps: TraceStep[];
@@ -533,6 +541,7 @@ function gatewayStep(
         say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
         who: "infra",
         subject,
+        pending: true,
       };
     }
     // Nothing has vouched for it and there is no address: the old reading
@@ -569,6 +578,7 @@ function gatewayStep(
       say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
       who: "infra",
       subject,
+      pending: true,
     };
   }
   return {
@@ -731,6 +741,7 @@ function acceptanceSteps(
         say: t("empty", "gwAcceptedPending"),
         who: "controller",
         freshness,
+        pending: true,
       },
       namespaceQuiet(route, listeners, "ok", t),
     ];
@@ -822,6 +833,7 @@ function refsStep(
       say: t("empty", "gwRefsPending"),
       who: "controller",
       freshness,
+      pending: true,
     };
   }
 
@@ -1217,6 +1229,14 @@ function traceFor(
   const unread = steps.some(
     (step) => step.state === "blind" && step.who !== "machine"
   );
+  const unknownBecause =
+    firstBroken >= 0
+      ? null
+      : unread
+        ? "unread"
+        : steps.some((step) => step.pending)
+          ? "undecided"
+          : null;
   if (firstBroken >= 0) {
     for (const step of steps.slice(firstBroken + 1)) {
       step.state = "off";
@@ -1225,6 +1245,7 @@ function traceFor(
       step.subject = undefined;
       step.addresses = undefined;
       step.forwardPort = undefined;
+      step.pending = undefined;
     }
   }
 
@@ -1239,11 +1260,27 @@ function traceFor(
     via:
       parent.kind === "ListenerSet" ? { name: parent.name, namespace } : null,
     serving: firstBroken < 0,
-    servingKnown: firstBroken >= 0 || !unread,
+    servingKnown: unknownBecause === null,
+    unknownBecause,
     stopStep: firstBroken < 0 ? null : firstBroken + 1,
     steps,
     probe,
   };
+}
+
+/** The verdict in words, the reason included where there is no verdict. */
+export function servingSay(trace: RouteTrace, t: T): string {
+  if (trace.unknownBecause === null) {
+    return t("empty", trace.serving ? "gwServing" : "gwNotServing");
+  }
+  const why = {
+    unread: "gwServingUnknown",
+    undecided: "gwServingUndecided",
+  } as const satisfies Record<
+    NonNullable<RouteTrace["unknownBecause"]>,
+    string
+  >;
+  return t("empty", why[trace.unknownBecause]);
 }
 
 /**

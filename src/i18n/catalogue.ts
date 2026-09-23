@@ -5725,6 +5725,7 @@ export const en = {
     gwMeshNotInterpreted:
       "{list} — mesh routing (GAMMA), not interpreted by this app.",
     gwServingUnknown: "Can't tell — something here could not be read",
+    gwServingUndecided: "Can't tell yet — a controller has not decided",
     gwCheckingInstall: "Checking whether Gateway API is installed…",
     gwCouldNotCheckInstall:
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",

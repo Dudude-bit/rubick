@@ -6166,6 +6166,7 @@ export const ru: Catalogue = {
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     gwServingUnknown: "Непонятно — что-то не удалось прочитать",
+    gwServingUndecided: "Пока непонятно — контроллер ещё не решил",
     gwCheckingInstall: "Проверяем, установлен ли Gateway API…",
     gwCouldNotCheckInstall:
       "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",
