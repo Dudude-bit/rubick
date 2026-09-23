@@ -4598,6 +4598,8 @@ export const en = {
       "Whatever their emptyDir holds does not survive the move.",
     waitingOnTheseExplained:
       "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
+    drainReportsMissed:
+      "Some of this drain's reports were lost on the way to this window, so it may already have finished. What is shown is the last one that arrived.",
     stoppedExplained:
       "Nothing here changes by waiting. Each one needs an answer only you can give.",
     notNowExplained:

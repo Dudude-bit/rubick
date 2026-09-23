@@ -38,7 +38,14 @@ export type DrainState =
   | { phase: "idle" }
   /** Started, and nothing has come back yet. */
   | { phase: "starting"; node: string }
-  | { phase: "running"; node: string; attempt: number; report: DrainReport }
+  | {
+      phase: "running";
+      node: string;
+      attempt: number;
+      report: DrainReport;
+      /** The event bridge fell behind since this report; the ending may have been dropped. */
+      missed: boolean;
+    }
   | {
       phase: "done";
       node: string;
@@ -144,9 +151,15 @@ export function useNodeDrain({
           return;
         }
         drainId.current = handle.drainId;
-        setState({ phase: "running", node, attempt: 0, report: EMPTY });
+        setState({
+          phase: "running",
+          node,
+          attempt: 0,
+          report: EMPTY,
+          missed: false,
+        });
 
-        const [offProgress, offFinished] = await Promise.all([
+        const [offProgress, offFinished, offLagged] = await Promise.all([
           listenEvent("drain-progress", (event) => {
             if (event.payload.drain_id !== drainId.current) return;
             setState({
@@ -154,6 +167,7 @@ export function useNodeDrain({
               node: event.payload.node,
               attempt: event.payload.attempt,
               report: event.payload.report,
+              missed: false,
             });
           }),
           listenEvent("drain-finished", (event) => {
@@ -163,14 +177,21 @@ export function useNodeDrain({
             setState({ phase: "done", node: ended, outcome, report, message });
             finished.current?.({ node: ended, outcome, report, message });
           }),
+          listenEvent("event-bridge-lagged", () => {
+            if (drainId.current === null) return;
+            setState((now) =>
+              now.phase === "running" ? { ...now, missed: true } : now
+            );
+          }),
         ]);
 
         if (disposed.current) {
           offProgress();
           offFinished();
+          offLagged();
           return;
         }
-        unlisteners.current.push(offProgress, offFinished);
+        unlisteners.current.push(offProgress, offFinished, offLagged);
         listening.current = true;
 
         // A stop pressed while nothing was listening is spent now; the

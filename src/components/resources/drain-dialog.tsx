@@ -328,6 +328,11 @@ function DrainLive({
                 {t("action", "drainingAttempt", { n: state.attempt })}
               </p>
             )}
+            {state.missed && (
+              <p className="text-[11px] text-warn">
+                {t("empty", "drainReportsMissed")}
+              </p>
+            )}
           </>
         ) : (
           <p className="text-xs font-medium text-fg-mid">
