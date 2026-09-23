@@ -17,7 +17,6 @@
 
 import { useMemo } from "react";
 import { backingFrom, type ServiceStop } from "../ingress";
-import { useSearchParams } from "react-router-dom";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -43,6 +42,8 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { KINDS, sourcesFrom, useBacking, useMesh } from "./data";
 import { describeMatch, fullyRead, type MatchReading } from "./match";
@@ -56,6 +57,7 @@ import {
   type IstioRoute,
   type IstioSources,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { troubleMark } from "../kit";
@@ -64,8 +66,7 @@ const AUTO_OPEN = 8;
 
 export default function IstioPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const mesh = useMesh();
   const backing = useBacking();
@@ -87,15 +88,12 @@ export default function IstioPage() {
 
   if (mesh.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadMeshRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "meshRoutingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{mesh.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadMeshRouting")}
+        body={t("empty", "meshRoutingRequestFailed")}
+        error={mesh.error}
+        onRetry={() => void mesh.refetch()}
+      />
     );
   }
 
@@ -165,15 +163,7 @@ export default function IstioPage() {
         }
         description={t("empty", "istioPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -659,26 +649,19 @@ function Findings({
   brief?: boolean;
 }) {
   const t = useT();
-  if (group.findings.length === 0) return null;
-  const shown = brief ? group.findings.slice(0, 1) : group.findings;
-  const hidden = brief ? group.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => {
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      render={(finding) => {
         const said = describeFinding(finding, t);
         return (
-          <FindingBlock key={index} tone={finding.severity} title={said.title}>
+          <FindingBlock tone={finding.severity} title={said.title}>
             {!brief && said.note}
           </FindingBlock>
         );
-      })}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
-      )}
-    </div>
+      }}
+    />
   );
 }
 

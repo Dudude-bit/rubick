@@ -33,7 +33,7 @@ import {
 } from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -58,6 +58,8 @@ import {
   Finding as FindingBlock,
   TroubleRow,
   type Tone,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
@@ -88,6 +90,7 @@ import {
 } from "./model";
 import { describePath, fullyRead } from "./rule";
 import { problemWords } from "@/lib/certificates";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 
@@ -96,8 +99,7 @@ const AUTO_OPEN = 8;
 
 export default function TraefikPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "routes";
+  const [tab, setTab] = useSearchParam("tab", "routes");
 
   const routeSources = useRouteSources();
   const backing = useBacking();
@@ -203,15 +205,12 @@ export default function TraefikPage() {
 
   if (routeSources.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadRouting")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "traefikRoutingRequestFailed")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{routeSources.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadRouting")}
+        body={t("empty", "traefikRoutingRequestFailed")}
+        error={routeSources.error}
+        onRetry={() => void routeSources.refetch()}
+      />
     );
   }
 
@@ -296,15 +295,7 @@ export default function TraefikPage() {
         }
         description={t("empty", "traefikPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -925,42 +916,28 @@ function middlewareDetail(
 
 // --- findings -----------------------------------------------------------
 
+// A closed row already carries its state in the word at its right end, so
+// only a finding that says more than that word earns a line on it — which
+// on a cluster of eighty plain-HTTP hosts is the difference between eighty
+// rows and a hundred and sixty.
+const saysMoreThanTheRow = (finding: HostGroup["findings"][number]) =>
+  finding.kind !== "clear";
+
 function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
-  const t = useT();
   const issuance = useCertificateIssuance(
     group.tlsSecrets[0]?.namespace,
     group.tlsSecrets.map((secret) => secret.secretName)
   );
 
-  if (group.findings.length === 0) return null;
-
-  // A closed row already carries its state in the word at its right end, so
-  // only a finding that says more than that word earns a line on it — which
-  // on a cluster of eighty plain-HTTP hosts is the difference between eighty
-  // rows and a hundred and sixty.
-  const worthRepeating = group.findings.filter(
-    (finding) => finding.kind !== "clear"
-  );
-  if (brief && worthRepeating.length === 0) return null;
-  const shown = brief ? worthRepeating.slice(0, 1) : group.findings;
-  const hidden = brief ? worthRepeating.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
-        <FindingLine
-          key={index}
-          finding={finding}
-          brief={brief}
-          issuance={issuance}
-        />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
+    <FindingList
+      findings={group.findings}
+      brief={brief}
+      worthRepeating={saysMoreThanTheRow}
+      render={(finding) => (
+        <FindingLine finding={finding} brief={brief} issuance={issuance} />
       )}
-    </div>
+    />
   );
 }
 

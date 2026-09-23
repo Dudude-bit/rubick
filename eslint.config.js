@@ -14,6 +14,8 @@ export default [
       "target/**",
       "artifacts/**",
       "web/**",
+      ".claude/**",
+      ".worktrees/**",
       "**/*.config.{js,ts,cjs,mjs}",
     ],
   },

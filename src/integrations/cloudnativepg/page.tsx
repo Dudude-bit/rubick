@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Box, Database, Network } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { useToast } from "@/components/ui/use-toast";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import {
@@ -23,7 +23,7 @@ import {
   getValueByPath,
   troubleMark,
 } from "../kit";
-import { Cell, Finding, TroubleRow } from "../page-kit";
+import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
 import {
   BACKUPS_CRD,
@@ -45,6 +45,7 @@ import {
   type PgFinding,
 } from "./model";
 import { useNow } from "@/hooks/useNow";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -65,8 +66,7 @@ function sentenceFor(error: unknown, t: ReturnType<typeof useT>): string {
 
 export default function CloudNativePgPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "clusters";
+  const [tab, setTab] = useSearchParam("tab", "clusters");
   const clustersQuery = useClusters();
   const companions = useCompanions();
 
@@ -85,12 +85,11 @@ export default function CloudNativePgPage() {
 
   if (clustersQuery.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("operators", "couldNotReadClusters")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{clustersQuery.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("operators", "couldNotReadClusters")}
+        error={clustersQuery.error}
+        onRetry={() => void clustersQuery.refetch()}
+      />
     );
   }
 
@@ -159,15 +158,7 @@ export default function CloudNativePgPage() {
         description={t("operators", "cnpgPageDescription")}
       />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }

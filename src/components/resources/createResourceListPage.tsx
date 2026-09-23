@@ -8,7 +8,7 @@
  * `ConfigMapList.tsx` is a typical use.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, type NavigateFunction } from "react-router-dom";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -19,7 +19,6 @@ import {
   type NamespaceScope,
 } from "@/hooks/useNamespaceScope";
 import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
-import { useToast } from "@/components/ui/use-toast";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -28,7 +27,7 @@ import { deliveryScopeOf } from "@/lib/delivery";
 import { narrowingHelps } from "@/lib/resource-registry";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT, type T as Translator } from "@/i18n/useT";
 
 /** A resource that can show up in a list page. */
@@ -155,33 +154,11 @@ export function createResourceListPage<T extends ListableResource>(
           config.fetcher({ namespace })
         );
 
-    // When the backend's watcher fails N times in a row (typical cause: the
-    // kubeconfig user lacks the `watch` verb on this kind), fall back to
-    // periodic refresh so the list doesn't appear frozen. The toast warns
-    // once; the watcher keeps retrying and a recovered stream resets the flag.
-    const { toast } = useToast();
-    const [watchFailed, setWatchFailed] = useState(false);
-    const handleWatchError = useCallback(
-      (err: string) => {
-        if (watchFailed) return;
-        setWatchFailed(true);
-        toast({
-          title: t("action", "realtimeUnavailable"),
-          description: t("action", "fallingBackToPolling", {
-            title: config.title,
-            error: err,
-          }),
-        });
-      },
-      [t, toast, watchFailed]
-    );
-
-    const { resyncing } = useResourceWatch<T>({
+    const { live, refresh, resyncing } = useWatchedList<T>({
       enabled: watchEnabled,
       subscribe,
       queryKey,
-      onError: handleWatchError,
-      onRecovered: useCallback(() => setWatchFailed(false), []),
+      reportFailure: config.title,
     });
 
     const deleter = config.deleter;
@@ -216,8 +193,8 @@ export function createResourceListPage<T extends ListableResource>(
         }
         delivery={deliveryScopeOf(config.resourceType)}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchEnabled && !watchFailed ? false : undefined}
-        live={watchEnabled && !watchFailed}
+        refresh={refresh}
+        live={live}
         resyncing={resyncing}
       />
     );
