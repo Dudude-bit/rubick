@@ -21,7 +21,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
-import { Cell, Chain, Column, Finding } from "../page-kit";
+import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import { coverage, verdict } from "./coverage";
 import { useT } from "@/i18n/useT";
@@ -56,12 +56,11 @@ export default function LokiPage() {
 
   if (found.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "lokiCouldNotAsk")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{found.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "lokiCouldNotAsk")}
+        error={found.error}
+        onRetry={() => void found.refetch()}
+      />
     );
   }
 

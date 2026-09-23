@@ -11,7 +11,7 @@
  * rows, so they use `usePodsWithMetrics` directly without aggregation.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, type NavigateFunction } from "react-router-dom";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -33,8 +33,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { getResourceRowId } from "@/lib/table-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
 
 type Workload = { name: string; namespace: string };
@@ -99,41 +98,20 @@ export function createWorkloadListPage<T extends Workload>(
       [watchFactory, watchNamespace]
     );
 
-    // See createResourceListPage for the watch-failure rationale.
-    // Same fallback pattern: toast once, flip state, let useResourceList
-    // resume polling.
-    const { toast } = useToast();
-    const [watchFailed, setWatchFailed] = useState(false);
-    const handleWatchError = useCallback(
-      (err: string) => {
-        if (watchFailed) return;
-        setWatchFailed(true);
-        toast({
-          title: t("action", "realtimeUnavailable"),
-          description: t("action", "fallingBackToPolling", {
-            title: config.title,
-            error: err,
-          }),
-        });
-      },
-      [t, toast, watchFailed]
-    );
+    const { live, refresh, resyncing } = useWatchedList<T>({
+      enabled: watchEnabled,
+      subscribe,
+      queryKey,
+      reportFailure: config.title,
+    });
 
     const listQuery = useResourceList(
       queryKey,
       listAcrossScope(scope.scope, (namespace) =>
         config.fetchList({ namespace })
       ),
-      watchEnabled && !watchFailed ? ({ refresh: false } as const) : undefined
+      { refresh }
     );
-
-    const { resyncing } = useResourceWatch<T>({
-      enabled: watchEnabled,
-      subscribe,
-      queryKey,
-      onError: handleWatchError,
-      onRecovered: useCallback(() => setWatchFailed(false), []),
-    });
 
     const dataWithMetrics = useMemo(
       () =>
@@ -188,7 +166,7 @@ export function createWorkloadListPage<T extends Workload>(
         }
         error={listQuery.error}
         dataUpdatedAt={listQuery.dataUpdatedAt}
-        live={watchEnabled && !watchFailed}
+        live={live}
         slowed={listQuery.freshness.slowed}
         waitingSince={listQuery.freshness.waitingSince}
         getRowId={getResourceRowId}

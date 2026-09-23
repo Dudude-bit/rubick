@@ -1,9 +1,7 @@
-import { useT } from "@/i18n/useT";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useToast } from "@/components/ui/use-toast";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { useMetrics } from "@/hooks/useMetrics";
 import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
@@ -14,7 +12,8 @@ import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { useWatchedList } from "@/hooks/useWatchedList";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { listPodRows, type PodRow } from "@/lib/pod-rows";
 
 export type { PodWithMetrics } from "@/lib/metrics";
@@ -34,7 +33,6 @@ interface UsePodsWithMetricsOptions {
  * with the same namespace will share the cached data.
  */
 export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
-  const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
   const scope = useNamespaceScope();
   const enabled = isConnected && options?.enabled !== false;
@@ -51,22 +49,17 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   // (e.g. RBAC `watch` denial); see handleWatchError below.
   const queryKey = useMemo(() => queryKeys.podRows(cacheKey), [cacheKey]);
 
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "fallingBackToPolling", {
-          title: "Pods",
-          error: err,
-        }),
-      });
-    },
-    [toast, watchFailed, t]
+  const subscribePods = useCallback(
+    () => commands.subscribePodRowWatch(watchNamespace),
+    [watchNamespace]
   );
+  // A watch covers none or one namespace; several is polled.
+  const { live, refresh, resyncing } = useWatchedList<PodRow>({
+    enabled: enabled && !scope.several,
+    subscribe: subscribePods,
+    queryKey,
+    reportFailure: toPlural(ResourceType.Pod),
+  });
 
   const {
     data: pods = EMPTY_PODS,
@@ -91,20 +84,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     enabled,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
-    // A watch covers none or one; several is polled (the watch is off below).
-    refresh: watchFailed || scope.several ? "resourceList" : false,
-  });
-
-  const subscribePods = useCallback(
-    () => commands.subscribePodRowWatch(watchNamespace),
-    [watchNamespace]
-  );
-  const { resyncing } = useResourceWatch<PodRow>({
-    enabled: enabled && !scope.several,
-    subscribe: subscribePods,
-    queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
+    refresh,
   });
 
   const { podMetrics, podStatus } = useMetrics({
@@ -141,7 +121,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     error: podsError,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
-    watchLive: !watchFailed,
+    watchLive: live,
     /** It is re-listing: the pods here are the ones from before it started. */
     resyncing,
     /** When a read with nothing to show began, for the list to say so. */

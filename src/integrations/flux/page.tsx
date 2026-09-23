@@ -13,7 +13,6 @@
  * log, and both are linked from here.
  */
 
-import { useSearchParams } from "react-router-dom";
 import { Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -35,6 +34,8 @@ import {
   OutLink,
   TroubleList,
   TroubleRow,
+  VendorReadFailure,
+  FindingList,
 } from "../page-kit";
 import {
   HELM_RELEASES_CRD,
@@ -52,6 +53,7 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 
 /** Past this many broken reconcilers, nothing opens itself. */
@@ -66,8 +68,7 @@ const crdOf = (kind: string): string | null =>
 
 export default function FluxPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "reconcilers";
+  const [tab, setTab] = useSearchParam("tab", "reconcilers");
 
   const picture = usePicture();
   const controllers = useControllers();
@@ -77,15 +78,12 @@ export default function FluxPage() {
 
   if (picture.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("empty", "couldNotReadFlux")}
-        </h2>
-        <p className="text-xs text-fg-mut">
-          {t("empty", "couldNotReadFluxBody")}
-        </p>
-        <p className="text-[11px] text-fg-fnt">{picture.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("empty", "couldNotReadFlux")}
+        body={t("empty", "couldNotReadFluxBody")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
     );
   }
 
@@ -140,15 +138,7 @@ export default function FluxPage() {
         }
         description={t("empty", "fluxPageDescription")}
       />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
@@ -383,27 +373,18 @@ function Findings({
   reconciler: FluxReconciler;
   brief?: boolean;
 }) {
-  const t = useT();
-  if (reconciler.findings.length === 0) return null;
-  const shown = brief ? reconciler.findings.slice(0, 1) : reconciler.findings;
-  const hidden = brief ? reconciler.findings.length - 1 : 0;
-
   return (
-    <div className="flex flex-col gap-2">
-      {shown.map((finding, index) => (
+    <FindingList
+      findings={reconciler.findings}
+      brief={brief}
+      render={(finding) => (
         <ReconcilerFinding
-          key={index}
           reconciler={reconciler}
           finding={finding}
           brief={brief}
         />
-      ))}
-      {hidden > 0 && (
-        <span className="text-[11px] text-fg-fnt">
-          {t("empty", "andMoreOpenRow", { n: hidden })}
-        </span>
       )}
-    </div>
+    />
   );
 }
 

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Box, HardDrive, Layers } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { Section, SectionHeader } from "@/components/ui/section";
+import { SectionHeader } from "@/components/ui/section";
 import { useToast } from "@/components/ui/use-toast";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import {
@@ -19,7 +19,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { agoOf } from "@/lib/usage-history";
 import { cn } from "@/lib/utils";
-import { Cell, Finding, TroubleRow } from "../page-kit";
+import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
 import {
   CLUSTERS_CRD,
@@ -36,13 +36,13 @@ import {
   type ScyllaCluster,
   type ScyllaFinding,
 } from "./model";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { troubleMark } from "../kit";
 
 export default function ScyllaPage() {
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "clusters";
+  const [tab, setTab] = useSearchParam("tab", "clusters");
   const clustersQuery = useClusters();
   const nodeConfigs = useNodeConfigs();
 
@@ -66,12 +66,11 @@ export default function ScyllaPage() {
 
   if (clustersQuery.error) {
     return (
-      <Section className="max-w-[64ch] py-8">
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {t("operators", "couldNotReadScyllaClusters")}
-        </h2>
-        <p className="text-[11px] text-fg-fnt">{clustersQuery.error.message}</p>
-      </Section>
+      <VendorReadFailure
+        title={t("operators", "couldNotReadScyllaClusters")}
+        error={clustersQuery.error}
+        onRetry={() => void clustersQuery.refetch()}
+      />
     );
   }
 
@@ -127,15 +126,7 @@ export default function ScyllaPage() {
         description={t("operators", "scyllaPageDescription")}
       />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
-      <DetailTabs
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(next) => {
-          const updated = new URLSearchParams(params);
-          updated.set("tab", next);
-          setParams(updated, { replace: true });
-        }}
-      />
+      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
     </div>
   );
 }
