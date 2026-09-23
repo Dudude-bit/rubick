@@ -4690,6 +4690,8 @@ export const en = {
     anyCluster: "any cluster",
     namespaceOnCluster: "{namespace} on {cluster}",
     readingArgoWorkloads: "Reading Argo’s own workloads…",
+    argoWorkloadsUnread:
+      "Could not list {kinds}, so any of Argo's own workloads among them are missing here.",
     argoWorkloadsDescription:
       "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
     argoUiDescription:
