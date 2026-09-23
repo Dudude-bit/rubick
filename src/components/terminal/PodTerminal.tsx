@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { commands } from "@/lib/commands";
 import { podContainers } from "@/lib/container-sequence";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
@@ -215,8 +215,7 @@ export function PodTerminal({
           disconnect();
         }
       } catch (err) {
-        const errorText = normalizeTauriError(err);
-        if (errorText.includes("not found") || errorText.includes("NotFound")) {
+        if (errorCode(err) === ERROR_CODES.NOT_FOUND) {
           setUnavailableReason(t("empty", "podNotFound"));
           disconnect();
         }

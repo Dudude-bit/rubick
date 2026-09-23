@@ -49,7 +49,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-vi.mock("@/lib/error-utils", () => ({
+vi.mock("@/lib/error-utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/error-utils")>()),
   normalizeTauriError: (err: unknown) => String(err),
   errorToShow: (err: unknown) => String(err),
 }));

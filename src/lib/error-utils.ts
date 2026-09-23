@@ -19,16 +19,30 @@ export interface NormalizedError {
 /**
  * Error codes for categorization
  */
+/**
+ * What an error is, as the backend says it: `shared/error-codes.json`, plus
+ * UNKNOWN for anything that did not come from there.
+ */
 export const ERROR_CODES = {
   UNKNOWN: "UNKNOWN_ERROR",
   NETWORK: "NETWORK_ERROR",
   TIMEOUT: "TIMEOUT_ERROR",
   AUTH: "AUTH_ERROR",
+  CREDENTIALS_EXPIRED: "CREDENTIALS_EXPIRED",
   PERMISSION: "PERMISSION_DENIED",
   NOT_FOUND: "NOT_FOUND",
   VALIDATION: "VALIDATION_ERROR",
   KUBE_API: "KUBE_API_ERROR",
   INTERNAL: "INTERNAL_ERROR",
+  CONFIG: "CONFIG_ERROR",
+  PLUGIN: "PLUGIN_ERROR",
+  TERMINAL: "TERMINAL_ERROR",
+  LOG_STREAM: "LOG_STREAM_ERROR",
+  NO_PREVIOUS_RUN: "NO_PREVIOUS_RUN",
+  LIST_UNREAD: "LIST_UNREAD",
+  LOG_NOT_KEPT: "LOG_NOT_KEPT",
+  READ_DEADLINE: "READ_DEADLINE",
+  NOT_CONNECTED: "NOT_CONNECTED",
 } as const;
 
 type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -72,13 +86,17 @@ export function isWorthRetrying(error: unknown): boolean {
 }
 
 /**
- * Extract error code from error message or structure
+ * The code an error carries, read through `cause`: a page that re-throws
+ * `new Error(message, { cause })` keeps the backend's code one level down.
+ * Only an error with no code anywhere falls back to reading its sentence.
  */
-function extractErrorCode(error: unknown): ErrorCode {
-  if (error && typeof error === "object") {
-    const err = error as Record<string, unknown>;
-
-    // Check for explicit error_code or code field
+export function errorCode(error: unknown): ErrorCode {
+  for (
+    let at: unknown = error, depth = 0;
+    at && typeof at === "object" && depth < 5;
+    at = (at as { cause?: unknown }).cause, depth++
+  ) {
+    const err = at as Record<string, unknown>;
     if (typeof err.error_code === "string") {
       return err.error_code as ErrorCode;
     }
@@ -138,7 +156,7 @@ function extractErrorCode(error: unknown): ErrorCode {
  * is broken and invites a retry; a refusal is neither.
  */
 export function isRefusal(error: unknown): boolean {
-  return extractErrorCode(error) === ERROR_CODES.PERMISSION;
+  return errorCode(error) === ERROR_CODES.PERMISSION;
 }
 
 /**
@@ -153,7 +171,7 @@ export function normalizeError(
   context?: string
 ): NormalizedError {
   const message = normalizeTauriError(error);
-  const code = extractErrorCode(error);
+  const code = errorCode(error);
 
   let details: unknown = undefined;
   if (error && typeof error === "object" && !(error instanceof Error)) {

@@ -8,6 +8,8 @@
  * the two equal, with a test on each side, the way the overview cap is held.
  */
 
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+
 /** After this the app stops waiting for one request and says so. */
 export const LIST_DEADLINE_SECONDS = 60;
 
@@ -17,14 +19,14 @@ export const SLOW_READ_MS = 8_000;
 /**
  * The marker `Error::ReadDeadline` puts at the front of its message.
  *
- * Matched rather than the prose after it, and for the reason `credentials.ts`
- * gives: errors cross the Tauri boundary as their `Display` string and
- * nothing else, and sniffing English is how a refusal once read as a network
+ * The code says it where there is one; the prefix is for a message that
+ * has lost it. Sniffing English is how a refusal once read as a network
  * blip. Defined in `src-tauri/src/error.rs`.
  */
 const MARKER = "READ_DEADLINE:";
 
 export function isReadDeadline(error: unknown): boolean {
+  if (errorCode(error) === ERROR_CODES.READ_DEADLINE) return true;
   const message =
     error instanceof Error
       ? error.message
