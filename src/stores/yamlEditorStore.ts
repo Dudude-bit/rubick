@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { dump, load } from "js-yaml";
 import { commands } from "@/lib/commands";
 import type { ManifestResult } from "@/generated/types";
 
@@ -57,7 +56,8 @@ interface YamlEditorState {
   restoreFromHistory: (timestamp: number) => void;
   getResourceHistory: () => HistoryEntry[];
   resetToOriginal: () => void;
-  formatYaml: () => void;
+  /** Whether the buffer parsed and was reformatted. */
+  formatYaml: () => Promise<boolean>;
 }
 
 function getResourceKeyString(key: ResourceKey | null): string {
@@ -239,9 +239,10 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
     });
   },
 
-  formatYaml: () => {
+  formatYaml: async () => {
     const { editedContent } = get();
     try {
+      const { dump, load } = await import("js-yaml");
       const parsed = load(editedContent);
       const formatted = dump(parsed, {
         indent: 2,
@@ -254,8 +255,10 @@ export const useYamlEditorStore = create<YamlEditorState>((set, get) => ({
         validationResult: null,
         applyResult: null,
       });
+      return true;
     } catch {
-      // If parsing fails, keep original content
+      // A buffer that does not parse is left as it is.
+      return false;
     }
   },
 }));

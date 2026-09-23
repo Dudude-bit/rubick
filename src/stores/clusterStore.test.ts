@@ -54,9 +54,10 @@ describe("what the window is scoped to", () => {
   });
 
   /**
-   * Would take the ceiling off the only thing a scope makes more expensive:
-   * the overview is one read per selected namespace every ten seconds, and
-   * this is the one place that number is bounded.
+   * Would take the ceiling off what a scope makes more expensive: the
+   * overview reads every selected namespace every ten seconds, the events
+   * feed asks each one every second, and this is the one place that number
+   * is bounded.
    */
   it("never watches more namespaces than it can answer for", async () => {
     await state().setNamespaceScope(
@@ -185,6 +186,32 @@ describe("an expired session and the reconnect", () => {
     await state().connect("prod-eu");
     expect(readExpiredCredentials()).not.toBeNull();
     expect(state().isConnected).toBe(false);
+  });
+});
+
+describe("a connect that failed", () => {
+  /**
+   * The field is read by the cluster door, its toast and the alert panel.
+   * Kept with the command in front, two of them printed
+   * "Tauri command 'connectCluster' failed:" over the server's words.
+   */
+  it("keeps the server's words without the command in front", async () => {
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error(
+        "Tauri command 'connectCluster' failed: exec plugin: aws-iam-authenticator not found"
+      )
+    );
+    await state().connect("prod-eu");
+    expect(state().error).toBe("exec plugin: aws-iam-authenticator not found");
+  });
+
+  /** The same field, set by an unreadable kubeconfig. */
+  it("keeps the server's words when the contexts could not be read", async () => {
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
+    await state().loadContexts();
+    expect(state().error).toBe("kubeconfig: bad yaml");
   });
 });
 

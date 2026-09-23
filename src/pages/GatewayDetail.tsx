@@ -44,11 +44,13 @@ import { CertificateLine } from "@/components/resources/CertificateFacts";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
+import { verdictOf } from "@/lib/route-verdict";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
@@ -85,23 +87,28 @@ function acceptedBy(
   gateway: GatewayInfo,
   t: T
 ): { text: string; tone: "ok" | "err" | "mute" } {
-  const verdicts = route.parents
-    .filter((parent) =>
-      // By the same resolution as `attachesTo`: a route through a set has
-      // its verdict written against the set, not against this Gateway.
+  const verdict = verdictOf(
+    // By the same resolution as `attachesTo`: a route through a set has its
+    // verdict written against the set, not against this Gateway.
+    route.parents.filter((parent) =>
       parentIsGateway(parent.parent, route.namespace, gateway)
-    )
-    .flatMap((parent) =>
-      parent.conditions.filter((c) => c.type === "Accepted")
-    );
-  if (verdicts.length === 0)
-    return { text: t("empty", "gwNoControllerShort"), tone: "mute" };
-  const refused = verdicts.find((c) => c.status === "False");
-  if (refused)
-    return { text: refused.reason ?? t("empty", "gwRefusedWord"), tone: "err" };
-  if (verdicts.every((c) => c.status === "True"))
-    return { text: t("empty", "gwAcceptedWord"), tone: "ok" };
-  return { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
+    ),
+    "Accepted"
+  );
+  switch (verdict.state) {
+    case "none":
+    case "undecided":
+      return { text: t("empty", "gwNoControllerShort"), tone: "mute" };
+    case "false":
+      return {
+        text: verdict.said.reason ?? t("empty", "gwRefusedWord"),
+        tone: "err",
+      };
+    case "true":
+      return { text: t("empty", "gwAcceptedWord"), tone: "ok" };
+    case "pending":
+      return { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
+  }
 }
 
 const TONE_CLASS = {
@@ -275,7 +282,7 @@ export function GatewayDetail() {
   // carries the controller that answers for it, and Accepted is that
   // controller's signature. Unknown or absent is the honest third state.
   const classes = useQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     enabled: !!gateway,

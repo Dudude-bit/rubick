@@ -20,17 +20,25 @@ import {
 } from "@/components/helm";
 import { Package, Search, FolderGit2 } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import type {
   HelmRelease,
   HelmChartSearchResult,
   HelmInstallOptions,
+  NamespaceInfo,
+  UnreadNamespace,
 } from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
+
+const namesOf = (namespaces: NamespaceInfo[]) =>
+  namespaces.map((ns) => ns.name);
+const NO_RELEASES: HelmRelease[] = [];
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 export function Helm() {
   const t = useT();
@@ -51,7 +59,7 @@ export function Helm() {
   // other list, rather than carrying a second dropdown of its own. A two- or
   // more namespace scope is read one namespace at a time, so a user with rights
   // in some namespaces and not others still sees theirs — a single cluster-wide
-  // secret list would 403 and come back empty. See `listAcrossScope`.
+  // secret list would 403 and come back empty.
   const scope = useNamespaceScope();
   const [activeTab, setActiveTab] = useState<string>("releases");
 
@@ -87,38 +95,38 @@ export function Helm() {
   }, [isConnected, helm, checkHelmAvailability]);
 
   const { data: namespaces = [] } = useQuery({
-    queryKey: ["namespaces"],
-    queryFn: async () => {
-      const result = await commands.listNamespaces();
-      return result.map((ns) => ns.name);
-    },
+    queryKey: queryKeys.namespaces(),
+    queryFn: () => commands.listNamespaces(),
+    select: namesOf,
     enabled: isConnected,
   });
 
   const helmCliAvailable = helm?.available ?? false;
 
   const {
-    data: releases = [],
+    data: answer,
     isLoading,
     error: releasesError,
     refetch,
   } = useLiveQuery({
-    // `null` for the whole cluster — not `"all"`, which is a name a namespace
-    // can really carry and would then share this cache entry.
-    queryKey: ["helm-releases-native", scopeCacheKey(scope.scope)],
+    queryKey: queryKeys.helm.releases(scopeCacheKey(scope.scope)),
     // The `commands` wrapper already throws a normalised Error; a second
     // catch here re-threw a bare string, and the refusal block's
     // `verbatim(error.message)` then read `.message` off a string and crashed.
     // Let the wrapper's Error propagate, like every other list.
-    queryFn: listAcrossScope(scope.scope, (ns) =>
-      commands.listHelmReleasesNative(ns)
-    ),
+    queryFn: () => commands.listHelmReleasesIn(wireScope(scope.scope)),
     enabled: isConnected,
     refresh: "steady",
   });
 
+  const releases = answer?.rows ?? NO_RELEASES;
+  const unread = answer?.unread ?? NOTHING_UNREAD;
+
   const { data: historyData = [], isLoading: historyLoading } = useQuery({
-    queryKey: ["helm-history", historyDialog?.name, historyDialog?.namespace],
+    queryKey: queryKeys.helm.history(
+      historyDialog?.namespace,
+      historyDialog?.name
+    ),
     queryFn: async () => {
       if (!historyDialog) return [];
       return await commands.getHelmHistory(
@@ -157,15 +165,13 @@ export function Helm() {
         title: t("action", "rollbackInitiated"),
         description: t("action", "rollbackInitiatedDetail"),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setRollbackTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "rollbackFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "rollbackFailed"), error);
     },
   });
 
@@ -182,15 +188,13 @@ export function Helm() {
         title: t("action", "releaseUninstalled"),
         description: t("action", "releaseUninstalledDetail"),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setUninstallTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "uninstallFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "uninstallFailed"), error);
     },
   });
 
@@ -210,11 +214,7 @@ export function Helm() {
       setNewRepoUrl("");
     },
     onError: (error) => {
-      toast({
-        title: t("action", "addRepositoryFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "addRepositoryFailed"), error);
     },
   });
 
@@ -229,11 +229,7 @@ export function Helm() {
       setDeleteRepoTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "removeRepositoryFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "removeRepositoryFailed"), error);
     },
   });
 
@@ -247,11 +243,7 @@ export function Helm() {
       queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "updateRepositoriesFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "updateRepositoriesFailed"), error);
     },
   });
 
@@ -262,11 +254,7 @@ export function Helm() {
       const results = await commands.helmSearchCharts(searchKeyword);
       setSearchResults(results);
     } catch (error) {
-      toast({
-        title: t("action", "searchFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "searchFailed"), error);
     } finally {
       setIsSearching(false);
     }
@@ -282,7 +270,9 @@ export function Helm() {
           name: installReleaseName,
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setInstallChart(null);
       setInstallReleaseName("");
       setInstallNamespace("default");
@@ -292,11 +282,7 @@ export function Helm() {
       setInstallWait(true);
     },
     onError: (error) => {
-      toast({
-        title: t("settings", "installationFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("settings", "installationFailed"), error);
     },
   });
 
@@ -310,18 +296,16 @@ export function Helm() {
           name: upgradeTarget?.name ?? "",
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setUpgradeTarget(null);
       setUpgradeVersion("");
       setUpgradeValues("");
       setUpgradeWait(true);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "upgradeFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "upgradeFailed"), error);
     },
   });
 
@@ -345,8 +329,9 @@ export function Helm() {
           title="Helm"
           // No count beside a refused read — "0 releases" there would say the
           // opposite of the tab's "no access". The tab reads the same error.
+          // Nor beside an unread namespace, where it is not the total.
           count={
-            releasesError && releases.length === 0
+            (releasesError && releases.length === 0) || unread.length > 0
               ? undefined
               : t("count", "releases", { n: releases.length })
           }
@@ -371,6 +356,7 @@ export function Helm() {
         <TabsContent value="releases">
           <HelmReleasesTab
             releases={releases}
+            unread={unread}
             isLoading={isLoading}
             error={releasesError ?? null}
             helmCliAvailable={helmCliAvailable}

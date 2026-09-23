@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+import { CODE_FILES } from "@/test/source-files";
 import { en, type Plural } from "./catalogue";
 
 /**
@@ -39,17 +39,6 @@ function matchFrom(text: string, open: number): number {
     else if (text[i] === close && --depth === 0) return i + 1;
   }
   return -1;
-}
-
-function files(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    if (name === "generated" || name === "node_modules") continue;
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) files(path, out);
-    else if (/\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path))
-      out.push(path);
-  }
-  return out;
 }
 
 /** Every `{name}` the string — or every form of the plural — asks for. */
@@ -128,7 +117,7 @@ function callsIn(file: string, source: string): Call[] {
 describe("every t() call supplies what its string asks for", () => {
   it("names no placeholder the caller leaves out", () => {
     const missing: string[] = [];
-    for (const file of files("src")) {
+    for (const file of CODE_FILES) {
       for (const call of callsIn(file, readFileSync(file, "utf8"))) {
         const entry = (en as Record<string, Record<string, string | Plural>>)[
           call.section
@@ -167,7 +156,7 @@ describe("every t() call supplies what its string asks for", () => {
    */
   it("chooses a plural form from a number, never from a formatted count", () => {
     const wrong: string[] = [];
-    for (const file of files("src")) {
+    for (const file of CODE_FILES) {
       for (const call of callsIn(file, readFileSync(file, "utf8"))) {
         const entry = (en as Record<string, Record<string, string | Plural>>)[
           call.section
@@ -190,9 +179,7 @@ describe("every t() call supplies what its string asks for", () => {
    * of the shape above, this fails and says so instead of going quiet.
    */
   it("reads the calls it is meant to be checking", () => {
-    const all = files("src").flatMap((f) =>
-      callsIn(f, readFileSync(f, "utf8"))
-    );
+    const all = CODE_FILES.flatMap((f) => callsIn(f, readFileSync(f, "utf8")));
     expect(all.length).toBeGreaterThan(200);
   });
 });

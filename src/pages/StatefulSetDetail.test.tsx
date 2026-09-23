@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,6 +26,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { StatefulSetDetail } from "./StatefulSetDetail";
 
 function buildSet(
@@ -43,6 +45,13 @@ function buildSet(
     initContainers: [],
     serviceAccountName: null,
     podResources: { requests: {}, limits: {} },
+    replica: {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    },
     labels: {},
     annotations: {},
     conditions: [],
@@ -131,6 +140,7 @@ function renderPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  renderPage.client = client;
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter
@@ -142,10 +152,55 @@ function renderPage() {
   );
 }
 
+renderPage.client = null as unknown as QueryClient;
+
 describe("StatefulSetDetail", () => {
   beforeEach(() => {
     connections = governed;
     mockDetail(buildSet());
+  });
+
+  /**
+   * The peek's Pods tab finds a set's pods the same way and keeps them in the
+   * same entry. Fails if the page keys them apart: the list is read twice,
+   * and a mutation from the peek leaves this pane behind.
+   */
+  it("keeps its pods where the peek's Pods tab reads them", async () => {
+    const pod = (name: string) => ({
+      name,
+      namespace: "k8s-gui-test",
+      uid: name,
+      status: {
+        phase: "Running",
+        display: "Running",
+        ready: true,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      nodeName: null,
+      containers: [],
+      initContainers: [],
+      restartCount: 0,
+      createdAt: null,
+      labels: {},
+      annotations: {},
+      ownerReferences: [],
+      podIp: null,
+      hostIp: null,
+    });
+    vi.mocked(commands.listPods).mockResolvedValueOnce([
+      pod("stateful-demo-0"),
+      pod("stateful-demo-web"),
+    ] as never);
+    renderPage();
+    await waitFor(() =>
+      expect(
+        renderPage.client.getQueryData(
+          queryKeys.ownedPods("StatefulSet", "k8s-gui-test", "stateful-demo")
+        )
+      ).toEqual([pod("stateful-demo-0")])
+    );
   });
 
   it("offers Scale — a StatefulSet has a replica count like any other", () => {

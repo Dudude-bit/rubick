@@ -17,11 +17,16 @@ import App from "./App";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
-import { logDebug, logError, logInfo } from "@/lib/logger";
+import { logError, logInfo } from "@/lib/logger";
 import { STALE_TIMES } from "@/lib/refresh";
 import { isWorthRetrying } from "@/lib/error-utils";
-import { commands } from "@/lib/commands";
-import { setHostOs } from "@/lib/platform";
+import { hostOsFromUserAgent, setHostOs } from "@/lib/platform";
+import { markStartup } from "@/lib/startup";
+import { loadLocale } from "@/i18n";
+import { currentLocale } from "@/stores/localeStore";
+
+// After every eagerly imported module has loaded.
+markStartup("main");
 
 const formatKey = (key: unknown) => {
   try {
@@ -42,14 +47,6 @@ const queryClient = new QueryClient({
         data: {
           queryKey: formatKey(query.queryKey),
           error: formatError(error),
-        },
-      });
-    },
-    onSuccess: (_data, query) => {
-      logDebug("Query success", {
-        context: "react-query",
-        data: {
-          queryKey: formatKey(query.queryKey),
         },
       });
     },
@@ -99,26 +96,11 @@ const queryClient = new QueryClient({
   },
 });
 
-// The rendered modifier differs per platform and Kbd reads it
-// synchronously, so resolve it before the first paint rather than
-// letting an early mount render the wrong glyph with no way to
-// re-render. A hung IPC must not white-screen the app, so the wait is
-// bounded and falls back to the Ctrl default.
-async function resolveHostOs(): Promise<void> {
-  try {
-    const info = await Promise.race([
-      commands.getAppInfo(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 2000)
-      ),
-    ]);
-    setHostOs(info.os);
-  } catch {
-    // keep the Ctrl fallback
-  }
-}
+// Kbd reads the platform synchronously, so it is set before the first render.
+setHostOs(hostOsFromUserAgent(navigator.userAgent));
 
-void resolveHostOs().then(() => {
+function render() {
+  markStartup("root");
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
@@ -131,4 +113,8 @@ void resolveHostOs().then(() => {
       </QueryClientProvider>
     </React.StrictMode>
   );
-});
+}
+
+// The reader's language before anything is drawn in it; English, which is
+// built in, if its catalogue cannot be loaded.
+loadLocale(currentLocale()).then(render, render);

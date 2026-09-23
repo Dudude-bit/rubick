@@ -20,6 +20,7 @@ import { Section } from "@/components/ui/section";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { useIntegrationPage } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 export function IntegrationPage() {
   const t = useT();
@@ -84,18 +85,13 @@ function Missing({ title, body }: { title: string; body: string }) {
       </div>
       <p className="text-xs text-fg-mut">{body}</p>
       <p className="text-[11px] text-fg-fnt">
-        {t("empty", "integrationsPageLists")
-          .split("{link}")
-          .map((part, i) => (
-            <span key={i}>
-              {i > 0 && (
-                <Link to="/integrations" className="text-info hover:underline">
-                  {t("nav", "integrations")}
-                </Link>
-              )}
-              {part}
-            </span>
-          ))}
+        {parts(t("empty", "integrationsPageLists"), {
+          link: (
+            <Link to="/integrations" className="text-info hover:underline">
+              {t("nav", "integrations")}
+            </Link>
+          ),
+        })}
       </p>
     </Section>
   );

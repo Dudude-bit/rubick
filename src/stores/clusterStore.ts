@@ -14,7 +14,7 @@ import { currentLocale } from "./localeStore";
 import { create } from "zustand";
 
 import type { ContextInfo } from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
 import { clampScope, decodeScope, wireNamespace } from "@/lib/namespace-scope";
@@ -192,7 +192,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       }
     } catch (error) {
       set({
-        error: normalizeTauriError(error),
+        error: errorToShow(error),
         isLoading: false,
       });
     }
@@ -326,10 +326,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       if (get().connectionAttemptId !== attemptId) {
         return;
       }
-      // Normalize error message - Tauri errors can be objects
-      const errorMessage = normalizeTauriError(error);
       set({
-        error: errorMessage,
+        // Every reader of this field puts it on screen.
+        error: errorToShow(error),
         errorContext: targetContext,
         isLoading: false,
         isAuthenticating: false,

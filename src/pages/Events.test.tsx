@@ -4,17 +4,21 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { listEvents: vi.fn(async () => []) },
+  commands: {
+    listEvents: vi.fn(async () => []),
+    getPod: vi.fn(async () => ({ containers: [] })),
+  },
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
 import { Events } from "./Events";
@@ -72,7 +76,7 @@ function mount(view: "list" | "stories" = "list") {
     </QueryClientProvider>
   );
   const rendered = render(tree());
-  return { ...rendered, redraw: () => rendered.rerender(tree()) };
+  return { ...rendered, client, redraw: () => rendered.rerender(tree()) };
 }
 
 const asked = () =>
@@ -315,6 +319,29 @@ describe("stories", () => {
     expect(screen.getByRole("tab", { name: "Stories" })).toHaveAttribute(
       "aria-selected",
       "true"
+    );
+  });
+
+  /**
+   * The timeline reads each pod's remembered exits under the key it said
+   * every other reader used — plural-first, while the pod page's is singular
+   * — so a pod was fetched twice and a restart on its page never reached the
+   * story. Fails if the timeline keys the pod apart from its page again.
+   */
+  it("reads each pod on the timeline from the entry its own page keeps", async () => {
+    const pod = "api-7b6d9c5f4-x8k2p";
+    listEvents.mockResolvedValue([warning("prod", pod, 0)]);
+    const { client } = mount("stories");
+
+    const card = await screen.findByRole("article", { name: /api/ });
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Timeline" })
+    );
+
+    await waitFor(() =>
+      expect(client.getQueryData(queryKeys.detail("Pod", "prod", pod))).toEqual(
+        { containers: [] }
+      )
     );
   });
 

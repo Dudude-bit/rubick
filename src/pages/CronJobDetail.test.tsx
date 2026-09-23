@@ -17,6 +17,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
 import { CronJobDetail } from "./CronJobDetail";
 
 function buildCronJob(
@@ -40,6 +41,13 @@ function buildCronJob(
     initContainers: [],
     serviceAccountName: null,
     podResources: { requests: {}, limits: {} },
+    replica: {
+      cpuRequests: null,
+      cpuLimits: null,
+      memoryRequests: null,
+      memoryLimits: null,
+      known: true,
+    },
     labels: {},
     annotations: {},
     ownerReferences: [],
@@ -123,5 +131,22 @@ describe("CronJobDetail", () => {
     mockDetail(undefined);
     const { container } = renderPage();
     expect(container.firstChild).toBeNull();
+  });
+
+  /**
+   * A refused Job list was caught and answered with an empty one, so the
+   * page drew "0 kept" beside a peek that said it could not read the runs.
+   */
+  it("says the runs could not be read rather than that there are none", async () => {
+    vi.mocked(commands.listJobs).mockRejectedValueOnce(
+      new Error(
+        'jobs.batch is forbidden: User "kirya" cannot list resource "jobs"'
+      )
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Could not read this CronJob's runs.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/jobs kept/)).toBeNull();
   });
 });

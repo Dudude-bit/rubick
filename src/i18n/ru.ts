@@ -144,8 +144,6 @@ export const ru: Catalogue = {
     operators: "Операторы",
     metadata: "Метаданные",
     allIntegrations: "Все интеграции",
-    infrastructureBuilder: "Конструктор инфраструктуры",
-    visual: "Схема",
     overview: "Обзор",
     workloads: "Нагрузки",
     cluster: "Кластер",
@@ -394,7 +392,6 @@ export const ru: Catalogue = {
     labels: "Метки",
     selectors: "Селекторы",
     data: "Данные",
-    containerImage: "Образ контейнера",
     serviceType: "Тип Service",
     sessionAffinity: "Привязка сессий",
     host: "Хост",
@@ -625,7 +622,6 @@ export const ru: Catalogue = {
     updating: "обновляется…",
     manifestCopiedNamed: "Манифест {name} скопирован",
     kindManifest: "манифест {kind}",
-    importedFromCluster: "Импортировано из кластера",
     suspendedLower: "приостановлен",
     inTime: "через {time}",
     nowLower: "сейчас",
@@ -752,7 +748,6 @@ export const ru: Catalogue = {
     confirmByTyping: "Подтвердите действие, введя требуемый текст",
     typeWord: "Введите",
     toConfirm: "для подтверждения",
-    realtimeFallback: "{kind}: переходим на периодическое обновление. {error}",
     nodeCordoned: "Узел закрыт для планирования",
     nodeCordonedDetail:
       "На узел {name} больше не будут назначаться новые поды.",
@@ -774,8 +769,6 @@ export const ru: Catalogue = {
     leaveEmptyForLatest: "Оставьте пустым, чтобы взять последнюю",
     valuesPlaceholder: "# Значения для слияния\nreplicaCount: 3",
     upgrading: "Обновление…",
-    paletteTemplates: "Шаблоны",
-    paletteDrag: "перетащите",
     paletteDescPod: "Нагрузка из одного контейнера",
     paletteDescDeployment: "Реплицируемая нагрузка",
     paletteDescService: "Постоянная сетевая точка входа",
@@ -1130,58 +1123,13 @@ export const ru: Catalogue = {
     willDeleteInNamespace:
       "Объект {name} в пространстве имён {namespace} будет удалён.",
     couldNotDo: "Не удалось {action} {name}",
-    invalidConnection: "Недопустимая связь",
-    invalidConnectionHint:
-      "Ingress соединяется с Service, а Service — с Pod или Deployment.",
-    invalidYaml: "Некорректный YAML",
-    fixYamlBeforeCanvas: "Исправьте YAML перед переходом к холсту.",
     validationPassed: "Проверка пройдена",
-    validationFailed: "Проверка не пройдена",
-    validationCompleted: "Проверка завершена.",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
     applyUnanswered: "Кластер не ответил",
     applyUnansweredHint:
       "Мы перестали ждать. Применилось или нет — неизвестно: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
-    applyCompleted: "Применение завершено.",
-    clearCanvasQuestion: "Очистить холст?",
-    clearCanvasConfirm: "С холста будут удалены все ресурсы и связи.",
-    openBuilderHelp: "Открыть справку по конструктору",
-    builderShortcutsTooltip:
-      "Перетаскивайте из палитры, выделяйте рамкой на пустом холсте. Удалить: Backspace · Выделить всё: Cmd/Ctrl+A · Инвертировать: Cmd/Ctrl+Shift+I",
-    filterResources: "Фильтровать ресурсы",
-    filterResourcesPlaceholder: "Фильтр ресурсов…",
-    includeImported: "Включая импортированные",
-    yamlPaneHint:
-      "Вставьте или доработайте манифесты здесь. При возврате к холсту этот текст разбирается, и распознанные типы ресурсов переносятся на схему.",
-    builderHelpTitle: "Справка по конструктору инфраструктуры",
-    builderHelpHint: "Горячие клавиши и приёмы выделения на холсте.",
-    builderHelpCanvas: "Холст",
-    builderHelpDrag: "Перетащите ресурс из палитры, чтобы разместить его.",
-    builderHelpClick:
-      "Нажмите на ресурс в палитре, чтобы добавить его ближе к центру холста.",
-    builderHelpLasso: "Потяните по пустому холсту, чтобы выделить рамкой.",
-    builderHelpNode:
-      "Нажмите на узел, чтобы выделить его, и тяните, чтобы переместить.",
-    builderHelpShortcuts: "Горячие клавиши",
-    builderHelpDelete: "Delete или Backspace: удалить выделенное.",
-    builderHelpSelectAll: "Cmd/Ctrl + A: выделить все узлы и связи.",
-    builderHelpInvert: "Cmd/Ctrl + Shift + I: инвертировать выделение.",
-    inspectorHint: "Здесь основные поля; всё остальное — в YAML.",
-    nameAlreadyUsed: "Имя уже занято другим {kind} в этом пространстве имён.",
-    useCurrentNamespace: "Текущее ({namespace})",
-    useCurrentContext: "Из текущего контекста",
-    customValue: "Указать вручную…",
     custom: "Указать вручную",
-    customNamespacePlaceholder: "своё пространство имён",
-    customSecretTypePlaceholder: "свой тип Secret",
-    selectType: "Выберите тип",
-    selectAffinity: "Выберите привязку",
-    selectPathType: "Выберите тип пути",
-    sessionAffinityHint:
-      "При значении ClientIP запросы клиента идут на один и тот же бэкенд.",
-    pathTypeHint:
-      "Определяет, как сопоставляется путь (Prefix, Exact или ImplementationSpecific).",
     stripFull: "Полная",
     stripFullHint: "Объём во времени, с часами и счётчиками ошибок",
     stripBand: "Полоска",
@@ -1224,6 +1172,19 @@ export const ru: Catalogue = {
     interleaveAnyway: "Всё равно смешать",
     clearQuery: "Очистить запрос",
     downloadFailed: "Не удалось скачать",
+    logSaved: {
+      one: "Сохранён {n} лог",
+      few: "Сохранено {n} лога",
+      many: "Сохранено {n} логов",
+      other: "Сохранено {n} лога",
+    },
+    logsPartlySaved: {
+      one: "Сохранён {n} лог из {total}",
+      few: "Сохранено {n} лога из {total}",
+      many: "Сохранено {n} логов из {total}",
+      other: "Сохранено {n} лога из {total}",
+    },
+    notSaved: "Не сохранены:",
     downloadFailedDetail: "Не удалось прочитать лог из API",
     confirm: "Подтвердить",
     processing: "Выполняется…",
@@ -1328,14 +1289,8 @@ export const ru: Catalogue = {
     edit: "Изменить",
     test: "Проверить",
     testing: "Проверка…",
-    addRegistry: "Добавить реестр",
-    saveCredentials: "Сохранить учётные данные",
     clear: "Очистить",
-    deleteSelection: "Удалить выбранное",
-    clearCanvas: "Очистить холст",
     import: "Импортировать",
-    openYaml: "Открыть YAML",
-    removeResource: "Удалить ресурс",
     copyLinesInView: "Копировать видимые строки",
     downloadFullLog: "Скачать полный лог",
     clearBuffered: "Очистить буфер",
@@ -1353,6 +1308,7 @@ export const ru: Catalogue = {
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
+    copyFailed: "Не удалось скопировать",
     openInBrowser: "Открыть в браузере",
     back: "Назад",
     gwFilterPlaceholder: "имя, хост, шлюз…",
@@ -1362,8 +1318,6 @@ export const ru: Catalogue = {
     hideMap: "Скрыть карту",
     map: "Карта",
     openGateways: "Открыть Gateways →",
-    liveUnavailableFor: "Живые обновления для {kind} недоступны",
-    fallsBackPolling: "{message} — список переходит на опрос.",
     copyListenerHostname: "Хост слушателя {host}",
     inInline: "в",
     probe: "Проверить",
@@ -1828,6 +1782,19 @@ export const ru: Catalogue = {
       many: "· {n} строк прочитать не удалось, строк не хватает",
       other: "· {n} строк прочитать не удалось, строк не хватает",
     },
+    lostOnTheWay: {
+      one: "· {n} строка потерялась по дороге, это не весь каталог",
+      few: "· {n} строки потерялись по дороге, это не весь каталог",
+      many: "· {n} строк потерялись по дороге, это не весь каталог",
+      other: "· {n} строк потерялись по дороге, это не весь каталог",
+    },
+    nothingArrived: {
+      one: "Инструмент перечислил {n} строку, и она потерялась по дороге — что здесь лежит, неизвестно.",
+      few: "Инструмент перечислил {n} строки, и ни одна не дошла — что здесь лежит, неизвестно.",
+      many: "Инструмент перечислил {n} строк, и ни одна не дошла — что здесь лежит, неизвестно.",
+      other:
+        "Инструмент перечислил {n} строк, и ни одна не дошла — что здесь лежит, неизвестно.",
+    },
     cannotSwitchViaDebug:
       "Пока чтение идёт через debug-контейнер, строки приходят из того контейнера, на который он нацелен — остановите, чтобы выбрать другой.",
     emptyDirectory: "{path} пуст: инструмент отработал и ничего там не нашёл.",
@@ -1951,8 +1918,6 @@ export const ru: Catalogue = {
     controllerFact: "Контроллер",
     controllerNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
-    controllerUnknown:
-      "Deployment'ы прочитать не удалось, поэтому работает ли контроллер оператора — неизвестно; это не значит, что его нет",
     inNamespace: "в {namespace}",
     versionUnknown: "неизвестна: нет образа контроллера, откуда её прочитать",
     fromImage: "из образа Deployment",
@@ -1962,7 +1927,7 @@ export const ru: Catalogue = {
     allowed: "да",
     refused: "отказано",
     couldNotTell: "не удалось узнать",
-    checkedAgo: "проверено для вас, {ago}",
+    checkedAgo: "проверено для вас {ago} назад",
     phaseUnknown: "фаза не записана",
     primaryFact: "Primary",
     readyFact: "Готовы",
@@ -2151,9 +2116,8 @@ export const ru: Catalogue = {
       "Уведомление на рабочем столе, когда узел пуст или drain сдался.",
     askForward: "Скажи мне, если оборвётся",
     stopAsking: "Перестать наблюдать",
-    watchingSince: "наблюдаю · {ago}",
-    lostSince: "потерян из виду · {ago}",
-    answeredAgo: "{ago}",
+    watchingSince: "наблюдаю уже {ago}",
+    lostSince: "потерян из виду {ago} назад",
     expired: "Истекло: сутки без ответа",
     empty: "Ничего не наблюдается",
     emptyHint:
@@ -2294,6 +2258,7 @@ export const ru: Catalogue = {
     verdictSelectsNothingBody:
       "{selector} ничему не соответствует в {namespace}.",
     verdictSelectionUnread: "Что он выбирает, посчитать не удалось.",
+    verdictSelectorUnevaluable: "Его селектор не вычисляется.",
     verdictNotPickedUp:
       "Ни один Prometheus его не подхватывает, поэтому его никто не скрейпит.",
     verdictNoInstances:
@@ -2334,6 +2299,8 @@ export const ru: Catalogue = {
     notCounted: "поды, здесь не считаются",
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
+    selectorUnevaluable:
+      "Такой селектор Kubernetes не соберёт (оператор не из In, NotIn, Exists и DoesNotExist, набор без значений или проверка наличия со значениями), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
     chipLabel: "лейбл",
@@ -2351,6 +2318,8 @@ export const ru: Catalogue = {
       "ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
     pickedUpUnknown:
       "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
+    pickedUpUnevaluable:
+      "у {prometheus} селектор, который Kubernetes не соберёт, поэтому подхватывает ли он его, сказать нельзя",
     notJudged: "не оценивается",
     picksUp: "подхватывает",
     picksUpAll: "все мониторы во всех namespace",
@@ -2784,7 +2753,7 @@ export const ru: Catalogue = {
     groupedByName:
       "Сгруппированы по сгенерированному суффиксу имён подов. Ни одно событие контроллера в этом окне не говорит, чьи они.",
     fromPodStatus: "из статуса пода, не событие",
-    lastSeen: "последнее {ago}",
+    lastSeen: "последнее {ago} назад",
     podStatusUnread: {
       one: "Статус {n} пода не прочитан; его завершения на этой шкале нет.",
       few: "Статус {n} подов не прочитан; их завершений на этой шкале нет.",
@@ -2808,6 +2777,7 @@ export const ru: Catalogue = {
     warnUndoApply: "{count} вещи отменят это применение.",
     warnRevertCount: "{count} вещи вернут это число обратно.",
     rowsOfTotal: "{shown} из {total} — {label}",
+    rowsWhereAnswered: "{n} — {label}, из ответивших namespace",
     rowCount: {
       one: "{n} строка",
       few: "{n} строки",
@@ -2876,7 +2846,7 @@ export const ru: Catalogue = {
       "Это объект, который управляющий слой пишет для совместимости. Он не умеет выражать «обслуживает» и «завершается» и обрывается на 1000 адресах — но здесь ни один EndpointSlice не ответил, так что читать больше нечего.",
     podPhase: "Фаза {phase}",
     nodeStoppedReportingAgo:
-      "Узел {node} перестал отчитываться {age}. Этот статус — последний, что он прислал, а не текущее состояние пода.",
+      "Узел {node} перестал отчитываться {age} назад. Этот статус — последний, что он прислал, а не текущее состояние пода.",
     nodeStoppedReporting:
       "Узел {node} перестал отчитываться. Этот статус — последний, что он прислал, а не текущее состояние пода.",
     allContainers: "все контейнеры",
@@ -2884,6 +2854,14 @@ export const ru: Catalogue = {
     certSelfSigned: "самоподписанный — за него никто выше не поручился",
     certIssuedBy: "выпущен: {name}",
     certIssuerNotNamed: "издатель не указан",
+    controllerUnread:
+      "Установлен ли контроллер, неизвестно: кластер отказал в списках, где его можно найти — {why}",
+    controllerLookupFailed:
+      "Установлен ли контроллер, неизвестно: списки, где его можно найти, прочитать не удалось — {why}",
+    controllerLookupDeadline:
+      "Установлен ли контроллер, неизвестно: кластер не ответил на списки, где его можно найти, за {seconds} с.",
+    argoNoWorkloads:
+      "Ничто в этом кластере не несёт {selector}, поэтому собственные рабочие нагрузки Argo найти не удалось. Его Applications по-прежнему читаются из API-сервера.",
     traefikNoController:
       "Ничто в этом кластере не несёт {selector}, поэтому собственную конфигурацию прокси прочитать не удалось.",
     traefikManifestUnreadable:
@@ -2901,7 +2879,7 @@ export const ru: Catalogue = {
     lokiHoldsAll: "хранит этот кластер",
     connDidNotSayWhy: "он не сказал почему",
     connDidNotAnswer: "не ответил — {reason}",
-    connAnsweredAgo: "ответил {age}",
+    connAnsweredAgo: "ответил {age} назад",
     connKeeps: "хранит {retention}",
     connRanges: "диапазоны {ranges}",
     lokiPageLimit: {
@@ -2969,7 +2947,9 @@ export const ru: Catalogue = {
     azureSomeCertOnGateway: "сертификат на Application Gateway",
     istioMeshOnly: "только внутри меша",
     mapEntryPoint: "Точка входа",
-    mapZeroReady: "0 готовых",
+    mapCanary: "канарейка",
+    mapCanaryShare: "канарейка {n}%",
+    mapOutsideMesh: "вне меша",
     traefikRouting: "Маршрутизация",
     traefikRouteNumber: {
       one: "Маршрут {n}",
@@ -3317,6 +3297,12 @@ export const ru: Catalogue = {
       few: "{n} сверщика",
       many: "{n} сверщиков",
       other: "{n} сверщика",
+    },
+    factKindsUnread: {
+      one: "{n} вид перечислить не удалось",
+      few: "{n} вида перечислить не удалось",
+      many: "{n} видов перечислить не удалось",
+      other: "{n} вида перечислить не удалось",
     },
     factNotReconciled: {
       one: "{n} не сверен",
@@ -3888,11 +3874,10 @@ export const ru: Catalogue = {
     metricsError: "Ошибка API метрик",
     metricsErrorBody: "Не удалось получить метрики из кластера.",
     metricsDetails: "Подробности: {details}",
+    podMetricsLabel: "метрики подов",
     markBroken: "сломано",
     markUnchecked: "не проверено",
     markWorthALook: "стоит взглянуть",
-    connectToImport:
-      "Подключитесь к кластеру, чтобы импортировать из него ресурсы.",
     spotNodeWarning:
       "Облако может забрать этот узел в любой момент. Уходящие отсюда поды — это устройство, а не сбой.",
     unknownAge: "Неизвестно",
@@ -4036,10 +4021,6 @@ export const ru: Catalogue = {
     connectionFailedRetry: "не удалось подключиться — повторить",
     chooseCluster: "Выбрать кластер",
     signingIn: "Вход…",
-    connectToValidate: "Подключитесь к кластеру, чтобы проверять манифесты.",
-    connectToApply: "Подключитесь к кластеру, чтобы применять манифесты.",
-    builderNotConnected:
-      "Нет подключения — проверка, применение и импорт недоступны.",
     notConnected: "Кластер не подключён",
     connecting: "Подключение…",
     signInAgain: "Войти снова",
@@ -4098,8 +4079,6 @@ export const ru: Catalogue = {
     searchThemeWords: "dark light appearance тёмная светлая тема оформление",
     searchColourWords:
       "color coloring tint kind colour цвет раскраска оттенок вид",
-    searchRegistryWords:
-      "registry registries image pull credentials docker ecr gcr harbor basic bearer token username password реестр реестры образ учётные данные",
     contextConnected: "подключён",
     contextReady: "готов",
     contextCannotConnect: "подключиться нельзя",
@@ -4125,6 +4104,7 @@ export const ru: Catalogue = {
     toolsProfiles: "— {gcp}, {azure}.",
     toolsGcpCount: "{n} GCP",
     toolsAzureCount: "{n} Azure",
+    notOnPath: "{label} нет в PATH. Укажите путь ниже.",
     lookingForBinary: "Ищем исполняемый файл…",
     kubeconfigRestored: "Kubeconfig восстановлен",
     kubeconfigUpdated: "Kubeconfig изменён",
@@ -4171,9 +4151,6 @@ export const ru: Catalogue = {
     findVendorInCluster: "Найти {vendor} в этом кластере",
     probeAnswered: "Ответил за {ms} мс",
     probeDidNotAnswer: "Не ответил — {reason}",
-    searchingRegistry: "Ищем в {registry}…",
-    registrySearchFailed: "Поиск не удался. Проверьте настройки реестра.",
-    officialBadge: "официальный",
     oneAddressPerCluster:
       "Свой адрес на каждый кластер: {vendor} живёт внутри кластера, и у staging он не тот, что у production. Даёт {gives}.",
     addressIsFromHere:
@@ -4194,39 +4171,12 @@ export const ru: Catalogue = {
     awsNoProfilesMid: " задаёт по умолчанию —",
     awsNoProfilesSuffix: ", затем профиль по умолчанию.",
     inWord: "в",
-    registryLabel: "Реестр",
-    selectRegistry: "Выберите реестр",
-    importing: "Импорт…",
-    importDockerConfig: "Импортировать конфиг Docker",
-    dockerConfigNote:
-      "Импорт конфига Docker читает ~/.docker/config.json (в Windows — %USERPROFILE%/.docker/config.json). Хелперы учётных данных не импортируются.",
-    registryProvider: "Провайдер",
-    selectProvider: "Выберите провайдера",
     displayName: "Отображаемое имя",
-    registryLabelPlaceholder: "Мой приватный реестр",
-    registryUrl: "URL реестра",
-    projectOptional: "Проект (необязательно)",
-    accountId: "ID аккаунта",
     region: "Регион",
     auth: "Аутентификация",
-    selectAuth: "Выберите способ аутентификации",
     username: "Имя пользователя",
     password: "Пароль",
     token: "Токен",
-    savedAs: "Сохранено: {username}",
-    credentialsConfigured: "Учётные данные заданы",
-    credentialsSaved: "Учётные данные сохранены.",
-    credentialsSaveFailed: "Не удалось сохранить учётные данные.",
-    credentialsCleared: "Учётные данные удалены.",
-    credentialsClearFailed: "Не удалось удалить учётные данные.",
-    dockerHubAlreadyAvailable: "Docker Hub уже доступен.",
-    registryUrlRequired: "Нужно указать URL реестра.",
-    ecrFieldsRequired: "Нужно указать ID аккаунта и регион ECR.",
-    dockerConfigImportTitle: "Импорт конфига Docker",
-    noRegistriesInDockerConfig: "В конфиге Docker реестров не найдено.",
-    dockerConfigImported: "Конфиг Docker импортирован",
-    dockerConfigImportSummary:
-      "Реестры с учётными данными: добавлено {added}, обновлено {updated}.",
     importFailed: "Не удалось импортировать",
     themeNamed: "Тема: {theme}",
     sectionAppearance: "Внешний вид",
@@ -4235,8 +4185,6 @@ export const ru: Catalogue = {
     sectionClusters: "Кластеры",
     sectionClustersHint:
       "Как приложение добирается до кластера: файл, который их перечисляет, личность, которой оно представляется, и бинарники, которые оно вызывает.",
-    sectionRegistries: "Реестры",
-    sectionRegistriesHint: "Откуда тянутся образы и что до них дотягивается.",
     sectionDiagnostics: "Диагностика",
     sectionDiagnosticsHint: "Что приложение видит на машине, где оно запущено.",
     perfTitle: "Производительность",
@@ -4682,6 +4630,12 @@ export const ru: Catalogue = {
     readingSources: "Читаем источники…",
     fluxNoSources:
       "Объектов-источников нет. Ничего не загружается, значит и применять нечего.",
+    fluxSourcesUnread:
+      "Источников тех видов, что удалось прочитать, нет. Виды выше перечислить не удалось, поэтому что загружает этот кластер, здесь неизвестно.",
+    fluxReconcilersUnread:
+      "Kustomization нет, а HelmRelease перечислить не удалось, поэтому применяет ли Flux что-нибудь, здесь неизвестно.",
+    fluxUnreadNote:
+      "Всё ниже, что ссылается на один из них, показано как непрочитанное, а не как отсутствующее.",
     fluxSourcesDescription:
       "Источник загружается один раз, и его применяет всё, что на него ссылается. Это та половина Flux, которая ломается тихо: если источник перестал загружаться, каждый реконсилятор под ним продолжает показывать последнюю ревизию, которую успел применить.",
     noUrlDeclared: "URL не задан",
@@ -4708,6 +4662,9 @@ export const ru: Catalogue = {
     },
     fluxSourceUnaffected:
       "На этот источник никто не ссылается, поэтому ничего не затронуто.",
+    fluxFrozenUnread:
+      "HelmRelease перечислить не удалось, поэтому собранные из этого источника здесь не учтены.",
+    fluxHelmReleasesNotRead: "HelmRelease не прочитаны",
     readingFluxWorkloads: "Читаем собственные нагрузки Flux…",
     fluxWorkloadsTitle: "Собственные нагрузки Flux",
     fluxWorkloadsDescription:
@@ -4800,11 +4757,11 @@ export const ru: Catalogue = {
         "Запрошено и лимит неизвестны: список подов в {n} пространствах имён отклонён ({namespaces}). Сумма по остальным была бы меньшим числом, выданным за целое, поэтому её нет.",
     },
     nodeBudgetRule: {
-      one: "requested: max(init, Σ containers) + overhead по {n} поду, занимающему место здесь",
-      few: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
-      many: "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} поду, занимающему место здесь",
+      few: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
+      many: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
       other:
-        "requested: max(init, Σ containers) + overhead по {n} подам, занимающим место здесь",
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead по {n} подам, занимающим место здесь",
     },
     unknownWord: "неизвестно",
     noUsageSource: "источника нет",
@@ -4899,7 +4856,6 @@ export const ru: Catalogue = {
     istioSubsetsDescription:
       "Каждый DestinationRule, наборы, которые он определяет, и маршрутизируется ли в них что-нибудь.",
     noSubsetsTrafficPolicyOnly: "без наборов — только политика трафика",
-    noMatchesFound: "Ничего не найдено.",
     theLoadBalancerInFront: "балансировщик перед ним",
     cannotPullImage: "{container} не может загрузить свой образ",
     imagePullRetrying:
@@ -4937,6 +4893,9 @@ export const ru: Catalogue = {
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
+    tlsNotChecked: "TLS не проверен",
+    relatedShortBy:
+      "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopNothingPublishedYet: "пока ничего не опубликовано",
@@ -5068,6 +5027,8 @@ export const ru: Catalogue = {
       "То, что лежит в их emptyDir, переезда не переживёт.",
     waitingOnTheseExplained:
       "Они уедут сами, как только кластер позволит. Если закрыть окно, освобождение не прервётся.",
+    drainReportsMissed:
+      "Часть сообщений этого освобождения потерялась по дороге в окно, так что оно, возможно, уже закончилось. Здесь показано последнее, что дошло.",
     stoppedExplained:
       "Здесь ожидание ничего не изменит: на каждого нужен ответ, который можете дать только вы.",
     notNowExplained:
@@ -5207,7 +5168,7 @@ export const ru: Catalogue = {
       "Замеры есть, но allocatable этого узла прочитать не удалось, поэтому долю от него не нарисовать.",
     nodeNoSeries: "в Prometheus нет серий по этому узлу",
     nodeNoSamplesYet:
-      "в окне нет замеров: новейшая серия {age}, окно просит {range}",
+      "в окне нет замеров: самому свежему {age}, окно просит {range}",
     noSeriesShort: "нет серий",
     historyWithoutMetricsServer:
       "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
@@ -5220,8 +5181,6 @@ export const ru: Catalogue = {
     declaredSizeForUnreported:
       "Заявленный размер, а не заполненность, — для {n} из них kubelet ничего не сообщает.",
     terminalSessionEnded: "Сессия завершена: {status}",
-    importedExcludedNote:
-      "Импортированные ресурсы не участвуют в «Применить» и «Проверить», пока не включено «Включая импортированные».",
     valuesHiddenByDefault: "значения по умолчанию скрыты",
     binaryNotText: "двоичные данные, не текст — {size}",
     blindReconcilers: {
@@ -5267,15 +5226,15 @@ export const ru: Catalogue = {
     lokiNamespacesTitle: "Пространства имён, по которым у него есть строки",
     lokiOneLineProof:
       "Одной строки достаточно как доказательства, поэтому запрашивается ровно одна. Пространство имён, ничего не писавшее за это окно, не доказывает ни того, ни другого — поэтому пустой ответ показан как вопрос, а не как приговор.",
-    lokiRefusedQuery: "отклонил запрос",
+    lokiQueryFailed: "запрос не удался",
     lokiHasLines: "строки есть",
     lokiNothingInWindow: "в этом окне ничего",
     lokiHoldsNone:
       "Этот Loki не хранит ни одного пространства имён этого кластера",
     lokiHoldsNoneBody:
       "Ни у одного из опрошенных пространств имён нет ни строки за последний час. Адрес отвечает на LogQL — это всё, что доказала проверка подключения, — значит за ним, скорее всего, логи другого кластера, и предложение истории в просмотрщике логов так и будет отвечать пустотой.",
-    lokiRefusalNotAbsence:
-      "Отказ — это не отсутствие. Об этих пространствах имён здесь не утверждается ничего.",
+    lokiFailureNotAbsence:
+      "Неудавшийся запрос — это не отсутствие. Об этих пространствах имён здесь не утверждается ничего.",
     integrationsNoCluster:
       "Подключите кластер, и здесь будет видно, что у него есть. Каждое расширение определяется запросом CRD к API-серверу, а спрашивать сейчас некого.",
     yamlNoteDefault: "объект в том виде, в каком его хранит API-сервер",
@@ -5325,6 +5284,12 @@ export const ru: Catalogue = {
     azureIdentityFinding4: "нет аннотации",
     azureIdentityFinding5:
       ", так что токен не относится ни к какому удостоверению. Каждый вызов к Azure возвращает 401, и ничто в Kubernetes не объясняет почему.",
+    azureUnreadNote:
+      "Ниже нарисовано то, что ответили остальные чтения; этого среди них нет, и ничто здесь не говорит, что оно показало бы.",
+    azureAccountUnreadTitle:
+      "{pod} запрашивает удостоверение, но его ServiceAccount прочитать не удалось",
+    azureAccountUnread:
+      "Называет ли {account} в {namespace} удостоверение Azure, неизвестно: {reason}",
     readingIdentities: "Читаем удостоверения…",
     noPodCarries: "Ни один под в этом кластере не несёт",
     nothingFederatingToAzure:
@@ -5360,6 +5325,7 @@ export const ru: Catalogue = {
     nothingBehindIt: "за ним ничего нет",
     certificateFailed: "сертификат не выдан",
     namesSomethingAbsent: "ссылается на отсутствующее",
+    namesSomethingUnread: "ссылается на непрочитанное",
     worthALook: "стоит посмотреть",
     everyHost: "любой хост",
     anyHostNotMatched: "любой хост, не подошедший выше",
@@ -5368,6 +5334,7 @@ export const ru: Catalogue = {
     httpAndHttps: "HTTP и HTTPS",
     httpsOnly: "только HTTPS",
     nameAbsent: "{name} — отсутствует",
+    nameUnread: "{name} — не прочитан",
     noFrontendConfig: "нет FrontendConfig",
     nothingTerminatesTls: "TLS никто не терминирует",
     uploadedToGoogle: "загружен в Google, не в этом кластере",
@@ -5443,6 +5410,12 @@ export const ru: Catalogue = {
       "Строка на ALB, а не на Ingress — потому что именно этот контроллер сажает несколько Ingress из разных пространств имён на один балансировщик.",
     ciliumPageDescription:
       "Каждый эндпоинт с политиками, которые его выбирают, и те, которых не выбирает ничего",
+    couldNotReadCilium: "Не удалось прочитать эндпоинты и политики Cilium",
+    couldNotReadCiliumBody:
+      "Покрытие — это два списка, сведённые вместе, и один из них не вернулся, поэтому здесь нельзя сказать, до каких подов дотягивается политика.",
+    readingCilium: "Читаем эндпоинты и политики…",
+    ciliumNoEndpoints:
+      "В этом кластере нет ни одного CiliumEndpoint. Cilium пишет по одному на каждый управляемый под, значит здесь он не управляет ни одним.",
     crdCouldNotBeListed: "Не удалось перечислить {crd}",
     albUnreadNote:
       "Группы всё равно строятся по самим Ingress; не хватает того, что настроил для них класс.",
@@ -5567,6 +5540,8 @@ export const ru: Catalogue = {
     shownRawBelow: "ниже показано как есть",
     apiObjectNotService: "объект API, а не Service",
     readingEndpoints: "читаем Endpoints",
+    endpointsUnread: "Endpoints не прочитаны",
+    behindUnread: "что за ними, прочитать не удалось — {why}",
     servedUnder: "сертификат из",
     rawNginxConfig: "Сырая конфигурация nginx, вставляется как есть",
     shownAsWritten: "Показано как написано",
@@ -5600,8 +5575,8 @@ export const ru: Catalogue = {
     nginxClaimsNoClass:
       "ingress-nginx работает, но не забирает ни одного IngressClass, поэтому ни один Ingress в этом кластере не может дойти до него по классу.",
     clustersDefault: "по умолчанию для этого кластера",
-    startedWithPre: "Запущен с ",
-    startedWithPost: " — именно эту строку он ищет в IngressClass.",
+    startedWithFlag:
+      "Запущен с {flag} — именно эту строку он ищет в IngressClass.",
     staticConfiguration: "Статическая конфигурация",
     staticConfigurationDescription:
       "Флаги, с которыми запущен процесс. В API-сервере их нет, поэтому они читаются из самой нагрузки.",
@@ -5721,17 +5696,16 @@ export const ru: Catalogue = {
     readDeadlineHint:
       "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
+    couldNotReadInNamespace: "Не удалось прочитать {label} в {namespace}.",
+    noneWhereAnswered: "В {namespaces} ничего не найдено: {label}.",
+    gwNoRoutesOfKindsRead:
+      "Среди видов, которые удалось прочитать, маршрутов нет.",
     readDeadlineShort: "Чтение {label} не уложилось в {seconds} с.",
     containerTerminated: "Контейнер завершил работу · {detail}",
     podNotFound: "Pod не найден",
     noShellOn: "В {target} нет оболочки.",
     noLongerAvailable: "{target} больше недоступен.",
     nothingLeftToAttachTo: "Подключаться уже не к чему",
-    nothingToValidate: "Нечего проверять",
-    nothingToApply: "Нечего применять",
-    addResourcesFirst: "Сначала добавьте ресурсы или вставьте манифест.",
-    dragResourcesHere: "Перетащите ресурсы сюда или нажмите на один в палитре.",
-    selectResourceToEdit: "Выберите ресурс, чтобы изменить его настройки.",
     logNotKept:
       "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
     noPreviousRunOf:
@@ -5762,8 +5736,7 @@ export const ru: Catalogue = {
       "Строки удалены вокруг замороженного интервала, поэтому рядом с ним у полосы разрыв.",
     repeatsOnNote:
       "Включены «Повторы»: строка, повторяющая предыдущую, сворачивается в неё.",
-    nothingHasMatched: "Ничего не совпало с",
-    forSpan: "уже {span}.",
+    nothingMatchedFor: "Ничего не совпало с {terms} уже {span}.",
     intakeNarrowNote:
       "Поток подключён и читает — это узкий фильтр приёма, а не остановка лога.",
     openedOn: "Открыт только контейнер",
@@ -6127,6 +6100,12 @@ export const ru: Catalogue = {
     claimedBy: "заявлен {name}",
     refusedBy: "отвергнут {name}",
     noControllerClaimed: "ни один контроллер не заявил этот класс",
+    meshGamma: "меш (GAMMA)",
+    backendWeight: "вес {n}",
+    workerRole: "рабочий",
+    storedVersion: "{version} (хранимая)",
+    couldNotAskRoutes:
+      "Не удалось спросить интеграции, какие их маршруты ведут к этим Service, так что ниже может не хватать входа.",
     nonePublished: "не опубликованы",
     mixedCrdBundle:
       "версии смешаны — частичный апгрейд оставил CRD Gateway API из разных релизов",
@@ -6185,7 +6164,6 @@ export const ru: Catalogue = {
     sectionTabs: "Вкладки",
     sectionTable: "В списке",
     sectionLogs: "В просмотре логов",
-    sectionBuilder: "В конструкторе инфраструктуры",
     palette: "Поиск и команды",
     settings: "Настройки",
     copyLink: "Скопировать ссылку на это место",
@@ -6213,9 +6191,6 @@ export const ru: Catalogue = {
     rowOpen: "Открыть строку",
     soloContainer: "Только этот контейнер, по позиции в легенде",
     allContainers: "Все контейнеры",
-    deleteSelection: "Удалить выделенное",
-    selectAll: "Выделить всё",
-    invertSelection: "Инвертировать выделение",
   },
   count: {
     secondsShort: "{n} с",
@@ -6388,6 +6363,12 @@ export const ru: Catalogue = {
       many: "{n} реконсиляторов из {sources}",
       other: "{n} реконсиляторов из {sources}",
     },
+    reconcilersSomeUnread: {
+      one: "{n} реконсилятор · часть видов не прочитана",
+      few: "{n} реконсилятора · часть видов не прочитана",
+      many: "{n} реконсиляторов · часть видов не прочитана",
+      other: "{n} реконсиляторов · часть видов не прочитана",
+    },
     sources: {
       one: "{n} источник",
       few: "{n} источника",
@@ -6415,7 +6396,7 @@ export const ru: Catalogue = {
       many: "и ещё {n} сертификатов в связке",
       other: "и ещё {n} сертификатов в связке",
     },
-    kindInstances: "Экземпляры {kind} ({n})",
+    kindInstances: "Экземпляры {kind}",
     otherRevisionsAtZero: {
       one: "ещё {n} ревизия масштабирована до нуля",
       few: "ещё {n} ревизии масштабированы до нуля",
@@ -6446,12 +6427,6 @@ export const ru: Catalogue = {
       few: "перед этим стоят {n} Service",
       many: "перед этим стоят {n} Service",
       other: "перед этим стоят {n} Service",
-    },
-    loadedResources: {
-      one: "Из кластера загружен {n} ресурс.",
-      few: "Из кластера загружено {n} ресурса.",
-      many: "Из кластера загружено {n} ресурсов.",
-      other: "Из кластера загружено {n} ресурса.",
     },
     routesToUndefinedSubset: {
       one: "{n} маршрут в набор, который никто не определяет",
@@ -6891,9 +6866,9 @@ export const ru: Catalogue = {
     ofN: "из {n}",
     nDecoded: "разобрано {n}",
     nNotRead: "не разобрано {n}",
-    brokenOfTotalFirst: "сломано {n} из {total} — они первыми",
     worthALook: "на {n} стоит взглянуть",
     worthALookOfTotal: "на {n} из {total} стоит взглянуть",
+    notCheckedOfTotal: "{n} из {total} без проверки",
     hostsAcrossNamespaces: {
       one: "{n} хост во всех пространствах имён",
       few: "{n} хоста во всех пространствах имён",
@@ -7109,6 +7084,12 @@ export const ru: Catalogue = {
       many: "{n} настроек подходит",
       other: "{n} настройки подходят",
     },
+    routeRules: {
+      one: "{n} маршрут",
+      few: "{n} маршрута",
+      many: "{n} маршрутов",
+      other: "{n} маршрута",
+    },
     paths: {
       one: "{n} путь",
       few: "{n} пути",
@@ -7162,11 +7143,11 @@ export const ru: Catalogue = {
       many: "{n} балансировщиков",
       other: "{n} балансировщика",
     },
-    queriesRefused: {
-      one: "{n} запрос отклонён",
-      few: "{n} запроса отклонены",
-      many: "{n} запросов отклонено",
-      other: "{n} запроса отклонены",
+    queriesFailed: {
+      one: "{n} запрос не удался",
+      few: "{n} запроса не удались",
+      many: "{n} запросов не удалось",
+      other: "{n} запроса не удались",
     },
     failedPods: {
       one: "{n} упавший под",

@@ -41,6 +41,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -48,6 +49,7 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 export function CrdDetail() {
   const t = useT();
@@ -75,7 +77,7 @@ export function CrdDetail() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["crd", decodedName],
+    queryKey: queryKeys.crd(decodedName),
     queryFn: async () => {
       if (!decodedName) throw new Error("CRD name is required");
       try {
@@ -117,15 +119,11 @@ export function CrdDetail() {
           name: decodedName ?? "",
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["crds"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
       navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
     },
     onError: (err: Error) => {
-      toast({
-        title: t("action", "deleteKindFailed", { kind: "CRD" }),
-        description: err.message,
-        variant: "destructive",
-      });
+      toastError(t("action", "deleteKindFailed", { kind: "CRD" }), err);
     },
   });
 

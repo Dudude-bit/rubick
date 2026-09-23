@@ -167,8 +167,6 @@ export const en = {
     operators: "Operators",
     metadata: "Metadata",
     allIntegrations: "All integrations",
-    infrastructureBuilder: "Infrastructure Builder",
-    visual: "Visual",
     overview: "Overview",
     workloads: "Workloads",
     cluster: "Cluster",
@@ -424,7 +422,6 @@ export const en = {
     labels: "Labels",
     selectors: "Selectors",
     data: "Data",
-    containerImage: "Container Image",
     serviceType: "Service Type",
     sessionAffinity: "Session Affinity",
     host: "Host",
@@ -656,7 +653,6 @@ export const en = {
     updating: "updating…",
     manifestCopiedNamed: "{name} manifest copied",
     kindManifest: "{kind} manifest",
-    importedFromCluster: "Imported from cluster",
     suspendedLower: "suspended",
     inTime: "in {time}",
     nowLower: "now",
@@ -779,7 +775,6 @@ export const en = {
     confirmByTyping: "Confirm this action by typing the required text",
     typeWord: "Type",
     toConfirm: "to confirm",
-    realtimeFallback: "{kind}: falling back to periodic refresh. {error}",
     nodeCordoned: "Node cordoned",
     nodeCordonedDetail: "Node {name} has been cordoned.",
     nodeUncordoned: "Node uncordoned",
@@ -799,8 +794,6 @@ export const en = {
     leaveEmptyForLatest: "Leave empty for latest",
     valuesPlaceholder: "# Custom values to merge\nreplicaCount: 3",
     upgrading: "Upgrading...",
-    paletteTemplates: "Templates",
-    paletteDrag: "drag",
     paletteDescPod: "Single container workload",
     paletteDescDeployment: "Replicated workload",
     paletteDescService: "Stable network endpoint",
@@ -1146,59 +1139,14 @@ export const en = {
     willDelete: "This will delete {name}.",
     willDeleteInNamespace: "This will delete {name} in {namespace}.",
     couldNotDo: "Could not {action} {name}",
-    invalidConnection: "Invalid connection",
-    invalidConnectionHint:
-      "Ingress connects to Services, and Services connect to Pods or Deployments.",
-    invalidYaml: "Invalid YAML",
-    fixYamlBeforeCanvas: "Fix YAML before switching to the canvas.",
     validationPassed: "Validation passed",
-    validationFailed: "Validation failed",
-    validationCompleted: "Validation completed.",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
     applyUnanswered: "The cluster did not answer",
     applyUnansweredHint:
       "We stopped waiting. Whether the change was applied is unknown — admission can outlast the wait — so check the object before applying again.",
 
-    applyCompleted: "Apply completed.",
-    clearCanvasQuestion: "Clear canvas?",
-    clearCanvasConfirm:
-      "This will remove all resources and connections from the canvas.",
-    openBuilderHelp: "Open builder help",
-    builderShortcutsTooltip:
-      "Drag from the palette, lasso-select on empty canvas. Delete: Backspace · Select all: Cmd/Ctrl+A · Invert: Cmd/Ctrl+Shift+I",
-    filterResources: "Filter resources",
-    filterResourcesPlaceholder: "Filter resources…",
-    includeImported: "Include imported",
-    yamlPaneHint:
-      "Paste or fine-tune manifests here. Switching back to the canvas parses this text and maps the resource types it recognises.",
-    builderHelpTitle: "Infrastructure Builder help",
-    builderHelpHint: "Shortcuts and selection tips for the canvas.",
-    builderHelpCanvas: "Canvas",
-    builderHelpDrag: "Drag a resource from the palette to place it.",
-    builderHelpClick:
-      "Click a resource in the palette to add it near the canvas centre.",
-    builderHelpLasso: "Drag on empty canvas to draw a selection box.",
-    builderHelpNode: "Click a node to select it, drag to move.",
-    builderHelpShortcuts: "Shortcuts",
-    builderHelpDelete: "Delete or Backspace: remove current selection.",
-    builderHelpSelectAll: "Cmd/Ctrl + A: select all nodes and edges.",
-    builderHelpInvert: "Cmd/Ctrl + Shift + I: invert selection.",
-    inspectorHint: "Core fields here; switch to YAML for anything else.",
-    nameAlreadyUsed: "Name already used for a {kind} in this namespace.",
-    useCurrentNamespace: "Use current ({namespace})",
-    useCurrentContext: "Use current context",
-    customValue: "Custom...",
     custom: "Custom",
-    customNamespacePlaceholder: "custom namespace",
-    customSecretTypePlaceholder: "custom secret type",
-    selectType: "Select type",
-    selectAffinity: "Select affinity",
-    selectPathType: "Select path type",
-    sessionAffinityHint:
-      "Routes client requests to the same backend when set to ClientIP.",
-    pathTypeHint:
-      "Controls how the path is matched (Prefix, Exact, or ImplementationSpecific).",
     stripFull: "Full",
     stripFullHint: "Volume over time, with the clock and the error counts",
     stripBand: "Band",
@@ -1241,6 +1189,12 @@ export const en = {
     interleaveAnyway: "Interleave them anyway",
     clearQuery: "Clear the query",
     downloadFailed: "Download failed",
+    logSaved: { one: "Log saved", other: "{n} logs saved" },
+    logsPartlySaved: {
+      one: "{n} of {total} logs saved",
+      other: "{n} of {total} logs saved",
+    },
+    notSaved: "Not saved:",
     downloadFailedDetail: "Could not read the log from the API",
     confirm: "Confirm",
     processing: "Processing...",
@@ -1345,14 +1299,8 @@ export const en = {
     edit: "Edit",
     test: "Test",
     testing: "Testing…",
-    addRegistry: "Add registry",
-    saveCredentials: "Save credentials",
     clear: "Clear",
-    deleteSelection: "Delete selection",
-    clearCanvas: "Clear canvas",
     import: "Import",
-    openYaml: "Open YAML",
-    removeResource: "Remove Resource",
     copyLinesInView: "Copy the lines in view",
     downloadFullLog: "Download the full log",
     clearBuffered: "Clear what is buffered",
@@ -1370,6 +1318,7 @@ export const en = {
     refresh: "Refresh",
     copy: "Copy",
     copied: "Copied",
+    copyFailed: "Could not copy",
     openInBrowser: "Open in Browser",
     back: "Back",
     gwFilterPlaceholder: "name, host, gateway…",
@@ -1379,8 +1328,6 @@ export const en = {
     hideMap: "Hide map",
     map: "Map",
     openGateways: "Open Gateways →",
-    liveUnavailableFor: "Live updates unavailable for {kind}s",
-    fallsBackPolling: "{message} — the list falls back to polling.",
     copyListenerHostname: "Listener hostname {host}",
     inInline: "in",
     probe: "Probe",
@@ -1794,6 +1741,16 @@ export const en = {
       one: "· {n} line could not be read, so a row is missing",
       other: "· {n} lines could not be read, so rows are missing",
     },
+    lostOnTheWay: {
+      one: "· {n} row was lost on the way, so this is not the whole directory",
+      other:
+        "· {n} rows were lost on the way, so this is not the whole directory",
+    },
+    nothingArrived: {
+      one: "The tool listed {n} row and it was lost on the way, so what is in here is unknown.",
+      other:
+        "The tool listed {n} rows and none of them arrived, so what is in here is unknown.",
+    },
     cannotSwitchViaDebug:
       "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
@@ -1895,8 +1852,6 @@ export const en = {
     controllerFact: "Controller",
     controllerNotFound:
       "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
-    controllerUnknown:
-      "the Deployments could not be read, so whether the operator's controller is running is unknown — not that it is absent",
     inNamespace: "in {namespace}",
     versionUnknown: "unknown: no controller image to read it from",
     fromImage: "from the Deployment image",
@@ -1906,7 +1861,7 @@ export const en = {
     allowed: "yes",
     refused: "refused",
     couldNotTell: "could not tell",
-    checkedAgo: "checked for you, {ago}",
+    checkedAgo: "checked for you {ago} ago",
     phaseUnknown: "phase not written",
     primaryFact: "Primary",
     readyFact: "Ready",
@@ -2088,9 +2043,8 @@ export const en = {
       "A desktop notification when the node is empty or the drain gives up.",
     askForward: "Tell me if it dies",
     stopAsking: "Stop watching",
-    watchingSince: "watching · {ago}",
-    lostSince: "lost sight · {ago}",
-    answeredAgo: "{ago}",
+    watchingSince: "watching for {ago}",
+    lostSince: "lost sight {ago} ago",
     expired: "Expired after a day with no answer",
     empty: "Nothing being watched",
     emptyHint:
@@ -2229,6 +2183,7 @@ export const en = {
     verdictSelectsNothing: "Selects no Service, so there is nothing to scrape.",
     verdictSelectsNothingBody: "{selector} matches nothing in {namespace}.",
     verdictSelectionUnread: "What it selects could not be counted.",
+    verdictSelectorUnevaluable: "Its selector cannot be evaluated.",
     verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
     verdictNoInstances:
       "No Prometheus object in the cluster, so nothing picks it up.",
@@ -2265,6 +2220,8 @@ export const en = {
     notCounted: "pods, not counted here",
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
+    selectorUnevaluable:
+      "Kubernetes would refuse to build this selector (an operator other than In, NotIn, Exists and DoesNotExist, a set with no values, or a presence test with some), so what it selects cannot be said: {selector}",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
     chipLabel: "label",
@@ -2280,6 +2237,8 @@ export const en = {
       "no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
     pickedUpUnknown:
       "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
+    pickedUpUnevaluable:
+      "{prometheus} has a selector Kubernetes would refuse to build, so whether it picks this up cannot be said",
     notJudged: "not judged",
     picksUp: "picks up",
     picksUpAll: "every monitor in every namespace",
@@ -2657,7 +2616,7 @@ export const en = {
     groupedByName:
       "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
     fromPodStatus: "from the pod status, not an event",
-    lastSeen: "last {ago}",
+    lastSeen: "last {ago} ago",
     podStatusUnread: {
       one: "The status of {n} pod could not be read; its exits are not on this clock.",
       other:
@@ -2674,6 +2633,7 @@ export const en = {
     warnUndoApply: "{count} things will undo this apply.",
     warnRevertCount: "{count} things will put this number back.",
     rowsOfTotal: "{shown} of {total} {label}",
+    rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
     longListTrim: {
       one: "{n} row — narrow the scope or search to trim",
@@ -2726,7 +2686,7 @@ export const en = {
       "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
     podPhase: "Phase {phase}",
     nodeStoppedReportingAgo:
-      "Node {node} stopped reporting {age}. This status is the last one it sent, not the pod's state now.",
+      "Node {node} stopped reporting {age} ago. This status is the last one it sent, not the pod's state now.",
     nodeStoppedReporting:
       "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
     allContainers: "all containers",
@@ -2734,6 +2694,14 @@ export const en = {
     certSelfSigned: "self-signed — nothing above it vouched for this",
     certIssuedBy: "issued by {name}",
     certIssuerNotNamed: "issuer not named",
+    controllerUnread:
+      "Whether the controller is installed is unknown: the cluster refused the lists it would be found in — {why}",
+    controllerLookupFailed:
+      "Whether the controller is installed is unknown: the lists it would be found in could not be read — {why}",
+    controllerLookupDeadline:
+      "Whether the controller is installed is unknown: the cluster did not answer the lists it would be found in within {seconds} s.",
+    argoNoWorkloads:
+      "Nothing in this cluster carries {selector}, so Argo's own workloads could not be found. Its Applications are still read from the API server.",
     traefikNoController:
       "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
     traefikManifestUnreadable:
@@ -2751,7 +2719,7 @@ export const en = {
     lokiHoldsAll: "holding this cluster",
     connDidNotSayWhy: "it did not say why",
     connDidNotAnswer: "did not answer — {reason}",
-    connAnsweredAgo: "answered {age}",
+    connAnsweredAgo: "answered {age} ago",
     connKeeps: "keeps {retention}",
     connRanges: "ranges {ranges}",
     lokiPageLimit: {
@@ -2810,7 +2778,9 @@ export const en = {
     azureSomeCertOnGateway: "a certificate on the Application Gateway",
     istioMeshOnly: "mesh only",
     mapEntryPoint: "Entry point",
-    mapZeroReady: "0 ready",
+    mapCanary: "canary",
+    mapCanaryShare: "{n}% canary",
+    mapOutsideMesh: "outside the mesh",
     traefikRouting: "Routing",
     traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
     traefikPriorityDefault: {
@@ -3054,6 +3024,10 @@ export const en = {
     factRenewalOverdue: "1 renewal overdue",
     kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
     factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factKindsUnread: {
+      one: "{n} kind could not be listed",
+      other: "{n} kinds could not be listed",
+    },
     factNotReconciled: {
       one: "{n} not reconciled",
       other: "{n} not reconciled",
@@ -3551,10 +3525,10 @@ export const en = {
     // The cluster's own words, kept whole: they are what somebody takes to
     // whoever can act on them.
     metricsDetails: "Details: {details}",
+    podMetricsLabel: "pod metrics",
     markBroken: "broken",
     markUnchecked: "not checked",
     markWorthALook: "worth a look",
-    connectToImport: "Connect to a cluster to import live resources.",
     spotNodeWarning:
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
     unknownAge: "Unknown",
@@ -3699,10 +3673,6 @@ export const en = {
     connectionFailedRetry: "connection failed — retry",
     chooseCluster: "Choose a cluster",
     signingIn: "Signing in…",
-    connectToValidate: "Connect to a cluster to validate manifests.",
-    connectToApply: "Connect to a cluster to apply manifests.",
-    builderNotConnected:
-      "Not connected — validate, apply and import are unavailable.",
     notConnected: "No cluster connected",
     connecting: "Connecting…",
     signInAgain: "Sign in again",
@@ -3743,8 +3713,6 @@ export const en = {
     searchLanguageWords: "language locale translation русский",
     searchThemeWords: "dark light appearance",
     searchColourWords: "color coloring tint kind",
-    searchRegistryWords:
-      "registry registries image pull credentials docker ecr gcr harbor basic bearer token username password",
     contextConnected: "connected",
     contextReady: "ready",
     contextCannotConnect: "cannot connect",
@@ -3767,6 +3735,7 @@ export const en = {
     toolsProfiles: "— {gcp}, {azure}.",
     toolsGcpCount: "{n} GCP",
     toolsAzureCount: "{n} Azure",
+    notOnPath: "{label} is not on PATH. Set the path below.",
     lookingForBinary: "Looking for the binary…",
     kubeconfigRestored: "Kubeconfig restored",
     kubeconfigUpdated: "Kubeconfig updated",
@@ -3814,9 +3783,6 @@ export const en = {
     findVendorInCluster: "Find {vendor} in this cluster",
     probeAnswered: "Answered in {ms}ms",
     probeDidNotAnswer: "Did not answer — {reason}",
-    searchingRegistry: "Searching {registry}…",
-    registrySearchFailed: "Search failed. Check registry settings.",
-    officialBadge: "official",
     oneAddressPerCluster:
       "One address per cluster, because a {vendor} is per cluster — staging's is not production's. Gives {gives}.",
     addressIsFromHere:
@@ -3836,39 +3802,12 @@ export const en = {
     awsNoProfilesMid: " defaults to —",
     awsNoProfilesSuffix: ", then the default profile.",
     inWord: "in",
-    registryLabel: "Registry",
-    selectRegistry: "Select registry",
-    importing: "Importing...",
-    importDockerConfig: "Import Docker config",
-    dockerConfigNote:
-      "Docker config import reads ~/.docker/config.json (%USERPROFILE%/.docker/config.json on Windows). Credential helpers are not imported.",
-    registryProvider: "Provider",
-    selectProvider: "Select provider",
     displayName: "Display name",
-    registryLabelPlaceholder: "My private registry",
-    registryUrl: "Registry URL",
-    projectOptional: "Project (optional)",
-    accountId: "Account ID",
     region: "Region",
     auth: "Auth",
-    selectAuth: "Select auth",
     username: "Username",
     password: "Password",
     token: "Token",
-    savedAs: "Saved: {username}",
-    credentialsConfigured: "Credentials configured",
-    credentialsSaved: "Credentials saved.",
-    credentialsSaveFailed: "Failed to save credentials.",
-    credentialsCleared: "Credentials cleared.",
-    credentialsClearFailed: "Failed to clear credentials.",
-    dockerHubAlreadyAvailable: "Docker Hub is already available.",
-    registryUrlRequired: "Registry URL is required.",
-    ecrFieldsRequired: "ECR account ID and region are required.",
-    dockerConfigImportTitle: "Docker config import",
-    noRegistriesInDockerConfig: "No registries found in the Docker config.",
-    dockerConfigImported: "Docker config imported",
-    dockerConfigImportSummary:
-      "Added {added}, updated {updated} registries with credentials.",
     importFailed: "Import failed",
     themeNamed: "Theme: {theme}",
     sectionAppearance: "Appearance",
@@ -3876,9 +3815,6 @@ export const en = {
     sectionClusters: "Clusters",
     sectionClustersHint:
       "How the app reaches a cluster: the file that names them, the identity that authenticates, and the binaries it shells out to.",
-    sectionRegistries: "Registries",
-    sectionRegistriesHint:
-      "Where images are pulled from, and what reaches them.",
     sectionDiagnostics: "Diagnostics",
     sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
     perfTitle: "Performance",
@@ -4304,6 +4240,12 @@ export const en = {
     readingSources: "Reading the sources…",
     fluxNoSources:
       "No source objects. Nothing is being fetched, so nothing can be applied.",
+    fluxSourcesUnread:
+      "No source of the kinds that could be read. The kinds above could not be listed, so what this cluster fetches is not known here.",
+    fluxReconcilersUnread:
+      "No Kustomization, and HelmReleases could not be listed, so whether Flux is applying anything is not known here.",
+    fluxUnreadNote:
+      "Anything below that names one of these is shown as not read, not as missing.",
     fluxSourcesDescription:
       "A source is fetched once and applied by everything that names it. This is the half of Flux that fails quietly: a source that stops fetching leaves every reconciler under it reporting the last revision it managed to apply.",
     noUrlDeclared: "no URL declared",
@@ -4326,6 +4268,9 @@ export const en = {
       other: "have nothing to apply.",
     },
     fluxSourceUnaffected: "Nothing names this source, so nothing is affected.",
+    fluxFrozenUnread:
+      "HelmReleases could not be listed, so any built from this source are not counted here.",
+    fluxHelmReleasesNotRead: "HelmReleases not read",
     readingFluxWorkloads: "Reading Flux’s own workloads…",
     fluxWorkloadsTitle: "Flux's own workloads",
     fluxWorkloadsDescription:
@@ -4411,9 +4356,9 @@ export const en = {
         "Requested and limited are unknown: listing pods in {n} namespaces was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
     },
     nodeBudgetRule: {
-      one: "requested: max(init, Σ containers) + overhead, over {n} pod holding a place here",
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pod holding a place here",
       other:
-        "requested: max(init, Σ containers) + overhead, over {n} pods holding a place here",
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pods holding a place here",
     },
     unknownWord: "unknown",
     noUsageSource: "no usage source",
@@ -4501,7 +4446,6 @@ export const en = {
     istioSubsetsDescription:
       "Every DestinationRule, the subsets it defines, and whether anything routes to them.",
     noSubsetsTrafficPolicyOnly: "no subsets — traffic policy only",
-    noMatchesFound: "No matches found.",
     theLoadBalancerInFront: "the load balancer in front",
     cannotPullImage: "{container} cannot pull its image",
     imagePullRetrying:
@@ -4534,6 +4478,9 @@ export const en = {
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
     noTls: "no TLS",
+    tlsNotChecked: "TLS not checked",
+    relatedShortBy:
+      "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopNothingPublishedYet: "nothing published yet",
@@ -4657,6 +4604,8 @@ export const en = {
       "Whatever their emptyDir holds does not survive the move.",
     waitingOnTheseExplained:
       "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
+    drainReportsMissed:
+      "Some of this drain's reports were lost on the way to this window, so it may already have finished. What is shown is the last one that arrived.",
     stoppedExplained:
       "Nothing here changes by waiting. Each one needs an answer only you can give.",
     notNowExplained:
@@ -4791,7 +4740,7 @@ export const en = {
       "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
     nodeNoSeries: "no series in Prometheus for this node",
     nodeNoSamplesYet:
-      "no samples in the window: newest series is {age}, the window asks for {range}",
+      "no samples in the window: the newest is {age} old, the window asks for {range}",
     noSeriesShort: "no series",
     historyWithoutMetricsServer:
       "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
@@ -4804,8 +4753,6 @@ export const en = {
     declaredSizeForUnreported:
       "Declared size, not how full, for the {n} of these the kubelet does not report on.",
     terminalSessionEnded: "Session ended: {status}",
-    importedExcludedNote:
-      "Imported resources are excluded from Apply and Validate unless you enable “Include imported”.",
     valuesHiddenByDefault: "values hidden by default",
     binaryNotText: "binary, not text — {size}",
     blindReconcilers: {
@@ -4847,14 +4794,14 @@ export const en = {
     lokiNamespacesTitle: "Namespaces it has lines for",
     lokiOneLineProof:
       "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way — which is why an empty answer is drawn as a question and not as a verdict.",
-    lokiRefusedQuery: "refused the query",
+    lokiQueryFailed: "query failed",
     lokiHasLines: "has lines",
     lokiNothingInWindow: "nothing in the window",
     lokiHoldsNone: "This Loki holds none of this cluster's namespaces",
     lokiHoldsNoneBody:
       "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL — which is all the connection test proved — so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
-    lokiRefusalNotAbsence:
-      "A refusal is not an absence. Nothing is claimed about these namespaces either way.",
+    lokiFailureNotAbsence:
+      "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
@@ -4902,6 +4849,12 @@ export const en = {
     azureIdentityFinding4: "has no",
     azureIdentityFinding5:
       " annotation, so the token is for no identity at all. Every call it makes to Azure comes back 401 and nothing in Kubernetes says why.",
+    azureUnreadNote:
+      "What is drawn below is what the other reads answered; this one is not in it, and nothing here says what it would have shown.",
+    azureAccountUnreadTitle:
+      "{pod} asks for an identity, and its ServiceAccount could not be read",
+    azureAccountUnread:
+      "Whether {account} in {namespace} names an Azure identity is not known: {reason}",
     readingIdentities: "Reading the identities…",
     noPodCarries: "No pod in this cluster carries",
     nothingFederatingToAzure:
@@ -4938,6 +4891,7 @@ export const en = {
     nothingBehindIt: "nothing behind it",
     certificateFailed: "certificate failed",
     namesSomethingAbsent: "names something absent",
+    namesSomethingUnread: "names something not read",
     worthALook: "worth a look",
     everyHost: "every host",
     anyHostNotMatched: "any host not matched above",
@@ -4946,6 +4900,7 @@ export const en = {
     httpAndHttps: "HTTP and HTTPS",
     httpsOnly: "HTTPS only",
     nameAbsent: "{name} — absent",
+    nameUnread: "{name} — not read",
     noFrontendConfig: "no FrontendConfig",
     nothingTerminatesTls: "nothing terminates TLS",
     uploadedToGoogle: "uploaded to Google, not in this cluster",
@@ -5018,6 +4973,12 @@ export const en = {
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
     ciliumPageDescription:
       "Every endpoint with the policies that select it, and the ones nothing selects at all",
+    couldNotReadCilium: "Could not read Cilium's endpoints and policies",
+    couldNotReadCiliumBody:
+      "Coverage is the two lists joined, and one of them did not come back — so nothing here can say which pods a policy reaches.",
+    readingCilium: "Reading endpoints and policies…",
+    ciliumNoEndpoints:
+      "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
@@ -5141,6 +5102,8 @@ export const en = {
     shownRawBelow: "shown raw below",
     apiObjectNotService: "an API object, not a Service",
     readingEndpoints: "reading endpoints",
+    endpointsUnread: "endpoints not read",
+    behindUnread: "what is behind them could not be read — {why}",
     servedUnder: "served under",
     rawNginxConfig: "Raw nginx configuration, injected verbatim",
     shownAsWritten: "Shown as written",
@@ -5174,8 +5137,8 @@ export const en = {
     nginxClaimsNoClass:
       "ingress-nginx is running and claims no IngressClass, so no Ingress in this cluster can reach it by class.",
     clustersDefault: "this cluster’s default",
-    startedWithPre: "Started with ",
-    startedWithPost: ", which is the string it looks for in an IngressClass.",
+    startedWithFlag:
+      "Started with {flag}, which is the string it looks for in an IngressClass.",
     staticConfiguration: "Static configuration",
     staticConfigurationDescription:
       "The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself.",
@@ -5295,17 +5258,15 @@ export const en = {
     readDeadlineHint:
       "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
+    couldNotReadInNamespace: "Could not read {label} in {namespace}.",
+    noneWhereAnswered: "No {label} in {namespaces}.",
+    gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",
     readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
     noShellOn: "No shell on {target}.",
     noLongerAvailable: "{target} is no longer available.",
     nothingLeftToAttachTo: "Nothing left to attach to",
-    nothingToValidate: "Nothing to validate",
-    nothingToApply: "Nothing to apply",
-    addResourcesFirst: "Add resources or paste a manifest first.",
-    dragResourcesHere: "Drag resources here, or click one in the palette.",
-    selectResourceToEdit: "Select a resource to edit its configuration.",
     logNotKept:
       "The node no longer has that log of {container} — the runtime dropped it. Nothing here can fetch it back: the same node would answer again.",
     noPreviousRunOf: "No previous run of {container} — it has not restarted.",
@@ -5342,8 +5303,7 @@ export const en = {
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
-    nothingHasMatched: "Nothing has matched",
-    forSpan: "for {span}.",
+    nothingMatchedFor: "Nothing has matched {terms} for {span}.",
     intakeNarrowNote:
       "The stream is attached and reading — this is intake being narrow, not the log stopping.",
     openedOn: "Opened on",
@@ -5703,6 +5663,12 @@ export const en = {
     claimedBy: "claimed by {name}",
     refusedBy: "refused by {name}",
     noControllerClaimed: "no controller has claimed this class",
+    meshGamma: "mesh (GAMMA)",
+    backendWeight: "weight {n}",
+    workerRole: "worker",
+    storedVersion: "{version} (stored)",
+    couldNotAskRoutes:
+      "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
     nonePublished: "none published",
     mixedCrdBundle:
       "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
@@ -5762,7 +5728,6 @@ export const en = {
     sectionTabs: "Tabs",
     sectionTable: "In a list",
     sectionLogs: "In the log viewer",
-    sectionBuilder: "In the infrastructure builder",
     palette: "Search and commands",
     settings: "Settings",
     copyLink: "Copy a link to this place",
@@ -5790,9 +5755,6 @@ export const en = {
     rowOpen: "Open the row",
     soloContainer: "Only this container, by legend position",
     allContainers: "Every container",
-    deleteSelection: "Delete the selection",
-    selectAll: "Select everything",
-    invertSelection: "Invert the selection",
   },
   count: {
     secondsShort: "{n} s",
@@ -5899,6 +5861,10 @@ export const en = {
       one: "{n} reconciler from {sources}",
       other: "{n} reconcilers from {sources}",
     },
+    reconcilersSomeUnread: {
+      one: "{n} reconciler · some kinds not read",
+      other: "{n} reconcilers · some kinds not read",
+    },
     sources: { one: "{n} source", other: "{n} sources" },
     notReconcilingAndFirst: "{n} of {total} not reconciling, and first",
     reconcilersAllApplied: {
@@ -5915,7 +5881,7 @@ export const en = {
       one: "with {n} more certificate in the bundle",
       other: "with {n} more certificates in the bundle",
     },
-    kindInstances: "{kind} Instances ({n})",
+    kindInstances: "{kind} Instances",
     otherRevisionsAtZero: {
       one: "{n} other revision is scaled to zero",
       other: "{n} other revisions are scaled to zero",
@@ -5936,10 +5902,6 @@ export const en = {
     servicesFrontThis: {
       one: "{n} Service fronts this",
       other: "{n} Services front this",
-    },
-    loadedResources: {
-      one: "Loaded {n} resource from the cluster.",
-      other: "Loaded {n} resources from the cluster.",
     },
     routesToUndefinedSubset: {
       one: "{n} route to a subset nothing defines",
@@ -6187,9 +6149,9 @@ export const en = {
     ofN: "of {n}",
     nDecoded: "{n} decoded",
     nNotRead: "{n} not read",
-    brokenOfTotalFirst: "{n} of {total} broken, and first",
     worthALook: "{n} worth a look",
     worthALookOfTotal: "{n} of {total} worth a look",
+    notCheckedOfTotal: "{n} of {total} not checked",
     hostsAcrossNamespaces: {
       one: "{n} host across every namespace",
       other: "{n} hosts across every namespace",
@@ -6279,6 +6241,7 @@ export const en = {
     fields: { one: "{n} field", other: "{n} fields" },
     settingsMatch: { one: "{n} setting matches", other: "{n} settings match" },
     paths: { one: "{n} path", other: "{n} paths" },
+    routeRules: { one: "{n} route", other: "{n} routes" },
     hosts: { one: "{n} host", other: "{n} hosts" },
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
@@ -6292,9 +6255,9 @@ export const en = {
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
-    queriesRefused: {
-      one: "{n} query was refused",
-      other: "{n} queries were refused",
+    queriesFailed: {
+      one: "{n} query failed",
+      other: "{n} queries failed",
     },
     failedPods: { one: "{n} failed pod", other: "{n} failed pods" },
     summedOverPods: {
