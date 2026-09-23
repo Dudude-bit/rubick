@@ -154,7 +154,11 @@ function Row({
       <span
         className={cn(
           "justify-self-center text-[9px] leading-none",
-          muted || mesh ? "text-fg-fnt" : row.serving ? "text-ok" : "text-err"
+          muted || mesh || (row.serving && !row.servingKnown)
+            ? "text-fg-fnt"
+            : row.serving
+              ? "text-ok"
+              : "text-err"
         )}
       >
         ●
@@ -415,7 +419,8 @@ export function GatewayRoutesList() {
     );
   }
 
-  const total = board.notServing.length + board.serving.length;
+  const total =
+    board.notServing.length + board.unknown.length + board.serving.length;
   const quietCluster = board.verdictsKnown && board.notServing.length === 0;
   const shown = brokenOnly ? [] : board.serving;
 
@@ -611,15 +616,18 @@ export function GatewayRoutesList() {
                 : t("empty", "gwReadingVerdicts")}
             </p>
             <div className="border-t border-hair">
-              {[...board.notServing, ...board.serving, ...board.mesh].map(
-                (row) => (
-                  <Row
-                    key={`${row.kind}/${row.namespace}/${row.name}`}
-                    row={row}
-                    muted
-                  />
-                )
-              )}
+              {[
+                ...board.notServing,
+                ...board.unknown,
+                ...board.serving,
+                ...board.mesh,
+              ].map((row) => (
+                <Row
+                  key={`${row.kind}/${row.namespace}/${row.name}`}
+                  row={row}
+                  muted
+                />
+              ))}
             </div>
           </>
         ) : (
@@ -633,6 +641,23 @@ export function GatewayRoutesList() {
                 />
                 <div className="border-t border-hair">
                   {board.notServing.map((row) => (
+                    <Row
+                      key={`${row.kind}/${row.namespace}/${row.name}`}
+                      row={row}
+                      muted={false}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {!brokenOnly && board.unknown.length > 0 && (
+              <>
+                <GroupCap
+                  label={t("empty", "gwGroupUnknown")}
+                  count={board.unknown.length}
+                />
+                <div className="border-t border-hair">
+                  {board.unknown.map((row) => (
                     <Row
                       key={`${row.kind}/${row.namespace}/${row.name}`}
                       row={row}

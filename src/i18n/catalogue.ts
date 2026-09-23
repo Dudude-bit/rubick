@@ -5632,6 +5632,7 @@ export const en = {
     gwConnecting: "connecting…",
     gwAnswersIn: "answers in {ms} ms",
     gwServing: "Serving",
+    gwGroupUnknown: "Cannot tell whether serving",
     gwNotServing: "Not serving",
     gwAllHostsListenerServes: "all hosts the listener serves",
     gwStopsAtStep: "stops at step {n} of {total}",

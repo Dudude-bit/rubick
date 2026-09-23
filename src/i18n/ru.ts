@@ -6071,6 +6071,7 @@ export const ru: Catalogue = {
     gwConnecting: "подключается…",
     gwAnswersIn: "отвечает за {ms} мс",
     gwServing: "Обслуживает",
+    gwGroupUnknown: "Не удалось определить, обслуживает ли",
     gwNotServing: "Не обслуживает",
     gwAllHostsListenerServes: "все хосты, которые обслуживает слушатель",
     gwStopsAtStep: "останавливается на шаге {n} из {total}",

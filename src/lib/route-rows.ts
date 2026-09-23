@@ -63,6 +63,9 @@ export interface RouteRow {
   contested: { by: string } | null;
   createdAt: string | null;
   serving: boolean;
+  /** Whether the trace could tell: false where a step was not read or a
+   *  controller has not decided, and then `serving` only means no break. */
+  servingKnown: boolean;
 }
 
 export interface GatewayPulse {
@@ -76,6 +79,8 @@ export interface RoutesBoard {
    *  verdicts drawn before then would be guesses. */
   verdictsKnown: boolean;
   notServing: RouteRow[];
+  /** No break found, and no way to tell it serves either. */
+  unknown: RouteRow[];
   serving: RouteRow[];
   mesh: RouteRow[];
   /** Gateway-level breaks the route rows cannot carry. */
@@ -88,9 +93,12 @@ export interface RoutesBoard {
  * nothing at all before the verdicts are known, because a guess in the
  * rail is worse than silence.
  */
-export function boardMark(board: RoutesBoard): "warn" | "err" | undefined {
+export function boardMark(
+  board: RoutesBoard
+): "warn" | "err" | "unchecked" | undefined {
   if (!board.verdictsKnown) return undefined;
   if (board.notServing.length > 0) return "err";
+  if (board.unknown.length > 0) return "unchecked";
   if (board.serving.some((row) => row.stale != null || row.contested != null)) {
     return "warn";
   }
@@ -279,6 +287,7 @@ export function routesBoard(
 ): RoutesBoard {
   const notServing: Array<{ row: RouteRow; depth: number }> = [];
   const serving: RouteRow[] = [];
+  const unknown: RouteRow[] = [];
   const mesh: RouteRow[] = [];
 
   // Who claims which host on which gateway. The spec resolves the tie —
@@ -354,6 +363,7 @@ export function routesBoard(
           viaGhost: null,
           contested: null,
           serving: false,
+          servingKnown: true,
         },
       });
       continue;
@@ -381,6 +391,7 @@ export function routesBoard(
         viaGhost: settled && !exists ? ref : null,
         contested: null,
         serving: true,
+        servingKnown: false,
       });
       continue;
     }
@@ -427,9 +438,12 @@ export function routesBoard(
       })(),
       contested: contestedBy(route),
       serving: broken == null,
+      servingKnown: traces.every((trace) => trace.servingKnown),
     };
     if (broken) {
       notServing.push({ row, depth: worst.stopStep ?? Infinity });
+    } else if (!row.servingKnown) {
+      unknown.push(row);
     } else {
       serving.push(row);
     }
@@ -439,11 +453,13 @@ export function routesBoard(
     (a, b) => a.depth - b.depth || a.row.serves.localeCompare(b.row.serves)
   );
   serving.sort((a, b) => a.serves.localeCompare(b.serves));
+  unknown.sort((a, b) => a.serves.localeCompare(b.serves));
   mesh.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
     verdictsKnown: sources.topologyKnown && sources.backing.backingKnown,
     notServing: notServing.map((entry) => entry.row),
+    unknown,
     serving,
     mesh,
     pulse: pulseOf(sources, t),

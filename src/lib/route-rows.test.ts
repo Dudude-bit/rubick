@@ -364,7 +364,7 @@ describe("routesBoard", () => {
     expect(board.serving[0].tail).toContain("redirect");
   });
 
-  it("reads an ExtensionRef-only route as serving, with the filter note as its tail", () => {
+  it("files an ExtensionRef-only route as cannot-tell, not serving, with the filter note as its tail", () => {
     const direct = route("direct", {
       rules: [
         {
@@ -383,7 +383,8 @@ describe("routesBoard", () => {
     });
     const board = routesBoard([direct], sources(), t);
 
-    expect(board.serving[0].tail).toContain("filter");
+    expect(board.serving).toHaveLength(0);
+    expect(board.unknown[0].tail).toContain("filter");
   });
 
   it("carries the stale-generation tag onto the row", () => {
@@ -482,8 +483,8 @@ describe("routesBoard", () => {
       t
     );
 
-    expect(board.serving[0].viaRef).toBeNull();
-    expect(board.serving[0].viaGhost).toBeNull();
+    expect(board.unknown[0].viaRef).toBeNull();
+    expect(board.unknown[0].viaGhost).toBeNull();
   });
 
   it("marks the younger claimant of a contested host — the older route wins", () => {
@@ -633,6 +634,37 @@ describe("the sidebar marks", () => {
     ).toBeUndefined();
   });
 
+  /**
+   * A route no step of which broke, whose trace still could not tell — its
+   * controller answers it, or a verdict is pending. The list drew it green
+   * under "Serving" and the rail stayed quiet while the trace said it could
+   * not say.
+   */
+  it("keeps a route its trace cannot vouch for out of serving, and marks the rail unchecked", () => {
+    const direct = route("direct", {
+      rules: [
+        {
+          matches: [],
+          backendRefs: [],
+          hasRedirect: false,
+          extensionRefs: [
+            {
+              group: "gateway.envoyproxy.io",
+              kind: "HTTPRouteFilter",
+              name: "x",
+            },
+          ],
+        },
+      ],
+    });
+    const board = routesBoard([direct, route("healthy")], sources(), t);
+
+    expect(board.unknown.map((row) => row.name)).toEqual(["direct"]);
+    expect(board.unknown[0].servingKnown).toBe(false);
+    expect(board.serving.map((row) => row.name)).toEqual(["healthy"]);
+    expect(boardMark(board)).toBe("unchecked");
+  });
+
   it("marks the gateways row from the pulse, then from silence", () => {
     const board = routesBoard(
       [],
@@ -682,8 +714,12 @@ describe("routes that reach a gateway through a ListenerSet", () => {
     );
 
     expect(board.mesh).toHaveLength(0);
-    expect(board.serving.length + board.notServing.length).toBe(1);
-    expect([...board.serving, ...board.notServing][0].via).toContain("edge");
+    expect(
+      board.serving.length + board.unknown.length + board.notServing.length
+    ).toBe(1);
+    expect(
+      [...board.serving, ...board.unknown, ...board.notServing][0].via
+    ).toContain("edge");
   });
 });
 
@@ -719,7 +755,7 @@ describe("two routes claiming one hostname on one Gateway", () => {
       t
     );
 
-    const rows = [...board.serving, ...board.notServing];
+    const rows = [...board.serving, ...board.unknown, ...board.notServing];
     expect(rows).toHaveLength(2);
     // Only the loser is marked, and it names the one that beat it — so
     // exactly one of the pair carries the mark, and it points at the other.
