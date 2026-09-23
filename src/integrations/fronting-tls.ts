@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react";
 import type { IngressInfo, ServiceInfo } from "@/generated/types";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
+import { frontingVerdict, type FrontingTls } from "@/lib/fronted-tls";
 import {
   frontingIngressesOf,
   frontingQuestions,
@@ -62,24 +63,12 @@ export function useFrontingTls(
   return useCallback(
     (host: string | null): FrontingTls => {
       if (host === null) return unanswered ? "unknown" : false;
-      const said = asked.map((ingress) => front.of(ingress, host)?.terminated);
-      const terminated =
-        said.includes(true) ||
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        );
-      if (terminated) return true;
-      // A supplier that read too little to say has not said no.
-      const unsure =
-        said.includes(null) ||
-        fronting.routes.some(
-          (route) => route.tls === null && route.host === host
-        );
-      return unanswered || unsure ? "unknown" : false;
+      return frontingVerdict(host, {
+        said: asked.map((ingress) => front.of(ingress, host)?.terminated),
+        routes: fronting.routes,
+        unanswered,
+      });
     },
     [asked, front, fronting.routes, unanswered]
   );
 }
-
-/** Whether something in front terminates TLS, or `"unknown"` until it is read. */
-export type FrontingTls = boolean | "unknown";

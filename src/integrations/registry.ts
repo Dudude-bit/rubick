@@ -392,6 +392,18 @@ export interface ServiceRoute {
    */
   tls: boolean | null;
   /**
+   * What stands in front of the proxy for this host, where `tls` is not
+   * `true` on the route's own objects: the Ingresses sending the host to the
+   * proxy's Service, and that Service. Their certificate is often an
+   * annotation only another vendor reads, so `tls` is not final until
+   * `ingress.tls` and `service.routes` have been asked about them — which
+   * `useServiceRoutes` does, as the proxy's own page does.
+   */
+  front?: {
+    ingresses: Array<{ namespace: string; name: string }>;
+    proxy: { namespace: string; name: string };
+  };
+  /**
    * The route pins an h2c (gRPC) scheme on its backend, so a browser sent
    * to this host gets no page — it is a way in for a CLI, not for a link.
    * Optional because most vendors cannot state it and absence means "not
