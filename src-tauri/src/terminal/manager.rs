@@ -523,7 +523,10 @@ mod tests {
             .collect();
         let said = everything_said(Burst { chunks }).await;
         let joined = said.concat();
-        let expected: String = (0..2000).map(|i| format!("{i:05}\n")).collect();
+        let expected = (0..2000)
+            .map(|i| format!("{i:05}\n"))
+            .collect::<Vec<_>>()
+            .concat();
         assert_eq!(joined, expected);
         assert!(said.len() < 200, "{} events for 2000 reads", said.len());
     }
