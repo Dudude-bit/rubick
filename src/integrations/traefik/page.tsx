@@ -24,15 +24,13 @@
  */
 
 import { sayWords } from "@/i18n/say";
-import { Fragment, useCallback, useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
   useRouteCertificates,
-  type ServiceStop,
+  STOP_UNDER,
 } from "../ingress";
-import { useServiceRoutes } from "@/hooks/useServiceRoutes";
-import { useIngressTls } from "@/hooks/useIngressTls";
 import { Link } from "react-router-dom";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
@@ -62,6 +60,8 @@ import {
   FindingList,
 } from "../page-kit";
 import { RoutingMap } from "../routing-map";
+import { useFrontingTls } from "../fronting-tls";
+import { ProxyControllerTab } from "../proxy-controller";
 import { routingMap } from "./map";
 import {
   servedGroupName,
@@ -72,8 +72,8 @@ import {
   type ControllerInfo,
 } from "./data";
 import {
-  frontingIngresses,
   allRoutes,
+  PROXY_LABEL,
   backingOf,
   boundEntryPoints,
   duplicatedServiceNames,
@@ -92,7 +92,6 @@ import { describePath, fullyRead } from "./rule";
 import { problemWords } from "@/lib/certificates";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -118,64 +117,10 @@ export default function TraefikPage() {
   );
   const certificates = useRouteCertificates(routes);
 
-  // What is in front of the proxy. On a managed cluster the certificate is
-  // usually held by a cloud load balancer and named in an annotation, so no
-  // amount of reading `spec.tls` finds it — and every host then read as
-  // served in the clear. The proxy's own Service is the thing to ask about;
-  // asking about the first is enough, because a chart that installs two is
-  // installing one proxy behind both.
-  const proxy = useMemo(() => {
-    const services = backing.data?.services ?? [];
-    const found = services.find(
-      (service) => service.selector["app.kubernetes.io/name"] === "traefik"
-    );
-    return found ? { namespace: found.namespace, name: found.name } : null;
-  }, [backing.data]);
-  // Every Ingress whose backend is the proxy's own Service, which is what a
-  // cloud load balancer's Ingress looks like from in here.
-  const frontAsked = useMemo(
-    () =>
-      frontingIngresses({
-        ingresses: routeSources.data?.ingresses ?? [],
-        services: backing.data?.services ?? [],
-      } as never).map(
-        (ingress: {
-          namespace: string;
-          name: string;
-          rules: Array<{ host: string }>;
-        }) => ({
-          namespace: ingress.namespace,
-          name: ingress.name,
-          hosts: ingress.rules.flatMap((rule: { host: string }) =>
-            rule.host ? [rule.host] : []
-          ),
-        })
-      ),
-    [routeSources.data, backing.data]
-  );
-
-  const fronting = useServiceRoutes(proxy);
-  // The certificate may be an ACM ARN or one installed on an Application
-  // Gateway, neither of which is a route and neither of which `spec.tls`
-  // knows about — so the Ingresses standing in front of the proxy are asked
-  // directly. Without this the fix above worked on GKE and nowhere else.
-  const front = useIngressTls(frontAsked);
-  const frontTls = useCallback(
-    (host: string | null) =>
-      host !== null &&
-      frontAsked.some(
-        (ingress) => front.of(ingress, host)?.terminated === true
-      ),
-    [front, frontAsked]
-  );
-  const upstreamTls = useCallback(
-    (host: string | null) =>
-      frontTls(host) ||
-      (host !== null &&
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        )),
-    [fronting.routes, frontTls]
+  const upstreamTls = useFrontingTls(
+    routeSources.data?.ingresses,
+    backing.data?.services,
+    PROXY_LABEL
   );
 
   const sources: TraefikSources | null = useMemo(
@@ -959,15 +904,6 @@ function FindingLine({
   );
 }
 
-/** What a stopped path says in the column, in four words or fewer. */
-const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> = {
-  backendMissing: "stopNoServiceToSendTo",
-  selectsNothing: "stopSelectorMatchesNothing",
-  publishesNothingYet: "stopNothingPublishedYet",
-  noneReady: "stopRunningNoneReady",
-  publishesNothing: "stopNoPortToSendTo",
-};
-
 /** One object, linked, the way the reader will go and edit it. */
 function objectRef(route: TraefikRoute): ReactNode {
   return (
@@ -1260,103 +1196,16 @@ function ControllerTab({
   sources: TraefikSources | null;
 }) {
   const t = useT();
-  if (!controller) {
-    return (
-      <p className="text-xs text-fg-fnt">{t("empty", "readingTheProxy")}</p>
-    );
-  }
-  const classes = sources ? traefikClasses(sources.classes) : [];
-
   return (
-    <div className="flex flex-col gap-[22px]">
-      <Section>
-        <SectionHeader
-          title={t("empty", "theProxyTitle")}
-          description={t("empty", "theProxyDescription")}
-        />
-        {controller.workload ? (
-          <div className="flex flex-col gap-1 text-[11.5px] text-fg-mut">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <ResourceRef
-                kind={controller.workload.kind}
-                name={controller.workload.name}
-                namespace={controller.workload.namespace}
-                showKind={false}
-              />
-              <span className="text-fg-fnt">
-                {t("count", "ofTotalReady", {
-                  n: controller.workload.ready,
-                  total: controller.workload.desired,
-                })}{" "}
-                · {controller.workload.namespace}
-              </span>
-            </span>
-            {controller.workload.image && (
-              <span className="font-mono text-[11px] text-fg-fnt">
-                {controller.workload.image}
-              </span>
-            )}
-            {controller.problem && (
-              <p className="text-[11px] text-warn">
-                {sayWords(controller.problem, t)}
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem && sayWords(controller.problem, t)}
-          </p>
-        )}
-      </Section>
-
-      <Section>
-        <SectionHeader
-          title={t("empty", "classesItClaims")}
-          count={classes.length}
-          description={t("empty", "classesItClaimsDescription")}
-        />
-        {classes.length === 0 ? (
-          <p className="text-[11px] text-warn">
-            {t("empty", "traefikClaimsNoClass")}
-          </p>
-        ) : (
-          <div className="flex flex-col">
-            {classes.map((entry) => (
-              <div
-                key={entry.name}
-                className="flex items-baseline gap-2 border-b border-hair py-1.5 text-[11.5px]"
-              >
-                <span className="font-mono text-fg-mid">{entry.name}</span>
-                {entry.isDefault && (
-                  <span className="text-[11px] text-fg-fnt">
-                    {t("empty", "clustersDefault")}
-                  </span>
-                )}
-                <span className="ml-auto font-mono text-[11px] text-fg-fnt">
-                  {entry.controller}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {controller.args.length > 0 && (
-        <Section>
-          <SectionHeader
-            title={t("empty", "staticConfiguration")}
-            count={controller.args.length}
-            description={t("empty", "staticConfigurationDescription")}
-          />
-          <div className="flex flex-col gap-0.5 font-mono text-[11px] text-fg-mut">
-            {controller.args.map((arg, index) => (
-              <span key={index} className="select-text break-all">
-                {arg}
-              </span>
-            ))}
-          </div>
-        </Section>
-      )}
-    </div>
+    <ProxyControllerTab
+      controller={controller}
+      classes={sources ? traefikClasses(sources.classes) : []}
+      words={{
+        reading: t("empty", "readingTheProxy"),
+        title: t("empty", "theProxyTitle"),
+        description: t("empty", "theProxyDescription"),
+        claimsNoClass: t("empty", "traefikClaimsNoClass"),
+      }}
+    />
   );
 }

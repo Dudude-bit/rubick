@@ -24,7 +24,7 @@ import type {
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
-import { covers, type Expiry } from "@/lib/certificates";
+import type { Expiry } from "@/lib/certificates";
 import {
   backingOf as backingOfBackend,
   certificateProblems,
@@ -36,6 +36,9 @@ import {
   type Backing,
   type BackingSources,
   type SecretRef,
+  frontingIngressesOf,
+  proxyServicesBy,
+  terminatedUpstreamOf,
 } from "../ingress";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
 
@@ -155,7 +158,7 @@ export interface NginxSources extends BackingSources {
 }
 
 /** The label an ingress-nginx chart puts on its own pods. */
-const PROXY_LABEL = ["app.kubernetes.io/name", "ingress-nginx"] as const;
+export const PROXY_LABEL = ["app.kubernetes.io/name", "ingress-nginx"] as const;
 
 /**
  * What terminates TLS for this host before it reaches nginx.
@@ -168,20 +171,9 @@ const PROXY_LABEL = ["app.kubernetes.io/name", "ingress-nginx"] as const;
  * would go quiet on a cluster where nothing terminates anything.
  */
 export function frontingIngresses(sources: NginxSources): IngressInfo[] {
-  const proxies = sources.services.filter(
-    (service) => service.selector[PROXY_LABEL[0]] === PROXY_LABEL[1]
-  );
-  if (proxies.length === 0) return [];
-  return sources.ingresses.filter((ingress) =>
-    ingress.rules.some((rule) =>
-      rule.paths.some((path) =>
-        proxies.some(
-          (service) =>
-            service.name === path.backendService &&
-            service.namespace === ingress.namespace
-        )
-      )
-    )
+  return frontingIngressesOf(
+    sources.ingresses,
+    proxyServicesBy(sources.services, PROXY_LABEL)
   );
 }
 
@@ -189,21 +181,7 @@ export function terminatedUpstream(
   host: string | null,
   sources: NginxSources
 ): { kind: "Ingress"; name: string; namespace: string } | null {
-  if (host === null) return null;
-
-  for (const ingress of frontingIngresses(sources)) {
-    const terminates =
-      ingress.hasCatchAllTls ||
-      covers(ingress.tlsHosts, host) ||
-      ingress.tlsConfigs.some((config) => covers(config.hosts, host));
-    if (!terminates) continue;
-    return {
-      kind: "Ingress",
-      name: ingress.name,
-      namespace: ingress.namespace,
-    };
-  }
-  return null;
+  return terminatedUpstreamOf(host, frontingIngresses(sources));
 }
 
 /** The IngressClasses whose controller is this nginx. */

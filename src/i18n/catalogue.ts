@@ -5078,8 +5078,8 @@ export const en = {
     nginxClaimsNoClass:
       "ingress-nginx is running and claims no IngressClass, so no Ingress in this cluster can reach it by class.",
     clustersDefault: "this cluster’s default",
-    startedWithPre: "Started with ",
-    startedWithPost: ", which is the string it looks for in an IngressClass.",
+    startedWithFlag:
+      "Started with {flag}, which is the string it looks for in an IngressClass.",
     staticConfiguration: "Static configuration",
     staticConfigurationDescription:
       "The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself.",

@@ -5504,8 +5504,8 @@ export const ru: Catalogue = {
     nginxClaimsNoClass:
       "ingress-nginx работает, но не забирает ни одного IngressClass, поэтому ни один Ingress в этом кластере не может дойти до него по классу.",
     clustersDefault: "по умолчанию для этого кластера",
-    startedWithPre: "Запущен с ",
-    startedWithPost: " — именно эту строку он ищет в IngressClass.",
+    startedWithFlag:
+      "Запущен с {flag} — именно эту строку он ищет в IngressClass.",
     staticConfiguration: "Статическая конфигурация",
     staticConfigurationDescription:
       "Флаги, с которыми запущен процесс. В API-сервере их нет, поэтому они читаются из самой нагрузки.",
