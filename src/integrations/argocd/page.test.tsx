@@ -4,6 +4,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { useLocaleStore } from "@/stores/localeStore";
+
 const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
 
 vi.mock("@/lib/commands", () => ({
@@ -113,6 +115,26 @@ describe("Argo's own workloads", () => {
       )
     ).toBeInTheDocument();
     expect(screen.getAllByText("argocd-server").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The Russian sentence read "Argo's own workloads among them are not here",
+   * which a reader takes for "there are none" — about a list nobody read.
+   */
+  it("says in Russian that the workloads among a refused kind are not shown, not absent", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    answers.set("deployments", () => Promise.resolve([server]));
+    answers.set("statefulsets", refused("statefulsets"));
+
+    try {
+      renderOn("controller");
+
+      const finding = await screen.findByText(/Не удалось перечислить/);
+      expect(finding).toHaveTextContent("здесь не показаны");
+      expect(finding).not.toHaveTextContent("здесь нет");
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /**

@@ -5134,7 +5134,7 @@ export const ru: Catalogue = {
     namespaceOnCluster: "{namespace} в {cluster}",
     readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
     argoWorkloadsUnread:
-      "Не удалось перечислить {kinds}, поэтому собственных рабочих нагрузок Argo среди них здесь нет.",
+      "Не удалось перечислить {kinds}, поэтому собственные рабочие нагрузки Argo среди них здесь не показаны.",
     argoWorkloadsDescription:
       "Где на самом деле диагностируется проблема Argo. Репозиторий, до которого он не достучался, и вебхук, который до него не дошёл, — в логах repo-server и контроллера, а не в статусе какого-либо Application.",
     argoUiDescription:
