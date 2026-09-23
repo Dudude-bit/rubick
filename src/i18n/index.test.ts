@@ -51,6 +51,16 @@ describe("counting things", () => {
     expect(say(21)).toBe("21 port forwards");
   });
 
+  /**
+   * A language with no catalogue, or one whose catalogue failed to load,
+   * reads English — and was counted by its own rules. French calls 0 `one`,
+   * so the whole interface said "0 pod" to a French system.
+   */
+  it("counts an English fallback by English rules", () => {
+    expect(translate("fr", "cluster", "podCount", { n: 0 })).toBe("0 pods");
+    expect(translate("fr", "cluster", "podCount", { n: 1 })).toBe("1 pod");
+  });
+
   /** Zero is `other` in both, and neither language wants a special case. */
   it("counts none of something without a special case", () => {
     expect(translate("en", "cluster", "podCount", { n: 0 })).toBe("0 pods");
