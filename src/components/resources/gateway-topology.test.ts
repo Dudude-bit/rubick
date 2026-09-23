@@ -11,6 +11,7 @@ import { gatewayTopology } from "./gateway-topology";
 import type {
   ConditionInfo,
   GatewayInfo,
+  PodInfo,
   RouteInfo,
   RouteParentStatusInfo,
 } from "@/generated/types";
@@ -346,75 +347,59 @@ describe("the gateway topology map", () => {
     expect(data.columns.some((column) => column.label === "Kinds")).toBe(false);
   });
 
-  it("resolves the workloads behind a backend, ReplicaSet hop included", () => {
+  /**
+   * The routing pages carry a summary: one address per Service. Grouping that
+   * address by owner drew five replicas as "1 of 1 ready"; the pods the
+   * selector picks are what runs behind the Service.
+   */
+  it("counts the pods a backend's selector picks, ReplicaSet hop included", () => {
     const backing = {
-      services: [],
+      services: [
+        {
+          name: "promo",
+          namespace: "gwtest",
+          selector: { app: "promo" },
+        },
+      ],
       published: [
         {
           service: { kind: "Service", name: "promo", namespace: "gwtest" },
-          source: "EndpointSlice",
-          slices: 1,
-          ready: 1,
+          ready: 2,
           draining: 0,
-          notReady: 1,
-          unrouted: 0,
-          ports: [],
+          notReady: 2,
           endpoints: [
             {
               address: "10.1.0.5",
-              target: {
-                kind: "Pod",
-                name: "promo-abc123-x1",
-                namespace: "gwtest",
-              },
+              target: { kind: "Pod", name: "promo-abc123-x1" },
               ready: true,
-              serving: true,
-              terminating: false,
-              nodeName: null,
-              zone: null,
-              hintZones: [],
-            },
-            {
-              address: "10.1.0.6",
-              target: { kind: "Pod", name: "stray", namespace: "gwtest" },
-              ready: false,
-              serving: false,
-              terminating: false,
-              nodeName: null,
-              zone: null,
-              hintZones: [],
             },
           ],
-          whole: true,
-          unpublished: [],
+          whole: false,
           stop: null,
         },
       ],
       backingKnown: true,
     };
-    const pod = (name: string, owners: unknown[]) => ({
+    const pod = (
+      name: string,
+      owners: unknown[],
+      over: { ready?: boolean; namespace?: string; labels?: object } = {}
+    ) => ({
       name,
-      namespace: "gwtest",
-      uid: name,
-      status: { phase: "Running", ready: true },
-      nodeName: null,
-      podIp: null,
-      hostIp: null,
-      containers: [],
-      initContainers: [],
-      labels: {},
-      annotations: {},
-      createdAt: null,
-      restartCount: 0,
-      lastRestartAt: null,
-      cpuRequests: null,
-      cpuLimits: null,
-      memoryRequests: null,
-      memoryLimits: null,
+      namespace: over.namespace ?? "gwtest",
+      status: { phase: "Running", ready: over.ready ?? true },
+      labels: over.labels ?? { app: "promo" },
       ownerReferences: owners,
-      volumes: [],
-      serviceAccountName: null,
     });
+    const rs = [
+      {
+        api_version: "apps/v1",
+        kind: "ReplicaSet",
+        name: "promo-abc123",
+        uid: "rs",
+        controller: true,
+      },
+    ];
     const data = gatewayTopology(
       [gateway("edge")],
       [route("promo")],
@@ -423,19 +408,14 @@ describe("the gateway topology map", () => {
       t,
       {
         pods: [
-          pod("promo-abc123-x1", [
-            {
-              api_version: "apps/v1",
-              kind: "ReplicaSet",
-              name: "promo-abc123",
-              uid: "rs",
-              controller: true,
-            },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ]) as any,
+          pod("promo-abc123-x1", rs),
+          pod("promo-abc123-x2", rs),
+          pod("promo-abc123-x3", rs, { ready: false }),
+          pod("stray", [], { ready: false }),
+          pod("elsewhere", rs, { namespace: "other" }),
+          pod("unlabelled", rs, { labels: { app: "cart" } }),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          pod("stray", []) as any,
-        ],
+        ] as any,
         deployments: [{ name: "promo", namespace: "gwtest" }],
       }
     );
@@ -446,10 +426,42 @@ describe("the gateway topology map", () => {
     expect(labels).toEqual(["1 bare pod", "promo"]);
     const deployment = workloads.nodes.find((node) => node.label === "promo")!;
     expect(deployment.object?.kind).toBe("Deployment");
-    expect(deployment.sub).toBe("1 of 1 ready");
+    expect(deployment.sub).toBe("2 of 3 ready");
     expect(deployment.tone).toBe("ok");
     const bare = workloads.nodes.find((node) => node.label === "1 bare pod")!;
     expect(bare.tone).toBe("err");
     expect(bare.object).toBeUndefined();
+  });
+
+  /** A Service with no selector has its endpoints written by hand; no pod
+   *  is behind it by any rule the map can apply, so it draws none. */
+  it("draws no workloads behind a Service with no selector", () => {
+    const backing = {
+      services: [{ name: "promo", namespace: "gwtest", selector: {} }],
+      published: [],
+      backingKnown: true,
+    } as unknown as Parameters<typeof gatewayTopology>[2];
+    const pods = [
+      {
+        name: "anything",
+        namespace: "gwtest",
+        status: { ready: true },
+        labels: {},
+        ownerReferences: [],
+      },
+    ] as unknown as PodInfo[];
+    const data = gatewayTopology(
+      [gateway("edge")],
+      [route("promo")],
+      backing,
+      t,
+      {
+        pods,
+        deployments: [],
+      }
+    );
+    expect(data.columns.some((column) => column.label === "Workloads")).toBe(
+      false
+    );
   });
 });

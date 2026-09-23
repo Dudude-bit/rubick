@@ -26,6 +26,7 @@ import {
   type MapTone,
 } from "@/integrations";
 import { describeStop } from "@/lib/connections";
+import { labelSelectorMatches } from "@/lib/label-selector";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
 import type { GatewayInfo, PodInfo, RouteInfo } from "@/generated/types";
@@ -296,13 +297,18 @@ export function gatewayTopology(
     }
   }
 
-  // The last: what actually runs behind each backend Service — its
-  // published endpoints resolved to pods, the pods to their controllers.
+  // The last: what actually runs behind each backend Service — the pods its
+  // selector picks, grouped by their controllers. Not its published
+  // endpoints: the routing pages carry a summary with one address in it, and
+  // five replicas drew as "1 of 1 ready".
   const workloadNodes = new Map<string, MapNode>();
   if (workloads && backing) {
-    const podByKey = new Map(
-      workloads.pods.map((pod) => [`${pod.namespace}/${pod.name}`, pod])
-    );
+    const podsIn = new Map<string, PodInfo[]>();
+    for (const pod of workloads.pods) {
+      const at = podsIn.get(pod.namespace) ?? [];
+      at.push(pod);
+      podsIn.set(pod.namespace, at);
+    }
     const deploymentNames = new Map<string, Set<string>>();
     for (const deployment of workloads.deployments) {
       const at = deploymentNames.get(deployment.namespace) ?? new Set();
@@ -314,13 +320,17 @@ export function gatewayTopology(
       if (node.object?.kind !== "Service" || node.object.namespace == null) {
         continue;
       }
-      const service = node.object;
-      const published = backing.published.find(
+      const service = {
+        name: node.object.name,
+        namespace: node.object.namespace,
+      };
+      const selector = backing.services.find(
         (entry) =>
-          entry.service.name === service.name &&
-          entry.service.namespace === service.namespace
-      );
-      if (!published) continue;
+          entry.name === service.name && entry.namespace === service.namespace
+      )?.selector;
+      // No selector: its endpoints are written by hand, and no pod is
+      // "behind" it by any rule this map can apply.
+      if (!selector || Object.keys(selector).length === 0) continue;
 
       const behind = new Map<
         string,
@@ -331,17 +341,14 @@ export function gatewayTopology(
           total: number;
         }
       >();
-      for (const endpoint of published.endpoints) {
-        const target = endpoint.target;
-        const pod =
-          target?.kind === "Pod"
-            ? podByKey.get(
-                `${target.namespace ?? service.namespace}/${target.name}`
-              )
-            : undefined;
-        const owner = pod ? ownerOf(pod, deploymentNames) : null;
-        // Pods with no controller — and addresses whose pod the list does
-        // not hold — group into one quiet node instead of vanishing.
+      for (const pod of podsIn.get(service.namespace) ?? []) {
+        if (
+          labelSelectorMatches({ matchLabels: selector }, pod.labels) !== true
+        )
+          continue;
+        const owner = ownerOf(pod, deploymentNames);
+        // Pods with no controller group into one quiet node instead of
+        // vanishing.
         const key = owner
           ? `${owner.kind}/${owner.name}`
           : `bare/${service.name}`;
@@ -352,7 +359,7 @@ export function gatewayTopology(
           total: 0,
         };
         entry.total += 1;
-        if (endpoint.ready) entry.ready += 1;
+        if (pod.status.ready) entry.ready += 1;
         behind.set(key, entry);
       }
 
