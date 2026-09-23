@@ -4893,6 +4893,7 @@ export const ru: Catalogue = {
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
+    tlsNotChecked: "TLS не проверен",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopNothingPublishedYet: "пока ничего не опубликовано",

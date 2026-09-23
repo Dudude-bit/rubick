@@ -185,6 +185,31 @@ describe("the routing map", () => {
     });
   });
 
+  /** TLS ending at a load balancer in front is TLS; the page row said so and the map beside it said "no TLS" in warn. */
+  it("tags a host TLS when something in front terminates it", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => true,
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({ text: "TLS", tone: "mute" });
+  });
+
+  /** A supplier in front that could not say is not "no TLS"; fails if the unknown is read as none. */
+  it("tags a host as not checked when what is in front could not say", () => {
+    const map = mapOf({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      upstreamTls: () => "unknown",
+    });
+
+    expect(map.columns[1].nodes[0].tag).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
+  });
+
   /**
    * Would have the map invent an outage out of a supported configuration.
    * Traefik's own internals have no endpoints by design, so a node for them

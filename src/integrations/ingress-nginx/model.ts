@@ -36,9 +36,11 @@ import {
   type Backing,
   type BackingSources,
   type SecretRef,
+  edgeTlsOf,
   frontingIngressesOf,
   proxyServicesBy,
   terminatedUpstreamOf,
+  type EdgeTls,
 } from "../ingress";
 import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
@@ -185,6 +187,10 @@ export function terminatedUpstream(
   sources: NginxSources
 ): { kind: "Ingress"; name: string; namespace: string } | null {
   return terminatedUpstreamOf(host, frontingIngresses(sources));
+}
+
+export function edgeTls(host: string | null, sources: NginxSources): EdgeTls {
+  return edgeTlsOf(host, sources, frontingIngresses(sources));
 }
 
 /** The IngressClasses whose controller is this nginx. */
@@ -358,13 +364,9 @@ function clearFinding(
   host: string | null
 ): Finding | null {
   if (routes.some((route) => route.tlsSecret)) return null;
-  // Without the proxy's Services nothing in front can be ruled out.
-  if (!sources.backingKnown) return null;
-  // Something in front holds the certificate; the hop into the cluster is
-  // plaintext by design and is not a fault to report per host.
-  if (terminatedUpstream(host, sources)) return null;
-  const upstream = sources.upstreamTls?.(host);
-  if (upstream === true || upstream === "unknown") return null;
+  // Something in front holds the certificate, and the hop into the cluster is
+  // plaintext by design; or what is in front could not be read.
+  if (edgeTls(host, sources).at !== "none") return null;
   const redirectAnyway = routes.some((route) =>
     route.annotations.some(
       (reading) =>

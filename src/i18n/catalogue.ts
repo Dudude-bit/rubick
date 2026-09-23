@@ -4478,6 +4478,7 @@ export const en = {
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
     noTls: "no TLS",
+    tlsNotChecked: "TLS not checked",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopNothingPublishedYet: "nothing published yet",
