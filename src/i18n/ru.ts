@@ -2784,6 +2784,12 @@ export const ru: Catalogue = {
       many: "{n} строк",
       other: "{n} строки",
     },
+    rowCountWhereAnswered: {
+      one: "{n} строка, из ответивших namespace",
+      few: "{n} строки, из ответивших namespace",
+      many: "{n} строк, из ответивших namespace",
+      other: "{n} строки, из ответивших namespace",
+    },
     longListTrim: {
       one: "{n} строка — сузьте область или поиск",
       few: "{n} строки — сузьте область или поиск",

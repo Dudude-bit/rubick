@@ -2635,6 +2635,10 @@ export const en = {
     rowsOfTotal: "{shown} of {total} {label}",
     rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
+    rowCountWhereAnswered: {
+      one: "{n} row, from the namespaces that answered",
+      other: "{n} rows, from the namespaces that answered",
+    },
     longListTrim: {
       one: "{n} row — narrow the scope or search to trim",
       other: "{n} rows — narrow the scope or search to trim",

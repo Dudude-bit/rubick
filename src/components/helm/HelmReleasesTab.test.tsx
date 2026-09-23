@@ -96,6 +96,27 @@ describe("what the releases tab does when the read fails", () => {
 });
 
 /**
+ * The empty message already knew a namespace went unread, but the footer
+ * under the rows still printed "1 row", the count of what answered stated
+ * as the count of the scope.
+ */
+describe("the releases tab beside a namespace it could not read", () => {
+  it("does not call the rows a total in the footer", () => {
+    mount({
+      releases: [release("api")],
+      unread: [
+        { namespace: "team-b", code: "FORBIDDEN", message: "forbidden" },
+      ],
+    });
+
+    expect(
+      screen.getByText("1 row, from the namespaces that answered")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1 row")).toBeNull();
+  });
+});
+
+/**
  * The release the app could not read must be on the page as itself, not as
  * an absence. A secret that would not decode was dropped with a
  * `tracing::warn!` nobody reads, so the page reported the survivors as the
