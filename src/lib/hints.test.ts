@@ -193,39 +193,53 @@ describe("troubleOf", () => {
   });
 
   /**
-   * The pod's figure is what its running containers may take, and a plain
-   * init container is not one of them: `migrate`, killed at its own 1Gi,
-   * was told the pod's limits add up to the app's 512Mi. A native sidecar
-   * is counted in that figure, so it keeps it.
+   * The pod's figure adds up the running containers that declare a limit,
+   * and `ContainerInfo` does not say which did. An Istio app with no limit,
+   * killed beside a proxy's 1Gi, was told the pod's limits add up to 1Gi —
+   * and `migrate`, a plain init container killed at its own 1Gi, the app's
+   * 512Mi. The figure is quoted only where the killed container is all
+   * that runs.
    */
-  it("quotes the pod's figure only for a container that figure counts", () => {
-    const killed = (phase: ContainerInfo["phase"]) =>
+  it("quotes the pod's figure only where it can be the killed container's", () => {
+    const oomKilled = (name: string, over: Partial<ContainerInfo> = {}) =>
+      container(name, {
+        state: { type: "waiting", reason: "CrashLoopBackOff" },
+        lastTerminated: {
+          exitCode: 137,
+          signal: 9,
+          reason: "OOMKilled",
+          message: null,
+          startedAt: null,
+          finishedAt: null,
+        },
+        restartCount: 2,
+        ...over,
+      });
+
+    expect(
       troubleOf(
         pod({
-          initContainers: [
-            container("migrate", {
-              phase,
-              state: { type: "waiting", reason: "CrashLoopBackOff" },
-              lastTerminated: {
-                exitCode: 137,
-                signal: 9,
-                reason: "OOMKilled",
-                message: null,
-                startedAt: null,
-                finishedAt: null,
-              },
-              restartCount: 2,
-            }),
-          ],
+          containers: [oomKilled("app"), container("istio-proxy")],
+          memoryLimits: "1073741824",
         }),
         []
-      );
-    expect(killed("init")).toMatchObject({
-      reason: "oomKilled",
+      )
+    ).toMatchObject({ reason: "oomKilled", container: "app", limit: null });
+
+    const killedInit = (phase: ContainerInfo["phase"]) =>
+      troubleOf(pod({ initContainers: [oomKilled("migrate", { phase })] }), []);
+    expect(killedInit("init")).toMatchObject({
       container: "migrate",
       limit: null,
     });
-    expect(killed("sidecar")).toMatchObject({ limit: "512Mi" });
+    expect(killedInit("sidecar")).toMatchObject({
+      container: "migrate",
+      limit: null,
+    });
+
+    expect(
+      troubleOf(pod({ containers: [oomKilled("app")] }), [])
+    ).toMatchObject({ container: "app", limit: "512Mi" });
   });
 
   it("reads a pull failure with the kubelet's own message", () => {
