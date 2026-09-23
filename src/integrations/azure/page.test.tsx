@@ -18,7 +18,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { default: AksAddonsPage } = await import("./page");
-const { AZURE_IDENTITY_CRD } = await import("./model");
+const { AZURE_IDENTITY_CRD, PROHIBITED_TARGET_CRD } = await import("./model");
 const { en } = await import("@/i18n/catalogue");
 
 const failure = (code: string, message: string) =>
@@ -78,6 +78,31 @@ describe("the AKS add-ons page", () => {
         exact: false,
       })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The add-on is decided from its own two kinds, and the sentence said
+   * "its three kinds are not served" — counting AGIC's, which beside it had
+   * been refused rather than found missing.
+   */
+  it("names only the add-on's own kinds as not served, not AGIC's refused one", async () => {
+    answers.crds = (crd) =>
+      crd === PROHIBITED_TARGET_CRD
+        ? failure(
+            "PERMISSION_DENIED",
+            "azureingressprohibitedtargets is forbidden"
+          )
+        : failure("NOT_FOUND", "not found");
+
+    renderPage();
+
+    const sentence = await screen.findByText(/add-on is not installed/);
+    expect(sentence).toHaveTextContent(
+      "AzureIdentity and AzureIdentityBinding"
+    );
+    expect(sentence).not.toHaveTextContent(
+      /three|AzureIngressProhibitedTarget/
+    );
   });
 
   /**

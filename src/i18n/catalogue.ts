@@ -4877,7 +4877,7 @@ export const en = {
     legacyAddonInstalled:
       " The retired pod-identity add-on is still installed, and what it holds is below.",
     legacyAddonNotInstalled:
-      " The retired pod-identity add-on is not installed either — its three kinds are not served by this API server.",
+      " The retired pod-identity add-on is not installed either — neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
     podIdentityRetired: "Pod identity, which is retired",
     podIdentityRetiredHint:
       "aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes.",

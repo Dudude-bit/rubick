@@ -5316,7 +5316,7 @@ export const ru: Catalogue = {
     legacyAddonInstalled:
       " Снятое с поддержки дополнение pod-identity всё ещё установлено — что в нём есть, показано ниже.",
     legacyAddonNotInstalled:
-      " Снятое с поддержки дополнение pod-identity тоже не установлено — его три вида этот API-сервер не обслуживает.",
+      " Снятое с поддержки дополнение pod-identity тоже не установлено — ни один из двух его видов, AzureIdentity и AzureIdentityBinding, этот API-сервер не обслуживает.",
     podIdentityRetired: "Pod identity — снято с поддержки",
     podIdentityRetiredHint:
       "aad-pod-identity объявлен устаревшим в октябре 2022, заархивирован в сентябре 2023, а его дополнение для AKS вышло из поддержки в сентябре 2025. Всё это работает, пока работает; переезжать надо на Workload ID выше.",
