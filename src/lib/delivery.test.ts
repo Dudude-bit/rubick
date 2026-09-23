@@ -1,6 +1,7 @@
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vitest";
+import { deliveryOfManifest } from "@/components/yaml/manifest-reads";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -14,7 +15,6 @@ import {
   deliveryIntercept,
   deliveryLine,
   deliveryMarks,
-  deliveryOfManifest,
   deliveryScopeOf,
   matchesDeliveryFilter,
 } from "./delivery";

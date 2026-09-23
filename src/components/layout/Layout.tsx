@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
@@ -8,7 +8,7 @@ import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { PeekPanel } from "@/components/resources/PeekPanel";
-import { YamlEditorDialog } from "@/components/yaml";
+import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
 import { useScopeTabs } from "@/hooks/useScopeTabs";
@@ -26,6 +26,27 @@ import { useT } from "@/i18n/useT";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+
+// Loaded on first use: it carries the YAML parser and the diff view, which
+// nothing needs until an object is opened for editing.
+const YamlEditorDialog = lazy(() =>
+  import("@/components/yaml/YamlEditorDialog").then((m) => ({
+    default: m.YamlEditorDialog,
+  }))
+);
+
+/** Mounted from the first open on, so later ones do not wait for the chunk. */
+function EditorWhenOpened() {
+  const open = useYamlEditorStore((state) => state.open);
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  if (!opened) return null;
+  return (
+    <Suspense fallback={null}>
+      <YamlEditorDialog />
+    </Suspense>
+  );
+}
 
 export function Layout() {
   const t = useT();
@@ -112,7 +133,7 @@ export function Layout() {
       </div>
       <CommandPalette />
       <ShortcutsOverlay />
-      <YamlEditorDialog />
+      <EditorWhenOpened />
       <WhatsNew />
       {/* Outside the outlet: one instance, and it survives the route change
           that `Open full page` performs. */}

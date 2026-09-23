@@ -1,5 +1,4 @@
 import type { QueryKey } from "@tanstack/react-query";
-import { load as parseYaml } from "js-yaml";
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -163,16 +162,25 @@ function customResourceState(
  */
 function manifestSource(kind: string): PeekSource {
   return source(
-    (name, namespace) =>
-      commands.getManifest(kind, getApiVersion(kind), name, namespace),
-    (text, _target, t) => summariseManifest(text, t)
+    async (name, namespace) => {
+      const text = await commands.getManifest(
+        kind,
+        getApiVersion(kind),
+        name,
+        namespace
+      );
+      // Loaded here, not at the top: the YAML parser is the one thing this
+      // path needs and no screen at startup does.
+      const { load } = await import("js-yaml");
+      return load(text);
+    },
+    (manifest, _target, t) => summariseManifest(manifest, t)
   );
 }
 
 const MANIFEST_ROW_LIMIT = 12;
 
-function summariseManifest(text: string, t: Translate): PeekSummary {
-  const manifest = parseYaml(text);
+function summariseManifest(manifest: unknown, t: Translate): PeekSummary {
   if (!manifest || typeof manifest !== "object") {
     return {
       groups: [
