@@ -1,16 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-function files(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    if (name === "generated" || name === "node_modules") continue;
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) files(path, out);
-    else if (/\.tsx$/.test(path) && !/\.test\.tsx$/.test(path)) out.push(path);
-  }
-  return out;
-}
+import { CODE_FILES } from "@/test/source-files";
 
 /** The attributes of the JSX element that carries `role="listbox"`. */
 function listboxTags(source: string): string[] {
@@ -38,13 +29,16 @@ describe("a list the arrow keys walk", () => {
    */
   it("names its selected row when the box keeps the focus", () => {
     const silent: string[] = [];
-    for (const file of files("src")) {
+    let checked = 0;
+    for (const file of CODE_FILES) {
       for (const tag of listboxTags(readFileSync(file, "utf8"))) {
         if (!/tabIndex=\{0\}/.test(tag)) continue;
+        checked++;
         if (!tag.includes("aria-activedescendant"))
           silent.push(file.replace(/^src\//, ""));
       }
     }
     expect(silent).toEqual([]);
+    expect(checked, "a guard that reads nothing passes").toBeGreaterThan(0);
   });
 });
