@@ -31,7 +31,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { answeredIn } from "@/lib/namespace-scope";
+import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
@@ -330,10 +330,7 @@ export function HelmReleasesTab({
           getRowHref={helmReleaseHref}
           emptyMessage={
             unread.length > 0
-              ? t("empty", "noneWhereAnswered", {
-                  label: t("empty", "helmReleases"),
-                  namespaces: answeredIn(scope, unread).join(", "),
-                })
+              ? noneWhereAnswered(t, t("empty", "helmReleases"), scope, unread)
               : undefined
           }
         />

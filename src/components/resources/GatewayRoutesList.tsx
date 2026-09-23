@@ -25,7 +25,8 @@ import {
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
 import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
-import { answeredIn } from "@/lib/namespace-scope";
+import { Unknown } from "@/components/ui/unknown";
+import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { Button } from "@/components/ui/button";
 import {
@@ -293,6 +294,7 @@ export function GatewayRoutesList() {
     served,
     routes,
     unread,
+    refusedKinds,
     isLoading,
     error,
     dataUpdatedAt,
@@ -428,7 +430,8 @@ export function GatewayRoutesList() {
           // beside an unread namespace: the rows are not the scope's total.
           (error && routes.length === 0) ||
           detectionError ||
-          unread.length > 0 ? undefined : (
+          unread.length > 0 ||
+          refusedKinds.length > 0 ? undefined : (
             <span className="tabular-nums">
               {total + board.mesh.length}
               {board.verdictsKnown && board.notServing.length > 0 && (
@@ -501,7 +504,19 @@ export function GatewayRoutesList() {
       />
 
       <div className="mt-3 empty:hidden">
-        <UnreadNamespaces unread={unread} label={t("nav", "routes")} />
+        <UnreadNamespaces
+          unread={unread}
+          label={t("nav", "routes").toLowerCase()}
+        />
+        {!error &&
+          refusedKinds.map(({ kind: refused, error: why }) => (
+            <Unknown
+              key={refused}
+              className="mb-2"
+              question={t("empty", "couldNotReadInScope", { label: refused })}
+              error={why}
+            />
+          ))}
       </div>
 
       {board.pulse.map((entry) => (
@@ -575,11 +590,15 @@ export function GatewayRoutesList() {
             {routes.length > 0
               ? t("empty", "nothingMatchesFilter")
               : unread.length > 0
-                ? t("empty", "noneWhereAnswered", {
-                    label: t("nav", "routes").toLowerCase(),
-                    namespaces: answeredIn(scope.scope, unread).join(", "),
-                  })
-                : t("empty", "gwNoRoutesInScope")}
+                ? noneWhereAnswered(
+                    t,
+                    t("nav", "routes").toLowerCase(),
+                    scope.scope,
+                    unread
+                  )
+                : refusedKinds.length > 0
+                  ? t("empty", "gwNoRoutesOfKindsRead")
+                  : t("empty", "gwNoRoutesInScope")}
           </p>
         ) : !board.verdictsKnown ? (
           <>

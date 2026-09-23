@@ -1194,12 +1194,6 @@ export async function unsubscribeResourceWatch(
   return invoke<void>("unsubscribe_resource_watch", { streamId });
 }
 
-export async function subscribeGatewayWatch(
-  scope: string[] | null
-): Promise<string> {
-  return invoke<string>("subscribe_gateway_watch", { scope });
-}
-
 export async function subscribeGatewayRouteWatch(
   kind: string,
   scope: string[] | null

@@ -168,6 +168,110 @@ describe("a scope some of whose namespaces did not answer", () => {
     expect(screen.queryByText(/No resources of this type/)).toBeNull();
     expect(screen.getByText("Could not read pods in staging.")).toBeVisible();
   });
+
+  /**
+   * The header dropped its count beside an unread namespace, and the footer
+   * went on printing "1 pod" under it, the same number stated as the total.
+   */
+  it("does not call the rows a total in the footer either", () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+
+    expect(
+      screen.getByText("1 pod, from the namespaces that answered")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1 pod")).toBeNull();
+  });
+
+  /**
+   * While a new scope is read, the last scope's answer stands in. Its unread
+   * namespaces are not this scope's, and a box naming one of them sat under
+   * a selection that did not contain it.
+   */
+  it("does not carry the last scope's unread namespaces into the next", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              queryKey={queryKey}
+              queryFn={answer}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(
+      page(["pods", "prod,staging"], async () => ({
+        rows: [{ name: "api", namespace: "prod" }],
+        unread: [refused],
+      }))
+    );
+    expect(
+      await screen.findByText("Could not read pods in staging.")
+    ).toBeVisible();
+
+    store.state.namespaceScope = ["dev"];
+    rerender(page(["pods", "dev"], () => new Promise(() => {})));
+    expect(screen.queryByText("Could not read pods in staging.")).toBeNull();
+  });
+
+  /**
+   * A re-read under a live watch that timed out in one namespace. The watch
+   * still streams that namespace, and its rows are current in the cache;
+   * the answer took them away and called the namespace unread, and the
+   * watch went on sending changes to rows the page no longer had.
+   */
+  it("keeps a watched namespace's rows when a re-read misses it", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 0 } },
+    });
+    const key = ["pods", "prod,staging"];
+    client.setQueryData<Scoped<Item>>(key, {
+      rows: [
+        { name: "api", namespace: "prod" },
+        { name: "worker", namespace: "staging" },
+      ],
+      unread: [],
+    });
+    const answer = vi.fn(async () => ({
+      rows: [
+        { name: "api", namespace: "prod" },
+        { name: "api-2", namespace: "prod" },
+      ],
+      unread: [{ ...refused, code: "READ_DEADLINE" }],
+    }));
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              queryKey={key}
+              queryFn={answer}
+              live
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("worker")).toBeVisible();
+    // What a delete from the page does next.
+    await act(() => client.invalidateQueries({ queryKey: key }));
+    expect(await screen.findByText("api-2")).toBeVisible();
+    expect(screen.getByText("worker")).toBeVisible();
+    expect(screen.queryByText("Could not read pods in staging.")).toBeNull();
+  });
 });
 
 describe("a read on a large cluster", () => {

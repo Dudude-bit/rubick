@@ -40,15 +40,19 @@ export function useWatchedList<
 }): WatchedList {
   const t = useT();
   const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
+  // Which subscription failed, not whether one did: a new scope is a new
+  // stream, and a failure held over from the last one kept a healthy list
+  // polling with nothing left to clear it.
+  const subscription = JSON.stringify(queryKey);
+  const [failedFor, setFailedFor] = useState<string | null>(null);
   // Read synchronously, so a burst of failures reports once.
-  const failed = useRef(false);
+  const failed = useRef<string | null>(null);
 
   const onError = useCallback(
     (message: string) => {
-      if (failed.current) return;
-      failed.current = true;
-      setWatchFailed(true);
+      if (failed.current === subscription) return;
+      failed.current = subscription;
+      setFailedFor(subscription);
       if (typeof reportFailure === "function") {
         reportFailure(message);
         return;
@@ -61,11 +65,11 @@ export function useWatchedList<
         }),
       });
     },
-    [reportFailure, t, toast]
+    [reportFailure, subscription, t, toast]
   );
   const onRecovered = useCallback(() => {
-    failed.current = false;
-    setWatchFailed(false);
+    failed.current = null;
+    setFailedFor(null);
   }, []);
 
   const { resyncing } = useResourceWatch<T>({
@@ -76,6 +80,7 @@ export function useWatchedList<
     onRecovered,
   });
 
+  const watchFailed = failedFor === subscription;
   const live = enabled && !watchFailed;
   return {
     live,

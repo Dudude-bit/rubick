@@ -210,9 +210,7 @@ export function CustomResourceList({
 
   return (
     <ResourceList<CustomResourceListItem>
-      title={(count) =>
-        t("count", "kindInstances", { kind: crdKind, n: count })
-      }
+      title={t("count", "kindInstances", { kind: crdKind })}
       queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={async () => {

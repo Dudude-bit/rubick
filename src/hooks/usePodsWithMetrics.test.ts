@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { createElement, type ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
-import type { PodMetrics } from "@/generated/types";
+import { renderHook as render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { PodMetrics, Scoped, UnreadNamespace } from "@/generated/types";
 import type { PodRow } from "@/lib/pod-rows";
 import type { NodeSilence } from "@/lib/node-reporting";
 import * as metricsModule from "@/lib/metrics";
@@ -15,6 +17,11 @@ interface ClusterState {
 
 const state = vi.hoisted(() => ({
   pods: [] as PodRow[],
+  unread: [] as UnreadNamespace[],
+  placeholder: false,
+  read: undefined as
+    ((ctx: { signal: AbortSignal }) => Promise<unknown>) | undefined,
+  fresh: { rows: [], unread: [] } as unknown,
   metrics: [] as PodMetrics[],
   silent: new Map<string, NodeSilence>(),
   cluster: {
@@ -34,13 +41,30 @@ vi.mock("@/stores/clusterStore", () => ({
 vi.mock("@/hooks/useLiveQuery", () => ({
   // Freshness comes with every real answer; a mock without it made the hook
   // read waitingSince off undefined.
-  useLiveQuery: () => ({
-    data: { rows: state.pods, unread: [] },
-    isLoading: false,
-    error: null,
-    freshness: { slowed: false, waitingSince: null },
-  }),
+  useLiveQuery: (options: {
+    queryFn: (ctx: { signal: AbortSignal }) => Promise<unknown>;
+  }) => {
+    state.read = options.queryFn;
+    return {
+      data: { rows: state.pods, unread: state.unread },
+      isPlaceholderData: state.placeholder,
+      isLoading: false,
+      error: null,
+      freshness: { slowed: false, waitingSince: null },
+    };
+  },
 }));
+vi.mock("@/lib/pod-rows", async (original) => ({
+  ...(await original<typeof import("@/lib/pod-rows")>()),
+  listPodRows: async () => state.fresh,
+}));
+
+const client = new QueryClient();
+const renderHook = <R>(hook: () => R) =>
+  render(hook, {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children),
+  });
 vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ podMetrics: state.metrics, podStatus: null }),
 }));
@@ -52,6 +76,9 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 }));
 
 beforeEach(() => {
+  state.unread = [];
+  state.placeholder = false;
+  client.clear();
   state.pods = ["a", "b"].map(
     (name) => ({ name, namespace: "default", nodeName: "gone" }) as PodRow
   );
@@ -125,4 +152,47 @@ it("exposes unknown usage when a pod loses its metrics sample", () => {
   expect(result.current.data[0].memoryBytes).toBeNull();
   expect(result.current.data[0].nodeSilence).toEqual(before[0].nodeSilence);
   expect(result.current.data[1]).toBe(before[1]);
+});
+
+/**
+ * The last scope's answer stands in while a new one is read. Its unread
+ * namespaces are not the new scope's, and the page named them under it.
+ */
+it("does not carry the last scope's unread namespaces into the next", () => {
+  state.unread = [
+    { namespace: "staging", code: "PERMISSION_DENIED", message: "" },
+  ];
+  state.placeholder = true;
+  const { result } = renderHook(() => usePodsWithMetrics());
+  expect(result.current.unread).toEqual([]);
+});
+
+/**
+ * A re-read under a live watch that timed out in one namespace. The watch
+ * still streams that namespace's pods; the answer took them away and called
+ * the namespace unread.
+ */
+it("keeps a watched namespace's pods when a re-read misses it", async () => {
+  state.cluster.namespaceScope = ["default", "staging"];
+  try {
+    const { result } = renderHook(() => usePodsWithMetrics());
+    const worker = { name: "worker", namespace: "staging" } as PodRow;
+    expect(result.current.watchLive).toBe(true);
+    state.fresh = {
+      rows: [state.pods[0]],
+      unread: [{ namespace: "staging", code: "READ_DEADLINE", message: "" }],
+    };
+    const { queryKeys } = await import("@/lib/query-keys");
+    client.setQueryData<Scoped<PodRow>>(queryKeys.podRows("default,staging"), {
+      rows: [state.pods[0], worker],
+      unread: [],
+    });
+    const answer = (await state.read?.({
+      signal: new AbortController().signal,
+    })) as Scoped<PodRow>;
+    expect(answer.rows).toContain(worker);
+    expect(answer.unread).toEqual([]);
+  } finally {
+    state.cluster.namespaceScope = [];
+  }
 });

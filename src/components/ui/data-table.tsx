@@ -111,6 +111,8 @@ interface DataTableProps<TData extends RowData> {
   rowLabel?: string;
   /** What dragged column widths are filed under; the row label otherwise. */
   widthsKey?: string;
+  /** The rows are not the whole of what was asked for, so no total. */
+  partial?: boolean;
 }
 
 /**
@@ -277,6 +279,7 @@ function DataTableInner<TData extends RowData>({
   grouping = null,
   rowLabel,
   widthsKey,
+  partial = false,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -1062,15 +1065,21 @@ function DataTableInner<TData extends RowData>({
               — a table of something with no kind — the frame counts rows. */}
             {rowLabel === undefined
               ? t("readings", "rowCount", { n: filteredRows })
-              : filteredRows === totalRows
-                ? `${totalRows} ${
-                    totalRows === 1 ? toSingularNoun(rowLabel) : rowLabel
-                  }`
-                : t("readings", "rowsOfTotal", {
-                    shown: filteredRows,
-                    total: totalRows,
-                    label: rowLabel,
-                  })}
+              : partial
+                ? t("readings", "rowsWhereAnswered", {
+                    n: filteredRows,
+                    label:
+                      filteredRows === 1 ? toSingularNoun(rowLabel) : rowLabel,
+                  })
+                : filteredRows === totalRows
+                  ? `${totalRows} ${
+                      totalRows === 1 ? toSingularNoun(rowLabel) : rowLabel
+                    }`
+                  : t("readings", "rowsOfTotal", {
+                      shown: filteredRows,
+                      total: totalRows,
+                      label: rowLabel,
+                    })}
           </div>
         </div>
       </div>

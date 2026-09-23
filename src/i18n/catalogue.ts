@@ -2618,6 +2618,7 @@ export const en = {
     warnUndoApply: "{count} things will undo this apply.",
     warnRevertCount: "{count} things will put this number back.",
     rowsOfTotal: "{shown} of {total} {label}",
+    rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
     longListTrim: {
       one: "{n} row — narrow the scope or search to trim",
@@ -5213,6 +5214,7 @@ export const en = {
     couldNotReadInScope: "Could not read {label} in this scope.",
     couldNotReadInNamespace: "Could not read {label} in {namespace}.",
     noneWhereAnswered: "No {label} in {namespaces}.",
+    gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",
     readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
     containerTerminated: "Container terminated · {detail}",
     podNotFound: "Pod not found",
@@ -5829,7 +5831,7 @@ export const en = {
       one: "with {n} more certificate in the bundle",
       other: "with {n} more certificates in the bundle",
     },
-    kindInstances: "{kind} Instances ({n})",
+    kindInstances: "{kind} Instances",
     otherRevisionsAtZero: {
       one: "{n} other revision is scaled to zero",
       other: "{n} other revisions are scaled to zero",

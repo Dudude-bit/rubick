@@ -315,29 +315,6 @@ pub fn unsubscribe_resource_watch(stream_id: String, state: State<'_, AppState>)
 
 // ----- Gateway API (runtime-discovered served versions) -----
 
-/// Subscribe to Gateways, at the served version detection picks, with the
-/// same `GatewayInfo` payload the list command answers — `ListenerSet`
-/// merging excluded: a watch event refreshes a row, and the row's listener
-/// count is re-read with the next list, not recomputed per event.
-#[tauri::command]
-pub async fn subscribe_gateway_watch(
-    scope: Option<Vec<String>>,
-    state: State<'_, AppState>,
-) -> Result<String> {
-    let client = current_client(&state)?;
-    let api_resource = crate::commands::gateway::served_api_resource("Gateway", &state).await?;
-    let stamp = api_resource.clone();
-    state
-        .watch_manager
-        .subscribe_custom_list(client, &api_resource, "Gateway", scope, move |obj| {
-            // Watch events strip apiVersion/kind like list items do; put
-            // them back so the payload matches what the fetcher returned.
-            Some(crate::resources::GatewayInfo::read(
-                &crate::commands::gateway::with_types(obj.clone(), &stamp),
-            ))
-        })
-}
-
 /// Subscribe to one route kind, `RouteInfo` payload — the shape all five
 /// list pages share.
 #[tauri::command]

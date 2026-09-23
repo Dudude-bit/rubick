@@ -110,12 +110,52 @@ export function joinScoped<T>(parts: readonly Scoped<T>[]): Scoped<T> {
   };
 }
 
+/**
+ * A fresh answer under a live watch. The watch keeps the cached rows of every
+ * namespace current, so a namespace this read timed out in keeps them rather
+ * than turning unread: dropping them left the watch streaming changes into
+ * rows the page no longer had.
+ */
+export function keepWatched<T extends { namespace?: string | null }>(
+  answer: Scoped<T>,
+  watched: Scoped<T> | undefined
+): Scoped<T> {
+  if (!watched || answer.unread.length === 0) return answer;
+  const missing = new Set(answer.unread.map((u) => u.namespace));
+  return {
+    rows: [
+      ...answer.rows,
+      ...watched.rows.filter((row) => missing.has(row.namespace ?? "")),
+    ],
+    unread: [],
+  };
+}
+
 /** The namespaces of `scope` that answered. */
 export function answeredIn(
   scope: readonly string[],
   unread: readonly UnreadNamespace[]
 ): string[] {
   return scope.filter((name) => !unread.some((u) => u.namespace === name));
+}
+
+/**
+ * "None" said only of the namespaces that answered — and when none did, not
+ * said at all.
+ */
+export function noneWhereAnswered(
+  t: T,
+  label: string,
+  scope: readonly string[],
+  unread: readonly UnreadNamespace[]
+): string {
+  const answered = answeredIn(scope, unread);
+  return answered.length === 0
+    ? t("empty", "couldNotReadInScope", { label })
+    : t("empty", "noneWhereAnswered", {
+        label,
+        namespaces: answered.join(", "),
+      });
 }
 
 /** What a stored value means, including one an older build wrote. */

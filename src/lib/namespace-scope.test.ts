@@ -7,6 +7,8 @@ import {
   inScope,
   answeredIn,
   joinScoped,
+  keepWatched,
+  noneWhereAnswered,
   sameScope,
   scopeCacheKey,
   scopeIn,
@@ -200,5 +202,47 @@ describe("reading a list across the selection", () => {
         [{ namespace: "staging", code: "PERMISSION_DENIED", message: "" }]
       )
     ).toEqual(["prod", "dev"]);
+  });
+
+  /**
+   * With every namespace unread there is no one left to say "none" about,
+   * and the sentence came out as "No routes in ." over two unread boxes.
+   */
+  it("says none only where something answered", () => {
+    const refused = (namespace: string) => ({
+      namespace,
+      code: "PERMISSION_DENIED",
+      message: "",
+    });
+    expect(noneWhereAnswered(t, "routes", ["a", "b"], [refused("b")])).toBe(
+      "No routes in a."
+    );
+    expect(
+      noneWhereAnswered(t, "routes", ["a", "b"], [refused("a"), refused("b")])
+    ).toBe("Could not read routes in this scope.");
+  });
+
+  /**
+   * Under a live watch a re-read that missed a namespace keeps that
+   * namespace's watched rows and does not call it unread; without a watch the
+   * miss stands as it was answered.
+   */
+  it("keeps what the watch holds for a namespace a re-read missed", () => {
+    const answer = {
+      rows: [{ name: "api", namespace: "prod" }],
+      unread: [{ namespace: "staging", code: "READ_DEADLINE", message: "" }],
+    };
+    const watched = whole([
+      { name: "old-api", namespace: "prod" },
+      { name: "worker", namespace: "staging" },
+    ]);
+    expect(keepWatched(answer, watched)).toEqual({
+      rows: [
+        { name: "api", namespace: "prod" },
+        { name: "worker", namespace: "staging" },
+      ],
+      unread: [],
+    });
+    expect(keepWatched(answer, undefined)).toBe(answer);
   });
 });

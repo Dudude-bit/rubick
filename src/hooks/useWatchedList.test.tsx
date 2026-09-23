@@ -65,13 +65,37 @@ describe("a list kept current by a watch", () => {
     expect(toast).toHaveBeenCalledTimes(2);
   });
 
-  /** Several namespaces are polled, never watched, and must not read as live. */
+  /** A list no watch can run for is polled, and must not read as live. */
   it("is not live where no watch can run", () => {
     const { result } = watched(false);
     expect(result.current).toMatchObject({
       live: false,
       refresh: "resourceList",
     });
+  });
+
+  /**
+   * A new scope is a new stream. The failure of the last one was held by the
+   * hook, and only a recovery of the stream that failed could clear it, so a
+   * healthy list kept polling and said it was not live.
+   */
+  it("starts a new scope's stream without the last scope's failure", () => {
+    const { result, rerender } = renderHook(
+      ({ queryKey }) =>
+        useWatchedList({
+          enabled: true,
+          subscribe: () => Promise.resolve("stream"),
+          queryKey,
+          reportFailure: "Pods",
+        }),
+      { initialProps: { queryKey: ["pods", "a,b"] } }
+    );
+    act(() => callbacks.onError?.("default: forbidden"));
+    expect(result.current.live).toBe(false);
+    rerender({ queryKey: ["pods", "c"] });
+    expect(result.current).toMatchObject({ live: true, refresh: false });
+    act(() => callbacks.onError?.("c: forbidden"));
+    expect(toast).toHaveBeenCalledTimes(2);
   });
 
   it("hands the failure to a caller that reports it itself", () => {

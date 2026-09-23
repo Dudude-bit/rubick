@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -18,6 +19,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import {
   joinScoped,
+  keepWatched,
   scopeCacheKey,
   whole,
   wireScope,
@@ -58,15 +60,21 @@ function useRouteKind(kind: ResourceKind, scope: string[], served: boolean) {
     queryKey,
     reportFailure: toPlural(kind),
   });
+  const queryClient = useQueryClient();
   const query = useLiveQuery<Scoped<RouteInfo>>({
     queryKey,
-    queryFn: () => commands.listGatewayRoutesIn(kind, wire),
+    queryFn: async () => {
+      const answer = await commands.listGatewayRoutesIn(kind, wire);
+      return live
+        ? keepWatched(answer, queryClient.getQueryData(queryKey))
+        : answer;
+    },
     enabled: served,
     staleTime: STALE_TIMES.resourceList,
     // The watch feeds the cache; polling is the fallback after it fails.
     refresh,
   });
-  return { query, resyncing, served, live };
+  return { kind, query, resyncing, served, live };
 }
 
 export function useGatewayRoutes(scope: string[]) {
@@ -127,6 +135,15 @@ export function useGatewayRoutes(scope: string[]) {
     [kinds]
   );
 
+  // A kind that failed whole — refused in every namespace, or on a scope read
+  // in one call — has no rows to join and no namespace to name, and adding it
+  // as `whole([])` counted a kind nobody could read as a kind with no routes.
+  const refusedKinds = active.flatMap((entry) =>
+    entry.query.isError && entry.query.data === undefined
+      ? [{ kind: entry.kind, error: entry.query.error }]
+      : []
+  );
+
   return {
     detection,
     detectionLoading: scan.isLoading,
@@ -134,6 +151,7 @@ export function useGatewayRoutes(scope: string[]) {
     served,
     routes,
     unread,
+    refusedKinds,
     isLoading:
       active.length > 0 && active.some((entry) => entry.query.isLoading),
     // An error only speaks when it hides rows: one kind failing while four

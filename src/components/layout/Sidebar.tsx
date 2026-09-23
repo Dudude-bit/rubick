@@ -338,10 +338,10 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     ],
     queryFn: async () => {
       // Each served kind on its own: a token may list HTTPRoutes and not
-      // TCPRoutes, and one refused kind must not blank the whole count — the
-      // routes page reads each kind as its own query for the same reason. A
-      // kind that answered contributes its rows; only when every kind was
-      // refused is the refusal the answer.
+      // TCPRoutes, and the rows of the kinds that answered still feed the
+      // mark. A refused kind is not a kind with no routes, though, so the
+      // count stays blank beside one, as it does beside an unread namespace
+      // and as the routes page does. Every kind refused is the refusal.
       const settled = await Promise.allSettled(
         routeKinds.map((kind) =>
           commands.listGatewayRoutesIn(kind, wireScope(scope))
@@ -354,7 +354,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       if (refused && answered.length === 0) {
         throw (refused as PromiseRejectedResult).reason;
       }
-      return joinScoped(answered);
+      return { ...joinScoped(answered), complete: refused === undefined };
     },
     staleTime: ROUTING_STALE,
     refresh: "overview",
@@ -454,7 +454,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
           item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
           overview={overview}
           value={
-            routes.data && routes.data.unread.length === 0
+            routes.data?.complete && routes.data.unread.length === 0
               ? scopedRoutes.length
               : null
           }

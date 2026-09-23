@@ -13,7 +13,7 @@ export function UnreadNamespaces({
   onRetry,
 }: {
   unread: readonly UnreadNamespace[];
-  /** The kind's plural, as the list names it. */
+  /** What was not read, as it reads inside a sentence. */
   label: string;
   onRetry?: () => void;
 }) {
@@ -25,7 +25,7 @@ export function UnreadNamespaces({
         <Unknown
           key={missing.namespace}
           question={t("empty", "couldNotReadInNamespace", {
-            label: label.toLowerCase(),
+            label,
             namespace: missing.namespace,
           })}
           error={missing}

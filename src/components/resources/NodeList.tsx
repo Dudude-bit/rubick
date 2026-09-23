@@ -229,7 +229,7 @@ export function NodeList() {
   // The same key the table reads, so the switch costs no second list.
   const nodesForTrends = useQuery({
     queryKey,
-    queryFn: () => commands.listNodes(null),
+    queryFn: () => commands.listNodes(null).then(whole),
     enabled: isConnected && view === "utilisation",
     staleTime: STALE_TIMES.resourceList,
   });
@@ -305,7 +305,7 @@ export function NodeList() {
           {viewToggle}
         </div>
         <NodeUtilisation
-          nodes={nodesForTrends.data ?? []}
+          nodes={nodesForTrends.data?.rows ?? []}
           nodesKnown={nodesForTrends.data !== undefined}
           nodesReason={
             nodesForTrends.error ? errorToShow(nodesForTrends.error) : null

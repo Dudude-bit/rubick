@@ -37,7 +37,7 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
-import { answeredIn, whole } from "@/lib/namespace-scope";
+import { keepWatched, noneWhereAnswered, whole } from "@/lib/namespace-scope";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
 
@@ -73,7 +73,7 @@ export interface ResourceListProps<
   Row extends { name: string; namespace?: string | null },
 > {
   /** Display title for the resource list */
-  title: string | ((count: number) => string);
+  title: string;
   /** Optional description below the title */
   description?: string;
   /** Query key for React Query */
@@ -235,7 +235,15 @@ export function ResourceList<
   const shouldUseQuery = data === undefined && !!queryKey && !!queryFn;
   const queryResult = useResource(
     (queryKey ?? ["resource-list"]) as string[],
-    queryFn ?? (async () => whole<Row>([])),
+    queryFn
+      ? live && queryKey
+        ? async () =>
+            keepWatched(
+              await queryFn(),
+              queryClient.getQueryData<Scoped<Row>>(queryKey)
+            )
+        : queryFn
+      : async () => whole<Row>([]),
     {
       enabled: shouldUseQuery,
       staleTime: staleTime ?? STALE_TIMES.resourceList,
@@ -250,9 +258,13 @@ export function ResourceList<
     () => scope.narrow(data ?? queryResult.data?.rows ?? []),
     [data, queryResult.data, scope]
   );
-  const unread =
-    (data === undefined ? queryResult.data?.unread : externalUnread) ??
-    NOTHING_UNREAD;
+  // The last scope's answer, held while this one is read: its unread
+  // namespaces are not this scope's, and its rows are not this scope's total.
+  const placeholder = data === undefined && queryResult.isPlaceholderData;
+  const unread = placeholder
+    ? NOTHING_UNREAD
+    : ((data === undefined ? queryResult.data?.unread : externalUnread) ??
+      NOTHING_UNREAD);
   const loading = isLoading ?? queryResult.isLoading;
   // Read at last. A failed list used to render `resources = []` with
   // `isLoading` already false, so the table printed "No resources of this type
@@ -372,25 +384,23 @@ export function ResourceList<
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
   const slow = waitedMs >= SLOW_READ_MS;
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
+  // Rows that are not the scope's whole: a namespace unread, a read cut
+  // short, or the last scope's answer still standing in.
+  const partial = ranOutOfTime || unread.length > 0 || placeholder;
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
-  const resolvedTitle =
-    typeof title === "function" ? title(resources.length) : title;
-
   const content = (
     <>
       {!embedded && (
         <ResourceListHeader
-          title={resolvedTitle}
+          title={title}
           // Nothing rather than zero when the read did not finish: a count
           // derived from a source the app has just said it could not read
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
-          count={
-            ranOutOfTime || unread.length > 0 ? undefined : resources.length
-          }
+          count={partial ? undefined : resources.length}
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
@@ -404,7 +414,7 @@ export function ResourceList<
       {headerContent}
       <UnreadNamespaces
         unread={unread}
-        label={emptyStateLabel}
+        label={emptyStateLabel.toLowerCase()}
         // Not the placeholder query's refetch when the rows come from outside:
         // that asks again under a key the page never reads.
         onRetry={
@@ -530,15 +540,18 @@ export function ResourceList<
           getRowId={getRowId}
           grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
           rowLabel={emptyStateLabel.toLowerCase()}
+          partial={partial}
           widthsKey={widthsKey}
           // "None in the scope" is a claim about the namespaces that did not
           // answer too; with any unread, it names the ones that did.
           emptyMessage={
             unread.length > 0
-              ? t("empty", "noneWhereAnswered", {
-                  label: emptyStateLabel.toLowerCase(),
-                  namespaces: answeredIn(scope.scope, unread).join(", "),
-                })
+              ? noneWhereAnswered(
+                  t,
+                  emptyStateLabel.toLowerCase(),
+                  scope.scope,
+                  unread
+                )
               : emptyMessage
           }
         />

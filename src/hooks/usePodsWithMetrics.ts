@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -8,7 +8,7 @@ import { mergePodsWithMetrics, type PodWithMetrics } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { scopeCacheKey } from "@/lib/namespace-scope";
+import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { withNodeSilence, type WithNodeSilence } from "@/lib/node-reporting";
 import { queryKeys } from "@/lib/query-keys";
@@ -60,8 +60,10 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     reportFailure: toPlural(ResourceType.Pod),
   });
 
+  const queryClient = useQueryClient();
   const {
     data: answer,
+    isPlaceholderData,
     isLoading: isLoadingPods,
     error: podsError,
     dataUpdatedAt,
@@ -75,7 +77,10 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     queryFn: async ({ signal }) => {
       const wire = scope.wire;
       try {
-        return await listPodRows(wire, signal);
+        const read = await listPodRows(wire, signal);
+        return live
+          ? keepWatched(read, queryClient.getQueryData(queryKey))
+          : read;
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
@@ -87,7 +92,11 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
   });
 
   const pods = answer?.rows ?? EMPTY_PODS;
-  const unread = answer?.unread ?? NOTHING_UNREAD;
+  // The last scope's answer stands in while this one is read, and its unread
+  // namespaces are not this scope's.
+  const unread = isPlaceholderData
+    ? NOTHING_UNREAD
+    : (answer?.unread ?? NOTHING_UNREAD);
 
   const { podMetrics, podStatus } = useMetrics({
     namespace: metricsNamespace,

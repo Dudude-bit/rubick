@@ -668,12 +668,13 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
   });
 
   /**
-   * A token may list one served route kind and not another. One refused kind
-   * must not blank the whole count — the routes page reads each kind on its
-   * own for the same reason, so the rail (one fetch over all kinds) has to
-   * tolerate a refusal the same way or the two disagree.
+   * A token may list one served route kind and not another. The rail dropped
+   * the refused kind and printed the rest as the total, so a kind nobody
+   * could read counted as a kind with no routes, while the same refusal in
+   * one namespace of two blanked the count. A refused kind blanks it too, as
+   * it does on the routes page.
    */
-  it("keeps the count when one served route kind is refused", async () => {
+  it("gives no count when one served route kind is refused", async () => {
     detectGatewayApi.mockResolvedValue({
       installed: true,
       kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }, { kind: "TCPRoute" }],
@@ -694,11 +695,13 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
     wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
-    // The one readable kind's route is counted; the refused kind is dropped,
-    // not fatal.
     await waitFor(() =>
-      expect(within(routes).getByText("1")).toBeInTheDocument()
+      expect(listGatewayRoutes.mock.calls.map(([kind]) => kind)).toContain(
+        "TCPRoute"
+      )
     );
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(within(routes).queryByText("1")).toBeNull();
   });
 
   /**
