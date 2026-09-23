@@ -68,47 +68,34 @@ pub struct ConnectAttempt {
     pub proxy: ProxyOutcome,
 }
 
+/// What the last kubeconfig load left behind.
+#[derive(Debug, Clone, Default)]
+pub struct LoadedKubeconfig {
+    /// As parsed. A failed reload keeps the previous one.
+    pub kubeconfig: Option<Kubeconfig>,
+    /// Which file each context's name was read from, when several pinned
+    /// files were merged: the first file to name something wins, and once
+    /// merged nothing in the result says where any of it came from. Empty
+    /// for a single file.
+    pub origins: HashMap<String, PathBuf>,
+    /// Why the last load failed. `None` beside a `None` kubeconfig means
+    /// nothing has been loaded yet, which must not be drawn as a file that
+    /// would not parse.
+    pub error: Option<String>,
+    /// The file it came from — recorded even when the read failed, since
+    /// naming the file to fix is most of the answer.
+    pub source: Option<PathBuf>,
+}
+
 /// Manages Kubernetes client connections for multiple clusters
 pub struct K8sClientManager {
     /// Active clients by context name
     clients: DashMap<String, Arc<Client>>,
 
-    /// Client configurations by context name
-    configs: DashMap<String, Config>,
-
-    /// Loaded kubeconfig
-    kubeconfig: RwLock<Option<Kubeconfig>>,
-
-    /// Default kubeconfig path
-    kubeconfig_path: RwLock<Option<PathBuf>>,
-
-    /// Which file each context's name was read from.
-    ///
-    /// Several pinned files merge into one kubeconfig — kube's own rule,
-    /// the same one kubectl follows for `$KUBECONFIG`: the first file to
-    /// name something wins. Once merged, nothing in the result says where
-    /// any of it came from, and "which file is this cluster in" is the
-    /// question somebody with a work file and a home file is actually
-    /// asking.
-    context_origins: RwLock<HashMap<String, PathBuf>>,
-
-    /// Why the last load failed, when one did.
-    ///
-    /// The error used to travel out to the caller and stop there, so a
-    /// kubeconfig that would not parse left this manager holding `None` —
-    /// the same thing it holds when there is no kubeconfig at all. The
-    /// Diagnostics panel, whose whole job is telling those two apart, could
-    /// only say "no kubeconfig loaded" to somebody staring at a file that
-    /// plainly exists. Kept here so the panel can name the reason.
-    kubeconfig_error: RwLock<Option<String>>,
-
-    /// The file the loaded kubeconfig actually came from.
-    ///
-    /// Distinct from `kubeconfig_path`, which records an *override* and
-    /// stays `None` for a default load. A screen reporting "where did this
-    /// come from" needs the file either way, and overloading the override
-    /// to carry it would quietly change what "no override" means.
-    kubeconfig_source: RwLock<Option<PathBuf>>,
+    /// The kubeconfig and what is known about how it was loaded, under one
+    /// lock. Five separate ones let a reader see the new file beside the
+    /// old error, between two writes that belong together.
+    loaded: RwLock<LoadedKubeconfig>,
 
     /// When each context's credentials stop being accepted, where the
     /// credential plugin said so. Absent for a context that named no deadline
@@ -186,12 +173,7 @@ impl K8sClientManager {
     pub fn new() -> Self {
         Self {
             clients: DashMap::new(),
-            configs: DashMap::new(),
-            kubeconfig: RwLock::new(None),
-            kubeconfig_path: RwLock::new(None),
-            kubeconfig_source: RwLock::new(None),
-            kubeconfig_error: RwLock::new(None),
-            context_origins: RwLock::new(HashMap::new()),
+            loaded: RwLock::new(LoadedKubeconfig::default()),
             credential_deadlines: DashMap::new(),
             proxies: DashMap::new(),
             paths: DashMap::new(),
@@ -215,7 +197,7 @@ impl K8sClientManager {
             Ok(parsed) => parsed,
             Err(e) => {
                 let why = format!("Failed to read kubeconfig: {e}");
-                *self.kubeconfig_error.write().await = Some(why.clone());
+                self.loaded.write().await.error = Some(why.clone());
                 return Err(Error::Auth(AuthError::Kubeconfig(why)));
             }
         };
@@ -225,14 +207,17 @@ impl K8sClientManager {
         // parsed contents. This mirrors kube's own resolution: `KUBECONFIG`
         // when set, `~/.kube/config` otherwise. It goes to `kubeconfig_source`,
         // not to the override — a default load has no override.
-        *self.kubeconfig_source.write().await = std::env::var_os("KUBECONFIG")
+        let source = std::env::var_os("KUBECONFIG")
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
             .or_else(|| dirs::home_dir().map(|h| h.join(".kube").join("config")));
 
-        *self.kubeconfig.write().await = Some(kubeconfig);
-        *self.kubeconfig_error.write().await = None;
-        *self.context_origins.write().await = HashMap::new();
+        *self.loaded.write().await = LoadedKubeconfig {
+            kubeconfig: Some(kubeconfig),
+            origins: HashMap::new(),
+            error: None,
+            source,
+        };
         Ok(())
     }
 
@@ -242,7 +227,12 @@ impl K8sClientManager {
     /// it: re-reading the file would answer about a different moment, and
     /// possibly a different file.
     pub async fn kubeconfig(&self) -> Option<Kubeconfig> {
-        self.kubeconfig.read().await.clone()
+        self.loaded.read().await.kubeconfig.clone()
+    }
+
+    /// Everything the last load left, read at one moment.
+    pub async fn loaded(&self) -> LoadedKubeconfig {
+        self.loaded.read().await.clone()
     }
 
     /// Why the last load failed, if it did.
@@ -251,7 +241,7 @@ impl K8sClientManager {
     /// yet — which is a different thing from a file that would not parse,
     /// and the two must not be drawn the same way.
     pub async fn kubeconfig_error(&self) -> Option<String> {
-        self.kubeconfig_error.read().await.clone()
+        self.loaded.read().await.error.clone()
     }
 
     /// Load kubeconfig from an explicit path if `override_path` is
@@ -298,8 +288,9 @@ impl K8sClientManager {
                 Ok(parsed) => parsed,
                 Err(e) => {
                     let why = format!("Failed to read kubeconfig from {}: {e}", path.display());
-                    *self.kubeconfig_error.write().await = Some(why.clone());
-                    *self.kubeconfig_source.write().await = Some(path);
+                    let mut loaded = self.loaded.write().await;
+                    loaded.error = Some(why.clone());
+                    loaded.source = Some(path);
                     return Err(Error::Auth(AuthError::Kubeconfig(why)));
                 }
             };
@@ -333,11 +324,12 @@ impl K8sClientManager {
 
         // The first file is what a screen naming "the" kubeconfig shows; the
         // whole list is what the settings screen lists.
-        *self.kubeconfig_path.write().await = canonical.first().cloned();
-        *self.kubeconfig_source.write().await = canonical.first().cloned();
-        *self.context_origins.write().await = origins;
-        *self.kubeconfig.write().await = Some(kubeconfig);
-        *self.kubeconfig_error.write().await = None;
+        *self.loaded.write().await = LoadedKubeconfig {
+            kubeconfig: Some(kubeconfig),
+            origins,
+            error: None,
+            source: canonical.first().cloned(),
+        };
         Ok(())
     }
 
@@ -346,15 +338,16 @@ impl K8sClientManager {
     /// Empty for a single file, because then every context came from it and
     /// saying so on every row is noise.
     pub async fn context_origins(&self) -> HashMap<String, PathBuf> {
-        self.context_origins.read().await.clone()
+        self.loaded.read().await.origins.clone()
     }
 
     /// Get a clone of the loaded kubeconfig
     pub async fn kubeconfig_clone(&self) -> Result<Kubeconfig> {
-        let kubeconfig = self.kubeconfig.read().await;
-        kubeconfig
-            .as_ref()
-            .cloned()
+        self.loaded
+            .read()
+            .await
+            .kubeconfig
+            .clone()
             .ok_or_else(|| Error::Config("Kubeconfig not loaded".to_string()))
     }
 
@@ -370,20 +363,19 @@ impl K8sClientManager {
             Ok(parsed) => parsed,
             Err(e) => {
                 let why = format!("Failed to read kubeconfig from {}: {e}", path.display());
-                *self.kubeconfig_error.write().await = Some(why.clone());
-                // The path is recorded even though the read failed: naming
-                // the file somebody has to go fix is most of the answer, and
-                // a panel that cannot name it sends them looking.
-                *self.kubeconfig_source.write().await = Some(path);
+                let mut loaded = self.loaded.write().await;
+                loaded.error = Some(why.clone());
+                loaded.source = Some(path);
                 return Err(Error::Auth(AuthError::Kubeconfig(why)));
             }
         };
 
-        *self.kubeconfig_path.write().await = Some(path.clone());
-        *self.kubeconfig_source.write().await = Some(path);
-        *self.context_origins.write().await = HashMap::new();
-        *self.kubeconfig.write().await = Some(kubeconfig);
-        *self.kubeconfig_error.write().await = None;
+        *self.loaded.write().await = LoadedKubeconfig {
+            kubeconfig: Some(kubeconfig),
+            origins: HashMap::new(),
+            error: None,
+            source: Some(path),
+        };
         Ok(())
     }
 
@@ -395,13 +387,14 @@ impl K8sClientManager {
     /// symlink is involved, which is the disagreement such a screen exists to
     /// prevent.
     pub async fn kubeconfig_path(&self) -> Option<PathBuf> {
-        self.kubeconfig_source.read().await.clone()
+        self.loaded.read().await.source.clone()
     }
 
     /// Get list of available contexts
     pub async fn list_contexts(&self) -> Result<Vec<ContextInfo>> {
-        let kubeconfig = self.kubeconfig.read().await;
-        let kubeconfig = kubeconfig
+        let loaded = self.loaded.read().await;
+        let kubeconfig = loaded
+            .kubeconfig
             .as_ref()
             .ok_or_else(|| Error::Config("Kubeconfig not loaded".to_string()))?;
 
@@ -432,8 +425,9 @@ impl K8sClientManager {
 
     /// Get current context name
     pub async fn get_current_context(&self) -> Result<Option<String>> {
-        let kubeconfig = self.kubeconfig.read().await;
-        let kubeconfig = kubeconfig
+        let loaded = self.loaded.read().await;
+        let kubeconfig = loaded
+            .kubeconfig
             .as_ref()
             .ok_or_else(|| Error::Config("Kubeconfig not loaded".to_string()))?;
 
@@ -448,11 +442,10 @@ impl K8sClientManager {
         }
 
         let config = self.create_config(context).await?;
-        let client = build_client(config.clone())?;
+        let client = build_client(config)?;
 
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
-        self.configs.insert(context.to_string(), config);
 
         tracing::info!("Connected to cluster: {}", context);
         Ok(client)
@@ -479,10 +472,9 @@ impl K8sClientManager {
                     "Failed to create config for context {context}: {e}"
                 ))
             })?;
-        let client = build_client(config.clone())?;
+        let client = build_client(config)?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
-        self.configs.insert(context.to_string(), config);
         self.proxies.remove(context);
         self.paths
             .insert(context.to_string(), ConnectionPath::Direct);
@@ -498,10 +490,9 @@ impl K8sClientManager {
             .parse()
             .map_err(|e| Error::Connection(format!("proxy address: {e}")))?;
         let config = without_client_retries(Config::new(url));
-        let client = build_client(config.clone())?;
+        let client = build_client(config)?;
         let client = Arc::new(client);
         self.clients.insert(context.to_string(), client.clone());
-        self.configs.insert(context.to_string(), config);
         self.paths
             .insert(context.to_string(), ConnectionPath::KubectlProxy);
         tracing::info!(
@@ -535,8 +526,9 @@ impl K8sClientManager {
 
     /// Create kube config for a context
     async fn create_config(&self, context: &str) -> Result<Config> {
-        let kubeconfig = self.kubeconfig.read().await;
-        let kubeconfig = kubeconfig
+        let loaded = self.loaded.read().await;
+        let kubeconfig = loaded
+            .kubeconfig
             .as_ref()
             .ok_or_else(|| Error::Config("Kubeconfig not loaded".to_string()))?;
 
@@ -558,7 +550,6 @@ impl K8sClientManager {
     /// Disconnect from a cluster
     pub fn disconnect(&self, context: &str) {
         self.clients.remove(context);
-        self.configs.remove(context);
         self.paths.remove(context);
         // Dropping it kills the process; nothing else talks to that port.
         self.proxies.remove(context);
@@ -571,7 +562,6 @@ impl K8sClientManager {
     /// non-existent) cluster.
     pub fn disconnect_all(&self) {
         self.clients.clear();
-        self.configs.clear();
         self.paths.clear();
         self.proxies.clear();
         tracing::info!("Disconnected from all clusters");
@@ -946,13 +936,7 @@ users:
             .await
             .expect("load with override");
 
-        let loaded = manager
-            .kubeconfig
-            .read()
-            .await
-            .as_ref()
-            .cloned()
-            .expect("kubeconfig populated");
+        let loaded = manager.kubeconfig().await.expect("kubeconfig populated");
         assert_eq!(
             loaded.current_context.as_deref(),
             Some("my-override-ctx"),
@@ -960,7 +944,7 @@ users:
         );
         // The override path is recorded so a later command (e.g. a
         // "show me which kubeconfig is active" UI affordance) can read it.
-        let recorded = manager.kubeconfig_path.read().await.clone();
+        let recorded = manager.kubeconfig_path().await;
         assert_eq!(recorded, Some(override_path.canonicalize().unwrap()));
     }
 
@@ -996,10 +980,10 @@ users:
         }
         result.expect("load with default");
 
-        let recorded = manager.kubeconfig_path.read().await.clone();
-        assert!(
-            recorded.is_none(),
-            "load_kubeconfig_resolved(no paths) must NOT record an override path"
+        assert_eq!(
+            manager.kubeconfig_path().await,
+            Some(fake_kubeconfig),
+            "a default load names the file $KUBECONFIG pointed at"
         );
     }
 

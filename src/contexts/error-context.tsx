@@ -1,9 +1,8 @@
 /**
  * Application-wide error listener.
  *
- * Mounts three subscriptions and renders its children unchanged:
+ * Mounts two subscriptions and renders its children unchanged:
  * - global errors (window.error, unhandledrejection)
- * - backend errors (the `app-error` Tauri event)
  * - the cluster store's error field
  *
  * Each one is logged to the backend and surfaced as a deduplicated
@@ -12,7 +11,6 @@
  */
 
 import React, { useCallback, useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { reportError, type NormalizedError } from "@/lib/error-utils";
@@ -106,27 +104,6 @@ export function ErrorProvider({ children }: Props) {
     return () => {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
-    };
-  }, [handleError]);
-
-  // Listen for backend app-error events
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-
-    listen<{ code?: string; message?: string }>("app-error", (event) => {
-      const error = {
-        code: event.payload.code,
-        message: event.payload.message || "Unknown backend error",
-      };
-      handleError(error, "tauri.app-error");
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
     };
   }, [handleError]);
 

@@ -6,6 +6,7 @@
 //! module's parser.
 
 use crate::error::{Error, Result};
+use kube::api::GroupVersionKind;
 use kube::core::DynamicObject;
 use kube::discovery::ApiResource;
 use serde::Deserialize as _;
@@ -92,13 +93,10 @@ fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> 
 
     let (group, version) = parse_api_version(api_version);
 
-    let api_resource = ApiResource {
-        group,
-        version,
-        kind: kind.to_string(),
-        api_version: api_version.to_string(),
-        plural: pluralize(kind),
-    };
+    let api_resource = ApiResource::from_gvk_with_plural(
+        &GroupVersionKind::gvk(&group, &version, kind),
+        &pluralize(kind),
+    );
 
     let mut object: DynamicObject =
         serde_yaml::from_value(value.clone()).map_err(|e| Error::Serialization(e.to_string()))?;
@@ -118,13 +116,10 @@ fn parse_manifest_document(value: &serde_yaml::Value) -> Result<ParsedManifest> 
 /// `get_manifest` which doesn't have a YAML body to parse.
 pub(super) fn api_resource_for(kind: &str, api_version: &str) -> ApiResource {
     let (group, version) = parse_api_version(api_version);
-    ApiResource {
-        group,
-        version,
-        kind: kind.to_string(),
-        api_version: api_version.to_string(),
-        plural: pluralize(kind),
-    }
+    ApiResource::from_gvk_with_plural(
+        &GroupVersionKind::gvk(&group, &version, kind),
+        &pluralize(kind),
+    )
 }
 
 fn parse_api_version(api_version: &str) -> (String, String) {
