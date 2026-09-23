@@ -1190,6 +1190,11 @@ export const en = {
     clearQuery: "Clear the query",
     downloadFailed: "Download failed",
     logSaved: { one: "Log saved", other: "{n} logs saved" },
+    logsPartlySaved: {
+      one: "{n} of {total} logs saved",
+      other: "{n} of {total} logs saved",
+    },
+    notSaved: "Not saved:",
     downloadFailedDetail: "Could not read the log from the API",
     confirm: "Confirm",
     processing: "Processing...",

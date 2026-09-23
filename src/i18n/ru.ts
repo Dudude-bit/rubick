@@ -1178,6 +1178,13 @@ export const ru: Catalogue = {
       many: "Сохранено {n} логов",
       other: "Сохранено {n} лога",
     },
+    logsPartlySaved: {
+      one: "Сохранён {n} лог из {total}",
+      few: "Сохранено {n} лога из {total}",
+      many: "Сохранено {n} логов из {total}",
+      other: "Сохранено {n} лога из {total}",
+    },
+    notSaved: "Не сохранены:",
     downloadFailedDetail: "Не удалось прочитать лог из API",
     confirm: "Подтвердить",
     processing: "Выполняется…",
