@@ -230,6 +230,40 @@ describe("the palette's resource rows", () => {
     });
   });
 
+  /**
+   * The cap was spent before the unroutable hits were dropped: five Widgets
+   * took every slot, none was drawn, and "3 more" sat under "Nothing
+   * matches" for the three pods nobody was shown.
+   */
+  it("spends a cluster's rows on hits it can open, not on the ones it drops", () => {
+    const widgets: SearchHit[] = Array.from(
+      { length: ROWS_PER_CLUSTER },
+      (_, i) => ({
+        context: "k3d-dev",
+        kind: "Widget",
+        name: `api-w${i}`,
+        namespace: "default",
+      })
+    );
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        scope: { kind: "all" },
+        shownClusters: [cluster("k3d-dev"), cluster("prod-eu")],
+        hitsByContext: byContext([...widgets, ...pods("k3d-dev", 3)]),
+      })
+    );
+
+    const dev = entries.flatMap((entry) =>
+      entry.kind === "hit" && entry.hit.context === "k3d-dev"
+        ? [entry.hit.name]
+        : []
+    );
+    expect(dev).toEqual(["api-0", "api-1", "api-2"]);
+    expect(entries.some((entry) => entry.kind === "more")).toBe(false);
+    expect(entries.some((entry) => entry.kind === "hint")).toBe(false);
+  });
+
   /** One cluster has nobody to share the screen with, so nothing is held back. */
   it("shows every hit when only one cluster is searched", () => {
     const entries = buildPaletteEntries(

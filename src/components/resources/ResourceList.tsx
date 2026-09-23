@@ -189,6 +189,11 @@ export interface ResourceListProps<
    * delivery label.
    */
   delivery?: { group: string; kind: string } | null;
+  /**
+   * The rows handed in are the last scope's answer, standing in while this
+   * one is read: not this scope's total, and its unread are not this scope's.
+   */
+  placeholder?: boolean;
 }
 
 export function ResourceList<
@@ -225,6 +230,7 @@ export function ResourceList<
   getRowId,
   grouping,
   delivery,
+  placeholder: externalPlaceholder = false,
 }: ResourceListProps<Row>) {
   const t = useT();
   const { isConnected } = useClusterStore();
@@ -260,7 +266,8 @@ export function ResourceList<
   );
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
-  const placeholder = data === undefined && queryResult.isPlaceholderData;
+  const placeholder =
+    data === undefined ? queryResult.isPlaceholderData : externalPlaceholder;
   const unread = placeholder
     ? NOTHING_UNREAD
     : ((data === undefined ? queryResult.data?.unread : externalUnread) ??

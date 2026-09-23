@@ -54,6 +54,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
+import { failingCondition } from "@/lib/condition-health";
 import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
 import type {
@@ -131,7 +132,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
   const certificates = useTlsCertificates(gateway.namespace, ownSecrets);
 
   const broken = (listener: ListenerInfo) =>
-    listener.conditions.some((c) => c.status === "False");
+    failingCondition(listener.conditions);
 
   return (
     <Section>
@@ -173,9 +174,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   {broken(listener) && (
                     <span className="text-err">
                       {" "}
-                      ·{" "}
-                      {listener.conditions.find((c) => c.status === "False")
-                        ?.reason ?? t("empty", "brokenWord")}
+                      · {broken(listener)?.reason ?? t("empty", "brokenWord")}
                     </span>
                   )}
                 </TableCell>

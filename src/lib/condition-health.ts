@@ -22,6 +22,9 @@ const HEALTHY_WHEN_FALSE = new Set([
   "failuretarget",
   "suspended",
   "terminating",
+  // Gateway API listeners: a controller that looked writes these False.
+  "conflicted",
+  "overlappingtlsconfig",
 ]);
 
 /**

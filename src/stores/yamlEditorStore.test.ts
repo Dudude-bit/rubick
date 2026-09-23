@@ -9,7 +9,7 @@ beforeEach(() => {
 describe("formatting the buffer", () => {
   /** The toast said "formatted" whether or not anything was: a buffer that
    *  does not parse is left alone, and says so by answering false. */
-  it("leaves a buffer that does not parse as it is, and says it did", async () => {
+  it("leaves a buffer that does not parse as it is, and says it was not formatted", async () => {
     const broken = "kind: [unclosed\n";
     useYamlEditorStore.setState({ editedContent: broken });
 
@@ -17,6 +17,7 @@ describe("formatting the buffer", () => {
     expect(useYamlEditorStore.getState().editedContent).toBe(broken);
   });
 
+  /** The other answer: a buffer that parses is rewritten and says so. */
   it("reformats a buffer that parses", async () => {
     useYamlEditorStore.setState({
       editedContent: "kind:   Pod\nmetadata: {name: web}\n",

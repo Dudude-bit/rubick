@@ -30,8 +30,13 @@ import { labelSelectorMatches } from "@/lib/label-selector";
 import { hasTerminated } from "@/lib/pod-status";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
-import { verdictOf } from "@/lib/route-verdict";
-import type { GatewayInfo, PodInfo, RouteInfo } from "@/generated/types";
+import { statusesFor, verdictOf } from "@/lib/route-verdict";
+import type {
+  GatewayInfo,
+  ParentRefInfo,
+  PodInfo,
+  RouteInfo,
+} from "@/generated/types";
 import {
   gatewayOfParent,
   gatewayProgrammed,
@@ -91,22 +96,13 @@ function routeTone(route: RouteInfo): MapTone {
   return "mute";
 }
 
-/** Whether this parent's own status entry says the Gateway refused it. */
-function refusedBy(
-  route: RouteInfo,
-  gatewayName: string,
-  gatewayNamespace: string
-): boolean {
-  return (
-    verdictOf(
-      route.parents.filter(
-        (entry) =>
-          entry.parent.name === gatewayName &&
-          (entry.parent.namespace ?? route.namespace) === gatewayNamespace
-      ),
-      "Accepted"
-    ).state === "false"
-  );
+/**
+ * Whether this parentRef's own status entries refuse it. Matched against the
+ * parentRef, not the Gateway it resolved to: a ListenerSet's entry carries
+ * the set's namespace, which need not be its Gateway's.
+ */
+function refusedBy(route: RouteInfo, parent: ParentRefInfo): boolean {
+  return verdictOf(statusesFor(route, parent), "Accepted").state === "false";
 }
 
 export function gatewayTopology(
@@ -201,9 +197,7 @@ export function gatewayTopology(
             : undefined,
         });
       }
-      const verdict: MapTone = refusedBy(route, parent.name, ns)
-        ? "err"
-        : "mute";
+      const verdict: MapTone = refusedBy(route, parent) ? "err" : "mute";
       if (!drawKinds) {
         link(gatewayId, routeId, verdict);
       } else {

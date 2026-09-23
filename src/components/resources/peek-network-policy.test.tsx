@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { render } from "@testing-library/react";
 
 import type { NetworkPolicyInfo, PolicyDirection } from "@/generated/types";
 import { resolveSource } from "./peek-sources";
@@ -89,14 +90,29 @@ describe("the NetworkPolicy the peek panel draws", () => {
   /**
    * The same three answers the list gives, said the same way: a refused pod
    * list is `None`, not zero, and zero is the finding the page exists for.
+   * The words differed and the colour did not, so "pods not read" was
+   * painted as a count the peek had.
    */
   it("keeps a pod list nobody could read apart from an empty one", () => {
-    const refused = summarise(policy({ selected: null }))[0].items[1];
-    expect(refused.value).toBe("podsNotRead");
-    expect(refused.tone).toBeUndefined();
+    const drawn = (selected: number | null) => {
+      const { container, unmount } = render(
+        <>{summarise(policy({ selected }))[0].items[1].value}</>
+      );
+      const out = {
+        text: container.textContent,
+        colour: container.querySelector("span")?.className ?? "",
+      };
+      unmount();
+      return out;
+    };
+    const refused = drawn(null);
+    const empty = drawn(0);
+    const some = drawn(3);
 
-    const empty = summarise(policy({ selected: 0 }))[0].items[1];
-    expect(empty.value).toBe("selectsNoPods");
-    expect(empty.tone).toBe("warn");
+    expect(refused.colour).not.toBe(some.colour);
+    expect(refused.colour).not.toBe(empty.colour);
+    expect(refused.text).toBe("pods not read");
+    expect(empty.text).toBe("no pods");
+    expect(summarise(policy({ selected: 0 }))[0].items[1].tone).toBe("warn");
   });
 });

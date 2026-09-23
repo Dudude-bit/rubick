@@ -73,8 +73,13 @@ export function WorkloadUsage({
   noLimitNote,
 }: WorkloadUsageProps) {
   const t = useT();
+  // A template whose quantities would not parse has no sums to give, and
+  // its missing limits are not "none declared".
+  const replica = template?.replica?.known ? template.replica : null;
   // The key travels; the chart is what turns it into words.
-  const limitNote: EmptyKey = noLimitNote ?? "noLimitsDeclared";
+  const limitNote: EmptyKey = replica
+    ? (noLimitNote ?? "noLimitsDeclared")
+    : "limitsNotKnown";
   const running = useMemo(() => runningPods(pods), [pods]);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
@@ -93,7 +98,6 @@ export function WorkloadUsage({
   // the reading is summed over — a workload halfway through a rollout is
   // measured against what is actually there rather than against what was
   // asked for.
-  const replica = template?.replica;
   const ceiling = {
     cpu: replica?.cpuLimits ?? null,
     memory: replica?.memoryLimits ?? null,

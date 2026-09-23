@@ -2784,6 +2784,12 @@ export const ru: Catalogue = {
       many: "{n} строк",
       other: "{n} строки",
     },
+    rowCountWhereAnswered: {
+      one: "{n} строка, из ответивших namespace",
+      few: "{n} строки, из ответивших namespace",
+      many: "{n} строк, из ответивших namespace",
+      other: "{n} строки, из ответивших namespace",
+    },
     longListTrim: {
       one: "{n} строка — сузьте область или поиск",
       few: "{n} строки — сузьте область или поиск",
@@ -5446,6 +5452,8 @@ export const ru: Catalogue = {
     noTargetGroupBinding: "нет TargetGroupBinding",
     noLimitsDeclared:
       "В этом шаблоне не объявлены лимиты — шкала показывает то, что эти поды уже потребляли, и ничто не ограничивает, сколько они могут взять.",
+    limitsNotKnown:
+      "Лимиты этого шаблона прочитать не удалось — шкала показывает то, что эти поды уже потребляли, а ограничивает ли их что-то, неизвестно.",
     noStructuralSchema:
       "Эта версия не публикует структурную схему, поэтому API-сервер не проверяет ничего, кроме metadata объекта.",
     readyLower: "готов",

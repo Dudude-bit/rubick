@@ -1064,7 +1064,9 @@ function DataTableInner<TData extends RowData>({
               spells it; only the frame around it is translated. Without one
               — a table of something with no kind — the frame counts rows. */}
             {rowLabel === undefined
-              ? t("readings", "rowCount", { n: filteredRows })
+              ? partial
+                ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
+                : t("readings", "rowCount", { n: filteredRows })
               : partial
                 ? t("readings", "rowsWhereAnswered", {
                     n: filteredRows,

@@ -1,7 +1,7 @@
 import { ArrowDownToLine, Info, Trash2 } from "lucide-react";
 
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { Peer } from "@/components/resources/network-policy-cells";
+import { Peer, ReachCell } from "@/components/resources/network-policy-cells";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
   KeyValueSection,
@@ -119,14 +119,9 @@ export function NetworkPolicyDetail() {
         },
         {
           label: t("columns", "pods"),
-          // Three answers, because a pod list the reader was refused is not
-          // a policy with nothing behind it.
-          value:
-            reach?.kind === "cannotSay"
-              ? t("empty", "podsNotRead")
-              : reach?.kind === "nothing"
-                ? t("empty", "selectsNoPods")
-                : t("count", "pods", { n: reach?.count ?? 0 }),
+          // The list's own cell: a pod list the reader was refused is not a
+          // policy with nothing behind it, and not a count either.
+          value: <ReachCell policy={policy} />,
           tone: reach?.kind === "nothing" ? "warn" : undefined,
         },
         {

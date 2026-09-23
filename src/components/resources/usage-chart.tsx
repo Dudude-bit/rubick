@@ -26,16 +26,11 @@ import {
   type UsageSample,
 } from "@/lib/usage-history";
 import { useT } from "@/i18n/useT";
+import { BAND_H } from "./band-frame";
 import type { en } from "@/i18n/catalogue";
 
 /** A line this chart is allowed to say, by the name the catalogue gives it. */
 export type EmptyKey = keyof typeof en.empty;
-
-/**
- * Tall enough to read a shape off. The 42px band this replaces turned every
- * series into a flat rule: at that height a doubling of load is four pixels.
- */
-export const BAND_H = 56;
 
 const Band = React.lazy(() => import("./usage-band"));
 

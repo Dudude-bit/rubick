@@ -26,10 +26,7 @@ import { clockOf } from "@/lib/usage-history";
 import { formatSince } from "@/lib/utils";
 import type { TrafficWindow } from "@/integrations";
 import { useT } from "@/i18n/useT";
-
-const BAND_H = 56;
-const MARGIN = { top: 13, right: 3, bottom: 1, left: 0 };
-const ASSUMED_W = 600;
+import { BAND_H, BAND_MARGIN, useBandWidth } from "./band-frame";
 
 /** Room above the peak, so a maximum is not a stroke sliced by the frame. */
 const HEADROOM = 1.25;
@@ -105,7 +102,7 @@ export function TrafficChart({ window: data, label }: TrafficChartProps) {
               data={rows}
               width={width}
               height={BAND_H}
-              margin={MARGIN}
+              margin={BAND_MARGIN}
               accessibilityLayer
             >
               <XAxis hide type="number" dataKey="i" domain={domain} />
@@ -235,24 +232,6 @@ function TrafficTooltip({
       </div>
     </div>
   );
-}
-
-function useBandWidth(): [React.RefObject<HTMLDivElement | null>, number] {
-  const ref = React.useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = React.useState(ASSUMED_W);
-  React.useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const measured = Math.round(entries[0]?.contentRect.width ?? 0);
-      if (measured > 0) setWidth(measured);
-    });
-    observer.observe(node);
-    const initial = Math.round(node.getBoundingClientRect().width);
-    if (initial > 0) setWidth(initial);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, width];
 }
 
 function describe(

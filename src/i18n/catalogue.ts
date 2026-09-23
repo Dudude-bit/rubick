@@ -2635,6 +2635,10 @@ export const en = {
     rowsOfTotal: "{shown} of {total} {label}",
     rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
+    rowCountWhereAnswered: {
+      one: "{n} row, from the namespaces that answered",
+      other: "{n} rows, from the namespaces that answered",
+    },
     longListTrim: {
       one: "{n} row — narrow the scope or search to trim",
       other: "{n} rows — narrow the scope or search to trim",
@@ -5007,6 +5011,8 @@ export const en = {
     noTargetGroupBinding: "no TargetGroupBinding",
     noLimitsDeclared:
       "No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take.",
+    limitsNotKnown:
+      "This template's limits could not be read — the scale is what these pods have used, and whether anything caps them is not known.",
     noStructuralSchema:
       "This version publishes no structural schema, so the API server validates nothing beyond the object's metadata.",
     readyLower: "ready",

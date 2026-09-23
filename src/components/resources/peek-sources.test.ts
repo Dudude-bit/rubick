@@ -96,7 +96,9 @@ describe("the peek's Overview against the detail pages", () => {
   /**
    * The badge read any True as accepted, so a route one controller was
    * still deciding about said Accepted here and "unknown" on the Gateway
-   * page. It reads the one rule `route-verdict.ts` keeps now.
+   * page. It reads the one rule `route-verdict.ts` keeps now, and a verdict
+   * nobody has given is said as such: `undefined` erased the badge, which
+   * is the peek going quiet where the Gateway page speaks.
    */
   it("does not badge a route accepted while one controller is still deciding", () => {
     const verdict = (status: string, reason: string) => ({
@@ -144,10 +146,90 @@ describe("the peek's Overview against the detail pages", () => {
     expect(badge([verdict("True", "Accepted")])).toBe("Accepted");
     expect(
       badge([verdict("True", "Accepted"), verdict("Unknown", "Pending")])
-    ).toBeUndefined();
+    ).toBe("Unknown");
     expect(
       badge([verdict("True", "Accepted"), verdict("False", "Refused")])
     ).toBe("Refused");
+    expect(badge([])).toBeNull();
+    expect(
+      badge([{ ...verdict("True", "Accepted"), conditions: [] }])
+    ).toBeNull();
+  });
+
+  const gateway = (
+    conditions: object[],
+    listenerConditions: object[] = []
+  ) => ({
+    name: "edge",
+    namespace: "ns",
+    apiVersion: "gateway.networking.k8s.io/v1",
+    className: "envoy",
+    listenerSets: [],
+    listenerSetsKnown: true,
+    listeners: [
+      {
+        name: "https",
+        port: 443,
+        protocol: "HTTPS",
+        hostname: null,
+        attachedRoutes: 1,
+        conditions: listenerConditions,
+        certificateRefs: [],
+        fromListenerSet: null,
+      },
+    ],
+    addresses: [],
+    conditions,
+    generation: 1,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+  const gatewayPeek = (subject: ReturnType<typeof gateway>) => {
+    const target = { kind: "Gateway", name: "edge", namespace: "ns" };
+    return resolveSource(target).summarise(
+      subject,
+      target,
+      ((_section: string, key: string) => key) as never
+    );
+  };
+  const said = (type: string, status: string, reason: string) => ({
+    type,
+    status,
+    reason,
+    message: null,
+    lastTransitionTime: null,
+  });
+
+  /** A Gateway no controller has written Programmed on had no badge at all. */
+  it("says a Gateway nobody has programmed has reported nothing", () => {
+    expect(gatewayPeek(gateway([])).status).toBeNull();
+    expect(
+      gatewayPeek(gateway([said("Programmed", "True", "Programmed")])).status
+    ).toBe("Programmed");
+  });
+
+  /**
+   * `Conflicted=False` is the healthy answer, and the listener row took any
+   * False for broken: an Istio listener read red with "— NoConflicts".
+   */
+  it("reads a listener's conditions by their own polarity", () => {
+    const listenerTone = (conditions: object[]) =>
+      gatewayPeek(gateway([], conditions)).groups[1].items[0].tone;
+
+    expect(
+      listenerTone([
+        said("Accepted", "True", "Accepted"),
+        said("Conflicted", "False", "NoConflicts"),
+        said("OverlappingTLSConfig", "False", "NoOverlap"),
+      ])
+    ).toBeUndefined();
+    expect(listenerTone([said("Conflicted", "True", "HostnameConflict")])).toBe(
+      "err"
+    );
+    expect(
+      listenerTone([said("ResolvedRefs", "False", "InvalidCertificateRef")])
+    ).toBe("err");
   });
 
   it("reads a CRD where the CRD page does", async () => {

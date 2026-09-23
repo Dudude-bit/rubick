@@ -56,7 +56,10 @@ function buildCronJob(
   };
 }
 
-function mockDetail(cronJob: CronJobDetailInfo | undefined) {
+function mockDetail(
+  cronJob: CronJobDetailInfo | undefined,
+  activeTab = "overview"
+) {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: cronJob?.name ?? "nightly-backup",
     namespace: cronJob?.namespace ?? "ops",
@@ -65,7 +68,7 @@ function mockDetail(cronJob: CronJobDetailInfo | undefined) {
     error: null,
     yaml: "kind: CronJob\n",
     copyYaml: vi.fn(),
-    activeTab: "overview",
+    activeTab,
     setActiveTab: vi.fn(),
     goBack: vi.fn(),
     refetch: vi.fn(),
@@ -148,5 +151,38 @@ describe("CronJobDetail", () => {
       await screen.findByText("Could not read this CronJob's runs.")
     ).toBeInTheDocument();
     expect(screen.queryByText(/jobs kept/)).toBeNull();
+  });
+
+  /**
+   * The Jobs tab reads the same refused list. Its count, its tab mark and its
+   * empty state would each say "none" — "0 kept", a 0 on the tab, "has not
+   * run yet" — about runs nobody could list.
+   */
+  it("says on the Jobs tab that the runs could not be read", async () => {
+    vi.mocked(commands.listJobs).mockRejectedValueOnce(
+      new Error(
+        'jobs.batch is forbidden: User "kirya" cannot list resource "jobs"'
+      )
+    );
+    mockDetail(buildCronJob(), "jobs");
+    renderPage();
+    expect(
+      await screen.findByText("Could not read this CronJob's runs.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/kept · history limits/)).toBeNull();
+    expect(screen.queryByText("This CronJob has not run yet")).toBeNull();
+    expect(screen.getByRole("tab", { name: /Jobs/ }).textContent).not.toMatch(
+      /\d/
+    );
+  });
+
+  /** The other side: a list that was read and is empty says so. */
+  it("says on the Jobs tab that a CronJob with no runs has not run", async () => {
+    mockDetail(buildCronJob(), "jobs");
+    renderPage();
+    expect(
+      await screen.findByText("This CronJob has not run yet")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/0 kept · history limits/)).toBeInTheDocument();
   });
 });
