@@ -1,5 +1,5 @@
 //! Where a kind is served, per context: one API group's discovery, read once
-//! and shared by every command that asks.
+//! and shared by every command that asks while it is fresh.
 //!
 //! Every custom-resource command used to GET the whole CRD — its schema runs
 //! to a megabyte — to learn a group, a version and a scope, and a page polling
@@ -8,6 +8,7 @@
 //! answers for every kind in the group at once.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use kube::discovery::{self, ApiGroup, ApiResource, Scope};
@@ -33,16 +34,45 @@ pub struct ServedKind {
     pub namespaced: bool,
 }
 
-type Entry = Arc<OnceCell<Option<Arc<ApiGroup>>>>;
+/// One group's discovery, and when it was read.
+#[derive(Clone)]
+struct Discovered {
+    at: Instant,
+    group: Option<Arc<ApiGroup>>,
+}
+
+type Entry = Arc<OnceCell<Discovered>>;
+
+/// How long an answer that holds what was asked for is kept. A CRD installed
+/// or upgraded under a connected window shows up within this.
+const FRESH_FOR: Duration = Duration::from_secs(60);
+
+/// How old an answer that lacks what was asked for may be before it is asked
+/// again: kubectl's rule, a miss re-reads discovery. The floor keeps a
+/// keystroke's search over kinds nobody installed from asking on every key.
+const MISS_AFTER: Duration = Duration::from_secs(5);
 
 /// Discovered groups by (context, group).
 ///
 /// One `OnceCell` per key, so callers that arrive together wait on one
 /// request. A failed read is never kept: a refusal cached as "not served"
-/// would say a kind is not installed for as long as the app runs.
-#[derive(Default)]
+/// would say a kind is not installed for as long as the app runs. Nor is an
+/// answer kept for good: a kind installed after it was read would stay
+/// "not installed" until the next connection.
 pub struct ServedIndex {
     groups: DashMap<(String, String), Entry>,
+    fresh_for: Duration,
+    miss_after: Duration,
+}
+
+impl Default for ServedIndex {
+    fn default() -> Self {
+        Self {
+            groups: DashMap::new(),
+            fresh_for: FRESH_FOR,
+            miss_after: MISS_AFTER,
+        }
+    }
 }
 
 impl ServedIndex {
@@ -59,7 +89,12 @@ impl ServedIndex {
         group: &str,
         plural: &str,
     ) -> Result<Option<Served>> {
-        let Some(api_group) = self.group(context, client, group).await? else {
+        let Some(api_group) = self
+            .group(context, client, group, |found| {
+                find(found, plural).is_some()
+            })
+            .await?
+        else {
             return Ok(None);
         };
         Ok(find(&api_group, plural))
@@ -78,34 +113,53 @@ impl ServedIndex {
         group: &str,
     ) -> Result<Option<Vec<ServedKind>>> {
         Ok(self
-            .group(context, client, group)
+            .group(context, client, group, |_| true)
             .await?
             .map(|api_group| kinds_of(&api_group)))
     }
 
+    /// The group as discovered, read again where the answer held is too old
+    /// for what `answers` wanted of it.
     async fn group(
         &self,
         context: &str,
         client: &Client,
         group: &str,
+        answers: impl Fn(&ApiGroup) -> bool,
     ) -> Result<Option<Arc<ApiGroup>>> {
-        let cell = self
-            .groups
-            .entry((context.to_string(), group.to_string()))
-            .or_default()
-            .clone();
+        let key = (context.to_string(), group.to_string());
+        let (cell, found) = self.read(&key, client).await?;
+        let age = found.at.elapsed();
+        let answered = found.group.as_deref().is_some_and(answers);
+        if age < self.fresh_for && (answered || age < self.miss_after) {
+            return Ok(found.group);
+        }
+        // Only the answer this call judged: one a caller beside it already
+        // replaced is the re-read, and is joined rather than thrown away.
+        self.groups
+            .remove_if(&key, |_, held| Arc::ptr_eq(held, &cell));
+        Ok(self.read(&key, client).await?.1.group)
+    }
+
+    async fn read(&self, key: &(String, String), client: &Client) -> Result<(Entry, Discovered)> {
+        let cell = self.groups.entry(key.clone()).or_default().clone();
         let found = cell
             .get_or_try_init(|| async {
-                match discovery::group(client, group).await {
-                    Ok(found) => Ok(Some(Arc::new(found))),
+                let group = match discovery::group(client, &key.1).await {
+                    Ok(found) => Some(Arc::new(found)),
                     Err(kube::Error::Discovery(kube::error::DiscoveryError::MissingApiGroup(
                         _,
-                    ))) => Ok(None),
-                    Err(e) => Err(crate::error::Error::from(e)),
-                }
+                    ))) => None,
+                    Err(e) => return Err(crate::error::Error::from(e)),
+                };
+                Ok(Discovered {
+                    at: Instant::now(),
+                    group,
+                })
             })
-            .await?;
-        Ok(found.clone())
+            .await?
+            .clone();
+        Ok((cell, found))
     }
 
     /// Forget one group, after a 404 says what was discovered has moved: a
@@ -294,10 +348,14 @@ pub(crate) mod test_server {
 
 #[cfg(test)]
 mod tests {
-    use super::test_server::{groups, resources, server};
+    use super::test_server::{answering, groups, resources, server};
     use super::*;
 
     const GROUP: &str = "gateway.networking.k8s.io";
+
+    fn groups_none() -> String {
+        serde_json::json!({ "kind": "APIGroupList", "apiVersion": "v1", "groups": [] }).to_string()
+    }
 
     /// The case that 404'd search on Gateway API 1.6: the route trio is
     /// served at `v1` only. A kind the preferred version lacks is still found
@@ -397,13 +455,7 @@ mod tests {
     /// discovery that failed is not, and must not come back as one.
     #[tokio::test]
     async fn a_missing_group_is_none_and_a_refused_one_is_an_error() {
-        let (client, _) = server(vec![(
-            "/apis",
-            200,
-            serde_json::json!({ "kind": "APIGroupList", "apiVersion": "v1", "groups": [] })
-                .to_string(),
-        )])
-        .await;
+        let (client, _) = server(vec![("/apis", 200, groups_none())]).await;
         let index = ServedIndex::default();
         assert!(index
             .resource("kind", &client, GROUP, "tcproutes")
@@ -449,6 +501,105 @@ mod tests {
             .resource("kind", &client, GROUP, "tcproutes")
             .await
             .expect("read");
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
+    }
+
+    fn aged(fresh_for: u64, miss_after: u64) -> ServedIndex {
+        ServedIndex {
+            fresh_for: Duration::from_millis(fresh_for),
+            miss_after: Duration::from_millis(miss_after),
+            ..ServedIndex::default()
+        }
+    }
+
+    /// Gateway API installed under a connected window. "Not served" was kept
+    /// for the whole connection, so the Routes pages said no CRDs were
+    /// installed until the reader reconnected.
+    #[tokio::test]
+    async fn a_group_installed_after_it_was_read_missing_is_found() {
+        let (client, hits) = answering(|path, nth| match path {
+            "/apis" if nth == 1 => (200, groups_none()),
+            "/apis" => (200, groups("v1", &["v1"])),
+            _ => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
+        })
+        .await;
+        let index = aged(60_000, 100);
+
+        assert!(index
+            .kinds("kind", &client, GROUP)
+            .await
+            .expect("read")
+            .is_none());
+        assert!(index
+            .kinds("kind", &client, GROUP)
+            .await
+            .expect("read")
+            .is_none());
+        assert_eq!(
+            hits.lock().unwrap().get("/apis"),
+            Some(&1),
+            "a miss this young is kept"
+        );
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let kinds = index.kinds("kind", &client, GROUP).await.expect("read");
+        assert_eq!(kinds.expect("installed now")[0].kind, "HTTPRoute");
+    }
+
+    /// An operator upgrade adds a kind to a group already read. Its CRD page
+    /// said the CRD did not exist, because nothing asked discovery again.
+    #[tokio::test]
+    async fn a_kind_added_to_a_group_already_read_is_found() {
+        let (client, _) = answering(|path, nth| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            _ if nth == 1 => (200, resources("v1", &[("httproutes", "HTTPRoute", true)])),
+            _ => (
+                200,
+                resources(
+                    "v1",
+                    &[
+                        ("httproutes", "HTTPRoute", true),
+                        ("listenersets", "ListenerSet", true),
+                    ],
+                ),
+            ),
+        })
+        .await;
+        let index = aged(60_000, 100);
+
+        assert!(index
+            .resource("kind", &client, GROUP, "listenersets")
+            .await
+            .expect("read")
+            .is_none());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert!(index
+            .resource("kind", &client, GROUP, "listenersets")
+            .await
+            .expect("read")
+            .is_some());
+    }
+
+    /// Even an answer that has what was asked for ages out: a version the
+    /// cluster stopped serving, or a kind `kinds` could not know to miss.
+    #[tokio::test]
+    async fn an_answer_that_holds_the_kind_is_read_again_once_old() {
+        let (client, hits) = server(vec![
+            ("/apis", 200, groups("v1", &["v1"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("tcproutes", "TCPRoute", true)]),
+            ),
+        ])
+        .await;
+        let index = aged(100, 100);
+
+        index.kinds("kind", &client, GROUP).await.expect("read");
+        index.kinds("kind", &client, GROUP).await.expect("read");
+        assert_eq!(hits.lock().unwrap().get("/apis"), Some(&1));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        index.kinds("kind", &client, GROUP).await.expect("read");
         assert_eq!(hits.lock().unwrap().get("/apis"), Some(&2));
     }
 
