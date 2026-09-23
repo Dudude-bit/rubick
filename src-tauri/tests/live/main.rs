@@ -24,3 +24,4 @@ mod live_reads;
 mod live_refusals;
 mod live_route_status;
 mod live_terminal;
+mod live_tls;
