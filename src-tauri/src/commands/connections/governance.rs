@@ -346,6 +346,7 @@ pub(super) fn unanswered(snapshot: &Snapshot) -> Vec<UnexploredKind> {
             unread.push(UnexploredKind::unanswered(kind, version, why));
         }
     }
+    unread.extend(snapshot.gateway_unread.iter().cloned());
     unread
 }
 
@@ -406,6 +407,7 @@ mod refused_claim_tests {
             legacy: Err("the slices answered".to_string()),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_unread: Vec::new(),
         };
 
         let unread = unanswered(&snapshot);
@@ -458,6 +460,7 @@ mod refused_claim_tests {
             legacy: Ok(Vec::new()),
             gateway_routes: Vec::new(),
             gateways: None,
+            gateway_unread: Vec::new(),
         };
         let unread = unanswered(&snapshot);
         let named: std::collections::BTreeMap<_, _> = unread
