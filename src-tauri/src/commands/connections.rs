@@ -1308,6 +1308,19 @@ fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Read<K> {
         .map_err(|err| Error::from(err).to_string())
 }
 
+/// [`read`], except for a session the cluster no longer accepts. That is not
+/// one kind unread but every read failing, and the frontend has to hear it as
+/// `CREDENTIALS_EXPIRED` to ask for a sign-in.
+fn read_live<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Result<Read<K>> {
+    match list {
+        Ok(list) => Ok(Ok(list.items)),
+        Err(err) => match Error::from(err) {
+            expired @ Error::CredentialsExpired(_) => Err(expired),
+            other => Ok(Err(other.to_string())),
+        },
+    }
+}
+
 /// The subject, out of the list it would be in.
 ///
 /// The two failures are different answers, and this is the only place that
@@ -1779,7 +1792,7 @@ async fn workload_connections(
             template.selector.as_ref(),
             out,
         )
-        .await
+        .await?
     } else {
         None
     };
@@ -1816,13 +1829,21 @@ async fn revisions_of(
     uid: Option<&str>,
     selector: Option<&LabelSelector>,
     out: &mut Neighbourhood,
-) -> Option<UnexploredKind> {
-    let uid = uid?;
-    let text = Selector::Query(selector).query_text()?;
+) -> Result<Option<UnexploredKind>> {
+    let Some(uid) = uid else { return Ok(None) };
+    let Some(text) = Selector::Query(selector).query_text() else {
+        return Ok(None);
+    };
     let params = ListParams::default().labels(&text);
-    let sets = match read(ctx.namespaced_api::<ReplicaSet>().list(&params).await) {
+    let sets = match read_live(ctx.namespaced_api::<ReplicaSet>().list(&params).await)? {
         Ok(sets) => sets,
-        Err(why) => return Some(UnexploredKind::unanswered("ReplicaSet", "apps/v1", &why)),
+        Err(why) => {
+            return Ok(Some(UnexploredKind::unanswered(
+                "ReplicaSet",
+                "apps/v1",
+                &why,
+            )))
+        }
     };
 
     let owned: Vec<&ReplicaSet> = sets
@@ -1867,7 +1888,7 @@ async fn revisions_of(
             Relation::Owns { controller: true },
         );
     }
-    None
+    Ok(None)
 }
 
 async fn service_connections(
@@ -2221,13 +2242,13 @@ async fn users_of(
         ns,
         target,
         UserLists {
-            pods: read(pods),
-            deploys: read(deploys),
-            sets: read(sets),
-            daemons: read(daemons),
-            jobs: read(jobs),
-            crons: read(crons),
-            ingresses: ingresses.map(read),
+            pods: read_live(pods)?,
+            deploys: read_live(deploys)?,
+            sets: read_live(sets)?,
+            daemons: read_live(daemons)?,
+            jobs: read_live(jobs)?,
+            crons: read_live(crons)?,
+            ingresses: ingresses.map(read_live).transpose()?,
         },
         out,
     );
@@ -3280,5 +3301,39 @@ mod users_tests {
         note_users("shop", &target, lists(Ok(Vec::new())), &mut out);
         assert!(out.not_looked_at.is_empty());
         assert_eq!(out.edges.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod read_live_tests {
+    use super::*;
+    use k8s_openapi::api::core::v1::ConfigMap;
+
+    fn refused(code: u16, reason: &str) -> kube::Result<kube::core::ObjectList<ConfigMap>> {
+        Err(kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
+            message: format!("{reason} for this list"),
+            reason: reason.to_string(),
+            code,
+            metadata: None,
+            details: None,
+        })))
+    }
+
+    /// A 401 inside a panel that reads only lists came back as a graph with
+    /// six kinds unread, and the sign-in the session needed was never asked.
+    #[test]
+    fn an_expired_session_ends_the_call() {
+        assert!(matches!(
+            read_live(refused(401, "Unauthorized")),
+            Err(Error::CredentialsExpired(_))
+        ));
+    }
+
+    /// A refusal of one kind is still one kind unread.
+    #[test]
+    fn a_refused_kind_is_part_of_the_answer() {
+        let answer = read_live(refused(403, "Forbidden")).expect("an answer");
+        assert!(answer.expect_err("unread").contains("Forbidden"));
     }
 }

@@ -424,10 +424,12 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
     let spec = original.spec.clone().unwrap_or_default();
     let mut labels = original.metadata.labels.clone().unwrap_or_default();
     labels.insert("k8s-gui/check-pod".to_string(), "true".to_string());
-    labels.insert(
+    // An annotation, not a label: a pod's name runs to 253 characters and a
+    // label value stops at 63, so a long one refused the whole copy.
+    let annotations = std::collections::BTreeMap::from([(
         "k8s-gui/check-source".to_string(),
         original.metadata.name.clone().unwrap_or_default(),
-    );
+    )]);
     let owner = original.metadata.uid.clone().map(|uid| OwnerReference {
         api_version: "v1".to_string(),
         kind: "Pod".to_string(),
@@ -441,6 +443,7 @@ fn copy_of(original: &Pod, name: &str, image: &str) -> Pod {
             name: Some(name.to_string()),
             namespace: original.metadata.namespace.clone(),
             labels: Some(labels),
+            annotations: Some(annotations),
             owner_references: owner.map(|o| vec![o]),
             ..Default::default()
         },
@@ -781,6 +784,31 @@ mod tests {
         assert!(name.len() <= 63);
         assert!(crate::validation::validate_dns_label(&name).is_ok());
         assert!(name.contains("-check-"));
+    }
+
+    /// A pod name may run to 253 characters now that it is checked as one,
+    /// and a label value stops at 63: carried in a label, a long name made
+    /// the API refuse the copy outright.
+    #[test]
+    fn every_label_on_a_copy_is_short_enough_to_be_one() {
+        let original: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": format!("{}.example.internal", "a".repeat(90)),
+                "namespace": "shop",
+                "labels": { "app": "shop" },
+            },
+            "spec": { "containers": [{ "name": "main" }] },
+        }))
+        .unwrap();
+        let copy = copy_of(&original, "short-check-1", "busybox");
+        for (key, value) in copy.metadata.labels.unwrap_or_default() {
+            assert!(value.len() <= 63, "{key} is {} characters", value.len());
+        }
+        let annotations = copy.metadata.annotations.unwrap_or_default();
+        assert_eq!(
+            annotations.get("k8s-gui/check-source"),
+            original.metadata.name.as_ref()
+        );
     }
 
     #[test]

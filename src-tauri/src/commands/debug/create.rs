@@ -189,14 +189,16 @@ pub async fn debug_pod_copy(
     // Create labels for the debug pod
     let mut labels = BTreeMap::new();
     labels.insert("k8s-gui/debug-pod".to_string(), "true".to_string());
-    labels.insert("k8s-gui/debug-source".to_string(), pod_name.clone());
     labels.insert("k8s-gui/created-at".to_string(), created_at.to_string());
+    // An annotation: a pod's name can pass the 63 characters a label holds.
+    let annotations = BTreeMap::from([("k8s-gui/debug-source".to_string(), pod_name.clone())]);
 
     let debug_pod = Pod {
         metadata: ObjectMeta {
             name: Some(debug_pod_name.clone()),
             namespace: Some(ns.clone()),
             labels: Some(labels),
+            annotations: Some(annotations),
             // Don't copy owner references - we don't want controllers managing this pod
             ..Default::default()
         },
@@ -258,11 +260,9 @@ pub async fn debug_node(
     // Create labels
     let mut labels = BTreeMap::new();
     labels.insert("k8s-gui/debug-pod".to_string(), "true".to_string());
-    // A label value stops at 63 characters, a node's name at 253.
-    if node_name.len() <= 63 {
-        labels.insert("k8s-gui/debug-node".to_string(), node_name.clone());
-    }
     labels.insert("k8s-gui/created-at".to_string(), created_at.to_string());
+    // An annotation: a node's name runs to 253 characters, a label to 63.
+    let annotations = BTreeMap::from([("k8s-gui/debug-node".to_string(), node_name.clone())]);
 
     // Create the privileged debug pod
     let debug_pod = Pod {
@@ -270,6 +270,7 @@ pub async fn debug_node(
             name: Some(debug_pod_name.clone()),
             namespace: Some(ns.clone()),
             labels: Some(labels),
+            annotations: Some(annotations),
             ..Default::default()
         },
         spec: Some(PodSpec {
