@@ -5,7 +5,7 @@
 //! with a cluster-wide one beside every namespaced one for the scheduler
 //! view: four namespaces was five full lists a round on a cluster of ten
 //! thousand pods. A watch per kind, kept in a store, answers the same
-//! question from memory; a request only projects its namespace out.
+//! question from memory; a request only projects its namespaces out.
 //!
 //! The store serves only while every watch it holds is healthy. A refused or
 //! broken watch is not stale data quietly served as fresh: the request falls

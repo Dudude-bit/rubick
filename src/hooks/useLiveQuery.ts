@@ -146,7 +146,7 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
 /**
  * The same discipline for a question that is several requests at once.
  *
- * A window scoped to three namespaces asks the overview three times, and
+ * A window scoped to three namespaces asks the events feed three times, and
  * `useQueries` has no room for the per-query state {@link useLiveQuery} keeps.
  * It lives here rather than at the call site because the interval is what this
  * module owns, and a fan-out is the one shape in the app whose cost is
@@ -160,10 +160,9 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
  * quiet ones reach `BACKOFF.steadyAfter` in the gap between two answers from a
  * part that is changing every poll, and the interval — with the badge over
  * data that never stopped moving — flips once a second. One part still moving
- * keeps the whole group at full rate. The overview never goes steady as its
- * payload stands (node CPU differs on every read); the events feed does, and
- * an idle events page fanned out across four namespaces at one second is
- * exactly the bill `lib/refresh.ts` exists to stop.
+ * keeps the whole group at full rate. An idle events page fanned out across
+ * four namespaces at one second is exactly the bill `lib/refresh.ts` exists
+ * to stop.
  *
  * **Coming back re-reads the parts from here** rather than leaving each of
  * them to it: a fan-out is the one shape with a reason to switch React Query's

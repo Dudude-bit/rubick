@@ -15,6 +15,7 @@ mod live_gateway;
 mod live_init_containers;
 mod live_namespace_watch;
 mod live_overview_cache;
+mod live_overview_scope;
 mod live_perf;
 mod live_pod_rows;
 mod live_prometheus_operator;

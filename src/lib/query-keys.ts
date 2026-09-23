@@ -9,6 +9,7 @@
  * next to.
  */
 
+import { scopeCacheKey } from "./namespace-scope";
 import { ResourceKind, ResourceType, toPlural } from "./resource-registry";
 
 /**
@@ -151,13 +152,18 @@ export const queryKeys = {
   silentNodes: (): string[] => ["nodes", "silent"],
 
   /**
-   * The cluster overview for one scope. The context is the second element
-   * because `ofSameCluster` reads it from there.
+   * The cluster overview for one scope: the namespaces it adds up, or none
+   * for the whole cluster. The context is the second element because
+   * `ofSameCluster` reads it from there.
    */
   clusterOverview: (
     context: string | null,
-    namespace?: string | null
-  ): (string | null)[] => ["cluster-overview", context, scope(namespace)],
+    namespaces: readonly string[] = []
+  ): (string | null)[] => [
+    "cluster-overview",
+    context,
+    scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
+  ],
 
   appInfo: (): string[] => ["app-info"],
 

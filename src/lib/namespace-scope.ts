@@ -9,10 +9,11 @@
  *
  * Lists are read once cluster-wide and narrowed here — a request and a watch
  * per namespace per screen would multiply every page by the size of the
- * selection. Aggregates cannot be narrowed after the fact, so the overview
- * and the events feed's limit are asked per namespace and joined; those two
- * are what {@link SCOPE_LIMIT} bounds, and the overview is the priciest query
- * in the app (`lib/refresh.ts`).
+ * selection. Aggregates cannot be narrowed after the fact: the overview is
+ * asked for the whole selection and adds it up in the backend, and the events
+ * feed's limit is asked per namespace and joined. Both cost more per
+ * namespace selected, which is what {@link SCOPE_LIMIT} bounds, and the
+ * overview is the priciest query in the app (`lib/refresh.ts`).
  *
  * Both places the selection persists are fields that predate it, and an older
  * build reads either straight into `currentNamespace` — `"prod,staging"`
@@ -29,20 +30,22 @@ import type { T } from "@/i18n/useT";
 /**
  * How many namespaces one window may watch at once.
  *
- * Counted from `get_cluster_overview`: the cluster-wide overview is fifteen
- * requests and a namespaced one is sixteen — and one of those sixteen is a
- * *full cluster* pod LIST, because the scheduler panel divides requests by
- * every node's allocatable and is cluster-wide whatever the scope. The window
- * asks for the cluster-wide overview however narrow the selection is (the
- * namespace picker exists to show the namespaces you are *not* on) and for one
- * more per namespace selected, every ten seconds: about 90 requests a minute
- * at "All namespaces", 186 at one namespace, about 480 at four — five of them
- * whole-cluster pod lists every poll. A dozen namespaces would be over 1200 a
- * minute, and nothing on screen would say so.
+ * Counted from `get_cluster_overview`, when it has to list rather than read
+ * its watches: the cluster-wide overview is fifteen requests, and one for a
+ * selection is four cluster reads — metrics, the namespace count, the nodes
+ * and one *full cluster* pod LIST, because the scheduler panel divides
+ * requests by every node's allocatable — plus twelve per namespace. The
+ * window asks for the cluster-wide overview however narrow the selection is
+ * (the namespace picker exists to show the namespaces you are *not* on) and
+ * for the selection's, every ten seconds: about 90 requests a minute at "All
+ * namespaces", 186 at one namespace, about 400 at four, two of them
+ * whole-cluster pod lists a poll. From the watches it is about 260 at four.
  *
- * Four holds the window to about two and a half times what one namespace
- * costs, and covers what people actually ask for — prod beside staging, or an
- * app's namespace beside the one its database lives in.
+ * Four covers what people actually ask for — prod beside staging, or an
+ * app's namespace beside the one its database lives in. Reading the cluster
+ * once instead of once per namespace would pay for a fifth at the overview's
+ * old cost of four, but the events feed and every list across the selection
+ * still ask once per namespace, and nothing made those cheaper.
  *
  * Enforced where a selection is *made* — `clusterStore.setNamespaceScope`, and
  * the picker that calls it — rather than where it is read. A bound applied at

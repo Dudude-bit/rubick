@@ -1511,9 +1511,9 @@ export async function deleteSecret(
 }
 
 export async function getClusterOverview(
-  namespace: string | null
+  scope: string[] | null
 ): Promise<ClusterOverview> {
-  return invoke<ClusterOverview>("get_cluster_overview", { namespace });
+  return invoke<ClusterOverview>("get_cluster_overview", { scope });
 }
 
 export async function listHelmReleasesNative(

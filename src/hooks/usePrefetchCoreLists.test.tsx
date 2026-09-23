@@ -145,14 +145,14 @@ describe("usePrefetchCoreLists", () => {
   });
 
   /**
-   * The store says "every namespace" as `""` and the page asks with `null`;
-   * the overview was keyed by hand on both sides. Fails if the prefetch and
+   * The store says "every namespace" as `""` and the page asks with an empty
+   * scope; the overview was keyed by hand on both sides. Fails if the prefetch and
    * `useClusterOverview` key one scope apart: the page asks again on mount
    * and the landing's most expensive request was spent for nothing.
    */
   it.each([
-    ["every namespace", "", null],
-    ["one namespace", "shop", "shop"],
+    ["every namespace", "", []],
+    ["one namespace", "shop", ["shop"]],
   ])(
     "opens the overview on the answer the landing asked for, for %s",
     async (_, storeSays, pageAsks) => {

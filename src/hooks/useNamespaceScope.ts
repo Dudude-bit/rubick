@@ -9,9 +9,10 @@
  * `narrow` is the identity for a scope of one or of none, and deliberately
  * so: those two cases are already scoped by the request itself, and filtering
  * a list the API server has already narrowed would only be a second chance to
- * get it wrong. A surface that asks per namespace instead — the overview, the
- * events feed — has nothing left to narrow either, and uses {@link scope} to
- * know what to ask for.
+ * get it wrong. A surface whose answer is already about the selection — the
+ * overview, which asks for all of it at once, and the events feed, which asks
+ * per namespace — has nothing left to narrow either, and uses {@link scope}
+ * to know what to ask for.
  */
 
 import { useT } from "@/i18n/useT";
