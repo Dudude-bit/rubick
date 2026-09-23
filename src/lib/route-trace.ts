@@ -559,6 +559,8 @@ function gatewayStep(
       },
     };
   }
+  // No Programmed condition at all: nobody has said, which is undecided,
+  // not programmed.
   if (!programmed) {
     return {
       id: "gateway",
@@ -566,6 +568,7 @@ function gatewayStep(
       say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
       who: "infra",
       subject,
+      pending: true,
     };
   }
   // `Unknown` is the API's third answer: a controller that has taken the
@@ -655,6 +658,7 @@ function acceptanceSteps(
         id: "listener",
         state: "warn",
         say: t("empty", "gwNoAcceptedYet"),
+        pending: true,
         who: "controller",
         freshness,
       },

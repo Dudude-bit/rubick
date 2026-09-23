@@ -350,6 +350,35 @@ describe("routeTraces", () => {
    *  accepts". Everything else on screen keeps that neutral, so the trace was
    *  the one place claiming a verdict nobody wrote — and because the step was
    *  `ok`, the route came out `serving: true, servingKnown: true`. */
+  /**
+   * No verdict at all is not a yes: a controller that wrote entries without
+   * `Accepted`, or a Gateway with no `Programmed` condition, left the trace
+   * reading "serving" with nothing behind it.
+   */
+  it("cannot say a route serves before its controller has said anything", () => {
+    const silentParent = route("healthy", {
+      parents: [
+        parentStatus("edge", [
+          condition("ResolvedRefs", "True", "ResolvedRefs"),
+        ]),
+      ],
+    });
+    const [noAccepted] = routeTraces(silentParent, sources(), t);
+    expect(noAccepted.servingKnown).toBe(false);
+    expect(noAccepted.unknownBecause).toBe("undecided");
+
+    const [noProgrammed] = routeTraces(
+      route("healthy"),
+      sources({ gateways: [gateway("edge", { conditions: [] })] }),
+      t
+    );
+    expect(noProgrammed.servingKnown).toBe(false);
+    expect(noProgrammed.unknownBecause).toBe("undecided");
+
+    const [decided] = routeTraces(route("healthy"), sources(), t);
+    expect(decided.servingKnown).toBe(true);
+  });
+
   it("does not call a parent accepted while the controller is still deciding", () => {
     const pending = route("healthy", {
       parents: [
