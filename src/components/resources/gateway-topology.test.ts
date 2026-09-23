@@ -213,6 +213,49 @@ describe("the gateway topology map", () => {
     expect(attachment?.tone).toBe("err");
   });
 
+  /**
+   * The set's status entry names the set in its own namespace, and the edge
+   * looked it up under the Gateway's: a refusal through a ListenerSet in
+   * another namespace than its Gateway was drawn muted, as not checked.
+   */
+  it("marks a refusal written against a ListenerSet in another namespace than its Gateway", () => {
+    const setRef = {
+      group: "gateway.networking.k8s.io",
+      kind: "ListenerSet",
+      name: "shop-tls",
+      namespace: null,
+      sectionName: null,
+      port: null,
+    };
+    const data = gatewayTopology(
+      [
+        {
+          ...gateway("edge"),
+          namespace: "infra",
+          listenerSets: [{ name: "shop-tls", namespace: "gwtest" }],
+        },
+      ],
+      [
+        route("promo", {
+          parentRefs: [setRef],
+          parents: [
+            {
+              parent: setRef,
+              controllerName: "example.net/gw",
+              conditions: [
+                condition("Accepted", "False", "NotAllowedByListeners"),
+              ],
+            },
+          ],
+        }),
+      ],
+      undefined,
+      t
+    );
+    const attachment = data.edges.find((edge) => edge.from === "gw/infra/edge");
+    expect(attachment?.tone).toBe("err");
+  });
+
   it("gives a mesh parent no gateway node and no missing lie", () => {
     const data = gatewayTopology(
       [],
