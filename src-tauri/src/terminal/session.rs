@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
-/// Default buffer size for terminal I/O operations (4KB)
-pub const TERMINAL_BUFFER_SIZE: usize = 4096;
+/// Bytes read from a terminal at a time. At 4 KB a busy shell was capped
+/// near 80 KB/s.
+pub const TERMINAL_BUFFER_SIZE: usize = 32 * 1024;
 
 /// Terminal session state
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

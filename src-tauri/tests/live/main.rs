@@ -21,3 +21,4 @@ mod live_prometheus_operator;
 mod live_proxy;
 mod live_refusals;
 mod live_route_status;
+mod live_terminal;
