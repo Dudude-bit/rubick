@@ -39,7 +39,7 @@ pub(super) async fn pod_connections(
         &mut HashSet::new(),
         out,
     )
-    .await;
+    .await?;
 
     // An autoscaler never names a pod; it names the workload above it, and
     // the chain that was just walked is where that workload's name is. A
@@ -53,7 +53,7 @@ pub(super) async fn pod_connections(
         .collect();
     governed_by(ns, &scalable, &subject, pod.labels(), &snapshot, out);
 
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
     Ok(())
 }
 
@@ -268,7 +268,7 @@ pub(super) async fn workload_connections(
         &mut HashSet::new(),
         out,
     )
-    .await;
+    .await?;
 
     let revisions_unread = if kind == "Deployment" {
         revisions_of(
@@ -296,7 +296,7 @@ pub(super) async fn workload_connections(
         out,
     );
 
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
     out.not_looked_at.extend(revisions_unread);
     Ok(())
 }
@@ -404,12 +404,12 @@ pub(super) async fn service_connections(
         snapshot.gateways.as_deref(),
         out,
     );
-    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;
     // The same as the pod and workload pages. Without it a refusal on this
     // page is invisible: an empty `not_looked_at` is the wire contract for
     // "every kind was read", so the "Not looked at" group never renders and
     // the frontend's own guards have nothing to fire on.
-    out.not_looked_at = unanswered(&snapshot);
+    out.not_looked_at.extend(unanswered(&snapshot));
 
     Ok(())
 }
@@ -425,7 +425,7 @@ pub(super) async fn workloads_behind(
     selector: &BTreeMap<String, String>,
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
-) {
+) -> Result<()> {
     let query = Selector::Equality(selector);
     let mut walked = HashSet::new();
     for pod in snapshot
@@ -434,8 +434,9 @@ pub(super) async fn workloads_behind(
         .filter(|pod| query.matches(pod.labels()) == Some(true))
     {
         let owners = pod.owner_references().to_vec();
-        owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await;
+        owner_chain(ctx, ns, pod_ref(pod, ns), owners, &mut walked, out).await?;
     }
+    Ok(())
 }
 
 pub(super) async fn ingress_connections(
@@ -480,7 +481,7 @@ pub(super) async fn ingress_connections(
                         continue;
                     }
                     note_reach(svc, &svc_ref, &snapshot, out, false);
-                    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await;
+                    workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;
                 } else {
                     let (backend, stops) = absent_backend(&service, ns, snapshot.services.is_ok());
                     out.edge(subject.clone(), backend.clone(), relation);
