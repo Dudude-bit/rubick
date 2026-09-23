@@ -397,7 +397,8 @@ pub enum AppEvent {
     /// The listing ended with rows, or with none and that being the answer.
     FilesDone {
         stream_id: String,
-        with: crate::files::ListedWith,
+        /// Which rung answered; `None` for a listing stopped before any ran.
+        with: Option<crate::files::ListedWith>,
         entries: usize,
         /// The listing was cut short; `entries` is what was seen, not a total.
         partial: bool,
@@ -614,7 +615,7 @@ mod tests {
             },
             AppEvent::FilesDone {
                 stream_id: "files-1".into(),
-                with: crate::files::ListedWith::GnuFind,
+                with: Some(crate::files::ListedWith::GnuFind),
                 entries: 3,
                 partial: false,
                 unreadable: 0,

@@ -213,8 +213,9 @@ impl SearchManager {
 
             let mut cancel_rx = cancel_rx;
             tokio::select! {
-                _ = subscribe_rx => {}
+                biased;
                 () = cancelled(&mut cancel_rx) => return,
+                _ = subscribe_rx => {}
                 () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
                     tracing::warn!("Search {id} subscribe gate timed out; emitting anyway");
                 }

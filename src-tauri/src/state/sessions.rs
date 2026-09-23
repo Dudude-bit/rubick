@@ -1,6 +1,6 @@
 //! Session bookkeeping types stored on `AppState` — one per active
 //! resource-bearing operation (cluster connection, port-forward,
-//! interactive auth flow, log stream).
+//! interactive auth flow).
 
 /// Session information for active connections
 #[derive(Debug, Clone)]
@@ -33,42 +33,4 @@ pub struct AuthSessionControl {
     /// "authentication cancelled" at a reader who started none.
     pub seen: bool,
     pub cancel_tx: tokio::sync::oneshot::Sender<()>,
-}
-
-/// Log stream information
-#[derive(Debug)]
-pub struct LogStream {
-    pub id: String,
-    pub pod: String,
-    pub container: String,
-    pub namespace: String,
-    pub cancel_tx: tokio::sync::oneshot::Sender<()>,
-    /// Subscribe gate. The streaming task blocks until the frontend
-    /// calls `log_stream_subscribed`, mirroring the terminal-auth fix.
-    /// Without this, log-batch events emitted between command return
-    /// and frontend listener registration are lost (Tauri events have
-    /// no replay). `Option` so it can be taken once and dropped.
-    pub subscribe_tx: Option<tokio::sync::oneshot::Sender<()>>,
-}
-
-/// A list being streamed to the frontend in chunks; see
-/// `commands::pods::list_pod_rows`. Same gate as a log stream, for the
-/// same reason.
-#[derive(Debug)]
-pub struct ListStream {
-    pub cancel_tx: tokio::sync::oneshot::Sender<()>,
-    pub subscribe_tx: Option<tokio::sync::oneshot::Sender<()>>,
-}
-
-/// Removes a map entry when dropped, so every exit path of a spawned task,
-/// the panicking one included, leaves no stale session behind.
-pub struct RemoveOnDrop<V> {
-    pub map: std::sync::Arc<dashmap::DashMap<String, V>>,
-    pub key: String,
-}
-
-impl<V> Drop for RemoveOnDrop<V> {
-    fn drop(&mut self) {
-        self.map.remove(&self.key);
-    }
 }

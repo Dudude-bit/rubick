@@ -4,20 +4,20 @@
 //! channel.
 //!
 //! - `events`:   `AppEvent` enum + `LogLineEvent` + `WatchOp`
-//! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl` /
-//!   `LogStream` bookkeeping types
+//! - `sessions`: Session / `PortForwardSession` / `AuthSessionControl`
+//!   bookkeeping types
+//! - `streams`:  the table, gate and cancel every frontend stream shares
 
 mod events;
 pub mod perf;
 mod sessions;
+pub mod streams;
 
 pub use events::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, AuthOutcome,
     LogLineEvent, StreamFailureKind, WatchChange, WatchOp,
 };
-pub use sessions::{
-    AuthSessionControl, ListStream, LogStream, PortForwardSession, RemoveOnDrop, Session,
-};
+pub use sessions::{AuthSessionControl, PortForwardSession, Session};
 
 use crate::client::K8sClientManager;
 use crate::config::AppConfig;
@@ -78,11 +78,14 @@ pub struct AppState {
     /// the session that owned them.
     pub port_forward_controls: Arc<DashMap<String, tokio_util::sync::CancellationToken>>,
 
-    /// Active log streams
-    pub log_streams: Arc<DashMap<String, LogStream>>,
+    /// Log streams.
+    pub log_streams: streams::Streams,
 
-    /// Lists arriving in chunks
-    pub list_streams: Arc<DashMap<String, ListStream>>,
+    /// Pod lists arriving in chunks.
+    pub pod_row_streams: streams::Streams,
+
+    /// Directory listings arriving in chunks.
+    pub file_listings: streams::Streams,
 
     /// Event broadcaster
     pub event_tx: broadcast::Sender<AppEvent>,
@@ -134,8 +137,9 @@ impl AppState {
             watch_manager: Arc::new(crate::watch::WatchManager::new(event_tx.clone())),
             port_forward_sessions: Arc::new(DashMap::new()),
             port_forward_controls: Arc::new(DashMap::new()),
-            log_streams: Arc::new(DashMap::new()),
-            list_streams: Arc::new(DashMap::new()),
+            log_streams: streams::Streams::default(),
+            pod_row_streams: streams::Streams::default(),
+            file_listings: streams::Streams::default(),
             event_tx,
             auth_sessions: DashMap::new(),
             connect_generation: AtomicU64::new(0),
