@@ -245,4 +245,30 @@ describe("reading a list across the selection", () => {
     });
     expect(keepWatched(answer, undefined)).toBe(answer);
   });
+
+  /**
+   * A watch that has not synced still holds the first read's unread
+   * namespaces, and a re-read missing the same one cleared it — the page drew
+   * a namespace nobody had read as one with nothing in it. Fails if the cache's
+   * own unread is not consulted.
+   */
+  it("keeps a namespace unread that the watch has not read either", () => {
+    const staging = {
+      namespace: "staging",
+      code: "READ_DEADLINE",
+      message: "",
+    };
+    const answer = {
+      rows: [{ name: "api", namespace: "prod" }],
+      unread: [staging],
+    };
+    const watched = {
+      rows: [{ name: "old-api", namespace: "prod" }],
+      unread: [{ ...staging, code: "PERMISSION_DENIED" }],
+    };
+    expect(keepWatched(answer, watched)).toEqual({
+      rows: [{ name: "api", namespace: "prod" }],
+      unread: [staging],
+    });
+  });
 });

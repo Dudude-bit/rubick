@@ -115,19 +115,26 @@ export function joinScoped<T>(parts: readonly Scoped<T>[]): Scoped<T> {
  * namespace current, so a namespace this read timed out in keeps them rather
  * than turning unread: dropping them left the watch streaming changes into
  * rows the page no longer had.
+ *
+ * Only where the cache has read it. A namespace the cache itself still holds
+ * as unread — a watch that has not synced yet — has no rows to keep, and
+ * clearing it drew the namespace as read and empty.
  */
 export function keepWatched<T extends { namespace?: string | null }>(
   answer: Scoped<T>,
   watched: Scoped<T> | undefined
 ): Scoped<T> {
   if (!watched || answer.unread.length === 0) return answer;
-  const missing = new Set(answer.unread.map((u) => u.namespace));
+  const blind = new Set(watched.unread.map((u) => u.namespace));
+  const kept = new Set(
+    answer.unread.flatMap((u) => (blind.has(u.namespace) ? [] : [u.namespace]))
+  );
   return {
     rows: [
       ...answer.rows,
-      ...watched.rows.filter((row) => missing.has(row.namespace ?? "")),
+      ...watched.rows.filter((row) => kept.has(row.namespace ?? "")),
     ],
-    unread: [],
+    unread: answer.unread.filter((u) => blind.has(u.namespace)),
   };
 }
 
