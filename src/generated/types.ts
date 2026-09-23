@@ -860,6 +860,25 @@ export type PodFilters = {
   nodeName: string | null;
 } & ResourceFilters;
 
+export interface ResourceConnections {
+  subject: ObjectRef;
+  edges: ConnectionEdge[];
+  stops: ChainStop[];
+  published: ServicePublished[];
+  notLookedAt: UnexploredKind[];
+}
+
+export interface UnexploredKind {
+  kind: string;
+  why: Unread;
+}
+
+export interface ConnectionEdge {
+  from: ObjectRef;
+  to: ObjectRef;
+  relation: Relation;
+}
+
 export interface NodeMetricsResponse {
   status: MetricsStatus;
   data: NodeMetrics[];
@@ -1088,6 +1107,21 @@ export interface GatewayClassInfo {
   createdAt: string | null;
 }
 
+export interface GatewayApiDetection {
+  installed: boolean;
+  bundleVersion: string | null;
+  channel: string | null;
+  mixedBundle: boolean;
+  kinds: ServedGatewayKind[];
+}
+
+export interface ServedGatewayKind {
+  kind: string;
+  plural: string;
+  versions: string[];
+  readVersion: string;
+}
+
 export interface PodInfo {
   name: string;
   namespace: string;
@@ -1281,40 +1315,6 @@ export interface ControllerRevisionInfo {
   initContainers: DeploymentContainerInfo[];
   templateAnnotations: Record<string, string>;
   createdAt: string | null;
-}
-
-export interface ResourceConnections {
-  subject: ObjectRef;
-  edges: ConnectionEdge[];
-  stops: ChainStop[];
-  published: ServicePublished[];
-  notLookedAt: UnexploredKind[];
-}
-
-export interface UnexploredKind {
-  kind: string;
-  why: Unread;
-}
-
-export interface ConnectionEdge {
-  from: ObjectRef;
-  to: ObjectRef;
-  relation: Relation;
-}
-
-export interface GatewayApiDetection {
-  installed: boolean;
-  bundleVersion: string | null;
-  channel: string | null;
-  mixedBundle: boolean;
-  kinds: ServedGatewayKind[];
-}
-
-export interface ServedGatewayKind {
-  kind: string;
-  plural: string;
-  versions: string[];
-  readVersion: string;
 }
 
 export interface PortForwardConfigPayload {
@@ -2292,30 +2292,6 @@ export type EnvVarSourceType =
 
 export type BudgetUnit = "cpu" | "memory" | "count";
 
-export type MetricsStatusKind =
-  "available" | "notInstalled" | "forbidden" | "error";
-
-export type FileRead =
-  | { state: "preview"; preview: FilePreview }
-  | { state: "written"; bytes: number }
-  | { state: "noTools" }
-  | { state: "failed"; exit_code: number | null; message: string };
-
-export type TcpProbeReason = "refused" | "timedOut";
-
-export type DryRunOutcome =
-  | { says: "created" }
-  | { says: "configured" }
-  | { says: "unchanged" }
-  | { says: "liveUnread"; said: string }
-  | { says: "refused"; said: string }
-  | { says: "unanswered"; said: string };
-
-export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
-
-export type Check =
-  { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };
-
 export type Unread =
   | { says: "unanswered"; version: string; said: string }
   | { says: "nodeClaimsNotRead" }
@@ -2360,6 +2336,30 @@ export type Usage =
   | { how: "imagePullSecret" }
   | { how: "identity" }
   | { how: "ingressTls"; hosts: string[] };
+
+export type MetricsStatusKind =
+  "available" | "notInstalled" | "forbidden" | "error";
+
+export type FileRead =
+  | { state: "preview"; preview: FilePreview }
+  | { state: "written"; bytes: number }
+  | { state: "noTools" }
+  | { state: "failed"; exit_code: number | null; message: string };
+
+export type TcpProbeReason = "refused" | "timedOut";
+
+export type DryRunOutcome =
+  | { says: "created" }
+  | { says: "configured" }
+  | { says: "unchanged" }
+  | { says: "liveUnread"; said: string }
+  | { says: "refused"; said: string }
+  | { says: "unanswered"; said: string };
+
+export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
+
+export type Check =
+  { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };
 
 export type Severity = "blocking" | "misconfigured" | "unverified" | "optional";
 
