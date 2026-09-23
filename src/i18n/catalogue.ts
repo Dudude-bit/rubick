@@ -2221,7 +2221,7 @@ export const en = {
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
     selectorUnevaluable:
-      "Kubernetes would refuse to build this selector (an operator other than In, NotIn, Exists and DoesNotExist, a set with no values, or a presence test with some), so what it selects cannot be said: {selector}",
+      "Kubernetes would refuse to build this selector (a missing or empty key, an operator other than In, NotIn, Exists and DoesNotExist, In or NotIn with no values, Exists or DoesNotExist with some, or a field of the wrong type), so what it selects cannot be said: {selector}",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
     chipLabel: "label",

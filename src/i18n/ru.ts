@@ -2300,7 +2300,7 @@ export const ru: Catalogue = {
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
     selectorUnevaluable:
-      "Такой селектор Kubernetes не соберёт (оператор не из In, NotIn, Exists и DoesNotExist, набор без значений или проверка наличия со значениями), поэтому что он выбирает, сказать нельзя: {selector}",
+      "Такой селектор Kubernetes не соберёт (ключ отсутствует или пуст, оператор не из In, NotIn, Exists и DoesNotExist, In или NotIn без значений, Exists или DoesNotExist со значениями или поле не того типа), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
     chipLabel: "лейбл",
