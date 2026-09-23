@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -15,13 +14,12 @@ import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
 import { useT, type T } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
 import { cn, formatSince } from "@/lib/utils";
-import { useClusterStore } from "@/stores/clusterStore";
 import { crdObjectPath, hourMinute } from "../../kit";
 import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { integrationSettingsPath } from "../../paths";
 import { usePicture, type Picture } from "../monitors/data";
+import { useSavedConnection } from "../saved-connection";
 import {
   PROMETHEUSES_CRD,
   readPrometheus,
@@ -495,12 +493,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
   const t = useT();
   const now = useNow();
   const copy = useCopyToClipboard();
-  const context = useClusterStore((state) => state.currentContext);
-  const saved = useQuery({
-    queryKey: [context, "prometheus", "page-address"],
-    queryFn: () => commands.getPrometheusConnection(),
-    staleTime: 60_000,
-  });
+  const saved = useSavedConnection(60_000);
   const base = saved.data?.url.replace(/\/+$/, "") ?? null;
   const tone = TONE[row.group];
   const Icon = ICON[tone];

@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import {
   helmReleaseOf,
@@ -144,11 +145,11 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   });
 
   const release = helmReleaseOf(subject.annotations, subject.namespace);
-  // The key the Helm page's rollback invalidates. A second key for the same
-  // fact is a copy that invalidation cannot reach.
+  // Under the prefix every Helm mutation invalidates. A second key for the
+  // same fact is a copy that invalidation cannot reach.
   const helm = useLiveQuery({
     refresh: "steady",
-    queryKey: ["helm-history", release?.name, release?.namespace],
+    queryKey: queryKeys.helm.history(release?.namespace, release?.name),
     queryFn: () => commands.getHelmHistory(release!.name, release!.namespace),
     enabled: release !== null,
   });

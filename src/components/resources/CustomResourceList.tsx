@@ -252,7 +252,7 @@ export function CustomResourceList({
             item.name,
             item.namespace || null
           ),
-        invalidateQueryKeys: [["custom-resources", crdName]],
+        invalidateQueryKeys: [queryKeys.customResourceLists(crdName)],
         resourceType: crdKind,
       }}
       staleTime={STALE_TIMES.resourceList}

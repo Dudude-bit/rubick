@@ -81,6 +81,7 @@ import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -121,7 +122,7 @@ export function DeploymentDetail() {
   });
 
   const { data: pods = [], error: podsError } = useLiveQuery({
-    queryKey: ["deployment-pods", namespace, name],
+    queryKey: queryKeys.ownedPods(ResourceType.Deployment, namespace, name),
     queryFn: async () => {
       try {
         if (!name) return [];
@@ -140,7 +141,7 @@ export function DeploymentDetail() {
   const connections = useConnections(ResourceType.Deployment, name, namespace);
 
   const { data: revisions = [] } = useLiveQuery({
-    queryKey: ["deployment-replicasets", namespace, name],
+    queryKey: queryKeys.deploymentReplicaSets(namespace, name),
     queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
@@ -204,7 +205,9 @@ export function DeploymentDetail() {
         }),
       },
       invalidateQueryKeys:
-        namespace && name ? [["deployment", namespace, name]] : [],
+        namespace && name
+          ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
+          : [],
       onSuccess: (_data, replicas) => {
         setScaleDialogOpen(false);
         follow({ action: "scale", replicas, generationBefore: generationNow });
@@ -231,7 +234,9 @@ export function DeploymentDetail() {
         }),
       },
       invalidateQueryKeys:
-        name && namespace ? [["deployment", namespace, name]] : [],
+        name && namespace
+          ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
+          : [],
       onSuccess: () =>
         follow({
           action: "restart",
@@ -261,7 +266,9 @@ export function DeploymentDetail() {
         errorPrefix: t("action", "updateImageFailed"),
       },
       invalidateQueryKeys:
-        name && namespace ? [["deployment", namespace, name]] : [],
+        name && namespace
+          ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
+          : [],
       onSuccess: () => {
         setImageDialogOpen(false);
         follow({

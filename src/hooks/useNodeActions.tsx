@@ -41,7 +41,9 @@ export function useNodeActions(): NodeActions {
     void queryClient.invalidateQueries({
       queryKey: queryKeys.resources(ResourceType.Node, null),
     });
-    void queryClient.invalidateQueries({ queryKey: ["node"] });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.details(ResourceType.Node),
+    });
   };
 
   const cordonMutation = useMutation({

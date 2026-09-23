@@ -47,6 +47,8 @@ import {
   useBackingLists,
 } from "@/integrations";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import { ResourceType } from "@/lib/resource-registry";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { KIND_TONE } from "@/lib/route-kind-tone";
 import { routesBoard, type RouteRow } from "@/lib/route-rows";
@@ -304,13 +306,13 @@ export function GatewayRoutesList() {
   // namespaces, and the class claim is cluster-scoped. Same keys as the
   // trace on the detail page, so list → detail reuses the cache.
   const gateways = useQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     enabled: served.has("Gateway"),
   });
   const classes = useQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
@@ -354,7 +356,7 @@ export function GatewayRoutesList() {
   // The map's outer columns: pods and deployments, read only while the
   // map is open — the list alone never pays for them.
   const pods = useLiveQuery({
-    queryKey: ["map-pods"],
+    queryKey: queryKeys.resources(ResourceType.Pod, null),
     queryFn: () =>
       commands.listPods({
         namespace: null,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { EVERY_NAMESPACE, queryKeys } from "./query-keys";
 import { ResourceType } from "./resource-registry";
@@ -10,14 +11,15 @@ import { ResourceType } from "./resource-registry";
  * half never reads.
  */
 describe("every namespace, however it is spelled", () => {
-  const bothSpellings: Array<[string, (ns: string | null) => string[]]> = [
-    ["pods", (ns) => queryKeys.pods(ns)],
+  const bothSpellings: Array<[string, (ns: string | null) => QueryKey]> = [
     ["podRows", (ns) => queryKeys.podRows(ns)],
     ["events", (ns) => queryKeys.events(ns)],
     ["metrics.pods", (ns) => queryKeys.metrics.pods(ns)],
+    // The Helm page reads its releases through this, scoped by the window.
     ["helm.releases", (ns) => queryKeys.helm.releases(ns)],
     ["resources", (ns) => queryKeys.resources(ResourceType.Deployment, ns)],
     ["customResourceList", (ns) => queryKeys.customResourceList("widgets", ns)],
+    ["clusterOverview", (ns) => queryKeys.clusterOverview("prod-eu", ns)],
   ];
 
   it.each(bothSpellings)(
@@ -35,15 +37,17 @@ describe("every namespace, however it is spelled", () => {
    */
   it("prefetching with null warms the key a reader builds from the store", () => {
     const storeSaysAllNamespaces = "";
-    expect(queryKeys.pods(null)).toEqual(
-      queryKeys.pods(storeSaysAllNamespaces)
+    expect(queryKeys.podRows(null)).toEqual(
+      queryKeys.podRows(storeSaysAllNamespaces)
     );
   });
 
   /** A named namespace still keys by its name. */
   it("keeps a real namespace apart from every namespace", () => {
-    expect(queryKeys.pods("kube-system")).not.toEqual(queryKeys.pods(null));
-    expect(queryKeys.pods("kube-system")).toEqual(["pods", "kube-system"]);
+    const pods = (ns: string | null) =>
+      queryKeys.resources(ResourceType.Pod, ns);
+    expect(pods("kube-system")).not.toEqual(pods(null));
+    expect(pods("kube-system")).toEqual(["pods", "kube-system"]);
   });
 
   /**
@@ -53,7 +57,7 @@ describe("every namespace, however it is spelled", () => {
    * pods to the same entry, and whichever was asked first answered both.
    */
   it("does not confuse a namespace named all with all of them", () => {
-    expect(queryKeys.pods("all")).not.toEqual(queryKeys.pods(null));
+    expect(queryKeys.podRows("all")).not.toEqual(queryKeys.podRows(null));
     expect(queryKeys.resources(ResourceType.Deployment, "all")).not.toEqual(
       queryKeys.resources(ResourceType.Deployment, null)
     );
@@ -67,6 +71,58 @@ describe("every namespace, however it is spelled", () => {
   it("uses a sentinel no namespace can be named", () => {
     const rfc1123Label = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
     expect(rfc1123Label.test(EVERY_NAMESPACE)).toBe(false);
-    expect(queryKeys.pods(null)).toEqual(["pods", EVERY_NAMESPACE]);
+    expect(queryKeys.podRows(null)).toEqual(["pod-rows", EVERY_NAMESPACE]);
+  });
+});
+
+/** Which of `keys` an invalidation of `prefix` marks stale. */
+async function staleAfter(prefix: QueryKey, keys: QueryKey[]) {
+  const client = new QueryClient();
+  for (const key of keys) client.setQueryData(key, "answer");
+  await client.invalidateQueries({ queryKey: prefix });
+  return keys.filter((key) => client.getQueryState(key)?.isInvalidated);
+}
+
+describe("what one invalidation reaches", () => {
+  /**
+   * A rollback from the Helm page invalidated only the list, and one from a
+   * release's page only the release and its history — so the history on a
+   * workload's Changes tab, and the list behind a release page, stayed as
+   * they were. Fails if a release fact moves out from under the prefix.
+   */
+  it("reaches every fact about every release from one Helm mutation", async () => {
+    const facts = [
+      queryKeys.helm.releases(null),
+      queryKeys.helm.releases("shop"),
+      queryKeys.helm.release("shop", "api"),
+      queryKeys.helm.history("shop", "api"),
+    ];
+    expect(await staleAfter(queryKeys.helm.everyRelease(), facts)).toEqual(
+      facts
+    );
+  });
+
+  /**
+   * Deleting a cloud profile changes what a context is bound to. The list of
+   * bindings was invalidated and the one the dialog was holding was not.
+   */
+  it("reaches each context's binding along with the list of them", async () => {
+    const facts = [
+      queryKeys.contextBindings(),
+      queryKeys.contextBinding("gke-shop"),
+    ];
+    expect(await staleAfter(queryKeys.contextBindings(), facts)).toEqual(facts);
+  });
+
+  /**
+   * A page reads a cluster-scoped object's namespace off the route as
+   * `undefined`, the peek as `null`. React Query hashes the two alike but
+   * matches a filter by value, so an invalidation spelled one way missed the
+   * entry spelled the other.
+   */
+  it("reaches a cluster-scoped object however its namespace was spelled", async () => {
+    const page = queryKeys.detail("Node", undefined, "node-a");
+    const peek = queryKeys.detail("Node", null, "node-a");
+    expect(await staleAfter(peek, [page])).toEqual([page]);
   });
 });

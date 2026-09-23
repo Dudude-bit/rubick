@@ -5,6 +5,7 @@ import {
   useQueryClient,
   keepPreviousData,
   UseMutationOptions,
+  type QueryKey,
 } from "@tanstack/react-query";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useToast } from "@/components/ui/use-toast";
@@ -88,7 +89,7 @@ export interface UseResourceMutationOptions<TData, TVariables, TError = Error> {
   /** Toast notification config */
   toast: MutationToastConfig<TData, TVariables>;
   /** Query keys to invalidate on success */
-  invalidateQueryKeys?: string[][];
+  invalidateQueryKeys?: QueryKey[];
   /** Additional onSuccess callback */
   onSuccess?: (data: TData, variables: TVariables) => void;
   /** Additional onError callback */

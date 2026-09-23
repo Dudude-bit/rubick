@@ -4,6 +4,7 @@ import { commands } from "@/lib/commands";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { mergeOverviews } from "@/lib/overview-merge";
 import { ofSameCluster } from "@/lib/previous-answer";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -40,7 +41,7 @@ export function useClusterOverview(namespace: string | null, enabled = true) {
   const isConnected = useClusterStore((s) => s.isConnected);
 
   return useLiveQuery({
-    queryKey: ["cluster-overview", currentContext, namespace ?? ""],
+    queryKey: queryKeys.clusterOverview(currentContext, namespace),
     queryFn: () => read(namespace),
     enabled: isConnected && enabled,
     staleTime: STALE_TIMES.overview,
@@ -111,7 +112,7 @@ export function useScopedOverview(): ScopedOverview {
     // A poll, where the question is unchanged, keeps every part's data and
     // never reaches the skeleton at all.
     queries: (several ? scope : []).map((name) => ({
-      queryKey: ["cluster-overview", currentContext, name],
+      queryKey: queryKeys.clusterOverview(currentContext, name),
       queryFn: () => read(name),
       enabled: isConnected,
       staleTime: STALE_TIMES.overview,

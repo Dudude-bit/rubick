@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import type { TlsCertificate } from "@/generated/types";
 
 /**
@@ -18,7 +19,7 @@ export function useTlsCertificates(
   // them here would make the query key flap as the Ingress is edited.
   const names = [...new Set(secretNames)].sort();
   return useQuery({
-    queryKey: ["tls-certificates", namespace, names.join(",")],
+    queryKey: queryKeys.tlsCertificates(namespace, names),
     queryFn: async (): Promise<Map<string, TlsCertificate>> => {
       const read = await commands.getTlsCertificates(namespace!, names);
       return new Map(read.map((entry) => [entry.secretName, entry]));

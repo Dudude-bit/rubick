@@ -14,6 +14,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
 import { targetColor } from "@/lib/share-targets";
 import { useT } from "@/i18n/useT";
@@ -21,8 +22,6 @@ import type { ShareTargetInfo } from "@/generated/types";
 
 import { SettingRow, SettingsGroup } from "./settings-row";
 import { toastError } from "@/lib/toast-error";
-
-const TARGETS_KEY = ["share-targets"];
 
 interface Draft {
   id: string | null;
@@ -64,7 +63,7 @@ export function SharingSettings() {
   };
 
   const targets = useQuery({
-    queryKey: TARGETS_KEY,
+    queryKey: queryKeys.shareTargets(),
     queryFn: () => commands.listShareTargets(),
   });
 
@@ -72,7 +71,7 @@ export function SharingSettings() {
     toastError(title, error);
 
   const saved = () => {
-    void queryClient.invalidateQueries({ queryKey: TARGETS_KEY });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.shareTargets() });
     openForm(null);
   };
 

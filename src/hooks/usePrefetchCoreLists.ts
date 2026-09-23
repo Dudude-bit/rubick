@@ -14,7 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { listPodRows } from "@/lib/pod-rows";
-import { queryKeys } from "@/lib/query-keys";
+import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -37,7 +37,7 @@ export function usePrefetchCoreLists(): void {
       warmed.current = null;
       return;
     }
-    const scope = `${context}/${currentNamespace || "all"}`;
+    const scope = `${context}/${currentNamespace || EVERY_NAMESPACE}`;
     if (warmed.current === scope) return;
     warmed.current = scope;
 
@@ -70,7 +70,7 @@ export function usePrefetchCoreLists(): void {
     // started. Same key as `useClusterOverview`, so the page mounts onto an
     // answer already in flight.
     void queryClient.prefetchQuery({
-      queryKey: ["cluster-overview", context, currentNamespace || ""],
+      queryKey: queryKeys.clusterOverview(context, namespace),
       queryFn: () => commands.getClusterOverview(namespace),
       staleTime: STALE_TIMES.overview,
     });

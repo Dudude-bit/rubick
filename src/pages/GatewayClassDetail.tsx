@@ -25,6 +25,7 @@ import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayClassInfo } from "@/generated/types";
@@ -37,7 +38,7 @@ function GatewayRows({ className }: { className: string }) {
     error,
     isLoading,
   } = useLiveQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     refresh: "overview",

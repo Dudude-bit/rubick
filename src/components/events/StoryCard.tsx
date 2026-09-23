@@ -266,13 +266,9 @@ function Timeline({ story, now }: { story: Story; now: number }) {
   const { asked: pods, skipped } = podsOf(story);
   const statuses = useQueries({
     queries: pods.map((pod) => ({
-      // The one key every other reader of a pod uses, so an action that
-      // invalidates a pod reaches this clock too.
-      queryKey: queryKeys.resourceDetail(
-        ResourceType.Pod,
-        pod.namespace ?? "",
-        pod.name
-      ),
+      // The pod page's own key, so an action that invalidates a pod reaches
+      // this clock too, and a pod already open costs nothing.
+      queryKey: queryKeys.detail(ResourceType.Pod, pod.namespace, pod.name),
       queryFn: () => commands.getPod(pod.name, pod.namespace),
       staleTime: 30_000,
       retry: false,

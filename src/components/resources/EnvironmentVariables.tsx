@@ -31,6 +31,7 @@ import type {
   EnvVarSourceType,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
@@ -281,7 +282,7 @@ export function EnvironmentVariables({
   // just without the resolved value.
   const configMapQueries = useQueries({
     queries: allConfigMapNames.map((name) => ({
-      queryKey: ["configmap-data", namespace, name] as const,
+      queryKey: queryKeys.configMapData(namespace, name),
       queryFn: () => commands.getConfigmapData(name, namespace!),
       enabled: !!namespace,
       staleTime: Infinity,
@@ -291,7 +292,7 @@ export function EnvironmentVariables({
 
   const secretQueries = useQueries({
     queries: allSecretNames.map((name) => ({
-      queryKey: ["secret-data", namespace, name] as const,
+      queryKey: queryKeys.secretData(namespace, name),
       queryFn: () => commands.getSecretData(name, namespace!),
       enabled: !!namespace && showSecrets,
       staleTime: Infinity,

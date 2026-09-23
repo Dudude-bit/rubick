@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { QueryClient } from "@tanstack/react-query";
 
 // The plan never calls a command; it only needs the module to load.
 vi.mock("@/lib/commands", () => ({ commands: {} }));
@@ -17,6 +18,7 @@ import {
   scaleCommandFor,
   type PeekAction,
 } from "./peek-actions";
+import { queryKeys } from "@/lib/query-keys";
 import { RESOURCE_REGISTRY, SCALABLE_KINDS } from "@/lib/resource-registry";
 import { askableKind } from "@/lib/tell-me-when";
 import * as generated from "@/generated/commands";
@@ -421,13 +423,76 @@ describe("describeDeletion", () => {
 });
 
 describe("peekMutationKeys", () => {
-  // The lists are plural-first, the detail pages singular-first. A mutation
-  // has to reach both or the row behind the panel keeps its old state.
-  it("covers both key shapes in the app", () => {
-    const keys = peekMutationKeys("Pod").map((key) => key.join("/"));
-    expect(keys).toContain("pods");
-    expect(keys).toContain("pod");
-    expect(keys).toContain("peek");
+  /** Which of `keys` a peek mutation of `kind` marks stale. */
+  async function staleAfter(kind: string, keys: readonly unknown[][]) {
+    const client = new QueryClient();
+    for (const key of keys) client.setQueryData(key, "answer");
+    for (const queryKey of peekMutationKeys(kind)) {
+      await client.invalidateQueries({ queryKey });
+    }
+    return keys.filter((key) => client.getQueryState(key)?.isInvalidated);
+  }
+
+  /**
+   * The panel is not modal, so whatever is behind it — the list, the object's
+   * page, its pods, its YAML — must go stale with it. Fails if any of those
+   * readers keys its entry where the panel's invalidation cannot reach.
+   */
+  it("reaches every reader of the object it changed", async () => {
+    const readers = [
+      queryKeys.resources("Deployment", "shop"),
+      queryKeys.resources("Deployment", null),
+      queryKeys.detail("Deployment", "shop", "api"),
+      queryKeys.ownedPods("Deployment", "shop", "api"),
+      queryKeys.manifest("Deployment", "shop", "api"),
+    ];
+    expect(await staleAfter("Deployment", readers)).toEqual(readers);
+  });
+
+  /**
+   * Every action the panel offers ends in pods changing. The events timeline
+   * once read its pods under the list's prefix and the pod page under its
+   * own; both are the pod's page entry now, and the pod table in a scope is
+   * not the table across every namespace.
+   */
+  it("reaches the pods of whatever it changed, in every scope", async () => {
+    const readers = [
+      queryKeys.detail("Pod", "shop", "api-7bcd"),
+      queryKeys.podRows("shop"),
+      queryKeys.podRows(null),
+      queryKeys.resources("Pod", "shop"),
+    ];
+    expect(await staleAfter("Deployment", readers)).toEqual(readers);
+  });
+
+  /** A delete of one kind has no business re-reading another's objects. */
+  it("leaves other kinds' objects alone", async () => {
+    const other = [queryKeys.detail("Service", "shop", "api")];
+    expect(await staleAfter("Deployment", other)).toEqual([]);
+  });
+
+  /**
+   * Every route verdict is drawn from the cluster-wide Gateways and classes.
+   * They were keyed apart from both kinds' prefixes, so a Gateway deleted
+   * from the peek stayed a live parent in every trace and on the rail.
+   */
+  it("reaches the Gateways and classes every route verdict reads", async () => {
+    expect(await staleAfter("Gateway", [queryKeys.gateways()])).toHaveLength(1);
+    expect(
+      await staleAfter("GatewayClass", [queryKeys.gatewayClasses()])
+    ).toHaveLength(1);
+  });
+
+  /**
+   * The verdicts need each Gateway's listener sets, which only the list
+   * command merges in; a watch row carries none. Sharing the Gateway page's
+   * watched entry would turn every verdict into "cannot tell" a tick after
+   * that page opened.
+   */
+  it("keeps the verdicts' Gateways apart from the page a watch writes into", () => {
+    expect(queryKeys.gateways()).not.toEqual(
+      queryKeys.resources("Gateway", null)
+    );
   });
 });
 

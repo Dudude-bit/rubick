@@ -41,6 +41,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -76,7 +77,7 @@ export function CrdDetail() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["crd", decodedName],
+    queryKey: queryKeys.crd(decodedName),
     queryFn: async () => {
       if (!decodedName) throw new Error("CRD name is required");
       try {
@@ -118,7 +119,7 @@ export function CrdDetail() {
           name: decodedName ?? "",
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["crds"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
       navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
     },
     onError: (err: Error) => {

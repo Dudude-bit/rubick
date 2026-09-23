@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
 
 import changelog from "../../../CHANGELOG.md?raw";
@@ -18,7 +17,7 @@ import {
   type ChangeItem,
   type Release,
 } from "@/lib/changelog";
-import { commands } from "@/lib/commands";
+import { useAppInfo } from "@/hooks/useAppInfo";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 
 const RELEASES = parseChangelog(changelog);
@@ -31,11 +30,7 @@ const RELEASES = parseChangelog(changelog);
  */
 export function WhatsNew() {
   const t = useT();
-  const { data: appInfo } = useQuery({
-    queryKey: ["appInfo"],
-    queryFn: commands.getAppInfo,
-    staleTime: Infinity,
-  });
+  const { data: appInfo } = useAppInfo();
   const version = appInfo?.version ?? null;
   const seen = useWhatsNewStore((state) => state.seenVersion);
   const showing = useWhatsNewStore((state) => state.showing);

@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useClusterStore } from "@/stores/clusterStore";
 import { BindingDialog } from "./clusters/BindingDialog";
@@ -41,11 +42,11 @@ export function ClustersSettings() {
   const t = useT();
 
   const { data: contexts, isLoading } = useQuery({
-    queryKey: ["contexts"],
+    queryKey: queryKeys.contexts(),
     queryFn: commands.listContexts,
   });
   const { data: bindings } = useQuery({
-    queryKey: ["contextBindings"],
+    queryKey: queryKeys.contextBindings(),
     queryFn: commands.listContextBindings,
   });
 

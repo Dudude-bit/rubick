@@ -47,6 +47,7 @@ import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { deliveryOfKind } from "@/lib/delivery";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
@@ -239,7 +240,7 @@ export function IngressDetail() {
   // Which controller claims this Ingress. Core: IngressClass is a built-in
   // kind, and "none does" is the failure that is silent everywhere else.
   const { data: controller } = useQuery({
-    queryKey: ["ingress-class", ingress?.className ?? null],
+    queryKey: queryKeys.ingressClass(ingress?.className),
     queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
     enabled: !!ingress,
   });
