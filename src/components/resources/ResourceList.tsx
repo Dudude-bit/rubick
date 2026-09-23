@@ -36,6 +36,7 @@ import {
 } from "@/components/resources/delivery-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
 
 /**
  * The column, built once because every list that has one gets exactly this one
@@ -316,7 +317,7 @@ export function ResourceList<
             deleteConfig?.resourceType?.toLowerCase() ??
             t("action", "resourceNoun"),
           name: item.name,
-          error: String(error),
+          error: errorToShow(error),
         }),
         variant: "destructive",
       });

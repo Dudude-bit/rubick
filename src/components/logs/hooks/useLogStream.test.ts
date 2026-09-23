@@ -51,6 +51,7 @@ vi.mock("@/lib/commands", () => ({
 
 vi.mock("@/lib/error-utils", () => ({
   normalizeTauriError: (err: unknown) => String(err),
+  errorToShow: (err: unknown) => String(err),
 }));
 
 import { useLogStream, DEFAULT_LOG_LIMIT } from "./useLogStream";

@@ -28,7 +28,7 @@ import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import { AlertsAbout } from "./AlertsAbout";
 import { Rail, routeAddress, RouteSource } from "./TrafficChain";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
-import { normalizeTauriError } from "@/lib/error-utils";
+import {} from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import {
@@ -64,6 +64,7 @@ import { TabGlyph, TabMark } from "./tab-marks";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
+import { errorToShow } from "@/lib/error-utils";
 
 export function PeekContent({
   target,
@@ -398,7 +399,7 @@ function PeekOverview({
         <p className="pt-4 text-xs text-warn">
           {t("empty", "couldNotReadKind", {
             kind: target.kind.toLowerCase(),
-            error: error.message,
+            error: errorToShow(error),
           })}
         </p>
       ) : isLoading || !summary ? (
@@ -470,7 +471,7 @@ function BackendPolicies({
         <p className="py-1 text-xs text-warn">
           {t("empty", "couldNotReadInScope", { label: "BackendTLSPolicies" })}{" "}
           <span className="text-fg-fnt">
-            {normalizeTauriError(policiesQuery.error)}
+            {errorToShow(policiesQuery.error)}
           </span>
         </p>
       </div>
@@ -623,7 +624,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     value: error ? (
       <span className="break-words">
         {t("services", "couldNotRead")}{" "}
-        <span className="text-fg-fnt">{normalizeTauriError(error)}</span>
+        <span className="text-fg-fnt">{errorToShow(error)}</span>
       </span>
     ) : data === undefined ? (
       t("action", "readingInline")
@@ -1004,7 +1005,7 @@ function PeekTraffic({ target }: { target: PeekTarget }) {
       {conns.error && (
         <p className="py-1 text-xs text-warn">
           {t("empty", "couldNotReadConnections", {
-            reason: normalizeTauriError(conns.error),
+            reason: errorToShow(conns.error),
           })}
         </p>
       )}

@@ -16,7 +16,7 @@ import { useNowSeconds } from "@/hooks/useNow";
 import { useCapabilityState } from "@/integrations";
 import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   describeTermination,
   lastTermination,
@@ -1258,9 +1258,7 @@ export function LogViewer({
         URL.revokeObjectURL(url);
       } catch (err) {
         console.error("Failed to download logs:", err);
-        refused.push(
-          `${target.pod}/${target.container}: ${normalizeTauriError(err)}`
-        );
+        refused.push(`${target.pod}/${target.container}: ${errorToShow(err)}`);
       }
     }
     if (refused.length > 0) {
@@ -1835,7 +1833,7 @@ function EmptyState({
   if (podsUnread)
     return (
       <Note>
-        {t("empty", "podsUnread", { reason: normalizeTauriError(podsUnread) })}
+        {t("empty", "podsUnread", { reason: errorToShow(podsUnread) })}
       </Note>
     );
 

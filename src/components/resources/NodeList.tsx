@@ -16,7 +16,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
 import { useMetrics } from "@/hooks/useMetrics";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
@@ -307,9 +307,7 @@ export function NodeList() {
           nodes={nodesForTrends.data ?? []}
           nodesKnown={nodesForTrends.data !== undefined}
           nodesReason={
-            nodesForTrends.error
-              ? normalizeTauriError(nodesForTrends.error)
-              : null
+            nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
           }
           range={range}
           onRange={setRange}

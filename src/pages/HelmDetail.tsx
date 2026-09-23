@@ -45,7 +45,6 @@ import {
 } from "@/components/resources/detail-kv";
 import { useCopyToClipboard } from "@/hooks";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -53,6 +52,7 @@ import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { installedObjects } from "@/lib/helm-manifest";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -144,11 +144,7 @@ export function HelmDetail() {
       setRollbackTarget(null);
     },
     onError: (error) => {
-      toast({
-        title: t("action", "rollbackFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "rollbackFailed"), error);
     },
   });
 
@@ -165,11 +161,7 @@ export function HelmDetail() {
       navigate("/helm");
     },
     onError: (error) => {
-      toast({
-        title: t("action", "uninstallFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "uninstallFailed"), error);
     },
   });
 

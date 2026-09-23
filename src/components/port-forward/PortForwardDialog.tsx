@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 interface PortForwardFormState {
   localPort: string;
@@ -158,11 +159,7 @@ export function PortForwardDialog({
       });
       onOpenChange(false);
     } catch (error) {
-      toast({
-        title: t("activity", "startForwardFailed"),
-        description: String(error),
-        variant: "destructive",
-      });
+      toastError(t("activity", "startForwardFailed"), error);
     } finally {
       setBusy(false);
     }
@@ -175,11 +172,7 @@ export function PortForwardDialog({
         title: t("activity", "forwardStopped"),
       });
     } catch (error) {
-      toast({
-        title: t("activity", "stopForwardFailed"),
-        description: String(error),
-        variant: "destructive",
-      });
+      toastError(t("activity", "stopForwardFailed"), error);
     }
   };
 

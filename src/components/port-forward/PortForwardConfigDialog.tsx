@@ -13,12 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
-import { normalizeTauriError } from "@/lib/error-utils";
 import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "@/stores/portForwardStore";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /**
  * The editor for a saved port-forward.
@@ -107,13 +107,12 @@ export function PortForwardConfigDialog({
       }
       onClose();
     } catch (error) {
-      toast({
-        title: config
+      toastError(
+        config
           ? t("activity", "saveForwardFailed")
           : t("activity", "createForwardFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+        error
+      );
     } finally {
       setBusy(false);
     }

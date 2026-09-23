@@ -15,7 +15,6 @@ import {
 } from "@/components/resources/detail-tab";
 import { useNow } from "@/hooks/useNow";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn, formatSince } from "@/lib/utils";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
@@ -38,6 +37,7 @@ import {
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { troubleMark } from "../kit";
+import { toastError } from "@/lib/toast-error";
 
 export default function ScyllaPage() {
   const t = useT();
@@ -363,14 +363,13 @@ function ClusterRow({
         predicate: (query) => query.queryKey.includes("scylla"),
       });
     } catch (error) {
-      toast({
-        title: t("operators", "actionFailed", {
+      toastError(
+        t("operators", "actionFailed", {
           action: t("operators", action.label),
           cluster: cluster.name,
         }),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+        error
+      );
     } finally {
       setBusy(false);
       setPending(null);

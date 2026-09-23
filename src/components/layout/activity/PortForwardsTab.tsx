@@ -23,7 +23,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { PortForwardConfigDialog } from "@/components/port-forward/PortForwardConfigDialog";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
-import { normalizeTauriError } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   usePortForwardStore,
@@ -40,6 +39,7 @@ import {
 } from "./primitives";
 import { useAsk } from "@/hooks/useAsk";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /** Same shape the store keys sessions by; do not reorder the parts. */
 const forwardKey = (item: {
@@ -233,11 +233,7 @@ export function PortForwardsTab() {
       try {
         await startConfig(configId);
       } catch (error) {
-        toast({
-          title: t("activity", "startForwardFailed"),
-          description: normalizeTauriError(error),
-          variant: "destructive",
-        });
+        toastError(t("activity", "startForwardFailed"), error);
       }
     });
 
@@ -246,11 +242,7 @@ export function PortForwardsTab() {
       try {
         await stopSession(sessionId);
       } catch (error) {
-        toast({
-          title: t("activity", "stopForwardFailed"),
-          description: normalizeTauriError(error),
-          variant: "destructive",
-        });
+        toastError(t("activity", "stopForwardFailed"), error);
       }
     });
 
@@ -259,11 +251,7 @@ export function PortForwardsTab() {
       try {
         await removeConfig(config.id);
       } catch (error) {
-        toast({
-          title: t("activity", "deleteForwardFailed"),
-          description: normalizeTauriError(error),
-          variant: "destructive",
-        });
+        toastError(t("activity", "deleteForwardFailed"), error);
       }
     });
 
@@ -281,11 +269,7 @@ export function PortForwardsTab() {
         }),
       });
     } catch (error) {
-      toast({
-        title: t("activity", "startAllFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("activity", "startAllFailed"), error);
     } finally {
       setStartingAll(false);
     }

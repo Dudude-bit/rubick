@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type { FileEntry, ListedWith } from "@/lib/container-files";
 import type { Via } from "@/generated/types";
 
@@ -247,7 +247,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             phase: "failed",
             entries: EMPTY,
             reason: "failed",
-            message: normalizeTauriError(error),
+            message: errorToShow(error),
             exitCode: null,
             stderr: "",
             tried: [],

@@ -7,7 +7,7 @@ import type {
   StreamLogConfig,
   StyledSegment,
 } from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import {
   listenForStreamFailures,
   type StreamFailure,
@@ -488,7 +488,7 @@ export function useLogStream({
             if (!s.active) return false;
             s.opened.delete(key);
             s.refused.add(key);
-            const message = normalizeTauriError(err);
+            const message = errorToShow(err);
             setFailures((prev) =>
               prev.some(
                 (f) => f.pod === source.pod && f.container === source.container
@@ -721,7 +721,7 @@ export function useLogStream({
             container: source.container,
             pod: source.pod,
             kind: "broken" as const,
-            message: normalizeTauriError(err),
+            message: errorToShow(err),
           }))
         );
         setIsConnecting(false);

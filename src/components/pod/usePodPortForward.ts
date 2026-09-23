@@ -16,6 +16,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { PodInfo } from "@/generated/types";
 
 import type { PortForwardFormState } from "./PodPortForwardDialog";
+import { toastError } from "@/lib/toast-error";
 
 const INITIAL_FORM: PortForwardFormState = {
   name: "",
@@ -109,11 +110,7 @@ export function usePodPortForward(pod: PodInfo | undefined) {
 
       setOpen(false);
     } catch (err) {
-      toast({
-        title: t("action", "portForwardStartFailed"),
-        description: String(err),
-        variant: "destructive",
-      });
+      toastError(t("action", "portForwardStartFailed"), err);
     } finally {
       setBusy(false);
     }
@@ -133,14 +130,10 @@ export function usePodPortForward(pod: PodInfo | undefined) {
       try {
         await stopPortForwardSession(sessionId);
       } catch (err) {
-        toast({
-          title: t("action", "portForwardStopFailed"),
-          description: String(err),
-          variant: "destructive",
-        });
+        toastError(t("action", "portForwardStopFailed"), err);
       }
     },
-    [stopPortForwardSession, toast, t]
+    [stopPortForwardSession, t]
   );
 
   const activePortForwards =

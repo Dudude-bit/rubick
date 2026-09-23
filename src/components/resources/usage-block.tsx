@@ -25,7 +25,7 @@ import type {
   UsageScope,
   VolumeFullness,
 } from "@/integrations";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
@@ -559,7 +559,7 @@ function useRangedHistory(
       power.state === "unreachable"
         ? power.reason
         : query.error
-          ? normalizeTauriError(query.error)
+          ? errorToShow(query.error)
           : "",
   };
 }

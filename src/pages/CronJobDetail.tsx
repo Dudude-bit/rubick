@@ -55,6 +55,7 @@ import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import type { CronJobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /**
  * The three facts a CronJob page exists to answer, at a glance.
@@ -181,11 +182,7 @@ export function CronJobDetail() {
       setRunOpen(false);
     },
     onError: (error: Error) => {
-      toast({
-        title: t("action", "cronRunFailed"),
-        description: error.message,
-        variant: "destructive",
-      });
+      toastError(t("action", "cronRunFailed"), error);
     },
   });
 

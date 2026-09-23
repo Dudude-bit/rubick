@@ -13,7 +13,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn, formatAge, formatSince } from "@/lib/utils";
 import type { CustomResourceInfo } from "@/generated/types";
@@ -61,7 +61,7 @@ function sentenceFor(error: unknown, t: ReturnType<typeof useT>): string {
     return t("operators", "fencingUnknown");
   if (said.startsWith("the whole cluster is fenced"))
     return t("operators", "fencedAllOne");
-  return normalizeTauriError(error);
+  return errorToShow(error);
 }
 
 export default function CloudNativePgPage() {

@@ -30,6 +30,7 @@ import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { Progress } from "@/components/ui/progress";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 export interface DebugNodeDialogProps {
   open: boolean;
@@ -74,13 +75,9 @@ export function DebugNodeDialog({
 
   const handleError = useCallback(
     (error: string) => {
-      toast({
-        title: t("action", "debugFailed"),
-        description: error,
-        variant: "destructive",
-      });
+      toastError(t("action", "debugFailed"), error);
     },
-    [toast, t]
+    [t]
   );
 
   const handleTimeout = useCallback((operation: DebugOperation) => {
@@ -163,11 +160,7 @@ export function DebugNodeDialog({
           }),
         });
       } catch (err) {
-        toast({
-          title: t("action", "failedToDeletePod"),
-          description: String(err),
-          variant: "destructive",
-        });
+        toastError(t("action", "failedToDeletePod"), err);
       }
     }
     setShowTimeoutDialog(false);

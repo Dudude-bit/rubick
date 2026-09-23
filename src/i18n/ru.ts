@@ -1295,6 +1295,7 @@ export const ru: Catalogue = {
     refresh: "Обновить",
     copy: "Копировать",
     copied: "Скопировано",
+    copyFailed: "Не удалось скопировать",
     openInBrowser: "Открыть в браузере",
     back: "Назад",
     gwFilterPlaceholder: "имя, хост, шлюз…",

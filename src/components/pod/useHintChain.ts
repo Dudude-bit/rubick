@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -147,14 +147,14 @@ export function useHintChain(
       notRead.push(
         t("hints", "notReadService", {
           namespace: pod.namespace,
-          reason: normalizeTauriError(services.error),
+          reason: errorToShow(services.error),
         })
       );
     if (endpoints.error && service)
       notRead.push(
         t("hints", "notReadEndpoints", {
           service: service.name,
-          reason: normalizeTauriError(endpoints.error),
+          reason: errorToShow(endpoints.error),
         })
       );
     if (address?.where === "outside")
