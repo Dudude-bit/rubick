@@ -1730,12 +1730,6 @@ export async function subscribePvcWatch(
   return invoke<string>("subscribe_pvc_watch", { namespace });
 }
 
-export async function subscribePodWatch(
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("subscribe_pod_watch", { namespace });
-}
-
 export async function subscribePodRowWatch(
   namespace: string | null
 ): Promise<string> {

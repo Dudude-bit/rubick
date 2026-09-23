@@ -251,7 +251,8 @@ fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
             .as_ref()
             .and_then(|s| s.phase.clone())
             .unwrap_or_else(|| "Unknown".to_string()),
-        display: super::types::PodInfo::from(pod).status.display,
+        // The status word alone, not a whole PodInfo built to read one field.
+        display: super::types::pod_display::display_status(pod),
         ready: condition_is_true(pod.status.as_ref(), "Ready"),
     })
 }

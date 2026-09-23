@@ -342,7 +342,6 @@ fn main() {
             commands::watch::subscribe_gateway_watch,
             commands::watch::subscribe_gateway_route_watch,
             commands::watch::subscribe_pvc_watch,
-            commands::watch::subscribe_pod_watch,
             commands::watch::subscribe_pod_row_watch,
             commands::watch::subscribe_deployment_watch,
             commands::watch::subscribe_statefulset_watch,

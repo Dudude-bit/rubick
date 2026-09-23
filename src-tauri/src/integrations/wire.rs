@@ -10,6 +10,7 @@
 //! back a status and a body, and Prometheus reading JSON out of it is not
 //! expressed in terms of Loki reading JSON and YAML.
 
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::ConnectionEntry;
@@ -19,12 +20,24 @@ use crate::error::{Error, Result};
 /// address pointing at nothing fails while the reader is still looking at it.
 pub const TIMEOUT: Duration = Duration::from_secs(20);
 
+/// One client per TLS setting, kept for the life of the app.
+///
+/// A client is its connection pool: building one per request opened a new
+/// TCP and TLS handshake for every `PromQL` query, three or four of them every
+/// two seconds while a usage chart is on screen.
 pub fn client(insecure_tls: bool) -> Result<reqwest::Client> {
-    reqwest::Client::builder()
+    static SECURE: OnceLock<reqwest::Client> = OnceLock::new();
+    static INSECURE: OnceLock<reqwest::Client> = OnceLock::new();
+    let slot = if insecure_tls { &INSECURE } else { &SECURE };
+    if let Some(client) = slot.get() {
+        return Ok(client.clone());
+    }
+    let built = reqwest::Client::builder()
         .timeout(TIMEOUT)
         .danger_accept_invalid_certs(insecure_tls)
         .build()
-        .map_err(|e| Error::Connection(format!("Could not build an HTTP client: {e}")))
+        .map_err(|e| Error::Connection(format!("Could not build an HTTP client: {e}")))?;
+    Ok(slot.get_or_init(|| built).clone())
 }
 
 /// Epoch ms, so a row can say "answered 2s ago".
@@ -139,5 +152,50 @@ mod tests {
         assert_eq!(refusal("   ").as_deref(), None);
         assert_eq!(refusal("<html><body>502</body></html>").as_deref(), None);
         assert_eq!(refusal(r#"{"status":"error"}"#).as_deref(), None);
+    }
+
+    /// Would break if the client went back to being built per request: every
+    /// query would open its own connection, and a usage chart polling three
+    /// of them every two seconds would handshake the whole time.
+    #[tokio::test]
+    async fn consecutive_requests_share_one_connection() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let counter = accepted.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    return;
+                };
+                counter.fetch_add(1, Ordering::SeqCst);
+                tokio::spawn(async move {
+                    let mut buffer = [0u8; 4096];
+                    while let Ok(read) = socket.read(&mut buffer).await {
+                        if read == 0 {
+                            return;
+                        }
+                        let reply = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+                        if socket.write_all(reply).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+
+        let entry = ConnectionEntry {
+            url: format!("http://{address}"),
+            auth_type: "none".to_string(),
+            token: None,
+            insecure_tls: true,
+        };
+        assert_eq!(get_text(&entry, "/a", &[]).await.as_deref(), Ok("ok"));
+        assert_eq!(get_text(&entry, "/b", &[]).await.as_deref(), Ok("ok"));
+        assert_eq!(accepted.load(Ordering::SeqCst), 1);
     }
 }

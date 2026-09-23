@@ -12,4 +12,4 @@ license = "GPL-3.0-or-later"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry"] }
 # The log file's directory, by each platform's own convention.
-dirs = "7"
+dirs = "6"

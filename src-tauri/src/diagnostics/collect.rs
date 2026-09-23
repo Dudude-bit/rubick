@@ -330,15 +330,18 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     // The parsed config the app is already living on, not a fresh read of
     // the file. A second read would answer about a different moment, and
     // this panel exists because two answers about one machine is the bug.
-    let Some(raw) = client.kubeconfig().await else {
+    // One read: the file, its error and its path belong to the same load.
+    let loaded = client.loaded().await;
+    let source = loaded.source.clone();
+    let Some(raw) = loaded.kubeconfig else {
         // Nothing parsed. Two different reasons land here and they must not
         // read the same: a file that would not parse is a problem with an
         // address and a fix, while no file at all is just an app nobody has
         // pointed at a cluster yet. Collapsing them answers "no kubeconfig
         // loaded" to somebody looking at a kubeconfig.
-        let (kubeconfig, mut findings) = match client.kubeconfig_error().await {
+        let (kubeconfig, mut findings) = match loaded.error {
             Some(why) => {
-                let path = client.kubeconfig_path().await.map_or_else(
+                let path = source.map_or_else(
                     || "unknown".to_string(),
                     |p| p.to_string_lossy().into_owned(),
                 );
@@ -369,7 +372,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
         };
     };
 
-    let path = client.kubeconfig_path().await.map_or_else(
+    let path = source.map_or_else(
         || "unknown — loaded before the path was recorded".to_string(),
         |p| p.to_string_lossy().into_owned(),
     );

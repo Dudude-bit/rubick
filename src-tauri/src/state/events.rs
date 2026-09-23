@@ -420,8 +420,6 @@ pub enum AppEvent {
     /// unstreamed command would have failed with, so every reader of it
     /// still matches. Exactly one of this or `PodRowsDone`.
     PodRowsFailed { stream_id: String, message: String },
-    /// Error occurred
-    Error { code: String, message: String },
 }
 
 impl AppEvent {
@@ -451,7 +449,6 @@ impl AppEvent {
             AppEvent::PodRowsBatch { .. } => "pod-rows-batch",
             AppEvent::PodRowsDone { .. } => "pod-rows-done",
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
-            AppEvent::Error { .. } => "app-error",
         }
     }
 
@@ -667,10 +664,6 @@ impl AppEvent {
                 "stream_id": stream_id,
                 "message": message,
             }),
-            AppEvent::Error { code, message } => serde_json::json!({
-                "code": code,
-                "message": message,
-            }),
         }
     }
 }
@@ -707,10 +700,6 @@ mod tests {
                 context: "infra-eu1".into(),
                 success: true,
                 why: None,
-            },
-            AppEvent::Error {
-                code: "X".into(),
-                message: "y".into(),
             },
             AppEvent::StreamFailed {
                 stream_id: "log-1".into(),

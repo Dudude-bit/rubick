@@ -278,8 +278,8 @@ mod tests {
         let state = AppState::new().unwrap();
         let mut rx = state.subscribe();
 
-        state.emit(AppEvent::Error {
-            code: "TEST".to_string(),
+        state.emit(AppEvent::PodRowsFailed {
+            stream_id: "rows-1".to_string(),
             message: "test".to_string(),
         });
 

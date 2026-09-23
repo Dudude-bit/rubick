@@ -45,19 +45,10 @@ async fn crd_to_dynamic_api(
         |v| v.name.clone(),
     );
 
-    let api_version = if spec.group.is_empty() {
-        version.clone()
-    } else {
-        format!("{}/{}", spec.group, version)
-    };
-
-    let api_resource = ApiResource {
-        group: spec.group.clone(),
-        version,
-        kind: spec.names.kind.clone(),
-        api_version,
-        plural: spec.names.plural.clone(),
-    };
+    let api_resource = ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk(&spec.group, &version, &spec.names.kind),
+        &spec.names.plural,
+    );
 
     let is_namespaced = spec.scope == "Namespaced";
 
