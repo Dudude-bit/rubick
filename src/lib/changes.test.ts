@@ -231,25 +231,37 @@ describe("diffRevisions, the fields it reads off a container", () => {
 });
 
 describe("what two revisions are compared on", () => {
+  // Every field differs, compared or not: one both sides hold equal could
+  // start being read without the test below noticing.
   const everything = (n: number) =>
     revision(
       n,
       [
         container("app", `app:${n}`, {
+          phase: n % 2 === 0 ? "sidecar" : "app",
           ports: [8000 + n],
           env: [{ name: "MODE", value: `m${n}`, valueFrom: null }],
           envFrom: [
             {
-              prefix: null,
+              prefix: `P${n}_`,
               configMapRef: `cfg-${n}`,
-              secretRef: null,
-              optional: null,
+              secretRef: `sec-${n}`,
+              optional: n % 2 === 0,
             },
           ],
-          resources: { requests: { cpu: `${n}00m` }, limits: {} },
+          resources: {
+            requests: { cpu: `${n}00m` },
+            limits: { memory: `${n}Gi` },
+          },
+          command: [`/bin/app-${n}`],
+          args: [`--n=${n}`],
         }),
       ],
-      { templateAnnotations: { "checksum/config": `c${n}` } }
+      {
+        current: n % 2 === 0,
+        changeCause: `rollout ${n}`,
+        templateAnnotations: { "checksum/config": `c${n}` },
+      }
     );
 
   /**
