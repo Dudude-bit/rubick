@@ -34,6 +34,7 @@ import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -267,8 +268,7 @@ export function TroubleList<T>({
 /** How a row reads at a glance. Anything not `ok` is a reason to open it. */
 export type Tone = "ok" | "warn" | "err";
 
-const toneText = (tone: Tone) =>
-  tone === "err" ? "text-err" : tone === "warn" ? "text-warn" : "text-ok";
+const toneText = (tone: Tone) => TONE_TEXT[tone];
 
 /**
  * A row in a list ordered by trouble.
@@ -453,12 +453,7 @@ export function Finding({
   children?: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "border-l-2 pl-2.5",
-        tone === "err" ? "border-err" : "border-warn"
-      )}
-    >
+    <div className={cn("border-l-2 pl-2.5", TONE_BORDER[tone])}>
       <p className={cn("text-[11.5px]", toneText(tone))}>{title}</p>
       {verbatim && (
         <p className="mt-0.5 select-text wrap-break-word font-mono text-[11px] text-fg-mut">

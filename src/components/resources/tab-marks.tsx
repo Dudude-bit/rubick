@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import type { DetailTabGlyph, DetailTabMark } from "./detail-tab";
+import { TONE_BG } from "@/lib/tone";
 
 /** 5px, which is the smallest disc that still reads as round rather than as dirt. */
 const DOT = "h-[5px] w-[5px] flex-none rounded-full";
@@ -59,12 +60,7 @@ export function TabMark({
     );
   }
   if (mark.shows === "severity") {
-    return (
-      <span
-        aria-hidden="true"
-        className={cn(DOT, mark.tone === "err" ? "bg-err" : "bg-warn")}
-      />
-    );
+    return <span aria-hidden="true" className={cn(DOT, TONE_BG[mark.tone])} />;
   }
   return (
     <span

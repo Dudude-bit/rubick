@@ -102,6 +102,7 @@ import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
+import { TONE_TEXT } from "@/lib/tone";
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -682,9 +683,7 @@ export function PodDetail() {
           // the tail of it — printing both is the same word twice with a
           // prefix.
           !pod?.status.display?.endsWith(problem.reason) && (
-            <span
-              className={`text-[11px] ${problem.tone === "err" ? "text-err" : "text-warn"}`}
-            >
+            <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
               {problem.reason}
             </span>
           )
