@@ -22,6 +22,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
+  DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
   TlsCertificate,
@@ -31,6 +32,7 @@ import {
   expandEnv,
   ROUTING_STALE,
   useBackingLists,
+  controllerContainers,
   workloadArgs,
   workloadEnv,
   type BackingSources,
@@ -138,14 +140,9 @@ export async function fetchController(): Promise<ControllerInfo> {
     );
   }
 
-  let manifest: string;
+  let containers: DeploymentContainerInfo[];
   try {
-    manifest = await commands.getManifest(
-      workload.kind,
-      "apps/v1",
-      workload.name,
-      workload.namespace
-    );
+    containers = await controllerContainers(workload);
   } catch (error) {
     return {
       workload,
@@ -161,8 +158,8 @@ export async function fetchController(): Promise<ControllerInfo> {
     };
   }
 
-  const args = workloadArgs(manifest);
-  const env = workloadEnv(manifest);
+  const args = workloadArgs(containers);
+  const env = workloadEnv(containers);
   const watching = {
     controllerClass: flagValue(args, "controller-class"),
     ingressClass: flagValue(args, "ingress-class"),

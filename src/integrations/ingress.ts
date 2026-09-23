@@ -19,7 +19,6 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
-import { load } from "js-yaml";
 
 import type { en } from "@/i18n/catalogue";
 import { commands } from "@/lib/commands";
@@ -29,6 +28,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
   ChainStop,
+  DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
   ObjectRef,
@@ -264,34 +264,30 @@ export function useBackingLists(enabled = true) {
   });
 }
 
-interface WorkloadManifest {
-  spec?: {
-    template?: {
-      spec?: {
-        containers?: Array<{
-          args?: unknown[];
-          command?: unknown[];
-          env?: Array<{ name?: string; value?: string }>;
-        }>;
-      };
-    };
-  };
+/**
+ * A controller's containers, as its workload's template declares them.
+ *
+ * Both ingress controllers keep something here that exists nowhere in the
+ * API server — Traefik's entry points, nginx's `--configmap` — so both read
+ * the workload, and neither should have its own idea of where a container's
+ * arguments live.
+ */
+export async function controllerContainers(
+  workload: Pick<ControllerWorkload, "kind" | "name" | "namespace">
+): Promise<DeploymentContainerInfo[]> {
+  const detail =
+    workload.kind === "Deployment"
+      ? await commands.getDeployment(workload.name, workload.namespace)
+      : await commands.getDaemonset(workload.name, workload.namespace);
+  return detail.containers;
 }
 
-/**
- * The flags a controller's process was started with.
- *
- * Both ingress controllers keep something in here that exists nowhere in the
- * API server — Traefik's entry points, nginx's `--configmap` — so both read
- * the workload's own manifest, and neither should have its own idea of where
- * a container's arguments live.
- */
-export function workloadArgs(manifest: string): string[] {
-  const parsed = load(manifest) as WorkloadManifest | undefined;
-  const containers = parsed?.spec?.template?.spec?.containers ?? [];
-  return containers.flatMap((container) =>
-    [...(container.command ?? []), ...(container.args ?? [])].map(String)
-  );
+/** The flags a controller's process was started with. */
+export function workloadArgs(containers: DeploymentContainerInfo[]): string[] {
+  return containers.flatMap((container) => [
+    ...container.command,
+    ...container.args,
+  ]);
 }
 
 /**
@@ -302,14 +298,13 @@ export function workloadArgs(manifest: string): string[] {
  * the flag without doing the same substitution names a ConfigMap in a
  * namespace called `$(POD_NAMESPACE)`, which does not exist.
  */
-export function workloadEnv(manifest: string): Record<string, string> {
-  const parsed = load(manifest) as WorkloadManifest | undefined;
-  const containers = parsed?.spec?.template?.spec?.containers ?? [];
+export function workloadEnv(
+  containers: DeploymentContainerInfo[]
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const container of containers) {
-    for (const entry of container.env ?? []) {
-      if (entry.name && entry.value !== undefined)
-        env[entry.name] = entry.value;
+    for (const entry of container.env) {
+      if (entry.value !== null) env[entry.name] = entry.value;
     }
   }
   return env;

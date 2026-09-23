@@ -4,7 +4,8 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listDeployments: vi.fn(),
     listDaemonsets: vi.fn(),
-    getManifest: vi.fn(),
+    getDeployment: vi.fn(),
+    getDaemonset: vi.fn(),
   },
 }));
 

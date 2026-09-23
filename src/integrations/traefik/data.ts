@@ -31,6 +31,7 @@ import {
   BACKING_NOT_READ,
   useBackingLists,
   type BackingLists,
+  controllerContainers,
   workloadArgs,
   type BackingSources,
   findControllerWorkload,
@@ -203,13 +204,7 @@ export async function fetchController(): Promise<ControllerInfo> {
 
   let args: string[];
   try {
-    const manifest = await commands.getManifest(
-      workload.kind,
-      "apps/v1",
-      workload.name,
-      workload.namespace
-    );
-    args = workloadArgs(manifest);
+    args = workloadArgs(await controllerContainers(workload));
   } catch (error) {
     return {
       workload,

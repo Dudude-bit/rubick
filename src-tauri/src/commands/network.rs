@@ -269,9 +269,48 @@ pub struct IngressClassSummary {
     /// Carries the default-class annotation, so an Ingress that names no
     /// class lands here.
     pub is_default: bool,
+    /// `spec.parameters`: the controller-specific object the class names.
+    pub parameters: Option<IngressClassParameters>,
+}
+
+/// An `IngressClass`'s `spec.parameters`, as written.
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngressClassParameters {
+    pub api_group: Option<String>,
+    pub kind: String,
+    pub name: String,
+    pub scope: Option<String>,
+    pub namespace: Option<String>,
 }
 
 const DEFAULT_CLASS_ANNOTATION: &str = "ingressclass.kubernetes.io/is-default-class";
+
+fn is_default(c: &k8s_openapi::api::networking::v1::IngressClass) -> bool {
+    c.annotations()
+        .get(DEFAULT_CLASS_ANNOTATION)
+        .map(String::as_str)
+        == Some("true")
+}
+
+fn summary_of(c: &k8s_openapi::api::networking::v1::IngressClass) -> IngressClassSummary {
+    IngressClassSummary {
+        name: c.name_any(),
+        controller: c.spec.as_ref().and_then(|s| s.controller.clone()),
+        is_default: is_default(c),
+        parameters: c
+            .spec
+            .as_ref()
+            .and_then(|s| s.parameters.as_ref())
+            .map(|p| IngressClassParameters {
+                api_group: p.api_group.clone(),
+                kind: p.kind.clone(),
+                name: p.name.clone(),
+                scope: p.scope.clone(),
+                namespace: p.namespace.clone(),
+            }),
+    }
+}
 
 #[tauri::command]
 pub async fn resolve_ingress_class(
@@ -285,22 +324,7 @@ pub async fn resolve_ingress_class(
     >(state, None, None, None)
     .await?;
 
-    let is_default = |c: &k8s_openapi::api::networking::v1::IngressClass| {
-        c.annotations()
-            .get(DEFAULT_CLASS_ANNOTATION)
-            .map(String::as_str)
-            == Some("true")
-    };
-
-    let available: Vec<IngressClassSummary> = classes
-        .items
-        .iter()
-        .map(|c| IngressClassSummary {
-            name: c.name_any(),
-            controller: c.spec.as_ref().and_then(|s| s.controller.clone()),
-            is_default: is_default(c),
-        })
-        .collect();
+    let available: Vec<IngressClassSummary> = classes.items.iter().map(summary_of).collect();
 
     let (matched, via_default) = match &class_name {
         Some(wanted) => (
@@ -347,4 +371,34 @@ pub async fn delete_endpoints(
     state: State<'_, AppState>,
 ) -> Result<()> {
     crate::commands::helpers::delete_resource::<Endpoints>(name, namespace, state, None).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The ALB page joins a class to its `IngressClassParams` through this
+    /// reference, and the summary is now the only way it arrives: dropped
+    /// here, every class reads as configured by nothing.
+    #[test]
+    fn a_class_summary_carries_the_parameters_it_names() {
+        let class: k8s_openapi::api::networking::v1::IngressClass =
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": "alb" },
+                "spec": {
+                    "controller": "ingress.k8s.aws/alb",
+                    "parameters": {
+                        "apiGroup": "elbv2.k8s.aws",
+                        "kind": "IngressClassParams",
+                        "name": "internet-facing"
+                    }
+                }
+            }))
+            .expect("an IngressClass");
+        let summary = summary_of(&class);
+        let parameters = summary.parameters.expect("the reference");
+        assert_eq!(parameters.kind, "IngressClassParams");
+        assert_eq!(parameters.name, "internet-facing");
+        assert_eq!(parameters.api_group.as_deref(), Some("elbv2.k8s.aws"));
+    }
 }

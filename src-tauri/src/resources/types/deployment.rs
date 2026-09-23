@@ -70,6 +70,10 @@ pub struct DeploymentContainerInfo {
     pub resources: DeploymentContainerResources,
     pub env: Vec<EnvVarInfo>,
     pub env_from: Vec<EnvFromInfo>,
+    /// What the container runs, as the template says: ingress controllers
+    /// keep their configuration in these flags, and nowhere in the API.
+    pub command: Vec<String>,
+    pub args: Vec<String>,
 }
 
 /// A pod template's containers, split the way `PodInfo` splits a pod's.
@@ -300,6 +304,8 @@ impl DeploymentContainerInfo {
             resources,
             env: extract_env_vars(container),
             env_from: extract_env_from(container),
+            command: container.command.clone().unwrap_or_default(),
+            args: container.args.clone().unwrap_or_default(),
         }
     }
 }

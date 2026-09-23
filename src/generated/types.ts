@@ -410,6 +410,15 @@ export interface IngressClassSummary {
   name: string;
   controller: string | null;
   isDefault: boolean;
+  parameters: IngressClassParameters | null;
+}
+
+export interface IngressClassParameters {
+  apiGroup: string | null;
+  kind: string;
+  name: string;
+  scope: string | null;
+  namespace: string | null;
 }
 
 export interface ServiceBacking {
@@ -668,6 +677,8 @@ export interface DeploymentContainerInfo {
   resources: DeploymentContainerResources;
   env: EnvVarInfo[];
   envFrom: EnvFromInfo[];
+  command: string[];
+  args: string[];
 }
 
 export interface EnvFromInfo {
@@ -1263,6 +1274,11 @@ export interface FrontendLogEntry {
 export interface BinaryLocation {
   name: string;
   path: string | null;
+}
+
+export interface ObjectMetadata {
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
 }
 
 export interface DryRun {

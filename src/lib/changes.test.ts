@@ -28,6 +28,8 @@ function container(
     phase: "app",
     ports: [],
     resources: { requests: {}, limits: {} },
+    command: [],
+    args: [],
     env: [],
     envFrom: [],
     ...over,

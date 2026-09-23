@@ -3,24 +3,25 @@
  *
  * The one read nothing in the app made before is the second line of the join:
  * `IngressClass.spec.parameters` names an `IngressClassParams`, and
- * `IngressClassBinding` — what `resolve_ingress_class` answers with — carries
+ * `IngressClassBinding` — what `resolve_ingress_class` answered with — carried
  * a name, a controller and a default flag and nothing else. So the scheme,
  * the certificate, the WAF ACL and the subnets of every ALB in the cluster
  * sat in an object the app listed as an anonymous custom resource, joined to
  * nothing.
  *
- * There is no `get_ingress_class` command, and the parameters reference is
- * not in any generated type, so the manifest is read and the one field taken
- * out of it. One `get` per class whose controller is this one, which on any
- * real cluster is one or two.
+ * `resolve_ingress_class` carries each class's `spec.parameters` now, so
+ * the join needs no read of its own.
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
+import type {
+  CustomResourceInfo,
+  IngressClassSummary,
+  IngressInfo,
+} from "@/generated/types";
 import { ROUTING_STALE } from "../ingress";
 import { INGRESS_CLASS_PARAMS_CRD, TARGET_GROUP_BINDING_CRD } from "./model";
 
@@ -53,28 +54,15 @@ const listKind = async (
   }
 };
 
-/** The `IngressClassParams` an IngressClass names, from its manifest. */
-async function parametersOf(className: string): Promise<string | null> {
-  try {
-    const manifest = await commands.getManifest(
-      "IngressClass",
-      "networking.k8s.io/v1",
-      className,
-      null
-    );
-    const parsed = load(manifest) as
-      { spec?: { parameters?: { kind?: string; name?: string } } } | undefined;
-    const parameters = parsed?.spec?.parameters;
-    if (!parameters?.name) return null;
-    // Only this controller's own kind. An IngressClass may point its
-    // parameters at anything, and reading somebody else's object as an
-    // `IngressClassParams` would invent fields it never had.
-    if (parameters.kind && parameters.kind !== "IngressClassParams")
-      return null;
-    return parameters.name;
-  } catch {
-    return null;
-  }
+/**
+ * The `IngressClassParams` a class names. Only this controller's own kind:
+ * an IngressClass may point its parameters at anything, and reading somebody
+ * else's object as an `IngressClassParams` would invent fields it never had.
+ */
+export function parametersOf(entry: IngressClassSummary): string | null {
+  const parameters = entry.parameters;
+  if (!parameters) return null;
+  return parameters.kind === "IngressClassParams" ? parameters.name : null;
 }
 
 export async function fetchAlbSources(): Promise<AlbSources> {
@@ -86,22 +74,20 @@ export async function fetchAlbSources(): Promise<AlbSources> {
     listKind(TARGET_GROUP_BINDING_CRD, unread),
   ]);
 
-  const ownClasses = binding.available
-    .filter((entry) => entry.controller === CONTROLLER)
-    .map((entry) => entry.name);
-
-  const named = await Promise.all(
-    ownClasses.map(async (name) => [name, await parametersOf(name)] as const)
+  const own = binding.available.filter(
+    (entry) => entry.controller === CONTROLLER
   );
+  const ownClasses = own.map((entry) => entry.name);
 
   return {
     ingresses,
     params,
     bindings,
     classParams: new Map(
-      named.flatMap(([name, parameters]) =>
-        parameters ? [[name, parameters] as const] : []
-      )
+      own.flatMap((entry) => {
+        const parameters = parametersOf(entry);
+        return parameters ? [[entry.name, parameters] as const] : [];
+      })
     ),
     ownClasses,
     unread,

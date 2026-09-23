@@ -5238,6 +5238,12 @@ export const ru: Catalogue = {
     azureIdentityFinding4: "нет аннотации",
     azureIdentityFinding5:
       ", так что токен не относится ни к какому удостоверению. Каждый вызов к Azure возвращает 401, и ничто в Kubernetes не объясняет почему.",
+    azureUnreadNote:
+      "Ниже нарисовано то, что ответили остальные чтения; этого среди них нет, и ничто здесь не говорит, что оно показало бы.",
+    azureAccountUnreadTitle:
+      "{pod} запрашивает удостоверение, но его ServiceAccount прочитать не удалось",
+    azureAccountUnread:
+      "Называет ли {account} в {namespace} удостоверение Azure, неизвестно: {reason}",
     readingIdentities: "Читаем удостоверения…",
     noPodCarries: "Ни один под в этом кластере не несёт",
     nothingFederatingToAzure:

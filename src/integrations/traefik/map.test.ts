@@ -19,6 +19,7 @@ const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
   controller: "traefik.io/ingress-controller",
   isDefault: true,
+  parameters: null,
 };
 
 function ingress(

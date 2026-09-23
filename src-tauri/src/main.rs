@@ -478,6 +478,7 @@ fn main() {
             commands::manifest::apply_manifest,
             commands::manifest::dry_run_manifest,
             commands::manifest::get_manifest,
+            commands::manifest::get_object_metadata,
             // Logging commands
             commands::logging::log_frontend_events_batch,
         ])
