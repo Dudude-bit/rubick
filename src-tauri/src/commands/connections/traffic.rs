@@ -23,22 +23,7 @@ pub(super) fn service_ref(svc: &Service, ns: &str) -> ObjectRef {
     })
 }
 
-pub(super) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
-    let status = pod.status.as_ref();
-    ObjectRef::new(
-        "Pod",
-        &pod.name_any(),
-        Some(ns.to_string()),
-        Existence::Present,
-    )
-    .with_facts(ObjectFacts::Pod {
-        phase: status
-            .and_then(|s| s.phase.clone())
-            .unwrap_or_else(|| "Unknown".to_string()),
-        display: crate::resources::PodInfo::from(pod).status.display,
-        ready: condition_is_true(status, "Ready"),
-    })
-}
+pub(super) use crate::resources::published::pod_ref;
 
 pub(super) fn service_selector(svc: &Service) -> BTreeMap<String, String> {
     svc.spec

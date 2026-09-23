@@ -249,7 +249,7 @@ pub fn unnamed_ports_of(service: &Service, pod: &Pod) -> Vec<String> {
         .collect()
 }
 
-fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
+pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
     ObjectRef::new(
         "Pod",
         &pod.name_any(),

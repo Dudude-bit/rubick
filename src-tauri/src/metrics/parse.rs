@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use kube::api::ListParams;
-use kube::core::DynamicObject;
+use kube::core::{DynamicObject, GroupVersionKind};
 use kube::discovery::ApiResource;
 use kube::Api;
 
@@ -63,28 +63,14 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
 
 fn metrics_api_resource(kind: &str) -> ApiResource {
     let plural = match kind {
-        "PodMetrics" => "pods",
-        "NodeMetrics" => "nodes",
-        _ => {
-            let mut lower = kind.to_ascii_lowercase();
-            lower.push('s');
-            return ApiResource {
-                group: "metrics.k8s.io".to_string(),
-                version: "v1beta1".to_string(),
-                api_version: "metrics.k8s.io/v1beta1".to_string(),
-                kind: kind.to_string(),
-                plural: lower,
-            };
-        }
+        "PodMetrics" => "pods".to_string(),
+        "NodeMetrics" => "nodes".to_string(),
+        _ => format!("{}s", kind.to_ascii_lowercase()),
     };
-
-    ApiResource {
-        group: "metrics.k8s.io".to_string(),
-        version: "v1beta1".to_string(),
-        api_version: "metrics.k8s.io/v1beta1".to_string(),
-        kind: kind.to_string(),
-        plural: plural.to_string(),
-    }
+    ApiResource::from_gvk_with_plural(
+        &GroupVersionKind::gvk("metrics.k8s.io", "v1beta1", kind),
+        &plural,
+    )
 }
 
 fn metrics_api(ctx: &ResourceContext, kind: &str) -> Api<DynamicObject> {
@@ -180,6 +166,19 @@ mod tests {
             metadata: None,
             details: None,
         }))
+    }
+
+    /// A wrong plural or apiVersion lists a path the server does not have,
+    /// and the panel then reads as "metrics unavailable" on every cluster.
+    #[test]
+    fn metrics_kinds_resolve_to_the_paths_the_server_serves() {
+        let pods = metrics_api_resource("PodMetrics");
+        assert_eq!(
+            (pods.api_version.as_str(), pods.plural.as_str()),
+            ("metrics.k8s.io/v1beta1", "pods")
+        );
+        assert_eq!(metrics_api_resource("NodeMetrics").plural, "nodes");
+        assert_eq!(metrics_api_resource("Other").plural, "others");
     }
 
     /// The metrics panel's own third state: "you cannot read metrics" must not

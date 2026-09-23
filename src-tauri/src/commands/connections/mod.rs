@@ -37,9 +37,9 @@ use tauri::State;
 use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::resources::{
-    condition_is_true, facts_of, published, usages_in_pod_spec, AutoscalerMetric, ChainStop,
-    ConditionInfo, ConnectionEdge, Existence, KindScope, ObjectFacts, ObjectRef, Relation,
-    ResourceConnections, Selector, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
+    facts_of, published, usages_in_pod_spec, AutoscalerMetric, ChainStop, ConditionInfo,
+    ConnectionEdge, Existence, KindScope, ObjectFacts, ObjectRef, Relation, ResourceConnections,
+    Selector, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 use crate::utils::Moment;
