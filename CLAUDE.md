@@ -262,6 +262,7 @@ the recorder; the rules that fail silently are these.
   The same holds for a resource quantity: `shared/quantity-conformance.json`,
   against `utils::quantities::parse_quantity` and `parseQuantity` — and for a
   log line as text (Download in Rust, Copy in TS): `shared/log-text-conformance.json`.
+  So does a label selector, `null` included: `shared/label-selector-conformance.json`.
   Where one question has two evaluators, the corpus is what makes them one
   answer; a doc comment listing what the second one does not implement is a
   record of the drift, not a check on it.
@@ -296,19 +297,18 @@ bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies
 
 Half-done is invisible: each of these fails by the kind simply not appearing.
 
-`RESOURCE_REGISTRY` entry · a route file under the right section · the item in
-the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+`RESOURCE_REGISTRY` entry · its group, version, plural and scope in
+`shared/kinds.json`, which the registry reads them from and a Rust test holds
+to `k8s-openapi` · a route file under the right section · the item in the
+Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
-Then three tables keyed by kind, each of which fails by staying quiet rather
-than by breaking. `API_GROUPS` in `lib/delivery.ts` — a kind absent from it
-answers `null`, which every caller reads as "no delivery to speak of", so the
-column, the detail block and the peek marks go silent together. `ROUTABLE` in
-`ResourceRef.tsx` — absent, and every reference to the kind renders as text
-instead of a link. `peek-actions.ts` — absent, and the peek offers no Delete
-even though the command exists. All three have guards now; the guards are what
-noticed.
+Then two tables keyed by kind, each of which fails by staying quiet rather
+than by breaking. `ROUTABLE` in `ResourceRef.tsx` — absent, and every
+reference to the kind renders as text instead of a link. `peek-actions.ts` —
+absent, and the peek offers no Delete even though the command exists. Both
+have guards now; the guards are what noticed.
 
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in

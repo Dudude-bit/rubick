@@ -7,6 +7,7 @@
  * deleted with the whole suite green.
  */
 import type { T } from "@/i18n/useT";
+import { unknowableWords } from "../monitors/words";
 import type { RuleRow } from "./model";
 
 export function verdictOf(
@@ -62,7 +63,10 @@ export function verdictOf(
     case "pickedUpUnknown":
       return {
         head: t("monitors", "verdictPickedUpUnknown"),
-        body: worst.reason,
+        body:
+          worst.why.kind === "unread"
+            ? worst.why.reason
+            : unknowableWords(worst.why, t),
       };
   }
   if (row.pickedUp.state === "noKind")

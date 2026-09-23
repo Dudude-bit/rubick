@@ -224,6 +224,22 @@ mod tests {
         assert!(!is_cluster_scoped("Gateway"));
     }
 
+    /// A manifest is applied and its YAML fetched at a path built from these
+    /// two guesses. For a kind the registry knows, the guess and the registry
+    /// are one fact, and a kind that disagreed would 404 on its YAML tab.
+    #[test]
+    fn the_guesses_agree_with_the_registry_on_every_kind_it_knows() {
+        for facts in crate::resources::every_kind() {
+            let kind = facts.kind.as_str();
+            assert_eq!(pluralize(kind), facts.plural, "{kind}");
+            assert_eq!(
+                is_cluster_scoped(kind),
+                facts.scope == crate::resources::KindScope::Cluster,
+                "{kind}"
+            );
+        }
+    }
+
     #[test]
     fn test_pluralize() {
         assert_eq!(pluralize("Pod"), "pods");

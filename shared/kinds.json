@@ -1,0 +1,208 @@
+{
+  "about": "What Kubernetes says about every kind src/lib/resource-registry.ts knows: its API group (\"\" is the core group), the version this app reads it at, the plural its URLs are built from, and whether it lives in a namespace. The registry imports this file instead of restating any of it. src-tauri/src/resources/kinds.rs reads it too, and its tests hold each built-in kind to k8s-openapi's constants and each Gateway API kind to the table src-tauri/src/commands/gateway.rs addresses it by. A Gateway API kind's version is the one read first; the version actually read is whichever the cluster serves.",
+  "kinds": [
+    {
+      "kind": "Pod",
+      "group": "",
+      "version": "v1",
+      "plural": "pods",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Deployment",
+      "group": "apps",
+      "version": "v1",
+      "plural": "deployments",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "ReplicaSet",
+      "group": "apps",
+      "version": "v1",
+      "plural": "replicasets",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "StatefulSet",
+      "group": "apps",
+      "version": "v1",
+      "plural": "statefulsets",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "DaemonSet",
+      "group": "apps",
+      "version": "v1",
+      "plural": "daemonsets",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Job",
+      "group": "batch",
+      "version": "v1",
+      "plural": "jobs",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "CronJob",
+      "group": "batch",
+      "version": "v1",
+      "plural": "cronjobs",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "ConfigMap",
+      "group": "",
+      "version": "v1",
+      "plural": "configmaps",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Secret",
+      "group": "",
+      "version": "v1",
+      "plural": "secrets",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Service",
+      "group": "",
+      "version": "v1",
+      "plural": "services",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Ingress",
+      "group": "networking.k8s.io",
+      "version": "v1",
+      "plural": "ingresses",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "NetworkPolicy",
+      "group": "networking.k8s.io",
+      "version": "v1",
+      "plural": "networkpolicies",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Gateway",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "gateways",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "GatewayClass",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "gatewayclasses",
+      "scope": "cluster"
+    },
+    {
+      "kind": "HTTPRoute",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "httproutes",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "GRPCRoute",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "grpcroutes",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "TLSRoute",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "tlsroutes",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "TCPRoute",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "tcproutes",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "UDPRoute",
+      "group": "gateway.networking.k8s.io",
+      "version": "v1",
+      "plural": "udproutes",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "group": "",
+      "version": "v1",
+      "plural": "persistentvolumeclaims",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "PersistentVolume",
+      "group": "",
+      "version": "v1",
+      "plural": "persistentvolumes",
+      "scope": "cluster"
+    },
+    {
+      "kind": "StorageClass",
+      "group": "storage.k8s.io",
+      "version": "v1",
+      "plural": "storageclasses",
+      "scope": "cluster"
+    },
+    {
+      "kind": "Endpoints",
+      "group": "",
+      "version": "v1",
+      "plural": "endpoints",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Node",
+      "group": "",
+      "version": "v1",
+      "plural": "nodes",
+      "scope": "cluster"
+    },
+    {
+      "kind": "Event",
+      "group": "",
+      "version": "v1",
+      "plural": "events",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "Namespace",
+      "group": "",
+      "version": "v1",
+      "plural": "namespaces",
+      "scope": "cluster"
+    },
+    {
+      "kind": "HorizontalPodAutoscaler",
+      "group": "autoscaling",
+      "version": "v2",
+      "plural": "horizontalpodautoscalers",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "PodDisruptionBudget",
+      "group": "policy",
+      "version": "v1",
+      "plural": "poddisruptionbudgets",
+      "scope": "namespaced"
+    },
+    {
+      "kind": "CustomResourceDefinition",
+      "group": "apiextensions.k8s.io",
+      "version": "v1",
+      "plural": "customresourcedefinitions",
+      "scope": "cluster"
+    }
+  ]
+}

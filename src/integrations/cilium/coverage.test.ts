@@ -96,9 +96,16 @@ describe("whether a selector picks an endpoint", () => {
   /**
    * An operator this app does not implement is not one it may answer "no"
    * to. `false` would put the endpoint in the "no policy selects it" pile,
-   * which is the reading a reader acts on.
+   * which is the reading a reader acts on. `NotIn ()` was answered "yes",
+   * which filed every endpoint under a policy Kubernetes would not build.
    */
-  it("answers an operator it does not know with neither yes nor no", () => {
+  it("answers a selector it cannot evaluate with neither yes nor no", () => {
+    expect(
+      selects(
+        { matchExpressions: [{ key: "app", operator: "NotIn", values: [] }] },
+        labels
+      )
+    ).toBeNull();
     expect(
       selects(
         { matchExpressions: [{ key: "app", operator: "Superset" }] },

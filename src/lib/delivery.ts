@@ -26,60 +26,21 @@ import type { T } from "@/i18n/useT";
 import { load } from "js-yaml";
 
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
+import { kindFacts } from "./resource-registry";
 import { formatAge } from "./utils";
 
 /**
- * The API group each kind lives in, `""` for the core group.
+ * The API group a kind lives in, `""` for the core group, from
+ * `shared/kinds.json`.
  *
- * Here and not spelled out at seventeen call sites, because Flux's inventory
- * id is `namespace_name_group_kind` and a group written `"app"` at one call
- * site would not fail — it would quietly report a delivered object as
- * *labelled and disowned*, which is the loudest wrong thing this feature can
- * say.
- *
- * **Every kind the registry names belongs here.** A missing one makes
- * `apiGroupOf` answer `null`, which every caller reads as "no delivery to
- * speak of" — column, detail block and peek go quiet together, and nothing
- * fails. Whether a *list* draws the column is {@link MADE_BY_THE_CLUSTER}'s
- * separate question.
+ * Flux's inventory id is `namespace_name_group_kind`, so a group written
+ * wrong would not fail — it would quietly report a delivered object as
+ * *labelled and disowned*. `null` for a kind the registry does not know,
+ * which every caller reads as "no delivery to speak of". Whether a *list*
+ * draws the column is {@link MADE_BY_THE_CLUSTER}'s separate question.
  */
-const GATEWAY = "gateway.networking.k8s.io";
-
-const API_GROUPS: Record<string, string> = {
-  ConfigMap: "",
-  CronJob: "batch",
-  CustomResourceDefinition: "apiextensions.k8s.io",
-  DaemonSet: "apps",
-  Deployment: "apps",
-  Endpoints: "",
-  Event: "",
-  Gateway: GATEWAY,
-  GatewayClass: GATEWAY,
-  GRPCRoute: GATEWAY,
-  HorizontalPodAutoscaler: "autoscaling",
-  HTTPRoute: GATEWAY,
-  Ingress: "networking.k8s.io",
-  Job: "batch",
-  Namespace: "",
-  NetworkPolicy: "networking.k8s.io",
-  Node: "",
-  PersistentVolume: "",
-  PersistentVolumeClaim: "",
-  Pod: "",
-  PodDisruptionBudget: "policy",
-  ReplicaSet: "apps",
-  Secret: "",
-  Service: "",
-  StatefulSet: "apps",
-  StorageClass: "storage.k8s.io",
-  TCPRoute: GATEWAY,
-  TLSRoute: GATEWAY,
-  UDPRoute: GATEWAY,
-};
-
-/** A kind's group, or `null` for one this table does not name. */
 export function apiGroupOf(kind: string): string | null {
-  return API_GROUPS[kind] ?? null;
+  return kindFacts(kind)?.group ?? null;
 }
 
 /**
@@ -150,8 +111,8 @@ export function deliveryScopeOf(
  *
  * The YAML editor has no typed object behind it — it has the document, which
  * states its own `apiVersion`, `kind` and `metadata`. Reading the query out of
- * the text is therefore both free and *better* than {@link API_GROUPS}: a
- * custom resource's group is in the document and will never be in that table,
+ * the text is therefore both free and *better* than {@link apiGroupOf}: a
+ * custom resource's group is in the document and will never be in the registry,
  * so an Argo `Application` edited by hand gets the same answer a Deployment
  * does.
  *
@@ -200,7 +161,7 @@ function stringsOf(value: unknown): Record<string, string> {
   return out;
 }
 
-/** {@link deliveryOf} for a kind whose group {@link API_GROUPS} names. */
+/** {@link deliveryOf} for a kind whose group {@link apiGroupOf} knows. */
 export function deliveryOfKind(
   kind: string,
   object: Parameters<typeof deliveryOf>[2]

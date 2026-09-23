@@ -25,6 +25,7 @@ impl OptionTimeExt for Option<&Time> {
 
 mod connections;
 mod gateway;
+mod kinds;
 mod network;
 pub mod node_budget;
 pub mod published;
@@ -38,6 +39,9 @@ mod workloads;
 
 pub use connections::*;
 pub use gateway::*;
+#[cfg(test)]
+pub(crate) use kinds::every_kind;
+pub use kinds::{facts_of, KindFacts, KindScope};
 pub use network::*;
 pub use published::{
     EndpointSource, PublishedEndpoint, PublishedPort, ServicePublished, UnpublishedPod,

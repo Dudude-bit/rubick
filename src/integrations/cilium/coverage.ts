@@ -16,6 +16,7 @@
  */
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { labelSelectorMatches, type LabelSelector } from "@/lib/label-selector";
 import { getValueByPath } from "../kit";
 import { enforcementOf } from "./model";
 
@@ -35,60 +36,18 @@ export function labelsOf(endpoint: CustomResourceInfo): Map<string, string> {
   return labels;
 }
 
-interface Expression {
-  key: string;
-  operator: string;
-  values?: string[];
-}
-
-function expressionHolds(
-  expression: Expression,
-  labels: Map<string, string>
-): boolean {
-  const has = labels.has(expression.key);
-  const value = labels.get(expression.key);
-  const listed = expression.values ?? [];
-  switch (expression.operator) {
-    case "Exists":
-      return has;
-    case "DoesNotExist":
-      return !has;
-    case "In":
-      return has && listed.includes(value as string);
-    case "NotIn":
-      return !has || !listed.includes(value as string);
-    default:
-      // An operator this app does not know is not one it may guess at.
-      return false;
-  }
-}
-
 /**
- * Whether a selector picks these labels, or `null` where the selector cannot
- * be evaluated — an operator we do not implement, so the answer is unknown
- * rather than "no".
+ * Whether a selector picks these labels, or `null` where that cannot be
+ * said: a policy with no `endpointSelector`, or one Kubernetes would refuse
+ * to build. `null` puts the endpoint under "cannot say" rather than in the
+ * "no policy selects it" pile a reader acts on.
  */
 export function selects(
   selector: unknown,
   labels: Map<string, string>
 ): boolean | null {
-  if (typeof selector !== "object" || selector === null) return null;
-  const record = selector as Record<string, unknown>;
-  const matchLabels = (record.matchLabels ?? {}) as Record<string, string>;
-  for (const [key, value] of Object.entries(matchLabels)) {
-    if (labels.get(key) !== value) return false;
-  }
-  const expressions = Array.isArray(record.matchExpressions)
-    ? (record.matchExpressions as Expression[])
-    : [];
-  for (const expression of expressions) {
-    if (
-      !["Exists", "DoesNotExist", "In", "NotIn"].includes(expression.operator)
-    )
-      return null;
-    if (!expressionHolds(expression, labels)) return false;
-  }
-  return true;
+  if (selector === undefined || selector === null) return null;
+  return labelSelectorMatches(selector as LabelSelector, labels);
 }
 
 /** What a policy does for one endpoint. */

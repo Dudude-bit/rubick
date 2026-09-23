@@ -2238,6 +2238,7 @@ export const ru: Catalogue = {
     verdictSelectsNothingBody:
       "{selector} ничему не соответствует в {namespace}.",
     verdictSelectionUnread: "Что он выбирает, посчитать не удалось.",
+    verdictSelectorUnevaluable: "Его селектор не вычисляется.",
     verdictNotPickedUp:
       "Ни один Prometheus его не подхватывает, поэтому его никто не скрейпит.",
     verdictNoInstances:
@@ -2278,6 +2279,8 @@ export const ru: Catalogue = {
     notCounted: "поды, здесь не считаются",
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
+    selectorUnevaluable:
+      "Такой селектор Kubernetes не соберёт (оператор не из In, NotIn, Exists и DoesNotExist, набор без значений или проверка наличия со значениями), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
     chipLabel: "лейбл",
@@ -2295,6 +2298,8 @@ export const ru: Catalogue = {
       "ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
     pickedUpUnknown:
       "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
+    pickedUpUnevaluable:
+      "у {prometheus} селектор, который Kubernetes не соберёт, поэтому подхватывает ли он его, сказать нельзя",
     notJudged: "не оценивается",
     picksUp: "подхватывает",
     picksUpAll: "все мониторы во всех namespace",

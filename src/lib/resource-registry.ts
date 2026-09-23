@@ -30,253 +30,196 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export const RESOURCE_REGISTRY = [
+import kindsFile from "../../shared/kinds.json";
+
+/** What Kubernetes says about a kind, as `shared/kinds.json` states it. */
+export interface KindFacts {
+  kind: string;
+  /** `""` for the core group. */
+  group: string;
+  version: string;
+  plural: string;
+  scope: "namespaced" | "cluster";
+}
+
+const KIND_FACTS = new Map(
+  (kindsFile.kinds as KindFacts[]).map((facts) => [facts.kind, facts])
+);
+
+/** The facts about `kind`, or `undefined` for a kind the file does not name. */
+export function kindFacts(kind: string): KindFacts | undefined {
+  return KIND_FACTS.get(kind);
+}
+
+const ENTRIES = [
   {
     kind: "Pod",
-    plural: "pods",
     displayPlural: "Pods",
     icon: Box,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "Deployment",
-    plural: "deployments",
     displayPlural: "Deployments",
     icon: Layers,
-    apiVersion: "apps/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "ReplicaSet",
-    plural: "replicasets",
     displayPlural: "ReplicaSets",
     // Not `Copy`, the DaemonSet's "one per node": grouped boxes are the
     // Pod's own cube repeated. The plural is never a nav row — nothing lists
     // ReplicaSets — but `getResourceDetailUrl` and the peek's URL read it for
     // the path segment `App.tsx` serves the detail route on.
     icon: Boxes,
-    apiVersion: "apps/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "StatefulSet",
-    plural: "statefulsets",
     displayPlural: "StatefulSets",
     icon: Database,
-    apiVersion: "apps/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "DaemonSet",
-    plural: "daemonsets",
     displayPlural: "DaemonSets",
     // Not Server, which belongs to Nodes: two kinds six sidebar rows apart
     // drawn with one mark stop being two things. Offset frames read as "one
     // copy per node".
     icon: Copy,
-    apiVersion: "apps/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "Job",
-    plural: "jobs",
     displayPlural: "Jobs",
     icon: Briefcase,
-    apiVersion: "batch/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "CronJob",
-    plural: "cronjobs",
     displayPlural: "CronJobs",
     icon: CalendarClock,
-    apiVersion: "batch/v1",
-    scope: "namespaced",
     category: "workloads",
   },
   {
     kind: "ConfigMap",
-    plural: "configmaps",
     displayPlural: "ConfigMaps",
     icon: FileText,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "configuration",
   },
   {
     kind: "Secret",
-    plural: "secrets",
     displayPlural: "Secrets",
     icon: KeyRound,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "configuration",
   },
   {
     kind: "Service",
-    plural: "services",
     displayPlural: "Services",
     icon: Network,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "Ingress",
-    plural: "ingresses",
     displayPlural: "Ingresses",
     icon: Globe,
-    apiVersion: "networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "NetworkPolicy",
-    plural: "networkpolicies",
     displayPlural: "NetworkPolicies",
     // Not the PodDisruptionBudget's shield: both guard something, and two
     // rows in one nav with the same glyph is the nav failing at the one
     // thing it does.
     icon: BrickWall,
-    apiVersion: "networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "Gateway",
-    plural: "gateways",
     displayPlural: "Gateways",
     icon: Router,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "GatewayClass",
-    plural: "gatewayclasses",
     displayPlural: "Gateway Classes",
     icon: Shapes,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "cluster",
     category: "network",
   },
   {
     kind: "HTTPRoute",
-    plural: "httproutes",
     displayPlural: "HTTPRoutes",
     icon: Route,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "GRPCRoute",
-    plural: "grpcroutes",
     displayPlural: "GRPCRoutes",
     icon: Braces,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "TLSRoute",
-    plural: "tlsroutes",
     displayPlural: "TLSRoutes",
     icon: LockKeyhole,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "TCPRoute",
-    plural: "tcproutes",
     displayPlural: "TCPRoutes",
     icon: Cable,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "UDPRoute",
-    plural: "udproutes",
     displayPlural: "UDPRoutes",
     icon: RadioTower,
-    apiVersion: "gateway.networking.k8s.io/v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "PersistentVolumeClaim",
-    plural: "persistentvolumeclaims",
     displayPlural: "PVCs",
     // A claim draws from a volume: the drive with the arrow, so it does not
     // share a mark with the PersistentVolume next to it under Storage.
     icon: HardDriveDownload,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "storage",
   },
   {
     kind: "PersistentVolume",
-    plural: "persistentvolumes",
     displayPlural: "Persistent Volumes",
     icon: HardDrive,
-    apiVersion: "v1",
-    scope: "cluster",
     category: "storage",
   },
   {
     kind: "StorageClass",
-    plural: "storageclasses",
     displayPlural: "Storage Classes",
     icon: Database,
-    apiVersion: "storage.k8s.io/v1",
-    scope: "cluster",
     category: "storage",
   },
   {
     kind: "Endpoints",
-    plural: "endpoints",
     displayPlural: "Endpoints",
     // Not Service's mark: two nav rows drawn with one glyph stop being two
     // things.
     icon: Waypoints,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: "network",
   },
   {
     kind: "Node",
-    plural: "nodes",
     displayPlural: "Nodes",
     icon: Server,
-    apiVersion: "v1",
-    scope: "cluster",
     category: null,
   },
   {
     kind: "Event",
-    plural: "events",
     displayPlural: "Events",
     icon: Activity,
-    apiVersion: "v1",
-    scope: "namespaced",
     category: null,
   },
   {
     kind: "Namespace",
-    plural: "namespaces",
     displayPlural: "Namespaces",
     icon: FolderOpen,
-    apiVersion: "v1",
-    scope: "cluster",
     category: null,
   },
   {
@@ -286,32 +229,40 @@ export const RESOURCE_REGISTRY = [
     // appear by name in Connections and on the workload, where an unregistered
     // kind draws as `CircleDashed`, the app's "I do not know this kind".
     kind: "HorizontalPodAutoscaler",
-    plural: "horizontalpodautoscalers",
     displayPlural: "HorizontalPodAutoscalers",
     icon: Gauge,
-    apiVersion: "autoscaling/v2",
-    scope: "namespaced",
     category: null,
   },
   {
     kind: "PodDisruptionBudget",
-    plural: "poddisruptionbudgets",
     displayPlural: "PodDisruptionBudgets",
     icon: ShieldCheck,
-    apiVersion: "policy/v1",
-    scope: "namespaced",
     category: null,
   },
   {
     kind: "CustomResourceDefinition",
-    plural: "customresourcedefinitions",
     displayPlural: "CRDs",
     icon: Puzzle,
-    apiVersion: "apiextensions.k8s.io/v1",
-    scope: "cluster",
     category: null,
   },
 ] as const;
+
+function withFacts<E extends (typeof ENTRIES)[number]>(entry: E) {
+  const facts = KIND_FACTS.get(entry.kind);
+  if (!facts)
+    throw new Error(`${entry.kind} is registered and not in shared/kinds.json`);
+  const { group, version, plural, scope } = facts;
+  return {
+    ...entry,
+    group,
+    version,
+    plural,
+    scope,
+    apiVersion: group === "" ? version : `${group}/${version}`,
+  };
+}
+
+export const RESOURCE_REGISTRY = ENTRIES.map(withFacts);
 
 export type ResourceKind = (typeof RESOURCE_REGISTRY)[number]["kind"];
 export type ResourceDefinition = (typeof RESOURCE_REGISTRY)[number];
@@ -340,11 +291,9 @@ export function listQueryFor(resourceKind: ResourceKind): {
   namespaced: boolean;
 } {
   const entry = RESOURCE_BY_KIND.get(resourceKind);
-  const apiVersion = entry?.apiVersion ?? "v1";
   return {
-    // `v1` is a version with no group in front of it, and the API server
-    // matches the core group as the empty string.
-    group: apiVersion.includes("/") ? apiVersion.split("/")[0] : "",
+    // The API server matches the core group as the empty string.
+    group: entry?.group ?? "",
     resource: toPlural(resourceKind),
     namespaced: entry?.scope !== "cluster",
   };

@@ -85,6 +85,33 @@ const rowWith = (targets: TargetsRead) =>
 
 describe("the sentence the monitor card leads with", () => {
   /**
+   * A selector Kubernetes would refuse to build has no arm to fall past:
+   * without one the card led with whatever the scrape said, over a
+   * selector nobody can say anything about.
+   */
+  it("leads with a selector that cannot be evaluated", () => {
+    const odd = readMonitor(
+      cr("ServiceMonitor", "web", "shop", {
+        selector: { matchExpressions: [{ key: "app", operator: "Near" }] },
+        endpoints: [{ port: "http" }],
+      }),
+      "ServiceMonitor"
+    );
+    const [row] = rowsOf(
+      [odd],
+      kindOf([prometheus()]),
+      ok([service("web", "shop")]),
+      ok([]),
+      { state: "notConnected" }
+    );
+    const verdict = verdictOf(row, 1, null, null, t);
+    expect(verdict.head).toBe(
+      translate("en", "monitors", "verdictSelectorUnevaluable")
+    );
+    expect(verdict.body).toContain("app Near ()");
+  });
+
+  /**
    * A target Prometheus has discovered and not yet scraped reports health
    * "unknown". The model says so — `targetsUnscraped` — and the card had no
    * arm for it, so the row fell past the switch and past both scrape guards

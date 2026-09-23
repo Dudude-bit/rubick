@@ -26,7 +26,14 @@ import {
   sharedPrefix,
 } from "../monitors/model";
 import { Chip, Chips, Step, Sub } from "../monitors/story";
-import { DOT, RING, SELECTED, WORDS, type RowTone } from "../monitors/words";
+import {
+  DOT,
+  RING,
+  SELECTED,
+  WORDS,
+  unknowableWords,
+  type RowTone,
+} from "../monitors/words";
 import { rowWords } from "./words";
 import { verdictOf } from "./verdict";
 import {
@@ -619,7 +626,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
           )}
           {pickedUp.state === "unknown" && pickedUp.by.length === 0 && (
             <p className="mt-1 text-xs text-warn">
-              {t("monitors", "pickedUpUnknown", { reason: pickedUp.reason })}
+              {unknowableWords(pickedUp.why, t)}
             </p>
           )}
           {pickedUp.state === "noKind" && (
