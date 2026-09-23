@@ -254,7 +254,8 @@ the recorder; the rules that fail silently are these.
 - Touch a log query term and both evaluators must agree: add the cases to
   `shared/log-query-conformance.json` and run the Rust and the TypeScript side.
   The same holds for a resource quantity: `shared/quantity-conformance.json`,
-  against `utils::quantities::parse_quantity` and `parseQuantity`.
+  against `utils::quantities::parse_quantity` and `parseQuantity` — and for a
+  log line as text (Download in Rust, Copy in TS): `shared/log-text-conformance.json`.
   Where one question has two evaluators, the corpus is what makes them one
   answer; a doc comment listing what the second one does not implement is a
   record of the drift, not a check on it.

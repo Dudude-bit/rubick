@@ -10,6 +10,7 @@ pub mod config;
 pub mod filter;
 pub mod parser;
 pub mod streamer;
+pub mod text;
 pub mod types;
 
 pub use ansi::{AnsiColor, StyledSegment, TextStyle};
