@@ -342,6 +342,59 @@ describe("the palette's resource rows", () => {
 
     expect(hintText(entries)).toBe("Nothing matches “api”.");
   });
+
+  /**
+   * A failed cluster has answered, and searched nothing. Counted as searched,
+   * its row said "failed — retry" under a hint saying nothing matches.
+   */
+  it("counts only the clusters whose search completed in an empty result", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        scope: { kind: "all" },
+        shownClusters: [
+          cluster("k3d-dev"),
+          cluster("stage", "failed", "forbidden"),
+        ],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing matches “api” on the 1 of 2 clusters that were searched."
+    );
+  });
+
+  /** One cluster, and its search failed: nothing was searched at all. */
+  it("says nothing was searched when no cluster's search completed", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [cluster("k3d-dev", "failed", "unreachable")],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing has been searched: the search did not complete on any cluster here."
+    );
+  });
+
+  /** Where every cluster is cold, the reason is that none is connected. */
+  it("says no cluster is connected when every one was skipped for it", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        scope: { kind: "all" },
+        shownClusters: [
+          cluster("k3d-dev", "skipped", "not-connected"),
+          cluster("prod-eu", "skipped", "not-connected"),
+        ],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing has been searched: no cluster here is connected yet."
+    );
+  });
 });
 
 describe("the palette's entries after a bang", () => {

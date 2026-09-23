@@ -113,6 +113,8 @@ interface JoinedParts<T> {
    * cannot read would then poll at full rate for as long as it stayed open.
    */
   settled: number[];
+  /** Which parts' latest read failed. */
+  failed: boolean[];
   isLoading: boolean;
   /** Some part is in flight right now. */
   fetching: boolean;
@@ -136,6 +138,7 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
     settled: parts.map((part) =>
       Math.max(part.dataUpdatedAt, part.errorUpdatedAt)
     ),
+    failed: parts.map((part) => part.status === "error"),
     isLoading: parts.some((part) => part.isLoading),
     fetching: parts.some((part) => part.fetchStatus === "fetching"),
     error: parts.find((part) => part.error)?.error ?? null,
@@ -195,14 +198,22 @@ export function useLiveQueries<T>(options: {
     recording: false,
   });
 
-  const { data, stamps, settled, isLoading, fetching, error, refetchers } =
-    useQueries({
-      queries: options.queries.map((query) => ({
-        ...query,
-        refetchInterval: everyMs,
-      })),
-      combine: joinParts,
-    });
+  const {
+    data,
+    stamps,
+    settled,
+    failed,
+    isLoading,
+    fetching,
+    error,
+    refetchers,
+  } = useQueries({
+    queries: options.queries.map((query) => ({
+      ...query,
+      refetchInterval: everyMs,
+    })),
+    combine: joinParts,
+  });
   const waitingSince = useWaitingSince(isLoading && fetching);
 
   // The join is only as fresh as its stalest part: reporting the newest would
@@ -215,11 +226,13 @@ export function useLiveQueries<T>(options: {
   // How many rounds in a row came back identical, a round being one answer
   // from every part. `data` is React Query's own "deep-equal to the last one"
   // per part, held still by `joinParts`, so one reference comparison is an
-  // exact "no part of this group changed".
-  const round = useRef<{ settled: number[]; data: Array<T | undefined> }>({
-    settled: [],
-    data: [],
-  });
+  // exact "no part of this group changed". A part answering after a failure
+  // with what it said before the failure has changed all the same.
+  const round = useRef<{
+    settled: number[];
+    data: Array<T | undefined>;
+    failed: boolean[];
+  }>({ settled: [], data: [], failed: [] });
   useEffect(() => {
     const last = round.current;
     const resized = settled.length !== last.settled.length;
@@ -229,10 +242,13 @@ export function useLiveQueries<T>(options: {
         (at, index) => at > 0 && (resized || at > last.settled[index])
       );
     if (!complete) return;
-    const identical = !resized && data === last.data;
-    round.current = { settled, data };
+    const identical =
+      !resized &&
+      data === last.data &&
+      failed.every((part, index) => part === last.failed[index]);
+    round.current = { settled, data, failed };
     setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-  }, [settled, data]);
+  }, [settled, data, failed]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus
@@ -363,6 +379,7 @@ export function useLiveQuery<
     refetch,
     isLoading,
     fetchStatus,
+    status,
   } = query;
   // A failure is an answer too. Counting only `dataUpdatedAt` kept a refused
   // read at full rate for as long as its page stayed open, one 403 every
@@ -374,16 +391,24 @@ export function useLiveQuery<
   //
   // React Query's structural sharing hands back the *same object* when a
   // response deep-equals the last one, so a reference comparison is an exact
-  // "nothing changed" — no hashing, no second copy of the payload.
+  // "nothing changed" — no hashing, no second copy of the payload. A failure
+  // keeps the last data, so the outcome is compared too: an answer after a
+  // refusal is a change even where it repeats the one before the refusal.
+  const failed = status === "error";
   const seenAt = useRef(0);
   const seenData = useRef<TData | undefined>(undefined);
+  const seenFailed = useRef(false);
   useEffect(() => {
     if (!settledAt || settledAt === seenAt.current) return;
-    const identical = seenAt.current !== 0 && data === seenData.current;
+    const identical =
+      seenAt.current !== 0 &&
+      data === seenData.current &&
+      failed === seenFailed.current;
     seenAt.current = settledAt;
     seenData.current = data;
+    seenFailed.current = failed;
     setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-  }, [settledAt, data]);
+  }, [settledAt, data, failed]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus

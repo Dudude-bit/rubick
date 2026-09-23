@@ -70,6 +70,9 @@ export function useResourceWatch<
   const queryClient = useQueryClient();
   const renewals = useRenewals();
   const [resyncing, setResyncing] = useState(false);
+  // Outlives the stream: a renewal or re-enable subscribes again under the
+  // same key, and only an answer may end the failure the consumer was told of.
+  const failedFor = useRef<QueryKey | null>(null);
   // Latest callbacks captured via refs so flipping a useState in
   // either callback doesn't tear down the subscription.
   const onErrorRef = useRef(onError);
@@ -89,7 +92,11 @@ export function useResourceWatch<
     let unlisten: (() => void) | null = null;
     // Tracks whether the last stream state was a failure, so `onRecovered`
     // fires once per failure→recovery transition and not on every event.
-    let inFailedState = false;
+    let inFailedState = failedFor.current === queryKey;
+    const fail = () => {
+      inFailedState = true;
+      failedFor.current = queryKey;
+    };
     // The rows a resync has delivered so far, held here rather than in
     // the cache until the backend says the burst is complete.
     let staged: Map<string, T> | null = null;
@@ -136,7 +143,7 @@ export function useResourceWatch<
           const payload = event.payload;
           if (payload.stream_id !== id) return;
           if (payload.changes.some((change) => change.op === "failed")) {
-            inFailedState = true;
+            fail();
             abandonResync();
             onErrorRef.current?.(
               payload.error ?? tRef.current("action", "resourceWatchFailed")
@@ -160,6 +167,7 @@ export function useResourceWatch<
           // it must not do is end the failure.
           if (inFailedState && answered) {
             inFailedState = false;
+            failedFor.current = null;
             onRecoveredRef.current?.();
           }
 
@@ -228,7 +236,7 @@ export function useResourceWatch<
         // is live. Same treatment as a failed stream: say so, drop the badge,
         // start polling again.
         const offLagged = await listenEvent("event-bridge-lagged", (event) => {
-          inFailedState = true;
+          fail();
           // A resync missing an unknown number of its own rows is not a
           // state to swap in — committing it would delete rows that exist.
           abandonResync();

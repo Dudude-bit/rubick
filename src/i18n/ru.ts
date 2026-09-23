@@ -2300,7 +2300,7 @@ export const ru: Catalogue = {
     selectionUnread:
       "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
     selectorUnevaluable:
-      "Такой селектор Kubernetes не соберёт (оператор не из In, NotIn, Exists и DoesNotExist, набор без значений или проверка наличия со значениями), поэтому что он выбирает, сказать нельзя: {selector}",
+      "Такой селектор Kubernetes не соберёт (ключ отсутствует или пуст, оператор не из In, NotIn, Exists и DoesNotExist, In или NotIn без значений, Exists или DoesNotExist со значениями или поле не того типа), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
     chipLabel: "лейбл",
@@ -3782,6 +3782,7 @@ export const ru: Catalogue = {
     rolloutSeenRevision: "готово {ready} из {desired}, ревизия {revision}",
     nodeCordonedWord: "закрыт для планирования",
     ciliumSelectsAll: "все эндпоинты в области действия",
+    ciliumSelectsNodes: "узлы, по nodeSelector, — ни одного эндпоинта",
     ciliumCovered: "под политикой",
     ciliumUnrestricted: "его не выбирает ни одна политика",
     ciliumOnlyRejected: "только отвергнутые",
@@ -4451,6 +4452,7 @@ export const ru: Catalogue = {
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
+    podListUnread: "список подов не прочитан",
     everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
       "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",
@@ -5872,6 +5874,8 @@ export const ru: Catalogue = {
       "Совпадений пока нет — ответили {answered} из {total} кластеров.",
     nothingSearchedNoCluster:
       "Поиск не выполнялся: ни один кластер ещё не подключён.",
+    nothingSearchedAnywhere:
+      "Поиск не выполнен: ни на одном кластере здесь он не завершился.",
     nothingMatchesOnSearched:
       "По запросу «{query}» ничего не найдено на {answered} из {total} кластеров, где выполнялся поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",

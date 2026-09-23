@@ -18,7 +18,7 @@
 import type { CustomResourceInfo } from "@/generated/types";
 import { labelSelectorMatches, type LabelSelector } from "@/lib/label-selector";
 import { getValueByPath } from "../kit";
-import { enforcementOf } from "./model";
+import { enforcementOf, selectsNodes } from "./model";
 
 /** The prefix Cilium puts on a label it took from Kubernetes. */
 const FROM_K8S = "k8s:";
@@ -82,6 +82,8 @@ export function coverageOf(
 
     const consider = (policy: CustomResourceInfo, isClusterwide: boolean) => {
       if (!isClusterwide && policy.namespace !== endpoint.namespace) return;
+      // Nodes, never an endpoint: a known "no", not an unread rule.
+      if (selectsNodes(policy)) return;
       const spec = policy.spec;
       if (typeof spec !== "object" || spec === null) {
         unreadable += 1;

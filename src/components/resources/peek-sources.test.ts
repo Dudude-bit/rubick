@@ -17,6 +17,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { queryKeys } from "@/lib/query-keys";
+import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 import { flatten, peekQueryKey, resolveSource } from "./peek-sources";
 
 /** What the peek asks for an object, and where it keeps the answer. */
@@ -301,21 +302,42 @@ describe("what a peek shows of a spec it has no schema for", () => {
 });
 
 describe("the families the peek's sources are spread from", () => {
+  const kinds = [
+    CLUSTER_SOURCES,
+    GATEWAY_SOURCES,
+    NETWORK_SOURCES,
+    CONFIG_STORAGE_SOURCES,
+    WORKLOAD_SOURCES,
+  ].flatMap((family) => Object.keys(family));
+
   /**
    * One object literal refused a kind written twice; five spread into one
    * do not, and the family spread last would silently replace the other's
    * reading of that kind.
    */
   it("claims each kind in only one family", () => {
-    const kinds = [
-      CLUSTER_SOURCES,
-      GATEWAY_SOURCES,
-      NETWORK_SOURCES,
-      CONFIG_STORAGE_SOURCES,
-      WORKLOAD_SOURCES,
-    ].flatMap((family) => Object.keys(family));
-
-    expect(kinds.length).toBeGreaterThan(0);
     expect(kinds.filter((kind, at) => kinds.indexOf(kind) !== at)).toEqual([]);
+  });
+
+  /**
+   * A kind no family claims is not an error: `resolveSource` hands it to the
+   * manifest walk, and the peek draws a dotted-path dump where it drew the
+   * kind. Checking only that the families were not empty let one go.
+   */
+  it("reads every registered kind itself, except the ones read as a manifest", () => {
+    const readAsManifest = [
+      "Event",
+      "HorizontalPodAutoscaler",
+      "PodDisruptionBudget",
+      "ReplicaSet",
+    ];
+    const registered: string[] = RESOURCE_REGISTRY.map(
+      (definition) => definition.kind
+    );
+
+    expect(registered.filter((kind) => !kinds.includes(kind)).sort()).toEqual(
+      readAsManifest
+    );
+    expect(kinds.filter((kind) => !registered.includes(kind))).toEqual([]);
   });
 });

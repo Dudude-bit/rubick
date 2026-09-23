@@ -45,14 +45,31 @@ export function enforcementOf(policy: CustomResourceInfo): Enforcement {
  * Whether the rules are somewhere this app can read them.
  *
  * `specs:` is a legal and accepted shape — a policy written that way is
- * `Valid: True` and enforcing — and it does not cross the IPC boundary. So
- * is a host policy's `nodeSelector`. Every reader below asks this first.
+ * `Valid: True` and enforcing — and it does not cross the IPC boundary.
+ * Every reader below asks this first.
  */
 function specIsHere(policy: CustomResourceInfo): boolean {
   return (
     typeof policy.spec === "object" &&
     policy.spec !== null &&
     !Array.isArray(policy.spec)
+  );
+}
+
+/**
+ * A host policy: it selects nodes through `nodeSelector`, which Cilium takes
+ * instead of an `endpointSelector`, and so never a pod's endpoint.
+ */
+export function selectsNodes(policy: CustomResourceInfo): boolean {
+  if (!specIsHere(policy)) return false;
+  const { endpointSelector, nodeSelector } = policy.spec as Record<
+    string,
+    unknown
+  >;
+  return (
+    (endpointSelector === undefined || endpointSelector === null) &&
+    typeof nodeSelector === "object" &&
+    nodeSelector !== null
   );
 }
 
@@ -80,23 +97,26 @@ export function directionsOf(policy: CustomResourceInfo): Directions | null {
 /**
  * What the policy selects.
  *
- * Four answers. An **empty** `endpointSelector` is Cilium's "every endpoint
+ * Five answers. An **empty** `endpointSelector` is Cilium's "every endpoint
  * in scope" — on a cluster-wide policy, the whole cluster. A selector
  * written as `matchExpressions` selects a *subset* this column cannot spell
- * in one line. And a policy with no `endpointSelector` at all has not said
- * nothing: it has said it somewhere this app cannot see — `nodeSelector` on
- * a host policy, or inside a `specs:` list.
+ * in one line. A host policy selects nodes by `nodeSelector`. And any other
+ * policy with no `endpointSelector` has not said nothing: it has said it
+ * somewhere this app cannot see, inside a `specs:` list.
  */
 export type Selection =
   | { kind: "all" }
   | { kind: "labels"; said: string; andExpressions: number }
   /** Narrower than everything, and not sayable in a cell. */
   | { kind: "expressions"; count: number }
+  /** A host policy's nodes, and no endpoint. */
+  | { kind: "nodes" }
   /** Not on the wire. Never "everything". */
   | { kind: "notHere" };
 
 export function selectionOf(policy: CustomResourceInfo): Selection {
   if (!specIsHere(policy)) return { kind: "notHere" };
+  if (selectsNodes(policy)) return { kind: "nodes" };
   const selector = getValueByPath(policy, "spec.endpointSelector");
   if (typeof selector !== "object" || selector === null) {
     return { kind: "notHere" };

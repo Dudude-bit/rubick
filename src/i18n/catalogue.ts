@@ -2221,7 +2221,7 @@ export const en = {
     selectionUnread:
       "Services could not be listed, so what this selects is unknown: {reason}",
     selectorUnevaluable:
-      "Kubernetes would refuse to build this selector (an operator other than In, NotIn, Exists and DoesNotExist, a set with no values, or a presence test with some), so what it selects cannot be said: {selector}",
+      "Kubernetes would refuse to build this selector (a missing or empty key, an operator other than In, NotIn, Exists and DoesNotExist, In or NotIn with no values, Exists or DoesNotExist with some, or a field of the wrong type), so what it selects cannot be said: {selector}",
     endpoints: "Endpoints",
     everyInterval: "every {interval}",
     chipLabel: "label",
@@ -3458,6 +3458,7 @@ export const en = {
     rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
+    ciliumSelectsNodes: "nodes, by nodeSelector — no endpoint",
     ciliumCovered: "covered",
     ciliumUnrestricted: "nothing selects it",
     ciliumOnlyRejected: "only rejected policies",
@@ -4081,6 +4082,7 @@ export const en = {
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
+    podListUnread: "pod list not read",
     everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
@@ -5433,6 +5435,8 @@ export const en = {
       "No matches yet — {answered} of {total} clusters have answered.",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
+    nothingSearchedAnywhere:
+      "Nothing has been searched: the search did not complete on any cluster here.",
     nothingMatchesOnSearched:
       "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",

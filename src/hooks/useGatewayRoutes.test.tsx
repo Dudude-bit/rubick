@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/hooks/useGatewayApi", () => ({
@@ -13,14 +13,23 @@ vi.mock("@/hooks/useGatewayApi", () => ({
     error: null,
   }),
 }));
-const watch = vi.hoisted(() => ({ live: false }));
-vi.mock("@/hooks/useWatchedList", () => ({
-  useWatchedList: () => ({
-    live: watch.live,
-    refresh: "resourceList",
-    resyncing: false,
-    watchFailed: false,
-  }),
+/** Each kind's watch, by the plural its cache key starts with. */
+const watches = vi.hoisted(
+  () => new Map<string, { onError?: (message: string) => void }>()
+);
+vi.mock("@/hooks/useResourceWatch", () => ({
+  useResourceWatch: (options: {
+    queryKey: string[];
+    onError?: (message: string) => void;
+  }) => {
+    watches.set(options.queryKey[0], options);
+    return { resyncing: false };
+  },
+}));
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock("@/components/ui/use-toast", () => ({
+  toast,
+  useToast: () => ({ toast }),
 }));
 const route = { name: "web", namespace: "team-a" };
 vi.mock("@/lib/commands", () => ({
@@ -60,7 +69,6 @@ describe("every route in scope, one query per served kind", () => {
    * rows the watch holds for it, as every list page does.
    */
   it("keeps a watched namespace's routes when a re-read misses it", async () => {
-    watch.live = true;
     const { commands } = await import("@/lib/commands");
     const { queryKeys } = await import("@/lib/query-keys");
     const kept = { name: "kept", namespace: "team-b" };
@@ -80,22 +88,40 @@ describe("every route in scope, one query per served kind", () => {
         unread: [],
       });
     }
-    try {
-      const { result } = renderHook(
-        () => useGatewayRoutes(["team-a", "team-b"]),
-        {
-          wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={client}>
-              {children}
-            </QueryClientProvider>
-          ),
-        }
-      );
-      await client.refetchQueries();
-      await waitFor(() => expect(result.current.routes).toContainEqual(kept));
-      expect(result.current.unread).toEqual([]);
-    } finally {
-      watch.live = false;
-    }
+    const { result } = renderHook(
+      () => useGatewayRoutes(["team-a", "team-b"]),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+    await client.refetchQueries();
+    await waitFor(() => expect(result.current.routes).toContainEqual(kept));
+    expect(result.current.unread).toEqual([]);
+  });
+
+  /**
+   * The toaster holds one toast at a time. Each kind's watch said so on its
+   * own, every toast replaced the last, and the one left named one kind while
+   * every route list on the page had fallen back to polling.
+   */
+  it("names every route kind whose watch fell back in the one notice left", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHook(() => useGatewayRoutes(["team-a"]), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(watches.has("tcproutes")).toBe(true));
+
+    act(() => watches.get("httproutes")?.onError?.("watch is forbidden"));
+    act(() => watches.get("tcproutes")?.onError?.("watch is forbidden"));
+
+    const shown = toast.mock.calls.at(-1)?.[0].description as string;
+    expect(shown).toContain("httproutes");
+    expect(shown).toContain("tcproutes");
   });
 });

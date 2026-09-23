@@ -723,6 +723,71 @@ describe("useResourceWatch", () => {
   });
 
   /**
+   * A renewal or a re-enable subscribes again under the same key. The new
+   * stream began as "not failed", so its first answer recovered nothing and
+   * the list kept polling beside a watch that worked, marked not live.
+   */
+  it("recovers a failed watch when a new stream under the same key answers", async () => {
+    const client = new QueryClient();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-cm-1")
+      .mockResolvedValueOnce("stream-cm-2");
+
+    const { rerender } = renderHook(
+      ({ enabled }) =>
+        useResourceWatch<Item>({
+          enabled,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client), initialProps: { enabled: true } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-cm-1", "Unauthorized");
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    emit("stream-cm-2", "applied", { name: "a" });
+
+    await waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1));
+  });
+
+  /** A new key is a new stream, which owes no recovery for the last one. */
+  it("starts a stream under a new key without the last key's failure", async () => {
+    const client = new QueryClient();
+    const onRecovered = vi.fn();
+    subscribeMock
+      .mockResolvedValueOnce("stream-cm-1")
+      .mockResolvedValueOnce("stream-cm-2");
+    const other = ["configmaps", "prod"];
+
+    const { rerender, result } = renderHook(
+      ({ queryKey }) =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey,
+          onError: vi.fn(),
+          onRecovered,
+        }),
+      { wrapper: makeWrapper(client), initialProps: { queryKey: KEY } }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    emitFailed("stream-cm-1", "Unauthorized");
+
+    rerender({ queryKey: other });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    emit("stream-cm-2", "restarted", null);
+
+    await waitFor(() => expect(result.current.resyncing).toBe(true));
+    expect(onRecovered).not.toHaveBeenCalled();
+  });
+
+  /**
    * A watch that fails mid-resync never sends the `synced` that ends it.
    * Left resyncing, a surface with nothing to show waits on a skeleton
    * that can never resolve — and the half-delivered burst must not be

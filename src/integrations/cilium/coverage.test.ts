@@ -205,4 +205,19 @@ describe("what covers an endpoint", () => {
     );
     expect(settled.verdict).toBe("covered");
   });
+
+  /**
+   * A host-firewall policy selects nodes by `nodeSelector` and has no
+   * `endpointSelector`. Read as unreadable, one of them put every endpoint
+   * in the cluster under "cannot say" and hid every unrestricted one.
+   */
+  it("does not let a host policy leave an endpoint undecided", () => {
+    const [alone] = coverageOf(
+      [API],
+      [],
+      [policy(null, { nodeSelector: { matchLabels: { role: "edge" } } })]
+    );
+    expect(alone.unreadable).toBe(0);
+    expect(alone.verdict).toBe("unrestricted");
+  });
 });
