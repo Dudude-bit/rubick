@@ -5,9 +5,11 @@ import type {
   ServiceInfo,
   ServicePublished,
 } from "@/generated/types";
+import { backingFrom, hostSeverity } from "../ingress";
 import {
   gatewayCovers,
   hostGroups,
+  hostState,
   resolveHost,
   type IstioSources,
 } from "./model";
@@ -144,6 +146,34 @@ describe("the chain", () => {
       http: [{ route: [{ destination: { host: "shop" } }] }],
     });
     expect(hostGroups(sources({ virtualServices: [many] }), t)).toHaveLength(2);
+  });
+});
+
+describe("a host whose backends are unread", () => {
+  /**
+   * Would break if the host went back to green "routing" while the Services
+   * list was refused: no stop was found because nothing was looked at.
+   */
+  it("reads as unknown rather than routing", () => {
+    const [group] = hostGroups(
+      {
+        ...sources({ virtualServices: [healthy] }),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** The same host with its Services read is routing. */
+  it("reads as routing once they are read", () => {
+    const [group] = hostGroups(sources({ virtualServices: [healthy] }), t);
+    expect(hostSeverity(group)).toBeNull();
+    expect(hostState(group, null, t).tone).toBe("ok");
   });
 });
 

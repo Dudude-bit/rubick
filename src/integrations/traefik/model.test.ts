@@ -7,14 +7,20 @@ import type {
   IngressInfo,
   ServiceInfo,
 } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { backingFrom, hostSeverity } from "../ingress";
 import {
   allRoutes,
   duplicatedServiceNames,
   hostGroups,
+  hostState,
   middlewareUses,
   readEntryPoints,
   type TraefikSources,
 } from "./model";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const TRAEFIK_CLASS: IngressClassSummary = {
   name: "traefik",
@@ -804,6 +810,41 @@ describe("what it refuses to claim before it knows", () => {
     );
 
     expect(group.findings).toEqual([]);
+  });
+
+  /**
+   * Would break if a host with nothing found and its Services unread went
+   * back to green "serving": the row, the map node and the tab mark all read
+   * `worst: null` as fine, beside a note saying nothing behind it was read.
+   */
+  it("calls a host whose backends were refused unknown, not serving", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      })
+    );
+
+    expect(group.backendsKnown).toBe(false);
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** Read and healthy is the one case "serving" is the answer. */
+  it("calls a host serving once what is behind it was read", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 2)],
+      })
+    );
+
+    expect(hostSeverity(group)).toBeNull();
+    expect(hostState(group, null, t).tone).toBe("ok");
   });
 });
 

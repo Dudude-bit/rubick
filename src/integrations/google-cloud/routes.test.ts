@@ -13,7 +13,11 @@ import type {
   CustomResourceInfo,
   IngressInfo,
   ServiceInfo,
+  ServicePublished,
 } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { backingFrom, hostSeverity } from "../ingress";
 import {
   allowsHttp,
   gceClassOf,
@@ -23,10 +27,13 @@ import {
 import {
   claimed,
   countHosts,
+  hostState,
   hostsOf,
   ignoredByClassName,
   type GkeSources,
 } from "./routes";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const ingress = (
   overrides: Partial<IngressInfo> & { host?: string } = {}
@@ -189,6 +196,50 @@ describe("reading the metadata GKE acts on", () => {
       false
     );
     expect(negForIngress({ "cloud.google.com/neg": "not json" })).toBe(false);
+  });
+});
+
+describe("a host whose backends are unread", () => {
+  /**
+   * Would break if a host with nothing found went back to green "serving"
+   * while the Services list was refused — the GKE page did not even say the
+   * backends went unread.
+   */
+  it("reads as unknown rather than serving", () => {
+    const [host] = hostsOf(
+      sources(backingFrom(undefined, new Error("services is forbidden")))
+    );
+    expect(hostSeverity(host)).toBe("unknown");
+    expect(hostState(host, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** Read and publishing, the same host is serving. */
+  it("reads as serving once they are read", () => {
+    const [host] = hostsOf(
+      sources({
+        backingKnown: true,
+        published: [
+          {
+            service: {
+              kind: "Service",
+              name: "storefront",
+              namespace: "web",
+              existence: "present",
+              facts: null,
+            },
+            ready: 2,
+            draining: 0,
+            notReady: 0,
+            stop: null,
+          } as unknown as ServicePublished,
+        ],
+      })
+    );
+    expect(hostSeverity(host)).toBeNull();
+    expect(hostState(host, null, t).tone).toBe("ok");
   });
 });
 

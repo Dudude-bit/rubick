@@ -117,6 +117,23 @@ describe("the routing map", () => {
   });
 
   /**
+   * #246 greyed the Service node and left the host in front of it green, so
+   * the map still said the host was fine on the strength of an unread list.
+   */
+  it("draws the host in front of unread backends as unknown too", () => {
+    const map = mapOf({
+      ingresses: [
+        ingress("shop", "shop.example.com", { secretName: "shop-tls" }),
+      ],
+      services: [service("web")],
+      backingKnown: false,
+      backingError: "endpointslices is forbidden",
+    });
+
+    expect(map.columns[1].nodes[0].tone).toBe("unknown");
+  });
+
+  /**
    * The shape the chain cannot show and the reason this view exists: two
    * hostnames landing on one Service is invisible in a list however it is
    * ordered, and it is exactly what somebody is looking for when one of the

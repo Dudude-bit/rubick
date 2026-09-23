@@ -43,6 +43,8 @@ import {
   proxyServicesBy,
   terminatedUpstreamOf,
 } from "../ingress";
+import type { T } from "@/i18n/useT";
+import type { RowTone } from "../page-kit";
 import { readRule, type RuleClause, type RuleReading } from "./rule";
 
 export type { Backing } from "../ingress";
@@ -179,6 +181,8 @@ export interface HostGroup {
   /** Every TLS Secret any route under this host is served under. */
   tlsSecrets: Array<{ namespace: string; secretName: string }>;
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 export interface TraefikSources extends BackingSources {
@@ -876,6 +880,8 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
             )[0],
       tlsSecrets,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown || !own.some((route) => route.service?.kubernetes),
     };
   });
 
@@ -906,6 +912,41 @@ export function duplicatedServiceNames(groups: HostGroup[]): Set<string> {
       .filter(([, spread]) => spread.size > 1)
       .map(([name]) => name)
   );
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: HostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stop = group.findings.find((finding) => finding.kind === "stop");
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate) {
+    return {
+      text:
+        certificate.kind === "certificate" && certificate.expiry?.expired
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
+      tone: "err",
+    };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function compareGroups(a: HostGroup, b: HostGroup): number {

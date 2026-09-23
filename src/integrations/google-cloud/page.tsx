@@ -32,12 +32,12 @@ import {
   Chain,
   Column,
   Finding,
-  type Tone,
+  BackingUnread,
   TroubleList,
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
-import { backingFrom } from "../ingress";
+import { backingFrom, hostSeverity } from "../ingress";
 import { useBacking, useIngressSources } from "./data";
 import { useT } from "@/i18n/useT";
 import {
@@ -52,6 +52,7 @@ import {
 } from "./model";
 import {
   backingFor,
+  hostState,
   hostsOf,
   ignoredByClassName,
   type GkeFinding,
@@ -168,6 +169,16 @@ export default function GkeIngressPage() {
             }}
             autoOpen={{ when: "err", upTo: AUTO_OPEN }}
             noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            aside={
+              <>
+                {backing.isPending && (
+                  <span className="text-[11px] text-fg-fnt">
+                    {t("empty", "checkingWhatIsBehind")}
+                  </span>
+                )}
+                <BackingUnread error={joined?.backingError ?? null} />
+              </>
+            }
             keyOf={(host, index) => host.host ?? `catch-all-${index}`}
             renderRow={(host, { openByDefault, last, shown }) => (
               <HostRow
@@ -185,33 +196,12 @@ export default function GkeIngressPage() {
   );
 }
 
-const severityOfHost = (host: GkeHost) => host.worst;
+const severityOfHost = hostSeverity;
 
 const searchableHost = (host: GkeHost) => [
   host.host,
   ...host.routes.flatMap((route) => [route.backend?.name, route.ingress.name]),
 ];
-
-/** The word at the right of a host line: what is true of it right now. */
-function hostState(
-  host: GkeHost,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  if (host.findings.some((finding) => finding.kind === "stop")) {
-    return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  }
-  const certificate = host.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate)
-    return { text: t("empty", "certificateFailed"), tone: "err" };
-  if (host.findings.some((finding) => finding.kind === "missing-object")) {
-    return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
-  }
-  if (host.findings.length > 0)
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  return { text: t("empty", "serving"), tone: "ok" };
-}
 
 function HostRow({
   host,
@@ -246,7 +236,7 @@ function HostRow({
           {front && !front.allowsHttp && t("empty", "noHttpListener")}
         </>
       }
-      state={hostState(host, t)}
+      state={hostState(host, sources?.backingError ?? null, t)}
       openByDefault={openByDefault}
       last={last}
     >
@@ -412,9 +402,14 @@ function RouteChain({
           <Cell
             bad={backing?.stop !== null && backing?.stop !== undefined}
             under={
-              route.neg
-                ? t("empty", "containerNativeNeg")
-                : t("empty", "throughKubeProxy")
+              !backing?.known
+                ? t(
+                    "empty",
+                    backing?.error ? "endpointsUnread" : "readingEndpoints"
+                  )
+                : route.neg
+                  ? t("empty", "containerNativeNeg")
+                  : t("empty", "throughKubeProxy")
             }
           >
             <ResourceRef
@@ -433,7 +428,11 @@ function RouteChain({
       <Column label={t("columns", "backendConfig")}>
         {route.configs.length === 0 ? (
           <Cell>
-            <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
+            <span className="text-fg-fnt">
+              {route.backend && !backing?.known
+                ? t("empty", "notReadLower")
+                : t("empty", "gkeDefaults")}
+            </span>
           </Cell>
         ) : (
           route.configs.map((config) => (

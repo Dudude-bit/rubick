@@ -33,6 +33,7 @@ import {
   type Backing,
   type BackingSources,
 } from "../ingress";
+import type { RowTone } from "../page-kit";
 import { readMatches, type MatchReading } from "./match";
 
 export type { Backing } from "../ingress";
@@ -115,6 +116,8 @@ export interface IstioHostGroup {
   findings: Finding[];
   chainFor: IstioRoute;
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 // --- resolving the strings ----------------------------------------------
@@ -492,11 +495,51 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
             (a, b) => b.destinations.length - a.destinations.length
           )[0],
         worst: worstOf(findings),
+        // A `name.namespace` host is told from a hostname by the Services
+        // list, so with that unread it may be in the cluster too.
+        backendsKnown:
+          sources.backingKnown ||
+          !routes.some((route) =>
+            route.destinations.some(
+              (destination) =>
+                !destination.external ||
+                destination.host.split(".").length === 2
+            )
+          ),
       };
     }
   );
 
   return groups.filter((group) => group.routes.length > 0).sort(compareGroups);
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: IstioHostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  if (group.findings.some((finding) => finding.kind === "noGateway")) {
+    return { text: t("empty", "noGatewayServesIt"), tone: "err" };
+  }
+  if (group.findings.some((finding) => finding.kind === "noSubset")) {
+    return { text: t("empty", "subsetNotDefined"), tone: "err" };
+  }
+  if (group.findings.some((finding) => finding.kind === "stop")) {
+    return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  }
+  if (group.findings.some((finding) => finding.kind === "weights")) {
+    return { text: t("empty", "weightsDoNotAddUp"), tone: "warn" };
+  }
+  if (group.findings.length > 0)
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "routingState"), tone: "ok" };
 }
 
 function compareGroups(a: IstioHostGroup, b: IstioHostGroup): number {

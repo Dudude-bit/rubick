@@ -17,6 +17,7 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
+import { hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
@@ -33,9 +34,7 @@ export const hostFilterPath = (host: string | null) =>
   `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
 
 function toneOf(group: HostGroup): MapTone {
-  if (group.worst === "err") return "err";
-  if (group.worst === "warn") return "warn";
-  return "ok";
+  return hostSeverity(group) ?? "ok";
 }
 
 /**

@@ -28,12 +28,14 @@ import type {
   CustomResourceInfo,
 } from "@/generated/types";
 import { covers } from "@/lib/certificates";
+import type { T } from "@/i18n/useT";
 import {
   backingOf,
   worstOf,
   type Backing,
   type BackingSources,
 } from "../ingress";
+import type { RowTone } from "../page-kit";
 import {
   allowsHttp,
   backendConfigRefs,
@@ -147,6 +149,8 @@ export interface GkeHost {
   fronts: GkeFront[];
   findings: GkeFinding[];
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 const byName = (list: CustomResourceInfo[], name: string) =>
@@ -457,6 +461,9 @@ export function hostsOf(sources: GkeSources): GkeHost[] {
       fronts: bucket.fronts,
       findings,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown ||
+        !bucket.routes.some((route) => route.backend !== null),
     };
   });
 
@@ -471,6 +478,34 @@ export function hostsOf(sources: GkeSources): GkeHost[] {
     if (right.host === null) return -1;
     return left.host.localeCompare(right.host);
   });
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  host: GkeHost,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  if (host.findings.some((finding) => finding.kind === "stop")) {
+    return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  }
+  const certificate = host.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate)
+    return { text: t("empty", "certificateFailed"), tone: "err" };
+  if (host.findings.some((finding) => finding.kind === "missing-object")) {
+    return { text: t("empty", "namesSomethingAbsent"), tone: "err" };
+  }
+  if (host.findings.length > 0)
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  if (!host.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 /** The sidebar's number: hosts this GKE Ingress stack serves. */

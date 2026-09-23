@@ -199,9 +199,26 @@ export function getValueByPath(
 export function troubleMark(
   worsts: ReadonlyArray<"err" | "warn" | null | undefined>,
   needAttention: (n: number, total: number) => string
+): DetailTabMark | undefined;
+/** A list where some verdicts could not be reached says so, not a count. */
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | "unknown" | null | undefined>,
+  needAttention: (n: number, total: number) => string,
+  notChecked: (n: number, total: number) => string
+): DetailTabMark | undefined;
+export function troubleMark(
+  worsts: ReadonlyArray<"err" | "warn" | "unknown" | null | undefined>,
+  needAttention: (n: number, total: number) => string,
+  notChecked?: (n: number, total: number) => string
 ): DetailTabMark | undefined {
   if (worsts.length === 0) return undefined;
-  const troubled = worsts.filter(Boolean).length;
+  const troubled = worsts.filter(
+    (worst) => worst === "err" || worst === "warn"
+  ).length;
+  const unchecked = worsts.filter((worst) => worst === "unknown").length;
+  if (troubled === 0 && unchecked > 0 && notChecked) {
+    return { shows: "unchecked", says: notChecked(unchecked, worsts.length) };
+  }
   if (troubled === 0) return countMark(worsts.length);
   return severityMark(
     worsts.includes("err") ? "err" : "warn",

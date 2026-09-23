@@ -11,8 +11,15 @@ import type {
   ServiceInfo,
   ServicePublished,
 } from "@/generated/types";
+import { backingFrom, hostSeverity } from "../ingress";
 import { PREFIX } from "./annotations";
-import { hostGroups, splitOf, allRoutes, type NginxSources } from "./model";
+import {
+  hostGroups,
+  hostState,
+  splitOf,
+  allRoutes,
+  type NginxSources,
+} from "./model";
 
 const NGINX_CLASS: IngressClassSummary = {
   name: "nginx",
@@ -374,6 +381,37 @@ describe("the findings", () => {
       t
     );
     expect(groups[0].host).toBe("zzz.test");
+  });
+});
+
+describe("a host whose backends are unread", () => {
+  /**
+   * Would break if the host went back to green "serving" while the Services
+   * list was refused: nothing was found because nothing was looked at.
+   */
+  it("reads as unknown rather than serving", () => {
+    const [group] = hostGroups(
+      {
+        ...sources([ingress("secure", "secure.test", { secretName: "tls" })]),
+        ...backingFrom(undefined, new Error("services is forbidden")),
+      },
+      t
+    );
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, "services is forbidden", t)).toEqual({
+      text: t("empty", "endpointsUnread"),
+      tone: "unknown",
+    });
+  });
+
+  /** The same host with its Service read is serving. */
+  it("reads as serving once they are read", () => {
+    const [group] = hostGroups(
+      sources([ingress("secure", "secure.test", { secretName: "tls" })]),
+      t
+    );
+    expect(hostSeverity(group)).toBeNull();
+    expect(hostState(group, null, t).tone).toBe("ok");
   });
 });
 

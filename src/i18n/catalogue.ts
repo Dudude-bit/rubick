@@ -6125,6 +6125,7 @@ export const en = {
     nNotRead: "{n} not read",
     worthALook: "{n} worth a look",
     worthALookOfTotal: "{n} of {total} worth a look",
+    notCheckedOfTotal: "{n} of {total} not checked",
     hostsAcrossNamespaces: {
       one: "{n} host across every namespace",
       other: "{n} hosts across every namespace",

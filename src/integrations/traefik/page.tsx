@@ -28,6 +28,7 @@ import { Fragment, useMemo, type ReactNode } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
+  hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
 } from "../ingress";
@@ -55,7 +56,6 @@ import {
   Column,
   Finding as FindingBlock,
   TroubleRow,
-  type Tone,
   VendorReadFailure,
   FindingList,
 } from "../page-kit";
@@ -78,6 +78,7 @@ import {
   boundEntryPoints,
   duplicatedServiceNames,
   hostGroups,
+  hostState,
   terminatedUpstream,
   middlewareType,
   middlewareUses,
@@ -170,8 +171,9 @@ export default function TraefikPage() {
       label: t("nav", "routes"),
       glyph: viewGlyph(Globe),
       mark: troubleMark(
-        groups.map((group) => group.worst),
-        (n, total) => t("count", "hostsNeedAttention", { n, total })
+        groups.map(hostSeverity),
+        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (
         <RoutesTab
@@ -285,6 +287,9 @@ function MapTab({
 
   const broken = groups.filter((group) => group.worst === "err").length;
   const worthALook = groups.filter((group) => group.worst === "warn").length;
+  const unchecked = groups.filter(
+    (group) => hostSeverity(group) === "unknown"
+  ).length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -293,7 +298,12 @@ function MapTab({
           ? `${t("count", "hostsBrokenOfTotal", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
           : worthALook > 0
             ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-            : t("count", "hostsNoneWithProblem", { n: groups.length })}
+            : unchecked > 0
+              ? t("count", "notCheckedOfTotal", {
+                  n: unchecked,
+                  total: groups.length,
+                })
+              : t("count", "hostsNoneWithProblem", { n: groups.length })}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
       <BackingUnread error={sources?.backingError ?? null} />
@@ -384,7 +394,7 @@ function RoutesTab({
   );
 }
 
-const severityOfGroup = (group: HostGroup) => group.worst;
+const severityOfGroup = hostSeverity;
 
 const searchableGroup = (group: HostGroup) => [
   group.host,
@@ -394,34 +404,6 @@ const searchableGroup = (group: HostGroup) => [
     route.service?.name ?? route.resourceBackend,
   ]),
 ];
-
-/** The word at the right of a host line: what is true of it right now. */
-function hostState(
-  group: HostGroup,
-  t: ReturnType<typeof useT>
-): { text: string; tone: Tone } {
-  const stop = group.findings.find((finding) => finding.kind === "stop");
-  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
-  const certificate = group.findings.find(
-    (finding) => finding.kind === "certificate" && finding.severity === "err"
-  );
-  if (certificate) {
-    return {
-      text:
-        certificate.kind === "certificate" && certificate.expiry?.expired
-          ? t("empty", "certificateExpired")
-          : t("empty", "certificateRunningOut"),
-      tone: "err",
-    };
-  }
-  if (group.findings.some((finding) => finding.kind === "clear")) {
-    return { text: t("empty", "servedInTheClear"), tone: "warn" };
-  }
-  if (group.findings.length > 0) {
-    return { text: t("empty", "worthALook"), tone: "warn" };
-  }
-  return { text: t("empty", "serving"), tone: "ok" };
-}
 
 function HostRow({
   group,
@@ -435,7 +417,7 @@ function HostRow({
   duplicated: Set<string>;
 }) {
   const t = useT();
-  const state = hostState(group, t);
+  const state = hostState(group, sources?.backingError ?? null, t);
   const tls = group.tlsSecrets[0];
   // Where the certificate is, when it is not here. Stated rather than merely
   // not warned about: a reader who knows TLS ends at the load balancer learns

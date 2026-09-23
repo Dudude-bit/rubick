@@ -169,6 +169,18 @@ export function backingFrom(
   };
 }
 
+/**
+ * A host's place in a list ordered by trouble. With nothing found and its
+ * backends unread, "fine" is not what is known — every row, map node and tab
+ * mark drawn from it read that as green.
+ */
+export function hostSeverity(group: {
+  worst: "err" | "warn" | null;
+  backendsKnown: boolean;
+}): "err" | "warn" | "unknown" | null {
+  return group.worst ?? (group.backendsKnown ? null : "unknown");
+}
+
 function ref(kind: string, name: string, namespace: string): ObjectRef {
   return { kind, name, namespace, existence: "present", facts: null };
 }

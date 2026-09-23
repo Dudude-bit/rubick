@@ -6837,6 +6837,7 @@ export const ru: Catalogue = {
     nNotRead: "не разобрано {n}",
     worthALook: "на {n} стоит взглянуть",
     worthALookOfTotal: "на {n} из {total} стоит взглянуть",
+    notCheckedOfTotal: "{n} из {total} без проверки",
     hostsAcrossNamespaces: {
       one: "{n} хост во всех пространствах имён",
       few: "{n} хоста во всех пространствах имён",

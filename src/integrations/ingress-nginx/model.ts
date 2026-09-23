@@ -40,6 +40,7 @@ import {
   proxyServicesBy,
   terminatedUpstreamOf,
 } from "../ingress";
+import type { RowTone } from "../page-kit";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
 
 export type { Backing } from "../ingress";
@@ -138,6 +139,8 @@ export interface NginxHostGroup {
   split: HostSplit | null;
   tlsSecrets: SecretRef[];
   worst: "err" | "warn" | null;
+  /** False while a Service this host routes to has not been read. */
+  backendsKnown: boolean;
 }
 
 export interface NginxSources extends BackingSources {
@@ -498,10 +501,50 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       split,
       tlsSecrets,
       worst: worstOf(findings),
+      backendsKnown:
+        sources.backingKnown || !own.some((route) => route.service !== null),
     };
   });
 
   return groups.sort(compareGroups);
+}
+
+/** The word at the right of a host line: what is true of it right now. */
+export function hostState(
+  group: NginxHostGroup,
+  backingError: string | null,
+  t: T
+): { text: string; tone: RowTone } {
+  const stop = group.findings.find((finding) => finding.kind === "stop");
+  if (stop) return { text: t("empty", "nothingBehindIt"), tone: "err" };
+  const certificate = group.findings.find(
+    (finding) => finding.kind === "certificate" && finding.severity === "err"
+  );
+  if (certificate) {
+    return {
+      text:
+        certificate.kind === "certificate" && certificate.expiry?.expired
+          ? t("empty", "certificateExpired")
+          : t("empty", "certificateRunningOut"),
+      tone: "err",
+    };
+  }
+  if (group.findings.some((finding) => finding.kind === "orphanCanary")) {
+    return { text: t("empty", "canaryShadowingNothing"), tone: "warn" };
+  }
+  if (group.findings.some((finding) => finding.kind === "clear")) {
+    return { text: t("empty", "servedInTheClear"), tone: "warn" };
+  }
+  if (group.findings.length > 0) {
+    return { text: t("empty", "worthALook"), tone: "warn" };
+  }
+  if (!group.backendsKnown) {
+    return {
+      text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
+      tone: "unknown",
+    };
+  }
+  return { text: t("empty", "serving"), tone: "ok" };
 }
 
 function compareGroups(a: NginxHostGroup, b: NginxHostGroup): number {
