@@ -223,6 +223,7 @@ const sources = (over: Partial<Parameters<typeof routeTraces>[1]> = {}) => ({
     services: [service("healthy")],
     published: [published("healthy", 1)],
     backingKnown: true,
+    backingError: null,
   },
   ...over,
 });
@@ -546,6 +547,7 @@ describe("routeTraces", () => {
           services: [service("edited")],
           published: [published("edited", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -644,7 +646,12 @@ describe("routeTraces", () => {
     const [trace] = routeTraces(
       route("healthy"),
       sources({
-        backing: { services: [], published: [], backingKnown: true },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: true,
+          backingError: null,
+        },
       }),
       t
     );
@@ -663,6 +670,7 @@ describe("routeTraces", () => {
           services: [service("healthy", [9999])],
           published: [published("healthy", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -683,6 +691,7 @@ describe("routeTraces", () => {
           services: [service("healthy")],
           published: [published("healthy", 0)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t
@@ -871,7 +880,12 @@ describe("routeTraces", () => {
     const [trace] = routeTraces(
       route("healthy"),
       sources({
-        backing: { services: [], published: [], backingKnown: false },
+        backing: {
+          services: [],
+          published: [],
+          backingKnown: false,
+          backingError: null,
+        },
       }),
       t
     );
@@ -914,6 +928,7 @@ describe("routeTraces", () => {
           services: [service("both")],
           published: [published("both", 1)],
           backingKnown: true,
+          backingError: null,
         },
       }),
       t

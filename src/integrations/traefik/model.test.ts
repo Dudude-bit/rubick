@@ -147,6 +147,8 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
     classes: [TRAEFIK_CLASS, NGINX_CLASS],
     services: [],
     published: [],
+    backingKnown: true,
+    backingError: null,
     middlewares: [],
     entryPoints: [],
     ...over,
@@ -785,6 +787,7 @@ describe("what it refuses to claim before it knows", () => {
       sources({
         ingresses: [ingress("ghost", "ghost.example.com", { service: "gone" })],
         backingKnown: false,
+        backingError: null,
       })
     );
 
@@ -976,6 +979,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
     services: [proxyService()],
     published: [],
     backingKnown: false,
+    backingError: null,
     entryPoints: [
       { name: "web", address: ":8000", tls: false, redirectTo: null },
     ],

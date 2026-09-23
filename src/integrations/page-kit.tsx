@@ -316,6 +316,22 @@ export function OutLink({
   );
 }
 
+/**
+ * The Services and their endpoints could not be read. Without it a refused
+ * read stayed on "checking what is behind them" for as long as the page was
+ * open, which is a question that will never be answered stated as one being
+ * asked.
+ */
+export function BackingUnread({ error }: { error: string | null }) {
+  const t = useT();
+  if (!error) return null;
+  return (
+    <span className="text-[11px] text-warn" title={error}>
+      {t("empty", "behindUnread", { why: error })}
+    </span>
+  );
+}
+
 /** One box in a chain, with its second line of detail. */
 export function Cell({
   children,

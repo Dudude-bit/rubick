@@ -84,7 +84,13 @@ export function routingMap(
                   .filter(Boolean)
                   .join(" · ")
               : "outside the mesh",
-            tone: service ? (backing.stop ? "err" : "ok") : "mute",
+            tone: !service
+              ? "mute"
+              : !backing.known
+                ? "unknown"
+                : backing.stop
+                  ? "err"
+                  : "ok",
             object: service
               ? {
                   kind: ResourceType.Service,
@@ -95,7 +101,9 @@ export function routingMap(
             tag: !service
               ? undefined
               : !backing.known
-                ? undefined
+                ? backing.error
+                  ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+                  : undefined
                 : backing.stop
                   ? { text: t("readings", "mapZeroReady"), tone: "err" }
                   : {
@@ -107,7 +115,13 @@ export function routingMap(
         link(
           id,
           destinationId,
-          backing.stop ? "err" : tone === "err" ? "warn" : "ok"
+          service && !backing.known
+            ? "unknown"
+            : backing.stop
+              ? "err"
+              : tone === "err"
+                ? "warn"
+                : "ok"
         );
       }
     }

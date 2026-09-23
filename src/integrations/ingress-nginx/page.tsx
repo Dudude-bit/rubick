@@ -17,8 +17,13 @@
  */
 
 import { sayWords } from "@/i18n/say";
-import { useCallback, useMemo, useState } from "react";
-import type { ServiceStop } from "../ingress";
+import { useCallback, useMemo } from "react";
+import {
+  BACKING_NOT_READ,
+  backingFrom,
+  useRouteCertificates,
+  type ServiceStop,
+} from "../ingress";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import {
@@ -43,9 +48,11 @@ import {
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import { useSearchParams } from "react-router-dom";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import {
+  BackingUnread,
   Chain,
   Cell,
   Column,
@@ -60,7 +67,6 @@ import {
   sourcesFrom,
   useBacking,
   useController,
-  useRouteCertificates,
   useRouteSources,
   type ControllerInfo,
 } from "./data";
@@ -95,7 +101,7 @@ export default function IngressNginxPage() {
   const routes = useMemo(
     () =>
       routeSources.data
-        ? allRoutes({ ...routeSources.data, services: [], published: [] }, t)
+        ? allRoutes({ ...routeSources.data, ...BACKING_NOT_READ }, t)
         : [],
     [routeSources.data, t]
   );
@@ -158,19 +164,26 @@ export default function IngressNginxPage() {
     [fronting.routes, frontTls]
   );
 
-  const sources: NginxSources | null = routeSources.data
-    ? {
-        ...sourcesFrom(routeSources.data, backing.data, certificates),
-        upstreamTls,
-      }
-    : null;
+  const sources: NginxSources | null = useMemo(
+    () =>
+      routeSources.data
+        ? {
+            ...sourcesFrom(
+              routeSources.data,
+              backingFrom(backing.data, backing.error),
+              certificates
+            ),
+            upstreamTls,
+          }
+        : null,
+    [routeSources.data, backing.data, backing.error, certificates, upstreamTls]
+  );
 
+  // `t` too: the groups carry sentences, and a memo without it kept the
+  // language they were first built in.
   const groups = useMemo(
     () => (sources ? hostGroups(sources, t) : []),
-    // `sources` is rebuilt every render; the inputs it is built from are what
-    // actually change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [routeSources.data, backing.data, certificates.size, upstreamTls]
+    [sources, t]
   );
 
   if (routeSources.error) {
@@ -377,7 +390,7 @@ function RoutesTab({
   backingLoading: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useSearchParam("q");
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -442,6 +455,7 @@ function RoutesTab({
             {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
+        <BackingUnread error={sources?.backingError ?? null} />
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
@@ -626,7 +640,9 @@ function PathRow({
         {route.service === null
           ? t("empty", "notAService")
           : backing && !backing.known
-            ? "…"
+            ? backing.error
+              ? t("empty", "unknownLower")
+              : "…"
             : backing?.stop
               ? "—"
               : backing
@@ -786,7 +802,15 @@ function HostChain({
           {route.service === null ? (
             <Cell under={t("empty", "notAService")}>—</Cell>
           ) : !backing.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}

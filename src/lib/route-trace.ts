@@ -972,7 +972,7 @@ function backendSteps(
       },
     ];
   }
-  if (backing.backingKnown === false) {
+  if (!backing.backingKnown) {
     return [
       {
         id: "backend",

@@ -80,6 +80,8 @@ function sources(over: Partial<TraefikSources> = {}): TraefikSources {
     classes: [TRAEFIK_CLASS],
     services: [],
     published: [],
+    backingKnown: true,
+    backingError: null,
     middlewares: [],
     entryPoints: [
       { name: "web", address: ":80", tls: false, redirectTo: null },
@@ -95,6 +97,24 @@ function mapOf(over: Partial<TraefikSources>) {
 }
 
 describe("the routing map", () => {
+  /**
+   * A Service whose endpoints nobody could read was drawn in the same tone
+   * as one confirmed serving — the words were careful and the colour lied.
+   */
+  it("draws a Service whose endpoints were refused as unknown", () => {
+    const map = mapOf({
+      ingresses: [ingress("shop", "shop.example.com")],
+      services: [service("web")],
+      backingKnown: false,
+      backingError: "endpointslices is forbidden",
+    });
+
+    const node = map.columns[2].nodes[0];
+    expect(node.tone).toBe("unknown");
+    expect(node.tag?.tone).toBe("unknown");
+    expect(map.edges.find((edge) => edge.to === node.id)?.tone).toBe("unknown");
+  });
+
   /**
    * The shape the chain cannot show and the reason this view exists: two
    * hostnames landing on one Service is invisible in a list however it is

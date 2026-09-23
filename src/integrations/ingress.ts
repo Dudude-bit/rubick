@@ -13,10 +13,16 @@
  * vendor's own, and a helper holding all three would hold none honestly.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import { load } from "js-yaml";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import type {
@@ -110,8 +116,11 @@ export interface Backing {
   notReady: number;
   /** Set only where the path stops. */
   stop: ServiceStop | null;
-  /** False while the Services and their slices are still being read. */
+  /** False while the Services and their slices are still being read, or
+   *  since they could not be. */
   known: boolean;
+  /** Why they could not be, in the cluster's words; null while reading. */
+  error: string | null;
 }
 
 export interface BackingSources {
@@ -124,8 +133,36 @@ export interface BackingSources {
    * readily as it means "none". Without this a page spends the second
    * between the two answers telling the reader that every backend in the
    * cluster is missing, which is a worse lie than saying nothing.
+   *
+   * Required: optional, forgetting it meant "known".
    */
-  backingKnown?: boolean;
+  backingKnown: boolean;
+  /** Why they were not read, where they could not be; null while reading. */
+  backingError: string | null;
+}
+
+/** For a caller that counts routes and never reads what is behind them. */
+export const BACKING_NOT_READ: BackingSources = {
+  services: [],
+  published: [],
+  backingKnown: false,
+  backingError: null,
+};
+
+/**
+ * The lists as every page carries them. Eight places built this object by
+ * hand, and a refused read showed as "reading endpoints" for good.
+ */
+export function backingFrom(
+  data: BackingLists | undefined,
+  error: unknown
+): BackingSources {
+  return {
+    services: data?.services ?? [],
+    published: data?.published ?? [],
+    backingKnown: data !== undefined,
+    backingError: data === undefined && error ? errorToShow(error) : null,
+  };
 }
 
 function ref(kind: string, name: string, namespace: string): ObjectRef {
@@ -151,7 +188,8 @@ export function backingOf(
   from: { kind: string; name: string; namespace: string },
   sources: BackingSources
 ): Backing {
-  const known = sources.backingKnown !== false;
+  const known = sources.backingKnown;
+  const error = known ? null : sources.backingError;
   const empty: Backing = {
     service: undefined,
     ready: 0,
@@ -159,6 +197,7 @@ export function backingOf(
     notReady: 0,
     stop: null,
     known,
+    error,
   };
   if (!backend || !known) return empty;
 
@@ -186,7 +225,15 @@ export function backingOf(
   // no endpoints and is not a stop. Saying it were would be the page calling
   // a working configuration broken.
   if (service.type === "ExternalName") {
-    return { service, ready: 0, draining: 0, notReady: 0, stop: null, known };
+    return {
+      service,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      stop: null,
+      known,
+      error,
+    };
   }
 
   // What the Service publishes, not what its pods look like. The same answer
@@ -200,7 +247,7 @@ export function backingOf(
   const ready = published?.ready ?? 0;
   const draining = published?.draining ?? 0;
   const notReady = published?.notReady ?? 0;
-  const state = { service, ready, draining, notReady, known };
+  const state = { service, ready, draining, notReady, known, error };
 
   // A draining address is still the one kube-proxy sends to when nothing
   // ready is left, so a Service down to one is a restart rather than a 502.
@@ -426,4 +473,97 @@ export function worstOf(
     }
   }
   return worst;
+}
+
+// --- the certificates a set of routes is served under -------------------
+
+/** A route that may name a TLS Secret in its own namespace. */
+interface ServedRoute {
+  source: { namespace: string };
+  tlsSecret?: string | null;
+}
+
+/**
+ * The certificates behind the TLS Secrets these routes are served under,
+ * keyed `namespace/secret`.
+ *
+ * Core, and it works on a cluster with nothing installed: `tls.crt` states
+ * its own validity. On the key `useTlsCertificates` reads, so an Ingress page
+ * and a vendor page ask for one certificate once. Stable until a read
+ * changes, so a memo built on it follows a renewed certificate rather than a
+ * count of them.
+ */
+export function useRouteCertificates(
+  routes: readonly ServedRoute[] | undefined
+): Map<string, TlsCertificate> {
+  const batches = useMemo(() => {
+    const byNamespace = new Map<string, Set<string>>();
+    for (const route of routes ?? []) {
+      if (!route.tlsSecret) continue;
+      const names = byNamespace.get(route.source.namespace) ?? new Set();
+      names.add(route.tlsSecret);
+      byNamespace.set(route.source.namespace, names);
+    }
+    return [...byNamespace].map(([namespace, names]) => ({
+      namespace,
+      names: [...names].sort(),
+    }));
+  }, [routes]);
+
+  const combine = useCallback(
+    (results: UseQueryResult<Map<string, TlsCertificate>>[]) => {
+      const certificates = new Map<string, TlsCertificate>();
+      results.forEach((result, index) => {
+        for (const [name, read] of result.data ?? []) {
+          certificates.set(`${batches[index].namespace}/${name}`, read);
+        }
+      });
+      return certificates;
+    },
+    [batches]
+  );
+
+  return useQueries({
+    queries: batches.map((batch) => ({
+      queryKey: ["tls-certificates", batch.namespace, batch.names.join(",")],
+      queryFn: async (): Promise<Map<string, TlsCertificate>> => {
+        const read = await commands.getTlsCertificates(
+          batch.namespace,
+          batch.names
+        );
+        return new Map(read.map((entry) => [entry.secretName, entry]));
+      },
+      staleTime: ROUTING_STALE,
+    })),
+    combine,
+  });
+}
+
+// --- finding a controller's own workload ----------------------------------
+
+/** A list read for a lookup: its items, or why there are none to look at. */
+export interface ListRead<T> {
+  items: T[];
+  error: string | null;
+}
+
+/**
+ * A list whose refusal is kept rather than read as empty. Looking for a
+ * controller through `.catch(() => [])` turned a 403 into "no controller is
+ * installed", which sends somebody to install one that is running.
+ */
+export async function listOrRefusal<T>(
+  read: Promise<T[]>
+): Promise<ListRead<T>> {
+  try {
+    return { items: await read, error: null };
+  } catch (error) {
+    return { items: [], error: errorToShow(error) };
+  }
+}
+
+/** Why nothing was found, when nothing could have been: the first refusal. */
+export function refusalOf(...reads: ListRead<unknown>[]): string | null {
+  if (reads.some((read) => read.items.length > 0)) return null;
+  return reads.find((read) => read.error !== null)?.error ?? null;
 }

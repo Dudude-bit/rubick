@@ -19,7 +19,7 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { ROUTING_STALE, useBackingLists } from "@/integrations";
+import { backingFrom, ROUTING_STALE, useBackingLists } from "@/integrations";
 import {
   routeTraces,
   probedReachable,
@@ -774,15 +774,11 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
           topologyKnown:
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
-          backing: {
-            services: backing.data?.services ?? [],
-            published: backing.data?.published ?? [],
-            backingKnown: backing.data !== undefined,
-          },
+          backing: backingFrom(backing.data, backing.error),
         },
         t
       ),
-    [route, gateways.data, classes.data, backing.data, served, t]
+    [route, gateways.data, classes.data, backing.data, backing.error, served, t]
   );
 
   // A ListenerSet parent is a gateway attachment that went the long way;

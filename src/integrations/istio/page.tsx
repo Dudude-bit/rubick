@@ -15,9 +15,10 @@
  * request.
  */
 
-import { useMemo, useState } from "react";
-import type { ServiceStop } from "../ingress";
+import { useMemo } from "react";
+import { backingFrom, type ServiceStop } from "../ingress";
 import { useSearchParams } from "react-router-dom";
+import { useSearchParam } from "@/hooks/useSearchParam";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -35,6 +36,7 @@ import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import type { CustomResourceInfo } from "@/generated/types";
 import {
+  BackingUnread,
   Chain,
   Cell,
   Column,
@@ -68,14 +70,19 @@ export default function IstioPage() {
   const mesh = useMesh();
   const backing = useBacking();
 
-  const sources: IstioSources | null = mesh.data
-    ? sourcesFrom(mesh.data, backing.data)
-    : null;
+  const sources: IstioSources | null = useMemo(
+    () =>
+      mesh.data
+        ? sourcesFrom(mesh.data, backingFrom(backing.data, backing.error))
+        : null,
+    [mesh.data, backing.data, backing.error]
+  );
 
+  // `t` too: the groups carry sentences, and a memo without it kept the
+  // language they were first built in.
   const groups = useMemo(
     () => (sources ? hostGroups(sources, t) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mesh.data, backing.data]
+    [sources, t]
   );
 
   if (mesh.error) {
@@ -250,7 +257,7 @@ function RoutesTab({
   backingLoading: boolean;
 }) {
   const t = useT();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useSearchParam("q");
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -311,6 +318,7 @@ function RoutesTab({
             {t("empty", "checkingWhatIsBehind")}
           </span>
         )}
+        <BackingUnread error={sources?.backingError ?? null} />
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-xs text-fg-fnt">
@@ -592,7 +600,15 @@ function HostChain({
           {!destination || destination.external ? (
             <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
           ) : !backing?.known ? (
-            <Cell under={t("empty", "readingEndpoints")}>—</Cell>
+            <Cell
+              under={t(
+                "empty",
+                backing?.error ? "endpointsUnread" : "readingEndpoints"
+              )}
+              title={backing?.error ?? undefined}
+            >
+              —
+            </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
               {t("count", "nPublished", { n: 0 })}

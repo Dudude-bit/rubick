@@ -22,8 +22,6 @@ import type {
   ChainStop,
   IngressClassSummary,
   IngressInfo,
-  ServiceInfo,
-  ServicePublished,
   TlsCertificate,
 } from "@/generated/types";
 import { covers, type Expiry } from "@/lib/certificates";
@@ -36,6 +34,7 @@ import {
   tlsSecretFor,
   worstOf,
   type Backing,
+  type BackingSources,
   type SecretRef,
 } from "../ingress";
 import { PREFIX, readAnnotations, type AnnotationReading } from "./annotations";
@@ -138,12 +137,9 @@ export interface NginxHostGroup {
   worst: "err" | "warn" | null;
 }
 
-export interface NginxSources {
+export interface NginxSources extends BackingSources {
   ingresses: IngressInfo[];
   classes: IngressClassSummary[];
-  services: ServiceInfo[];
-  published: ServicePublished[];
-  backingKnown?: boolean;
   certificates?: Map<string, TlsCertificate>;
   /**
    * Whether something in front of this nginx terminates TLS for a host —
@@ -310,10 +306,7 @@ export function allRoutes(sources: NginxSources, t: T): NginxRoute[] {
     .flatMap((ingress, index) => routesFrom(ingress, index, t));
 }
 
-export function backingOf(
-  route: NginxRoute,
-  sources: Pick<NginxSources, "services" | "published" | "backingKnown">
-): Backing {
+export function backingOf(route: NginxRoute, sources: BackingSources): Backing {
   return backingOfBackend(route.service, route.source, sources);
 }
 

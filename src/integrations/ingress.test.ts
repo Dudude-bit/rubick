@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backingOf, type BackingSources } from "./ingress";
+import { backingFrom, backingOf, type BackingSources } from "./ingress";
 import type { ServiceInfo, ServicePublished } from "@/generated/types";
 
 const service = (overrides: Partial<ServiceInfo> = {}): ServiceInfo =>
@@ -47,6 +47,7 @@ const sources = (over: Partial<BackingSources> = {}): BackingSources => ({
   services: [service()],
   published: [published()],
   backingKnown: true,
+  backingError: null,
   ...over,
 });
 
@@ -105,9 +106,38 @@ describe("what a route's backend is doing", () => {
     const answer = backingOf(
       { name: "app", namespace: "shop" },
       from,
-      sources({ backingKnown: false })
+      sources({ backingKnown: false, backingError: null })
     );
 
     expect(answer.known).toBe(false);
+  });
+
+  /**
+   * A refused read used to look exactly like one still in flight: the page
+   * said "reading endpoints" for as long as it was open. The reason now
+   * travels with the unknown.
+   */
+  it("says why it does not know when the lists were refused", () => {
+    const refused = backingFrom(
+      undefined,
+      new Error("services is forbidden (code: 403)")
+    );
+    expect(refused.backingKnown).toBe(false);
+    expect(refused.backingError).toContain("forbidden");
+
+    const answer = backingOf({ name: "app", namespace: "shop" }, from, refused);
+    expect(answer.known).toBe(false);
+    expect(answer.error).toContain("forbidden");
+  });
+
+  /** Still reading is not a failure, and an answer is known whatever else failed. */
+  it("keeps reading and read apart from refused", () => {
+    expect(backingFrom(undefined, null)).toMatchObject({
+      backingKnown: false,
+      backingError: null,
+    });
+    expect(
+      backingFrom({ services: [], published: [] }, new Error("a later refetch"))
+    ).toMatchObject({ backingKnown: true, backingError: null });
   });
 });

@@ -17,7 +17,7 @@
  */
 
 import type { Saying } from "@/i18n/say";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -27,12 +27,19 @@ import type {
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
-import { useBackingLists, workloadArgs, type BackingLists } from "../ingress";
+import {
+  BACKING_NOT_READ,
+  listOrRefusal,
+  refusalOf,
+  useBackingLists,
+  type BackingLists,
+  workloadArgs,
+  type BackingSources,
+} from "../ingress";
 import {
   allRoutes,
   readEntryPoints,
   type EntryPoint,
-  type TraefikRoute,
   type TraefikSources,
 } from "./model";
 
@@ -131,8 +138,7 @@ export function countHosts(sources: RouteSources): number {
   const hosts = new Set(
     allRoutes({
       ...sources,
-      services: [],
-      published: [],
+      ...BACKING_NOT_READ,
       entryPoints: [],
     }).map((route) => route.clause.host ?? "")
   );
@@ -197,17 +203,22 @@ export async function fetchController(): Promise<ControllerInfo> {
   };
 
   const [deployments, daemonSets] = await Promise.all([
-    commands.listDeployments(filters).catch(() => []),
-    commands.listDaemonsets(filters).catch(() => []),
+    listOrRefusal(commands.listDeployments(filters)),
+    listOrRefusal(commands.listDaemonsets(filters)),
   ]);
 
-  const deployment = deployments[0];
-  const daemonSet = daemonSets[0];
+  const deployment = deployments.items[0];
+  const daemonSet = daemonSets.items[0];
   if (!deployment && !daemonSet) {
-    return none({
-      key: "traefikNoController",
-      values: { selector: CONTROLLER_SELECTOR },
-    });
+    const refused = refusalOf(deployments, daemonSets);
+    return none(
+      refused
+        ? { key: "controllerUnread", values: { why: refused } }
+        : {
+            key: "traefikNoController",
+            values: { selector: CONTROLLER_SELECTOR },
+          }
+    );
   }
 
   const workload = deployment
@@ -268,63 +279,16 @@ export function useController() {
   });
 }
 
-/**
- * The certificates behind the TLS Secrets these routes are served under.
- *
- * Core, and it works on a cluster with nothing installed: `tls.crt` states
- * its own validity. cert-manager's half — *why* it looks like that, and what
- * is stopping the renewal — arrives separately through the capability seam
- * and is simply absent when nothing supplies it.
- */
-export function useRouteCertificates(routes: TraefikRoute[] | undefined) {
-  const context = useClusterStore((state) => state.currentContext);
-  const byNamespace = new Map<string, string[]>();
-  for (const route of routes ?? []) {
-    if (!route.tlsSecret) continue;
-    const namespace = route.source.namespace;
-    const names = byNamespace.get(namespace) ?? [];
-    if (!names.includes(route.tlsSecret)) names.push(route.tlsSecret);
-    byNamespace.set(namespace, names);
-  }
-  const batches = [...byNamespace.entries()].map(([namespace, names]) => ({
-    namespace,
-    names: [...names].sort(),
-  }));
-
-  const results = useQueries({
-    queries: batches.map((batch) => ({
-      queryKey: [
-        context,
-        "tls-certificates",
-        batch.namespace,
-        batch.names.join(","),
-      ],
-      queryFn: () => commands.getTlsCertificates(batch.namespace, batch.names),
-      staleTime: ROUTE_STALE,
-    })),
-  });
-
-  const certificates = new Map<string, TlsCertificate>();
-  results.forEach((result, index) => {
-    for (const read of result.data ?? []) {
-      certificates.set(`${batches[index].namespace}/${read.secretName}`, read);
-    }
-  });
-  return certificates;
-}
-
 /** Everything the page needs, once all three queries have answered. */
 export function sourcesFrom(
   routeSources: RouteSources,
-  backing: Backing | undefined,
+  backing: BackingSources,
   controller: ControllerInfo | undefined,
   certificates: Map<string, TlsCertificate>
 ): TraefikSources {
   return {
     ...routeSources,
-    services: backing?.services ?? [],
-    published: backing?.published ?? [],
-    backingKnown: backing !== undefined,
+    ...backing,
     entryPoints: controller?.entryPoints ?? [],
     certificates,
   };

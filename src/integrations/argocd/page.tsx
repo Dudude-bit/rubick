@@ -76,6 +76,7 @@ import {
   type ArgoSource,
 } from "./model";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
 
 /** Past this many broken applications, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -1052,7 +1053,7 @@ function ControllerTab({
         />
         {controller.components.length === 0 ? (
           <p className="max-w-[64ch] text-[11px] text-fg-fnt">
-            {controller.problem}
+            {controller.problem && sayWords(controller.problem, t)}
           </p>
         ) : (
           <div className="flex flex-col">

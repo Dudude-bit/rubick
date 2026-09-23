@@ -43,7 +43,7 @@ import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { backingOf, useBackingLists } from "@/integrations";
+import { backingFrom, backingOf, useBackingLists } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -147,11 +147,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
                                 name: route.name,
                                 namespace: route.namespace,
                               },
-                              {
-                                services: backing.data?.services ?? [],
-                                published: backing.data?.published ?? [],
-                                backingKnown: backing.data !== undefined,
-                              }
+                              backingFrom(backing.data, backing.error)
                             )
                           : null;
                       return (

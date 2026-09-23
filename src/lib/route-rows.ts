@@ -362,8 +362,7 @@ export function routesBoard(
     if (gatewayParents.length === 0) {
       const parent = route.parentRefs[0];
       const at = parent.namespace ?? route.namespace;
-      const settled =
-        parent.kind === "Service" && sources.backing.backingKnown !== false;
+      const settled = parent.kind === "Service" && sources.backing.backingKnown;
       const exists =
         settled &&
         sources.backing.services.some(
@@ -443,8 +442,7 @@ export function routesBoard(
   mesh.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
-    verdictsKnown:
-      sources.topologyKnown && sources.backing.backingKnown !== false,
+    verdictsKnown: sources.topologyKnown && sources.backing.backingKnown,
     notServing: notServing.map((entry) => entry.row),
     serving,
     mesh,
