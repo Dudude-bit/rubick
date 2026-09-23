@@ -312,9 +312,11 @@ export interface IngressTls {
   /**
    * Whether the host is served over TLS. `false` is a real answer — a vendor
    * that owns this Ingress and finds no certificate for the host is stating
-   * that it serves plain HTTP, which is worth more than silence.
+   * that it serves plain HTTP, which is worth more than silence. `null` is
+   * the vendor owning it and not having read enough to say — a certificate
+   * named into a list it could not read — and is never read as `false`.
    */
-  terminated: boolean;
+  terminated: boolean | null;
   /**
    * What holds it, for the sentence: "an ACM certificate", "shop-cert". Never
    * branched on — the surface prints it. A key, because this is answered

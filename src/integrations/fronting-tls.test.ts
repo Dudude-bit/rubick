@@ -10,6 +10,8 @@ const answers = vi.hoisted(() => ({
     isPending: false,
     error: null as Error | null,
   },
+  /** What a cloud controller says about a host it was asked about. */
+  front: new Map<string, boolean | null>(),
 }));
 
 vi.mock("@/hooks/useServiceRoutes", () => ({
@@ -17,14 +19,29 @@ vi.mock("@/hooks/useServiceRoutes", () => ({
     service ? answers.routes : { routes: [], isPending: false, error: null },
 }));
 vi.mock("@/hooks/useIngressTls", () => ({
-  useIngressTls: () => ({
-    available: false,
-    of: () => null,
+  // Answers only for the hosts it was asked about, as a supplier does.
+  useIngressTls: (
+    asked: Array<{ namespace: string; name: string; hosts: string[] }>
+  ) => ({
+    available: true,
+    of: (ingress: { namespace: string; name: string }, host: string) => {
+      const was = asked.find(
+        (entry) =>
+          entry.namespace === ingress.namespace &&
+          entry.name === ingress.name &&
+          entry.hosts.includes(host)
+      );
+      const said = answers.front.get(`${ingress.name}/${host}`);
+      return was && said !== undefined
+        ? { host, terminated: said, by: { key: "verbatimLine" } }
+        : null;
+    },
     isPending: false,
     error: null,
   }),
 }));
 
+import type { IngressInfo } from "@/generated/types";
 import { useFrontingTls } from "./fronting-tls";
 
 const LABEL = ["app.kubernetes.io/name", "traefik"] as const;
@@ -35,13 +52,44 @@ const proxy = {
   selector: { "app.kubernetes.io/name": "traefik" },
 } as unknown as ServiceInfo;
 
-const ask = (services: ServiceInfo[] | undefined) =>
-  renderHook(() => useFrontingTls([], services, LABEL)).result.current(
-    "shop.example.com"
-  );
+/** An Ingress sending everything to the proxy, naming no host of its own. */
+const edge = {
+  name: "edge",
+  namespace: "kube-system",
+  rules: [],
+  defaultBackend: {
+    backendService: "traefik",
+    backendPort: "80",
+    resourceBackend: null,
+  },
+} as unknown as IngressInfo;
+
+/** An Ingress routing the host itself to the proxy. */
+const shop = {
+  name: "shop",
+  namespace: "kube-system",
+  rules: [
+    {
+      host: "shop.example.com",
+      paths: [{ path: "/", backendService: "traefik", backendPort: "80" }],
+    },
+  ],
+  defaultBackend: null,
+} as unknown as IngressInfo;
+
+const SERVED = ["shop.example.com"];
+
+const ask = (
+  services: ServiceInfo[] | undefined,
+  ingresses: IngressInfo[] = []
+) =>
+  renderHook(() =>
+    useFrontingTls(ingresses, services, LABEL, SERVED)
+  ).result.current("shop.example.com");
 
 beforeEach(() => {
   answers.routes = { routes: [], isPending: false, error: null };
+  answers.front = new Map();
 });
 
 describe("whether something in front terminates TLS", () => {
@@ -79,6 +127,26 @@ describe("whether something in front terminates TLS", () => {
       error: null,
     };
     expect(ask([proxy])).toBe("unknown");
+  });
+
+  /**
+   * GKE answers `null` for a host whose ManagedCertificate it could not
+   * list; read as silence, the proxy's hosts were called served in the
+   * clear. Fails if the null is dropped.
+   */
+  it("could not say when the controller in front could not read its certificate", () => {
+    answers.front.set("shop/shop.example.com", null);
+    expect(ask([proxy], [shop])).toBe("unknown");
+  });
+
+  /**
+   * A load balancer sending everything to the proxy through
+   * `spec.defaultBackend` names no host, and was asked about none — so its
+   * certificate, read or not, never reached a single host behind it.
+   */
+  it("asks a hostless Ingress in front about the hosts the proxy serves", () => {
+    answers.front.set("edge/shop.example.com", true);
+    expect(ask([proxy], [edge])).toBe(true);
   });
 
   it("says yes for a host a route in front serves over TLS", () => {

@@ -1,4 +1,6 @@
 import { useT } from "@/i18n/useT";
+import { covers } from "@/lib/certificates";
+import type { VendorTlsAnswer } from "./vendor-tls";
 import {
   Tooltip,
   TooltipContent,
@@ -16,7 +18,7 @@ interface TlsBadgeProps {
    * without this the column read "no TLS" on every HTTPS site on a managed
    * cluster.
    */
-  vendor?: { hosts: string[]; by: string } | null;
+  vendor?: VendorTlsAnswer | null;
 }
 
 /**
@@ -30,9 +32,16 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
   const t = useT();
   const explicitCount = tlsHosts.length;
   const vendorHosts = vendor?.hosts ?? [];
+  const unchecked = hasCatchAllTls
+    ? []
+    : (vendor?.unchecked ?? []).filter((host) => !covers(tlsHosts, host));
 
   if (explicitCount === 0 && !hasCatchAllTls && vendorHosts.length === 0) {
-    return <span className="text-fg-fnt">{t("empty", "noTls")}</span>;
+    return (
+      <span className="text-fg-fnt">
+        {t("empty", unchecked.length > 0 ? "tlsNotChecked" : "noTls")}
+      </span>
+    );
   }
 
   // The controller's answer is not a Secret in this cluster, so it is counted
@@ -52,6 +61,11 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
               {host}
             </div>
           ))}
+          {unchecked.map((host) => (
+            <div key={host} className="text-xs">
+              {host} · {t("empty", "tlsNotChecked")}
+            </div>
+          ))}
         </TooltipContent>
       </Tooltip>
     );
@@ -69,6 +83,7 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
     ...vendorHosts.map((host) =>
       vendor ? t("readings", "tlsHostFrom", { host, by: vendor.by }) : host
     ),
+    ...unchecked.map((host) => `${host} · ${t("empty", "tlsNotChecked")}`),
   ];
 
   return (

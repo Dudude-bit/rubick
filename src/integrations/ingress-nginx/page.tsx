@@ -110,11 +110,18 @@ export default function IngressNginxPage() {
     [routeSources.data, t]
   );
   const certificates = useRouteCertificates(routes);
+  const served = useMemo(
+    () => [
+      ...new Set(routes.flatMap((route) => (route.host ? [route.host] : []))),
+    ],
+    [routes]
+  );
 
   const upstreamTls = useFrontingTls(
     routeSources.data?.ingresses,
     backing.data?.services,
-    PROXY_LABEL
+    PROXY_LABEL,
+    served
   );
 
   const sources: NginxSources | null = useMemo(

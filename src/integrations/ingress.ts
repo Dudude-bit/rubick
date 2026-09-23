@@ -432,6 +432,32 @@ export function frontingIngressesOf(
 }
 
 /**
+ * What a cloud controller is asked about each Ingress in front: its own rule
+ * hosts, and for one sending everything to the proxy through
+ * `spec.defaultBackend`, every host the proxy serves — the load balancer's
+ * certificate is for those, and the Ingress names none of them.
+ */
+export function frontingQuestions(
+  fronting: readonly IngressInfo[],
+  proxies: readonly ServiceInfo[],
+  served: readonly string[]
+): Array<{ namespace: string; name: string; hosts: string[] }> {
+  return fronting.map((ingress) => {
+    const own = ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : []));
+    const everything = proxies.some(
+      (service) =>
+        service.namespace === ingress.namespace &&
+        service.name === ingress.defaultBackend?.backendService
+    );
+    return {
+      namespace: ingress.namespace,
+      name: ingress.name,
+      hosts: [...new Set(everything ? [...own, ...served] : own)],
+    };
+  });
+}
+
+/**
  * Where TLS ends for a host that holds no certificate of its own: at an
  * Ingress in front, at a cloud controller in front, nowhere — or not known,
  * because the Services or what stands in front could not be read.

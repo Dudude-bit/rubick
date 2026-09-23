@@ -1,4 +1,3 @@
-import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -9,7 +8,6 @@ import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
-import { covers } from "@/lib/certificates";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -26,7 +24,12 @@ import {
   createAgeColumn,
 } from "@/components/resources/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { TlsBadge } from "@/components/network";
+import {
+  TlsBadge,
+  ingressOpenUrl,
+  vendorTlsAnswer,
+  type VendorTlsAnswer,
+} from "@/components/network";
 import { useWatchedList } from "@/hooks/useWatchedList";
 
 import type { IngressInfo, Scoped } from "@/generated/types";
@@ -45,7 +48,7 @@ import { useT } from "@/i18n/useT";
  * managed clouds.
  */
 const VendorTls = createContext<
-  ((ingress: IngressInfo) => { hosts: string[]; by: string } | null) | null
+  ((ingress: IngressInfo) => VendorTlsAnswer | null) | null
 >(null);
 
 function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
@@ -82,30 +85,6 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
     </span>
   );
 }
-
-const getIngressOpenUrl = (
-  ingress: IngressInfo,
-  /** Hosts a controller terminates that `spec.tls` never mentions. */
-  vendorHosts: string[] = []
-): string | null => {
-  const host =
-    ingress.rules.find((rule) => rule.host && rule.host !== "*")?.host ||
-    ingress.loadBalancerIps[0];
-
-  if (!host) {
-    return null;
-  }
-
-  // `covers` rather than equality: `*.example.com` is how a wildcard Secret
-  // serves `shop.example.com`, and a literal comparison offered http:// for
-  // every subdomain behind one.
-  const usesTls =
-    covers(ingress.tlsHosts, host) ||
-    ingress.hasCatchAllTls ||
-    vendorHosts.includes(host);
-  const scheme = usesTls ? "https" : "http";
-  return `${scheme}://${host}`;
-};
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -255,19 +234,7 @@ export function IngressList() {
   );
   const vendorTls = useIngressTls(asked);
   const vendorFor = useCallback(
-    (ingress: IngressInfo) => {
-      const hosts = ingress.rules.flatMap((rule) =>
-        rule.host && vendorTls.of(ingress, rule.host)?.terminated
-          ? [rule.host]
-          : []
-      );
-      if (hosts.length === 0) return null;
-      const said = vendorTls.of(ingress, hosts[0])?.by;
-      const by = said
-        ? sayWords(said, t)
-        : t("empty", "theLoadBalancerInFront");
-      return { hosts, by };
-    },
+    (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]
   );
 
@@ -291,10 +258,10 @@ export function IngressList() {
         icon: ExternalLink,
         label: t("action", "openInBrowser"),
         onClick: (item) => {
-          const url = getIngressOpenUrl(item, vendorFor(item)?.hosts ?? []);
+          const url = ingressOpenUrl(item, vendorFor(item));
           if (url) window.open(url, "_blank", "noreferrer");
         },
-        hidden: (item) => !getIngressOpenUrl(item),
+        hidden: (item) => !ingressOpenUrl(item, vendorFor(item)),
       },
       {
         icon: Trash2,
