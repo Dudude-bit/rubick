@@ -80,5 +80,4 @@ const SECTION_KEY = {
   tabs: "sectionTabs",
   table: "sectionTable",
   logs: "sectionLogs",
-  builder: "sectionBuilder",
 } as const;

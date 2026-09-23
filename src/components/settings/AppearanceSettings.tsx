@@ -55,7 +55,7 @@ export function AppearanceSettings() {
           <Select
             value={choice ?? "system"}
             onValueChange={(value) =>
-              setChoice(value === "system" ? null : (value as Locale))
+              void setChoice(value === "system" ? null : (value as Locale))
             }
           >
             <SelectTrigger id="setting-language" className="h-7 w-56 text-xs">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatShortcut } from "@/lib/platform";
+import { formatShortcut, hostOsFromUserAgent } from "@/lib/platform";
 
 describe("formatShortcut", () => {
   it("renders mod as the command glyph on macOS", () => {
@@ -31,5 +31,30 @@ describe("formatShortcut", () => {
 
   it("falls back to the ctrl form for an unknown os", () => {
     expect(formatShortcut("mod+K", "freebsd")).toBe("Ctrl+K");
+  });
+});
+
+describe("the host OS before anything has been asked", () => {
+  /**
+   * The first render waited up to two seconds for the backend to name the
+   * OS; the webview's own user agent already says it. These are the three
+   * webviews Tauri runs in.
+   */
+  it("reads each webview's user agent as its platform", () => {
+    expect(
+      hostOsFromUserAgent(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+      )
+    ).toBe("macos");
+    expect(
+      hostOsFromUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0"
+      )
+    ).toBe("windows");
+    expect(
+      hostOsFromUserAgent(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+      )
+    ).toBe("linux");
   });
 });

@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   cleanup,
   render,
@@ -102,6 +110,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
 
 function buildPod(overrides: Partial<PodInfo> = {}): PodInfo {
@@ -367,6 +376,12 @@ function mockCluster() {
   servicesRoutesSpy.mockReset();
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
+
+// The body is fetched ahead of the first peek in the app; here it is fetched
+// once, so every render below opens the panel whole, as a click does.
+beforeAll(async () => {
+  await preloadPeekContent();
+});
 
 describe("PeekPanel", () => {
   beforeEach(mockCluster);

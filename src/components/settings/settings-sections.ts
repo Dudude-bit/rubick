@@ -1,6 +1,5 @@
 import {
   Info,
-  Package,
   Palette,
   Search,
   Server,
@@ -57,12 +56,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
     label: "sectionClusters",
     icon: Server,
     description: "sectionClustersHint",
-  },
-  {
-    id: "registries",
-    label: "sectionRegistries",
-    icon: Package,
-    description: "sectionRegistriesHint",
   },
   {
     id: "diagnostics",

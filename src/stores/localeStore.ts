@@ -17,19 +17,23 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { localeFrom, type Locale } from "@/i18n";
+import { loadLocale, localeFrom, type Locale } from "@/i18n";
 
 interface LocaleState {
   /** The chosen language, or `null` for "whatever the system says". */
   choice: Locale | null;
-  setChoice: (choice: Locale | null) => void;
+  /** Switches once the language's catalogue has arrived, never before. */
+  setChoice: (choice: Locale | null) => Promise<void>;
 }
 
 export const useLocaleStore = create<LocaleState>()(
   persist(
     (set) => ({
       choice: null,
-      setChoice: (choice) => set({ choice }),
+      setChoice: async (choice) => {
+        await loadLocale(choice ?? systemLocale());
+        set({ choice });
+      },
     }),
     { name: "locale", version: 1 }
   )
