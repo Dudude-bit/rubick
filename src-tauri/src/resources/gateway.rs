@@ -164,7 +164,9 @@ impl RouteInfo {
             .parents
             .iter()
             .filter(|entry| {
-                entry.parent.name == parent.name
+                entry.parent.group == parent.group
+                    && entry.parent.kind == parent.kind
+                    && entry.parent.name == parent.name
                     && ns_of(&entry.parent.namespace) == ns_of(&parent.namespace)
             })
             .collect();

@@ -22,7 +22,10 @@ export type Verdict =
   | { state: "undecided" }
   | { state: "false" | "pending" | "true"; said: ConditionInfo };
 
-type ParentKey = Pick<ParentRefInfo, "name" | "namespace" | "sectionName">;
+type ParentKey = Pick<
+  ParentRefInfo,
+  "group" | "kind" | "name" | "namespace" | "sectionName"
+>;
 
 /**
  * The entries that answer for one parentRef. A status parentRef echoes the
@@ -34,8 +37,11 @@ export function statusesFor<E extends Pick<RouteParentStatusInfo, "parent">>(
   route: { namespace: string; parents: E[] },
   parent: ParentKey
 ): E[] {
+  // A Gateway and a ListenerSet may share a name; each is its own parent.
   const named = route.parents.filter(
     (entry) =>
+      entry.parent.group === parent.group &&
+      entry.parent.kind === parent.kind &&
       entry.parent.name === parent.name &&
       (entry.parent.namespace ?? route.namespace) ===
         (parent.namespace ?? route.namespace)
