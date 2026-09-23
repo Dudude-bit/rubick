@@ -110,6 +110,24 @@ describe("whether a save moves the replica count, in a buffer of several documen
     ).toBe(false);
   });
 
+  /**
+   * The apply sends every copy of the object in turn, so the last one decides
+   * the count. Reading only the first copy said nothing moved while the
+   * second scaled the workload from 3 to 5 under the autoscaler.
+   */
+  it("reads every copy of the object in the buffer, not only the first", () => {
+    const original = deployment("api", 3);
+    expect(
+      changesReplicaCount(original, `${original}---\n${deployment("api", 5)}`)
+    ).toBe(true);
+    expect(
+      changesReplicaCount(original, `${deployment("api", 5)}---\n${original}`)
+    ).toBe(true);
+    expect(changesReplicaCount(original, `${original}---\n${original}`)).toBe(
+      false
+    );
+  });
+
   /** Another Deployment's count is not this one's. */
   it("compares the object the editor opened, not the first one it finds", () => {
     const edited = `${deployment("worker", 9)}---\n${deployment("api", 3)}`;
