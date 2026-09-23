@@ -100,6 +100,32 @@ impl ServedIndex {
         Ok(find(&api_group, plural))
     }
 
+    /// `plural` in `group` with every version that serves it; `None` where
+    /// the cluster serves no such kind. A miss asks again, as `resource`
+    /// does — `kinds` cannot, not knowing what was wanted of it.
+    ///
+    /// # Errors
+    ///
+    /// Where discovery could not be read.
+    pub async fn kind(
+        &self,
+        context: &str,
+        client: &Client,
+        group: &str,
+        plural: &str,
+    ) -> Result<Option<ServedKind>> {
+        Ok(self
+            .group(context, client, group, |found| {
+                find(found, plural).is_some()
+            })
+            .await?
+            .and_then(|api_group| {
+                kinds_of(&api_group)
+                    .into_iter()
+                    .find(|kind| kind.plural == plural)
+            }))
+    }
+
     /// Every kind `group` serves; `None` where the cluster serves no such
     /// group.
     ///

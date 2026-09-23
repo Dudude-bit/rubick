@@ -54,11 +54,9 @@ pub(crate) fn is_cluster_scoped(kind: &str) -> bool {
 pub(crate) async fn served_api_resource(kind: &str, state: &AppState) -> Result<ApiResource> {
     let plural = plural_of(kind)?;
     let mine: Vec<_> = state
-        .served_kinds(GATEWAY_API_GROUP)
+        .served_kind(GATEWAY_API_GROUP, plural)
         .await?
-        .unwrap_or_default()
         .into_iter()
-        .filter(|served| served.plural == plural)
         .collect();
     let detection = GatewayApiDetection::read([], &mine);
     let served = detection.kinds.first().ok_or_else(|| Error::NotFound {
@@ -536,11 +534,55 @@ pub async fn probe_tcp_connect(address: String, port: u16) -> Result<TcpProbe> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use crate::client::served::test_server::{connected, failure, groups, resources};
     use crate::client::served::ServedIndex;
     use crate::resources::RouteInfo;
 
     const V1: &str = "/apis/gateway.networking.k8s.io/v1";
+
+    /// Would leave every Gateway saying its sets are unknown for a minute
+    /// after a bundle upgrade adds `ListenerSet`: Gateway kinds were resolved
+    /// from the whole group's answer, which cannot miss, so the rule that a
+    /// miss asks again reached search and CRD pages and never these.
+    #[tokio::test]
+    async fn a_listener_set_added_to_a_group_already_read_is_found_on_the_next_miss() {
+        let served = ServedIndex::aged(Duration::from_mins(1), Duration::from_millis(100));
+        let (state, _) = connected(served, |path, nth| match path {
+            "/apis" => (200, groups("v1", &["v1"])),
+            V1 if nth == 1 => (200, resources("v1", &[("gateways", "Gateway", true)])),
+            V1 => (
+                200,
+                resources(
+                    "v1",
+                    &[
+                        ("gateways", "Gateway", true),
+                        ("listenersets", "ListenerSet", true),
+                    ],
+                ),
+            ),
+            "/apis/gateway.networking.k8s.io/v1/listenersets" => (
+                200,
+                serde_json::json!({
+                    "kind": "ListenerSetList",
+                    "apiVersion": "gateway.networking.k8s.io/v1",
+                    "metadata": {},
+                    "items": [],
+                })
+                .to_string(),
+            ),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+
+        assert!(super::listener_sets(&state).await.is_none());
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(
+            super::listener_sets(&state).await.map(|sets| sets.len()),
+            Some(0)
+        );
+    }
 
     /// Would keep a Gateway or route page on "not found" until discovery aged
     /// out, when the version it was read at stopped being served: a 404 from
