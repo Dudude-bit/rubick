@@ -1,22 +1,10 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
+import { CODE_FILES } from "@/test/source-files";
 import { KEYDOWN_SITES, SECTIONS, SHORTCUTS } from "./shortcuts";
-
-function sources(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) {
-      sources(path, out);
-    } else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-      out.push(path);
-    }
-  }
-  return out;
-}
 
 describe("the one table of shortcuts", () => {
   /**
@@ -32,15 +20,13 @@ describe("the one table of shortcuts", () => {
    * reads `event.key` is a control answering its own Enter, not a shortcut.
    */
   it("knows every file that listens for a key", () => {
-    const listeners = sources("src")
-      .filter((path) => {
-        const text = readFileSync(path, "utf8");
-        if (/addEventListener\(\s*["']keydown["']/.test(text)) return true;
-        return (
-          /onKeyDown/.test(text) && /\b(metaKey|ctrlKey|altKey)\b/.test(text)
-        );
-      })
-      .map((path) => path.replace(/\\/g, "/"));
+    const listeners = CODE_FILES.filter((path) => {
+      const text = readFileSync(path, "utf8");
+      if (/addEventListener\(\s*["']keydown["']/.test(text)) return true;
+      return (
+        /onKeyDown/.test(text) && /\b(metaKey|ctrlKey|altKey)\b/.test(text)
+      );
+    });
     const unlisted = listeners.filter((path) => !(path in KEYDOWN_SITES));
     expect(unlisted).toEqual([]);
     for (const site of Object.keys(KEYDOWN_SITES)) {
@@ -89,7 +75,7 @@ describe("the one table of shortcuts", () => {
    */
   it("holds every shortcut the app draws a hint for", () => {
     const advertised = new Set<string>();
-    for (const path of sources("src")) {
+    for (const path of CODE_FILES) {
       const text = readFileSync(path, "utf8");
       for (const m of text.matchAll(/formatShortcut\("([^"]+)"\)/g)) {
         const key = m[1].toLowerCase();

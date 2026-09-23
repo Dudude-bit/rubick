@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -24,18 +23,10 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { renderWithProviders } from "@/test/render";
 import { SharingSettings } from "./SharingSettings";
 
-const wrap = () =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <SharingSettings />
-    </QueryClientProvider>
-  );
+const wrap = () => renderWithProviders(<SharingSettings />);
 
 beforeEach(() => {
   vi.mocked(commands.saveShareTarget).mockClear();

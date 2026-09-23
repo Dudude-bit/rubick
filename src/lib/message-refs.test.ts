@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
+
+import { filesUnder } from "@/test/source-files";
 
 import {
   linkifyMessage,
@@ -217,16 +218,14 @@ describe("linkifyMessage", () => {
  * and this is the check rather than a review comment.
  */
 describe("surfaces that must stay text", () => {
-  const sources = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(dir, entry.name);
-      return entry.isDirectory() ? sources(path) : [path];
-    });
-
   it.each(["src/components/logs", "src/components/yaml"])(
     "%s never imports the segmenter",
     (dir) => {
-      const offenders = sources(dir).filter((path) =>
+      const files = filesUnder(dir);
+      expect(files.length, "a guard that reads nothing passes").toBeGreaterThan(
+        0
+      );
+      const offenders = files.filter((path) =>
         /message-refs|ResourceMessage/.test(readFileSync(path, "utf8"))
       );
       expect(offenders).toEqual([]);
