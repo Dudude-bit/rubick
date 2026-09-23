@@ -189,6 +189,32 @@ describe("an expired session and the reconnect", () => {
   });
 });
 
+describe("a connect that failed", () => {
+  /**
+   * The field is read by the cluster door, its toast and the alert panel.
+   * Kept with the command in front, two of them printed
+   * "Tauri command 'connectCluster' failed:" over the server's words.
+   */
+  it("keeps the server's words without the command in front", async () => {
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error(
+        "Tauri command 'connectCluster' failed: exec plugin: aws-iam-authenticator not found"
+      )
+    );
+    await state().connect("prod-eu");
+    expect(state().error).toBe("exec plugin: aws-iam-authenticator not found");
+  });
+
+  /** The same field, set by an unreadable kubeconfig. */
+  it("keeps the server's words when the contexts could not be read", async () => {
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
+    await state().loadContexts();
+    expect(state().error).toBe("kubeconfig: bad yaml");
+  });
+});
+
 describe("restoring the last cluster on launch", () => {
   beforeEach(() => {
     vi.mocked(commands.connectCluster).mockClear();

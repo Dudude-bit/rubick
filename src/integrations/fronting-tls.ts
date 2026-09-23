@@ -3,7 +3,12 @@ import { useCallback, useMemo } from "react";
 import type { IngressInfo, ServiceInfo } from "@/generated/types";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { useServiceRoutes } from "@/hooks/useServiceRoutes";
-import { frontingIngressesOf, proxyServicesBy } from "./ingress";
+import { frontingVerdict, type FrontingTls } from "@/lib/fronted-tls";
+import {
+  frontingIngressesOf,
+  frontingQuestions,
+  proxyServicesBy,
+} from "./ingress";
 
 /**
  * Whether something in front of the proxy serves this host over TLS.
@@ -21,7 +26,9 @@ import { frontingIngressesOf, proxyServicesBy } from "./ingress";
 export function useFrontingTls(
   ingresses: readonly IngressInfo[] | undefined,
   services: readonly ServiceInfo[] | undefined,
-  proxyLabel: readonly [string, string]
+  proxyLabel: readonly [string, string],
+  /** The hosts the proxy serves, which is what a hostless Ingress in front is asked about. */
+  served: readonly string[]
 ): (host: string | null) => FrontingTls {
   const [labelKey, labelValue] = proxyLabel;
   const proxies = useMemo(
@@ -39,12 +46,12 @@ export function useFrontingTls(
   );
   const asked = useMemo(
     () =>
-      frontingIngressesOf(ingresses ?? [], proxies).map((ingress) => ({
-        namespace: ingress.namespace,
-        name: ingress.name,
-        hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
-      })),
-    [ingresses, proxies]
+      frontingQuestions(
+        frontingIngressesOf(ingresses ?? [], proxies),
+        proxies,
+        served
+      ),
+    [ingresses, proxies, served]
   );
 
   const fronting = useServiceRoutes(proxy);
@@ -56,21 +63,12 @@ export function useFrontingTls(
   return useCallback(
     (host: string | null): FrontingTls => {
       if (host === null) return unanswered ? "unknown" : false;
-      const terminated =
-        asked.some((ingress) => front.of(ingress, host)?.terminated === true) ||
-        fronting.routes.some(
-          (route) => route.tls === true && route.host === host
-        );
-      if (terminated) return true;
-      // A supplier that read too little to say has not said no.
-      const unsure = fronting.routes.some(
-        (route) => route.tls === null && route.host === host
-      );
-      return unanswered || unsure ? "unknown" : false;
+      return frontingVerdict(host, {
+        said: asked.map((ingress) => front.of(ingress, host)?.terminated),
+        routes: fronting.routes,
+        unanswered,
+      });
     },
     [asked, front, fronting.routes, unanswered]
   );
 }
-
-/** Whether something in front terminates TLS, or `"unknown"` until it is read. */
-export type FrontingTls = boolean | "unknown";

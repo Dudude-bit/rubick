@@ -118,11 +118,22 @@ export default function TraefikPage() {
     [routeSources.data]
   );
   const certificates = useRouteCertificates(routes);
+  const served = useMemo(
+    () => [
+      ...new Set(
+        routes.flatMap((route) =>
+          route.clause.host ? [route.clause.host] : []
+        )
+      ),
+    ],
+    [routes]
+  );
 
   const upstreamTls = useFrontingTls(
     routeSources.data?.ingresses,
     backing.data?.services,
-    PROXY_LABEL
+    PROXY_LABEL,
+    served
   );
 
   const sources: TraefikSources | null = useMemo(

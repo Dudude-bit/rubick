@@ -13,7 +13,11 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
-import { reportError, type NormalizedError } from "@/lib/error-utils";
+import {
+  errorToShow,
+  reportError,
+  type NormalizedError,
+} from "@/lib/error-utils";
 
 const TOAST_DEDUPE_MS = 3000;
 
@@ -74,7 +78,8 @@ export function ErrorProvider({ children }: Props) {
         title = title.charAt(0).toUpperCase() + title.slice(1);
       }
 
-      emitToast(title, normalized.message);
+      // The log keeps the command's name; the reader gets the server's words.
+      emitToast(title, errorToShow(error));
 
       return normalized;
     },

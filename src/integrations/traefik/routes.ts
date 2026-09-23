@@ -20,11 +20,13 @@ import type { ProxyBehind, ServiceRoute } from "../registry";
 import { fetchController, fetchRouteSources, servedGroupName } from "./data";
 import {
   allRoutes,
+  frontingIngresses,
+  proxyServices,
   terminatedUpstream,
   type EntryPoint,
   type TraefikRoute,
 } from "./model";
-import { BACKING_NOT_READ } from "../ingress";
+import { BACKING_NOT_READ, frontingQuestions } from "../ingress";
 
 /**
  * Whether this route is served over TLS, or `null` where the objects do not
@@ -73,6 +75,20 @@ export async function serviceRoutes(input: {
     entryPoints,
   };
 
+  const proxies = proxyServices(withServices);
+  const fronting = frontingIngresses(withServices);
+  // What the consumer asks about a host this file cannot settle: the
+  // certificate in front may be an annotation only another vendor reads.
+  const frontOf = (host: string): ServiceRoute["front"] =>
+    services === null || !proxies[0]
+      ? undefined
+      : {
+          ingresses: frontingQuestions(fronting, proxies, [host])
+            .filter((question) => question.hosts.includes(host))
+            .map(({ namespace, name }) => ({ namespace, name })),
+          proxy: { namespace: proxies[0].namespace, name: proxies[0].name },
+        };
+
   const found = new Map<string, ServiceRoute>();
   for (const route of allRoutes(withServices)) {
     const service = route.service;
@@ -114,7 +130,7 @@ export async function serviceRoutes(input: {
       // Two objects disagreeing about the scheme means one of them serves it
       // over TLS, and a client that asks for TLS gets it.
       if (already.tls !== true && secure === true) {
-        found.set(key, { ...already, tls: true, source });
+        found.set(key, { ...already, tls: true, front: undefined, source });
       }
       continue;
     }
@@ -122,6 +138,7 @@ export async function serviceRoutes(input: {
       host,
       path,
       tls: secure,
+      front: secure === true ? undefined : frontOf(host),
       h2c,
       source,
       to: crd

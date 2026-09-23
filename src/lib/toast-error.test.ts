@@ -10,18 +10,23 @@ const SOURCES = import.meta.glob<string>(
   { query: "?raw", import: "default", eager: true }
 );
 
-/** Where the message is kept or compared rather than shown. */
+/**
+ * Where the message is kept or compared rather than shown. Not a store: a
+ * store's error is read by every screen that shows it, and one of them
+ * forgetting `verbatim` is how the toast beside the cluster door and the
+ * alert panel printed "Tauri command 'connectCluster' failed:".
+ */
 const KEEPS_THE_PREFIX = new Set([
   "/src/lib/error-utils.ts",
   "/src/lib/commands.ts",
-  "/src/stores/clusterStore.ts",
   "/src/components/terminal/PodTerminal.tsx",
 ]);
 
 /**
  * Every spelling of a caught failure read by hand: the `instanceof` guard,
  * `String(error)` — which adds "Error: " in front of the prefix, so even
- * `verbatim` cannot take it off — a cast, and a bare `.message`.
+ * `verbatim` cannot take it off — a cast, a bare `.message`, and the
+ * `.message` of what `reportError` hands back, which is the logged form.
  */
 const BY_HAND = new RegExp(
   [
@@ -29,6 +34,7 @@ const BY_HAND = new RegExp(
     String.raw`String\(\s*(?:e|err|error)\s*\)`,
     String.raw`as Error\)\.message`,
     String.raw`\b(?:err|error)\??\.message\b`,
+    String.raw`\bnormalized\??\.message\b`,
   ].join("|"),
   "g"
 );
