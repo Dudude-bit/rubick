@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import type { PodMetrics } from "@/generated/types";
