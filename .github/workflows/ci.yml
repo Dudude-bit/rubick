@@ -111,6 +111,19 @@ jobs:
           mkdir -p dist
           echo '<!doctype html><html><head></head><body></body></html>' > dist/index.html
 
+      - name: One TLS stack
+        # rustls on ring is the only TLS in the app. aws-lc and OpenSSL used
+        # to be compiled beside it — minutes of every cold build — through
+        # default features nobody chose; one creeping back fails here.
+        run: |
+          for crate in aws-lc-sys openssl-sys native-tls; do
+            if cargo tree -e normal -i "$crate" >/dev/null 2>&1; then
+              echo "::error::$crate is back in the dependency tree"
+              cargo tree -e normal -i "$crate"
+              exit 1
+            fi
+          done
+
       - name: Rust clippy
         # The tree is quiet: every finding is either fixed or allowed where it
         # applies, with the reason next to it. A new one should stop the PR
