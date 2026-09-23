@@ -179,6 +179,18 @@ impl ServedIndex {
     }
 }
 
+#[cfg(test)]
+impl ServedIndex {
+    /// An index whose answers age as fast as a test can wait.
+    pub(crate) fn aged(fresh_for: Duration, miss_after: Duration) -> Self {
+        Self {
+            fresh_for,
+            miss_after,
+            ..Self::default()
+        }
+    }
+}
+
 /// The preferred version first — kubectl's choice — then the rest, most
 /// stable first: a kind may be missing from the preferred version, which
 /// is the common pitfall `ApiGroup` warns about.
@@ -255,6 +267,54 @@ pub(crate) mod test_server {
     pub(crate) async fn answering(
         answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> (Client, Hits) {
+        let (url, hits) = listening(answer).await;
+        let config = kube::Config::new(url.parse().expect("cluster url"));
+        (Client::try_from(config).expect("client"), hits)
+    }
+
+    /// The app's own state, its current context connected to an API server
+    /// answering as `answering` does, and discovery read through `served`.
+    pub(crate) async fn connected(
+        served: super::ServedIndex,
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (crate::state::AppState, Hits) {
+        let (url, hits) = listening(answer).await;
+        let mut state = crate::state::AppState::new().expect("state");
+        state.client_manager = Arc::new(crate::client::K8sClientManager::with_served(served));
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(&format!(
+            "apiVersion: v1\nkind: Config\ncurrent-context: fake\n\
+             clusters: [{{name: fake, cluster: {{server: '{url}'}}}}]\n\
+             users: [{{name: fake, user: {{}}}}]\n\
+             contexts: [{{name: fake, context: {{cluster: fake, user: fake}}}}]\n"
+        ))
+        .expect("kubeconfig");
+        state
+            .client_manager
+            .connect_with_kubeconfig("fake", kubeconfig)
+            .await
+            .expect("connected");
+        state.set_current_context(Some("fake".to_string()));
+        (state, hits)
+    }
+
+    /// A failure as the API server words it.
+    pub(crate) fn failure(code: u16, reason: &str) -> (u16, String) {
+        (
+            code,
+            serde_json::json!({
+                "kind": "Status",
+                "apiVersion": "v1",
+                "status": "Failure",
+                "reason": reason,
+                "code": code,
+            })
+            .to_string(),
+        )
+    }
+
+    async fn listening(
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (String, Hits) {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind");
@@ -295,12 +355,7 @@ pub(crate) mod test_server {
                 });
             }
         });
-        let config = kube::Config::new(
-            format!("http://127.0.0.1:{port}")
-                .parse()
-                .expect("cluster url"),
-        );
-        (Client::try_from(config).expect("client"), hits)
+        (format!("http://127.0.0.1:{port}"), hits)
     }
 
     pub(crate) fn groups(preferred: &str, versions: &[&str]) -> String {
@@ -505,11 +560,10 @@ mod tests {
     }
 
     fn aged(fresh_for: u64, miss_after: u64) -> ServedIndex {
-        ServedIndex {
-            fresh_for: Duration::from_millis(fresh_for),
-            miss_after: Duration::from_millis(miss_after),
-            ..ServedIndex::default()
-        }
+        ServedIndex::aged(
+            Duration::from_millis(fresh_for),
+            Duration::from_millis(miss_after),
+        )
     }
 
     /// Gateway API installed under a connected window. "Not served" was kept

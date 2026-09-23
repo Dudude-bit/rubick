@@ -9,7 +9,6 @@ use kube::api::DynamicObject;
 use kube::discovery::ApiResource;
 use kube::Resource;
 use kube::{Api, Client};
-use tauri::State;
 
 /// Context for Kubernetes API access with optional namespace scope.
 pub struct ResourceContext {
@@ -51,12 +50,12 @@ impl ResourceContext {
     }
 
     /// For single-resource commands (get/delete) - requires namespace, defaults to "default"
-    pub fn for_command(state: &State<'_, AppState>, namespace: Option<String>) -> Result<Self> {
+    pub fn for_command(state: &AppState, namespace: Option<String>) -> Result<Self> {
         Self::from_app_state(state, namespace, true)
     }
 
     /// For list commands - namespace is optional (None = all namespaces)
-    pub fn for_list(state: &State<'_, AppState>, namespace: Option<String>) -> Result<Self> {
+    pub fn for_list(state: &AppState, namespace: Option<String>) -> Result<Self> {
         Self::from_app_state(state, namespace, false)
     }
 
