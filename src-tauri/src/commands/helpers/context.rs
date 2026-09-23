@@ -36,6 +36,11 @@ impl ResourceContext {
         } else {
             normalize_optional_namespace(namespace)
         };
+        // A path segment of every request made through this context, and
+        // normalising only trims it.
+        if let Some(ns) = namespace.as_deref() {
+            crate::validation::validate_namespace(ns)?;
+        }
 
         Ok(ResourceContext { client, namespace })
     }
@@ -117,5 +122,30 @@ impl ResourceContext {
         K::DynamicType: Default,
     {
         Api::all(self.client.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::{test_server::connected, ServedIndex};
+
+    /// Would let a namespace from the frontend reach a request path unchecked
+    /// in every command but the few that validated it themselves.
+    #[tokio::test]
+    async fn a_namespace_that_is_not_a_name_is_refused_before_any_request() {
+        let (state, hits) = connected(ServedIndex::default(), |_, _| (404, "{}".into())).await;
+
+        for bad in ["../kube-system", "a/b", "Shop"] {
+            assert!(ResourceContext::for_command(&state, Some(bad.into())).is_err());
+            assert!(ResourceContext::for_list(&state, Some(bad.into())).is_err());
+        }
+        let ctx = ResourceContext::for_command(&state, Some(" shop ".into())).expect("a name");
+        assert_eq!(ctx.namespace.as_deref(), Some("shop"));
+        assert!(ResourceContext::for_list(&state, None)
+            .expect("every namespace")
+            .namespace
+            .is_none());
+        assert!(hits.lock().unwrap().is_empty());
     }
 }
