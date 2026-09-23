@@ -23,4 +23,20 @@ describe("how a vendor page says a read failed", () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(140);
     expect(raw).toEqual([]);
   });
+
+  /**
+   * Cilium's page never read its query's error, and a refused list drew as
+   * an empty search. Prometheus is the one page whose tabs each own their
+   * read and say its failure themselves.
+   */
+  it("says so on every vendor page that reads anything", () => {
+    const silent = Object.entries(SOURCES).flatMap(([path, source]) =>
+      /^\.\/[^/]+\/page\.tsx$/.test(path) &&
+      path !== "./prometheus/page.tsx" &&
+      !source.includes("<VendorReadFailure")
+        ? [path]
+        : []
+    );
+    expect(silent).toEqual([]);
+  });
 });

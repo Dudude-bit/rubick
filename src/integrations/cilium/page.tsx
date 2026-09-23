@@ -25,6 +25,7 @@ import {
   Finding,
   TroubleList,
   TroubleRow,
+  VendorReadFailure,
 } from "../page-kit";
 import type { Tone } from "../page-kit";
 import { coverageOf, type Coverage } from "./coverage";
@@ -77,6 +78,17 @@ export default function CiliumPage() {
     ...(picture.data?.clusterwide ?? []),
   ].filter((policy) => enforcementOf(policy).state === "rejected");
 
+  if (picture.error) {
+    return (
+      <VendorReadFailure
+        title={t("empty", "couldNotReadCilium")}
+        body={t("empty", "couldNotReadCiliumBody")}
+        error={picture.error}
+        onRetry={() => void picture.refetch()}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Section>
@@ -115,22 +127,31 @@ export default function CiliumPage() {
       </Section>
 
       <Section>
-        <TroubleList
-          items={coverage}
-          severityOf={severityOfCoverage}
-          searchable={searchableCoverage}
-          filter={{
-            placeholder: t("action", "searchEllipsis"),
-            label: t("action", "searchEllipsis"),
-          }}
-          // The findings above say what is wrong; no row opens itself.
-          autoOpen={{ when: "err", upTo: 0 }}
-          noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
-          keyOf={(one) =>
-            one.endpoint.uid || `${one.endpoint.namespace}/${one.endpoint.name}`
-          }
-          renderRow={(one, { last }) => <CoverageRow one={one} last={last} />}
-        />
+        {picture.isPending ? (
+          <p className="text-xs text-fg-fnt">{t("empty", "readingCilium")}</p>
+        ) : coverage.length === 0 ? (
+          <p className="max-w-[64ch] text-xs text-fg-mut">
+            {t("empty", "ciliumNoEndpoints")}
+          </p>
+        ) : (
+          <TroubleList
+            items={coverage}
+            severityOf={severityOfCoverage}
+            searchable={searchableCoverage}
+            filter={{
+              placeholder: t("action", "searchEllipsis"),
+              label: t("action", "searchEllipsis"),
+            }}
+            // The findings above say what is wrong; no row opens itself.
+            autoOpen={{ when: "err", upTo: 0 }}
+            noMatch={(query) => t("empty", "nothingMatchesQuery", { query })}
+            keyOf={(one) =>
+              one.endpoint.uid ||
+              `${one.endpoint.namespace}/${one.endpoint.name}`
+            }
+            renderRow={(one, { last }) => <CoverageRow one={one} last={last} />}
+          />
+        )}
       </Section>
     </div>
   );

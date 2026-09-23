@@ -4947,6 +4947,12 @@ export const en = {
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
     ciliumPageDescription:
       "Every endpoint with the policies that select it, and the ones nothing selects at all",
+    couldNotReadCilium: "Could not read Cilium's endpoints and policies",
+    couldNotReadCiliumBody:
+      "Coverage is the two lists joined, and one of them did not come back — so nothing here can say which pods a policy reaches.",
+    readingCilium: "Reading endpoints and policies…",
+    ciliumNoEndpoints:
+      "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
     crdCouldNotBeListed: "{crd} could not be listed",
     albUnreadNote:
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
