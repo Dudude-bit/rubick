@@ -127,16 +127,14 @@ export async function fetchController(): Promise<ControllerInfo> {
     problem,
   });
 
-  const { workload, refused } =
+  const { workload, unread } =
     await findControllerWorkload(CONTROLLER_SELECTOR);
   if (!workload) {
     return none(
-      refused
-        ? { key: "controllerUnread", values: { why: refused } }
-        : {
-            key: "nginxNoController",
-            values: { selector: CONTROLLER_SELECTOR },
-          }
+      unread ?? {
+        key: "nginxNoController",
+        values: { selector: CONTROLLER_SELECTOR },
+      }
     );
   }
 

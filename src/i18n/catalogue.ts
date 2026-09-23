@@ -2681,6 +2681,10 @@ export const en = {
     certIssuerNotNamed: "issuer not named",
     controllerUnread:
       "Whether the controller is installed is unknown: the cluster refused the lists it would be found in — {why}",
+    controllerLookupFailed:
+      "Whether the controller is installed is unknown: the lists it would be found in could not be read — {why}",
+    controllerLookupDeadline:
+      "Whether the controller is installed is unknown: the cluster did not answer the lists it would be found in within {seconds} s.",
     argoNoWorkloads:
       "Nothing in this cluster carries {selector}, so Argo's own workloads could not be found. Its Applications are still read from the API server.",
     traefikNoController:
@@ -4756,14 +4760,14 @@ export const en = {
     lokiNamespacesTitle: "Namespaces it has lines for",
     lokiOneLineProof:
       "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way — which is why an empty answer is drawn as a question and not as a verdict.",
-    lokiRefusedQuery: "refused the query",
+    lokiQueryFailed: "query failed",
     lokiHasLines: "has lines",
     lokiNothingInWindow: "nothing in the window",
     lokiHoldsNone: "This Loki holds none of this cluster's namespaces",
     lokiHoldsNoneBody:
       "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL — which is all the connection test proved — so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
-    lokiRefusalNotAbsence:
-      "A refusal is not an absence. Nothing is claimed about these namespaces either way.",
+    lokiFailureNotAbsence:
+      "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
     yamlNoteDefault: "the object as the API server has it",
@@ -6204,9 +6208,9 @@ export const en = {
     contextsFromFile: { one: "{n} context", other: "{n} contexts" },
     apiGroups: { one: "{n} API group", other: "{n} API groups" },
     loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
-    queriesRefused: {
-      one: "{n} query was refused",
-      other: "{n} queries were refused",
+    queriesFailed: {
+      one: "{n} query failed",
+      other: "{n} queries failed",
     },
     failedPods: { one: "{n} failed pod", other: "{n} failed pods" },
     summedOverPods: {

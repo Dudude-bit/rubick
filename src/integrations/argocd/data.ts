@@ -19,7 +19,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import { covers } from "@/lib/certificates";
 import type { Saying } from "@/i18n/say";
-import { listOrRefusal, refusalOf, type ListRead } from "../ingress";
+import { failureOf, listOrFailure, type ListRead } from "../ingress";
 import type { ServiceRoute } from "../registry";
 import { readApplication, type ArgoApp } from "./model";
 
@@ -179,10 +179,12 @@ export function uiAddress(
 /** Why the list of Argo's workloads is empty, where it is. */
 function noComponents(...reads: ListRead<unknown>[]): Saying | null {
   if (reads.some((read) => read.items.length > 0)) return null;
-  const refused = refusalOf(...reads);
-  return refused
-    ? { key: "controllerUnread", values: { why: refused } }
-    : { key: "argoNoWorkloads", values: { selector: CONTROLLER_SELECTOR } };
+  return (
+    failureOf(...reads) ?? {
+      key: "argoNoWorkloads",
+      values: { selector: CONTROLLER_SELECTOR },
+    }
+  );
 }
 
 export function useController() {
@@ -197,8 +199,8 @@ export function useController() {
         limit: null,
       };
       const [deploymentRead, statefulSetRead, ingresses] = await Promise.all([
-        listOrRefusal(commands.listDeployments(filters)),
-        listOrRefusal(commands.listStatefulsets(filters)),
+        listOrFailure(commands.listDeployments(filters)),
+        listOrFailure(commands.listStatefulsets(filters)),
         // Only where the UI answers: a refusal costs the link, not the page.
         commands.listIngresses(null).catch((): IngressInfo[] => []),
       ]);

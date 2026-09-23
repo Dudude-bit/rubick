@@ -65,7 +65,7 @@ export default function LokiPage() {
   }
 
   const state = found.data ? verdict(found.data, t) : null;
-  const refused = found.data?.namespaces.filter(
+  const failed = found.data?.namespaces.filter(
     (entry) => entry.problem !== null
   );
   const empty = found.data?.namespaces.filter(
@@ -110,7 +110,7 @@ export default function LokiPage() {
                     title={entry.problem ?? undefined}
                   >
                     {entry.problem !== null
-                      ? t("empty", "lokiRefusedQuery")
+                      ? t("empty", "lokiQueryFailed")
                       : entry.holds
                         ? t("empty", "lokiHasLines")
                         : t("empty", "lokiNothingInWindow")}
@@ -134,14 +134,14 @@ export default function LokiPage() {
             </div>
           )}
 
-          {refused && refused.length > 0 && (
+          {failed && failed.length > 0 && (
             <div className="mt-3">
               <Finding
                 tone="warn"
-                title={t("count", "queriesRefused", { n: refused.length })}
-                verbatim={refused[0].problem}
+                title={t("count", "queriesFailed", { n: failed.length })}
+                verbatim={failed[0].problem}
               >
-                {t("empty", "lokiRefusalNotAbsence")}
+                {t("empty", "lokiFailureNotAbsence")}
               </Finding>
             </div>
           )}
