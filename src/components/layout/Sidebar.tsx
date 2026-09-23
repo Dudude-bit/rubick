@@ -41,6 +41,7 @@ import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
+import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -307,14 +308,14 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // token is refused them — the board reads that absence as `topologyKnown:
   // false` and asserts nothing, rather than a red dot for what it cannot see.
   const gatewaysAll = useLiveQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && served.has("Gateway") && !gatewaysDenied,
   });
   const classes = useLiveQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     refresh: "overview",
@@ -325,7 +326,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // cluster still gets a number instead of a blank (the routes page reads the
   // same way). A whole-cluster window is one call.
   const routes = useLiveQuery({
-    queryKey: ["gateway-rail-routes", cacheKey, ...routeKinds],
+    queryKey: [
+      "gateway-rail-routes",
+      cacheKey ?? EVERY_NAMESPACE,
+      ...routeKinds,
+    ],
     queryFn: listAcrossScope(scope, async (ns) => {
       // Each served kind on its own: a token may list HTTPRoutes and not
       // TCPRoutes, and one refused kind must not blank the whole count — the
@@ -352,7 +357,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // stays the verdict source; on a whole-cluster window it already is this
   // list, so this second read only runs once a namespace is selected.
   const gatewaysScoped = useLiveQuery({
-    queryKey: ["gateway-rail-gateways", cacheKey],
+    queryKey: ["gateway-rail-gateways", cacheKey ?? EVERY_NAMESPACE],
     queryFn: listAcrossScope(scope, (ns) => commands.listGateways(ns)),
     staleTime: ROUTING_STALE,
     refresh: "overview",

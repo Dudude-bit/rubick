@@ -28,6 +28,7 @@ import {
   worstTone,
 } from "./monitors/data";
 import { RANGE_SPECS } from "./queries";
+import { readSavedConnection } from "./saved-connection";
 import { formatSince } from "@/lib/utils";
 
 /**
@@ -90,7 +91,7 @@ export default defineVendor({
         "blackbox",
       ],
     },
-    read: () => commands.getPrometheusConnection().then(asSaved),
+    read: readSavedConnection,
     save: (draft: ConnectionDraft) =>
       commands.savePrometheusConnection(
         draft.url,
@@ -213,18 +214,6 @@ export default defineVendor({
     "network.traffic": networkTraffic,
   },
 });
-
-function asSaved(
-  connection: Awaited<ReturnType<typeof commands.getPrometheusConnection>>
-): SavedConnection | null {
-  if (!connection) return null;
-  return {
-    url: connection.url,
-    authType: connection.authType === "bearer" ? "bearer" : "none",
-    hasToken: connection.hasToken,
-    insecureTls: connection.insecureTls,
-  };
-}
 
 /** The address without its scheme — the row is narrow and `http://` is noise. */
 function hostOf(url: string): string {

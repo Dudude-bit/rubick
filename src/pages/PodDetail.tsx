@@ -414,7 +414,9 @@ export function PodDetail() {
         title: t("action", "podRestarted"),
         description: t("action", "podRestartingDetail", { name: name ?? "" }),
       });
-      queryClient.invalidateQueries({ queryKey: ["pod", namespace, name] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.detail(ResourceType.Pod, namespace, name),
+      });
       refetch();
     },
     onError: (err) => {

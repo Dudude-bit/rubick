@@ -10,8 +10,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
+import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import type { PodInfo } from "@/generated/types";
@@ -127,7 +129,11 @@ export function useHintChain(
   }, [inCluster, pod.namespace]);
 
   const endpoints = useQuery({
-    queryKey: [context, "hints", "endpoints", pod.namespace, service?.name],
+    queryKey: queryKeys.detail(
+      ResourceType.Endpoints,
+      pod.namespace,
+      service?.name
+    ),
     queryFn: () => commands.getEndpoints(service!.name, pod.namespace),
     enabled: service !== null,
     staleTime: STALE,

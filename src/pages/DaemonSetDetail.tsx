@@ -58,6 +58,7 @@ import { useAsk } from "@/hooks/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -107,7 +108,9 @@ export function DaemonSetDetail() {
         }),
       },
       invalidateQueryKeys:
-        namespace && name ? [["daemonset", namespace, name]] : [],
+        namespace && name
+          ? [queryKeys.detail(ResourceType.DaemonSet, namespace, name)]
+          : [],
       onSuccess: () => {
         if (!name) return;
         asking.ask(
@@ -134,7 +137,12 @@ export function DaemonSetDetail() {
   // claim about the cluster made from a question nobody answered, and the
   // reading somebody takes to mean their DaemonSet is down.
   const { data: pods = [], error: podsError } = useLiveQuery({
-    queryKey: ["daemonset-pods", namespace, name, labelSelector],
+    queryKey: queryKeys.ownedPods(
+      ResourceType.DaemonSet,
+      namespace,
+      name,
+      labelSelector
+    ),
     queryFn: async () => {
       if (!namespace) return [];
       try {

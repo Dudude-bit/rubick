@@ -19,6 +19,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { StoryCard } from "@/components/events/StoryCard";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
@@ -117,12 +118,7 @@ export function Events() {
   const several = scope.several;
 
   const single = useLiveQuery({
-    queryKey: [
-      toPlural(ResourceType.Event),
-      currentNamespace,
-      eventType,
-      eventLimit,
-    ],
+    queryKey: [...queryKeys.events(currentNamespace), eventType, eventLimit],
     queryFn: () => read(filtersFor(currentNamespace, eventType, limit)),
     enabled: isConnected && !several,
     refresh: "fast",
@@ -152,12 +148,7 @@ export function Events() {
     // replaced. The feed draws its skeleton until every namespace has answered
     // the question actually being asked, which is one fast read away.
     queries: (several ? scope.scope : []).map((namespace) => ({
-      queryKey: [
-        toPlural(ResourceType.Event),
-        namespace,
-        eventType,
-        eventLimit,
-      ],
+      queryKey: [...queryKeys.events(namespace), eventType, eventLimit],
       queryFn: () => read(filtersFor(namespace, eventType, limit)),
       enabled: isConnected,
       staleTime: STALE_TIMES.fast,

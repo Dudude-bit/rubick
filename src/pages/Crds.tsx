@@ -21,6 +21,7 @@ import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -52,7 +53,7 @@ export function Crds() {
     dataUpdatedAt,
     freshness,
   } = useLiveQuery({
-    queryKey: ["crds", "grouped"],
+    queryKey: queryKeys.crds(),
     queryFn: async () => {
       try {
         return await commands.listCrds(true);
@@ -81,7 +82,7 @@ export function Crds() {
           name: item.name,
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["crds"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
     },
     onError: (error: Error) => {
       toastError(t("action", "deleteKindFailed", { kind: "CRD" }), error);

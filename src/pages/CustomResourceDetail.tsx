@@ -22,6 +22,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOf } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -193,7 +194,7 @@ export function CustomResourceDetail() {
   const goBack = () => navigate(-1);
 
   const { data: crdInfo } = useQuery({
-    queryKey: ["crd", decodedCrdName],
+    queryKey: queryKeys.crd(decodedCrdName),
     queryFn: () => commands.getCrd(decodedCrdName),
     enabled: isConnected && !!decodedCrdName,
   });
@@ -203,7 +204,7 @@ export function CustomResourceDetail() {
     isLoading,
     error,
   } = useLiveQuery({
-    queryKey: ["custom-resource", decodedCrdName, namespace, name],
+    queryKey: queryKeys.customResource(decodedCrdName, namespace, name),
     queryFn: () =>
       commands.getCustomResource(decodedCrdName, name || "", namespace || null),
     enabled: isConnected && !!decodedCrdName && !!name,
@@ -212,7 +213,7 @@ export function CustomResourceDetail() {
   });
 
   const { data: yaml = "" } = useQuery({
-    queryKey: ["custom-resource-yaml", decodedCrdName, namespace, name],
+    queryKey: queryKeys.customResourceYaml(decodedCrdName, namespace, name),
     queryFn: () =>
       commands.getCustomResourceYaml(
         decodedCrdName,
@@ -238,7 +239,7 @@ export function CustomResourceDetail() {
         description: t("action", "nameDeleted", { name: name ?? "" }),
       });
       queryClient.invalidateQueries({
-        queryKey: ["custom-resources", decodedCrdName],
+        queryKey: queryKeys.customResourceLists(decodedCrdName),
       });
       navigate(-1);
     },

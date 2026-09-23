@@ -15,11 +15,13 @@ import {
   useMutation,
   useQueryClient,
   keepPreviousData,
+  type QueryKey,
 } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useResourceYaml } from "./useResourceYaml";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
@@ -129,8 +131,8 @@ export function useResourceDetail<T>(
     error: readError,
     refetch,
     freshness,
-  } = useLiveQuery<T, Error, T, string[]>({
-    queryKey: [resourceKind.toLowerCase(), namespace, name] as string[],
+  } = useLiveQuery<T, Error, T, QueryKey>({
+    queryKey: queryKeys.detail(resourceKind, namespace, name),
     queryFn: async () => {
       if (!name) throw new Error("Name is required");
       const result = await fetchResource(name, namespace || null);
@@ -190,7 +192,7 @@ export function useResourceDetail<T>(
         }),
       });
       queryClient.invalidateQueries({
-        queryKey: [resourceKind.toLowerCase()],
+        queryKey: queryKeys.details(resourceKind),
       });
       if (onDeleted) {
         onDeleted();

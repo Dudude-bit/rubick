@@ -26,6 +26,7 @@ import { AlertsAbout } from "./AlertsAbout";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import {} from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import {
   getCustomResourceUrl,
@@ -47,12 +48,13 @@ import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   getResourceDefinition,
+  ResourceType,
   toKind,
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { kindHue } from "@/lib/resource-identity";
 import { useClusterStore } from "@/stores/clusterStore";
-import { resolveSource, type PeekSummary } from "./peek-sources";
+import { peekQueryKey, resolveSource, type PeekSummary } from "./peek-sources";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";
 import { PeekTabBody } from "./PeekTabs";
 import { PeekHeading } from "./peek-heading";
@@ -82,10 +84,7 @@ export function PeekContent({
   const source = useMemo(() => resolveSource(target), [target]);
 
   const { data, error, isLoading } = useLiveQuery({
-    // The CRD is part of the identity, not decoration: two groups may declare
-    // the same kind, and a key without it would serve one of them from the
-    // other's cache entry.
-    queryKey: ["peek", target.crd ?? null, target.kind, namespace, target.name],
+    queryKey: peekQueryKey(target),
     queryFn: () => source.fetch(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
@@ -454,7 +453,7 @@ function BackendPolicies({
   const { crdFor } = useCrdIndex();
   const t = useT();
   const policiesQuery = useLiveQuery({
-    queryKey: ["backend-tls-policies", service.namespace],
+    queryKey: queryKeys.backendTlsPolicies(service.namespace),
     queryFn: () => commands.listBackendTlsPolicies(service.namespace),
     staleTime: STALE_TIMES.resourceDetail,
     refresh: false,
@@ -580,7 +579,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     limit: null,
   };
   const pods = useLiveQuery({
-    queryKey: ["peek-ns-pods", namespace],
+    queryKey: queryKeys.resources(ResourceType.Pod, namespace),
     queryFn: () =>
       commands.listPods({
         ...filters,

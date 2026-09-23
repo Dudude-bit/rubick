@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Copy, Search, Zap } from "lucide-react";
 
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { Button } from "@/components/ui/button";
+import { useAppInfo } from "@/hooks/useAppInfo";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { commands } from "@/lib/commands";
 import {
   agentReport,
   hintFor,
@@ -66,11 +65,7 @@ export function MostLikelyPanel({
     trouble,
     settings.showPanel
   );
-  const version = useQuery({
-    queryKey: ["app-info"],
-    queryFn: () => commands.getAppInfo(),
-    staleTime: Infinity,
-  });
+  const version = useAppInfo();
 
   // A refused events read is not a pod with nothing wrong: three of the six
   // troubles are read from events, so the panel used to vanish rather than

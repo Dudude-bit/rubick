@@ -1631,6 +1631,22 @@ export async function getPodLogs(
   });
 }
 
+export async function savePodLog(
+  podName: string,
+  namespace: string | null,
+  container: string,
+  tailLines: number | null,
+  previous: boolean
+): Promise<string> {
+  return invoke<string>("save_pod_log", {
+    podName,
+    namespace,
+    container,
+    tailLines,
+    previous,
+  });
+}
+
 export async function stopLogStream(streamId: string): Promise<void> {
   return invoke<void>("stop_log_stream", { streamId });
 }
@@ -1728,12 +1744,6 @@ export async function subscribePvcWatch(
   namespace: string | null
 ): Promise<string> {
   return invoke<string>("subscribe_pvc_watch", { namespace });
-}
-
-export async function subscribePodWatch(
-  namespace: string | null
-): Promise<string> {
-  return invoke<string>("subscribe_pod_watch", { namespace });
 }
 
 export async function subscribePodRowWatch(

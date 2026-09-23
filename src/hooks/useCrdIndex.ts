@@ -20,6 +20,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /** Ten minutes: installing an operator is not a thing that happens mid-read. */
@@ -55,8 +56,9 @@ export function useCrdIndex(): { crdFor: CrdLookup; isLoading: boolean } {
   const isConnected = useClusterStore((state) => state.isConnected);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["crd-index"],
-    queryFn: () => commands.listCrds(null),
+    // The CRD page's own list, so a CRD deleted there leaves every link too.
+    queryKey: queryKeys.crds(),
+    queryFn: () => commands.listCrds(true),
     enabled: isConnected,
     staleTime: CRDS_STALE_MS,
     // A cluster with no CRDs is a real cluster; not answering is not worth a

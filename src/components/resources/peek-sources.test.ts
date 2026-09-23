@@ -1,6 +1,119 @@
-import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 
-import { flatten } from "./peek-sources";
+/** Every command a source asked, by name. */
+const asked = vi.hoisted(() => [] as string[]);
+vi.mock("@/lib/commands", () => ({
+  commands: new Proxy(
+    {},
+    {
+      get: (_, name) => async () => {
+        asked.push(String(name));
+        return {};
+      },
+    }
+  ),
+}));
+
+import { queryKeys } from "@/lib/query-keys";
+import { flatten, peekQueryKey, resolveSource } from "./peek-sources";
+
+/** What the peek asks for an object, and where it keeps the answer. */
+async function peekOf(target: {
+  kind: string;
+  name: string;
+  namespace?: string | null;
+  crd?: string;
+}) {
+  asked.length = 0;
+  await resolveSource(target).fetch(target.name, target.namespace ?? null);
+  return { asked: [...asked], key: peekQueryKey(target) };
+}
+
+/**
+ * The getter each detail page hands `useResourceDetail`, read from the pages
+ * rather than restated, so a page that changes what it asks shows up here.
+ */
+function detailGetters(): Array<[string, string, string | null]> {
+  const dir = join("src", "pages");
+  return readdirSync(dir)
+    .filter((file) => file.endsWith("Detail.tsx"))
+    .flatMap((file) => {
+      const found = readFileSync(join(dir, file), "utf8").match(
+        /resourceKind:\s*ResourceType\.(\w+),(\s*isClusterScoped:\s*true,)?\s*fetchResource:[\s\S]*?commands\.(\w+)\(/
+      );
+      if (!found) return [];
+      const [, kind, clusterScoped, getter] = found;
+      return [[kind, getter, clusterScoped ? null : "ns"]] as Array<
+        [string, string, string | null]
+      >;
+    });
+}
+
+/**
+ * The peek's Overview is the detail page's own cache entry, so the two must
+ * ask the same `get_*`: two commands under one key hand one screen the
+ * other's shape. A kind the peek reads as a bare manifest keeps its own
+ * entry for the same reason.
+ */
+describe("the peek's Overview against the detail pages", () => {
+  const getters = detailGetters();
+
+  /** Would pass over an empty scan, which is what a broken pattern gives. */
+  it("finds the detail pages it compares against", () => {
+    expect(getters.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it.each(getters)(
+    "shares the %s page's entry only when it asks what the page asks",
+    async (kind, getter, namespace) => {
+      const peek = await peekOf({ kind, name: "x", namespace });
+      expect([getter, "getManifest"]).toContain(peek.asked[0]);
+      const shared =
+        JSON.stringify(peek.key) ===
+        JSON.stringify(queryKeys.detail(kind, namespace, "x"));
+      expect(shared).toBe(peek.asked[0] === getter);
+    }
+  );
+
+  it("reads a route where the route's page does", async () => {
+    const page = readFileSync(
+      join("src", "pages", "GatewayRouteDetail.tsx"),
+      "utf8"
+    );
+    expect(page).toMatch(/fetchResource:[^\n]*commands\.getGatewayRoute\(/);
+    const peek = await peekOf({
+      kind: "HTTPRoute",
+      name: "x",
+      namespace: "ns",
+    });
+    expect(peek.asked).toEqual(["getGatewayRoute"]);
+    expect(peek.key).toEqual(queryKeys.detail("HTTPRoute", "ns", "x"));
+  });
+
+  it("reads a CRD where the CRD page does", async () => {
+    const peek = await peekOf({
+      kind: "CustomResourceDefinition",
+      name: "applications.argoproj.io",
+    });
+    expect(peek.asked).toEqual(["getCrd"]);
+    expect(peek.key).toEqual(queryKeys.crd("applications.argoproj.io"));
+  });
+
+  it("reads a custom resource where its page does", async () => {
+    const peek = await peekOf({
+      kind: "Application",
+      name: "shop",
+      namespace: "argocd",
+      crd: "applications.argoproj.io",
+    });
+    expect(peek.asked).toEqual(["getCustomResource"]);
+    expect(peek.key).toEqual(
+      queryKeys.customResource("applications.argoproj.io", "argocd", "shop")
+    );
+  });
+});
 import { CLUSTER_SOURCES } from "./peek-sources-cluster";
 import { GATEWAY_SOURCES } from "./peek-sources-gateway";
 import { NETWORK_SOURCES } from "./peek-sources-network";

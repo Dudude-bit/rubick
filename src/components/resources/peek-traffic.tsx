@@ -16,6 +16,7 @@ import { ResourceName, RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekHeading } from "./peek-heading";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 
 /**
  * The level above and the level below, so a peek is a place to walk the
@@ -53,7 +54,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
     (edge) => edge.relation.verb === "attachesTo" && edge.to.kind === "Gateway"
   );
   const gatewaysQuery = useLiveQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: STALE_TIMES.resourceDetail,
     enabled: hasGatewayDoors,

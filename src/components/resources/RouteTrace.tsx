@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -741,13 +742,13 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   // namespaces, and the class claim is cluster-scoped. Same key as the
   // routes list's map, so table → detail reuses one cache entry.
   const gateways = useQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     enabled: served.has("Gateway"),
   });
   const classes = useQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
@@ -757,7 +758,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   // GEP-713 reverse lookup: the policy names the Service, never the other
   // way round, so the trace scans the namespace's policies once.
   const policiesQuery = useQuery({
-    queryKey: ["backend-tls-policies", route.namespace],
+    queryKey: queryKeys.backendTlsPolicies(route.namespace),
     queryFn: () => commands.listBackendTlsPolicies(route.namespace),
     staleTime: ROUTING_STALE,
     enabled: served.has("BackendTLSPolicy"),

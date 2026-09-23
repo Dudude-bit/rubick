@@ -277,13 +277,10 @@ impl ServedGatewayKind {
     /// The dynamic-API coordinates for this kind at [`Self::read_version`].
     #[must_use]
     pub fn api_resource(&self) -> kube::discovery::ApiResource {
-        kube::discovery::ApiResource {
-            group: GATEWAY_API_GROUP.to_string(),
-            api_version: format!("{GATEWAY_API_GROUP}/{}", self.read_version),
-            version: self.read_version.clone(),
-            kind: self.kind.clone(),
-            plural: self.plural.clone(),
-        }
+        kube::discovery::ApiResource::from_gvk_with_plural(
+            &kube::api::GroupVersionKind::gvk(GATEWAY_API_GROUP, &self.read_version, &self.kind),
+            &self.plural,
+        )
     }
 }
 

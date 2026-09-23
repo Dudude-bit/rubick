@@ -1,11 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Download, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
-import { commands } from "@/lib/commands";
+import { useAppInfo } from "@/hooks/useAppInfo";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
@@ -37,11 +36,7 @@ export function AboutSettings() {
     downloadAndInstall,
   } = useUpdaterStore();
 
-  const { data: appInfo } = useQuery({
-    queryKey: ["appInfo"],
-    queryFn: commands.getAppInfo,
-    staleTime: Infinity,
-  });
+  const { data: appInfo } = useAppInfo();
 
   return (
     <div className="flex flex-col gap-5">

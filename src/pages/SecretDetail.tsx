@@ -16,6 +16,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -48,7 +49,7 @@ export function SecretDetail() {
   const connections = useConnections(ResourceType.Secret, name, namespace);
 
   const { data: secretData, isLoading: isDataLoading } = useQuery({
-    queryKey: ["secret-data", name, namespace],
+    queryKey: queryKeys.secretData(namespace, name),
     queryFn: () => commands.getSecretData(name!, namespace ?? null),
     enabled: !!name && !!namespace,
   });

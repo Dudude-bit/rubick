@@ -10,6 +10,15 @@ updates:
     groups:
       patch-and-minor:
         update-types: ["patch", "minor"]
+    ignore:
+      # Held at the version tauri and kube pull in, so one copy is compiled
+      # instead of two. Move them when those do.
+      - dependency-name: "base64"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "sha2"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "dirs"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: bun
     directory: "/"

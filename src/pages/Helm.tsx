@@ -20,10 +20,12 @@ import {
 } from "@/components/helm";
 import { Package, Search, FolderGit2 } from "lucide-react";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import type {
   HelmRelease,
   HelmChartSearchResult,
   HelmInstallOptions,
+  NamespaceInfo,
 } from "@/generated/types";
 import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -31,6 +33,9 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+
+const namesOf = (namespaces: NamespaceInfo[]) =>
+  namespaces.map((ns) => ns.name);
 
 export function Helm() {
   const t = useT();
@@ -87,11 +92,9 @@ export function Helm() {
   }, [isConnected, helm, checkHelmAvailability]);
 
   const { data: namespaces = [] } = useQuery({
-    queryKey: ["namespaces"],
-    queryFn: async () => {
-      const result = await commands.listNamespaces();
-      return result.map((ns) => ns.name);
-    },
+    queryKey: queryKeys.namespaces(),
+    queryFn: () => commands.listNamespaces(),
+    select: namesOf,
     enabled: isConnected,
   });
 
@@ -103,9 +106,7 @@ export function Helm() {
     error: releasesError,
     refetch,
   } = useLiveQuery({
-    // `null` for the whole cluster — not `"all"`, which is a name a namespace
-    // can really carry and would then share this cache entry.
-    queryKey: ["helm-releases-native", scopeCacheKey(scope.scope)],
+    queryKey: queryKeys.helm.releases(scopeCacheKey(scope.scope)),
     // The `commands` wrapper already throws a normalised Error; a second
     // catch here re-threw a bare string, and the refusal block's
     // `verbatim(error.message)` then read `.message` off a string and crashed.
@@ -118,7 +119,10 @@ export function Helm() {
   });
 
   const { data: historyData = [], isLoading: historyLoading } = useQuery({
-    queryKey: ["helm-history", historyDialog?.name, historyDialog?.namespace],
+    queryKey: queryKeys.helm.history(
+      historyDialog?.namespace,
+      historyDialog?.name
+    ),
     queryFn: async () => {
       if (!historyDialog) return [];
       return await commands.getHelmHistory(
@@ -157,7 +161,9 @@ export function Helm() {
         title: t("action", "rollbackInitiated"),
         description: t("action", "rollbackInitiatedDetail"),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setRollbackTarget(null);
     },
     onError: (error) => {
@@ -178,7 +184,9 @@ export function Helm() {
         title: t("action", "releaseUninstalled"),
         description: t("action", "releaseUninstalledDetail"),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setUninstallTarget(null);
     },
     onError: (error) => {
@@ -258,7 +266,9 @@ export function Helm() {
           name: installReleaseName,
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setInstallChart(null);
       setInstallReleaseName("");
       setInstallNamespace("default");
@@ -282,7 +292,9 @@ export function Helm() {
           name: upgradeTarget?.name ?? "",
         }),
       });
-      queryClient.invalidateQueries({ queryKey: ["helm-releases-native"] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
       setUpgradeTarget(null);
       setUpgradeVersion("");
       setUpgradeValues("");

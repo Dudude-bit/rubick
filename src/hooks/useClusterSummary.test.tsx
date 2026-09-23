@@ -18,6 +18,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { peekMutationKeys } from "@/components/resources/peek-actions";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "./useClusterSummary";
@@ -37,6 +38,31 @@ beforeEach(() => {
   getClusterOverview.mockReset();
   listNamespaces.mockReset();
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+});
+
+/**
+ * The picker's namespaces are the list Helm's forms offer, read once under
+ * one key; a namespace deleted from the peek has to leave the picker too.
+ * Fails if the summary keys the list where a Namespace mutation cannot reach.
+ */
+describe("the namespaces the window offers", () => {
+  it("are read again once a namespace is deleted from the peek", async () => {
+    getClusterOverview.mockResolvedValue({
+      namespaces: [],
+      problems: [],
+      problemsTruncated: 0,
+      counts: { pods: 0 },
+    } as never);
+    listNamespaces.mockResolvedValue([{ name: "team-a" }] as never);
+    const { result } = renderHook(() => useClusterSummary(), { wrapper });
+    await waitFor(() => expect(result.current.namespaces).toHaveLength(1));
+
+    listNamespaces.mockResolvedValue([] as never);
+    for (const queryKey of peekMutationKeys("Namespace")) {
+      await client.invalidateQueries({ queryKey });
+    }
+    await waitFor(() => expect(result.current.namespaces).toHaveLength(0));
+  });
 });
 
 describe("cluster summary counts when the overview is refused", () => {

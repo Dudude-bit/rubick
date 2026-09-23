@@ -312,6 +312,7 @@ fn main() {
             commands::events::list_events,
             // Log commands
             commands::logs::get_pod_logs,
+            commands::logs::save_pod_log,
             commands::logs::stop_log_stream,
             commands::logs::stream_pod_logs,
             commands::logs::log_stream_subscribed,
@@ -342,7 +343,6 @@ fn main() {
             commands::watch::subscribe_gateway_watch,
             commands::watch::subscribe_gateway_route_watch,
             commands::watch::subscribe_pvc_watch,
-            commands::watch::subscribe_pod_watch,
             commands::watch::subscribe_pod_row_watch,
             commands::watch::subscribe_deployment_watch,
             commands::watch::subscribe_statefulset_watch,

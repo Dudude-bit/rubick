@@ -1,6 +1,8 @@
+import type { QueryKey } from "@tanstack/react-query";
 import { load as parseYaml } from "js-yaml";
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { getApiVersion, toKind } from "@/lib/resource-registry";
 import { vendorPeek } from "@/integrations";
 import type { T as Translate } from "@/i18n/useT";
@@ -40,6 +42,22 @@ const SOURCES: PeekSources = {
   ...CONFIG_STORAGE_SOURCES,
   ...NETWORK_SOURCES,
 };
+
+/**
+ * Where the Overview is cached. A typed source asks the `get_*` its detail
+ * page asks, so it reads the page's entry; a manifest is another answer and
+ * keeps its own.
+ */
+export function peekQueryKey(target: PeekTarget): QueryKey {
+  const namespace = target.namespace ?? null;
+  if (target.crd) {
+    return queryKeys.customResource(target.crd, namespace, target.name);
+  }
+  const resolved = toKind(target.kind);
+  return resolved && SOURCES[resolved]
+    ? queryKeys.detail(resolved, namespace, target.name)
+    : ["peek", resolved ?? target.kind, namespace, target.name];
+}
 
 export function resolveSource(target: PeekTarget): PeekSource {
   // A custom resource first, and never by kind: two CRDs may declare the same

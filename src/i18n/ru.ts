@@ -1172,6 +1172,12 @@ export const ru: Catalogue = {
     interleaveAnyway: "Всё равно смешать",
     clearQuery: "Очистить запрос",
     downloadFailed: "Не удалось скачать",
+    logSaved: {
+      one: "Сохранён {n} лог",
+      few: "Сохранено {n} лога",
+      many: "Сохранено {n} логов",
+      other: "Сохранено {n} лога",
+    },
     downloadFailedDetail: "Не удалось прочитать лог из API",
     confirm: "Подтвердить",
     processing: "Выполняется…",

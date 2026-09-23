@@ -13,6 +13,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
@@ -45,7 +46,7 @@ export function ConfigMapDetail() {
   const connections = useConnections(ResourceType.ConfigMap, name, namespace);
 
   const { data: configMapData, isLoading: isDataLoading } = useQuery({
-    queryKey: ["configmap-data", name, namespace],
+    queryKey: queryKeys.configMapData(namespace, name),
     queryFn: () => commands.getConfigmapData(name!, namespace!),
     enabled: !!name && !!namespace,
   });
@@ -60,7 +61,7 @@ export function ConfigMapDetail() {
     try {
       await commands.setConfigmapKey(name!, key, value, namespace!);
       await queryClient.invalidateQueries({
-        queryKey: ["configmap-data", name, namespace],
+        queryKey: queryKeys.configMapData(namespace, name),
       });
       toast({ title: t("action", "keyUpdated", { key }) });
     } catch (error) {

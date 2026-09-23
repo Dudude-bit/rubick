@@ -118,7 +118,6 @@ subscribe_namespaced!(
     PersistentVolumeClaimInfo,
     "PersistentVolumeClaim"
 );
-subscribe_namespaced!(subscribe_pod_watch, Pod, PodInfo, "Pod");
 subscribe_namespaced!(subscribe_pod_row_watch, Pod, PodRow, "Pod");
 subscribe_namespaced!(
     subscribe_deployment_watch,
@@ -184,17 +183,10 @@ pub async fn subscribe_custom_resource_watch(
     let client = current_client(&state)?;
     let namespace = normalize_optional_namespace(namespace);
 
-    let api_resource = kube::discovery::ApiResource {
-        group: group.clone(),
-        version: version.clone(),
-        api_version: if group.is_empty() {
-            version.clone()
-        } else {
-            format!("{group}/{version}")
-        },
-        kind: kind.clone(),
-        plural,
-    };
+    let api_resource = kube::discovery::ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk(&group, &version, &kind),
+        &plural,
+    );
 
     Ok(state.watch_manager.subscribe_custom_resource(
         client,
@@ -294,17 +286,10 @@ pub async fn subscribe_custom_object_watch(
         crate::validation::validate_namespace(ns)?;
     }
     let client = current_client(&state)?;
-    let api_resource = kube::discovery::ApiResource {
-        group: group.clone(),
-        version: version.clone(),
-        api_version: if group.is_empty() {
-            version.clone()
-        } else {
-            format!("{group}/{version}")
-        },
-        kind: kind.clone(),
-        plural,
-    };
+    let api_resource = kube::discovery::ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk(&group, &version, &kind),
+        &plural,
+    );
     Ok(state.watch_manager.subscribe_custom_resource(
         client,
         &api_resource,

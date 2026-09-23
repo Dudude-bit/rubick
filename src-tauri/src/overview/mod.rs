@@ -136,17 +136,19 @@ impl Health {
     }
 }
 
+fn namespace_and_name<K: kube::Resource>(object: &K) -> (&str, &str) {
+    let meta = object.meta();
+    (
+        meta.namespace.as_deref().unwrap_or_default(),
+        meta.name.as_deref().unwrap_or_default(),
+    )
+}
+
 /// The apiserver's own order, which is by namespace then name.
 fn by_name<K: kube::Resource>(mut items: Vec<Arc<K>>) -> Vec<Arc<K>> {
-    items.sort_by(|a, b| {
-        let key = |o: &Arc<K>| {
-            (
-                o.meta().namespace.clone().unwrap_or_default(),
-                o.meta().name.clone().unwrap_or_default(),
-            )
-        };
-        key(a).cmp(&key(b))
-    });
+    // Borrowed keys: cloning both strings on every comparison was four
+    // allocations per compare across every pod in the cluster.
+    items.sort_by(|a, b| namespace_and_name(a.as_ref()).cmp(&namespace_and_name(b.as_ref())));
     items
 }
 
