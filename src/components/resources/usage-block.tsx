@@ -11,8 +11,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageRow } from "@/components/resources/detail-blocks";
 import type { TrafficChartProps } from "@/components/resources/traffic-chart";
+import { BAND_H } from "@/components/resources/band-frame";
 import {
-  BAND_H,
   NO_LIMIT_NOTE,
   UsageChart,
   WATCHING_NOTE,
