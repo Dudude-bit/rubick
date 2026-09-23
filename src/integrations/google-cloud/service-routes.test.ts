@@ -4,11 +4,12 @@ import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
 const answers = vi.hoisted(() => ({
   crds: (): Promise<CustomResourceInfo[]> => Promise.resolve([]),
+  ingresses: null as IngressInfo[] | null,
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listIngresses: () => Promise.resolve([shop]),
+    listIngresses: () => Promise.resolve(answers.ingresses ?? [shop]),
     listCustomResources: () => answers.crds(),
   },
 }));
@@ -58,6 +59,7 @@ const tlsOfShop = async () =>
 
 beforeEach(() => {
   answers.crds = () => Promise.resolve([]);
+  answers.ingresses = null;
 });
 
 describe("whether GKE terminates TLS in front of a Service", () => {
@@ -80,5 +82,27 @@ describe("whether GKE terminates TLS in front of a Service", () => {
     answers.crds = failing("NOT_FOUND", "not found");
 
     expect(await tlsOfShop()).toBe(false);
+  });
+
+  /**
+   * Two GCE Ingresses on one host and path: the first could not tell, the
+   * second said no, and the second replaced the first — the proxy was told
+   * its host is served in the clear. Fails if a "no" outranks an unknown.
+   */
+  it("keeps an Ingress that could not tell over one on the same path that says no", async () => {
+    answers.crds = failing(
+      "PERMISSION_DENIED",
+      "managedcertificates.networking.gke.io is forbidden"
+    );
+    answers.ingresses = [
+      shop,
+      {
+        ...shop,
+        name: "shop-plain",
+        annotations: { "kubernetes.io/ingress.class": "gce" },
+      },
+    ];
+
+    expect(await tlsOfShop()).toBeNull();
   });
 });
