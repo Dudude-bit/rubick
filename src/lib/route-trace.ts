@@ -29,6 +29,7 @@ import type {
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
+import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
 
 export interface TraceQuote {
   asks: string;
@@ -327,27 +328,6 @@ function freshnessOf(
     return undefined;
   }
   return { observed: condition.observedGeneration, current: route.generation };
-}
-
-function statusesFor(
-  route: RouteInfo,
-  parent: ParentRefInfo
-): RouteParentStatusInfo[] {
-  const named = route.parents.filter(
-    (entry) =>
-      entry.parent.name === parent.name &&
-      (entry.parent.namespace ?? route.namespace) ===
-        (parent.namespace ?? route.namespace)
-  );
-  // A status parentRef echoes the spec's, sectionName included — a route
-  // attached to one gateway through two listeners has two verdicts, and
-  // each trace must read its own. Entries that name no section (or a
-  // controller that did not echo it) fall back for every attachment.
-  const exact = named.filter(
-    (entry) =>
-      (entry.parent.sectionName ?? null) === (parent.sectionName ?? null)
-  );
-  return exact.length > 0 ? exact : named;
 }
 
 /** The listeners this parentRef points at — one by section, or all. */
@@ -656,9 +636,7 @@ function acceptanceSteps(
     ];
   }
 
-  const accepted = entries
-    .flatMap((entry) => entry.conditions)
-    .find((c) => c.type === "Accepted");
+  const accepted = saidOf(verdictOf(entries, "Accepted"));
   const freshness = freshnessOf(accepted, route);
 
   if (!accepted) {
@@ -831,9 +809,7 @@ function refsStep(
   entries: RouteParentStatusInfo[],
   t: T
 ): TraceStep {
-  const resolved = entries
-    .flatMap((entry) => entry.conditions)
-    .find((c) => c.type === "ResolvedRefs");
+  const resolved = saidOf(verdictOf(entries, "ResolvedRefs"));
   const freshness = freshnessOf(resolved, route);
 
   if (resolved?.status === "False") {

@@ -92,6 +92,63 @@ describe("the peek's Overview against the detail pages", () => {
     expect(peek.key).toEqual(queryKeys.detail("HTTPRoute", "ns", "x"));
   });
 
+  /**
+   * The badge read any True as accepted, so a route one controller was
+   * still deciding about said Accepted here and "unknown" on the Gateway
+   * page. It reads the one rule `route-verdict.ts` keeps now.
+   */
+  it("does not badge a route accepted while one controller is still deciding", () => {
+    const verdict = (status: string, reason: string) => ({
+      parent: {
+        group: "gateway.networking.k8s.io",
+        kind: "Gateway",
+        name: "edge",
+        namespace: null,
+        sectionName: null,
+        port: null,
+      },
+      controllerName: `${reason}.example.net/gw`,
+      conditions: [
+        {
+          type: "Accepted",
+          status,
+          reason,
+          message: null,
+          lastTransitionTime: null,
+        },
+      ],
+    });
+    const route = (parents: ReturnType<typeof verdict>[]) => ({
+      kind: "HTTPRoute",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      name: "x",
+      namespace: "ns",
+      hostnames: [],
+      parentRefs: [],
+      rules: [],
+      parents,
+      generation: 1,
+      labels: {},
+      annotations: {},
+      createdAt: null,
+    });
+    const target = { kind: "HTTPRoute", name: "x", namespace: "ns" };
+    const badge = (parents: ReturnType<typeof verdict>[]) =>
+      resolveSource(target).summarise(
+        route(parents),
+        target,
+        ((_section: string, key: string) => key) as never
+      ).status;
+
+    expect(badge([verdict("True", "Accepted")])).toBe("Accepted");
+    expect(
+      badge([verdict("True", "Accepted"), verdict("Unknown", "Pending")])
+    ).toBeUndefined();
+    expect(
+      badge([verdict("True", "Accepted"), verdict("False", "Refused")])
+    ).toBe("Refused");
+  });
+
   it("reads a CRD where the CRD page does", async () => {
     const peek = await peekOf({
       kind: "CustomResourceDefinition",

@@ -139,6 +139,81 @@ pub struct RouteInfo {
     pub created_at: Option<String>,
 }
 
+/// What a route's status says about one condition of one parent, read as
+/// `src/lib/route-verdict.ts` reads it; `shared/route-verdict-conformance.json`
+/// holds the two to one answer.
+#[derive(Debug, Clone, Copy)]
+pub enum Verdict<'a> {
+    /// No entry for this parent at all.
+    None,
+    /// Entries, none of which carries the condition.
+    Undecided,
+    False(&'a ConditionInfo),
+    Pending(&'a ConditionInfo),
+    True(&'a ConditionInfo),
+}
+
+impl RouteInfo {
+    /// The entries that answer for one parentRef: those naming it, narrowed
+    /// to the ones echoing its sectionName when any do. A controller that
+    /// did not echo the section answers for every listener.
+    #[must_use]
+    pub fn statuses_for(&self, parent: &ParentRefInfo) -> Vec<&RouteParentStatusInfo> {
+        let ns_of = |ns: &Option<String>| ns.clone().unwrap_or_else(|| self.namespace.clone());
+        let named: Vec<&RouteParentStatusInfo> = self
+            .parents
+            .iter()
+            .filter(|entry| {
+                entry.parent.name == parent.name
+                    && ns_of(&entry.parent.namespace) == ns_of(&parent.namespace)
+            })
+            .collect();
+        let exact: Vec<&RouteParentStatusInfo> = named
+            .iter()
+            .copied()
+            .filter(|entry| entry.parent.section_name == parent.section_name)
+            .collect();
+        if exact.is_empty() {
+            named
+        } else {
+            exact
+        }
+    }
+}
+
+/// One refusal decides, wherever it sits; True only when every entry says
+/// True, and then the one about the oldest generation speaks. Reading the
+/// first entry alone drew a route two controllers disagreed about as
+/// accepted here and refused on the Gateway page.
+#[must_use]
+pub fn verdict_of<'a>(entries: &[&'a RouteParentStatusInfo], condition: &str) -> Verdict<'a> {
+    if entries.is_empty() {
+        return Verdict::None;
+    }
+    let said: Vec<&ConditionInfo> = entries
+        .iter()
+        .flat_map(|entry| entry.conditions.iter())
+        .filter(|c| c.type_ == condition)
+        .collect();
+    if said.is_empty() {
+        return Verdict::Undecided;
+    }
+    if let Some(refused) = said.iter().find(|c| c.status == "False") {
+        return Verdict::False(refused);
+    }
+    if let Some(undecided) = said.iter().find(|c| c.status != "True") {
+        return Verdict::Pending(undecided);
+    }
+    let oldest = said.iter().copied().fold(said[0], |sofar, c| {
+        match (c.observed_generation, sofar.observed_generation) {
+            (Some(this), Some(that)) if this < that => c,
+            (Some(_), None) => c,
+            _ => sofar,
+        }
+    });
+    Verdict::True(oldest)
+}
+
 /// The group every kind here belongs to, and the `parentRefs[].group`
 /// default the spec declares.
 pub const GATEWAY_API_GROUP: &str = "gateway.networking.k8s.io";
@@ -1060,6 +1135,89 @@ mod tests {
 
     fn parse(yaml: &str) -> DynamicObject {
         serde_yaml::from_str(yaml).expect("fixture parses")
+    }
+
+    /// The corpus writes parents short; group, kind and port are the same
+    /// for every case.
+    fn parent_of(short: &serde_json::Value) -> ParentRefInfo {
+        let mut full = serde_json::json!({
+            "group": GATEWAY_API_GROUP, "kind": "Gateway",
+            "namespace": null, "sectionName": null, "port": null,
+        });
+        for (key, value) in short.as_object().expect("a parent") {
+            full[key] = value.clone();
+        }
+        serde_json::from_value(full).expect("a parentRef")
+    }
+
+    fn answer(verdict: Verdict<'_>) -> serde_json::Value {
+        let (state, said) = match verdict {
+            Verdict::None => ("none", None),
+            Verdict::Undecided => ("undecided", None),
+            Verdict::False(c) => ("false", Some(c)),
+            Verdict::Pending(c) => ("pending", Some(c)),
+            Verdict::True(c) => ("true", Some(c)),
+        };
+        let mut out = serde_json::json!({ "state": state });
+        if let Some(reason) = said.and_then(|c| c.reason.clone()) {
+            out["reason"] = reason.into();
+        }
+        if let Some(generation) = said.and_then(|c| c.observed_generation) {
+            out["observedGeneration"] = generation.into();
+        }
+        out
+    }
+
+    /// The trace, the routes list, the Gateway page, the map and the peek
+    /// read this in TypeScript and the connections graph here. The graph
+    /// read the first entry alone, so a route two controllers disagreed
+    /// about had no stop in the graph and was red on the Gateway page.
+    #[test]
+    fn a_routes_status_reads_as_the_shared_corpus_says() {
+        let corpus: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../shared/route-verdict-conformance.json"
+        ))
+        .expect("the corpus parses");
+        let cases = corpus["cases"].as_array().expect("cases");
+        assert!(cases.len() > 10);
+        for case in cases {
+            let name = case["name"].as_str().expect("a name");
+            let parents = case["entries"]
+                .as_array()
+                .expect("entries")
+                .iter()
+                .map(|entry| RouteParentStatusInfo {
+                    parent: parent_of(&entry["parent"]),
+                    controller_name: entry["controllerName"].as_str().unwrap_or("").into(),
+                    conditions: serde_json::from_value(entry["conditions"].clone())
+                        .expect("conditions"),
+                })
+                .collect();
+            let route = RouteInfo {
+                kind: "HTTPRoute".into(),
+                api_version: format!("{GATEWAY_API_GROUP}/v1"),
+                name: "r".into(),
+                namespace: case["routeNamespace"].as_str().expect("a namespace").into(),
+                hostnames: vec![],
+                parent_refs: vec![],
+                rules: vec![],
+                parents,
+                generation: None,
+                labels: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+                created_at: None,
+            };
+            let entries = route.statuses_for(&parent_of(&case["parent"]));
+            for (condition, key) in [("Accepted", "accepted"), ("ResolvedRefs", "resolvedRefs")] {
+                let mut got = answer(verdict_of(&entries, condition));
+                if case[key].get("observedGeneration").is_none() {
+                    got.as_object_mut()
+                        .expect("an object")
+                        .remove("observedGeneration");
+                }
+                assert_eq!(got, case[key], "{name}: {condition}");
+            }
+        }
     }
 
     const BACKEND_TLS_POLICY_V1: &str = r#"

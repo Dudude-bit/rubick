@@ -29,6 +29,7 @@ import { describeStop } from "@/lib/connections";
 import { labelSelectorMatches } from "@/lib/label-selector";
 import type { T } from "@/i18n/useT";
 import { KIND_TEXT } from "@/lib/route-kind-tone";
+import { verdictOf } from "@/lib/route-verdict";
 import type { GatewayInfo, PodInfo, RouteInfo } from "@/generated/types";
 import {
   gatewayOfParent,
@@ -83,12 +84,9 @@ function gatewayTone(gateway: GatewayInfo): { tone: MapTone; sub?: string } {
 
 /** The Accepted verdicts this route's Gateway parents wrote. */
 function routeTone(route: RouteInfo): MapTone {
-  const verdicts = route.parents.flatMap((parent) =>
-    parent.conditions.filter((c) => c.type === "Accepted")
-  );
-  if (verdicts.some((c) => c.status === "False")) return "err";
-  if (verdicts.length > 0 && verdicts.every((c) => c.status === "True"))
-    return "ok";
+  const verdict = verdictOf(route.parents, "Accepted");
+  if (verdict.state === "false") return "err";
+  if (verdict.state === "true") return "ok";
   return "mute";
 }
 
@@ -98,13 +96,15 @@ function refusedBy(
   gatewayName: string,
   gatewayNamespace: string
 ): boolean {
-  return route.parents.some(
-    (entry) =>
-      entry.parent.name === gatewayName &&
-      (entry.parent.namespace ?? route.namespace) === gatewayNamespace &&
-      entry.conditions.some(
-        (c) => c.type === "Accepted" && c.status === "False"
-      )
+  return (
+    verdictOf(
+      route.parents.filter(
+        (entry) =>
+          entry.parent.name === gatewayName &&
+          (entry.parent.namespace ?? route.namespace) === gatewayNamespace
+      ),
+      "Accepted"
+    ).state === "false"
   );
 }
 

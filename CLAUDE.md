@@ -184,6 +184,11 @@ each has a contract nothing checks for you.
   a cluster-read step tagged that way silently claims a verdict is knowable.
 - A `ConnRow` whose group claims anything that depends on the object existing
   must set `verifiable: true`; the render site hides `notChecked` otherwise.
+- A route's status about one parent is read through `verdictOf` /
+  `verdict_of` and nothing else, held together by
+  `shared/route-verdict-conformance.json`. The graph read the first entry and
+  the trace the first `Accepted`, so a route two controllers disagreed about
+  was green on one screen and red on the next.
 - Implementations of `delivery.source` and `ingress.tls` answer **positionally**
   — same length as the input, a hole rather than a dropped element. The caller
   indexes the answer by row.
