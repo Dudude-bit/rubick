@@ -5992,6 +5992,7 @@ export const ru: Catalogue = {
     gwRefUnresolvedShort: "ссылка не разрешилась",
     gwRefsResolveQuiet: "Ссылки разрешаются — обратного никто не сообщил",
     gwRefsResolve: "Ссылки разрешаются",
+    gwRefsPending: "Контроллер ещё не решил, разрешаются ли ссылки",
     gwRedirectsOnly:
       "Этот маршрут перенаправляет — бэкендов нет, и они не нужны",
     gwFilterNamed:
@@ -6003,6 +6004,8 @@ export const ru: Catalogue = {
       "Во всех правилах нет backendRefs (и нет ни редиректа, ни фильтра-расширения). Совпавший запрос сразу получает ошибку от шлюза.",
     gwBackendsReading: "Бэкенд-Service — ещё читаются",
     gwEndpointsReading: "Эндпоинты — ещё читаются",
+    gwBackendsUnread: "Бэкенд-Service — прочитать не удалось",
+    gwEndpointsUnread: "Эндпоинты — прочитать не удалось",
     gwBackendMissingSay: "Бэкенд-Service {name} не существует в {namespace}",
     gwBackendMissingShort: "Service {name} не существует",
     gwWrongPortSay: "Service {name} не обслуживает порт {port}",

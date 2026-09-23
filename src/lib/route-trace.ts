@@ -809,8 +809,21 @@ function refsStep(
   entries: RouteParentStatusInfo[],
   t: T
 ): TraceStep {
-  const resolved = saidOf(verdictOf(entries, "ResolvedRefs"));
+  const verdict = verdictOf(entries, "ResolvedRefs");
+  const resolved = saidOf(verdict);
   const freshness = freshnessOf(resolved, route);
+
+  // `Unknown` is not "they resolve", the same third answer the listener step
+  // keeps apart from "accepts".
+  if (verdict.state === "pending") {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsPending"),
+      who: "controller",
+      freshness,
+    };
+  }
 
   if (resolved?.status === "False") {
     if (resolved.reason === "RefNotPermitted") {
@@ -948,18 +961,25 @@ function backendSteps(
       },
     ];
   }
+  // A read that failed is not one still coming. Blind either way, not err:
+  // nothing here says the route is broken, only that nobody could look.
   if (!backing.backingKnown) {
+    const failed = backing.backingError;
+    const detail = failed
+      ? { title: t("empty", "gwBackendsUnread"), body: failed }
+      : undefined;
     return [
       {
         id: "backend",
         state: "blind",
-        say: t("empty", "gwBackendsReading"),
+        say: t("empty", failed ? "gwBackendsUnread" : "gwBackendsReading"),
         who: "yours",
+        detail,
       },
       {
         id: "endpoints",
         state: "blind",
-        say: t("empty", "gwEndpointsReading"),
+        say: t("empty", failed ? "gwEndpointsUnread" : "gwEndpointsReading"),
         who: "yours",
       },
     ];
