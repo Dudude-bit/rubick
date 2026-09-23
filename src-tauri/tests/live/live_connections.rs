@@ -742,7 +742,7 @@ async fn a_pod_names_the_service_that_fronts_it() {
 /// ./test-manifests/listenerset-routes-play-controller.sh
 /// kubectl create service clusterip app -n apps --tcp=80:8080
 /// K8S_GUI_INIT_CONTEXT=kind-rubick-ls K8S_GUI_INIT_NAMESPACE=apps \
-///   cargo test --test live live_connections::listenerset -- --ignored --nocapture
+///   cargo test --test live live_connections::a_route_through_a_listenerset -- --ignored --nocapture
 /// ```
 #[tokio::test]
 #[ignore = "needs the listenerset-routes scene"]
