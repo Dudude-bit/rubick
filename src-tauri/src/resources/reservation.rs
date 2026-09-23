@@ -59,9 +59,10 @@ pub struct Reservation {
     pub limits: Sums,
     /// What usage is measured against: the running containers' declared
     /// limits — app containers and sidecars — added up, the sum
-    /// kube-state-metrics records, or the pod-level limit. A plain init
-    /// container's limit held only before any sample, and overhead is the
-    /// sandbox's.
+    /// kube-state-metrics records. A plain init container's limit held only
+    /// before any sample, and overhead is the sandbox's. A pod-level limit
+    /// caps the sum, and is the whole of it where a running container
+    /// declares none.
     pub ceiling: Sums,
     pub known: bool,
 }
@@ -109,7 +110,7 @@ fn containers_sum(
     sums
 }
 
-fn running_ceiling(spec: &PodSpec, ok: &mut bool) -> Sums {
+fn running_ceiling(spec: &PodSpec, pod_limits: &Sums, ok: &mut bool) -> Sums {
     let sidecars = spec
         .init_containers
         .iter()
@@ -124,6 +125,13 @@ fn running_ceiling(spec: &PodSpec, ok: &mut bool) -> Sums {
     let mut ceiling = Sums::new();
     for limits in &running {
         add(&mut ceiling, limits);
+    }
+    for (key, whole) in pod_limits {
+        let every_one_capped = running.iter().all(|limits| limits.contains_key(key));
+        let slot = ceiling.entry(key.clone()).or_insert(*whole);
+        if !every_one_capped || *whole < *slot {
+            *slot = *whole;
+        }
     }
     ceiling
 }
@@ -143,13 +151,12 @@ pub fn pod_reservation(spec: &PodSpec) -> Reservation {
     let mut ok = true;
     let mut requests = containers_sum(spec, |r| r.requests.as_ref(), &mut ok);
     let mut limits = containers_sum(spec, |r| r.limits.as_ref(), &mut ok);
-    let mut ceiling = running_ceiling(spec, &mut ok);
 
     let pod_level = spec.resources.as_ref();
     requests.extend(read(pod_level.and_then(|r| r.requests.as_ref()), &mut ok));
     let pod_limits = read(pod_level.and_then(|r| r.limits.as_ref()), &mut ok);
-    limits.extend(pod_limits.clone());
-    ceiling.extend(pod_limits);
+    let ceiling = running_ceiling(spec, &pod_limits, &mut ok);
+    limits.extend(pod_limits);
 
     let overhead = read(spec.overhead.as_ref(), &mut ok);
     add(&mut requests, &overhead);
@@ -408,6 +415,38 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Would draw a 2Gi ceiling over two containers capped at 512Mi each, a
+    /// bar at half while both sit one step from being killed: a pod-level
+    /// limit caps what runs, and raises nothing that is already capped.
+    #[test]
+    fn a_pod_level_limit_caps_the_running_sum_and_never_raises_it() {
+        let capped = |name: &str| sized(name, false, &[], &[("memory", "512Mi")]);
+        let whole = Some(ResourceRequirements {
+            limits: quantities(&[("memory", "2Gi")]),
+            ..Default::default()
+        });
+        let both = PodSpec {
+            containers: vec![capped("app"), capped("worker")],
+            resources: whole.clone(),
+            ..Default::default()
+        };
+        assert_eq!(
+            pod_reservation(&both).ceiling.get("memory"),
+            Some(&(1024.0 * MIB))
+        );
+
+        let one = PodSpec {
+            containers: vec![capped("app"), sized("worker", false, &[], &[])],
+            resources: whole,
+            ..Default::default()
+        };
+        assert_eq!(
+            pod_reservation(&one).ceiling.get("memory"),
+            Some(&(2048.0 * MIB)),
+            "the worker may take whatever the pod has left"
+        );
     }
 
     /// A pod with no spec reserves nothing, and says it knows that.
