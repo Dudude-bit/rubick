@@ -1,0 +1,25 @@
+{
+  "about": "A log line as text — in a downloaded file and on the clipboard — as both halves write it: src-tauri/src/logs/text.rs (Download) and logsToText in src/components/logs/types.ts (Copy). `raw` is the line as the terminal shows it; an empty one falls back to the timestamp and the message. Lines are joined with a newline and nothing after the last.",
+  "cases": [
+    {
+      "line": {
+        "raw": "GET /health 200",
+        "timestamp": "2026-09-23T12:00:00Z",
+        "message": "GET /health 200"
+      },
+      "text": "GET /health 200"
+    },
+    {
+      "line": {
+        "raw": "",
+        "timestamp": "2026-09-23T12:00:00.500Z",
+        "message": ""
+      },
+      "text": "2026-09-23T12:00:00.500Z "
+    },
+    {
+      "line": { "raw": "", "timestamp": null, "message": "no stamp" },
+      "text": " no stamp"
+    }
+  ]
+}

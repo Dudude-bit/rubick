@@ -1,6 +1,6 @@
 //! Log streaming commands
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::logs::{LogConfig, LogLine, LogStreamer, QueryTerm};
 use crate::state::{AppState, LogStream};
 use crate::utils::normalize_optional_namespace;
@@ -249,6 +249,45 @@ pub async fn get_pod_logs(
     let logs = streamer.get_logs(&log_config).await?;
 
     Ok(logs)
+}
+
+/// Save a container's log into the Downloads folder, and say where.
+///
+/// Written here rather than handed to the webview to write: ten thousand
+/// parsed lines, about six fields each, made one IPC answer of well over a
+/// megabyte for a file that needs only the text of each line.
+#[tauri::command]
+pub async fn save_pod_log(
+    pod_name: String,
+    namespace: Option<String>,
+    container: String,
+    tail_lines: Option<i64>,
+    previous: bool,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    // Both names become the file's name: validated, nothing in them can
+    // reach outside the folder.
+    crate::validation::validate_name::<k8s_openapi::api::core::v1::Pod>(&pod_name)?;
+    crate::validation::validate_dns_label(&container)?;
+    let lines = get_pod_logs(
+        pod_name.clone(),
+        namespace,
+        Some(container.clone()),
+        tail_lines,
+        None,
+        previous,
+        state,
+    )
+    .await?;
+    let dir = dirs::download_dir()
+        .ok_or_else(|| Error::Config("There is no Downloads folder to save into".to_string()))?;
+    let stem = format!(
+        "{pod_name}-{container}{}",
+        if previous { "-previous" } else { "" }
+    );
+    let path = crate::logs::text::unused_path(&dir, &stem, "log");
+    tokio::fs::write(&path, crate::logs::text::log_text(&lines)).await?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Stop log streaming

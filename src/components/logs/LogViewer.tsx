@@ -1234,32 +1234,33 @@ export function LogViewer({
     // used to take every pod after it down with it, and the reader was told
     // the API could not be read — over a fact the backend had just named.
     const refused: string[] = [];
+    const saved: string[] = [];
     for (const target of targets) {
       try {
-        const allLogs = await commands.getPodLogs(
-          target.pod,
-          target.namespace,
-          target.container,
-          10000,
-          null,
-          // The file has to be the log on screen. Downloading the current
-          // run while the pane reads the previous one hands the reader a
-          // different log under the same name.
-          previousRun
+        // Written by the backend straight into Downloads: the log never
+        // crosses IPC as ten thousand parsed lines just to become a file.
+        saved.push(
+          await commands.savePodLog(
+            target.pod,
+            target.namespace,
+            target.container,
+            10000,
+            // The file has to be the log on screen. Downloading the current
+            // run while the pane reads the previous one hands the reader a
+            // different log under the same name.
+            previousRun
+          )
         );
-        const blob = new Blob([logsToText(allLogs)], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = `${target.pod}-${target.container}${previousRun ? "-previous" : ""}.log`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
       } catch (err) {
         console.error("Failed to download logs:", err);
         refused.push(`${target.pod}/${target.container}: ${errorToShow(err)}`);
       }
+    }
+    if (saved.length > 0) {
+      toast({
+        title: t("action", "logSaved", { n: saved.length }),
+        description: saved.join("\n"),
+      });
     }
     if (refused.length > 0) {
       toast({

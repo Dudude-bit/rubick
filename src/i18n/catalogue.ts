@@ -1189,6 +1189,7 @@ export const en = {
     interleaveAnyway: "Interleave them anyway",
     clearQuery: "Clear the query",
     downloadFailed: "Download failed",
+    logSaved: { one: "Log saved", other: "{n} logs saved" },
     downloadFailedDetail: "Could not read the log from the API",
     confirm: "Confirm",
     processing: "Processing...",
