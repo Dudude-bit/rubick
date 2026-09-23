@@ -30,26 +30,84 @@ pub const TERABYTE: u64 = 1000 * 1000 * 1000 * 1000;
 pub const PETABYTE: u64 = 1000 * TERABYTE;
 pub const EXABYTE: u64 = 1000 * PETABYTE;
 
-/// Suffix to the divisor that turns the number in front of it into millicores.
-const CPU_UNITS: [(char, f64); 3] = [('m', 1.0), ('n', 1_000_000.0), ('u', 1_000.0)];
-
-/// Suffix to the number of bytes it stands for. Binary units are listed
-/// first, though nothing depends on the order: a value ending in `Ki` does
-/// not end in `K`.
-const MEMORY_UNITS: [(&str, u64); 12] = [
-    ("Ki", KIBIBYTE),
-    ("Mi", MEBIBYTE),
-    ("Gi", GIBIBYTE),
-    ("Ti", TEBIBYTE),
-    ("Pi", PEBIBYTE),
-    ("Ei", EXBIBYTE),
-    ("K", KILOBYTE),
-    ("M", MEGABYTE),
-    ("G", GIGABYTE),
-    ("T", TERABYTE),
-    ("P", PETABYTE),
-    ("E", EXABYTE),
+/// Suffix to the number it multiplies by. Kubernetes' own list: the binary
+/// ones, and the decimal ones with `k` in lower case — `1K` is a string the
+/// API server refuses, and reading it as a thousand agreed with nobody.
+const SUFFIXES: [(&str, f64); 15] = [
+    ("Ki", KIBIBYTE as f64),
+    ("Mi", MEBIBYTE as f64),
+    ("Gi", GIBIBYTE as f64),
+    ("Ti", TEBIBYTE as f64),
+    ("Pi", PEBIBYTE as f64),
+    ("Ei", EXBIBYTE as f64),
+    ("n", 1e-9),
+    ("u", 1e-6),
+    ("m", 1e-3),
+    ("k", 1e3),
+    ("M", 1e6),
+    ("G", 1e9),
+    ("T", 1e12),
+    ("P", 1e15),
+    ("E", 1e18),
 ];
+
+/// A quantity as Kubernetes reads it (`resource.Quantity`): a signed decimal
+/// number and then a binary suffix, a decimal one, or an exponent (`1e3`,
+/// `12E-3`). `None` for anything the API server would refuse.
+///
+/// The frontend reads the same grammar; `shared/quantity-conformance.json`
+/// is what keeps the two one answer.
+#[must_use]
+pub fn parse_quantity(text: &str) -> Option<f64> {
+    let text = text.trim();
+    let digits_end = text
+        .char_indices()
+        .find(|&(i, c)| !(c.is_ascii_digit() || c == '.' || (i == 0 && (c == '+' || c == '-'))))
+        .map_or(text.len(), |(i, _)| i);
+    let (number, suffix) = text.split_at(digits_end);
+    let value = signed_number(number)?;
+    if suffix.is_empty() {
+        return Some(value);
+    }
+    if let Some(exponent) = suffix
+        .strip_prefix('e')
+        .or_else(|| suffix.strip_prefix('E'))
+        .filter(|rest| !rest.is_empty())
+    {
+        // `1E` is an exabyte; `1E3` is a thousand.
+        if let Some(power) = signed_integer(exponent) {
+            return Some(value * 10f64.powi(power));
+        }
+    }
+    SUFFIXES
+        .iter()
+        .find(|(name, _)| *name == suffix)
+        .map(|(_, factor)| value * factor)
+}
+
+/// `1`, `1.5`, `.5`, `5.`, with an optional sign; not `.`, not `1.2.3`.
+fn signed_number(text: &str) -> Option<f64> {
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    let mut parts = unsigned.split('.');
+    let whole = parts.next().unwrap_or("");
+    let fraction = parts.next().unwrap_or("");
+    let all_digits = |part: &str| part.chars().all(|c| c.is_ascii_digit());
+    if parts.next().is_some() || (whole.is_empty() && fraction.is_empty()) {
+        return None;
+    }
+    if !all_digits(whole) || !all_digits(fraction) {
+        return None;
+    }
+    text.parse::<f64>().ok()
+}
+
+fn signed_integer(text: &str) -> Option<i32> {
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if unsigned.is_empty() || !unsigned.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    text.parse::<i32>().ok()
+}
 
 /// Parse CPU quantity string to millicores (f64)
 /// Supports formats: "500m", "0.5", "2", "2.5", "100n" (nanocores)
@@ -58,19 +116,12 @@ pub fn parse_cpu(cpu_str: &str) -> f64 {
     parse_cpu_checked(cpu_str).unwrap_or(0.0)
 }
 
-/// Like [`parse_cpu`], but `None` when the number itself will not parse, so a
+/// Like [`parse_cpu`], but `None` when the quantity will not parse, so a
 /// caller can tell "could not read" from a real zero rather than collapse the
-/// two. An unknown *suffix* still falls through to the no-suffix (cores) path.
+/// two.
 #[must_use]
 pub fn parse_cpu_checked(cpu_str: &str) -> Option<f64> {
-    let cpu_str = cpu_str.trim();
-    for (suffix, per_millicore) in CPU_UNITS {
-        if let Some(num) = cpu_str.strip_suffix(suffix) {
-            return num.parse::<f64>().ok().map(|n| n / per_millicore);
-        }
-    }
-    // No suffix means cores: "2", "0.5", "2.5".
-    cpu_str.parse::<f64>().ok().map(|n| n * 1000.0)
+    parse_quantity(cpu_str).map(|cores| cores * 1000.0)
 }
 
 /// Parse memory quantity string to bytes (u64)
@@ -80,19 +131,14 @@ pub fn parse_memory(mem_str: &str) -> u64 {
     parse_memory_checked(mem_str).unwrap_or(0)
 }
 
-/// Like [`parse_memory`], but `None` when the number itself will not parse, so
-/// a caller can tell "could not read" from a real zero rather than collapse
-/// the two.
+/// Like [`parse_memory`], but `None` when the quantity will not parse, or is
+/// negative, so a caller can tell "could not read" from a real zero rather
+/// than collapse the two.
 #[must_use]
 pub fn parse_memory_checked(mem_str: &str) -> Option<u64> {
-    let mem_str = mem_str.trim();
-    for (suffix, bytes) in MEMORY_UNITS {
-        if let Some(num) = mem_str.strip_suffix(suffix) {
-            return num.parse::<f64>().ok().map(|n| (n * bytes as f64) as u64);
-        }
-    }
-    // No suffix means the quantity is already in bytes.
-    mem_str.parse::<u64>().ok()
+    parse_quantity(mem_str)
+        .filter(|bytes| *bytes >= 0.0)
+        .map(|bytes| bytes.round() as u64)
 }
 
 /// Format millicores to string representation
@@ -163,7 +209,9 @@ mod tests {
         assert_eq!(parse_memory("1Mi"), 1024 * 1024);
         assert_eq!(parse_memory("1Gi"), 1024 * 1024 * 1024);
         assert_eq!(parse_memory("1Ti"), 1024_u64.pow(4));
-        assert_eq!(parse_memory("1K"), 1_000);
+        // Refused by the API server, so refused here: the decimal kilo is `k`.
+        assert_eq!(parse_memory("1K"), 0);
+        assert_eq!(parse_memory("1k"), 1_000);
         assert_eq!(parse_memory("1M"), 1_000_000);
         assert_eq!(parse_memory("1G"), 1_000_000_000);
         assert_eq!(parse_memory("1T"), 1_000_000_000_000);
@@ -196,6 +244,30 @@ mod tests {
         assert_eq!(parse_memory_checked("0"), Some(0));
         assert_eq!(parse_cpu_checked("banana"), None);
         assert_eq!(parse_cpu_checked("500m"), Some(500.0));
+    }
+
+    /// The two halves read one grammar: the corpus is the answer both owe.
+    /// Rust knew `K` and not `k`, the frontend knew both, and neither read
+    /// an exponent, so a node whose allocatable a vendor wrote as `1k`
+    /// dropped out of the capacity view whole.
+    #[test]
+    fn every_quantity_in_the_shared_corpus_reads_the_same() {
+        const CORPUS: &str = include_str!("../../../shared/quantity-conformance.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).unwrap();
+        for case in corpus["cases"].as_array().unwrap() {
+            let input = case["input"].as_str().unwrap();
+            let got = parse_quantity(input);
+            match case["value"].as_f64() {
+                None => assert_eq!(got, None, "{input:?} should be refused"),
+                Some(want) => {
+                    let got = got.unwrap_or_else(|| panic!("{input:?} should read as {want}"));
+                    assert!(
+                        (got - want).abs() <= want.abs() * 1e-12,
+                        "{input:?} read as {got}, not {want}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
