@@ -46,6 +46,7 @@ import {
   StreamFailureNotice,
 } from "./LogNotices";
 import { LaneCoverage } from "./LaneCoverage";
+import { downloadNotice } from "./download-notice";
 import { EmptyState } from "./LogEmptyState";
 import { containerColors as buildContainerColors } from "./container-colors";
 import { useT } from "@/i18n/useT";
@@ -773,19 +774,8 @@ export function LogViewer({
         refused.push(`${target.pod}/${target.container}: ${errorToShow(err)}`);
       }
     }
-    if (saved.length > 0) {
-      toast({
-        title: t("action", "logSaved", { n: saved.length }),
-        description: saved.join("\n"),
-      });
-    }
-    if (refused.length > 0) {
-      toast({
-        title: t("action", "downloadFailed"),
-        description: refused.join("\n"),
-        variant: "destructive",
-      });
-    }
+    const notice = downloadNotice(saved, refused, t);
+    if (notice) toast(notice);
   }, [
     containers,
     lanes,

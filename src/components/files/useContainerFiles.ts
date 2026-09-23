@@ -32,6 +32,11 @@ export type ListingState =
        * or null when the backend has not answered yet. Zero is a claim.
        */
       unreadable: number | null;
+      /**
+       * Rows the backend sent that never arrived — a batch the event bridge
+       * dropped — or null before `files-done` has said how many it sent.
+       */
+      lost: number | null;
     }
   | {
       phase: "failed";
@@ -165,25 +170,29 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
         const onDone = await listenEvent("files-done", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
-            only((was) => ({
-              phase: "done",
+            only((was) => {
               // The backend emits `files-done` after a cancel too, and by
               // then `stop()` has already moved the state to "done" — so
               // testing for "reading" threw away every row that had arrived
               // and the tab announced the directory as empty.
-              entries:
+              const entries =
                 was.phase === "reading" || was.phase === "done"
                   ? was.entries
-                  : EMPTY,
-              with: event.payload.with,
-              elapsedMs: event.payload.elapsed_ms,
-              at: Date.now(),
-              // A listing the reader cut short stays cut short. Overwriting
-              // this relabelled a partial read as the whole directory.
-              stopped: was.phase === "done" ? was.stopped : false,
-              partial: event.payload.partial,
-              unreadable: event.payload.unreadable,
-            }))
+                  : EMPTY;
+              return {
+                phase: "done",
+                entries,
+                with: event.payload.with,
+                elapsedMs: event.payload.elapsed_ms,
+                at: Date.now(),
+                // A listing the reader cut short stays cut short. Overwriting
+                // this relabelled a partial read as the whole directory.
+                stopped: was.phase === "done" ? was.stopped : false,
+                partial: event.payload.partial,
+                unreadable: event.payload.unreadable,
+                lost: Math.max(0, event.payload.entries - entries.length),
+              };
+            })
           );
         });
         const onFailed = await listenEvent("files-failed", (event) => {
@@ -269,6 +278,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
               stopped: true,
               partial: true,
               unreadable: null,
+              lost: null,
             },
           }
         : was

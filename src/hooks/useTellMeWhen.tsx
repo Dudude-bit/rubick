@@ -138,6 +138,7 @@ export function useTellMeWhen() {
   const streams = useRef(new Map<string, Stream>());
   const coalescer = useRef<Coalescer<Answer> | null>(null);
   const deliver = useRef<(answers: Answer[]) => void>(() => {});
+  const reopenAll = useRef<() => void>(() => {});
 
   useEffect(() => {
     deliver.current = (answers) => {
@@ -192,6 +193,27 @@ export function useTellMeWhen() {
       if (stream.lostTimer !== null) clearTimeout(stream.lostTimer);
       if (stream.id) {
         void commands.unsubscribeResourceWatch(stream.id).catch(() => {});
+      }
+    };
+
+    // A lag dropped events nobody can name, so each watch looks again from a
+    // fresh list and is lost until that list answers. The lost timer carries
+    // over, or a watch already lost would never be reported.
+    reopenAll.current = () => {
+      for (const watchId of [...live.keys()]) {
+        const old = live.get(watchId);
+        if (!old) continue;
+        const stream: Stream = {
+          id: null,
+          off: null,
+          lostTimer: old.lostTimer,
+          closed: false,
+        };
+        old.lostTimer = null;
+        close(watchId);
+        live.set(watchId, stream);
+        lost(watchId, stream);
+        void open(watchId, stream);
       }
     };
 
@@ -266,7 +288,10 @@ export function useTellMeWhen() {
         lost(watchId, stream);
         return;
       }
-      if (watch.status.state === "lost") {
+      // A `restarted` marker is the watcher trying again, not the cluster
+      // answering: kube sends one before every retry of a refused list.
+      const answered = payload.changes.some((c) => c.op !== "restarted");
+      if (watch.status.state === "lost" && answered) {
         store.setStatus(watchId, { state: "watching" });
         if (stream.lostTimer !== null) clearTimeout(stream.lostTimer);
         stream.lostTimer = null;
@@ -317,6 +342,13 @@ export function useTellMeWhen() {
     // No cleanup here on purpose: this effect re-runs on every list change,
     // and the streams it did not touch have to outlive the run.
   }, [openIds, connected]);
+
+  useEffect(() => {
+    const off = listenEvent("event-bridge-lagged", () => reopenAll.current());
+    return () => {
+      void off.then((stop) => stop());
+    };
+  }, []);
 
   useEffect(() => {
     let offDrain: null | (() => void) = null;

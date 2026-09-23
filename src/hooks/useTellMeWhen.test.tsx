@@ -80,6 +80,7 @@ const rollout = (): Watch => ({
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.clearAllMocks();
+  vi.mocked(commands.subscribeObjectWatch).mockReset();
   for (const key of Object.keys(listeners)) delete listeners[key];
   useTellMeWhenStore.setState({ watches: [] });
   useClusterStore.setState({ currentContext: "prod", isConnected: true });
@@ -207,6 +208,131 @@ describe("a rollout being watched", () => {
     await waitFor(() =>
       expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost")
     );
+    hook.unmount();
+  });
+});
+
+function markerOnly() {
+  emit("resource-event", {
+    stream_id: "stream-1",
+    changes: [{ op: "restarted", resource: null }],
+    error: null,
+  });
+}
+
+function failedOnce() {
+  emit("resource-event", {
+    stream_id: "stream-1",
+    changes: [{ op: "failed", resource: null }],
+    error: "list: forbidden",
+  });
+}
+
+describe("a watch whose list keeps failing", () => {
+  /** kube sends `restarted` before every retry of a refused list and `failed` once per streak; taking the marker for an answer put the row back on "watching" and cancelled the lost-sight notice. */
+  it("stays lost through the retry markers and reports losing sight", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+
+    act(() => failedOnce());
+    for (let i = 0; i < 5; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+      act(() => markerOnly());
+    }
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOST_SIGHT_MS);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "Lost sight of payments",
+      body: "",
+    });
+    hook.unmount();
+  });
+
+  /** An action's deadline reached while the list is refused is a window nobody watched, not one where nothing happened; the marker made it say "timed out". */
+  it("says it lost sight, not that time ran out, when the deadline passes", async () => {
+    useTellMeWhenStore.setState({
+      watches: [{ ...rollout(), deadline: Date.now() + 60_000 }],
+    });
+    const hook = await armed();
+
+    act(() => failedOnce());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+    act(() => markerOnly());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70_000);
+    });
+    const status = useTellMeWhenStore.getState().watches[0].status;
+    expect(status.state === "done" && status.verdict.says).toBe("lostSight");
+    hook.unmount();
+  });
+});
+
+describe("the event bridge falling behind", () => {
+  /** The dropped batch can be the one that answered; without a fresh look the row reads "watching" and the answer never comes. Fails if the lag is ignored. */
+  it("looks again from a fresh list and answers from it", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-1",
+        changes: [{ op: "applied", resource: deployment(1) }],
+        error: null,
+      })
+    );
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("lost");
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("stream-3")
+    );
+    expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith("stream-1");
+
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-3",
+        changes: [
+          { op: "restarted", resource: null },
+          {
+            op: "applied",
+            resource: deployment(3, "NewReplicaSetAvailable"),
+          },
+          { op: "synced", resource: null },
+        ],
+        error: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "payments rolled out",
+      body: "",
+    });
+    hook.unmount();
+  });
+
+  /** A watch already lost when the lag lands keeps its clock; dropping the timer with the old stream left it lost and never reported. */
+  it("still reports a watch that was already lost when the lag landed", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    act(() => failedOnce());
+    vi.mocked(commands.subscribeObjectWatch).mockResolvedValueOnce("stream-3");
+
+    act(() => emit("event-bridge-lagged", { missed: 1200 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOST_SIGHT_MS + 10_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "Lost sight of payments",
+      body: "",
+    });
     hook.unmount();
   });
 });

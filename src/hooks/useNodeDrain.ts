@@ -106,6 +106,12 @@ export function useNodeDrain({
    * The wish is remembered and spent the moment the handle arrives.
    */
   const wantsStop = useRef(false);
+  /**
+   * The finish listener is up. A stop sent before it is answered with a
+   * `drain-finished` nobody hears, and the gate it took with it makes the
+   * subscribe fail as "not found".
+   */
+  const listening = useRef(false);
 
   const detach = useCallback(() => {
     while (unlisteners.current.length > 0) unlisteners.current.pop()?.();
@@ -127,16 +133,14 @@ export function useNodeDrain({
       detach();
       drainId.current = null;
       wantsStop.current = false;
+      listening.current = false;
       setState({ phase: "starting", node });
 
       try {
         const handle = await commands.startNodeDrain(node, options);
-        if (disposed.current || wantsStop.current) {
+        if (disposed.current) {
           await commands.cancelNodeDrain(handle.drainId).catch(() => {});
-          // Still subscribe below when it was only a stop: the backend
-          // answers a cancel with `drain-finished`, and that is the event
-          // that gets the dialog out of "starting".
-          if (disposed.current) return;
+          return;
         }
         drainId.current = handle.drainId;
         setState({ phase: "running", node, attempt: 0, report: EMPTY });
@@ -166,9 +170,19 @@ export function useNodeDrain({
           return;
         }
         unlisteners.current.push(offProgress, offFinished);
+        listening.current = true;
 
-        // Listeners installed — release the backend's gate.
-        await commands.nodeDrainSubscribed(handle.drainId);
+        // A stop pressed while nothing was listening is spent now; the
+        // `drain-finished` it is answered with is what ends the dialog.
+        if (wantsStop.current) {
+          await commands.cancelNodeDrain(handle.drainId).catch(() => {});
+          return;
+        }
+        // Listeners installed — release the backend's gate. A stop that won
+        // the race took the gate with it, and its ending is on the way.
+        await commands.nodeDrainSubscribed(handle.drainId).catch((error) => {
+          if (!wantsStop.current) throw error;
+        });
       } catch (error) {
         if (disposed.current) return;
         setState({
@@ -183,12 +197,10 @@ export function useNodeDrain({
 
   /** Stop asking. What has already been evicted stays evicted. */
   const cancel = useCallback(() => {
+    wantsStop.current = true;
     const id = drainId.current;
-    if (!id) {
-      // Nothing to cancel yet; `start` will spend this the moment there is.
-      wantsStop.current = true;
-      return;
-    }
+    // Nothing to cancel yet, or nobody to hear it end; `start` spends it.
+    if (!id || !listening.current) return;
     commands.cancelNodeDrain(id).catch(() => {});
   }, []);
 
