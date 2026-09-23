@@ -63,6 +63,21 @@ describe("statusRole", () => {
       expect(statusRole(s)).toBe("err");
   });
 
+  /**
+   * A Gateway that is not programmed reaches the peek badge as its reason.
+   * Unlisted, `Invalid` drew a grey badge beside a list that paints it red.
+   */
+  it("reads a Gateway's not-programmed reasons as failures", () => {
+    for (const reason of [
+      "Invalid",
+      "AddressNotAssigned",
+      "AddressNotUsable",
+      "NoResources",
+    ]) {
+      expect(statusRole(reason), reason).toBe("err");
+    }
+  });
+
   it("maps terminal and unknown states to neutral", () => {
     for (const s of ["Completed", "Terminated", "Superseded", "", "wat"])
       expect(statusRole(s)).toBe("neutral");

@@ -115,6 +115,12 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "false",
     // Gateway API: a controller looked and said no.
     "refused",
+    // Gateway API: why a Gateway is not programmed, as its condition's
+    // reason — what the peek badge shows while the list paints it red.
+    "invalid",
+    "addressnotassigned",
+    "addressnotusable",
+    "noresources",
     // Cilium threw the policy away. It is still an object, and the
     // namespace it was written to close is open.
     "rejected",
