@@ -1213,4 +1213,26 @@ describe("a workload pane", () => {
       screen.queryByText("No pods to read from yet.")
     ).not.toBeInTheDocument();
   });
+
+  /**
+   * A re-read of the pod list that failed left the last answer standing,
+   * and the coverage line went on stating its total as the workload's.
+   */
+  it("gives no pod total once the pod list could not be read again", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const { rerender } = render(pane([pod("api-a")]));
+    await waitFor(() =>
+      expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
+        "1 of 1 pod streaming"
+      )
+    );
+
+    rerender(pane([pod("api-a")], new Error("pods is forbidden")));
+
+    const coverage = screen.getByTestId("log-lane-coverage").textContent;
+    expect(coverage).toContain("pod list not read");
+    expect(coverage).not.toMatch(/of \d+ pods? streaming/);
+  });
 });

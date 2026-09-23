@@ -4081,6 +4081,7 @@ export const en = {
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
     noPodsToStream: "No pods to read from yet.",
+    podListUnread: "pod list not read",
     everyLaneHidden: "Every pod is hidden.",
     noStoriesInWindow:
       "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",

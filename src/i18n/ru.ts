@@ -4451,6 +4451,7 @@ export const ru: Catalogue = {
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что есть они или нет — отсюда не видно: {reason}",
     noPodsToStream: "Пока нет подов, которые можно читать.",
+    podListUnread: "список подов не прочитан",
     everyLaneHidden: "Все поды скрыты.",
     noStoriesInWindow:
       "В {scope} за последние {range} ничего не происходило. Чтение вернулось без событий.",

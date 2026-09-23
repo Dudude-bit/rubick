@@ -14,7 +14,14 @@ export function LaneCoverage({
   mode,
   onModeChange,
 }: {
-  coverage: { total: number; streaming: number; refused: number; gone: number };
+  coverage: {
+    /** The workload's pod list answered: without it no total is known. */
+    podsRead: boolean;
+    total: number;
+    streaming: number;
+    refused: number;
+    gone: number;
+  };
   /** Nothing is attached because the reader stopped it, which is not a gap. */
   paused: boolean;
   rule: LaneRule;
@@ -40,12 +47,14 @@ export function LaneCoverage({
     >
       <span>
         {[
-          paused
-            ? t("count", "podsPaused", { n: coverage.total })
-            : t("count", "podsStreaming", {
-                streaming: coverage.streaming,
-                n: coverage.total,
-              }),
+          !coverage.podsRead
+            ? t("empty", "podListUnread")
+            : paused
+              ? t("count", "podsPaused", { n: coverage.total })
+              : t("count", "podsStreaming", {
+                  streaming: coverage.streaming,
+                  n: coverage.total,
+                }),
           coverage.refused > 0
             ? t("count", "podsUnreadable", { n: coverage.refused })
             : null,
