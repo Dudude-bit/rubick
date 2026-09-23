@@ -968,7 +968,7 @@ mod subject_tests {
         assert!(err.to_string().contains("Deployment/payments"));
     }
 
-    /// Would tell a CronJob page no Service selects its pods and no budget
+    /// Would tell a `CronJob` page no Service selects its pods and no budget
     /// covers them: the labels its Jobs' pods carry were read as none.
     #[tokio::test]
     async fn a_cron_job_s_pods_carry_the_labels_its_job_template_gives_them() {
