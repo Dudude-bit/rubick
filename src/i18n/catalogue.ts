@@ -4268,6 +4268,9 @@ export const en = {
       other: "have nothing to apply.",
     },
     fluxSourceUnaffected: "Nothing names this source, so nothing is affected.",
+    fluxFrozenUnread:
+      "HelmReleases could not be listed, so any built from this source are not counted here.",
+    fluxHelmReleasesNotRead: "HelmReleases not read",
     readingFluxWorkloads: "Reading Flux’s own workloads…",
     fluxWorkloadsTitle: "Flux's own workloads",
     fluxWorkloadsDescription:

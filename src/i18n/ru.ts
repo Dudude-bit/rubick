@@ -4662,6 +4662,9 @@ export const ru: Catalogue = {
     },
     fluxSourceUnaffected:
       "На этот источник никто не ссылается, поэтому ничего не затронуто.",
+    fluxFrozenUnread:
+      "HelmRelease перечислить не удалось, поэтому собранные из этого источника здесь не учтены.",
+    fluxHelmReleasesNotRead: "HelmRelease не прочитаны",
     readingFluxWorkloads: "Читаем собственные нагрузки Flux…",
     fluxWorkloadsTitle: "Собственные нагрузки Flux",
     fluxWorkloadsDescription:
