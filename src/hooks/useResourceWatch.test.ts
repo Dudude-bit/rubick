@@ -500,6 +500,39 @@ describe("useResourceWatch", () => {
     ]);
   });
 
+  /**
+   * The bridge dropping events is this watch failing: the list is short, not
+   * stale. The payload is `{ missed }`; reading it as the bare number it
+   * once was prints "dropped [object Object] updates".
+   */
+  it("reports a lagging event bridge as a failure, with how many were dropped", async () => {
+    const client = new QueryClient();
+    client.setQueryData<Item[]>(KEY, []);
+    const onError = vi.fn();
+
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+
+    await waitFor(() => {
+      expect(listeners["event-bridge-lagged"]).toBeDefined();
+    });
+    listeners["event-bridge-lagged"]?.({
+      payload: { channel: "event-bridge-lagged", missed: 37 },
+    });
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("dropped 37 updates")
+    );
+  });
+
   it("calls onRecovered exactly once when a non-failed event follows a failed one", async () => {
     const client = new QueryClient();
     client.setQueryData<Item[]>(KEY, []);

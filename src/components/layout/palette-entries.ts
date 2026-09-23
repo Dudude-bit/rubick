@@ -15,6 +15,7 @@ import type { ActivityTab } from "@/stores/activityPanelStore";
 import { isRoutableKind } from "@/components/resources/ResourceRef";
 import {
   MIN_SEARCH_LENGTH,
+  isSearchable,
   type ClusterSearchState,
   type SearchHit,
 } from "@/hooks/useResourceSearch";
@@ -380,7 +381,7 @@ export function buildPaletteEntries({
     return out;
   }
 
-  if (query.length < MIN_SEARCH_LENGTH) {
+  if (!isSearchable(query)) {
     out.push({
       id: "cap:res",
       kind: "caption",

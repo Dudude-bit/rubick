@@ -35,20 +35,6 @@ pub(super) struct WatchBatch {
     bytes: usize,
 }
 
-/// Counts what serialising a value would write, without writing it.
-struct ByteCount(usize);
-
-impl std::io::Write for ByteCount {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0 += buf.len();
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
 impl WatchBatch {
     pub(super) fn new(stream_id: String) -> Self {
         Self {
@@ -91,12 +77,11 @@ impl WatchBatch {
             }
         };
 
-        let Some(resource) = transform(&obj).and_then(|r| serde_json::to_value(&r).ok()) else {
+        let Some(resource) = transform(&obj).and_then(|r| serde_json::value::to_raw_value(&r).ok())
+        else {
             return false;
         };
-        let mut size = ByteCount(0);
-        let _ = serde_json::to_writer(&mut size, &resource);
-        self.bytes += size.0;
+        self.bytes += resource.get().len();
         self.changes.push(WatchChange {
             op,
             resource: Some(resource),

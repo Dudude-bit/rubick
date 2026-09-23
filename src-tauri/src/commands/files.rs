@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 /// How long a preview may take before it is given up on. A FIFO or a device
 /// node never ends on its own.
 const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
-use crate::files::{self, Exit, FilePreview, Listing, Via};
+use crate::files::{self, Exit, FilePreview, Listing, ListingFailure, Via};
 use crate::state::{AppEvent, AppState, LogStream, RemoveOnDrop};
 use crate::utils::normalize_optional_namespace;
 
@@ -37,17 +37,17 @@ fn current_client(state: &State<'_, AppState>) -> Result<kube::Client> {
     Ok((*state.current_client()?).clone())
 }
 
-/// Why a listing ended without rows, in words the frontend switches on.
-fn failure_reason(error: &Error) -> &'static str {
+/// Why a listing ended without rows.
+fn failure_reason(error: &Error) -> ListingFailure {
     if error.is_refusal() {
-        "refused"
+        ListingFailure::Refused
     } else if matches!(error, Error::KubeApi(kube::Error::Api(r)) if r.code == 400 || r.code == 404)
     {
         // The API answers 400 for a container that is not running and 404
         // for a pod that is gone; both mean there is nothing to exec into.
-        "notRunning"
+        ListingFailure::NotRunning
     } else {
-        "failed"
+        ListingFailure::Failed
     }
 }
 
@@ -143,7 +143,7 @@ pub async fn list_container_files(
             // other side, where a scanner can see them.
             Ok(Listing::NoTools { tried }) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
-                reason: "noTools".into(),
+                reason: ListingFailure::NoTools,
                 message: String::new(),
                 exit_code: None,
                 stderr: String::new(),
@@ -153,7 +153,7 @@ pub async fn list_container_files(
             // side carries only which of the ladder's contracts was hit.
             Ok(Listing::Unopenable) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
-                reason: "unopenable".into(),
+                reason: ListingFailure::Unopenable,
                 message: String::new(),
                 exit_code: None,
                 stderr: String::new(),
@@ -161,7 +161,7 @@ pub async fn list_container_files(
             },
             Ok(Listing::Failed { exit, stderr }) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
-                reason: "failed".into(),
+                reason: ListingFailure::Failed,
                 message: exit
                     .message
                     .clone()
@@ -172,7 +172,7 @@ pub async fn list_container_files(
             },
             Err(error) => AppEvent::FilesFailed {
                 stream_id: id.clone(),
-                reason: failure_reason(&error).into(),
+                reason: failure_reason(&error),
                 message: error.to_string(),
                 exit_code: None,
                 stderr: String::new(),

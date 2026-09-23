@@ -1,36 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
+import { listenEvent } from "@/lib/events";
 import { errorToShow } from "@/lib/error-utils";
 import type { FileEntry, ListedWith } from "@/lib/container-files";
-import type { Via } from "@/generated/types";
+import type { ListingFailure, Via } from "@/generated/types";
 
-interface BatchPayload {
-  stream_id: string;
-  entries: FileEntry[];
-}
-
-interface DonePayload {
-  stream_id: string;
-  with: ListedWith;
-  entries: number;
-  partial: boolean;
-  unreadable: number;
-  elapsed_ms: number;
-}
-
-export type FailureReason =
-  "noTools" | "unopenable" | "refused" | "notRunning" | "failed";
-
-interface FailedPayload {
-  stream_id: string;
-  reason: FailureReason;
-  message: string;
-  exit_code: number | null;
-  stderr: string;
-  tried: string[];
-}
+export type FailureReason = ListingFailure;
 
 /**
  * Where a listing stands. Four states, and "reading" with no rows is not
@@ -169,7 +145,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
           state: { phase: "reading", entries: EMPTY, startedAt: Date.now() },
         });
 
-        const onBatch = await listen<BatchPayload>("files-batch", (event) => {
+        const onBatch = await listenEvent("files-batch", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
             only((was) => {
@@ -186,7 +162,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             })
           );
         });
-        const onDone = await listen<DonePayload>("files-done", (event) => {
+        const onDone = await listenEvent("files-done", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
             only((was) => ({
@@ -210,29 +186,26 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             }))
           );
         });
-        const onFailed = await listen<FailedPayload>(
-          "files-failed",
-          (event) => {
-            if (event.payload.stream_id !== id) return;
-            setSnapshot(
-              only((was) => ({
-                phase: "failed",
-                // Whatever arrived is what the reader saw arrive; a failure
-                // at the end does not unsee it. Wiping the rows here turned
-                // a stop-then-fail into "nothing was ever read".
-                entries:
-                  was.phase === "reading" || was.phase === "done"
-                    ? was.entries
-                    : EMPTY,
-                reason: event.payload.reason,
-                message: event.payload.message,
-                exitCode: event.payload.exit_code,
-                stderr: event.payload.stderr,
-                tried: event.payload.tried,
-              }))
-            );
-          }
-        );
+        const onFailed = await listenEvent("files-failed", (event) => {
+          if (event.payload.stream_id !== id) return;
+          setSnapshot(
+            only((was) => ({
+              phase: "failed",
+              // Whatever arrived is what the reader saw arrive; a failure
+              // at the end does not unsee it. Wiping the rows here turned
+              // a stop-then-fail into "nothing was ever read".
+              entries:
+                was.phase === "reading" || was.phase === "done"
+                  ? was.entries
+                  : EMPTY,
+              reason: event.payload.reason,
+              message: event.payload.message,
+              exitCode: event.payload.exit_code,
+              stderr: event.payload.stderr,
+              tried: event.payload.tried,
+            }))
+          );
+        });
         off = [onBatch, onDone, onFailed];
         if (!active) {
           takeDown();

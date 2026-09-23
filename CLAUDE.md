@@ -162,9 +162,11 @@ Claims here are settled by running things, not by reasoning about them.
 - A spawned operation that emits events waits on its subscribe gate, exposes a
   `<thing>_subscribed` command to release it, and **always** emits its terminal
   event — including on cancel and on early error. Tauri events have no replay.
-- Event payloads are hand-written flat `serde_json::json!` arms with snake_case
-  keys; command return types are camelCase via serde. The two halves of the IPC
-  boundary use opposite casing on purpose.
+- An event is a variant of `AppEvent`, serialised flat with its `channel` as
+  the tag and snake_case fields; command return types are camelCase via
+  serde. Listen through `listenEvent` from `@/lib/events`, which takes the
+  payload's type from the generated union — a hand-written `listen<T>` is
+  the copy nothing compares, and `events.test.ts` refuses it.
 
 ## Connections and traces
 

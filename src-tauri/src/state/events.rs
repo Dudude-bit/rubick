@@ -51,6 +51,11 @@ pub enum WatchOp {
     Failed,
 }
 
+/// A resource serialised once, where the watch read it: the broadcast clone
+/// and the bridge copy its bytes instead of walking a tree of `Value`s, about
+/// eight times less work on a ten-thousand-pod resync.
+pub type RawJson = Box<serde_json::value::RawValue>;
+
 /// One change inside a `ResourceWatchEvent` batch.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WatchChange {
@@ -58,7 +63,7 @@ pub struct WatchChange {
     /// The transformed resource on `applied`/`deleted`. `None` on the
     /// resync markers and on `failed`, which say something about the
     /// stream rather than about an object.
-    pub resource: Option<serde_json::Value>,
+    pub resource: Option<RawJson>,
 }
 
 /// Why a long-lived stream stopped without the frontend asking it to.
@@ -222,9 +227,15 @@ pub enum AuthOutcome {
     SwitchedAway,
 }
 
-/// Events that can be broadcast to frontend
+/// Events that can be broadcast to frontend.
+///
+/// Serialised flat, as the fields of the variant plus `channel`, the event's
+/// name: `{ "channel": "log-batch", "stream_id": …, "lines": … }`. The tag
+/// is what lets the generated TypeScript union hand each listener its own
+/// payload type, so a renamed field or channel fails to compile there.
+/// Fields stay `snake_case`, unlike command answers.
 #[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "type", content = "data")]
+#[serde(tag = "channel", rename_all = "kebab-case")]
 pub enum AppEvent {
     /// Batch of log lines for a single stream. The streamer flushes
     /// every ~50ms (or sooner if the buffer fills) so that verbose
@@ -246,6 +257,7 @@ pub enum AppEvent {
     /// slots in a broadcast channel that holds a thousand.
     ///
     /// `changes` is in arrival order and never empty.
+    #[serde(rename = "resource-event")]
     ResourceWatchEvent {
         stream_id: String,
         changes: Vec<WatchChange>,
@@ -397,7 +409,7 @@ pub enum AppEvent {
     /// `notRunning` or `failed`. Exactly one of this or `FilesDone`.
     FilesFailed {
         stream_id: String,
-        reason: String,
+        reason: crate::files::ListingFailure,
         message: String,
         exit_code: Option<i32>,
         stderr: String,
@@ -420,6 +432,12 @@ pub enum AppEvent {
     /// unstreamed command would have failed with, so every reader of it
     /// still matches. Exactly one of this or `PodRowsDone`.
     PodRowsFailed { stream_id: String, message: String },
+    /// The bridge to the window fell behind and `missed` events are gone.
+    ///
+    /// Emitted by the bridge itself, never broadcast. A watched list that
+    /// lost events is short rather than stale, so every watch treats this
+    /// as a failure and resumes polling.
+    EventBridgeLagged { missed: u64 },
 }
 
 impl AppEvent {
@@ -449,222 +467,17 @@ impl AppEvent {
             AppEvent::PodRowsBatch { .. } => "pod-rows-batch",
             AppEvent::PodRowsDone { .. } => "pod-rows-done",
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
+            AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
         }
     }
 
-    /// Frontend-facing payload. Not `serde_json::to_value(self)`:
-    /// `AppEvent` is `#[serde(tag = "type", content = "data")]`, which
-    /// would wrap each payload in `{ "type": ..., "data": {...} }` and
-    /// force every listener to dig through `event.payload.data.*`. Each
-    /// arm returns the flat object the hooks expect
-    /// (`event.payload.session_id`, etc.).
+    /// The payload as the frontend receives it, serialised once.
     ///
-    /// A new variant must be added here: the exhaustive match refuses to
-    /// compile without it, and `payload_is_flat_object_for_every_variant`
-    /// below fails until the payload is flat (no `type` wrapper key).
-    #[must_use]
-    pub fn payload(&self) -> serde_json::Value {
-        match self {
-            AppEvent::LogBatch { stream_id, lines } => serde_json::json!({
-                "stream_id": stream_id,
-                "lines": lines,
-            }),
-            AppEvent::StreamFailed {
-                stream_id,
-                kind,
-                message,
-            } => serde_json::json!({
-                "stream_id": stream_id,
-                "kind": kind,
-                "message": message,
-            }),
-            AppEvent::ResourceWatchEvent {
-                stream_id,
-                changes,
-                error,
-            } => serde_json::json!({
-                "stream_id": stream_id,
-                "changes": changes,
-                "error": error,
-            }),
-            AppEvent::SearchHits {
-                search_id,
-                context,
-                hits,
-            } => serde_json::json!({
-                "search_id": search_id,
-                "context": context,
-                "hits": hits,
-            }),
-            AppEvent::SearchStatus {
-                search_id,
-                context,
-                status,
-                reason,
-                message,
-                matched,
-                truncated,
-            } => serde_json::json!({
-                "search_id": search_id,
-                "context": context,
-                "status": status,
-                "reason": reason,
-                "message": message,
-                "matched": matched,
-                "truncated": truncated,
-            }),
-            AppEvent::TerminalOutput { session_id, data } => serde_json::json!({
-                "session_id": session_id,
-                "data": data,
-            }),
-            AppEvent::TerminalClosed { session_id, status } => serde_json::json!({
-                "session_id": session_id,
-                "status": status,
-            }),
-            AppEvent::PortForwardStatus {
-                id,
-                pod,
-                namespace,
-                local_port,
-                remote_port,
-                status,
-                message,
-                attempt,
-            } => serde_json::json!({
-                "id": id,
-                "pod": pod,
-                "namespace": namespace,
-                "local_port": local_port,
-                "remote_port": remote_port,
-                "status": status,
-                "message": message,
-                "attempt": attempt,
-            }),
-            AppEvent::AuthUrlRequested {
-                context,
-                url,
-                flow,
-                session_id,
-                redirect_uri,
-            } => serde_json::json!({
-                "context": context,
-                "url": url,
-                "flow": flow,
-                "session_id": session_id,
-                "redirect_uri": redirect_uri,
-            }),
-            AppEvent::AuthFlowCompleted {
-                session_id,
-                context,
-                success,
-                why,
-            } => serde_json::json!({
-                "session_id": session_id,
-                "context": context,
-                "success": success,
-                "why": why,
-            }),
-            AppEvent::AuthFlowCancelled {
-                session_id,
-                context,
-                why,
-            } => serde_json::json!({
-                "session_id": session_id,
-                "context": context,
-                "why": why,
-            }),
-            AppEvent::CredentialsRenewed { context } => serde_json::json!({
-                "context": context,
-            }),
-            AppEvent::AuthTerminalSessionCreated {
-                auth_session_id,
-                terminal_session_id,
-                context,
-                command,
-            } => serde_json::json!({
-                "auth_session_id": auth_session_id,
-                "terminal_session_id": terminal_session_id,
-                "context": context,
-                "command": command,
-            }),
-            AppEvent::DrainProgress {
-                drain_id,
-                node,
-                attempt,
-                report,
-            } => serde_json::json!({
-                "drain_id": drain_id,
-                "node": node,
-                "attempt": attempt,
-                "report": report,
-            }),
-            AppEvent::DrainFinished {
-                drain_id,
-                node,
-                outcome,
-                report,
-                message,
-            } => serde_json::json!({
-                "drain_id": drain_id,
-                "node": node,
-                "outcome": outcome,
-                "report": report,
-                "message": message,
-            }),
-            AppEvent::FilesBatch { stream_id, entries } => serde_json::json!({
-                "stream_id": stream_id,
-                "entries": entries,
-            }),
-            AppEvent::FilesDone {
-                stream_id,
-                with,
-                entries,
-                partial,
-                unreadable,
-                elapsed_ms,
-            } => serde_json::json!({
-                "stream_id": stream_id,
-                "with": with,
-                "entries": entries,
-                "partial": partial,
-                "unreadable": unreadable,
-                "elapsed_ms": elapsed_ms,
-            }),
-            AppEvent::FilesFailed {
-                stream_id,
-                reason,
-                message,
-                exit_code,
-                stderr,
-                tried,
-            } => serde_json::json!({
-                "stream_id": stream_id,
-                "reason": reason,
-                "message": message,
-                "exit_code": exit_code,
-                "stderr": stderr,
-                "tried": tried,
-            }),
-            AppEvent::PodRowsBatch { stream_id, rows } => serde_json::json!({
-                "stream_id": stream_id,
-                "rows": rows,
-            }),
-            AppEvent::PodRowsDone {
-                stream_id,
-                rows,
-                complete,
-                elapsed_ms,
-            } => serde_json::json!({
-                "stream_id": stream_id,
-                "rows": rows,
-                "complete": complete,
-                "elapsed_ms": elapsed_ms,
-            }),
-            AppEvent::PodRowsFailed { stream_id, message } => serde_json::json!({
-                "stream_id": stream_id,
-                "message": message,
-            }),
-        }
+    /// # Errors
+    ///
+    /// Only where a value inside cannot be JSON, which none of these can.
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(self)
     }
 }
 
@@ -672,34 +485,51 @@ impl AppEvent {
 mod tests {
     use super::*;
 
-    /// Every `AppEvent` payload must be a flat object — no `type`
-    /// wrapper key, no `data` nesting. The frontend hooks read fields
-    /// like `event.payload.context` directly; the `#[serde(tag, content)]`
-    /// representation sits one level deeper and silently breaks every
-    /// consumer — an `AuthTerminalSessionCreated` nested that way opens
-    /// the modal with empty context/command and a `terminalSessionId:
-    /// undefined` that disconnects the inner terminal.
-    #[test]
-    fn payload_is_flat_object_for_every_variant() {
-        let samples = [
-            AppEvent::AuthTerminalSessionCreated {
-                auth_session_id: "auth-1".into(),
-                terminal_session_id: "term-1".into(),
-                context: "infra-eu1".into(),
-                command: "kubectl oidc-login".into(),
+    impl AppEvent {
+        /// What the frontend receives, parsed back.
+        fn payload(&self) -> serde_json::Value {
+            serde_json::from_str(&self.to_json().expect("serialises")).expect("parses")
+        }
+    }
+
+    fn report() -> crate::drain::DrainReport {
+        crate::drain::DrainReport {
+            evicted: 1,
+            already_gone: 0,
+            leaving: 0,
+            daemonset_pods_left: 2,
+            static_pods_left: 0,
+            refused: Vec::new(),
+        }
+    }
+
+    /// One of every variant. The match in `sample_index` is exhaustive, so
+    /// a new variant does not compile until it has a number, and
+    /// `every_variant_has_a_sample` fails until it has a sample here.
+    fn every_variant() -> Vec<AppEvent> {
+        vec![
+            AppEvent::LogBatch {
+                stream_id: "log-1".into(),
+                lines: vec![LogLineEvent {
+                    message: "hello".into(),
+                    timestamp: Some("2026-09-23T00:00:00Z".into()),
+                    level: None,
+                    format: LogFormat::Plain,
+                    fields: None,
+                    raw: "hello".into(),
+                    segments: None,
+                }],
             },
-            AppEvent::AuthUrlRequested {
-                context: "infra-eu1".into(),
-                url: "https://example".into(),
-                flow: "exec".into(),
-                session_id: Some("auth-1".into()),
-                redirect_uri: None,
-            },
-            AppEvent::AuthFlowCompleted {
-                session_id: "auth-1".into(),
-                context: "infra-eu1".into(),
-                success: true,
-                why: None,
+            AppEvent::ResourceWatchEvent {
+                stream_id: "rw-1".into(),
+                changes: vec![WatchChange {
+                    op: WatchOp::Applied,
+                    resource: Some(
+                        serde_json::value::to_raw_value(&serde_json::json!({ "name": "api-0" }))
+                            .unwrap(),
+                    ),
+                }],
+                error: None,
             },
             AppEvent::StreamFailed {
                 stream_id: "log-1".into(),
@@ -720,13 +550,83 @@ mod tests {
                 matched: 0,
                 truncated: false,
             },
-            AppEvent::ResourceWatchEvent {
-                stream_id: "rw-1".into(),
-                changes: vec![WatchChange {
-                    op: WatchOp::Applied,
-                    resource: Some(serde_json::json!({ "name": "api-0" })),
-                }],
-                error: None,
+            AppEvent::TerminalOutput {
+                session_id: "term-1".into(),
+                data: "$ ".into(),
+            },
+            AppEvent::TerminalClosed {
+                session_id: "term-1".into(),
+                status: Some("exit 0".into()),
+            },
+            AppEvent::PortForwardStatus {
+                id: "pf-1".into(),
+                pod: "api-0".into(),
+                namespace: "shop".into(),
+                local_port: 8080,
+                remote_port: 80,
+                status: "connected".into(),
+                message: None,
+                attempt: Some(1),
+            },
+            AppEvent::AuthUrlRequested {
+                context: "infra-eu1".into(),
+                url: "https://example".into(),
+                flow: "exec".into(),
+                session_id: Some("auth-1".into()),
+                redirect_uri: None,
+            },
+            AppEvent::AuthFlowCompleted {
+                session_id: "auth-1".into(),
+                context: "infra-eu1".into(),
+                success: true,
+                why: None,
+            },
+            AppEvent::AuthFlowCancelled {
+                session_id: "auth-1".into(),
+                context: "infra-eu1".into(),
+                why: Some(AuthOutcome::TimedOut),
+            },
+            AppEvent::CredentialsRenewed {
+                context: "infra-eu1".into(),
+            },
+            AppEvent::AuthTerminalSessionCreated {
+                auth_session_id: "auth-1".into(),
+                terminal_session_id: "term-1".into(),
+                context: "infra-eu1".into(),
+                command: "kubectl oidc-login".into(),
+            },
+            AppEvent::DrainProgress {
+                drain_id: "drain-1".into(),
+                node: "server-0".into(),
+                attempt: 1,
+                report: report(),
+            },
+            AppEvent::DrainFinished {
+                drain_id: "drain-1".into(),
+                node: "server-0".into(),
+                outcome: crate::drain::DrainOutcome::Drained,
+                report: report(),
+                message: None,
+            },
+            AppEvent::FilesBatch {
+                stream_id: "files-1".into(),
+                entries: vec![],
+            },
+            AppEvent::FilesDone {
+                stream_id: "files-1".into(),
+                with: crate::files::ListedWith::GnuFind,
+                entries: 3,
+                partial: false,
+                unreadable: 0,
+                elapsed_ms: 12,
+            },
+            AppEvent::FilesFailed {
+                stream_id: "files-1".into(),
+                reason: crate::files::ListingFailure::NoTools,
+                message: "no ls".into(),
+                exit_code: Some(127),
+                stderr: String::new(),
+                tried: vec!["ls".into()],
             },
             AppEvent::PodRowsBatch {
                 stream_id: "pods-1".into(),
@@ -742,22 +642,70 @@ mod tests {
                 stream_id: "pods-1".into(),
                 message: "refused".into(),
             },
-        ];
+            AppEvent::EventBridgeLagged { missed: 12 },
+        ]
+    }
 
-        for event in &samples {
+    fn sample_index(event: &AppEvent) -> usize {
+        match event {
+            AppEvent::LogBatch { .. } => 0,
+            AppEvent::ResourceWatchEvent { .. } => 1,
+            AppEvent::StreamFailed { .. } => 2,
+            AppEvent::SearchHits { .. } => 3,
+            AppEvent::SearchStatus { .. } => 4,
+            AppEvent::TerminalOutput { .. } => 5,
+            AppEvent::TerminalClosed { .. } => 6,
+            AppEvent::PortForwardStatus { .. } => 7,
+            AppEvent::AuthUrlRequested { .. } => 8,
+            AppEvent::AuthFlowCompleted { .. } => 9,
+            AppEvent::AuthFlowCancelled { .. } => 10,
+            AppEvent::CredentialsRenewed { .. } => 11,
+            AppEvent::AuthTerminalSessionCreated { .. } => 12,
+            AppEvent::DrainProgress { .. } => 13,
+            AppEvent::DrainFinished { .. } => 14,
+            AppEvent::FilesBatch { .. } => 15,
+            AppEvent::FilesDone { .. } => 16,
+            AppEvent::FilesFailed { .. } => 17,
+            AppEvent::PodRowsBatch { .. } => 18,
+            AppEvent::PodRowsDone { .. } => 19,
+            AppEvent::PodRowsFailed { .. } => 20,
+            AppEvent::EventBridgeLagged { .. } => 21,
+        }
+    }
+
+    /// Without it a variant added later is serialised by nothing here.
+    #[test]
+    fn every_variant_has_a_sample() {
+        let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
+        seen.sort_unstable();
+        assert_eq!(seen, (0..=21).collect::<Vec<_>>());
+    }
+
+    /// Every `AppEvent` payload must be a flat object — no `type`
+    /// wrapper key, no `data` nesting. The frontend hooks read fields
+    /// like `event.payload.context` directly; the `#[serde(tag, content)]`
+    /// representation sits one level deeper and silently breaks every
+    /// consumer — an `AuthTerminalSessionCreated` nested that way opens
+    /// the modal with empty context/command and a `terminalSessionId:
+    /// undefined` that disconnects the inner terminal.
+    #[test]
+    fn payload_is_flat_object_for_every_variant() {
+        for event in every_variant() {
             let payload = event.payload();
             let obj = payload
                 .as_object()
                 .unwrap_or_else(|| panic!("{} payload was not a JSON object", event.channel()));
+            // `data` is a real field of `terminal-output`; a wrapped payload
+            // would also lose `channel` from the top level, checked below.
             assert!(
                 !obj.contains_key("type"),
-                "{} payload looks tagged-enum-wrapped (has `type` key) — frontend reads fields at top level",
+                "{} payload looks tagged-enum-wrapped — frontend reads fields at top level",
                 event.channel()
             );
-            assert!(
-                !obj.contains_key("data"),
-                "{} payload looks tagged-enum-wrapped (has `data` key)",
-                event.channel()
+            assert_eq!(
+                obj.get("channel").and_then(|c| c.as_str()),
+                Some(event.channel()),
+                "the tag the TypeScript union narrows on is the channel it arrives on"
             );
         }
     }
@@ -846,7 +794,10 @@ mod tests {
                 },
                 WatchChange {
                     op: WatchOp::Applied,
-                    resource: Some(serde_json::json!({ "name": "api-0" })),
+                    resource: Some(
+                        serde_json::value::to_raw_value(&serde_json::json!({ "name": "api-0" }))
+                            .unwrap(),
+                    ),
                 },
                 WatchChange {
                     op: WatchOp::Synced,

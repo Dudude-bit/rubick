@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
 import {
   credentialsExpired,
   expiryReason,
@@ -6,59 +5,12 @@ import {
 } from "@/lib/credentials";
 
 import { commands } from "@/lib/commands";
+import { listenEvent } from "@/lib/events";
 import { stallWatch } from "@/lib/stall-watch";
 import { perf, sizeOf } from "@/lib/perf";
-import type { ContainerInfo, PodInfo, PodStatusInfo } from "@/generated/types";
+import type { PodRow } from "@/generated/types";
 
-/**
- * The pod list's row, as `src-tauri/src/resources/types/pod_row.rs` builds
- * it: the columns' fields of `PodInfo` and nothing else, so a namespace of
- * ten thousand pods is a few megabytes and not thirty. The binding generator
- * only emits what a command returns, and a row arrives in events, so the
- * shape is picked from the generated `PodInfo` rather than written twice.
- */
-export type PodRow = Pick<
-  PodInfo,
-  | "name"
-  | "namespace"
-  | "uid"
-  | "nodeName"
-  | "podIp"
-  | "labels"
-  | "createdAt"
-  | "restartCount"
-  | "lastRestartAt"
-  | "cpuRequests"
-  | "cpuLimits"
-  | "memoryRequests"
-  | "memoryLimits"
-> & {
-  status: Pick<PodStatusInfo, "phase" | "display">;
-  containers: RowContainer[];
-  initContainers: RowContainer[];
-};
-
-export type RowContainer = Pick<
-  ContainerInfo,
-  "name" | "ready" | "started" | "phase" | "state"
->;
-
-interface BatchPayload {
-  stream_id: string;
-  rows: PodRow[];
-}
-
-interface DonePayload {
-  stream_id: string;
-  rows: number;
-  complete: boolean;
-  elapsed_ms: number;
-}
-
-interface FailedPayload {
-  stream_id: string;
-  message: string;
-}
+export type { PodRow, RowContainer } from "@/generated/types";
 
 /**
  * The pod list, streamed in chunks under the IPC target and reassembled
@@ -100,12 +52,12 @@ export async function listPodRows(
   };
 
   const off = await Promise.all([
-    listen<BatchPayload>("pod-rows-batch", (event) => {
+    listenEvent("pod-rows-batch", (event) => {
       if (event.payload.stream_id !== id) return;
       for (const row of event.payload.rows) rows.push(row);
       if (perf.recording) bytes += sizeOf(event.payload.rows).bytes ?? 0;
     }),
-    listen<DonePayload>("pod-rows-done", (event) => {
+    listenEvent("pod-rows-done", (event) => {
       if (event.payload.stream_id !== id) return;
       if (!event.payload.complete) {
         settle.reject(new Error("the pod list was stopped before it ended"));
@@ -125,7 +77,7 @@ export async function listPodRows(
       }
       settle.resolve(rows);
     }),
-    listen<FailedPayload>("pod-rows-failed", (event) => {
+    listenEvent("pod-rows-failed", (event) => {
       if (event.payload.stream_id !== id) return;
       // A failure that arrives as an *event* never passes the command
       // wrapper, which is the one place that notices an expired session —

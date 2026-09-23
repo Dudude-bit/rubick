@@ -68,6 +68,21 @@ pub enum ListedWith {
     BusyboxStat,
 }
 
+/// Why a listing ended without an answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ListingFailure {
+    /// Neither rung's tools are in the container.
+    NoTools,
+    /// Our own script's exit 2: the path is not a directory it can open.
+    Unopenable,
+    /// The cluster refused the exec.
+    Refused,
+    /// No running container to exec into: the API answered 400 or 404.
+    NotRunning,
+    Failed,
+}
+
 /// How an exec ended, read from the status channel and not guessed.
 #[derive(Debug, Clone, Default)]
 pub struct Exit {

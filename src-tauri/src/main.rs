@@ -10,11 +10,6 @@ use k8s_gui_lib::{commands, integrations, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
-/// Emitted when the frontend event bridge drops events it could not keep up
-/// with. Every surface fed by a watch treats it as that watch failing, because
-/// from the surface's point of view it is: updates it needed are gone.
-const EVENT_BRIDGE_LAGGED: &str = "event-bridge-lagged";
-
 /// Whether this build registers `rubick://` itself at startup.
 ///
 /// Not inside a Flatpak: the exported .desktop file declares
@@ -110,14 +105,8 @@ fn main() {
 
             // Subscribe to events and forward to frontend.
             //
-            // The per-variant `event.channel()` and `event.payload()` are
-            // defined alongside the `AppEvent` enum in `state::events`.
-            // Inlining the routing here previously diverged from the enum
-            // — a new `AuthTerminalSessionCreated` variant got an
-            // `event_name` mapping but no explicit payload, falling
-            // through to a `serde_json::to_value(&event)` default that
-            // wrapped the data under `{ "type": ..., "data": {...} }` and
-            // silently broke the frontend modal (v2.1.0 bug).
+            // `event.channel()` and `event.to_json()` live beside `AppEvent`
+            // in `state::events`; each event is serialised once, here.
             let mut event_rx = state.subscribe();
             let app_handle = app.handle().clone();
             let perf = state.perf.clone();
@@ -149,27 +138,35 @@ fn main() {
                             // list is on `refresh: false`. So the frontend is
                             // told, and it treats this exactly as a watch
                             // failure: drop the "live" badge, resume polling.
-                            let _ = app_handle.emit(EVENT_BRIDGE_LAGGED, missed);
+                            let lagged = k8s_gui_lib::state::AppEvent::EventBridgeLagged { missed };
+                            if let Ok(payload) = lagged.to_json() {
+                                let _ = app_handle.emit_str(lagged.channel(), payload);
+                            }
                             continue;
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
                     };
 
                     let event_name = event.channel();
-                    let payload = event.payload();
+                    let payload = match event.to_json() {
+                        Ok(payload) => payload,
+                        Err(e) => {
+                            tracing::error!("Failed to serialise event {event_name}: {e}");
+                            continue;
+                        }
+                    };
 
                     if perf.is_recording() {
-                        let bytes = serde_json::to_vec(&payload).map_or(0, |v| v.len());
                         let changes = match &event {
                             k8s_gui_lib::state::AppEvent::ResourceWatchEvent {
                                 changes, ..
                             } => changes.len(),
                             _ => 0,
                         };
-                        perf.observe(bytes, changes);
+                        perf.observe(payload.len(), changes);
                     }
 
-                    if let Err(e) = app_handle.emit(event_name, payload) {
+                    if let Err(e) = app_handle.emit_str(event_name, payload) {
                         tracing::error!("Failed to emit event {}: {}", event_name, e);
                     }
                 }
@@ -199,6 +196,7 @@ fn main() {
             commands::access::check_namespace_access,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
+            commands::app_events::app_event_types,
             commands::perf::perf_set_recording,
             commands::perf::perf_counters,
             // Namespace management
