@@ -18,6 +18,7 @@ import { useLocaleStore } from "@/stores/localeStore";
 import { isTranslated, LOCALES, LOCALE_NAMES, type Locale } from "@/i18n";
 import { useT } from "@/i18n/useT";
 import { SettingRow, SettingsGroup } from "./settings-row";
+import { toastError } from "@/lib/toast-error";
 
 const THEMES = [
   { value: "light", k: "themeLight", Icon: Sun },
@@ -55,7 +56,9 @@ export function AppearanceSettings() {
           <Select
             value={choice ?? "system"}
             onValueChange={(value) =>
-              setChoice(value === "system" ? null : (value as Locale))
+              setChoice(value === "system" ? null : (value as Locale)).catch(
+                (error: unknown) => toastError(t("action", "error"), error)
+              )
             }
           >
             <SelectTrigger id="setting-language" className="h-7 w-56 text-xs">

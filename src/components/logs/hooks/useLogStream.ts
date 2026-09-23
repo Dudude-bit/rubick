@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/lib/commands";
-import type {
-  LogFormat,
-  LogLevel,
-  StreamLogConfig,
-  StyledSegment,
-} from "@/generated/types";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { listenEvent } from "@/lib/events";
+import type { LogLineEvent, StreamLogConfig } from "@/generated/types";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import {
   listenForStreamFailures,
   type StreamFailure,
@@ -67,20 +62,7 @@ export interface ContainerFailure extends StreamFailure {
 }
 
 /** One line as the backend emits it, before it is given an id and a home. */
-export interface LogBatchLine {
-  message: string;
-  timestamp: string | null;
-  level: LogLevel | null;
-  format: LogFormat | null;
-  fields: Record<string, string> | null;
-  raw: string;
-  segments?: StyledSegment[];
-}
-
-interface LogBatchPayload {
-  stream_id: string;
-  lines: LogBatchLine[];
-}
+export type LogBatchLine = LogLineEvent;
 
 interface UseLogStreamOptions {
   /** The pod a single-pod pane reads. */
@@ -488,7 +470,7 @@ export function useLogStream({
             if (!s.active) return false;
             s.opened.delete(key);
             s.refused.add(key);
-            const message = normalizeTauriError(err);
+            const message = errorToShow(err);
             setFailures((prev) =>
               prev.some(
                 (f) => f.pod === source.pod && f.container === source.container
@@ -500,8 +482,7 @@ export function useLogStream({
                       container: source.container,
                       pod: source.pod,
                       kind:
-                        message.includes("not found") ||
-                        message.includes("NotFound")
+                        errorCode(err) === ERROR_CODES.NOT_FOUND
                           ? "gone"
                           : "broken",
                       message,
@@ -661,7 +642,7 @@ export function useLogStream({
       let unlistenBatch: (() => void) | null = null;
       let unlistenFailure: (() => void) | null = null;
       try {
-        unlistenBatch = await listen<LogBatchPayload>("log-batch", (event) => {
+        unlistenBatch = await listenEvent("log-batch", (event) => {
           const source = s.sourceOf.get(event.payload.stream_id);
           if (source === undefined || event.payload.lines.length === 0) {
             return;
@@ -721,7 +702,7 @@ export function useLogStream({
             container: source.container,
             pod: source.pod,
             kind: "broken" as const,
-            message: normalizeTauriError(err),
+            message: errorToShow(err),
           }))
         );
         setIsConnecting(false);

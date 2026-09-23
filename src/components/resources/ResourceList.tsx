@@ -36,6 +36,12 @@ import {
 } from "@/components/resources/delivery-column";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
+import { keepWatched, noneWhereAnswered, whole } from "@/lib/namespace-scope";
+import type { Scoped, UnreadNamespace } from "@/generated/types";
+import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
+
+const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 /**
  * The column, built once because every list that has one gets exactly this one
@@ -67,15 +73,17 @@ export interface ResourceListProps<
   Row extends { name: string; namespace?: string | null },
 > {
   /** Display title for the resource list */
-  title: string | ((count: number) => string);
+  title: string;
   /** Optional description below the title */
   description?: string;
   /** Query key for React Query */
   queryKey?: string[];
   /** Function to fetch resources */
-  queryFn?: () => Promise<Row[]>;
+  queryFn?: () => Promise<Scoped<Row>>;
   /** Optional data override (skips internal query) */
   data?: Row[];
+  /** The namespaces `data` could not be read in, when the rows come from outside. */
+  unread?: UnreadNamespace[];
   /** Optional loading state when using data override */
   isLoading?: boolean;
   /**
@@ -191,6 +199,7 @@ export function ResourceList<
   queryKey,
   queryFn,
   data,
+  unread: externalUnread,
   isLoading,
   error: externalError,
   dataUpdatedAt: externalDataUpdatedAt,
@@ -226,7 +235,15 @@ export function ResourceList<
   const shouldUseQuery = data === undefined && !!queryKey && !!queryFn;
   const queryResult = useResource(
     (queryKey ?? ["resource-list"]) as string[],
-    (queryFn ?? (async () => [] as Row[])) as () => Promise<Row[]>,
+    queryFn
+      ? live && queryKey
+        ? async () =>
+            keepWatched(
+              await queryFn(),
+              queryClient.getQueryData<Scoped<Row>>(queryKey)
+            )
+        : queryFn
+      : async () => whole<Row>([]),
     {
       enabled: shouldUseQuery,
       staleTime: staleTime ?? STALE_TIMES.resourceList,
@@ -234,17 +251,20 @@ export function ResourceList<
     }
   );
 
-  // Narrowed here rather than in the fetch, and that is the whole reason a
-  // multi-namespace scope costs one request instead of one per namespace: the
-  // cache entry stays the unfiltered cluster-wide answer under the key the
-  // watch stream writes to, and the selection only decides what this table
-  // draws from it. A scope of one or none is already narrowed by the request
-  // and passes straight through.
+  // The answer is already the selection's; narrowing guards a caller whose
+  // `data` is wider than it.
   const scope = useNamespaceScope();
   const resources = useMemo(
-    () => scope.narrow(data ?? queryResult.data ?? []),
+    () => scope.narrow(data ?? queryResult.data?.rows ?? []),
     [data, queryResult.data, scope]
   );
+  // The last scope's answer, held while this one is read: its unread
+  // namespaces are not this scope's, and its rows are not this scope's total.
+  const placeholder = data === undefined && queryResult.isPlaceholderData;
+  const unread = placeholder
+    ? NOTHING_UNREAD
+    : ((data === undefined ? queryResult.data?.unread : externalUnread) ??
+      NOTHING_UNREAD);
   const loading = isLoading ?? queryResult.isLoading;
   // Read at last. A failed list used to render `resources = []` with
   // `isLoading` already false, so the table printed "No resources of this type
@@ -316,7 +336,7 @@ export function ResourceList<
             deleteConfig?.resourceType?.toLowerCase() ??
             t("action", "resourceNoun"),
           name: item.name,
-          error: String(error),
+          error: errorToShow(error),
         }),
         variant: "destructive",
       });
@@ -364,23 +384,23 @@ export function ResourceList<
     showSkeleton && waitingSince !== null ? now - waitingSince : 0;
   const slow = waitedMs >= SLOW_READ_MS;
   const ranOutOfTime = failed !== null && isReadDeadline(failed);
+  // Rows that are not the scope's whole: a namespace unread, a read cut
+  // short, or the last scope's answer still standing in.
+  const partial = ranOutOfTime || unread.length > 0 || placeholder;
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;
   }
-  const resolvedTitle =
-    typeof title === "function" ? title(resources.length) : title;
-
   const content = (
     <>
       {!embedded && (
         <ResourceListHeader
-          title={resolvedTitle}
+          title={title}
           // Nothing rather than zero when the read did not finish: a count
           // derived from a source the app has just said it could not read
           // is a number about nothing, printed directly above the sentence
-          // admitting as much.
-          count={ranOutOfTime ? undefined : resources.length}
+          // admitting as much. A namespace unread leaves it no total either.
+          count={partial ? undefined : resources.length}
           description={description}
           actions={headerActions}
           dataUpdatedAt={dataUpdatedAt}
@@ -392,6 +412,16 @@ export function ResourceList<
         />
       )}
       {headerContent}
+      <UnreadNamespaces
+        unread={unread}
+        label={emptyStateLabel.toLowerCase()}
+        // Not the placeholder query's refetch when the rows come from outside:
+        // that asks again under a key the page never reads.
+        onRetry={
+          onRetry ??
+          (data === undefined ? () => void queryResult.refetch() : undefined)
+        }
+      />
       {showDelivery && (
         <DeliveryFilterControl
           value={deliveryFilter}
@@ -510,8 +540,20 @@ export function ResourceList<
           getRowId={getRowId}
           grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
           rowLabel={emptyStateLabel.toLowerCase()}
+          partial={partial}
           widthsKey={widthsKey}
-          emptyMessage={emptyMessage}
+          // "None in the scope" is a claim about the namespaces that did not
+          // answer too; with any unread, it names the ones that did.
+          emptyMessage={
+            unread.length > 0
+              ? noneWhereAnswered(
+                  t,
+                  emptyStateLabel.toLowerCase(),
+                  scope.scope,
+                  unread
+                )
+              : emptyMessage
+          }
         />
       )}
       {deleteConfig && (

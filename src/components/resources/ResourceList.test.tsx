@@ -15,20 +15,22 @@ import type { ColumnDef } from "@/components/ui/table-features";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-vi.mock("@/stores/clusterStore", () => {
-  const state = {
+const store = vi.hoisted(() => ({
+  state: {
     currentNamespace: "default",
     namespaceScope: [] as string[],
     isConnected: true,
-  };
-  return {
-    useClusterStore: vi.fn(<T,>(selector?: (s: typeof state) => T) =>
-      typeof selector === "function" ? selector(state) : state
-    ),
-  };
-});
+  },
+}));
+
+vi.mock("@/stores/clusterStore", () => ({
+  useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
+    typeof selector === "function" ? selector(store.state) : store.state
+  ),
+}));
 
 import { ResourceList } from "./ResourceList";
+import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
 
 interface Item {
@@ -38,7 +40,13 @@ interface Item {
 
 const columns: ColumnDef<Item>[] = [{ accessorKey: "name", header: "Name" }];
 
-const list = (props: { data: Item[]; error?: Error | null }) =>
+const list = (props: {
+  data?: Item[];
+  error?: Error | null;
+  unread?: UnreadNamespace[];
+  queryKey?: string[];
+  queryFn?: () => Promise<Scoped<Item>>;
+}) =>
   render(
     <QueryClientProvider
       client={
@@ -113,6 +121,159 @@ describe("a list whose rows come from outside", () => {
   });
 });
 
+describe("a scope some of whose namespaces did not answer", () => {
+  const refused: UnreadNamespace = {
+    namespace: "staging",
+    code: "PERMISSION_DENIED",
+    message: 'pods is forbidden: User "narrow" cannot list pods in staging',
+  };
+
+  afterEach(() => {
+    store.state.namespaceScope = [];
+  });
+
+  /**
+   * The defect the scoped read exists for: one namespace refused, the other
+   * answered, and the page drew the answer as the whole selection. The
+   * refused one is named with the cluster's words, and the header carries no
+   * count, because the rows are not the scope's total.
+   */
+  it("names the namespace it could not read beside the rows of the rest", () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+
+    expect(screen.getByText("api")).toBeVisible();
+    expect(
+      screen.getByText("Could not read pods in staging.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/The cluster refused: pods is forbidden/)
+    ).toBeVisible();
+    expect(screen.queryByText("1")).toBeNull();
+  });
+
+  /**
+   * "None in the current scope" over a scope with an unread namespace is the
+   * third state collapsed into the second. The empty table speaks only for
+   * the namespaces that answered.
+   */
+  it("says none only of the namespaces that answered", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({
+      queryKey: ["pods", "prod,staging"],
+      queryFn: async () => ({ rows: [], unread: [refused] }),
+    });
+
+    expect(await screen.findByText("No pods in prod.")).toBeVisible();
+    expect(screen.queryByText(/No resources of this type/)).toBeNull();
+    expect(screen.getByText("Could not read pods in staging.")).toBeVisible();
+  });
+
+  /**
+   * The header dropped its count beside an unread namespace, and the footer
+   * went on printing "1 pod" under it, the same number stated as the total.
+   */
+  it("does not call the rows a total in the footer either", () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+
+    expect(
+      screen.getByText("1 pod, from the namespaces that answered")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1 pod")).toBeNull();
+  });
+
+  /**
+   * While a new scope is read, the last scope's answer stands in. Its unread
+   * namespaces are not this scope's, and a box naming one of them sat under
+   * a selection that did not contain it.
+   */
+  it("does not carry the last scope's unread namespaces into the next", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              queryKey={queryKey}
+              queryFn={answer}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(
+      page(["pods", "prod,staging"], async () => ({
+        rows: [{ name: "api", namespace: "prod" }],
+        unread: [refused],
+      }))
+    );
+    expect(
+      await screen.findByText("Could not read pods in staging.")
+    ).toBeVisible();
+
+    store.state.namespaceScope = ["dev"];
+    rerender(page(["pods", "dev"], () => new Promise(() => {})));
+    expect(screen.queryByText("Could not read pods in staging.")).toBeNull();
+  });
+
+  /**
+   * A re-read under a live watch that timed out in one namespace. The watch
+   * still streams that namespace, and its rows are current in the cache;
+   * the answer took them away and called the namespace unread, and the
+   * watch went on sending changes to rows the page no longer had.
+   */
+  it("keeps a watched namespace's rows when a re-read misses it", async () => {
+    store.state.namespaceScope = ["prod", "staging"];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 0 } },
+    });
+    const key = ["pods", "prod,staging"];
+    client.setQueryData<Scoped<Item>>(key, {
+      rows: [
+        { name: "api", namespace: "prod" },
+        { name: "worker", namespace: "staging" },
+      ],
+      unread: [],
+    });
+    const answer = vi.fn(async () => ({
+      rows: [
+        { name: "api", namespace: "prod" },
+        { name: "api-2", namespace: "prod" },
+      ],
+      unread: [{ ...refused, code: "READ_DEADLINE" }],
+    }));
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ResourceList<Item>
+              title="Pods"
+              columns={columns}
+              emptyStateLabel="Pods"
+              queryKey={key}
+              queryFn={answer}
+              live
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText("worker")).toBeVisible();
+    // What a delete from the page does next.
+    await act(() => client.invalidateQueries({ queryKey: key }));
+    expect(await screen.findByText("api-2")).toBeVisible();
+    expect(screen.getByText("worker")).toBeVisible();
+    expect(screen.queryByText("Could not read pods in staging.")).toBeNull();
+  });
+});
+
 describe("a read on a large cluster", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -153,8 +314,8 @@ describe("a read on a large cluster", () => {
    */
   it("says what it is still reading once the wait is long enough to notice", async () => {
     vi.useFakeTimers();
-    let resolve: (rows: Item[]) => void = () => {};
-    const pending = new Promise<Item[]>((done) => {
+    let resolve: (answer: Scoped<Item>) => void = () => {};
+    const pending = new Promise<Scoped<Item>>((done) => {
       resolve = done;
     });
     render(
@@ -189,7 +350,7 @@ describe("a read on a large cluster", () => {
       /Still reading pods/
     );
 
-    resolve([{ name: "web", namespace: "default" }]);
+    resolve({ rows: [{ name: "web", namespace: "default" }], unread: [] });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });

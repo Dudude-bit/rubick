@@ -27,7 +27,6 @@ import { DebugNodeDialog, DebugPodDialog } from "@/components/debug";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
-import { useToast } from "@/components/ui/use-toast";
 import { useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useCritical } from "@/hooks/useCritical";
@@ -35,7 +34,7 @@ import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { commands } from "@/lib/commands";
 import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -66,6 +65,7 @@ import {
 import { useAsk } from "@/hooks/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
 type ScalableInfo = DeploymentInfo | StatefulSetDetailInfo;
@@ -114,7 +114,6 @@ export function useObjectActions({
   const t = useT();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { data: clusterInfo } = useClusterInfo();
   const critical = useCritical();
   const criticalActive = critical.critical && !!critical.context;
@@ -173,14 +172,13 @@ export function useObjectActions({
   };
 
   const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) =>
-    toast({
-      title: t("action", "couldNotDo", {
+    toastError(
+      t("action", "couldNotDo", {
         action: t("action", verb).toLowerCase(),
         name,
       }),
-      description: normalizeTauriError(error),
-      variant: "destructive",
-    });
+      error
+    );
 
   const asking = useAsk();
   const askTarget = (() => {
@@ -273,9 +271,7 @@ export function useObjectActions({
     backend: backendQuery.data,
     backendPending:
       backendQuery.isPending && backendQuery.fetchStatus !== "idle",
-    backendError: backendQuery.error
-      ? normalizeTauriError(backendQuery.error)
-      : null,
+    backendError: backendQuery.error ? errorToShow(backendQuery.error) : null,
   });
 
   const busy: Partial<Record<PeekActionId, boolean>> = {

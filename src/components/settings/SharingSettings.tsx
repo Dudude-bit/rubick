@@ -14,14 +14,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
+import { errorToShow } from "@/lib/error-utils";
 import { targetColor } from "@/lib/share-targets";
 import { useT } from "@/i18n/useT";
 import type { ShareTargetInfo } from "@/generated/types";
 
 import { SettingRow, SettingsGroup } from "./settings-row";
-
-const TARGETS_KEY = ["share-targets"];
+import { toastError } from "@/lib/toast-error";
 
 interface Draft {
   id: string | null;
@@ -63,19 +63,15 @@ export function SharingSettings() {
   };
 
   const targets = useQuery({
-    queryKey: TARGETS_KEY,
+    queryKey: queryKeys.shareTargets(),
     queryFn: () => commands.listShareTargets(),
   });
 
   const failed = (title: string) => (error: unknown) =>
-    toast({
-      title,
-      description: normalizeTauriError(error),
-      variant: "destructive",
-    });
+    toastError(title, error);
 
   const saved = () => {
-    void queryClient.invalidateQueries({ queryKey: TARGETS_KEY });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.shareTargets() });
     openForm(null);
   };
 
@@ -151,7 +147,7 @@ export function SharingSettings() {
             // read is not a list with nothing in it.
             <p className="text-[11px] text-warn">
               {t("share", "targetsUnread", {
-                reason: normalizeTauriError(targets.error),
+                reason: errorToShow(targets.error),
               })}
             </p>
           ) : (targets.data ?? []).length === 0 && !draft ? (

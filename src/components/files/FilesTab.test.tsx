@@ -123,6 +123,7 @@ const done = (
   stopped: false,
   partial: false,
   unreadable: 0,
+  lost: 0,
   ...over,
 });
 
@@ -412,6 +413,38 @@ describe("FilesTab", () => {
     expect(screen.queryByText(/is empty/)).toBeNull();
     expect(
       screen.getByText(/none of them could be read, so what is in here/)
+    ).toBeInTheDocument();
+  });
+
+  /** A batch the event bridge dropped left a short listing drawn as the whole directory, or an empty one called empty. */
+  it("says rows were lost on the way instead of calling the listing whole", () => {
+    listing.mockReturnValue(done([file("a.log")], { lost: 500 }));
+    const view = wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByText(/500 rows were lost on the way/)
+    ).toBeInTheDocument();
+
+    listing.mockReturnValue(done([], { lost: 300 }));
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <FilesTab
+          pod={pod()}
+          via={null}
+          onDebug={() => {}}
+          onStopVia={() => {}}
+        />
+      </QueryClientProvider>
+    );
+    expect(screen.queryByText(/is empty/)).toBeNull();
+    expect(
+      screen.getByText(/300 rows and none of them arrived/)
     ).toBeInTheDocument();
   });
 

@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
+import { renderWithProviders } from "@/test/render";
 import { WhatsNew } from "./WhatsNew";
 
 const getAppInfo = vi.fn();
@@ -28,16 +28,7 @@ vi.mock("../../../CHANGELOG.md?raw", () => ({
 `,
 }));
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      {ui}
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement) => renderWithProviders(ui);
 
 describe("WhatsNew", () => {
   beforeEach(() => {

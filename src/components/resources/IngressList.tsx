@@ -1,21 +1,13 @@
-import { sayWords } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
-import { covers } from "@/lib/certificates";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
@@ -32,11 +24,15 @@ import {
   createAgeColumn,
 } from "@/components/resources/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { TlsBadge } from "@/components/network";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
+import {
+  TlsBadge,
+  ingressOpenUrl,
+  vendorTlsAnswer,
+  type VendorTlsAnswer,
+} from "@/components/network";
+import { useWatchedList } from "@/hooks/useWatchedList";
 
-import type { IngressInfo } from "@/generated/types";
+import type { IngressInfo, Scoped } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useT } from "@/i18n/useT";
@@ -52,7 +48,7 @@ import { useT } from "@/i18n/useT";
  * managed clouds.
  */
 const VendorTls = createContext<
-  ((ingress: IngressInfo) => { hosts: string[]; by: string } | null) | null
+  ((ingress: IngressInfo) => VendorTlsAnswer | null) | null
 >(null);
 
 function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
@@ -89,30 +85,6 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
     </span>
   );
 }
-
-const getIngressOpenUrl = (
-  ingress: IngressInfo,
-  /** Hosts a controller terminates that `spec.tls` never mentions. */
-  vendorHosts: string[] = []
-): string | null => {
-  const host =
-    ingress.rules.find((rule) => rule.host && rule.host !== "*")?.host ||
-    ingress.loadBalancerIps[0];
-
-  if (!host) {
-    return null;
-  }
-
-  // `covers` rather than equality: `*.example.com` is how a wildcard Secret
-  // serves `shop.example.com`, and a literal comparison offered http:// for
-  // every subdomain behind one.
-  const usesTls =
-    covers(ingress.tlsHosts, host) ||
-    ingress.hasCatchAllTls ||
-    vendorHosts.includes(host);
-  const scheme = usesTls ? "https" : "http";
-  return `${scheme}://${host}`;
-};
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -226,61 +198,34 @@ export function IngressList() {
   const scope = useNamespaceScope();
   const navigate = useNavigate();
 
-  // Several namespaces are read one apiece and polled; a watch covers none or
-  // one. See `listAcrossScope`.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
-  const watchEnabled = !scope.several;
-  const listIngressesFor = (namespace: string | null) =>
-    commands.listIngresses({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    });
+  const listIngresses = () => commands.listIngressesIn(scope.wire);
 
   const queryKey = useMemo(
     () => queryKeys.resources(ResourceType.Ingress, cacheKey),
     [cacheKey]
   );
   const subscribe = useCallback(
-    () => commands.subscribeIngressWatch(watchNamespace),
-    [watchNamespace]
+    () => commands.subscribeIngressWatch(scope.wire),
+    [scope.wire]
   );
 
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "realtimeFallback", {
-          kind: toPlural(ResourceType.Ingress),
-          error: err,
-        }),
-      });
-    },
-    [t, toast, watchFailed]
-  );
-  const { resyncing } = useResourceWatch<IngressInfo>({
-    enabled: watchEnabled,
+  const { live, refresh, resyncing } = useWatchedList<IngressInfo>({
+    enabled: true,
     subscribe,
     queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
+    reportFailure: toPlural(ResourceType.Ingress),
   });
 
   // A second observer on the list's own cache entry, so the rows cost one
-  // request and not two — the same trick the sidebar counts use.
-  const listed = useResourceList<IngressInfo[]>(
-    queryKey,
-    listAcrossScope(scope.scope, listIngressesFor)
-  );
+  // request and not two — the same trick the sidebar counts use. At the
+  // list's own rate: left at the default it polled under a live watch.
+  const listed = useResourceList<Scoped<IngressInfo>>(queryKey, listIngresses, {
+    refresh,
+  });
   const asked = useMemo(
     () =>
-      (listed.data ?? []).map((ingress) => ({
+      (listed.data?.rows ?? []).map((ingress) => ({
         namespace: ingress.namespace,
         name: ingress.name,
         hosts: ingress.rules.flatMap((rule) => (rule.host ? [rule.host] : [])),
@@ -289,19 +234,7 @@ export function IngressList() {
   );
   const vendorTls = useIngressTls(asked);
   const vendorFor = useCallback(
-    (ingress: IngressInfo) => {
-      const hosts = ingress.rules.flatMap((rule) =>
-        rule.host && vendorTls.of(ingress, rule.host)?.terminated
-          ? [rule.host]
-          : []
-      );
-      if (hosts.length === 0) return null;
-      const said = vendorTls.of(ingress, hosts[0])?.by;
-      const by = said
-        ? sayWords(said, t)
-        : t("empty", "theLoadBalancerInFront");
-      return { hosts, by };
-    },
+    (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]
   );
 
@@ -325,10 +258,10 @@ export function IngressList() {
         icon: ExternalLink,
         label: t("action", "openInBrowser"),
         onClick: (item) => {
-          const url = getIngressOpenUrl(item, vendorFor(item)?.hosts ?? []);
+          const url = ingressOpenUrl(item, vendorFor(item));
           if (url) window.open(url, "_blank", "noreferrer");
         },
-        hidden: (item) => !getIngressOpenUrl(item),
+        hidden: (item) => !ingressOpenUrl(item, vendorFor(item)),
       },
       {
         icon: Trash2,
@@ -346,7 +279,7 @@ export function IngressList() {
         title="Ingresses"
         queryKey={queryKey}
         getRowId={getResourceRowId}
-        queryFn={listAcrossScope(scope.scope, listIngressesFor)}
+        queryFn={listIngresses}
         columns={baseColumns}
         quickActions={quickActions}
         emptyStateLabel={toPlural(ResourceType.Ingress)}
@@ -357,8 +290,8 @@ export function IngressList() {
           resourceType: ResourceType.Ingress,
         }}
         staleTime={STALE_TIMES.resourceList}
-        refresh={watchFailed || scope.several ? undefined : false}
-        live={watchEnabled && !watchFailed}
+        refresh={refresh}
+        live={live}
         resyncing={resyncing}
         getRowHref={(row) =>
           getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)

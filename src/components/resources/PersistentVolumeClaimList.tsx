@@ -1,8 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { T } from "@/i18n/T";
 import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
@@ -24,8 +24,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
@@ -76,51 +75,24 @@ export function PersistentVolumeClaimList() {
   const scope = useNamespaceScope();
   const navigate = useNavigate();
 
-  // Several namespaces are read one apiece and polled; a watch covers none or
-  // one. See `listAcrossScope`.
-  const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
   const cacheKey = scopeCacheKey(scope.scope);
-  const watchEnabled = !scope.several;
-  const listPvcsFor = (namespace: string | null) =>
-    commands.listPersistentVolumeClaims({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    });
 
   const queryKey = useMemo(
     () => queryKeys.resources(ResourceType.PersistentVolumeClaim, cacheKey),
     [cacheKey]
   );
   const subscribe = useCallback(
-    () => commands.subscribePvcWatch(watchNamespace),
-    [watchNamespace]
+    () => commands.subscribePvcWatch(scope.wire),
+    [scope.wire]
   );
 
-  const { toast } = useToast();
-  const [watchFailed, setWatchFailed] = useState(false);
-  const handleWatchError = useCallback(
-    (err: string) => {
-      if (watchFailed) return;
-      setWatchFailed(true);
-      toast({
-        title: t("action", "realtimeUnavailable"),
-        description: t("action", "fallingBackToPolling", {
-          title: "Persistent Volume Claims",
-          error: err,
-        }),
-      });
-    },
-    [t, toast, watchFailed]
-  );
-  const { resyncing } = useResourceWatch<PersistentVolumeClaimInfo>({
-    enabled: watchEnabled,
-    subscribe,
-    queryKey,
-    onError: handleWatchError,
-    onRecovered: useCallback(() => setWatchFailed(false), []),
-  });
+  const { live, refresh, resyncing } =
+    useWatchedList<PersistentVolumeClaimInfo>({
+      enabled: true,
+      subscribe,
+      queryKey,
+      reportFailure: toPlural(ResourceType.PersistentVolumeClaim),
+    });
 
   const quickActions = useMemo<
     (
@@ -158,7 +130,7 @@ export function PersistentVolumeClaimList() {
       })}
       queryKey={queryKey}
       getRowId={getResourceRowId}
-      queryFn={listAcrossScope(scope.scope, listPvcsFor)}
+      queryFn={() => commands.listPersistentVolumeClaimsIn(scope.wire)}
       columns={columns}
       quickActions={quickActions}
       emptyStateLabel={toPlural(ResourceType.PersistentVolumeClaim)}
@@ -172,8 +144,8 @@ export function PersistentVolumeClaimList() {
         resourceType: ResourceType.PersistentVolumeClaim,
       }}
       staleTime={STALE_TIMES.resourceList}
-      refresh={watchFailed || scope.several ? undefined : false}
-      live={watchEnabled && !watchFailed}
+      refresh={refresh}
+      live={live}
       resyncing={resyncing}
       getRowHref={(row) =>
         getResourceDetailUrl(

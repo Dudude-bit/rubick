@@ -22,8 +22,9 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import type { ContextBinding } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const NONE = "__none__";
 const EMPTY: ContextBinding = {
@@ -57,17 +58,17 @@ export function BindingDialog({
   } | null>(null);
 
   const { data: gcpProfiles } = useQuery({
-    queryKey: ["gcpProfiles"],
+    queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
     enabled: context !== null,
   });
   const { data: azureProfiles } = useQuery({
-    queryKey: ["azureProfiles"],
+    queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
     enabled: context !== null,
   });
   const { data: existing } = useQuery({
-    queryKey: ["contextBinding", context],
+    queryKey: queryKeys.contextBinding(context),
     queryFn: () => commands.getContextBinding(context ?? ""),
     enabled: context !== null,
   });
@@ -77,16 +78,10 @@ export function BindingDialog({
   const setBinding = (next: (prev: ContextBinding) => ContextBinding) =>
     setEdited({ for: context ?? "", value: next(binding) });
 
-  const failed = (error: unknown) =>
-    toast({
-      title: t("action", "error"),
-      description: normalizeTauriError(error),
-      variant: "destructive",
-    });
+  const failed = (error: unknown) => toastError(t("action", "error"), error);
 
   const done = (title: string) => {
-    queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
-    queryClient.invalidateQueries({ queryKey: ["contextBinding"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.contextBindings() });
     onOpenChange(false);
     toast({ title });
   };

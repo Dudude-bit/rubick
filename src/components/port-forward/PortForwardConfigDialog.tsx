@@ -13,12 +13,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
-import { normalizeTauriError } from "@/lib/error-utils";
 import {
   usePortForwardStore,
   type PortForwardConfig,
 } from "@/stores/portForwardStore";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
+import { parts } from "@/i18n/parts";
 
 /**
  * The editor for a saved port-forward.
@@ -107,13 +108,12 @@ export function PortForwardConfigDialog({
       }
       onClose();
     } catch (error) {
-      toast({
-        title: config
+      toastError(
+        config
           ? t("activity", "saveForwardFailed")
           : t("activity", "createForwardFailed"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+        error
+      );
     } finally {
       setBusy(false);
     }
@@ -129,16 +129,9 @@ export function PortForwardConfigDialog({
               : t("activity", "newPortForward")}
           </DialogTitle>
           <DialogDescription>
-            {splitAround(t("activity", "forwardSavedFor"), "{context}").map(
-              (part, i) =>
-                i === 1 ? (
-                  <span key="context" className="font-mono">
-                    {context}
-                  </span>
-                ) : (
-                  <span key={i}>{part}</span>
-                )
-            )}
+            {parts(t("activity", "forwardSavedFor"), {
+              context: <span className="font-mono">{context}</span>,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -246,11 +239,4 @@ export function PortForwardConfigDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-/** A sentence kept whole in the catalogue, cut where it is rendered. */
-function splitAround(text: string, token: string): string[] {
-  const at = text.indexOf(token);
-  if (at < 0) return [text];
-  return [text.slice(0, at), token, text.slice(at + token.length)];
 }

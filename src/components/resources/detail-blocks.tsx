@@ -15,6 +15,7 @@ import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { TONE_TEXT } from "@/lib/tone";
 
 /**
  * The blocks a resource detail page repeats: an action in the header row, a
@@ -250,7 +251,7 @@ export function ProblemSummary({
   action,
   tone = "err",
 }: ProblemSummaryProps) {
-  const color = tone === "err" ? "text-err" : "text-warn";
+  const color = TONE_TEXT[tone];
   return (
     <div className="flex items-start gap-2">
       <span className={cn("mt-[3px] text-[9px]", color)} aria-hidden="true">

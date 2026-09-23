@@ -10,7 +10,7 @@ import { ResourceRef } from "./ResourceRef";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { isRefusal, verbatim } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 
 /**
@@ -99,7 +99,7 @@ export function ChildRows({
               : t("empty", "couldNotReadInScope", { label: label ?? "" })}
         </p>
         <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-          {verbatim(error.message)}
+          {errorToShow(error)}
         </p>
       </div>
     );

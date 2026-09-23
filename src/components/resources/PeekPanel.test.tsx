@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  beforeAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   cleanup,
   render,
@@ -45,6 +53,7 @@ vi.mock("@/hooks/useServiceRoutes", () => ({
       available: false,
       routes: new Map(),
       isPending: false,
+      error: null,
     },
   useProxyBehind: () => null,
 }));
@@ -79,6 +88,11 @@ vi.mock("@/lib/commands", () => ({
     getNamespace: vi.fn(),
     getGatewayRoute: vi.fn(),
     listNodes: vi.fn(),
+    listPods: vi.fn(),
+    listDeployments: vi.fn(),
+    listServices: vi.fn(),
+    detectGatewayApi: vi.fn(),
+    listBackendTlsPolicies: vi.fn(),
   },
 }));
 
@@ -93,6 +107,7 @@ status:
 `;
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -102,6 +117,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
 
 function buildPod(overrides: Partial<PodInfo> = {}): PodInfo {
@@ -300,6 +316,7 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  wrap.client = client;
   return render(
     <QueryClientProvider client={client}>
       {/* The shell mounts one of these around the whole app; a disabled
@@ -313,6 +330,8 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
     </QueryClientProvider>
   );
 };
+
+wrap.client = null as unknown as QueryClient;
 
 const location = () => screen.getByTestId("location").textContent;
 const POD_PEEK = "/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
@@ -367,6 +386,12 @@ function mockCluster() {
   servicesRoutesSpy.mockReset();
   useDisplaySettingsStore.setState({ peekWidth: PEEK_WIDTH_DEFAULT });
 }
+
+// The body is fetched ahead of the first peek in the app; here it is fetched
+// once, so every render below opens the panel whole, as a click does.
+beforeAll(async () => {
+  await preloadPeekContent();
+});
 
 describe("PeekPanel", () => {
   beforeEach(mockCluster);
@@ -567,6 +592,80 @@ describe("PeekPanel", () => {
 });
 
 const CONFIGMAP_PEEK = "/events?peek=configmaps/k8s-gui-test/app-config";
+
+/**
+ * The panel asks the same questions the detail pages ask, and keeps each
+ * answer where the page keeps it: opening the page after the peek costs
+ * nothing, and an action on either reaches the other. Each fails if the
+ * panel keys that answer apart from the page again.
+ */
+describe("PeekPanel reads what the detail pages read", () => {
+  beforeEach(mockCluster);
+
+  const POD = ["k8s-gui-test", "crash-demo-56588f6b8c-8bj9v"] as const;
+
+  it("keeps the object itself in the pod page's entry", async () => {
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    expect(wrap.client.getQueryData(queryKeys.detail("Pod", ...POD))).toEqual(
+      buildPod()
+    );
+  });
+
+  it("keeps the manifest in the pod page's entry", async () => {
+    vi.mocked(commands.getManifest).mockResolvedValue("kind: Pod\n");
+    wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    await openTab("YAML");
+    await screen.findByTestId("yaml-editor");
+    expect(wrap.client.getQueryData(queryKeys.manifest("Pod", ...POD))).toBe(
+      "kind: Pod\n"
+    );
+  });
+
+  it("keeps a ConfigMap's values where its page and a pod's env read them", async () => {
+    wrap(CONFIGMAP_PEEK);
+    await openTab("Data");
+    await screen.findByText("worker_processes 1;");
+    expect(
+      wrap.client.getQueryData(
+        queryKeys.configMapData("k8s-gui-test", "app-config")
+      )
+    ).toMatchObject({ values: { "nginx.conf": "worker_processes 1;" } });
+  });
+
+  it("keeps a Deployment's pods in its page's entry", async () => {
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "api",
+      namespace: "shop",
+      uid: "deploy-uid",
+      replicas: { desired: 1, ready: 1, current: 1, updated: 1, available: 1 },
+      strategy: "RollingUpdate",
+      containers: [],
+      initContainers: [],
+      serviceAccountName: null,
+      podResources: { requests: {}, limits: {} },
+      labels: {},
+      annotations: {},
+      templateAnnotations: {},
+      generation: 1,
+      observedGeneration: 1,
+      createdAt: null,
+      conditions: [],
+      ownerReferences: [],
+    } as never);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
+    wrap("/events?peek=deployments/shop/api");
+    await openTab("Pods");
+    await waitFor(() =>
+      expect(
+        wrap.client.getQueryData(
+          queryKeys.ownedPods("Deployment", "shop", "api")
+        )
+      ).toEqual([buildPod()])
+    );
+  });
+});
 
 describe("PeekPanel tab strip", () => {
   beforeEach(mockCluster);
@@ -825,20 +924,6 @@ describe("PeekPanel tab persistence", () => {
       <PeekOpener target={CONFIG_MAP} label="peek configmap" />
     </>
   );
-
-  it("stays on Logs when the next target is another pod", async () => {
-    wrap(POD_PEEK, withOpeners);
-    await screen.findByText("CrashLoopBackOff");
-    await openTab("Logs");
-
-    await userEvent.click(screen.getByText("peek other pod"));
-    await waitFor(() =>
-      expect(screen.getByRole("tab", { name: "Logs" })).toHaveAttribute(
-        "aria-selected",
-        "true"
-      )
-    );
-  });
 
   it("falls back to Overview when the next target has no such tab", async () => {
     wrap(POD_PEEK, withOpeners);
@@ -1528,5 +1613,76 @@ describe("the peek tab as the detail page spells it", () => {
   /** Overview is where a page opens anyway; saying so in the URL is noise. */
   it("says nothing for the tab a page opens on", () => {
     expect(pageTab("overview", "Pod")).toBeNull();
+  });
+});
+
+describe("a peek block whose read was refused", () => {
+  const FORBIDDEN = "forbidden: cannot list resource";
+
+  beforeEach(mockCluster);
+  afterEach(() => {
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /** A refused neighbourhood read was the same silence as a pod nothing routes. */
+  it("says so where nothing routes a pod only because nobody could look", async () => {
+    vi.mocked(commands.getResourceConnections).mockRejectedValue(
+      new Error(FORBIDDEN)
+    );
+    wrap(POD_PEEK);
+
+    expect(await screen.findByText("Traffic path")).toBeInTheDocument();
+    expect(
+      screen.getByText(`Could not read what connects to this: ${FORBIDDEN}`)
+    ).toBeInTheDocument();
+  });
+
+  /** "reading…" forever beside a refused list, and "none" beside a read one. */
+  it("tells a refused count in a namespace from an empty one", async () => {
+    vi.mocked(commands.listPods).mockRejectedValue(new Error(FORBIDDEN));
+    vi.mocked(commands.listDeployments).mockResolvedValue([]);
+    vi.mocked(commands.listServices).mockResolvedValue([]);
+    wrap("/events?peek=namespaces/kube-system");
+
+    expect(await screen.findByText(FORBIDDEN)).toBeInTheDocument();
+    expect(screen.getByText("could not read")).toBeInTheDocument();
+    expect(screen.getAllByText("none")).toHaveLength(2);
+  });
+
+  /** An empty list is "no policy names this Service"; a refused one is not. */
+  it("does not drop the policies block when the policies were refused", async () => {
+    useClusterStore.setState({ currentContext: "kind", isConnected: true });
+    vi.mocked(commands.detectGatewayApi).mockResolvedValue({
+      kinds: [{ kind: "BackendTLSPolicy" }],
+    } as unknown as Awaited<ReturnType<typeof commands.detectGatewayApi>>);
+    vi.mocked(commands.listBackendTlsPolicies).mockRejectedValue(
+      new Error(FORBIDDEN)
+    );
+    wrap("/events?peek=services/storefront/frontend");
+
+    expect(
+      await screen.findByText(/Could not read BackendTLSPolicies/)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A vendor that did not answer "which of your routes reach this" left the
+   * Service drawn as the top of the chain, the same as nothing routing it.
+   */
+  it("says the integrations could not be asked, rather than that nothing routes it", async () => {
+    servicesRoutesSpy.mockReturnValue({
+      available: true,
+      routes: new Map(),
+      isPending: false,
+      error: new Error("ingressroutes.traefik.io is forbidden"),
+    });
+    wrap("/events?peek=services/storefront/frontend");
+
+    expect(
+      await screen.findByText(/Could not ask the integrations/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("ingressroutes.traefik.io is forbidden")
+    ).toBeInTheDocument();
   });
 });

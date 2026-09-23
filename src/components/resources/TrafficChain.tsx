@@ -52,6 +52,8 @@ import type {
   TlsCertificate,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { TONE_TEXT } from "@/lib/tone";
+import { errorToShow } from "@/lib/error-utils";
 
 /**
  * A name at a hop. A missing object keeps its glyph and its hue and loses
@@ -244,11 +246,7 @@ function EdgeNote({
           )}{" "}
           {joinSayings(config.summary, t)}
           {config.problem && (
-            <span
-              className={
-                config.problem.tone === "err" ? "text-err" : "text-warn"
-              }
-            >
+            <span className={TONE_TEXT[config.problem.tone]}>
               {" — "}
               {sayWords(config.problem.text, t)}
             </span>
@@ -604,6 +602,14 @@ export function TrafficChain({
             </p>
           ))}
         </div>
+      )}
+      {routed2.error && (
+        <p className="max-w-[92ch] text-[11px] text-warn">
+          {t("empty", "couldNotAskRoutes")}
+          <span className="block select-text wrap-break-word font-mono text-fg-mut">
+            {errorToShow(routed2.error)}
+          </span>
+        </p>
       )}
       <div className="flex flex-col gap-4">
         {paths.map((path) => (

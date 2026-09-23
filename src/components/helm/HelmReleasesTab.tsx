@@ -28,7 +28,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DetailAction } from "@/components/resources/detail-blocks";
-import type { HelmRelease } from "@/generated/types";
+import type { HelmRelease, UnreadNamespace } from "@/generated/types";
+import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { formatDate } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
@@ -44,6 +47,8 @@ const helmReleaseHref = (row: HelmRelease) =>
 
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
+  /** The namespaces of the scope whose releases could not be read. */
+  unread?: UnreadNamespace[];
   isLoading: boolean;
   /** `unknown`, not `Error`: the query's thrown value is not guaranteed to be
    *  an Error, and `errorToShow`/`isRefusal` both take it as-is. */
@@ -58,6 +63,7 @@ export interface HelmReleasesTabProps {
 
 export function HelmReleasesTab({
   releases,
+  unread = [],
   isLoading,
   error,
   helmCliAvailable,
@@ -69,6 +75,7 @@ export function HelmReleasesTab({
 }: HelmReleasesTabProps) {
   const t = useT();
   const navigate = useNavigate();
+  const { scope } = useNamespaceScope();
 
   const columns: ColumnDef<HelmRelease>[] = useMemo(
     () => [
@@ -293,6 +300,11 @@ export function HelmReleasesTab({
         </div>
       </div>
 
+      <UnreadNamespaces
+        unread={unread}
+        label={t("empty", "helmReleases")}
+        onRetry={onRefetch}
+      />
       {error && releases.length === 0 ? (
         <div className="max-w-[68ch] py-8">
           <p className="text-xs text-err">
@@ -316,6 +328,11 @@ export function HelmReleasesTab({
           searchPlaceholder={t("action", "searchReleases")}
           getRowId={getHelmReleaseRowId}
           getRowHref={helmReleaseHref}
+          emptyMessage={
+            unread.length > 0
+              ? noneWhereAnswered(t, t("empty", "helmReleases"), scope, unread)
+              : undefined
+          }
         />
       )}
     </div>

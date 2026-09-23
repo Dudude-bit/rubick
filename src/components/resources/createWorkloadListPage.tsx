@@ -11,7 +11,7 @@
  * rows, so they use `usePodsWithMetrics` directly without aggregation.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate, type NavigateFunction } from "react-router-dom";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -19,7 +19,8 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { ResourceList } from "./ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
+import type { Scoped } from "@/generated/types";
 import { useResourceList } from "@/hooks/useResource";
 import { usePodsWithMetrics } from "@/hooks/usePodsWithMetrics";
 import {
@@ -33,8 +34,7 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { getResourceRowId } from "@/lib/table-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { useResourceWatch } from "@/hooks/useResourceWatch";
-import { useToast } from "@/components/ui/use-toast";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
 
 type Workload = { name: string; namespace: string };
@@ -44,8 +44,8 @@ export interface WorkloadListPageConfig<T extends Workload> {
   resourceType: ResourceKind;
   /** Page title (also default empty-state label). */
   title: string;
-  /** Fetch the workload list (without metrics). */
-  fetchList: (params: { namespace: string | null }) => Promise<T[]>;
+  /** Read the workload list (without metrics) across the selection. */
+  fetchList: (params: { scope: string[] | null }) => Promise<Scoped<T>>;
   /**
    * Which pods belong to a workload of this kind, used to aggregate pod
    * CPU/memory up to the workload row. One of the `match*Pods` matchers
@@ -68,7 +68,7 @@ export interface WorkloadListPageConfig<T extends Workload> {
    * cache via real-time `resource-event` Tauri events instead.
    * Pod metrics on the side keep their own usePodsWithMetrics path.
    */
-  watch?: (params: { namespace: string | null }) => Promise<string>;
+  watch?: (params: { scope: string[] | null }) => Promise<string>;
 }
 
 export function createWorkloadListPage<T extends Workload>(
@@ -81,64 +81,42 @@ export function createWorkloadListPage<T extends Workload>(
 
     // Read for the aggregated CPU and memory columns only. The workloads are
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
-    const { data: pods, podStatus } = usePodsWithMetrics();
+    const {
+      data: pods,
+      podStatus,
+      podUnread,
+      refetchPodMetrics,
+    } = usePodsWithMetrics();
 
-    // Several namespaces are read one apiece and polled; a watch covers none
-    // or one. See `listAcrossScope` / createResourceListPage.
-    const watchNamespace = scope.scope.length === 1 ? scope.scope[0] : null;
     const cacheKey = scopeCacheKey(scope.scope);
     const watchFactory = config.watch;
-    const watchEnabled = !!watchFactory && !scope.several;
 
     const queryKey = useMemo(
       () => queryKeys.resources(config.resourceType, cacheKey),
       [cacheKey]
     );
     const subscribe = useCallback(
-      () => watchFactory!({ namespace: watchNamespace }),
-      [watchFactory, watchNamespace]
+      () => watchFactory!({ scope: scope.wire }),
+      [watchFactory, scope.wire]
     );
 
-    // See createResourceListPage for the watch-failure rationale.
-    // Same fallback pattern: toast once, flip state, let useResourceList
-    // resume polling.
-    const { toast } = useToast();
-    const [watchFailed, setWatchFailed] = useState(false);
-    const handleWatchError = useCallback(
-      (err: string) => {
-        if (watchFailed) return;
-        setWatchFailed(true);
-        toast({
-          title: t("action", "realtimeUnavailable"),
-          description: t("action", "fallingBackToPolling", {
-            title: config.title,
-            error: err,
-          }),
-        });
-      },
-      [t, toast, watchFailed]
-    );
+    const { live, refresh, resyncing } = useWatchedList<T>({
+      enabled: !!watchFactory,
+      subscribe,
+      queryKey,
+      reportFailure: config.title,
+    });
 
     const listQuery = useResourceList(
       queryKey,
-      listAcrossScope(scope.scope, (namespace) =>
-        config.fetchList({ namespace })
-      ),
-      watchEnabled && !watchFailed ? ({ refresh: false } as const) : undefined
+      () => config.fetchList({ scope: scope.wire }),
+      { refresh }
     );
-
-    const { resyncing } = useResourceWatch<T>({
-      enabled: watchEnabled,
-      subscribe,
-      queryKey,
-      onError: handleWatchError,
-      onRecovered: useCallback(() => setWatchFailed(false), []),
-    });
 
     const dataWithMetrics = useMemo(
       () =>
         attachAggregatedPodMetrics<T>(
-          listQuery.data ?? [],
+          listQuery.data?.rows ?? [],
           pods,
           config.matchPods
         ),
@@ -179,6 +157,8 @@ export function createWorkloadListPage<T extends Workload>(
       <ResourceList<T & ResourceMetrics>
         title={config.title}
         data={dataWithMetrics}
+        unread={listQuery.data?.unread}
+        onRetry={() => void listQuery.refetch()}
         // A resync holds the rows it has until the new state is complete, so
         // there is normally something to show. With nothing to show, "still
         // finding out" is the skeleton — the empty state would be claiming the
@@ -188,7 +168,7 @@ export function createWorkloadListPage<T extends Workload>(
         }
         error={listQuery.error}
         dataUpdatedAt={listQuery.dataUpdatedAt}
-        live={watchEnabled && !watchFailed}
+        live={live}
         slowed={listQuery.freshness.slowed}
         waitingSince={listQuery.freshness.waitingSince}
         getRowId={getResourceRowId}
@@ -200,9 +180,11 @@ export function createWorkloadListPage<T extends Workload>(
         }
         // Inside the list, as the Nodes page has it — see `PodList`.
         headerContent={
-          podStatus?.status !== "available" ? (
-            <MetricsStatusBanner status={podStatus} />
-          ) : null
+          <MetricsStatusBanner
+            status={podStatus}
+            unread={podUnread}
+            onRetry={() => void refetchPodMetrics()}
+          />
         }
         getRowHref={(row) =>
           getResourceDetailUrl(config.resourceType, row.name, row.namespace)

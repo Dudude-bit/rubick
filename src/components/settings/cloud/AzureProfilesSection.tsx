@@ -18,8 +18,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { AzureProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const EMPTY_PROFILE: AzureProfile = {
   description: undefined,
@@ -42,7 +43,7 @@ export function AzureProfilesSection() {
   const [newProfileName, setNewProfileName] = useState("");
 
   const { data: profiles, isLoading } = useQuery({
-    queryKey: ["azureProfiles"],
+    queryKey: queryKeys.azureProfiles(),
     queryFn: commands.listAzureProfiles,
   });
 
@@ -57,32 +58,26 @@ export function AzureProfilesSection() {
       await commands.saveAzureProfile(name, profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.azureProfiles() });
       setDialogOpen(false);
       toast({ title: t("settings", "azureProfileSaved") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: commands.deleteAzureProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["azureProfiles"] });
-      queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.azureProfiles() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contextBindings(),
+      });
       toast({ title: t("settings", "azureProfileDeleted") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 

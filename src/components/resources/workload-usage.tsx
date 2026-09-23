@@ -19,14 +19,11 @@ import { UsageBlock } from "@/components/resources/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
+import { hasTerminated } from "@/lib/pod-status";
 import type { UsageScope } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import type { PodInfo, ResourceConnections } from "@/generated/types";
-import {
-  templateCeiling,
-  templateRequests,
-  type WorkloadTemplate,
-} from "@/components/resources/workload-ceiling";
+import type { WorkloadTemplate } from "@/components/resources/workload-ceiling";
 
 /**
  * A pod that has terminated is not using anything, and metrics-server has
@@ -34,9 +31,7 @@ import {
  * and zero contributors here.
  */
 function runningPods(pods: readonly PodInfo[]): PodInfo[] {
-  return pods.filter(
-    (pod) => pod.status.phase !== "Succeeded" && pod.status.phase !== "Failed"
-  );
+  return pods.filter((pod) => !hasTerminated(pod));
 }
 
 export interface WorkloadUsageProps {
@@ -98,8 +93,15 @@ export function WorkloadUsage({
   // the reading is summed over — a workload halfway through a rollout is
   // measured against what is actually there rather than against what was
   // asked for.
-  const ceiling = templateCeiling(template);
-  const requests = templateRequests(template);
+  const replica = template?.replica;
+  const ceiling = {
+    cpu: replica?.cpuLimits ?? null,
+    memory: replica?.memoryLimits ?? null,
+  };
+  const requests = {
+    cpu: replica?.cpuRequests ?? null,
+    memory: replica?.memoryRequests ?? null,
+  };
 
   const scope: UsageScope | undefined =
     name && namespace

@@ -19,8 +19,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import type { GcpProfile } from "@/generated/types";
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
 
 const EMPTY_PROFILE: GcpProfile = {
   description: undefined,
@@ -41,7 +42,7 @@ export function GcpProfilesSection() {
   const [newProfileName, setNewProfileName] = useState("");
 
   const { data: profiles, isLoading } = useQuery({
-    queryKey: ["gcpProfiles"],
+    queryKey: queryKeys.gcpProfiles(),
     queryFn: commands.listGcpProfiles,
   });
 
@@ -56,32 +57,26 @@ export function GcpProfilesSection() {
       await commands.saveGcpProfile(name, profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.gcpProfiles() });
       setDialogOpen(false);
       toast({ title: t("settings", "gcpProfileSaved") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: commands.deleteGcpProfile,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["gcpProfiles"] });
-      queryClient.invalidateQueries({ queryKey: ["contextBindings"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.gcpProfiles() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.contextBindings(),
+      });
       toast({ title: t("settings", "gcpProfileDeleted") });
     },
     onError: (error) => {
-      toast({
-        title: t("action", "error"),
-        description: normalizeTauriError(error),
-        variant: "destructive",
-      });
+      toastError(t("action", "error"), error);
     },
   });
 

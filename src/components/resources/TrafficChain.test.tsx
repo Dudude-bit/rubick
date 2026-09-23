@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
+
+import { renderWithProviders } from "@/test/render";
 
 import { TrafficChain } from "./TrafficChain";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
@@ -24,16 +24,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement) =>
+  renderWithProviders(ui, { initialEntries: ["/"] });
 
 const service: ObjectRef = {
   kind: "Service",
@@ -294,6 +286,7 @@ describe("TrafficChain", () => {
               name: "traefik",
               controller: "traefik.io/ingress-controller",
               isDefault: false,
+              parameters: null,
             },
           ],
         }}

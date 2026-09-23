@@ -1,36 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 
 import { commands } from "@/lib/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { listenEvent } from "@/lib/events";
+import { errorToShow } from "@/lib/error-utils";
 import type { FileEntry, ListedWith } from "@/lib/container-files";
-import type { Via } from "@/generated/types";
+import type { ListingFailure, Via } from "@/generated/types";
 
-interface BatchPayload {
-  stream_id: string;
-  entries: FileEntry[];
-}
-
-interface DonePayload {
-  stream_id: string;
-  with: ListedWith;
-  entries: number;
-  partial: boolean;
-  unreadable: number;
-  elapsed_ms: number;
-}
-
-export type FailureReason =
-  "noTools" | "unopenable" | "refused" | "notRunning" | "failed";
-
-interface FailedPayload {
-  stream_id: string;
-  reason: FailureReason;
-  message: string;
-  exit_code: number | null;
-  stderr: string;
-  tried: string[];
-}
+export type FailureReason = ListingFailure;
 
 /**
  * Where a listing stands. Four states, and "reading" with no rows is not
@@ -56,6 +32,11 @@ export type ListingState =
        * or null when the backend has not answered yet. Zero is a claim.
        */
       unreadable: number | null;
+      /**
+       * Rows the backend sent that never arrived — a batch the event bridge
+       * dropped — or null before `files-done` has said how many it sent.
+       */
+      lost: number | null;
     }
   | {
       phase: "failed";
@@ -169,7 +150,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
           state: { phase: "reading", entries: EMPTY, startedAt: Date.now() },
         });
 
-        const onBatch = await listen<BatchPayload>("files-batch", (event) => {
+        const onBatch = await listenEvent("files-batch", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
             only((was) => {
@@ -186,53 +167,54 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             })
           );
         });
-        const onDone = await listen<DonePayload>("files-done", (event) => {
+        const onDone = await listenEvent("files-done", (event) => {
           if (event.payload.stream_id !== id) return;
           setSnapshot(
-            only((was) => ({
-              phase: "done",
+            only((was) => {
               // The backend emits `files-done` after a cancel too, and by
               // then `stop()` has already moved the state to "done" — so
               // testing for "reading" threw away every row that had arrived
               // and the tab announced the directory as empty.
+              const entries =
+                was.phase === "reading" || was.phase === "done"
+                  ? was.entries
+                  : EMPTY;
+              return {
+                phase: "done",
+                entries,
+                with: event.payload.with,
+                elapsedMs: event.payload.elapsed_ms,
+                at: Date.now(),
+                // A listing the reader cut short stays cut short. Overwriting
+                // this relabelled a partial read as the whole directory.
+                stopped: was.phase === "done" ? was.stopped : false,
+                partial: event.payload.partial,
+                unreadable: event.payload.unreadable,
+                lost: Math.max(0, event.payload.entries - entries.length),
+              };
+            })
+          );
+        });
+        const onFailed = await listenEvent("files-failed", (event) => {
+          if (event.payload.stream_id !== id) return;
+          setSnapshot(
+            only((was) => ({
+              phase: "failed",
+              // Whatever arrived is what the reader saw arrive; a failure
+              // at the end does not unsee it. Wiping the rows here turned
+              // a stop-then-fail into "nothing was ever read".
               entries:
                 was.phase === "reading" || was.phase === "done"
                   ? was.entries
                   : EMPTY,
-              with: event.payload.with,
-              elapsedMs: event.payload.elapsed_ms,
-              at: Date.now(),
-              // A listing the reader cut short stays cut short. Overwriting
-              // this relabelled a partial read as the whole directory.
-              stopped: was.phase === "done" ? was.stopped : false,
-              partial: event.payload.partial,
-              unreadable: event.payload.unreadable,
+              reason: event.payload.reason,
+              message: event.payload.message,
+              exitCode: event.payload.exit_code,
+              stderr: event.payload.stderr,
+              tried: event.payload.tried,
             }))
           );
         });
-        const onFailed = await listen<FailedPayload>(
-          "files-failed",
-          (event) => {
-            if (event.payload.stream_id !== id) return;
-            setSnapshot(
-              only((was) => ({
-                phase: "failed",
-                // Whatever arrived is what the reader saw arrive; a failure
-                // at the end does not unsee it. Wiping the rows here turned
-                // a stop-then-fail into "nothing was ever read".
-                entries:
-                  was.phase === "reading" || was.phase === "done"
-                    ? was.entries
-                    : EMPTY,
-                reason: event.payload.reason,
-                message: event.payload.message,
-                exitCode: event.payload.exit_code,
-                stderr: event.payload.stderr,
-                tried: event.payload.tried,
-              }))
-            );
-          }
-        );
         off = [onBatch, onDone, onFailed];
         if (!active) {
           takeDown();
@@ -247,7 +229,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
             phase: "failed",
             entries: EMPTY,
             reason: "failed",
-            message: normalizeTauriError(error),
+            message: errorToShow(error),
             exitCode: null,
             stderr: "",
             tried: [],
@@ -296,6 +278,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
               stopped: true,
               partial: true,
               unreadable: null,
+              lost: null,
             },
           }
         : was

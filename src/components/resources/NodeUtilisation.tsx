@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type { DeclaredPoint, UsageRange } from "@/integrations";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
   nodeTrends,
@@ -22,7 +22,7 @@ import {
 } from "@/lib/node-trends";
 import { nodePlacement } from "@/lib/node-pool";
 import { ResourceType } from "@/lib/resource-registry";
-import { agoOf } from "@/lib/usage-history";
+import { formatSince } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { NodeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -154,7 +154,7 @@ export function NodeUtilisation({
         <p className="px-1 pb-2 text-[11px] text-warn" role="status">
           {t("empty", "vendorDidNotAnswer", {
             vendor: power.state === "ready" ? power.vendor : "",
-            reason: normalizeTauriError(query.error),
+            reason: errorToShow(query.error),
           })}
         </p>
       )}
@@ -225,7 +225,7 @@ function Row({
               ? t("empty", "nodeNoAllocatable")
               : trend.newestAgoMs !== null
                 ? t("empty", "nodeNoSamplesYet", {
-                    age: agoOf(now - trend.newestAgoMs, now),
+                    age: formatSince(now - trend.newestAgoMs, now),
                     range,
                   })
                 : // Only where the staleness probe itself answered: a failed

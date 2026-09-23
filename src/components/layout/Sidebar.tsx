@@ -17,11 +17,12 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
-import { useCrdReadDenied, useListAccess } from "@/hooks/useListAccess";
+import { useListAccess } from "@/hooks/useListAccess";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import {
+  backingFrom,
   ROUTING_STALE,
   useBackingLists,
   useIntegrationPages,
@@ -40,10 +41,16 @@ import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
+import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { inScope, listAcrossScope, scopeCacheKey } from "@/lib/namespace-scope";
+import {
+  inScope,
+  joinScoped,
+  scopeCacheKey,
+  wireScope,
+} from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
@@ -285,17 +292,12 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
     ...(routeKinds as ResourceKind[]),
   ]);
-  // These pages resolve each kind's CRD first — a cluster-scoped get on
-  // `customresourcedefinitions` — so a token refused that cannot open them at
-  // all, whatever its rights on the routes themselves. The list reviews above
-  // cannot see this: a token may list a route kind (or even list CRDs) and
-  // still be refused the get. A mark, never a lock — the row stays a link.
-  const crdDenied = useCrdReadDenied();
-  const gatewaysDenied = crdDenied || access[ResourceType.Gateway] === false;
+  // These pages find each kind through discovery, which every signed-in
+  // reader may read, so the list reviews are the whole question.
+  const gatewaysDenied = access[ResourceType.Gateway] === false;
   const routesDenied =
-    crdDenied ||
-    (routeKinds.length > 0 &&
-      routeKinds.every((kind) => access[kind as ResourceKind] === false));
+    routeKinds.length > 0 &&
+    routeKinds.every((kind) => access[kind as ResourceKind] === false);
 
   const cacheKey = scopeCacheKey(scope);
 
@@ -306,14 +308,14 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // token is refused them — the board reads that absence as `topologyKnown:
   // false` and asserts nothing, rather than a red dot for what it cannot see.
   const gatewaysAll = useLiveQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && served.has("Gateway") && !gatewaysDenied,
   });
   const classes = useLiveQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     refresh: "overview",
@@ -322,27 +324,33 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // The rail's own count follows the window's namespaces, like every other
   // row — read per namespace so a token with rights in some and not the whole
   // cluster still gets a number instead of a blank (the routes page reads the
-  // same way). A whole-cluster window is one call.
+  // same way). A whole-cluster window is one call per kind.
   const routes = useLiveQuery({
-    queryKey: ["gateway-rail-routes", cacheKey, ...routeKinds],
-    queryFn: listAcrossScope(scope, async (ns) => {
+    queryKey: [
+      "gateway-rail-routes",
+      cacheKey ?? EVERY_NAMESPACE,
+      ...routeKinds,
+    ],
+    queryFn: async () => {
       // Each served kind on its own: a token may list HTTPRoutes and not
-      // TCPRoutes, and one refused kind must not blank the whole count — the
-      // routes page reads each kind as its own query for the same reason. A
-      // kind that answered contributes its rows; only when every kind was
-      // refused is the refusal the answer, thrown for `listAcrossScope`.
+      // TCPRoutes, and the rows of the kinds that answered still feed the
+      // mark. A refused kind is not a kind with no routes, though, so the
+      // count stays blank beside one, as it does beside an unread namespace
+      // and as the routes page does. Every kind refused is the refusal.
       const settled = await Promise.allSettled(
-        routeKinds.map((kind) => commands.listGatewayRoutes(kind, ns))
+        routeKinds.map((kind) =>
+          commands.listGatewayRoutesIn(kind, wireScope(scope))
+        )
       );
-      const rows = settled.flatMap((r) =>
-        r.status === "fulfilled" ? r.value : []
+      const answered = settled.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : []
       );
       const refused = settled.find((r) => r.status === "rejected");
-      if (refused && settled.every((r) => r.status === "rejected")) {
+      if (refused && answered.length === 0) {
         throw (refused as PromiseRejectedResult).reason;
       }
-      return rows;
-    }),
+      return { ...joinScoped(answered), complete: refused === undefined };
+    },
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled: installed && routeKinds.length > 0 && !routesDenied,
@@ -351,8 +359,8 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // stays the verdict source; on a whole-cluster window it already is this
   // list, so this second read only runs once a namespace is selected.
   const gatewaysScoped = useLiveQuery({
-    queryKey: ["gateway-rail-gateways", cacheKey],
-    queryFn: listAcrossScope(scope, (ns) => commands.listGateways(ns)),
+    queryKey: ["gateway-rail-gateways", cacheKey ?? EVERY_NAMESPACE],
+    queryFn: () => commands.listGatewaysIn(wireScope(scope)),
     staleTime: ROUTING_STALE,
     refresh: "overview",
     enabled:
@@ -370,15 +378,16 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
   // (above): a route can attach to a Gateway in a namespace the window is not
   // on, and a verdict computed without it is wrong.
   const scopedRoutes = useMemo(
-    () => (routes.data ?? []).filter((r) => inScope(scope, r.namespace)),
+    () => (routes.data?.rows ?? []).filter((r) => inScope(scope, r.namespace)),
     [routes.data, scope]
   );
   // The count follows the scope; on a whole-cluster window the verdict read
   // already is that list, so reuse it and skip the second fetch.
-  const gatewayCount = scope.length === 0 ? gatewaysAll : gatewaysScoped;
+  const counted =
+    scope.length === 0 ? gatewaysAll.data : gatewaysScoped.data?.rows;
   const scopedGateways = useMemo(
-    () => (gatewayCount.data ?? []).filter((g) => inScope(scope, g.namespace)),
-    [gatewayCount.data, scope]
+    () => (counted ?? []).filter((g) => inScope(scope, g.namespace)),
+    [counted, scope]
   );
   const board = useMemo(
     () =>
@@ -395,11 +404,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
           // empty class list reads "class does not exist", which would
           // put a red dot on a healthy cluster for one render.
           topologyKnown: gatewaysAll.data !== undefined && classesSettled,
-          backing: {
-            services: backing.data?.services ?? [],
-            published: backing.data?.published ?? [],
-            backingKnown: backing.data !== undefined,
-          },
+          backing: backingFrom(backing.data, backing.error),
         },
         t
       ),
@@ -408,6 +413,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       gatewaysAll.data,
       classes.data,
       backing.data,
+      backing.error,
       classesSettled,
       t,
     ]
@@ -423,7 +429,13 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={resource(ResourceType.Gateway)}
           overview={overview}
-          value={gatewayCount.data ? scopedGateways.length : null}
+          // No number where a namespace was not read: it would not be the
+          // scope's total.
+          value={
+            counted && !gatewaysScoped.data?.unread.length
+              ? scopedGateways.length
+              : null
+          }
           mark={gatewaysMark(
             scopedGateways,
             scopedPulse,
@@ -436,7 +448,11 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
         <NavRow
           item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
           overview={overview}
-          value={routes.data ? scopedRoutes.length : null}
+          value={
+            routes.data?.complete && routes.data.unread.length === 0
+              ? scopedRoutes.length
+              : null
+          }
           mark={boardMark(board)}
           denied={routesDenied}
         />

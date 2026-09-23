@@ -1,21 +1,34 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
-import type { MetricsStatus } from "@/generated/types";
+import type { MetricsStatus, UnreadNamespace } from "@/generated/types";
 import { AlertTriangle, ShieldAlert, Wrench } from "lucide-react";
 
 interface MetricsStatusBannerProps {
   status?: MetricsStatus | null;
+  /** Namespaces of a selection whose samples were not read while others were. */
+  unread?: readonly UnreadNamespace[];
+  onRetry?: () => void;
   className?: string;
 }
 
 export function MetricsStatusBanner({
   status,
+  unread,
+  onRetry,
   className,
 }: MetricsStatusBannerProps) {
   const t = useT();
-  if (!status || status.status === "available") {
-    return null;
+  if (!status) return null;
+  if (status.status === "available") {
+    return unread?.length ? (
+      <UnreadNamespaces
+        unread={unread}
+        label={t("cluster", "podMetricsLabel")}
+        onRetry={onRetry}
+      />
+    ) : null;
   }
 
   const details = status.message?.trim();

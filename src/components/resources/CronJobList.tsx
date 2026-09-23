@@ -74,15 +74,9 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
 export const CronJobList = createWorkloadListPage<CronJobInfo>({
   resourceType: ResourceType.CronJob,
   title: "CronJobs",
-  fetchList: ({ namespace }) =>
-    commands.listCronjobs({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetchList: ({ scope }) => commands.listCronjobsIn(scope),
   matchPods: matchCronJobPods,
-  watch: ({ namespace }) => commands.subscribeCronjobWatch(namespace),
+  watch: ({ scope }) => commands.subscribeCronjobWatch(scope),
   deleter: (item) => commands.deleteCronjob(item.name, item.namespace),
   columns,
 });

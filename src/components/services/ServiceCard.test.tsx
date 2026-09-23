@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
@@ -6,29 +6,32 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ChainPath } from "@/lib/connections";
 
 const chain = vi.hoisted(() => ({ paths: [] as ChainPath[] }));
+const read = vi.hoisted(() => ({ error: null as unknown }));
 
 vi.mock("@/hooks/useConnections", () => ({
   useConnections: () => ({
-    data: {
-      subject: {
-        kind: "Deployment",
-        name: "payments",
-        namespace: "shop",
-        existence: "present",
-        facts: {
-          kind: "workload",
-          replicas: 1,
-          readyReplicas: 1,
-          revision: null,
-          current: null,
+    data: read.error
+      ? undefined
+      : {
+          subject: {
+            kind: "Deployment",
+            name: "payments",
+            namespace: "shop",
+            existence: "present",
+            facts: {
+              kind: "workload",
+              replicas: 1,
+              readyReplicas: 1,
+              revision: null,
+              current: null,
+            },
+          },
+          edges: [],
+          published: [],
+          stops: [],
+          notLookedAt: [],
         },
-      },
-      edges: [],
-      published: [],
-      stops: [],
-      notLookedAt: [],
-    },
-    error: null,
+    error: read.error,
     isPending: false,
   }),
 }));
@@ -56,6 +59,29 @@ const mount = () =>
       </TooltipProvider>
     </MemoryRouter>
   );
+
+beforeEach(() => {
+  read.error = null;
+});
+
+describe("what a card says about its state", () => {
+  /**
+   * The card handed the state only the message, and the code the backend
+   * sent with it was lost on the way: a deleted Deployment read as "could
+   * not read" rather than as gone.
+   */
+  it("says a pinned workload the cluster no longer has is gone", () => {
+    const said = "Resource not found: Deployment/payments in namespace shop";
+    read.error = new Error(
+      `Tauri command 'getResourceConnections' failed: ${said}`,
+      { cause: { code: "NOT_FOUND", message: said } }
+    );
+
+    mount();
+
+    expect(screen.getByText(/does not exist|не существует/i)).toBeVisible();
+  });
+});
 
 describe("what a card says about a way in", () => {
   /**
@@ -122,6 +148,7 @@ describe("what a card says about a way in", () => {
               endpoints: [],
               whole: true,
               unpublished: [],
+              stop: null,
             },
             first: null,
             address: null,

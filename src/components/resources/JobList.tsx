@@ -42,15 +42,9 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
 export const JobList = createWorkloadListPage<JobInfo>({
   resourceType: ResourceType.Job,
   title: "Jobs",
-  fetchList: ({ namespace }) =>
-    commands.listJobs({
-      namespace,
-      labelSelector: null,
-      fieldSelector: null,
-      limit: null,
-    }),
+  fetchList: ({ scope }) => commands.listJobsIn(scope),
   matchPods: matchJobPods,
-  watch: ({ namespace }) => commands.subscribeJobWatch(namespace),
+  watch: ({ scope }) => commands.subscribeJobWatch(scope),
   deleter: (item) => commands.deleteJob(item.name, item.namespace),
   columns,
 });

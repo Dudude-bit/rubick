@@ -10,6 +10,8 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type { PeekTarget } from "@/hooks/usePeek";
@@ -137,7 +139,7 @@ function TabError({
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">{what}</p>
       <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
-        {error.message}
+        {errorToShow(error)}
       </p>
       <div className="mt-2">
         <DetailAction
@@ -308,7 +310,9 @@ function PeekDataTab({
     // keys the backend refuses to hand over, and the ones that are not text
     // — so the peek panel draws a Secret and a ConfigMap the same way
     // without normalising anything on the way in.
-    queryKey: ["peek-data", kind, namespace, target.name],
+    queryKey: isSecret
+      ? queryKeys.secretData(namespace, target.name)
+      : queryKeys.configMapData(namespace, target.name),
     queryFn: (): Promise<ConfigData> =>
       isSecret
         ? commands.getSecretData(target.name, namespace)
@@ -412,7 +416,12 @@ function PeekPodsTab({
       : undefined;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
-    queryKey: ["peek-pods", kind, namespace, target.name, selector],
+    queryKey: queryKeys.ownedPods(
+      kind ?? target.kind,
+      namespace,
+      target.name,
+      selector
+    ),
     queryFn: () => fetchOwnedPods(target, namespace!, detail),
     // A DaemonSet's selector arrives with the Overview fetch; asking before
     // it lands would list the whole namespace.
@@ -570,13 +579,13 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   const namespace = target.namespace ?? null;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
-    queryKey: [
-      "peek-yaml",
-      target.crd ?? null,
-      target.kind,
-      namespace,
-      target.name,
-    ],
+    queryKey: target.crd
+      ? queryKeys.customResourceYaml(target.crd, namespace, target.name)
+      : queryKeys.manifest(
+          toKind(target.kind) ?? target.kind,
+          namespace,
+          target.name
+        ),
     queryFn: () =>
       // `fetchResourceYaml` resolves the apiVersion from the registry, which
       // has never heard of this kind and answers `v1` — so a custom resource

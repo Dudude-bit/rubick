@@ -1,16 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-function sources(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) sources(path, out);
-    else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name))
-      out.push(path);
-  }
-  return out;
-}
+import { CODE_FILES } from "@/test/source-files";
 
 /** Every class literal written in a className attribute, `cn()` included. */
 function classesIn(attrs: string): string {
@@ -56,7 +47,7 @@ describe("ScrollArea", () => {
    */
   it("is never given its height by a flex parent", () => {
     const wrong: string[] = [];
-    for (const path of sources("src")) {
+    for (const path of CODE_FILES) {
       const text = readFileSync(path, "utf8");
       for (const m of text.matchAll(/<ScrollArea\b([^>]*)>/gs)) {
         const classes = classesIn(m[1]);
@@ -98,7 +89,7 @@ describe("ScrollArea", () => {
 
   /** A guard that reads nothing passes forever. */
   it("reads the files it is meant to be checking", () => {
-    const all = sources("src").filter((path) =>
+    const all = CODE_FILES.filter((path) =>
       /<ScrollArea\b/.test(readFileSync(path, "utf8"))
     );
     expect(all.length).toBeGreaterThan(0);

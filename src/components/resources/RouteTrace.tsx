@@ -16,10 +16,12 @@ import {
 } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { ROUTING_STALE, useBackingLists } from "@/integrations";
+import { backingFrom, ROUTING_STALE, useBackingLists } from "@/integrations";
 import {
   routeTraces,
   probedReachable,
@@ -396,7 +398,7 @@ function ProbePanel({
         resolvedFirst = result.resolved[0];
         setDns({ status: "finished", result });
       } catch (error) {
-        setDns({ status: "error", message: String(error) });
+        setDns({ status: "error", message: errorToShow(error) });
       }
     }
     if (udp) return;
@@ -414,7 +416,7 @@ function ProbePanel({
       const result = await commands.probeTcpConnect(connectTo, port ?? 80);
       setTcp({ status: "finished", result });
     } catch (error) {
-      setTcp({ status: "error", message: String(error) });
+      setTcp({ status: "error", message: errorToShow(error) });
     }
   };
 
@@ -741,13 +743,13 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   // namespaces, and the class claim is cluster-scoped. Same key as the
   // routes list's map, so table → detail reuses one cache entry.
   const gateways = useQuery({
-    queryKey: ["gateway-map-gateways"],
+    queryKey: queryKeys.gateways(),
     queryFn: () => commands.listGateways(null),
     staleTime: ROUTING_STALE,
     enabled: served.has("Gateway"),
   });
   const classes = useQuery({
-    queryKey: ["gateway-classes"],
+    queryKey: queryKeys.gatewayClasses(),
     queryFn: commands.listGatewayClasses,
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
@@ -757,7 +759,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
   // GEP-713 reverse lookup: the policy names the Service, never the other
   // way round, so the trace scans the namespace's policies once.
   const policiesQuery = useQuery({
-    queryKey: ["backend-tls-policies", route.namespace],
+    queryKey: queryKeys.backendTlsPolicies(route.namespace),
     queryFn: () => commands.listBackendTlsPolicies(route.namespace),
     staleTime: ROUTING_STALE,
     enabled: served.has("BackendTLSPolicy"),
@@ -774,15 +776,11 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
           topologyKnown:
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
-          backing: {
-            services: backing.data?.services ?? [],
-            published: backing.data?.published ?? [],
-            backingKnown: backing.data !== undefined,
-          },
+          backing: backingFrom(backing.data, backing.error),
         },
         t
       ),
-    [route, gateways.data, classes.data, backing.data, served, t]
+    [route, gateways.data, classes.data, backing.data, backing.error, served, t]
   );
 
   // A ListenerSet parent is a gateway attachment that went the long way;

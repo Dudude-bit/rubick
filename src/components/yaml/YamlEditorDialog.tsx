@@ -39,16 +39,16 @@ import { useToast } from "@/components/ui/use-toast";
 import { Spinner } from "@/components/ui/spinner";
 import { ActionWarnings } from "@/components/resources/action-warnings";
 import { DeliveryMarks } from "@/components/resources/delivery";
-import { DetailAction } from "@/components/resources/detail-blocks";
 import { useConnections } from "@/hooks/useConnections";
 import { useDelivery } from "@/hooks/useDelivery";
-import { deliveryApplyIntercept, deliveryOfManifest } from "@/lib/delivery";
-import { applyWarnings, changesReplicaCount } from "@/lib/governance";
+import { deliveryApplyIntercept } from "@/lib/delivery";
+import { applyWarnings } from "@/lib/governance";
+import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
+import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useAsk } from "@/hooks/useAsk";
 import { askableKind } from "@/lib/tell-me-when";
-import { AlertTriangle, Play, FileCheck, FileJson } from "lucide-react";
+import { AlertTriangle, Play, FileCheck } from "lucide-react";
 import { errorToShow } from "@/lib/error-utils";
 
 import { YamlEditor } from "./YamlEditor";
@@ -58,60 +58,6 @@ import { YamlResultDisplay } from "./YamlResultDisplay";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
-interface YamlEditorActionProps {
-  title: string;
-  resourceKey: ResourceKey;
-  fetchYaml: () => Promise<string>;
-  menuLabel?: string;
-  readOnly?: boolean;
-  className?: string;
-}
-
-/** Open it, and say why if it will not open. Shared by both affordances. */
-function useOpenEditor({
-  title,
-  resourceKey,
-  fetchYaml,
-  readOnly = false,
-}: YamlEditorActionProps) {
-  const t = useT();
-  const { toast } = useToast();
-  const openEditor = useYamlEditorStore((state) => state.openEditor);
-
-  return async () => {
-    try {
-      await openEditor({ title, resourceKey, fetchYaml, readOnly });
-    } catch (error) {
-      toast({
-        title: t("empty", "couldNotReadManifest"),
-        description: errorToShow(error),
-        variant: "destructive",
-      });
-    }
-  };
-}
-
-const editorLabel = (
-  t: ReturnType<typeof useT>,
-  { menuLabel, readOnly }: YamlEditorActionProps
-) => menuLabel ?? t("action", readOnly ? "viewYaml" : "editYaml");
-
-// Button-based action for use in headers/toolbars
-export function YamlEditorAction(props: YamlEditorActionProps) {
-  const t = useT();
-  const open = useOpenEditor(props);
-  return (
-    <DetailAction
-      label={editorLabel(t, props)}
-      icon={FileJson}
-      onClick={open}
-      className={props.className}
-    />
-  );
-}
-
-// DropdownMenuItem-based action for use in action menus
-// Main Dialog Component
 export function YamlEditorDialog() {
   const asking = useAsk();
   const t = useT();
@@ -350,10 +296,12 @@ export function YamlEditorDialog() {
   ]);
 
   const handleFormat = useCallback(() => {
-    formatYaml();
-    toast({
-      title: t("action", "formatted"),
-      description: t("action", "yamlFormatted"),
+    void formatYaml().then((formatted) => {
+      if (!formatted) return;
+      toast({
+        title: t("action", "formatted"),
+        description: t("action", "yamlFormatted"),
+      });
     });
   }, [formatYaml, toast, t]);
 

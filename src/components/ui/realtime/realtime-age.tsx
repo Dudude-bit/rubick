@@ -1,8 +1,8 @@
 /**
  * RealtimeAge Component
  *
- * Displays an auto-updating age value with adaptive refresh intervals.
- * Uses the global tick store for efficient batched updates.
+ * Displays an auto-updating age value with adaptive refresh intervals, on
+ * the shared clocks in `useNow`.
  *
  * @module components/ui/realtime/realtime-age
  */
