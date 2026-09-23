@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/copyable-value";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
-import { failingCondition } from "@/lib/condition-health";
+import { cautioningCondition, failingCondition } from "@/lib/condition-health";
 import { verdictOf, type Verdict } from "@/lib/route-verdict";
 import {
   redirectOnly,
@@ -198,6 +198,9 @@ export const GATEWAY_SOURCES: PeekSources = {
             // By each condition's own polarity: `Conflicted=False` is the
             // healthy answer.
             const broken = failingCondition(listener.conditions);
+            const caution = broken
+              ? null
+              : cautioningCondition(listener.conditions);
             const address = gateway.addresses[0];
             return {
               label: listener.name,
@@ -234,9 +237,18 @@ export const GATEWAY_SOURCES: PeekSources = {
                       — {broken.reason ?? t("empty", "brokenWord")}
                     </span>
                   )}
+                  {caution && (
+                    <span className="text-warn">
+                      — {caution.reason ?? caution.type}
+                    </span>
+                  )}
                 </span>
               ),
-              tone: broken ? ("err" as const) : undefined,
+              tone: broken
+                ? ("err" as const)
+                : caution
+                  ? ("warn" as const)
+                  : undefined,
             };
           }),
           emptyMessage: t("empty", "gwNoListeners"),
