@@ -5667,8 +5667,7 @@ export const ru: Catalogue = {
       "Строки удалены вокруг замороженного интервала, поэтому рядом с ним у полосы разрыв.",
     repeatsOnNote:
       "Включены «Повторы»: строка, повторяющая предыдущую, сворачивается в неё.",
-    nothingHasMatched: "Ничего не совпало с",
-    forSpan: "уже {span}.",
+    nothingMatchedFor: "Ничего не совпало с {terms} уже {span}.",
     intakeNarrowNote:
       "Поток подключён и читает — это узкий фильтр приёма, а не остановка лога.",
     openedOn: "Открыт только контейнер",
@@ -6032,6 +6031,12 @@ export const ru: Catalogue = {
     claimedBy: "заявлен {name}",
     refusedBy: "отвергнут {name}",
     noControllerClaimed: "ни один контроллер не заявил этот класс",
+    meshGamma: "меш (GAMMA)",
+    backendWeight: "вес {n}",
+    workerRole: "рабочий",
+    storedVersion: "{version} (хранимая)",
+    couldNotAskRoutes:
+      "Не удалось спросить интеграции, какие их маршруты ведут к этим Service, так что ниже может не хватать входа.",
     nonePublished: "не опубликованы",
     mixedCrdBundle:
       "версии смешаны — частичный апгрейд оставил CRD Gateway API из разных релизов",

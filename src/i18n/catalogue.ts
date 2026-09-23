@@ -5242,8 +5242,7 @@ export const en = {
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
-    nothingHasMatched: "Nothing has matched",
-    forSpan: "for {span}.",
+    nothingMatchedFor: "Nothing has matched {terms} for {span}.",
     intakeNarrowNote:
       "The stream is attached and reading — this is intake being narrow, not the log stopping.",
     openedOn: "Opened on",
@@ -5603,6 +5602,12 @@ export const en = {
     claimedBy: "claimed by {name}",
     refusedBy: "refused by {name}",
     noControllerClaimed: "no controller has claimed this class",
+    meshGamma: "mesh (GAMMA)",
+    backendWeight: "weight {n}",
+    workerRole: "worker",
+    storedVersion: "{version} (stored)",
+    couldNotAskRoutes:
+      "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
     nonePublished: "none published",
     mixedCrdBundle:
       "mixed versions — a partial upgrade left Gateway API CRDs from different releases",

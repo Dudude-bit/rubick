@@ -76,6 +76,8 @@ export interface ServicesRoutes {
   /** By `namespace/name`. A Service nothing routes is simply absent. */
   routes: Map<string, ServiceRoute[]>;
   isPending: boolean;
+  /** The first supplier that did not answer — see {@link ServiceRoutes.error}. */
+  error: Error | null;
 }
 
 /**
@@ -122,6 +124,7 @@ export function useServicesRoutes(
     available: enabled,
     routes,
     isPending: enabled && queries.some((query) => query.isPending),
+    error: (queries.find((query) => query.error)?.error as Error) ?? null,
   };
 }
 

@@ -51,8 +51,8 @@ function gatewayRouteSource(kind: string): PeekSource {
                 value: (
                   <CopyableAddresses
                     values={route.hostnames}
-                    label="Hostname"
-                    empty="all hosts the listener serves"
+                    label={t("columns", "hostname")}
+                    empty={t("empty", "gwAllHostsListenerServes")}
                   />
                 ),
               },
@@ -86,7 +86,9 @@ function gatewayRouteSource(kind: string): PeekSource {
                       parent.name,
                       parent.namespace ?? route.namespace
                     )}
-                    <span className="text-fg-fnt">— mesh (GAMMA)</span>
+                    <span className="text-fg-fnt">
+                      — {t("empty", "meshGamma")}
+                    </span>
                   </span>
                 ),
             })),
@@ -114,7 +116,8 @@ function gatewayRouteSource(kind: string): PeekSource {
                         )}
                         {backend.weight != null && (
                           <span className="text-fg-fnt">
-                            · weight {backend.weight}
+                            ·{" "}
+                            {t("empty", "backendWeight", { n: backend.weight })}
                           </span>
                         )}
                       </span>
@@ -167,8 +170,8 @@ export const GATEWAY_SOURCES: PeekSources = {
               value: (
                 <CopyableAddresses
                   values={gateway.addresses}
-                  label="Gateway address"
-                  empty="none published"
+                  label={t("columns", "gatewayAddress")}
+                  empty={t("empty", "nonePublished")}
                 />
               ),
             },
@@ -246,15 +249,19 @@ export const GATEWAY_SOURCES: PeekSources = {
         {
           title: "GatewayClass",
           items: [
-            { label: "Controller", value: cls.controllerName, mono: true },
+            {
+              label: t("columns", "controller"),
+              value: cls.controllerName,
+              mono: true,
+            },
             {
               label: t("columns", "claim"),
               value:
                 cls.accepted === true
-                  ? `claimed by ${cls.controllerName}`
+                  ? t("empty", "claimedBy", { name: cls.controllerName })
                   : cls.accepted === false
-                    ? `refused by ${cls.controllerName}`
-                    : "no controller has answered — everything through this class is dead",
+                    ? t("empty", "refusedBy", { name: cls.controllerName })
+                    : t("empty", "gwClassNoAnswer"),
               tone:
                 cls.accepted === true
                   ? undefined
