@@ -157,8 +157,9 @@ impl TerminalManager {
             // safety timeout prevents a wedged session if the frontend
             // never calls `terminal_subscribed` (e.g. browser crash).
             let gate = tokio::select! {
-                _ = subscribe_rx => Gate::Released,
+                biased;
                 _ = &mut cancel_rx => Gate::Cancelled,
+                _ = subscribe_rx => Gate::Released,
                 () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => {
                     tracing::warn!(
                         "Terminal session {} subscribe gate timed out after {}s",

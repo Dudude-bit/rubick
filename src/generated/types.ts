@@ -2062,7 +2062,7 @@ export type AppEvent =
   | {
       channel: "files-done";
       stream_id: string;
-      with: ListedWith;
+      with: ListedWith | null;
       entries: number;
       partial: boolean;
       unreadable: number;

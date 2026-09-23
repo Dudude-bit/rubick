@@ -1,6 +1,6 @@
 //! Pod-specific commands
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
@@ -12,13 +12,13 @@ use crate::commands::helpers::{get_resource_info, ResourceContext};
 use crate::error::Result;
 use crate::resources::{PodInfo, PodRow};
 use crate::state::perf::{chunks_within, IPC_TARGET_BYTES};
-use crate::state::{AppEvent, AppState, ListStream, RemoveOnDrop};
+use crate::state::streams::SUBSCRIBE_TIMEOUT;
+use crate::state::{AppEvent, AppState};
 use crate::utils::{elapsed_ms, generate_id, normalize_optional_namespace};
 
 /// Rows per API page: one round trip's worth, converted and sent on before
 /// the next is asked for, so the first rows land before the last are read.
 const PAGE: u32 = 500;
-const SUBSCRIBE_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// List pods, narrowed by the terms `PodFilters` names.
 #[tauri::command]
@@ -125,31 +125,12 @@ pub async fn list_pod_rows(
     let clients = state.client_manager.clone();
 
     let stream_id = generate_id("pods");
-    let (cancel_tx, mut cancel_rx) = oneshot::channel();
-    let (subscribe_tx, subscribe_rx) = oneshot::channel::<()>();
-    let streams = state.list_streams.clone();
-    streams.insert(
-        stream_id.clone(),
-        ListStream {
-            cancel_tx,
-            subscribe_tx: Some(subscribe_tx),
-        },
-    );
+    let mut opened = state.pod_row_streams.open(stream_id.clone());
     let event_tx = state.event_tx.clone();
 
     let id = stream_id.clone();
     tokio::spawn(async move {
-        let _cleanup = RemoveOnDrop {
-            map: streams,
-            key: id.clone(),
-        };
-        let started = tokio::select! {
-            biased;
-            _ = &mut cancel_rx => false,
-            subscribed = subscribe_rx => subscribed.is_ok(),
-            () = tokio::time::sleep(SUBSCRIBE_TIMEOUT) => true,
-        };
-        if !started {
+        if !opened.wait_for_subscriber(SUBSCRIBE_TIMEOUT).await {
             // A terminal event on every path, including this one. Tauri
             // events have no replay, and a reader that installed its
             // listeners and was then cancelled would otherwise wait on a
@@ -162,6 +143,7 @@ pub async fn list_pod_rows(
             });
             return;
         }
+        let (mut cancel_rx, _held) = opened.split();
         // After the gate, not before it. The task can sit here for a minute
         // waiting to be subscribed, and CLAUDE.md states the rule: a held
         // `kube::Client` carries a token that expires. Taken per run, so a
@@ -220,20 +202,14 @@ pub async fn list_pod_rows(
 /// The frontend's listeners are up; let the rows flow.
 #[tauri::command]
 pub fn pod_rows_subscribed(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some(mut entry) = state.list_streams.get_mut(&stream_id) {
-        if let Some(tx) = entry.subscribe_tx.take() {
-            let _ = tx.send(());
-        }
-    }
+    let _ = state.pod_row_streams.subscribed(&stream_id);
     Ok(())
 }
 
 /// Stop a list that is still arriving.
 #[tauri::command]
 pub fn stop_pod_rows(stream_id: String, state: State<'_, AppState>) -> Result<()> {
-    if let Some((_, stream)) = state.list_streams.remove(&stream_id) {
-        let _ = stream.cancel_tx.send(());
-    }
+    let _ = state.pod_row_streams.stop(&stream_id);
     Ok(())
 }
 

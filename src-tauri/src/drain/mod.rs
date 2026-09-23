@@ -404,8 +404,9 @@ impl DrainManager {
             };
             let mut cancel_rx = cancel_rx;
 
+            // Cancel first, as every stream's gate checks it.
             tokio::select! {
-                _ = subscribe_rx => {}
+                biased;
                 // Not a bare `return`. Every drain owes exactly one terminal
                 // event: a caller that pressed Stop while the gate was still
                 // held would otherwise wait on an answer that never comes,
@@ -428,6 +429,7 @@ impl DrainManager {
                     );
                     return;
                 }
+                _ = subscribe_rx => {}
                 () = tokio::time::sleep(SUBSCRIBE_GATE_TIMEOUT) => {
                     tracing::warn!("Drain {id} subscribe gate timed out; going ahead anyway");
                 }
