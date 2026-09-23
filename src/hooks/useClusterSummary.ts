@@ -37,11 +37,13 @@ export interface ClusterSummary {
  * empty. The query key matches the overview page's key when the window
  * is already on "all namespaces", so the common case costs one request.
  */
+const WHOLE_CLUSTER: readonly string[] = [];
+
 export function useClusterSummary(): ClusterSummary {
   const isConnected = useClusterStore((s) => s.isConnected);
 
   const { data: overview, isLoading: overviewLoading } =
-    useClusterOverview(null);
+    useClusterOverview(WHOLE_CLUSTER);
 
   const { data: namespaceInfos, isLoading: namespacesLoading } = useQuery({
     queryKey: queryKeys.namespaces(),

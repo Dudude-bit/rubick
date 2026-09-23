@@ -11,19 +11,19 @@
 //! the transfer and the main thread, and the reduction has to re-run on
 //! every watch event.
 
-use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
 use chrono::{DateTime, Utc};
+use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Node, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
-use kube::Api;
+use kube::{Api, Client};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -62,9 +62,7 @@ const PENDING_GRACE_SECONDS: i64 = 60;
 
 /// Cap on the problems list. A node outage produces one row per pod on it,
 /// and neither the IPC payload nor the two-second re-render survives that.
-///
-/// The frontend caps its own merge at the same number; the two are held
-/// equal by `shared/overview-limits.json` rather than by memory.
+/// Applied once to the whole scope, however many namespaces it adds up.
 const MAX_PROBLEMS: usize = 50;
 
 /// Restart count above which a pod is called out even while it is Running.
@@ -979,15 +977,19 @@ struct OverviewInputs<'a> {
     /// False when the node list (or the cluster-wide accounting pods) was
     /// refused: the capacity view is unknown, not empty.
     nodes_known: bool,
-    /// `None` when the Deployment list was refused: the problems it feeds are
-    /// one section of the screen, not the screen.
-    deployments: Option<&'a [Arc<Deployment>]>,
+    /// Every Deployment the scope handed over. Their problems stand whether
+    /// or not another namespace refused its list; the count does not.
+    deployments: &'a [Arc<Deployment>],
+    /// False when a namespace in scope refused its Deployment list.
+    deployments_known: bool,
+    /// `None` when a namespace in scope refused its Job list.
     jobs: Option<&'a [Arc<Job>]>,
     events: &'a [Arc<Event>],
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
     /// Counts for the kinds this query does not otherwise need to read.
     counts: ResourceCounts,
-    namespace: Option<&'a str>,
+    /// The namespaces asked about, or `None` for the whole cluster.
+    scope: Option<&'a [String]>,
     now: DateTime<Utc>,
     served_from: OverviewSource,
 }
@@ -1011,13 +1013,11 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     );
 
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
-    problems.extend(deployment_problems(refs(
-        input.deployments.unwrap_or_default(),
-    )));
+    problems.extend(deployment_problems(refs(input.deployments)));
     problems.extend(node_problems(refs(nodes)));
-    // Scoped, the breakdown is one row restating the selection, under a
-    // heading that counts namespaces in the cluster. Drop it instead.
-    let namespaces = match input.namespace {
+    // Scoped, the breakdown restates the selection, under a heading that
+    // counts namespaces in the cluster. Drop it instead.
+    let namespaces = match input.scope {
         Some(_) => Vec::new(),
         None => namespace_loads(refs(input.scoped_pods), &problems),
     };
@@ -1028,7 +1028,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     // not `Some(0)` — the same distinction the other counts make.
     let counts = ResourceCounts {
         pods: Some(input.scoped_pods.len()),
-        deployments: input.deployments.map(<[Arc<Deployment>]>::len),
+        deployments: input.deployments_known.then_some(input.deployments.len()),
         jobs: input.jobs.map(<[Arc<Job>]>::len),
         nodes: input.nodes_known.then_some(input.nodes.len()),
         ..input.counts.clone()
@@ -1051,12 +1051,57 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
 }
 
 /// Get everything the overview screen needs in one round trip.
+///
+/// `scope` is the namespaces to answer for, added up into one overview, or
+/// `None` for the whole cluster. An empty list is refused rather than read as
+/// "every namespace": a caller that lost its selection would otherwise be
+/// handed the whole cluster's numbers under a label naming none of it.
 #[tauri::command]
 pub async fn get_cluster_overview(
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<ClusterOverview> {
-    Box::pin(cluster_overview(&state, namespace)).await
+    Box::pin(cluster_overview(&state, scope)).await
+}
+
+/// `scope` checked, sorted and without repeats. The answer is about a set of
+/// namespaces, so two spellings of one set read, rank and tie alike.
+fn scope_of(scope: Option<Vec<String>>) -> Result<Option<Vec<String>>> {
+    let Some(mut names) = scope else {
+        return Ok(None);
+    };
+    if names.is_empty() {
+        return Err(Error::InvalidInput(
+            "An overview scope names at least one namespace".to_string(),
+        ));
+    }
+    for name in &names {
+        crate::validation::validate_namespace(name)?;
+    }
+    names.sort();
+    names.dedup();
+    Ok(Some(names))
+}
+
+/// Where the namespaced kinds are read: once across the cluster, or once in
+/// each namespace of the scope. The cluster-scoped reads beside them happen
+/// once whichever it is.
+fn reaches(scope: Option<&[String]>) -> Vec<Option<&str>> {
+    scope.map_or_else(
+        || vec![None],
+        |names| names.iter().map(|name| Some(name.as_str())).collect(),
+    )
+}
+
+fn api_in<K>(client: &Client, reach: Option<&str>) -> Api<K>
+where
+    K: kube::Resource<Scope = k8s_openapi::NamespaceResourceScope>,
+    K::DynamicType: Default,
+{
+    match reach {
+        Some(namespace) => Api::namespaced(client.clone(), namespace),
+        None => Api::all(client.clone()),
+    }
 }
 
 /// The counts and the usage every overview needs beside its lists.
@@ -1065,82 +1110,107 @@ struct Sides {
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
 }
 
-/// Nine bounded metadata pages and one metrics read, started together.
-async fn side_reads(ctx: &ResourceContext, state: &AppState) -> Sides {
-    let stateful_sets_api: Api<StatefulSet> = ctx.namespaced_or_cluster_api();
-    let daemon_sets_api: Api<DaemonSet> = ctx.namespaced_or_cluster_api();
-    let cron_jobs_api: Api<CronJob> = ctx.namespaced_or_cluster_api();
-    let services_api: Api<Service> = ctx.namespaced_or_cluster_api();
-    let ingresses_api: Api<Ingress> = ctx.namespaced_or_cluster_api();
-    let config_maps_api: Api<ConfigMap> = ctx.namespaced_or_cluster_api();
-    let secrets_api: Api<Secret> = ctx.namespaced_or_cluster_api();
-    let events_api: Api<Event> = ctx.namespaced_or_cluster_api();
-    let namespaces_api: Api<Namespace> = ctx.cluster_api();
-    let (
-        metrics,
-        stateful_sets,
-        daemon_sets,
-        cron_jobs,
-        namespaces,
-        services,
-        ingresses,
-        config_maps,
-        secrets,
-        events,
-    ) = tokio::join!(
-        crate::metrics::get_node_metrics(state),
+/// Eight bounded metadata pages, for one namespace or the whole cluster.
+async fn namespaced_counts(client: &Client, reach: Option<&str>) -> ResourceCounts {
+    let stateful_sets_api: Api<StatefulSet> = api_in(client, reach);
+    let daemon_sets_api: Api<DaemonSet> = api_in(client, reach);
+    let cron_jobs_api: Api<CronJob> = api_in(client, reach);
+    let services_api: Api<Service> = api_in(client, reach);
+    let ingresses_api: Api<Ingress> = api_in(client, reach);
+    let config_maps_api: Api<ConfigMap> = api_in(client, reach);
+    let secrets_api: Api<Secret> = api_in(client, reach);
+    let events_api: Api<Event> = api_in(client, reach);
+    let (stateful_sets, daemon_sets, cron_jobs, services, ingresses, config_maps, secrets, events) = tokio::join!(
         count_of(&stateful_sets_api),
         count_of(&daemon_sets_api),
         count_of(&cron_jobs_api),
-        count_of(&namespaces_api),
         count_of(&services_api),
         count_of(&ingresses_api),
         count_of(&config_maps_api),
         count_of(&secrets_api),
         count_of(&events_api),
     );
-    Sides {
-        counts: ResourceCounts {
-            stateful_sets,
-            daemon_sets,
-            cron_jobs,
-            namespaces,
-            services,
-            ingresses,
-            config_maps,
-            secrets,
-            events,
-            ..Default::default()
-        },
-        // Live usage is best-effort: metrics-server is not installed everywhere.
-        usage_by_node: usage_index(metrics.ok()),
+    ResourceCounts {
+        stateful_sets,
+        daemon_sets,
+        cron_jobs,
+        services,
+        ingresses,
+        config_maps,
+        secrets,
+        events,
+        ..Default::default()
     }
 }
 
-/// The overview for `namespace` (`None` is the whole cluster): from the
+/// Several namespaces' counts as one. A count one of them refused stays
+/// `None` in the sum: two answers and a refusal is not a total, and a number
+/// printed from it would state something the reader cannot check.
+fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
+    let sum = |count: fn(&ResourceCounts) -> Option<usize>| {
+        parts
+            .iter()
+            .try_fold(0, |total, part| Some(total + count(part)?))
+    };
+    ResourceCounts {
+        stateful_sets: sum(|c| c.stateful_sets),
+        daemon_sets: sum(|c| c.daemon_sets),
+        cron_jobs: sum(|c| c.cron_jobs),
+        services: sum(|c| c.services),
+        ingresses: sum(|c| c.ingresses),
+        config_maps: sum(|c| c.config_maps),
+        secrets: sum(|c| c.secrets),
+        events: sum(|c| c.events),
+        ..Default::default()
+    }
+}
+
+/// The namespaced counts in every reach, added up, and the namespace count once.
+async fn side_counts(client: &Client, scope: Option<&[String]>) -> ResourceCounts {
+    let namespaces_api: Api<Namespace> = Api::all(client.clone());
+    let (namespaces, parts) = tokio::join!(
+        count_of(&namespaces_api),
+        join_all(
+            reaches(scope)
+                .into_iter()
+                .map(|reach| namespaced_counts(client, reach))
+        ),
+    );
+    ResourceCounts {
+        namespaces,
+        ..add_counts(&parts)
+    }
+}
+
+/// The overview for `scope` (`None` is the whole cluster): from the
 /// watch-fed stores when they are healthy, otherwise by listing.
 pub async fn cluster_overview(
     state: &AppState,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
 ) -> Result<ClusterOverview> {
-    let ctx = ResourceContext::for_list_from_app_state(state, namespace)?;
+    let scope = scope_of(scope)?;
+    let client = (*state.current_client()?).clone();
     let context = state
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-    let (sides, snapshot) = tokio::join!(
-        side_reads(&ctx, state),
-        state
-            .overview_cache
-            .snapshot(&context, || ctx.client.clone()),
+    let (metrics, counts, snapshot) = tokio::join!(
+        crate::metrics::get_node_metrics(state),
+        side_counts(&client, scope.as_deref()),
+        state.overview_cache.snapshot(&context, || client.clone()),
     );
+    let sides = Sides {
+        counts,
+        // Live usage is best-effort: metrics-server is not installed everywhere.
+        usage_by_node: usage_index(metrics.ok()),
+    };
     match snapshot {
-        Some(snapshot) => Ok(from_snapshot(&ctx, &snapshot, sides)),
-        None => by_listing(&ctx, sides).await,
+        Some(snapshot) => Ok(from_snapshot(&snapshot, scope.as_deref(), sides)),
+        None => by_listing(&client, scope.as_deref(), sides).await,
     }
 }
 
-/// The stores' objects in `namespace`; nodes are the cluster's whichever
-/// scope is asked for, and the accounting pods stay cluster-wide.
+/// The stores' objects in scope; nodes are the cluster's whichever scope is
+/// asked for, and the accounting pods stay cluster-wide.
 struct Projected {
     scoped_pods: Vec<Arc<Pod>>,
     deployments: Vec<Arc<Deployment>>,
@@ -1148,36 +1218,34 @@ struct Projected {
     events: Vec<Arc<Event>>,
 }
 
-fn project(snapshot: &Snapshot, namespace: Option<&str>) -> Projected {
+fn project(snapshot: &Snapshot, scope: Option<&[String]>) -> Projected {
     fn keep<K>(
         items: &[Arc<K>],
-        namespace: Option<&str>,
+        scope: Option<&[String]>,
         of: fn(&K) -> Option<&str>,
     ) -> Vec<Arc<K>> {
         items
             .iter()
-            .filter(|item| namespace.is_none_or(|wanted| of(item) == Some(wanted)))
+            .filter(|item| {
+                scope.is_none_or(|names| {
+                    of(item).is_some_and(|namespace| names.iter().any(|name| name == namespace))
+                })
+            })
             .cloned()
             .collect()
     }
     Projected {
-        scoped_pods: keep(&snapshot.pods, namespace, |p| {
-            p.metadata.namespace.as_deref()
-        }),
-        deployments: keep(&snapshot.deployments, namespace, |d| {
+        scoped_pods: keep(&snapshot.pods, scope, |p| p.metadata.namespace.as_deref()),
+        deployments: keep(&snapshot.deployments, scope, |d| {
             d.metadata.namespace.as_deref()
         }),
-        jobs: keep(&snapshot.jobs, namespace, |j| {
-            j.metadata.namespace.as_deref()
-        }),
-        events: keep(&snapshot.events, namespace, |e| {
-            e.metadata.namespace.as_deref()
-        }),
+        jobs: keep(&snapshot.jobs, scope, |j| j.metadata.namespace.as_deref()),
+        events: keep(&snapshot.events, scope, |e| e.metadata.namespace.as_deref()),
     }
 }
 
-fn from_snapshot(ctx: &ResourceContext, snapshot: &Snapshot, sides: Sides) -> ClusterOverview {
-    let scoped = project(snapshot, ctx.namespace.as_deref());
+fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) -> ClusterOverview {
+    let scoped = project(snapshot, scope);
     build_overview(&OverviewInputs {
         scoped_pods: &scoped.scoped_pods,
         accounting_pods: &snapshot.pods,
@@ -1185,12 +1253,13 @@ fn from_snapshot(ctx: &ResourceContext, snapshot: &Snapshot, sides: Sides) -> Cl
         // A store only serves while every watch it holds is allowed and
         // healthy, so the capacity view is known here by construction.
         nodes_known: true,
-        deployments: Some(&scoped.deployments),
+        deployments: &scoped.deployments,
+        deployments_known: true,
         jobs: Some(&scoped.jobs),
         events: &scoped.events,
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
-        namespace: ctx.namespace.as_deref(),
+        scope,
         now: Utc::now(),
         served_from: OverviewSource::Watch,
     })
@@ -1200,40 +1269,109 @@ fn arcs<T>(items: impl IntoIterator<Item = T>) -> Vec<Arc<T>> {
     items.into_iter().map(Arc::new).collect()
 }
 
-async fn by_listing(ctx: &ResourceContext, sides: Sides) -> Result<ClusterOverview> {
+/// One reach's lists: a namespace's, or the whole cluster's.
+struct Listed {
+    pods: Result<Vec<Pod>>,
+    deployments: Option<Vec<Deployment>>,
+    jobs: Option<Vec<Job>>,
+    events: Vec<Event>,
+}
+
+async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
     let params = ListParams::default();
-    let pods_api: Api<Pod> = ctx.namespaced_or_cluster_api();
-    let nodes_api: Api<Node> = ctx.cluster_api();
-    let deployments_api: Api<Deployment> = ctx.namespaced_or_cluster_api();
-    let jobs_api: Api<Job> = ctx.namespaced_or_cluster_api();
-    let events_api: Api<Event> = ctx.namespaced_or_cluster_api();
+    let pods_api: Api<Pod> = api_in(client, reach);
+    let deployments_api: Api<Deployment> = api_in(client, reach);
+    let jobs_api: Api<Job> = api_in(client, reach);
+    let events_api: Api<Event> = api_in(client, reach);
+    let (pods, deployments, jobs, events) = tokio::join!(
+        pods_api.list(&params),
+        deployments_api.list(&params),
+        jobs_api.list(&params),
+        list_warning_events(&events_api),
+    );
+    Listed {
+        pods: pods.map(|list| list.items).map_err(Error::from),
+        deployments: deployments.ok().map(|list| list.items),
+        jobs: jobs.ok().map(|list| list.items),
+        events,
+    }
+}
+
+/// Every reach's lists as one.
+struct Gathered {
+    pods: Vec<Arc<Pod>>,
+    deployments: Vec<Arc<Deployment>>,
+    deployments_known: bool,
+    jobs: Option<Vec<Arc<Job>>>,
+    events: Vec<Arc<Event>>,
+}
+
+/// Joins the reaches by the rule the counts follow: what one namespace
+/// refused is never filled in by the ones that answered.
+///
+/// Pods are the load-bearing read, so a namespace that refuses them fails the
+/// whole overview. Deployments feed problems as well as a count: the problems
+/// of the namespaces that answered stand, and the count goes unknown. Jobs are
+/// a count and a composition, both unknown when any namespace refused.
+fn gather(parts: Vec<Listed>) -> Result<Gathered> {
+    let deployments_known = parts.iter().all(|part| part.deployments.is_some());
+    let jobs_known = parts.iter().all(|part| part.jobs.is_some());
+    let mut gathered = Gathered {
+        pods: Vec::new(),
+        deployments: Vec::new(),
+        deployments_known,
+        jobs: jobs_known.then(Vec::new),
+        events: Vec::new(),
+    };
+    for part in parts {
+        gathered.pods.extend(arcs(part.pods?));
+        gathered
+            .deployments
+            .extend(arcs(part.deployments.into_iter().flatten()));
+        if let Some(jobs) = gathered.jobs.as_mut() {
+            jobs.extend(arcs(part.jobs.into_iter().flatten()));
+        }
+        gathered.events.extend(arcs(part.events));
+    }
+    Ok(gathered)
+}
+
+async fn by_listing(
+    client: &Client,
+    scope: Option<&[String]>,
+    sides: Sides,
+) -> Result<ClusterOverview> {
+    let params = ListParams::default();
+    let nodes_api: Api<Node> = Api::all(client.clone());
     // Scheduler headroom and the node rows describe the cluster, not the
     // selection: dividing one namespace's requests by every node's allocatable
     // would state a reserved share that is nobody's number. So the accounting
-    // pass always runs on a cluster-wide pod list — fetched only when a
-    // namespace is selected, since otherwise the scoped list already is one.
-    let cluster_pods_api: Api<Pod> = ctx.cluster_api();
+    // pass always runs on a cluster-wide pod list — read once for the whole
+    // scope, and only when there is one, since otherwise the scoped list
+    // already is that list.
+    let cluster_pods_api: Api<Pod> = Api::all(client.clone());
     let cluster_pods_request = async {
-        match ctx.namespace {
+        match scope {
             Some(_) => Some(cluster_pods_api.list(&params).await),
             None => None,
         }
     };
 
-    let (pods_result, cluster_pods_result, nodes_result, deployments_result, jobs_result, events) = tokio::join!(
-        pods_api.list(&params),
+    let (parts, cluster_pods_result, nodes_result) = tokio::join!(
+        join_all(
+            reaches(scope)
+                .into_iter()
+                .map(|reach| list_in(client, reach))
+        ),
         cluster_pods_request,
         nodes_api.list(&params),
-        deployments_api.list(&params),
-        jobs_api.list(&params),
-        list_warning_events(&events_api),
     );
 
-    // The scoped pod read is the one load-bearing read: with no pods in the
-    // selected scope there is no screen to draw. On the whole cluster it is
-    // the cluster-wide list, so a token with no cluster read rights fails here
-    // and the page shows the refusal (and says to pick a namespace).
-    let pods = arcs(pods_result.map_err(Error::from)?.items);
+    // With no pods in scope there is no screen to draw. On the whole cluster
+    // the scoped list is the cluster-wide one, so a token with no cluster
+    // read rights fails here and the page shows the refusal (and says to
+    // pick a namespace).
+    let listed = gather(parts)?;
     // The node list and the cluster-wide accounting pods are cluster-scoped
     // reads a namespace-restricted token is refused. They degrade to "unknown"
     // rather than failing the whole overview, so a scoped user still sees the
@@ -1244,30 +1382,21 @@ async fn by_listing(ctx: &ResourceContext, sides: Sides) -> Result<ClusterOvervi
         .flatten()
         .map(|list| arcs(list.items));
     let nodes = nodes_result.ok().map(|list| arcs(list.items));
-    let deployments = deployments_result.ok().map(|list| arcs(list.items));
-    let jobs = jobs_result.ok().map(|list| arcs(list.items));
-    let events = arcs(events);
-
-    // The capacity view needs both the nodes and cluster-wide pod requests.
-    // When a namespace is selected those are a separate cluster-wide fetch;
-    // on the whole cluster the scoped pods already are that fetch.
-    let accounting_known = match ctx.namespace {
-        Some(_) => cluster_pods.is_some(),
-        None => true,
-    };
+    let accounting_known = scope.is_none() || cluster_pods.is_some();
     let nodes_known = nodes.is_some() && accounting_known;
 
     Ok(build_overview(&OverviewInputs {
-        scoped_pods: &pods,
-        accounting_pods: cluster_pods.as_deref().unwrap_or(&pods),
+        scoped_pods: &listed.pods,
+        accounting_pods: cluster_pods.as_deref().unwrap_or(&listed.pods),
         nodes: nodes.as_deref().unwrap_or_default(),
         nodes_known,
-        deployments: deployments.as_deref(),
-        jobs: jobs.as_deref(),
-        events: &events,
+        deployments: &listed.deployments,
+        deployments_known: listed.deployments_known,
+        jobs: listed.jobs.as_deref(),
+        events: &listed.events,
         usage_by_node: sides.usage_by_node,
         counts: sides.counts,
-        namespace: ctx.namespace.as_deref(),
+        scope,
         now: Utc::now(),
         served_from: OverviewSource::List,
     }))
@@ -1280,23 +1409,6 @@ async fn by_listing(ctx: &ResourceContext, sides: Sides) -> Result<ClusterOvervi
 mod tests {
     use super::*;
 
-    /// The frontend caps the list it merges at the same number, and neither
-    /// side can see the other's constant. `shared/overview-limits.json` is
-    /// what holds them equal; this test and its twin in
-    /// `src/lib/overview-merge.test.ts` are what enforce it.
-    #[test]
-    fn the_problem_cap_is_the_number_the_shared_file_states() {
-        const LIMITS: &str = include_str!("../../../shared/overview-limits.json");
-
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Limits {
-            max_problems: usize,
-        }
-
-        let limits: Limits = serde_json::from_str(LIMITS).expect("shared limits parse");
-        assert_eq!(MAX_PROBLEMS, limits.max_problems);
-    }
     use crate::metrics::{MetricsStatus, NodeMetrics};
     use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
     use k8s_openapi::api::core::v1::{
@@ -1398,17 +1510,19 @@ mod tests {
         accounting_pods: &[Pod],
         namespace: Option<&str>,
     ) -> ClusterOverview {
+        let scope = namespace.map(|name| vec![name.to_string()]);
         build_overview(&OverviewInputs {
             scoped_pods: &arcs(scoped_pods.to_vec()),
             accounting_pods: &arcs(accounting_pods.to_vec()),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
-            deployments: Some(&[]),
+            deployments: &[],
+            deployments_known: true,
             jobs: Some(&[]),
             events: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
-            namespace,
+            scope: scope.as_deref(),
             served_from: OverviewSource::List,
             now: Utc::now(),
         })
@@ -1469,12 +1583,13 @@ mod tests {
             // they must be ignored, not drawn and not counted.
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: false,
-            deployments: Some(&[]),
+            deployments: &[],
+            deployments_known: true,
             jobs: Some(&[]),
             events: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
-            namespace: Some("team-a"),
+            scope: Some(&["team-a".to_string()]),
             served_from: OverviewSource::List,
             now: Utc::now(),
         });
@@ -1541,7 +1656,8 @@ mod tests {
             accounting_pods: &[],
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
-            deployments: Some(&[]),
+            deployments: &[],
+            deployments_known: true,
             jobs: Some(&[]),
             events: &[],
             usage_by_node: usage_index(Some(node_metrics_response(
@@ -1549,7 +1665,7 @@ mod tests {
                 vec![],
             ))),
             counts: ResourceCounts::default(),
-            namespace: None,
+            scope: None,
             now: Utc::now(),
             served_from: OverviewSource::List,
         });
@@ -1647,12 +1763,13 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &[],
             nodes_known: true,
-            deployments: Some(&[]),
+            deployments: &[],
+            deployments_known: true,
             jobs: Some(&[]),
             events: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
-            namespace: None,
+            scope: None,
             served_from: OverviewSource::List,
             now,
         });
@@ -2044,6 +2161,10 @@ mod tests {
         assert_eq!(tally(&page_meta(Some("tok"), None), 500), None);
     }
 
+    fn names(names: &[&str]) -> Vec<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
     fn in_namespace<K: Default + kube::Resource<DynamicType = ()>>(namespace: &str) -> K {
         let mut object = K::default();
         object.meta_mut().namespace = Some(namespace.to_string());
@@ -2066,7 +2187,7 @@ mod tests {
             jobs: arcs([in_namespace::<Job>("data")]),
             events: arcs([in_namespace::<Event>("app"), in_namespace("data")]),
         };
-        let app = project(&snapshot, Some("app"));
+        let app = project(&snapshot, Some(&names(&["app"])));
         assert_eq!(app.scoped_pods.len(), 2);
         assert_eq!(app.deployments.len(), 1);
         assert_eq!(app.jobs.len(), 0);
@@ -2078,6 +2199,33 @@ mod tests {
         assert_eq!(whole.events.len(), 2);
     }
 
+    /// A scope of several namespaces is every one of them from the stores,
+    /// and nothing of the namespaces outside it. Matching only the first
+    /// name would answer for a third of a three-namespace window.
+    #[test]
+    fn a_projection_of_several_namespaces_keeps_each_and_nothing_else() {
+        let snapshot = Snapshot {
+            pods: arcs([
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("data"),
+                in_namespace::<Pod>("data"),
+                in_namespace::<Pod>("kube-system"),
+            ]),
+            nodes: arcs([Node::default()]),
+            deployments: arcs([
+                in_namespace::<Deployment>("data"),
+                in_namespace("kube-system"),
+            ]),
+            jobs: arcs([in_namespace::<Job>("app")]),
+            events: arcs([in_namespace::<Event>("kube-system")]),
+        };
+        let both = project(&snapshot, Some(&names(&["app", "data"])));
+        assert_eq!(both.scoped_pods.len(), 3);
+        assert_eq!(both.deployments.len(), 1);
+        assert_eq!(both.jobs.len(), 1);
+        assert!(both.events.is_empty());
+    }
+
     /// What the line above used to claim, asserted where it can fail.
     ///
     /// `project` takes the snapshot by reference and returns no nodes at
@@ -2086,8 +2234,8 @@ mod tests {
     /// Reserved capacity is the *cluster's* number — a namespace's requests
     /// over every node's allocatable — and narrowing the nodes to the
     /// namespace is the mistake this exists to catch.
-    #[tokio::test]
-    async fn the_capacity_view_stays_the_whole_clusters_however_the_scope_narrows() {
+    #[test]
+    fn the_capacity_view_stays_the_whole_clusters_however_the_scope_narrows() {
         let snapshot = Snapshot {
             pods: arcs([
                 in_namespace::<Pod>("app"),
@@ -2099,34 +2247,13 @@ mod tests {
             jobs: arcs([]),
             events: arcs([]),
         };
-        // A client that never connects: `from_snapshot` reads only the
-        // namespace off the context, and the stores are already in hand.
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let nowhere = || {
-            let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
-            kube::Client::try_from(config).expect("a client that never connects")
-        };
         let sides = || Sides {
             counts: ResourceCounts::default(),
             usage_by_node: None,
         };
 
-        let scoped = from_snapshot(
-            &ResourceContext {
-                client: nowhere(),
-                namespace: Some("app".to_string()),
-            },
-            &snapshot,
-            sides(),
-        );
-        let whole = from_snapshot(
-            &ResourceContext {
-                client: nowhere(),
-                namespace: None,
-            },
-            &snapshot,
-            sides(),
-        );
+        let scoped = from_snapshot(&snapshot, Some(&names(&["app"])), sides());
+        let whole = from_snapshot(&snapshot, None, sides());
 
         assert!(
             !whole.nodes.is_empty(),
@@ -2206,35 +2333,33 @@ mod tests {
         );
     }
 
-    /// Where the answer came from, which the frontend shows and the join
-    /// across namespaces downgrades. Flipping `from_snapshot`'s
-    /// `OverviewSource::Watch` to `List` left every Rust test green: the
-    /// only assertion on it is an `#[ignore]`d live test that loops until
-    /// it sees `Watch` and never checks the fallback half.
-    #[tokio::test]
-    async fn an_overview_built_from_the_stores_says_it_came_from_the_watch() {
+    /// Where the answer came from, which the frontend shows. Flipping
+    /// `from_snapshot`'s `OverviewSource::Watch` to `List` left every Rust
+    /// test green: the only assertion on it is an `#[ignore]`d live test that
+    /// loops until it sees `Watch` and never checks the fallback half. A scope
+    /// of several namespaces is one snapshot, so it is watched or listed
+    /// whole — never some namespaces of each.
+    #[test]
+    fn an_overview_built_from_the_stores_says_it_came_from_the_watch() {
         let snapshot = Snapshot {
-            pods: arcs([in_namespace::<Pod>("app")]),
+            pods: arcs([in_namespace::<Pod>("app"), in_namespace("data")]),
             nodes: arcs([Node::default()]),
             deployments: arcs([]),
             jobs: arcs([]),
             events: arcs([]),
         };
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
-        let ctx = ResourceContext {
-            client: kube::Client::try_from(config).expect("a client"),
-            namespace: None,
-        };
-        let built = from_snapshot(
-            &ctx,
-            &snapshot,
-            Sides {
-                counts: ResourceCounts::default(),
-                usage_by_node: None,
-            },
-        );
-        assert_eq!(built.served_from, OverviewSource::Watch);
+        for scope in [None, Some(names(&["app", "data"]))] {
+            let built = from_snapshot(
+                &snapshot,
+                scope.as_deref(),
+                Sides {
+                    counts: ResourceCounts::default(),
+                    usage_by_node: None,
+                },
+            );
+            assert_eq!(built.served_from, OverviewSource::Watch);
+            assert_eq!(built.counts.pods, Some(2));
+        }
     }
 
     /// The other four strips had no test at all: emptying `strip_node`,
@@ -2335,7 +2460,8 @@ mod tests {
             accounting_pods: &arcs(pods),
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
-            deployments: None,
+            deployments: &[],
+            deployments_known: false,
             jobs: None,
             events: &[],
             usage_by_node: None,
@@ -2344,7 +2470,7 @@ mod tests {
                 secrets: None,
                 ..Default::default()
             },
-            namespace: None,
+            scope: None,
             now: Utc::now(),
             served_from: OverviewSource::List,
         });
@@ -2377,12 +2503,13 @@ mod tests {
             accounting_pods: &arcs(cluster),
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
-            deployments: Some(&arcs(deployments)),
+            deployments: &arcs(deployments),
+            deployments_known: true,
             jobs: Some(&arcs(jobs)),
             events: &[],
             usage_by_node: None,
             counts: ResourceCounts::default(),
-            namespace: Some("app"),
+            scope: Some(&["app".to_string()]),
             now: Utc::now(),
             served_from: OverviewSource::List,
         });
@@ -2485,5 +2612,689 @@ mod tests {
         assert_eq!(composition.completed, 1);
         assert_eq!(composition.failed, 1);
         assert_eq!(composition.active, 2);
+    }
+}
+
+/// One overview for several namespaces, against an API server that counts
+/// what it was asked. These were the frontend's merge rules while the window
+/// asked once per namespace and added the answers up; the rules stayed when
+/// the adding moved here, and so did the cases.
+#[cfg(test)]
+mod across_namespaces {
+    use super::*;
+    use crate::client::served::test_server::{server, Hits};
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    use serde_json::{json, Value};
+
+    const PROD: &str = "prod";
+    const STAGING: &str = "staging";
+
+    fn list(items: Vec<Value>) -> String {
+        json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": items }).to_string()
+    }
+
+    fn refused(what: &str) -> String {
+        json!({
+            "kind": "Status",
+            "apiVersion": "v1",
+            "status": "Failure",
+            "message": format!("{what} is forbidden"),
+            "reason": "Forbidden",
+            "code": 403,
+        })
+        .to_string()
+    }
+
+    fn named(count: usize) -> Vec<Value> {
+        (0..count)
+            .map(|i| json!({ "metadata": { "name": format!("object-{i}") } }))
+            .collect()
+    }
+
+    fn pod(name: &str, namespace: &str, phase: &str) -> Value {
+        json!({
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": name,
+                "namespace": namespace,
+                "creationTimestamp": "2026-08-05T00:00:00Z",
+            },
+            "spec": { "nodeName": "n1", "containers": [] },
+            "status": { "phase": phase },
+        })
+    }
+
+    fn crash_looping(name: &str, namespace: &str) -> Value {
+        let mut pod = pod(name, namespace, "Running");
+        pod["status"]["containerStatuses"] = json!([{
+            "name": "app",
+            "image": "app",
+            "imageID": "",
+            "ready": false,
+            "restartCount": 0,
+            "state": { "waiting": { "reason": "CrashLoopBackOff" } },
+        }]);
+        pod
+    }
+
+    fn node(name: &str, ready: bool) -> Value {
+        let status = if ready { "True" } else { "False" };
+        json!({
+            "apiVersion": "v1",
+            "kind": "Node",
+            "metadata": { "name": name },
+            "status": {
+                "conditions": [{ "type": "Ready", "status": status }],
+                "allocatable": { "cpu": "4", "memory": "8Gi", "pods": "110" },
+            },
+        })
+    }
+
+    fn job(name: &str, namespace: &str, outcome: Option<&str>) -> Value {
+        let conditions: Vec<Value> = outcome
+            .map(|type_| json!({ "type": type_, "status": "True" }))
+            .into_iter()
+            .collect();
+        json!({
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": { "name": name, "namespace": namespace },
+            "status": { "conditions": conditions },
+        })
+    }
+
+    fn unavailable(name: &str, namespace: &str) -> Value {
+        json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": name, "namespace": namespace },
+            "spec": { "replicas": 2, "selector": {}, "template": {} },
+            "status": { "readyReplicas": 0 },
+        })
+    }
+
+    fn warning(namespace: &str, reason: &str, count: i32) -> Value {
+        json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": { "name": format!("{reason}-{namespace}"), "namespace": namespace },
+            "type": "Warning",
+            "reason": reason,
+            "count": count,
+            "lastTimestamp": (Utc::now() - chrono::Duration::minutes(5))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": { "kind": "Pod", "name": "api", "namespace": namespace },
+        })
+    }
+
+    /// Every path an overview of prod and staging reads, each answering an
+    /// empty list until a test says otherwise.
+    struct Cluster(Vec<(&'static str, u16, String)>);
+
+    impl Cluster {
+        fn new() -> Self {
+            let paths = [
+                "/api/v1/nodes",
+                "/api/v1/pods",
+                "/api/v1/namespaces",
+                "/api/v1/namespaces/prod/pods",
+                "/api/v1/namespaces/staging/pods",
+                "/apis/apps/v1/namespaces/prod/deployments",
+                "/apis/apps/v1/namespaces/staging/deployments",
+                "/apis/batch/v1/namespaces/prod/jobs",
+                "/apis/batch/v1/namespaces/staging/jobs",
+                "/api/v1/namespaces/prod/events",
+                "/api/v1/namespaces/staging/events",
+                "/apis/apps/v1/namespaces/prod/statefulsets",
+                "/apis/apps/v1/namespaces/staging/statefulsets",
+                "/apis/apps/v1/namespaces/prod/daemonsets",
+                "/apis/apps/v1/namespaces/staging/daemonsets",
+                "/apis/batch/v1/namespaces/prod/cronjobs",
+                "/apis/batch/v1/namespaces/staging/cronjobs",
+                "/api/v1/namespaces/prod/services",
+                "/api/v1/namespaces/staging/services",
+                "/apis/networking.k8s.io/v1/namespaces/prod/ingresses",
+                "/apis/networking.k8s.io/v1/namespaces/staging/ingresses",
+                "/api/v1/namespaces/prod/configmaps",
+                "/api/v1/namespaces/staging/configmaps",
+                "/api/v1/namespaces/prod/secrets",
+                "/api/v1/namespaces/staging/secrets",
+            ];
+            Self(
+                paths
+                    .into_iter()
+                    .map(|path| (path, 200, list(Vec::new())))
+                    .collect(),
+            )
+        }
+
+        fn answer(mut self, path: &str, status: u16, body: String) -> Self {
+            let route = self
+                .0
+                .iter_mut()
+                .find(|(known, _, _)| *known == path)
+                .expect("a path the overview reads");
+            route.1 = status;
+            route.2 = body;
+            self
+        }
+
+        fn items(self, path: &str, items: Vec<Value>) -> Self {
+            self.answer(path, 200, list(items))
+        }
+
+        fn refuse(self, path: &str) -> Self {
+            self.answer(path, 403, refused(path))
+        }
+
+        /// The overview of prod and staging, listed, and what was asked for.
+        async fn overview(self) -> (Result<ClusterOverview>, Hits) {
+            let (client, hits) = server(self.0).await;
+            let scope =
+                scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
+            let counts = side_counts(&client, scope.as_deref()).await;
+            let sides = Sides {
+                counts,
+                usage_by_node: None,
+            };
+            (by_listing(&client, scope.as_deref(), sides).await, hits)
+        }
+
+        async fn listed(self) -> ClusterOverview {
+            self.overview().await.0.expect("an overview")
+        }
+    }
+
+    fn asked(hits: &Hits, path: &str) -> usize {
+        hits.lock().unwrap().get(path).copied().unwrap_or(0)
+    }
+
+    /// The reason this moved to Rust. Asked once per namespace, every part
+    /// re-read the nodes, the namespace count and — listing — a full
+    /// cluster-wide pod LIST: four namespaces were five of those a round.
+    /// A cluster read issued per namespace fails here.
+    #[tokio::test]
+    async fn a_scope_reads_cluster_facts_once_and_each_namespace_once() {
+        let (answer, hits) = Cluster::new().overview().await;
+        answer.expect("an overview");
+
+        for path in ["/api/v1/nodes", "/api/v1/pods", "/api/v1/namespaces"] {
+            assert_eq!(asked(&hits, path), 1, "{path} is the cluster's, read once");
+        }
+        for namespace in [PROD, STAGING] {
+            for kind in ["pods", "secrets"] {
+                let path = format!("/api/v1/namespaces/{namespace}/{kind}");
+                assert_eq!(asked(&hits, &path), 1, "{path}");
+            }
+            let deployments = format!("/apis/apps/v1/namespaces/{namespace}/deployments");
+            assert_eq!(asked(&hits, &deployments), 1, "{deployments}");
+        }
+    }
+
+    /// Would draw one `NotReady` node once per namespace in scope, under as
+    /// many identical React keys, with a headline counting it that often:
+    /// the node half of the problems comes off the cluster, whatever
+    /// namespace was asked for.
+    #[tokio::test]
+    async fn a_node_problem_is_one_row_however_many_namespaces_are_in_scope() {
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", false)])
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("api", PROD, "Failed")],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![pod("web", STAGING, "Failed")],
+            )
+            .listed()
+            .await;
+
+        let nodes = overview.problems.iter().filter(|p| p.kind == "Node");
+        assert_eq!(nodes.count(), 1);
+        assert_eq!(overview.problems.len(), 3);
+        assert_eq!(overview.problems_truncated, 0);
+    }
+
+    /// Would report a three-node cluster as six the moment two namespaces
+    /// were watched: the nodes and the namespace count are cluster facts,
+    /// taken once, never added up.
+    #[tokio::test]
+    async fn cluster_facts_are_taken_once_instead_of_summed() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/nodes",
+                vec![node("a", true), node("b", true), node("c", true)],
+            )
+            .items("/api/v1/namespaces", named(12))
+            .listed()
+            .await;
+
+        assert_eq!(overview.nodes.len(), 3);
+        assert_eq!(overview.counts.nodes, Some(3));
+        assert_eq!(overview.counts.namespaces, Some(12));
+    }
+
+    /// The counts that belong to a namespace add up across the scope.
+    #[tokio::test]
+    async fn per_namespace_counts_add_up() {
+        let pods = |namespace: &str, n: usize| {
+            (0..n)
+                .map(|i| pod(&format!("p{i}"), namespace, "Running"))
+                .collect()
+        };
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/pods", pods(PROD, 4))
+            .items("/api/v1/namespaces/staging/pods", pods(STAGING, 7))
+            .items("/api/v1/namespaces/prod/services", named(1))
+            .items("/api/v1/namespaces/staging/services", named(2))
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.pods, Some(11));
+        assert_eq!(overview.counts.services, Some(3));
+    }
+
+    /// Would break the app's one rule about numbers. Two namespaces
+    /// answering and one refusing is not a total, and a sum of the two that
+    /// answered would be printed as the scope's.
+    #[tokio::test]
+    async fn a_count_one_namespace_refused_is_unknown_not_a_partial_sum() {
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/secrets", named(2))
+            .refuse("/api/v1/namespaces/staging/secrets")
+            .items("/api/v1/namespaces/prod/services", named(1))
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.secrets, None);
+        assert_eq!(overview.counts.services, Some(1));
+    }
+
+    /// Every namespace or none, as when each was asked on its own and one
+    /// refusal left the page without an answer. Keeping the namespaces that
+    /// answered would label their pods with the scope's name.
+    #[tokio::test]
+    async fn a_namespace_that_refuses_its_pods_fails_the_whole_overview() {
+        let (answer, _) = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("api", PROD, "Running")],
+            )
+            .refuse("/api/v1/namespaces/staging/pods")
+            .overview()
+            .await;
+
+        let error = answer.expect_err("a refusal, not two thirds of a scope");
+        assert!(error.is_refusal(), "{error}");
+    }
+
+    /// The rule the counts follow, for the one kind whose bar needs status.
+    /// A token that can list Jobs in one namespace and not another must not
+    /// get a composition that silently omits the rest.
+    #[tokio::test]
+    async fn a_jobs_total_is_unknown_when_one_namespace_refused_its_jobs() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/batch/v1/namespaces/prod/jobs",
+                vec![job("backup", PROD, Some("Complete"))],
+            )
+            .refuse("/apis/batch/v1/namespaces/staging/jobs")
+            .listed()
+            .await;
+
+        assert!(overview.jobs.is_none());
+        assert_eq!(overview.counts.jobs, None);
+    }
+
+    /// A Deployment list is problems as well as a count. The rows prod could
+    /// show stay on screen when staging refuses; only the count, which would
+    /// be a partial sum, goes unknown.
+    #[tokio::test]
+    async fn problems_of_the_namespaces_that_answered_stand_when_another_refused() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/apps/v1/namespaces/prod/deployments",
+                vec![unavailable("api", PROD)],
+            )
+            .refuse("/apis/apps/v1/namespaces/staging/deployments")
+            .listed()
+            .await;
+
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Deployment" && p.name == "api"));
+        assert_eq!(overview.counts.deployments, None);
+    }
+
+    /// Would drop a namespace's rows from the join: both namespaces' problems
+    /// are on the panel.
+    #[tokio::test]
+    async fn problems_every_namespace_reported_are_joined() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("api-1", PROD, "Failed")],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![pod("web-2", STAGING, "Failed")],
+            )
+            .listed()
+            .await;
+
+        let names: Vec<_> = overview.problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["api-1", "web-2"]);
+    }
+
+    /// Pod phases and Job outcomes add up across the scope.
+    #[tokio::test]
+    async fn pod_composition_and_jobs_add_up_across_namespaces() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![
+                    pod("a", PROD, "Running"),
+                    pod("b", PROD, "Running"),
+                    crash_looping("c", PROD),
+                    pod("d", PROD, "Pending"),
+                ],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![
+                    pod("e", STAGING, "Running"),
+                    pod("f", STAGING, "Running"),
+                    pod("g", STAGING, "Succeeded"),
+                    pod("h", STAGING, "Failed"),
+                ],
+            )
+            .items(
+                "/apis/batch/v1/namespaces/staging/jobs",
+                vec![
+                    job("x", STAGING, Some("Complete")),
+                    job("y", STAGING, Some("Complete")),
+                    job("z", STAGING, None),
+                ],
+            )
+            .listed()
+            .await;
+
+        assert_eq!(overview.pods.running, 5);
+        assert_eq!(overview.pods.crash_looping, 1);
+        assert_eq!(overview.pods.pending, 1);
+        assert_eq!(overview.pods.succeeded, 1);
+        assert_eq!(overview.pods.failed, 1);
+        let jobs = overview.jobs.expect("both namespaces answered");
+        assert_eq!((jobs.completed, jobs.active, jobs.failed), (2, 1, 0));
+    }
+
+    /// The node list and the cluster-wide pods behind the capacity view are
+    /// one read each. Either refused leaves the whole scope's capacity view
+    /// unknown — no node rows, and no node count beside the "no node access"
+    /// note the page shows.
+    #[tokio::test]
+    async fn the_capacity_view_is_unknown_when_a_cluster_read_was_refused() {
+        for refused in ["/api/v1/nodes", "/api/v1/pods"] {
+            let overview = Cluster::new()
+                .items("/api/v1/nodes", vec![node("n1", true)])
+                .refuse(refused)
+                .listed()
+                .await;
+
+            assert!(!overview.nodes_known, "{refused}");
+            assert!(overview.nodes.is_empty(), "{refused}");
+            assert_eq!(overview.counts.nodes, None, "{refused}");
+        }
+    }
+
+    /// The namespace breakdown is the picker's view of the whole cluster. A
+    /// scope's answer restating its own namespaces under a heading that
+    /// counts the cluster's would be built out of the selection.
+    #[tokio::test]
+    async fn a_scope_has_no_namespace_breakdown() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("a", PROD, "Running")],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![pod("b", STAGING, "Running")],
+            )
+            .listed()
+            .await;
+
+        assert!(overview.namespaces.is_empty());
+    }
+
+    /// Would break the warnings panel, which keys its rows by reason: two
+    /// namespaces reporting `FailedScheduling` were two rows under one key,
+    /// one never drawn, the other carrying one namespace's count.
+    #[tokio::test]
+    async fn a_warning_reason_is_one_row_carrying_the_whole_scopes_count() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/events",
+                vec![warning(PROD, "FailedScheduling", 4)],
+            )
+            .items(
+                "/api/v1/namespaces/staging/events",
+                vec![warning(STAGING, "FailedScheduling", 9)],
+            )
+            .listed()
+            .await;
+
+        assert_eq!(overview.warnings.len(), 1);
+        assert_eq!(overview.warnings[0].count, 13);
+    }
+
+    fn event(namespace: &str, reason: &str, count: i32, minutes_ago: Option<i64>) -> Event {
+        let mut event: Event = serde_json::from_value(warning(namespace, reason, count))
+            .expect("an event this test wrote");
+        event.last_timestamp = minutes_ago.map(|minutes| {
+            Time(
+                crate::utils::moment::as_cluster_time(
+                    Utc::now() - chrono::Duration::minutes(minutes),
+                )
+                .expect("an instant this test wrote"),
+            )
+        });
+        event
+    }
+
+    /// The sample describes one event and has to keep describing one: the
+    /// message from the loudest namespace under the time of the newest would
+    /// put a sentence on screen at a moment it never happened.
+    #[test]
+    fn the_sample_is_the_newest_event_whole_whichever_namespace_saw_it() {
+        let mut loud = event(STAGING, "FailedScheduling", 20, Some(50));
+        loud.message = Some("0/3 nodes are available".to_string());
+        loud.involved_object.name = Some("batch-7".to_string());
+        let mut recent = event(PROD, "FailedScheduling", 1, Some(10));
+        recent.message = Some("Insufficient memory".to_string());
+        recent.involved_object.name = Some("api-1".to_string());
+
+        let groups = recent_warnings([&loud, &recent]);
+
+        assert_eq!(groups.len(), 1);
+        let group = &groups[0];
+        assert_eq!(group.count, 21);
+        assert_eq!(group.sample.as_deref(), Some("Insufficient memory"));
+        assert_eq!(group.object_name.as_deref(), Some("api-1"));
+        assert_eq!(group.namespace.as_deref(), Some(PROD));
+    }
+
+    /// An undated event cannot be shown to be the newer one.
+    #[test]
+    fn an_undated_event_never_takes_the_sample_from_a_dated_one() {
+        let mut dated = event(PROD, "BackOff", 1, Some(30));
+        dated.message = Some("dated".to_string());
+        let mut undated = event(STAGING, "BackOff", 1, None);
+        undated.message = Some("undated".to_string());
+
+        for order in [[&dated, &undated], [&undated, &dated]] {
+            let groups = recent_warnings(order);
+            assert_eq!(groups[0].sample.as_deref(), Some("dated"));
+        }
+    }
+
+    /// The panel is read top-down, and adding the namespaces up changes the
+    /// order: loudest across the whole scope first.
+    #[test]
+    fn warning_groups_are_ordered_by_the_scopes_count() {
+        let events = [
+            event(PROD, "BackOff", 9, Some(5)),
+            event(PROD, "FailedScheduling", 2, Some(5)),
+            event(STAGING, "FailedScheduling", 8, Some(5)),
+        ];
+        let reasons: Vec<_> = recent_warnings(&events)
+            .into_iter()
+            .map(|group| group.reason)
+            .collect();
+        assert_eq!(reasons, ["FailedScheduling", "BackOff"]);
+    }
+
+    fn problem_in(
+        namespace: &str,
+        name: &str,
+        severity: ProblemSeverity,
+        since: Option<&str>,
+    ) -> ClusterProblem {
+        ClusterProblem {
+            severity,
+            kind: "Pod".to_string(),
+            name: name.to_string(),
+            namespace: Some(namespace.to_string()),
+            reason: "CrashLoopBackOff".to_string(),
+            detail: None,
+            since: since.map(str::to_string),
+            restarts: None,
+        }
+    }
+
+    /// Would break the promise the panel's caption makes. In namespace
+    /// order, a mild problem in the first namespace sat above the
+    /// `CrashLoopBackOff` in the second.
+    #[test]
+    fn the_worst_row_leads_whichever_namespace_it_came_from() {
+        let (kept, _) = rank_and_cap(vec![
+            problem_in(
+                PROD,
+                "web-1",
+                ProblemSeverity::Warning,
+                Some("2026-08-05T08:00:00Z"),
+            ),
+            problem_in(
+                STAGING,
+                "api-1",
+                ProblemSeverity::Critical,
+                Some("2026-08-05T10:00:00Z"),
+            ),
+        ]);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["api-1", "web-1"]);
+    }
+
+    /// Oldest first inside a severity: the top row is what has been broken
+    /// longest, and an unknown age is not evidence that a problem is young.
+    #[test]
+    fn equal_severities_are_ordered_by_age_undated_first() {
+        let critical = ProblemSeverity::Critical;
+        let (kept, _) = rank_and_cap(vec![
+            problem_in(PROD, "recent", critical, Some("2026-08-05T10:00:00Z")),
+            problem_in(PROD, "undated", critical, None),
+            problem_in(STAGING, "old", critical, Some("2026-08-05T01:00:00Z")),
+        ]);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["undated", "old", "recent"]);
+    }
+
+    /// Would grow the panel by fifty rows per namespace watched, on exactly
+    /// the clusters the cap was written for. The rows dropped are still
+    /// counted, or the headline above the panel understates an outage.
+    #[test]
+    fn the_scope_is_cut_to_one_panel_and_counts_what_it_dropped() {
+        let many = |namespace: &str, n: usize, severity: ProblemSeverity| {
+            (0..n)
+                .map(|i| {
+                    problem_in(
+                        namespace,
+                        &format!("{namespace}-{i}"),
+                        severity,
+                        Some(&format!("2026-08-05T00:{:02}:00Z", i % 60)),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        // The mild namespace first, as it sorts: a cut taken before the
+        // ranking would keep its fifty warnings and drop every critical.
+        let mut problems = many(PROD, MAX_PROBLEMS, ProblemSeverity::Warning);
+        problems.extend(many(STAGING, MAX_PROBLEMS + 3, ProblemSeverity::Critical));
+
+        let (kept, truncated) = rank_and_cap(problems);
+
+        assert_eq!(kept.len(), MAX_PROBLEMS);
+        assert!(kept.iter().all(|p| p.severity == ProblemSeverity::Critical));
+        assert_eq!(truncated, MAX_PROBLEMS + 3);
+        assert_eq!(kept.len() + truncated, 2 * MAX_PROBLEMS + 3);
+    }
+
+    /// Usage is the cluster's node metrics, read once for the scope, so a
+    /// scope cannot be half measured: the answer carries that one reading or
+    /// says there is none, never usage for some namespaces.
+    #[test]
+    fn metrics_are_one_reading_for_the_whole_scope() {
+        let snapshot = Snapshot {
+            pods: Vec::new(),
+            nodes: arcs([serde_json::from_value::<Node>(node("n1", true)).expect("a node")]),
+            deployments: Vec::new(),
+            jobs: Vec::new(),
+            events: Vec::new(),
+        };
+        let scope = vec![PROD.to_string(), STAGING.to_string()];
+        let with = |usage_by_node| {
+            from_snapshot(
+                &snapshot,
+                Some(&scope),
+                Sides {
+                    counts: ResourceCounts::default(),
+                    usage_by_node,
+                },
+            )
+        };
+
+        let measured = with(Some(BTreeMap::from([("n1".to_string(), (250.0, 1024))])));
+        assert!(measured.metrics_available);
+        assert_eq!(measured.nodes[0].cpu.usage, Some(250.0));
+        let unmeasured = with(None);
+        assert!(!unmeasured.metrics_available);
+        assert_eq!(unmeasured.nodes[0].cpu.usage, None);
+    }
+
+    /// An empty list read as "every namespace" hands a caller that lost its
+    /// selection the whole cluster's numbers under a label naming none of it.
+    #[test]
+    fn an_empty_scope_is_refused_rather_than_read_as_the_whole_cluster() {
+        assert!(matches!(scope_of(None), Ok(None)));
+        assert!(matches!(
+            scope_of(Some(Vec::new())),
+            Err(Error::InvalidInput(_))
+        ));
+    }
+
+    /// A scope is a set: the same namespaces in another order, or twice,
+    /// are one question with one answer — including how ties are ordered.
+    #[test]
+    fn a_scope_is_read_as_a_set_of_valid_names() {
+        let asked = vec![STAGING.to_string(), PROD.to_string(), STAGING.to_string()];
+        assert_eq!(
+            scope_of(Some(asked)).expect("a valid scope"),
+            Some(vec![PROD.to_string(), STAGING.to_string()])
+        );
+        assert!(scope_of(Some(vec!["Prod_1".to_string()])).is_err());
     }
 }

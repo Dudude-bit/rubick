@@ -51,7 +51,7 @@ async fn after_the_stores_fill_every_overview_is_served_from_the_watch() {
     let started = Instant::now();
     let mut served = Vec::new();
     loop {
-        let overview = cluster_overview(&state, Some(namespace.clone()))
+        let overview = cluster_overview(&state, Some(vec![namespace.clone()]))
             .await
             .expect("overview");
         served.push(overview.served_from);

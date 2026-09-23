@@ -54,9 +54,10 @@ describe("what the window is scoped to", () => {
   });
 
   /**
-   * Would take the ceiling off the only thing a scope makes more expensive:
-   * the overview is one read per selected namespace every ten seconds, and
-   * this is the one place that number is bounded.
+   * Would take the ceiling off what a scope makes more expensive: the
+   * overview reads every selected namespace every ten seconds, the events
+   * feed asks each one every second, and this is the one place that number
+   * is bounded.
    */
   it("never watches more namespaces than it can answer for", async () => {
     await state().setNamespaceScope(

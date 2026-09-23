@@ -12,6 +12,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { readOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
 import { listPodRows } from "@/lib/pod-rows";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
@@ -69,9 +70,10 @@ export function usePrefetchCoreLists(): void {
     // its first second asking what the connect beat could already have
     // started. Same key as `useClusterOverview`, so the page mounts onto an
     // answer already in flight.
+    const overviewScope = namespace ? [namespace] : [];
     void queryClient.prefetchQuery({
-      queryKey: queryKeys.clusterOverview(context, namespace),
-      queryFn: () => commands.getClusterOverview(namespace),
+      queryKey: queryKeys.clusterOverview(context, overviewScope),
+      queryFn: () => readOverview(overviewScope),
       staleTime: STALE_TIMES.overview,
     });
 

@@ -19,7 +19,6 @@ describe("every namespace, however it is spelled", () => {
     ["helm.releases", (ns) => queryKeys.helm.releases(ns)],
     ["resources", (ns) => queryKeys.resources(ResourceType.Deployment, ns)],
     ["customResourceList", (ns) => queryKeys.customResourceList("widgets", ns)],
-    ["clusterOverview", (ns) => queryKeys.clusterOverview("prod-eu", ns)],
   ];
 
   it.each(bothSpellings)(
@@ -72,6 +71,24 @@ describe("every namespace, however it is spelled", () => {
     const rfc1123Label = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
     expect(rfc1123Label.test(EVERY_NAMESPACE)).toBe(false);
     expect(queryKeys.podRows(null)).toEqual(["pod-rows", EVERY_NAMESPACE]);
+  });
+});
+
+describe("the overview's key", () => {
+  /**
+   * The overview answers for a whole scope in one read, so the scope is the
+   * key. Keyed by less, a window on `prod, staging` and one on `prod` would
+   * read each other's totals; keyed by the order the namespaces were picked
+   * in, one set of namespaces would be read twice.
+   */
+  it("is the scope as a set, and every namespace when there is none", () => {
+    const key = (scope: string[]) =>
+      queryKeys.clusterOverview("prod-eu", scope);
+    expect(key([])).toEqual(["cluster-overview", "prod-eu", EVERY_NAMESPACE]);
+    expect(key(["shop"])).toEqual(["cluster-overview", "prod-eu", "shop"]);
+    expect(key(["staging", "prod"])).toEqual(key(["prod", "staging"]));
+    expect(key(["prod", "staging"])).not.toEqual(key(["prod"]));
+    expect(key(["all"])).not.toEqual(key([]));
   });
 });
 

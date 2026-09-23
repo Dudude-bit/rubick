@@ -69,8 +69,9 @@ describe("what is stored against a context and a tab", () => {
 
 describe("what a window is allowed to watch", () => {
   /**
-   * Would put the cost of the overview back where `lib/refresh.ts` found it:
-   * one poll per selected namespace, and no ceiling on the selection.
+   * Would take the ceiling off the requests a selection costs: a dozen per
+   * namespace in every overview poll, and one per namespace in the events
+   * feed's.
    */
   it("cuts a selection to what the app can answer for", () => {
     const asked = Array.from({ length: SCOPE_LIMIT + 3 }, (_, i) => `ns-${i}`);
