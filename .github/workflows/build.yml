@@ -25,13 +25,18 @@ on:
       - '.github/PULL_REQUEST_TEMPLATE.md'
   pull_request:
     branches: [main]
+    # `labeled`: the plan reads the build-all label, and without it adding
+    # the label built nothing until the next push.
+    types: [opened, synchronize, reopened, labeled]
     paths-ignore: *docs
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Any other label plans nothing, so it gets a group of its own rather than
+  # cancelling the builds in flight.
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'build-all' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -53,6 +58,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          ADDED_LABEL: ${{ github.event.action == 'labeled' && github.event.label.name || '' }}
           MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           base=""

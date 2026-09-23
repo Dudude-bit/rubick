@@ -59,6 +59,9 @@ jobs:
         # What build.yml found most often, twenty minutes into a macOS job.
         run: python3 scripts/check-tauri-versions.py
 
+      - name: Build plan
+        run: python3 -m unittest scripts/build_matrix_test.py
+
       - uses: ./.github/actions/setup-js
 
       - name: Frontend formatting
