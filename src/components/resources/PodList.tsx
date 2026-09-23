@@ -201,6 +201,8 @@ export function PodList() {
   const {
     data: podsWithMetrics,
     podStatus,
+    podUnread,
+    refetchPodMetrics,
     isLoading,
     error,
     unread,
@@ -271,9 +273,11 @@ export function PodList() {
       // list owns the window's height now, and a banner outside it is one more
       // box the height has to be threaded through.
       headerContent={
-        podStatus?.status !== "available" ? (
-          <MetricsStatusBanner status={podStatus} />
-        ) : null
+        <MetricsStatusBanner
+          status={podStatus}
+          unread={podUnread}
+          onRetry={() => void refetchPodMetrics()}
+        />
       }
       getRowHref={(row) =>
         getResourceDetailUrl(ResourceType.Pod, row.name, row.namespace)

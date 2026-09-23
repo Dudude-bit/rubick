@@ -3502,6 +3502,7 @@ export const en = {
     // The cluster's own words, kept whole: they are what somebody takes to
     // whoever can act on them.
     metricsDetails: "Details: {details}",
+    podMetricsLabel: "pod metrics",
     markBroken: "broken",
     markUnchecked: "not checked",
     markWorthALook: "worth a look",
@@ -4323,9 +4324,9 @@ export const en = {
         "Requested and limited are unknown: listing pods in {n} namespaces was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
     },
     nodeBudgetRule: {
-      one: "requested: max(init, Σ containers) + overhead, over {n} pod holding a place here",
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pod holding a place here",
       other:
-        "requested: max(init, Σ containers) + overhead, over {n} pods holding a place here",
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pods holding a place here",
     },
     unknownWord: "unknown",
     noUsageSource: "no usage source",

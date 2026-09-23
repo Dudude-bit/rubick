@@ -2,8 +2,7 @@
 //! what the pods may burst to: one table, every resource the kubelet
 //! reports, extended ones included.
 //!
-//! The sums are the scheduler's own rule (`max(init) + Σ containers +
-//! overhead`, pod-level resources overriding), over the pods on the node
+//! The sums are the scheduler's own rule (`resources::reservation`), over the pods on the node
 //! that still hold a reservation. They are numbers or they are nothing:
 //! a namespace whose pods could not be listed makes the whole column
 //! unknown, because a total over the readable namespaces is a smaller
@@ -115,6 +114,7 @@ pub fn budget(
                     requests: r,
                     limits: l,
                     known: pod_ok,
+                    ..
                 } = pod
                     .spec
                     .as_ref()

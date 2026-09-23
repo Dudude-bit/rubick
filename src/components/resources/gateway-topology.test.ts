@@ -464,4 +464,47 @@ describe("the gateway topology map", () => {
       false
     );
   });
+
+  /**
+   * An Evicted pod keeps its labels and its ReplicaSet, and no Service
+   * publishes it. Counted, leftovers from a DiskPressure read a healthy
+   * Deployment as mostly down.
+   */
+  it("leaves terminated pods out of the replicas behind a backend", () => {
+    const backing = {
+      services: [
+        { name: "promo", namespace: "gwtest", selector: { app: "promo" } },
+      ],
+      published: [],
+      backingKnown: true,
+    } as unknown as Parameters<typeof gatewayTopology>[2];
+    const rs = [{ kind: "ReplicaSet", name: "promo-abc123", controller: true }];
+    const pod = (name: string, phase: string, ready: boolean) => ({
+      name,
+      namespace: "gwtest",
+      status: { phase, ready },
+      labels: { app: "promo" },
+      ownerReferences: rs,
+    });
+    const data = gatewayTopology(
+      [gateway("edge")],
+      [route("promo")],
+      backing,
+      t,
+      {
+        pods: [
+          pod("promo-abc123-x1", "Running", true),
+          pod("promo-abc123-e1", "Failed", false),
+          pod("promo-abc123-e2", "Failed", false),
+          pod("promo-abc123-done", "Succeeded", false),
+        ] as unknown as PodInfo[],
+        deployments: [{ name: "promo", namespace: "gwtest" }],
+      }
+    );
+    const deployment = data.columns
+      .at(-1)!
+      .nodes.find((node) => node.label === "promo")!;
+    expect(deployment.sub).toBe("1 of 1 ready");
+    expect(deployment.tone).toBe("ok");
+  });
 });

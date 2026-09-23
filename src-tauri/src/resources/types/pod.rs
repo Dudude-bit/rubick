@@ -220,7 +220,8 @@ pub struct ResourceTotals {
 }
 
 /// The pod's requests and limits as the pods column and the pod page show
-/// them, from the same rule the node budget and the overview use.
+/// them, from the same rule the node budget and the overview use. The limit
+/// is the running containers' ceiling, what their usage is drawn against.
 #[must_use]
 pub fn resource_totals(spec: &PodSpec) -> ResourceTotals {
     let held = crate::resources::reservation::pod_reservation(spec);
@@ -236,9 +237,9 @@ pub fn resource_totals(spec: &PodSpec) -> ResourceTotals {
     };
     ResourceTotals {
         cpu_requests: cpu(&held.requests),
-        cpu_limits: cpu(&held.limits),
+        cpu_limits: cpu(&held.ceiling),
         memory_requests: memory(&held.requests),
-        memory_limits: memory(&held.limits),
+        memory_limits: memory(&held.ceiling),
     }
 }
 

@@ -19,6 +19,7 @@ import { UsageBlock } from "@/components/resources/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";
+import { hasTerminated } from "@/lib/pod-status";
 import type { UsageScope } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import type { PodInfo, ResourceConnections } from "@/generated/types";
@@ -30,9 +31,7 @@ import type { WorkloadTemplate } from "@/components/resources/workload-ceiling";
  * and zero contributors here.
  */
 function runningPods(pods: readonly PodInfo[]): PodInfo[] {
-  return pods.filter(
-    (pod) => pod.status.phase !== "Succeeded" && pod.status.phase !== "Failed"
-  );
+  return pods.filter((pod) => !hasTerminated(pod));
 }
 
 export interface WorkloadUsageProps {

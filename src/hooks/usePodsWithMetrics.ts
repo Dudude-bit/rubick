@@ -97,7 +97,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     ? NOTHING_UNREAD
     : (answer?.unread ?? NOTHING_UNREAD);
 
-  const { podMetrics, podStatus } = useMetrics({
+  const { podMetrics, podStatus, podUnread, refetchPodMetrics } = useMetrics({
     // Read per namespace, like the pods: a cluster-wide read is refused to a
     // namespace-scoped token, which then lost every sample on the page.
     scope: scope.scope,
@@ -123,6 +123,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     pods,
     podMetrics,
     podStatus,
+    podUnread,
+    refetchPodMetrics,
     // The pods, and only the pods. Metrics are an optional column pair on a
     // cluster that may not even run metrics-server, and waiting for them held
     // the whole list behind a skeleton on every cluster that does: the rows

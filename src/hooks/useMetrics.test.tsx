@@ -38,4 +38,24 @@ describe("pod metrics for a selection", () => {
     );
     expect(commands.getPodsMetrics).not.toHaveBeenCalled();
   });
+
+  /** Dropped here, a namespace refused beside one that answered reaches the
+   *  pages as an "available" status with no word about it. */
+  it("hands on the namespaces whose metrics were not read", async () => {
+    const staging = {
+      namespace: "staging",
+      code: "PERMISSION_DENIED",
+      message: "forbidden",
+    };
+    vi.mocked(commands.getPodsMetricsIn).mockResolvedValueOnce({
+      status: { status: "available", message: null },
+      data: [],
+      unread: [staging],
+    });
+    const { result } = renderHook(
+      () => useMetrics({ scope: ["prod", "staging"], includeNodes: false }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.podUnread).toEqual([staging]));
+  });
 });

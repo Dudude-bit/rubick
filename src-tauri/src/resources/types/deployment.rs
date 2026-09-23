@@ -100,9 +100,10 @@ pub struct TemplateContainers {
 }
 
 /// One replica's requests and limits, by the rule every pod screen uses —
-/// `resources::reservation`: sidecars counted, the largest init container,
-/// pod-level resources. Millicores and bytes; `None` where the template sets
-/// none of it. A template carries no overhead: that is added at admission.
+/// `resources::reservation`: requests as the scheduler holds them, limits as
+/// the running containers' ceiling. Millicores and bytes; `None` where the
+/// template sets none of it. A template carries no overhead: that is added
+/// at admission.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReplicaReservation {
@@ -127,9 +128,9 @@ impl ReplicaReservation {
         let some = |v: Option<&f64>| v.copied().filter(|v| *v > 0.0);
         Self {
             cpu_requests: some(held.requests.get("cpu")),
-            cpu_limits: some(held.limits.get("cpu")),
+            cpu_limits: some(held.ceiling.get("cpu")),
             memory_requests: some(held.requests.get("memory")),
-            memory_limits: some(held.limits.get("memory")),
+            memory_limits: some(held.ceiling.get("memory")),
             known: held.known,
         }
     }
@@ -369,6 +370,8 @@ mod tests {
     /// Would put a workload's Usage chart on a different ceiling from its
     /// pods: the frontend used to sum the template itself, counting sidecars
     /// but not the largest init container, while the pods column counted both.
+    /// The ceiling is the running containers' — `migrate` has exited before
+    /// anything is measured.
     #[test]
     fn a_replica_is_sized_by_the_rule_the_pods_are() {
         let mib = 1024.0 * 1024.0;
@@ -384,8 +387,10 @@ mod tests {
         assert!(replica.known);
         assert_eq!(replica.cpu_requests, Some(500.0));
         assert_eq!(replica.memory_requests, Some(256.0 * mib));
-        assert_eq!(replica.cpu_limits, Some(500.0));
+        assert_eq!(replica.cpu_limits, Some(150.0));
         assert_eq!(replica.memory_limits, None, "no container limits memory");
+        let pod = crate::resources::types::pod::resource_totals(&spec);
+        assert_eq!(pod.cpu_limits.as_deref(), Some("150m"));
     }
 
     /// A pod-level limit (KEP-2837) replaces the container sum for its

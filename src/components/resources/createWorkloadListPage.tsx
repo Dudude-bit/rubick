@@ -81,7 +81,12 @@ export function createWorkloadListPage<T extends Workload>(
 
     // Read for the aggregated CPU and memory columns only. The workloads are
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
-    const { data: pods, podStatus } = usePodsWithMetrics();
+    const {
+      data: pods,
+      podStatus,
+      podUnread,
+      refetchPodMetrics,
+    } = usePodsWithMetrics();
 
     const cacheKey = scopeCacheKey(scope.scope);
     const watchFactory = config.watch;
@@ -175,9 +180,11 @@ export function createWorkloadListPage<T extends Workload>(
         }
         // Inside the list, as the Nodes page has it — see `PodList`.
         headerContent={
-          podStatus?.status !== "available" ? (
-            <MetricsStatusBanner status={podStatus} />
-          ) : null
+          <MetricsStatusBanner
+            status={podStatus}
+            unread={podUnread}
+            onRetry={() => void refetchPodMetrics()}
+          />
         }
         getRowHref={(row) =>
           getResourceDetailUrl(config.resourceType, row.name, row.namespace)
