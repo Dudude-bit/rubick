@@ -503,6 +503,38 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    /// A capability's `remote` block hands its permissions to any page on
+    /// those URLs. Ours said `https://*`, so a page the window was taken to
+    /// could read the clipboard, open programs and emit the app's events;
+    /// and every command's scope was resolved against those patterns at
+    /// startup, a quarter of a second. Logins open in the browser, so no
+    /// remote page here needs IPC, and `auth-*` named a window that never
+    /// existed.
+    #[test]
+    fn no_capability_reaches_a_remote_page_or_a_window_we_do_not_open() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+        let mut read = 0;
+        for entry in fs::read_dir(&dir).expect("the capabilities folder") {
+            let path = entry.expect("an entry").path();
+            let json: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).expect("read a capability"))
+                    .expect("a capability is JSON");
+            assert!(
+                json.get("remote").is_none(),
+                "{} grants remote pages IPC",
+                path.display()
+            );
+            assert_eq!(
+                json["windows"],
+                serde_json::json!(["main"]),
+                "{} names a window the app does not open",
+                path.display()
+            );
+            read += 1;
+        }
+        assert!(read > 0, "no capability was read");
+    }
+
     /// A Flatpak's exported .desktop file is its registration of `rubick://`,
     /// and the sandbox has no `xdg-mime`: registering from inside put an
     /// error and a warning at the top of every Flatpak log. Everywhere else
