@@ -301,6 +301,10 @@ export function LogQuery({
             </span>
           )}
           <input
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             ref={inputRef}
             value={draft}
             onChange={(event) => {

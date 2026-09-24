@@ -2026,6 +2026,7 @@ export type AppEvent =
       message: string | null;
       matched: number;
       truncated: boolean;
+      unreadable: string[];
     }
   | { channel: "terminal-output"; session_id: string; data: string }
   | { channel: "terminal-closed"; session_id: string; status: string | null }

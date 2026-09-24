@@ -8,6 +8,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const store = vi.hoisted(() => ({
   state: { isConnected: true, namespaceScope: [] as string[] },
 }));
+const page = vi.hoisted(() => ({
+  routes: [] as unknown[],
+  refused: true,
+  backingError: null as Error | null,
+}));
 vi.mock("@/stores/clusterStore", () => ({
   useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
     typeof selector === "function" ? selector(store.state) : store.state
@@ -21,7 +26,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 vi.mock("@/integrations", async (original) => ({
   ...(await original<typeof import("@/integrations")>()),
-  useBackingLists: () => ({ data: undefined, error: null }),
+  useBackingLists: () => ({ data: undefined, error: page.backingError }),
 }));
 
 const refused = new Error("tcproutes is forbidden (code: 403)");
@@ -32,9 +37,9 @@ vi.mock("@/hooks/useGatewayRoutes", () => ({
     detectionLoading: false,
     detectionError: null,
     served: new Set(["HTTPRoute", "TCPRoute"]),
-    routes: [],
+    routes: page.routes,
     unread: [],
-    refusedKinds: [{ kind: "TCPRoute", error: refused }],
+    refusedKinds: page.refused ? [{ kind: "TCPRoute", error: refused }] : [],
     isLoading: false,
     error: null,
     dataUpdatedAt: 0,
@@ -70,5 +75,48 @@ describe("the routes page with a route kind it could not read", () => {
     ).toBeVisible();
     expect(screen.queryByText("No routes in the current scope.")).toBeNull();
     expect(screen.queryByText("0")).toBeNull();
+  });
+});
+
+describe("the routes page when the Services could not be read", () => {
+  /**
+   * A refused Services list left the verdicts unknown for good, and the
+   * page said "reading verdicts… still on their way" forever.
+   */
+  it("says the Services could not be read instead of still reading", async () => {
+    page.refused = false;
+    page.backingError = new Error("services is forbidden (code: 403)");
+    page.routes = [
+      {
+        kind: "HTTPRoute",
+        apiVersion: "gateway.networking.k8s.io/v1",
+        name: "web",
+        namespace: "shop",
+        hostnames: ["web.example.com"],
+        parentRefs: [],
+        rules: [],
+        parents: [],
+        generation: 1,
+        labels: {},
+        annotations: {},
+        createdAt: null,
+      },
+    ];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/network/routes"]}>
+          <TooltipProvider>
+            <GatewayRoutesList />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(
+      await screen.findByText(
+        "The Services behind these routes could not be read, so no verdict below is a verdict."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(/still on their way/)).toBeNull();
   });
 });

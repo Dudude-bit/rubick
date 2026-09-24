@@ -12,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const search = vi.hoisted(() => ({
+  unreadable: [] as string[],
   hits: [] as {
     context: string;
     kind: string;
@@ -32,6 +33,7 @@ vi.mock("@/hooks/useResourceSearch", async (importOriginal) => ({
         message: null,
         matched: search.hits.length,
         truncated: false,
+        unreadable: search.unreadable,
       },
     ],
     isSearching: false,
@@ -71,6 +73,7 @@ async function open(query: string) {
 describe("the command palette's hits", () => {
   beforeEach(() => {
     search.hits = [];
+    search.unreadable = [];
     useClusterStore.setState({
       currentContext: "k3d-dev",
       currentNamespace: "",
@@ -133,6 +136,17 @@ describe("the command palette's hits", () => {
     fireEvent.click(screen.getByText(/api-worker/), { ctrlKey: true });
     expect(useScopeTabStore.getState().tabs).toHaveLength(3);
     expect(useScopeTabStore.getState().activeId).toBe("palette");
+  });
+
+  /** The cluster's row said "1 match" in green over a refused Services
+   *  list; the unread kinds are part of its answer. */
+  it("names the kinds a cluster could not read beside its matches", async () => {
+    search.hits = [hit()];
+    search.unreadable = ["Service"];
+    await open("burst-demo");
+    expect(
+      await screen.findByText(/could not read Service/)
+    ).toBeInTheDocument();
   });
 
   it("does not offer a kind the router has no page for at all", async () => {

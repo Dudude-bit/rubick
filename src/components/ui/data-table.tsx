@@ -832,6 +832,10 @@ function DataTableInner<TData extends RowData>({
           <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
               type="text"
               aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}

@@ -65,6 +65,10 @@ export function SettingsNav({
       <div className="mx-1 flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <input
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           type="search"
           aria-label={t("settings", "searchSettings")}
           placeholder={t("settings", "searchSettings")}

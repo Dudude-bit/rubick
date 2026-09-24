@@ -386,6 +386,10 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           </span>
         ))}
         <input
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder={t("files", "filterNames", {

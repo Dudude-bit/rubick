@@ -841,6 +841,10 @@ function NamespacePopover({
         <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
           <Search aria-hidden="true" className="h-3 w-3 flex-none" />
           <input
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             value={filter}
             onChange={(event) => {
               setFilter(event.target.value);

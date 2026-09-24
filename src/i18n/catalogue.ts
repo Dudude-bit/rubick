@@ -109,6 +109,17 @@ export const en = {
     stopNoPodCarries: "No pod carries {selector}",
     stopNoneReadyNote:
       "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+    stopRouteNotAcceptedTitle: "{gateway} does not accept this route",
+    stopRouteNotAcceptedNote:
+      "The controller answered Accepted: False{said}. The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
+    stopRefNotPermittedTitle:
+      "A reference this route makes is not permitted — no ReferenceGrant allows it",
+    stopRefUnresolvedTitle: "A reference this route makes did not resolve",
+    stopRefsUnresolvedNote:
+      "The controller answered ResolvedRefs: False{said}. The spec obliges the implementation to fail the affected traffic rather than route around it.",
+    stopGatewayMissingTitle: "Names a Gateway that does not exist",
+    stopGatewayMissingNote:
+      "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent — this is the one refusal the cluster cannot say itself.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list}, and {last}",
     twoAnd: "{a} and {b}",
@@ -3677,6 +3688,7 @@ export const en = {
     connectingInline: "connecting…",
     searchingInline: "searching…",
     failedInline: "failed",
+    kindsUnreadInline: "could not read {kinds}",
     retryInline: "retry",
     toSearchIt: "to search it",
     notInKubeconfig: "not in the kubeconfig",
@@ -5458,6 +5470,8 @@ export const en = {
     nothingMatchesOnSearched:
       "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",
+    nothingMatchesInReadable:
+      "Nothing matches “{query}” in what could be read — some kinds could not be.",
     noHelmHistory: "No history — Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
@@ -5525,7 +5539,7 @@ export const en = {
     gwProgrammedQuietSay:
       "Gateway {name} — the controller has not reported Programmed",
     gwProgrammedPendingSay:
-      "Gateway {name} — the controller has taken it and not finished",
+      "Gateway {name} — waiting for a controller to program it",
     gwProgrammedSay: "Gateway {name} is programmed",
     gwListenerNamed: "Listener :{name}",
     gwListenerAny: "A listener",
@@ -5735,6 +5749,8 @@ export const en = {
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",
     gwCouldNotReadVerdicts:
       "The gateways could not be read, so no verdict below is a verdict.",
+    gwCouldNotReadBacking:
+      "The Services behind these routes could not be read, so no verdict below is a verdict.",
     gwNoConditionsYet: "No controller has written conditions yet.",
     gwProbeRefused:
       "refused — the address answers, but nothing listens on this port",
