@@ -140,6 +140,9 @@ pub struct ServicePublished {
     /// and they are counted nowhere above, because they are not endpoints in
     /// any sense kube-proxy would recognise.
     pub unrouted: i32,
+    /// Of `unrouted`, the ones the slice calls ready.
+    #[serde(rename = "unroutedReady")]
+    pub unrouted_ready: i32,
     pub ports: Vec<PublishedPort>,
     /// Every published endpoint where the reader is on the Service's own
     /// page, and the first alone where a chain hop only needs a name.
@@ -326,7 +329,8 @@ pub fn from_slices(
 
     let mut ports: Vec<PublishedPort> = Vec::new();
     let mut endpoints: Vec<PublishedEndpoint> = Vec::new();
-    let (mut ready, mut draining, mut not_ready, mut unrouted) = (0, 0, 0, 0);
+    let (mut ready, mut draining, mut not_ready) = (0, 0, 0);
+    let (mut unrouted, mut unrouted_ready) = (0, 0);
     // Every pod any slice holds, and whether the slice holding it publishes a
     // port. A dual-stack Service lists the same pod in an IPv4 and an IPv6
     // slice, so "published somewhere" is the union rather than the last one.
@@ -364,6 +368,7 @@ pub fn from_slices(
             }
             if !publishes {
                 unrouted += 1;
+                unrouted_ready += i32::from(read.ready);
                 continue;
             }
             if read.ready {
@@ -395,6 +400,7 @@ pub fn from_slices(
         draining,
         not_ready,
         unrouted,
+        unrouted_ready,
         ports,
         endpoints,
         whole: true,
@@ -483,6 +489,7 @@ pub fn from_legacy(
         draining: 0,
         not_ready,
         unrouted: 0,
+        unrouted_ready: 0,
         ports,
         endpoints,
         whole: true,
@@ -535,6 +542,7 @@ pub fn from_pod_readiness(
         draining: 0,
         not_ready,
         unrouted: 0,
+        unrouted_ready: 0,
         ports: Vec::new(),
         endpoints,
         whole: true,
@@ -608,7 +616,7 @@ pub fn service_stop(
                 service: at,
                 selector: text,
                 pods: published.unrouted,
-                ready_pods: published.unrouted,
+                ready_pods: published.unrouted_ready,
                 unnamed_ports: named_target_ports(service),
             });
         }
@@ -839,6 +847,37 @@ mod tests {
             published.unpublished[0].unnamed_ports,
             vec!["http".to_string()]
         );
+    }
+
+    /// Where the pods were not read, the stop counts ready pods from the
+    /// slice. It said every unrouted address was ready, so a Service with one
+    /// ready pod of two read "2 pods match, all ready".
+    #[test]
+    fn an_unread_pod_list_takes_ready_pods_from_the_slice() {
+        let svc = selecting("web");
+        let conditions = |ready: bool| EndpointConditions {
+            ready: Some(ready),
+            serving: Some(ready),
+            terminating: Some(false),
+        };
+        let slices = [slice(
+            "web-x",
+            "web",
+            None,
+            vec![
+                endpoint("10.0.0.1", "a", conditions(true)),
+                endpoint("10.0.0.2", "b", conditions(false)),
+            ],
+        )];
+
+        assert!(matches!(
+            stop_of(&svc, &slices, None),
+            Some(ChainStop::PublishesNothing {
+                pods: 2,
+                ready_pods: 1,
+                ..
+            })
+        ));
     }
 
     /// The same Service with the port named on the container publishes both,

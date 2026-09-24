@@ -191,6 +191,7 @@ const published = (name: string, ready: number): ServicePublished => ({
   draining: 0,
   notReady: ready === 0 ? 1 : 0,
   unrouted: 0,
+  unroutedReady: 0,
   ports: [],
   endpoints: [],
   whole: true,

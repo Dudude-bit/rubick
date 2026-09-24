@@ -114,6 +114,7 @@ function published(name: string, ready: number): ServicePublished {
     draining: 0,
     notReady: 0,
     unrouted: 0,
+    unroutedReady: 0,
   } as unknown as ServicePublished;
 }
 

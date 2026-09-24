@@ -348,6 +348,47 @@ pub async fn get_manifest(
     manifest_of(&state, &kind, &api_version, &name, namespace).await
 }
 
+/// Where one object is read, for every reader of one by kind and version.
+struct Served {
+    api: kube::Api<kube::api::DynamicObject>,
+    gateway: bool,
+}
+
+impl Served {
+    // Gateway API kinds are pinned to /v1 by the frontend registry, but a
+    // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
+    // negotiation every gateway command does, so the YAML tab matches the
+    // Overview it sits beside instead of 404ing. Where discovery gave no
+    // version the registry's pin is a guess, and its 404 would read as the
+    // object gone.
+    async fn at(
+        state: &AppState,
+        kind: &str,
+        api_version: &str,
+        namespace: Option<String>,
+    ) -> Result<Self> {
+        let gateway = api_version.starts_with("gateway.networking.k8s.io/");
+        let api_resource = if gateway {
+            crate::commands::gateway::served_api_resource(kind, state).await?
+        } else {
+            api_resource_for(kind, api_version)
+        };
+        let ns = namespace.unwrap_or_else(|| "default".to_string());
+        let ctx = ResourceContext::for_command(state, Some(ns))?;
+        let api =
+            ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
+        Ok(Self { api, gateway })
+    }
+
+    fn answered<T>(&self, state: &AppState, answer: kube::Result<T>) -> Result<T> {
+        if self.gateway {
+            crate::commands::gateway::answered(state, answer)
+        } else {
+            Ok(answer?)
+        }
+    }
+}
+
 async fn manifest_of(
     state: &AppState,
     kind: &str,
@@ -355,29 +396,8 @@ async fn manifest_of(
     name: &str,
     namespace: Option<String>,
 ) -> Result<String> {
-    // Gateway API kinds are pinned to /v1 by the frontend registry, but a
-    // pre-graduation bundle serves them at v1beta1/v1alpha2 — the same
-    // negotiation every gateway command does, so the YAML tab matches the
-    // Overview it sits beside instead of 404ing. Where discovery gave no
-    // version the registry's pin is a guess, and its 404 would read as the
-    // object gone.
-    let gateway = api_version.starts_with("gateway.networking.k8s.io/");
-    let api_resource = if gateway {
-        crate::commands::gateway::served_api_resource(kind, state).await?
-    } else {
-        api_resource_for(kind, api_version)
-    };
-
-    let ns = namespace.unwrap_or_else(|| "default".to_string());
-    let ctx = ResourceContext::for_command(state, Some(ns))?;
-    let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
-
-    let resource = api.get(name).await;
-    let resource = if gateway {
-        crate::commands::gateway::answered(state, resource)?
-    } else {
-        resource?
-    };
+    let served = Served::at(state, kind, api_version, namespace).await?;
+    let resource = served.answered(state, served.api.get(name).await)?;
 
     // Every detail page's YAML tab comes through here, Secrets included, and
     // base64 is not a control: `tls.key` in a manifest is one `base64 -d`
@@ -411,11 +431,10 @@ pub async fn get_object_metadata(
     state: State<'_, AppState>,
 ) -> Result<ObjectMetadata> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let api_resource = api_resource_for(&kind, &api_version);
-    let ns = namespace.unwrap_or_else(|| "default".to_string());
-    let ctx = ResourceContext::for_command(&state, Some(ns))?;
-    let api = ctx.dynamic_api_for_resource(&api_resource, is_cluster_scoped(&api_resource.kind));
-    let meta = api.get_metadata(&name).await?.metadata;
+    let served = Served::at(&state, &kind, &api_version, namespace).await?;
+    let meta = served
+        .answered(&state, served.api.get_metadata(&name).await)?
+        .metadata;
     Ok(ObjectMetadata {
         labels: meta.labels.unwrap_or_default(),
         annotations: meta.annotations.unwrap_or_default(),

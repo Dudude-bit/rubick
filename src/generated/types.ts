@@ -480,6 +480,7 @@ export interface ServicePublished {
   draining: number;
   notReady: number;
   unrouted: number;
+  unroutedReady: number;
   ports: PublishedPort[];
   endpoints: PublishedEndpoint[];
   whole: boolean;

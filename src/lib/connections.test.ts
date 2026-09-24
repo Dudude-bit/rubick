@@ -97,6 +97,7 @@ const publishes = (
   draining: 0,
   notReady: 0,
   unrouted: 0,
+  unroutedReady: 0,
   ports: [],
   endpoints: [],
   whole: true,

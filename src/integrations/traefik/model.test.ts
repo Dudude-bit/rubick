@@ -140,6 +140,7 @@ function published(
     draining: 0,
     notReady,
     unrouted: 0,
+    unroutedReady: 0,
     ports: [],
     endpoints: [],
     whole: true,
