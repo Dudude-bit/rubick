@@ -303,9 +303,9 @@ function ClusterListRow({
           meta={
             <span className="flex items-center gap-1.5">
               {failed
-                ? "failed"
+                ? t("cluster", "failedInline")
                 : lastUsedAt
-                  ? `last used ${age} ago`
+                  ? t("cluster", "lastUsedAgo", { age })
                   : providerLabel(detectProvider(context)).toLowerCase()}
               {/* Both ways in are only worth their width on the row the
                   reader is standing on. The arrow is spelled out for

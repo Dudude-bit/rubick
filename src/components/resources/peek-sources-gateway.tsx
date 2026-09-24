@@ -223,7 +223,9 @@ export const GATEWAY_SOURCES: PeekSources = {
                   {listener.hostname && (
                     <CopyableValue
                       value={listener.hostname}
-                      label={`Listener hostname ${listener.hostname}`}
+                      label={t("columns", "listenerHostname", {
+                        host: listener.hostname,
+                      })}
                       quietMark
                     />
                   )}
