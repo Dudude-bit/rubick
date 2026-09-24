@@ -118,31 +118,34 @@ describe("the router bridge", () => {
 describe("a tab whose cluster is gone", () => {
   /** The hook is what hands the connection to the tab; without it the tab
    *  keeps the lost cluster's name after the window connected elsewhere. */
-  it("takes the cluster the window connects to", async () => {
+  it("takes the cluster a connect from it lands on", async () => {
     useScopeTabStore.setState({
       tabs: [tab({ id: "a", context: "gone", missing: true })],
       activeId: "a",
     });
     mount("/");
     await act(async () => {
-      useClusterStore.setState({ currentContext: "drain", isConnected: true });
+      await useClusterStore.getState().connect("drain");
     });
     expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
   });
 
-  /** The other order: connected first, flagged lost when the kubeconfig
-   *  loads. The tab kept the lost name over the connected cluster. */
-  it("takes it when the tab is flagged lost after the window connected", async () => {
-    useClusterStore.setState({ currentContext: "drain", isConnected: true });
+  /** Activating the lost tab drops the window's connection after the tab is
+   *  already active; the connection being dropped is not the tab's. */
+  it("does not take the cluster still open when it is activated", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
     useScopeTabStore.setState({
-      tabs: [tab({ id: "a", context: "gone" })],
+      tabs: [
+        tab({ id: "a", context: "prod" }),
+        tab({ id: "b", context: "gone", missing: true }),
+      ],
       activeId: "a",
     });
     mount("/");
     await act(async () => {
-      state().reconcileContexts(["drain"]);
+      await state().activateTab("b");
     });
-    expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
+    expect(state().tabs[1]).toMatchObject({ missing: true, context: "gone" });
   });
 });
 

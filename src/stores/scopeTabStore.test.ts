@@ -312,13 +312,20 @@ describe("a cluster the kubeconfig has lost", () => {
 
   /** Picking a cluster on a lost tab's front door connected the window, and
    *  the tab went on naming the lost cluster over the new one's rows. */
+  /** With the scope `connect` restored for that cluster: an empty one on
+   *  the tab would be applied over it on the next launch. */
   it("becomes the cluster the window connects to from its front door", () => {
-    seed([tab({ id: "a", context: "gone", missing: true, namespace: "web" })]);
+    seed([tab({ id: "a", context: "gone", missing: true, namespace: "old" })]);
+    useClusterStore.setState({
+      currentNamespace: "web",
+      namespaceScope: ["web"],
+    });
     state().adoptConnected("drain");
     expect(state().tabs[0]).toMatchObject({
       missing: false,
       context: "drain",
-      namespace: "",
+      namespace: "web",
+      scope: ["web"],
     });
   });
 

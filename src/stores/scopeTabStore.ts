@@ -343,6 +343,10 @@ export const useScopeTabStore = create<ScopeTabState>()(
         set((state) => {
           const active = state.tabs.find((tab) => tab.id === state.activeId);
           if (!active?.missing) return state;
+          // The scope `connect` restored for that cluster, not an empty one
+          // that the next launch would apply over it.
+          const { currentNamespace, namespaceScope } =
+            useClusterStore.getState();
           return {
             tabs: state.tabs.map((tab) =>
               tab.id === state.activeId
@@ -350,8 +354,8 @@ export const useScopeTabStore = create<ScopeTabState>()(
                     ...tab,
                     missing: false,
                     context: connected,
-                    namespace: "",
-                    scope: [],
+                    namespace: currentNamespace,
+                    scope: namespaceScope,
                   }
                 : tab
             ),

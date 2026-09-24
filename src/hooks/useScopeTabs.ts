@@ -24,9 +24,6 @@ export function useScopeTabs(): void {
   const activeId = useScopeTabStore((s) => s.activeId);
   const contexts = useClusterStore((s) => s.contexts);
   const contextSwitches = useClusterStore((s) => s.contextSwitches);
-  const connectedTo = useClusterStore((s) =>
-    s.isConnected ? s.currentContext : null
-  );
 
   // Router -> store. Every navigation belongs to the tab it happened in,
   // the way a browser tab tracks the page.
@@ -54,15 +51,35 @@ export function useScopeTabs(): void {
       .retargetAfterSwitch(useClusterStore.getState().currentContext);
   }, [contextSwitches]);
 
-  // Either may come second: the kubeconfig can flag the tab lost after the
-  // window has already connected.
-  const activeLost = useScopeTabStore(
-    (s) => s.tabs.find((tab) => tab.id === s.activeId)?.missing ?? false
-  );
+  // A lost tab takes the cluster a connect started from it lands on — not
+  // the one still open when it was activated, which is being dropped.
   useEffect(() => {
-    if (connectedTo && activeLost)
-      useScopeTabStore.getState().adoptConnected(connectedTo);
-  }, [connectedTo, activeLost]);
+    let startedOn: { attempt: number; tab: string } | null = null;
+    return useClusterStore.subscribe((state, prev) => {
+      if (
+        state.connectionAttemptId !== prev.connectionAttemptId &&
+        state.pendingContext
+      ) {
+        const { tabs, activeId } = useScopeTabStore.getState();
+        const active = tabs.find((tab) => tab.id === activeId);
+        startedOn = active?.missing
+          ? { attempt: state.connectionAttemptId, tab: active.id }
+          : null;
+      }
+      if (
+        startedOn &&
+        state.isConnected &&
+        !prev.isConnected &&
+        state.connectionAttemptId === startedOn.attempt &&
+        state.currentContext
+      ) {
+        const tabs = useScopeTabStore.getState();
+        if (tabs.activeId === startedOn.tab)
+          tabs.adoptConnected(state.currentContext);
+        startedOn = null;
+      }
+    });
+  }, []);
 
   // Everything cached belonged to the connection the parked tab no longer
   // has, so none of it may be shown as live. Resource query keys do not
