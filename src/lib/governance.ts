@@ -125,7 +125,7 @@ export function autoscalerRange(facts: AutoscalerFacts, t: T): string {
     ? t("readings", "hpaPinnedAt", { n: facts.maxReplicas })
     : t("readings", "hpaRange", {
         min: facts.minReplicas,
-        max: facts.maxReplicas,
+        n: facts.maxReplicas,
       });
 }
 

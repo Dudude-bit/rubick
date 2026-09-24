@@ -5,6 +5,8 @@ import type { T } from "@/i18n/useT";
 import { firingWords } from "./words";
 import { verdictOf } from "./verdict";
 import type { RuleRow } from "./model";
+import { verdictOf as verdictOfMonitor } from "../monitors/verdict";
+import type { MonitorRow } from "../monitors/model";
 
 const inLanguage =
   (language: "en" | "ru"): T =>
@@ -41,5 +43,30 @@ describe("the alerts verdict", () => {
     expect(verdictOf(row("pending"), 1, inLanguage("en")).head).toBe(
       "4 alerts pending from 1 rule, not yet past their for clauses."
     );
+  });
+});
+
+describe("the monitors verdict", () => {
+  const down = (n: number, total: number) =>
+    ({
+      findings: [
+        {
+          kind: "targetsDown",
+          severity: "err",
+          down: n,
+          total,
+          lastError: null,
+        },
+      ],
+    }) as never as MonitorRow;
+
+  /** "1 из 1 target'ов down." — the total's noun ignored the total. */
+  it("declines the target total by its own number", () => {
+    expect(
+      verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("ru")).head
+    ).toBe("1 из 1 target'а down.");
+    expect(
+      verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("en")).head
+    ).toBe("1 of 1 target down.");
   });
 });

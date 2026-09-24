@@ -724,7 +724,19 @@ export const ru: Catalogue = {
     runsSubject: "задачи, которые этот CronJob ещё хранит",
     barUpToDate: "актуальны",
     barOutdated: "устарели",
-    historyLimits: "хранится {succeeded} успешных · {failed} неудачных",
+    historyLimits: "хранится {succeeded} · {failed}",
+    jobsSucceeded: {
+      one: "{n} успешный",
+      few: "{n} успешных",
+      many: "{n} успешных",
+      other: "{n} успешных",
+    },
+    jobsFailed: {
+      one: "{n} неудачный",
+      few: "{n} неудачных",
+      many: "{n} неудачных",
+      other: "{n} неудачных",
+    },
     activePerController: "активных по данным контроллера: {n}",
     howDeclared: "Как это объявлено",
     keptHistoryLimits: "хранится {n} · сколько именно — решают лимиты истории",
@@ -2117,7 +2129,7 @@ export const ru: Catalogue = {
       "Объектов NodeConfig нет. Локальные диски тогда такие, какими пришли узлы; оператор ничего не готовит.",
     nodeStatusesNotWritten:
       "оператор не записал статусы узлов, поэтому сколько узлов он настроил — неизвестно",
-    nodesSetUp: "{tuned} из {nodes} узлов подготовлено",
+    nodesSetUp: "{tuned} {of} подготовлено",
   },
   tell: {
     askRollout: "Скажи мне, когда раскатка закончится",
@@ -2276,8 +2288,14 @@ export const ru: Catalogue = {
     verdictNoInstances:
       "В кластере нет объекта Prometheus, поэтому его некому подхватить.",
     verdictPickedUpUnknown: "Подхватывает ли его Prometheus, неизвестно.",
-    verdictDown: "{down} из {total} target'ов down.",
-    verdictDownSince: "{down} из {total} target'ов down с {since}.",
+    verdictDown: "{down} {of} down.",
+    verdictDownSince: "{down} {of} down с {since}.",
+    ofTargets: {
+      one: "из {n} target'а",
+      few: "из {n} target'ов",
+      many: "из {n} target'ов",
+      other: "из {n} target'ов",
+    },
     prometheusSays: "Prometheus говорит",
     verdictNoTargets: "Подхвачен, но у Prometheus для него ещё нет target'а.",
     verdictUp: {
@@ -2346,7 +2364,12 @@ export const ru: Catalogue = {
     noTargetYet: "пока нет",
     noTargets:
       "Оператор не записал для него ни одного target'а: за именованным портом нет эндпоинта, или записал для другого Prometheus, не того, что подключён.",
-    moreTargets: "ещё {n} target'ов",
+    moreTargets: {
+      one: "ещё {n} target",
+      few: "ещё {n} target'а",
+      many: "ещё {n} target'ов",
+      other: "ещё {n} target'ов",
+    },
     notChecked: "не проверено",
     mostLikely: "Скорее всего",
     hintLoopbackWhy:
@@ -2797,9 +2820,24 @@ export const ru: Catalogue = {
     },
     twoWord: "Две",
     threeWord: "Три",
-    warnUndoThis: "{count} вещи отменят это.",
-    warnUndoApply: "{count} вещи отменят это применение.",
-    warnRevertCount: "{count} вещи вернут это число обратно.",
+    warnUndoThis: {
+      one: "{count} вещь отменит это.",
+      few: "{count} вещи отменят это.",
+      many: "{count} вещей отменят это.",
+      other: "{count} вещей отменят это.",
+    },
+    warnUndoApply: {
+      one: "{count} вещь отменит это применение.",
+      few: "{count} вещи отменят это применение.",
+      many: "{count} вещей отменят это применение.",
+      other: "{count} вещей отменят это применение.",
+    },
+    warnRevertCount: {
+      one: "{count} вещь вернёт это число обратно.",
+      few: "{count} вещи вернут это число обратно.",
+      many: "{count} вещей вернут это число обратно.",
+      other: "{count} вещей вернут это число обратно.",
+    },
     rowsOfTotal: "{shown} из {total} — {label}",
     rowsWhereAnswered: "{n} — {label}, из ответивших namespace",
     rowCount: {
@@ -2864,7 +2902,7 @@ export const ru: Catalogue = {
     envFromConfigMap: "configmap · envFrom",
     envAllSources: "все источники",
     envFromWord: "envFrom",
-    readyOfNodes: "{ready} из {desired} узлов",
+    readyOfNodes: "{ready} {of}",
     helmRelease: "релиз Helm",
     crdEstablished: "Установлено",
     crdNotEstablished: "Не установлено",
@@ -3137,7 +3175,12 @@ export const ru: Catalogue = {
       many: "{n} перезапусков с момента создания",
       other: "{n} перезапуска с момента создания",
     },
-    problemReplicasReady: "готовы {ready} из {desired} реплик",
+    problemReplicasReady: {
+      one: "готово {ready} из {n} реплики",
+      few: "готово {ready} из {n} реплик",
+      many: "готово {ready} из {n} реплик",
+      other: "готово {ready} из {n} реплик",
+    },
     problemUnschedulable: "помечен неназначаемым — новые поды сюда не поедут",
     certNoSecret: "в этом пространстве имён нет Secret с таким именем",
     certSecretUnreadable: "Secret не удалось прочитать — {said}",
@@ -3573,7 +3616,12 @@ export const ru: Catalogue = {
     delApplyLabelDetail:
       "Этот объект никто не применяет, что бы ни говорила его метка.",
     hpaPinnedAt: "закреплено на {n}",
-    hpaRange: "от {min} до {max} реплик",
+    hpaRange: {
+      one: "от {min} до {n} реплики",
+      few: "от {min} до {n} реплик",
+      many: "от {min} до {n} реплик",
+      other: "от {min} до {n} реплик",
+    },
     hpaCannotReach: "{name} не достаёт до того, что масштабирует",
     hpaCannotReachDetail:
       "Автомасштабировщик называет {kind} {target} и не может прочитать его масштаб, поэтому ничего не масштабирует.",
@@ -3689,7 +3737,12 @@ export const ru: Catalogue = {
       "Каждый TLS-ответ велит браузеру впредь отказываться от обычного HTTP к этому хосту.",
     ngxHstsOff:
       "Заголовок Strict-Transport-Security не отправляется, поэтому браузер снова попробует обычный HTTP.",
-    ngxHstsAge: "Браузеру велено помнить это {age} секунд.",
+    ngxHstsAge: {
+      one: "Браузеру велено помнить это {n} секунду.",
+      few: "Браузеру велено помнить это {n} секунды.",
+      many: "Браузеру велено помнить это {n} секунд.",
+      other: "Браузеру велено помнить это {n} секунды.",
+    },
     ngxHttp2On: "На TLS-слушателе предлагается HTTP/2.",
     ngxHttp2Off: "HTTP/2 выключен; все клиенты откатываются на HTTP/1.1.",
     ngxGzipOn: "Ответы сжимаются, прежде чем покинуть nginx.",
@@ -6815,7 +6868,25 @@ export const ru: Catalogue = {
       other:
         "Плотность лога во времени: {n} среза по {step}, с {from} до {to}.",
     },
-    densityTotals: "{lines} строк, {errors} ошибок, {warnings} предупреждений.",
+    densityTotals: "{lines}, {errors}, {warnings}.",
+    densityLines: {
+      one: "{count} строка",
+      few: "{count} строки",
+      many: "{count} строк",
+      other: "{count} строки",
+    },
+    densityErrors: {
+      one: "{count} ошибка",
+      few: "{count} ошибки",
+      many: "{count} ошибок",
+      other: "{count} ошибки",
+    },
+    densityWarnings: {
+      one: "{count} предупреждение",
+      few: "{count} предупреждения",
+      many: "{count} предупреждений",
+      other: "{count} предупреждения",
+    },
     busiestSlice: {
       one: "Самый плотный срез {clock}: {lines} строка.",
       few: "Самый плотный срез {clock}: {lines} строки.",
@@ -7058,7 +7129,12 @@ export const ru: Catalogue = {
     },
     versionsWithDeprecated: "{n} · {deprecated} устарели",
     slashReady: "{n}/{total} готовы",
-    podsReadySlash: "готово {n}/{total} подов",
+    podsReadySlash: {
+      one: "готово {ready}/{n} пода",
+      few: "готово {ready}/{n} подов",
+      many: "готово {ready}/{n} подов",
+      other: "готово {ready}/{n} подов",
+    },
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",
@@ -7078,8 +7154,20 @@ export const ru: Catalogue = {
       other: "{n} аннотации",
     },
     clustersAnswered: "ответили {n} из {total}",
-    podsRunning: "работает {n} из {total} подов",
-    nodesReady: "готовы {n} из {total} узлов",
+    podsRunning: "работает {n} {of}",
+    nodesReady: "готово {n} {of}",
+    ofPods: {
+      one: "из {n} пода",
+      few: "из {n} подов",
+      many: "из {n} подов",
+      other: "из {n} подов",
+    },
+    ofNodes: {
+      one: "из {n} узла",
+      few: "из {n} узлов",
+      many: "из {n} узлов",
+      other: "из {n} узлов",
+    },
     moreNotDrawn: {
       one: "Ещё {n} адрес не показан — счётчики выше учитывают всё.",
       few: "Ещё {n} адреса не показаны — счётчики выше учитывают всё.",

@@ -752,7 +752,9 @@ export const en = {
     runsSubject: "jobs this CronJob still owns",
     barUpToDate: "up to date",
     barOutdated: "outdated",
-    historyLimits: "{succeeded} succeeded · {failed} failed kept",
+    historyLimits: "{succeeded} · {failed} kept",
+    jobsSucceeded: { one: "{n} succeeded", other: "{n} succeeded" },
+    jobsFailed: { one: "{n} failed", other: "{n} failed" },
     activePerController: "{n} active per the controller",
     howDeclared: "How it is declared",
     keptHistoryLimits: "{n} kept · history limits decide how many",
@@ -2044,7 +2046,7 @@ export const en = {
       "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
     nodeStatusesNotWritten:
       "the operator has written no node statuses, so how many nodes it tuned is unknown",
-    nodesSetUp: "{tuned} of {nodes} nodes set up",
+    nodesSetUp: "{tuned} {of} set up",
   },
   tell: {
     askRollout: "Tell me when the rollout finishes",
@@ -2200,8 +2202,9 @@ export const en = {
     verdictNoInstances:
       "No Prometheus object in the cluster, so nothing picks it up.",
     verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
-    verdictDown: "{down} of {total} targets down.",
-    verdictDownSince: "{down} of {total} targets down since {since}.",
+    verdictDown: "{down} {of} down.",
+    verdictDownSince: "{down} {of} down since {since}.",
+    ofTargets: { one: "of {n} target", other: "of {n} targets" },
     prometheusSays: "Prometheus says",
     verdictNoTargets: "Picked up, but Prometheus has no target for it yet.",
     verdictUp: {
@@ -2265,7 +2268,7 @@ export const en = {
     noTargetYet: "none yet",
     noTargets:
       "The operator has written no target for it: no endpoint behind the named port, or written for another Prometheus than the one connected.",
-    moreTargets: "+{n} more targets",
+    moreTargets: { one: "+{n} more target", other: "+{n} more targets" },
     notChecked: "not checked",
     mostLikely: "Most likely",
     hintLoopbackWhy:
@@ -2648,9 +2651,18 @@ export const en = {
     membersFolded: { one: "{n} object", other: "{n} objects" },
     twoWord: "Two",
     threeWord: "Three",
-    warnUndoThis: "{count} things will undo this.",
-    warnUndoApply: "{count} things will undo this apply.",
-    warnRevertCount: "{count} things will put this number back.",
+    warnUndoThis: {
+      one: "{count} thing will undo this.",
+      other: "{count} things will undo this.",
+    },
+    warnUndoApply: {
+      one: "{count} thing will undo this apply.",
+      other: "{count} things will undo this apply.",
+    },
+    warnRevertCount: {
+      one: "{count} thing will put this number back.",
+      other: "{count} things will put this number back.",
+    },
     rowsOfTotal: "{shown} of {total} {label}",
     rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
@@ -2697,7 +2709,7 @@ export const en = {
     envFromConfigMap: "configmap · envFrom",
     envAllSources: "all sources",
     envFromWord: "envFrom",
-    readyOfNodes: "{ready} of {desired} nodes",
+    readyOfNodes: "{ready} {of}",
     helmRelease: "Helm release",
     crdEstablished: "Established",
     crdNotEstablished: "Not established",
@@ -2925,7 +2937,10 @@ export const en = {
       one: "{n} restart since creation",
       other: "{n} restarts since creation",
     },
-    problemReplicasReady: "{ready}/{desired} replicas ready",
+    problemReplicasReady: {
+      one: "{ready}/{n} replica ready",
+      other: "{ready}/{n} replicas ready",
+    },
     problemUnschedulable: "marked unschedulable — no new pods will land here",
     certNoSecret: "no Secret of that name in this namespace",
     certSecretUnreadable: "the Secret could not be read — {said}",
@@ -3243,7 +3258,7 @@ export const en = {
     delApplyLabelDetail:
       "Nothing is applying this object, whatever its label says.",
     hpaPinnedAt: "pinned at {n}",
-    hpaRange: "{min} to {max} replicas",
+    hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
     hpaCannotReachDetail:
       "The autoscaler names {kind} {target} and cannot read its scale, so it is not scaling anything.",
@@ -3356,7 +3371,10 @@ export const en = {
       "Every TLS response tells the browser to refuse plain HTTP to this host in future.",
     ngxHstsOff:
       "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.",
-    ngxHstsAge: "The browser is told to remember that for {age} seconds.",
+    ngxHstsAge: {
+      one: "The browser is told to remember that for {n} second.",
+      other: "The browser is told to remember that for {n} seconds.",
+    },
     ngxHttp2On: "HTTP/2 is offered on the TLS listener.",
     ngxHttp2Off: "HTTP/2 is switched off; every client falls back to HTTP/1.1.",
     ngxGzipOn: "Responses are compressed before they leave nginx.",
@@ -6116,7 +6134,10 @@ export const en = {
       other:
         "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
     },
-    densityTotals: "{lines} lines, {errors} errors, {warnings} warnings.",
+    densityTotals: "{lines}, {errors}, {warnings}.",
+    densityLines: { one: "{count} line", other: "{count} lines" },
+    densityErrors: { one: "{count} error", other: "{count} errors" },
+    densityWarnings: { one: "{count} warning", other: "{count} warnings" },
     busiestSlice: {
       one: "Busiest slice {clock} with {lines} line.",
       other: "Busiest slice {clock} with {lines} lines.",
@@ -6256,7 +6277,10 @@ export const en = {
     versions: { one: "{n} version", other: "{n} versions" },
     versionsWithDeprecated: "{n} · {deprecated} deprecated",
     slashReady: "{n}/{total} ready",
-    podsReadySlash: "{n}/{total} pods ready",
+    podsReadySlash: {
+      one: "{ready}/{n} pod ready",
+      other: "{ready}/{n} pods ready",
+    },
     readySummary: "{n} ready",
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",
@@ -6266,8 +6290,10 @@ export const en = {
     certificates: { one: "{n} certificate", other: "{n} certificates" },
     annotations: { one: "{n} annotation", other: "{n} annotations" },
     clustersAnswered: "{n} of {total} clusters answered",
-    podsRunning: "{n} of {total} pods running",
-    nodesReady: "{n} of {total} nodes ready",
+    podsRunning: "{n} {of} running",
+    nodesReady: "{n} {of} ready",
+    ofPods: { one: "of {n} pod", other: "of {n} pods" },
+    ofNodes: { one: "of {n} node", other: "of {n} nodes" },
     moreNotDrawn: {
       one: "{n} more not drawn — the counts above are the whole of it.",
       other: "{n} more not drawn — the counts above are the whole of it.",

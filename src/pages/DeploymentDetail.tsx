@@ -601,8 +601,8 @@ export function DeploymentDetail() {
                 {" "}
                 ·{" "}
                 {t("count", "podsReadySlash", {
-                  n: rolloutReady,
-                  total: rolloutDesired,
+                  ready: rolloutReady,
+                  n: rolloutDesired,
                 })}
               </span>
             </p>

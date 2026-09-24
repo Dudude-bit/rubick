@@ -876,9 +876,18 @@ function describe(
       to: sliceClock(density.to),
     }),
     t("count", "densityTotals", {
-      lines: formatCount(density.lines),
-      errors: formatCount(density.errors),
-      warnings: formatCount(density.warnings),
+      lines: t("count", "densityLines", {
+        n: density.lines,
+        count: formatCount(density.lines),
+      }),
+      errors: t("count", "densityErrors", {
+        n: density.errors,
+        count: formatCount(density.errors),
+      }),
+      warnings: t("count", "densityWarnings", {
+        n: density.warnings,
+        count: formatCount(density.warnings),
+      }),
     }),
     t("count", "busiestSlice", {
       clock: sliceClock(busiest.start),
