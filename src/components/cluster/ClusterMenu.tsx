@@ -147,6 +147,10 @@ function AliasField({
   return (
     <div className="px-[7px] pb-1.5">
       <input
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         ref={ref}
         value={alias}
         onChange={(event) => onChange(event.target.value)}

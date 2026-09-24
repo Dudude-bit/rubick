@@ -38,6 +38,8 @@ export interface ClusterSearchState {
   message: string | null;
   matched: number;
   truncated: boolean;
+  /** Kinds this cluster would not list; `matched` counts only the rest. */
+  unreadable: string[];
 }
 
 export interface UseResourceSearchOptions {
@@ -92,6 +94,7 @@ function fromTarget(target: SearchTarget): ClusterSearchState {
     message: target.message,
     matched: 0,
     truncated: false,
+    unreadable: [],
   };
 }
 
@@ -225,6 +228,7 @@ export function useResourceSearch({
                       message: payload.message,
                       matched: payload.matched,
                       truncated: payload.truncated,
+                      unreadable: payload.unreadable,
                     }
                   : cluster
               );
@@ -296,6 +300,7 @@ export function useResourceSearch({
                     status: "searching" as const,
                     matched: 0,
                     truncated: false,
+                    unreadable: [],
                   }
             )
           : [];

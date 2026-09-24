@@ -466,6 +466,10 @@ export function GatewayRoutesList() {
         actions={
           <div className="flex items-center gap-2">
             <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("action", "gwFilterPlaceholder")}
@@ -613,7 +617,9 @@ export function GatewayRoutesList() {
                   thing to wait for. */}
               {gateways.error || classes.error
                 ? t("empty", "gwCouldNotReadVerdicts")
-                : t("empty", "gwReadingVerdicts")}
+                : backing.error
+                  ? t("empty", "gwCouldNotReadBacking")
+                  : t("empty", "gwReadingVerdicts")}
             </p>
             <div className="border-t border-hair">
               {[

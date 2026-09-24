@@ -333,6 +333,10 @@ export function Events() {
             <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
               <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
               <input
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 type="text"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}

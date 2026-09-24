@@ -1150,6 +1150,49 @@ describe("what the Service publishes", () => {
     expect(said.note).toContain("Name the port in the container");
   });
 
+  /** Three stops about routes were English literals, so a Russian screen
+   *  printed "gwtest-edge does not accept this route" in English. */
+  it("words every route stop through the catalogue", () => {
+    const keyed: T = (section, key) => `${String(section)}.${String(key)}`;
+    const stops: ChainStop[] = [
+      {
+        reason: "routeNotAccepted",
+        route: ref("HTTPRoute", "r"),
+        gateway: ref("Gateway", "g"),
+        conditionReason: "NotAllowedByListeners",
+        message: "no",
+      },
+      {
+        reason: "routeRefsUnresolved",
+        route: ref("HTTPRoute", "r"),
+        conditionReason: "RefNotPermitted",
+        message: null,
+      },
+      {
+        reason: "routeRefsUnresolved",
+        route: ref("HTTPRoute", "r"),
+        conditionReason: "BackendNotFound",
+        message: null,
+      },
+      {
+        reason: "gatewayMissing",
+        route: ref("HTTPRoute", "r"),
+        gateway: ref("Gateway", "g"),
+      },
+    ];
+    for (const stop of stops) {
+      const said = describeStop(stop, keyed);
+      expect(said.title).toMatch(/^nav\.stop/);
+      expect(said.note).toMatch(/^nav\.stop/);
+    }
+    expect(describeStop(stops[1], keyed).title).toBe(
+      "nav.stopRefNotPermittedTitle"
+    );
+    expect(describeStop(stops[2], keyed).title).toBe(
+      "nav.stopRefUnresolvedTitle"
+    );
+  });
+
   /** And it declines to explain what it cannot see. A pod missing from every
    *  slice for a reason nothing states gets no invented cause. */
   it("says only what it holds when the reason is not derivable", () => {

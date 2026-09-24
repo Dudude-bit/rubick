@@ -1239,8 +1239,12 @@ function traceFor(
   // Blind because the cluster could not be read, not because nobody has
   // probed yet: the last mile is `who: "machine"` and is blind on every
   // healthy trace by design, so counting it would make every verdict unknown.
+  // A controller that wrote nothing is silence, not a failed read.
   const unread = steps.some(
-    (step) => step.state === "blind" && step.who !== "machine"
+    (step) =>
+      step.state === "blind" &&
+      step.who !== "machine" &&
+      step.who !== "controller"
   );
   const unknownBecause =
     firstBroken >= 0

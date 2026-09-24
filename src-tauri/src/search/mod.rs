@@ -221,6 +221,7 @@ impl SearchManager {
                             )),
                             0,
                             false,
+                            Vec::new(),
                         );
                     }
                 });
@@ -337,28 +338,21 @@ async fn search_context(
             Some(message),
             0,
             false,
+            unreadable,
         );
         return;
     }
 
     // Some kinds were readable and some were not — the cluster answered,
-    // so this is `Done`, not `Failed`. But it carries the reason as a
-    // `reason` rather than only in prose: the app already treats a
-    // denied read as its own state (`MetricsStatusKind::Forbidden`)
-    // instead of folding it into "no data", and a partial search is the
-    // same thing one level down. Naming the kinds is what lets a reader
-    // tell "no Secrets match" from "you cannot see Secrets".
+    // so this is `Done`, not `Failed`, with the unread kinds named: that is
+    // what lets a reader tell "no Secrets match" from "you cannot see
+    // Secrets". `message` is the cluster's own words; the sentence around
+    // them is the frontend's, in the reader's language.
     let (reason, message) = match first_error {
         None => (None, None),
         Some(error) => {
             let (reason, cause) = describe_failure(&error);
-            (
-                Some(reason),
-                Some(format!(
-                    "Could not read {} — {cause}",
-                    unreadable.join(", ")
-                )),
-            )
+            (Some(reason), Some(cause))
         }
     };
 
@@ -371,6 +365,7 @@ async fn search_context(
         message,
         matched,
         truncated,
+        unreadable,
     );
 }
 
@@ -398,6 +393,7 @@ async fn resolve_client(
                 None,
                 0,
                 false,
+                Vec::new(),
             );
             Some((*client).clone())
         }
@@ -412,6 +408,7 @@ async fn resolve_client(
                 Some(message),
                 0,
                 false,
+                Vec::new(),
             );
             None
         }
@@ -428,6 +425,7 @@ async fn resolve_client(
                 )),
                 0,
                 false,
+                Vec::new(),
             );
             None
         }
@@ -514,6 +512,7 @@ fn emit_status(
     message: Option<String>,
     matched: u32,
     truncated: bool,
+    unreadable: Vec<String>,
 ) {
     let _ = event_tx.send(AppEvent::SearchStatus {
         search_id: search_id.to_string(),
@@ -523,6 +522,7 @@ fn emit_status(
         message,
         matched,
         truncated,
+        unreadable,
     });
 }
 
@@ -547,6 +547,72 @@ mod tests {
             .iter()
             .find(|kind| kind.label == label)
             .expect("a searchable kind")
+    }
+
+    /// Pods read and Services refused: the cluster answered, so `Done`, with
+    /// the refused kind named as data. It used to travel only inside an
+    /// English sentence the palette never drew, so "1 match" read as the
+    /// whole answer.
+    #[tokio::test]
+    async fn a_partly_refused_search_names_the_kinds_it_could_not_read() {
+        use crate::client::served::{test_server::connected, ServedIndex};
+
+        let (state, _) = connected(ServedIndex::default(), |path, _| match path {
+            "/api/v1/pods" => (
+                200,
+                serde_json::json!({
+                    "kind": "PartialObjectMetadataList",
+                    "apiVersion": "meta.k8s.io/v1",
+                    "metadata": {},
+                    "items": [{"metadata": {"name": "app-1", "namespace": "default"}}],
+                })
+                .to_string(),
+            ),
+            "/api/v1/services" => (
+                403,
+                serde_json::json!({
+                    "kind": "Status", "apiVersion": "v1", "status": "Failure",
+                    "message": "services is forbidden", "reason": "Forbidden", "code": 403,
+                })
+                .to_string(),
+            ),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let (event_tx, mut rx) = broadcast::channel(16);
+        search_context(
+            event_tx,
+            state.client_manager.clone(),
+            "s".into(),
+            "fake".into(),
+            "app".into(),
+            None,
+            Arc::new(vec![gateway_kind("Pod"), gateway_kind("Service")]),
+            50,
+        )
+        .await;
+
+        let mut last = None;
+        while let Ok(event) = rx.try_recv() {
+            if let AppEvent::SearchStatus {
+                status,
+                matched,
+                unreadable,
+                message,
+                ..
+            } = event
+            {
+                last = Some((status, matched, unreadable, message));
+            }
+        }
+        let (status, matched, unreadable, message) = last.expect("a terminal status");
+        assert_eq!(status, SearchContextStatus::Done);
+        assert_eq!(matched, 1);
+        assert_eq!(unreadable, vec!["Service".to_string()]);
+        assert!(
+            message.is_some_and(|m| !m.contains("Could not read")),
+            "the cluster's words, without a sentence around them"
+        );
     }
 
     /// A kind the cluster does not serve has no objects to match, and says

@@ -137,6 +137,7 @@ export function CommandPalette() {
           message: null,
           matched: 0,
           truncated: false,
+          unreadable: [],
         }
     );
   }, [clusters, wake, scopeContexts]);
@@ -542,6 +543,10 @@ export function CommandPalette() {
             />
           )}
           <input
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             ref={inputRef}
             autoFocus
             aria-label={t("action", "searchResourcesActionsPages")}
@@ -975,7 +980,19 @@ function ClusterGroup({
         : t("count", "matchCount", { n: cluster.matched });
     if (cluster.truncated)
       state = t("count", "matchesCapped", { n: cluster.matched });
+    if (cluster.unreadable.length > 0) {
+      state = (
+        <span title={cluster.message ?? undefined}>
+          {state} ·{" "}
+          {t("cluster", "kindsUnreadInline", {
+            kinds: cluster.unreadable.join(", "),
+          })}
+        </span>
+      );
+      tone = "text-warn";
+    }
   }
+  const partial = cluster.status === "done" && cluster.unreadable.length > 0;
 
   return (
     <div
@@ -997,7 +1014,7 @@ function ClusterGroup({
       <span
         className={cn(
           "h-1.5 w-1.5 flex-none rounded-full",
-          cluster.status === "done" && "bg-ok",
+          cluster.status === "done" && (partial ? "bg-warn" : "bg-ok"),
           working && "animate-pulse-subtle bg-info",
           cluster.status === "failed" && "bg-err",
           cluster.status === "skipped" && "border border-fg-fnt"

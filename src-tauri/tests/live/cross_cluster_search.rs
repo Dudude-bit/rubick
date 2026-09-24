@@ -126,9 +126,10 @@ async fn fan_out_reports_every_cluster() {
                 message,
                 matched,
                 truncated,
+                unreadable,
             } if search_id == handle.search_id => {
                 println!(
-                    "[{:>6}ms] status {context} :: {status:?} reason={reason:?} matched={matched} truncated={truncated} message={}",
+                    "[{:>6}ms] status {context} :: {status:?} reason={reason:?} matched={matched} truncated={truncated} unreadable={unreadable:?} message={}",
                     started.elapsed().as_millis(),
                     message.unwrap_or_else(|| "-".to_string()),
                 );

@@ -86,6 +86,17 @@ export const ru: Catalogue = {
     stopNoPodCarries: "Ни один под не несёт {selector}",
     stopNoneReadyNote:
       "Service не публикует эндпоинт для пода, который не проходит проверку готовности, поэтому трафик отклоняется, пока поды спокойно работают — из-за этого все списки в приложении рисуют их здоровыми. Срезы говорят то же самое: все адреса за этим Service в них есть, и ни один не обслуживает.",
+    stopRouteNotAcceptedTitle: "{gateway} не принимает этот маршрут",
+    stopRouteNotAcceptedNote:
+      "Контроллер ответил Accepted: False{said}. YAML маршрута корректен, но его никто не обслуживает — непринятый маршрут просто не программируется.",
+    stopRefNotPermittedTitle:
+      "Ссылка из этого маршрута не разрешена — ни один ReferenceGrant её не допускает",
+    stopRefUnresolvedTitle: "Ссылка из этого маршрута не разрешилась",
+    stopRefsUnresolvedNote:
+      "Контроллер ответил ResolvedRefs: False{said}. Спецификация требует от реализации отказать затронутому трафику, а не пустить его в обход.",
+    stopGatewayMissingTitle: "Ссылается на Gateway, которого нет",
+    stopGatewayMissingNote:
+      "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер — это единственный отказ, о котором кластер сам сказать не может.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list} и {last}",
     twoAnd: "{a} и {b}",
@@ -4029,6 +4040,7 @@ export const ru: Catalogue = {
     connectingInline: "подключение…",
     searchingInline: "поиск…",
     failedInline: "ошибка",
+    kindsUnreadInline: "не удалось прочитать: {kinds}",
     retryInline: "повторить",
     toSearchIt: "искать в нём",
     notInKubeconfig: "нет в kubeconfig",
@@ -5902,6 +5914,8 @@ export const ru: Catalogue = {
     nothingMatchesOnSearched:
       "По запросу «{query}» ничего не найдено на {answered} из {total} кластеров, где выполнялся поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
+    nothingMatchesInReadable:
+      "В том, что удалось прочитать, «{query}» не нашлось — часть видов прочитать не удалось.",
     noHelmHistory: "Истории нет — Helm её для этого релиза не хранит.",
     nothingRoutesThroughController:
       "Через этот контроллер ничего не проходит, поэтому рисовать нечего.",
@@ -5968,7 +5982,7 @@ export const ru: Catalogue = {
     gwProgrammedQuietSay:
       "Gateway {name} — контроллер не отчитался о Programmed",
     gwProgrammedPendingSay:
-      "Gateway {name} — контроллер взял его и ещё не закончил",
+      "Gateway {name} — ждёт, пока контроллер его запрограммирует",
     gwProgrammedSay: "Gateway {name} запрограммирован",
     gwListenerNamed: "Слушатель :{name}",
     gwListenerAny: "Слушатель",
@@ -6175,6 +6189,8 @@ export const ru: Catalogue = {
       "Не удалось проверить, установлен ли Gateway API, поэтому страница не может сказать, что здесь есть.",
     gwCouldNotReadVerdicts:
       "Не удалось прочитать Gateway, поэтому ни один вердикт ниже не вердикт.",
+    gwCouldNotReadBacking:
+      "Не удалось прочитать Services за этими маршрутами, поэтому ни один вердикт ниже не вердикт.",
     gwNoConditionsYet: "Ни один контроллер ещё не записал условия.",
     gwProbeRefused: "отказано — адрес отвечает, но этот порт никто не слушает",
     gwProbeTimedOut:

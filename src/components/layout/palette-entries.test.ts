@@ -42,6 +42,7 @@ function cluster(
     message: null,
     matched: 0,
     truncated: false,
+    unreadable: [],
   };
 }
 
@@ -395,6 +396,24 @@ describe("the palette's resource rows", () => {
 
     expect(hintText(entries)).toBe(
       "Nothing matches “api” on the 1 of 2 clusters that were searched."
+    );
+  });
+
+  /**
+   * A cluster that listed Pods and was refused Services has not searched
+   * Services. Counted as searched, it said "Nothing matches" over objects
+   * the reader simply could not see.
+   */
+  it("does not say nothing matches over a cluster that could not read some kinds", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [{ ...cluster("k3d-dev"), unreadable: ["Service"] }],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "Nothing matches “api” in what could be read — some kinds could not be."
     );
   });
 

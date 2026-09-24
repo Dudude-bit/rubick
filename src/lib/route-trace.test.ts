@@ -296,6 +296,19 @@ describe("routeTraces", () => {
     expect(servingSay(trace, t)).toBe(t("empty", "gwServingUnknown"));
   });
 
+  /** A route no controller has written a status for was headed "something
+   *  could not be read", though every read had succeeded. */
+  it("says a route with no status is undecided, not unread", () => {
+    const [trace] = routeTraces(
+      route("healthy", { parents: [] }),
+      sources(),
+      t
+    );
+
+    expect(trace.servingKnown).toBe(false);
+    expect(servingSay(trace, t)).toBe(t("empty", "gwServingUndecided"));
+  });
+
   /** A refusal is an answer: nothing unread makes it less of one. */
   it("still knows the verdict when a step refused rather than went unread", () => {
     const [trace] = routeTraces(

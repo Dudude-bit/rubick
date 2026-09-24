@@ -308,6 +308,9 @@ pub enum AppEvent {
         message: Option<String>,
         matched: u32,
         truncated: bool,
+        /// The kinds this cluster would not list, by kind name. Empty when
+        /// every kind was read; `matched` counts only the others.
+        unreadable: Vec<String>,
     },
     /// Terminal output received
     TerminalOutput { session_id: String, data: String },
@@ -552,6 +555,7 @@ mod tests {
                 message: None,
                 matched: 0,
                 truncated: false,
+                unreadable: Vec::new(),
             },
             AppEvent::TerminalOutput {
                 session_id: "term-1".into(),
@@ -874,6 +878,7 @@ mod tests {
             message: None,
             matched: 0,
             truncated: false,
+            unreadable: Vec::new(),
         }
         .payload();
         assert_eq!(empty.get("status").and_then(|v| v.as_str()), Some("done"));
@@ -887,6 +892,7 @@ mod tests {
             message: Some("connection refused".into()),
             matched: 0,
             truncated: false,
+            unreadable: Vec::new(),
         }
         .payload();
         assert_eq!(
@@ -911,11 +917,29 @@ mod tests {
             message: Some("not connected".into()),
             matched: 0,
             truncated: false,
+            unreadable: Vec::new(),
         }
         .payload();
         assert_eq!(
             skipped.get("reason").and_then(|v| v.as_str()),
             Some("not-connected"),
+        );
+
+        let partial = AppEvent::SearchStatus {
+            search_id: "s-1".into(),
+            context: "dev".into(),
+            status: SearchContextStatus::Done,
+            reason: Some(SearchFailureKind::Forbidden),
+            message: Some("services is forbidden".into()),
+            matched: 2,
+            truncated: false,
+            unreadable: vec!["Service".into()],
+        }
+        .payload();
+        assert_eq!(
+            partial.get("unreadable"),
+            Some(&serde_json::json!(["Service"])),
+            "the unread kinds travel as data, not inside a sentence"
         );
     }
 

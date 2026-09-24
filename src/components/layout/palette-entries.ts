@@ -460,25 +460,29 @@ export function buildPaletteEntries({
     // A failed cluster has answered and searched nothing: only `done` ones
     // can say the query matches nothing there.
     const total = shownClusters.length;
-    const searched = shownClusters.filter(
-      (cluster) => cluster.status === "done"
+    const done = shownClusters.filter((cluster) => cluster.status === "done");
+    // A cluster that could not list some kinds has not searched them.
+    const searched = done.filter(
+      (cluster) => cluster.unreadable.length === 0
     ).length;
     out.push({
       id: "hint:empty",
       kind: "hint",
       text: working
         ? t("empty", "noMatchesYet", { answered, total })
-        : searched === 0
+        : done.length === 0
           ? shownClusters.every(isCold)
             ? t("empty", "nothingSearchedNoCluster")
             : t("empty", "nothingSearchedAnywhere")
-          : searched < total
-            ? t("empty", "nothingMatchesOnSearched", {
-                query,
-                answered: searched,
-                total,
-              })
-            : t("empty", "nothingMatchesQuery", { query }),
+          : searched < done.length
+            ? t("empty", "nothingMatchesInReadable", { query })
+            : searched < total
+              ? t("empty", "nothingMatchesOnSearched", {
+                  query,
+                  answered: searched,
+                  total,
+                })
+              : t("empty", "nothingMatchesQuery", { query }),
     });
   }
 

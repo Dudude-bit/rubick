@@ -350,31 +350,44 @@ export function describeStop(
       };
     case "routeNotAccepted":
       return {
-        title: `${stop.gateway.name} does not accept this route`,
-        note:
-          `The controller answered Accepted: False` +
-          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
-          (stop.message ? `: ${stop.message}` : ".") +
-          " The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
+        title: t("nav", "stopRouteNotAcceptedTitle", {
+          gateway: stop.gateway.name,
+        }),
+        note: t("nav", "stopRouteNotAcceptedNote", { said: saidBy(stop) }),
       };
     case "routeRefsUnresolved":
       return {
-        title:
+        title: t(
+          "nav",
           stop.conditionReason === "RefNotPermitted"
-            ? "A reference this route makes is not permitted — no ReferenceGrant allows it"
-            : "A reference this route makes did not resolve",
-        note:
-          `The controller answered ResolvedRefs: False` +
-          (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
-          (stop.message ? `: ${stop.message}` : ".") +
-          " The spec obliges the implementation to fail the affected traffic rather than route around it.",
+            ? "stopRefNotPermittedTitle"
+            : "stopRefUnresolvedTitle"
+        ),
+        note: t("nav", "stopRefsUnresolvedNote", { said: saidBy(stop) }),
       };
     case "gatewayMissing":
       return {
-        title: `Names a Gateway that does not exist`,
-        note: `${stop.route.name} attaches to ${stop.gateway.namespace ? `${stop.gateway.namespace}/` : ""}${stop.gateway.name}, which the API server does not have. No controller will ever write status for that parent — this is the one refusal the cluster cannot say itself.`,
+        title: t("nav", "stopGatewayMissingTitle"),
+        note: t("nav", "stopGatewayMissingNote", {
+          route: stop.route.name,
+          gateway: stop.gateway.namespace
+            ? `${stop.gateway.namespace}/${stop.gateway.name}`
+            : stop.gateway.name,
+        }),
       };
   }
+}
+
+/** The controller's own words after its condition, left as it wrote them. */
+function saidBy(stop: {
+  conditionReason: string | null;
+  message: string | null;
+}): string {
+  const message = stop.message?.replace(/\.\s*$/, "");
+  return (
+    (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+    (message ? `: ${message}` : "")
+  );
 }
 
 // --- the traffic chain --------------------------------------------------
