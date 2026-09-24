@@ -1,14 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  AlertTriangle,
-  Bell,
-  Check,
-  Copy,
-  ExternalLink,
-  HelpCircle,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Bell, Check, Copy, HelpCircle, X } from "lucide-react";
 
 import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -815,7 +807,6 @@ function RuleCard({
               site="Prometheus"
               className="h-6 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover hover:no-underline"
             >
-              <ExternalLink className="size-3" aria-hidden />
               {t("monitors", "openInPrometheus")}
             </OutLink>
           )}
@@ -827,7 +818,9 @@ function RuleCard({
         </p>
       )}
       {(spec.annotations.summary ?? spec.annotations.description) && (
-        <p className="mt-1 text-[11.5px] text-fg-mut">
+        // The rule's template, `{{ $labels.job }}` and all — source, like
+        // the expression under it; each alert below carries it filled in.
+        <p className="mt-1 select-text font-mono text-[11px] text-fg-mut">
           {spec.annotations.summary ?? spec.annotations.description}
         </p>
       )}
