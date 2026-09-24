@@ -23,10 +23,13 @@ describe("every text field", () => {
           source.indexOf("/>", match.index)
         );
         if (/type="(checkbox|radio|file|range|hidden)"/.test(tag)) continue;
-        if (
-          !tag.includes("spellCheck={false}") ||
-          !tag.includes('autoCorrect="off"')
-        )
+        const off = [
+          'autoComplete="off"',
+          'autoCorrect="off"',
+          'autoCapitalize="off"',
+          "spellCheck={false}",
+        ];
+        if (!off.every((attr) => tag.includes(attr)))
           loose.push(
             `${path}:${source.slice(0, match.index).split("\n").length}`
           );

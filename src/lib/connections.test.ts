@@ -1185,6 +1185,12 @@ describe("what the Service publishes", () => {
       expect(said.title).toMatch(/^nav\.stop/);
       expect(said.note).toMatch(/^nav\.stop/);
     }
+    expect(describeStop(stops[1], keyed).title).toBe(
+      "nav.stopRefNotPermittedTitle"
+    );
+    expect(describeStop(stops[2], keyed).title).toBe(
+      "nav.stopRefUnresolvedTitle"
+    );
   });
 
   /** And it declines to explain what it cannot see. A pod missing from every

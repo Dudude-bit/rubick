@@ -1251,11 +1251,7 @@ function traceFor(
       ? null
       : unread
         ? "unread"
-        : steps.some(
-              (step) =>
-                step.pending ||
-                (step.state === "blind" && step.who === "controller")
-            )
+        : steps.some((step) => step.pending)
           ? "undecided"
           : null;
   if (firstBroken >= 0) {
