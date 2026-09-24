@@ -144,6 +144,7 @@ describe("what a card says about a way in", () => {
               draining: 0,
               notReady: 2,
               unrouted: 0,
+              unroutedReady: 0,
               ports: [],
               endpoints: [],
               whole: true,
