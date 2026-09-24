@@ -21,7 +21,7 @@ export function verdictOf(
       return {
         head: t("alerts", "verdictFiring", {
           n: worst.alerts,
-          rules: worst.rules,
+          from: t("alerts", "fromRules", { n: worst.rules }),
         }),
         body: null,
       };
@@ -56,7 +56,7 @@ export function verdictOf(
       return {
         head: t("alerts", "verdictPending", {
           n: worst.alerts,
-          rules: worst.rules,
+          from: t("alerts", "fromRules", { n: worst.rules }),
         }),
         body: null,
       };

@@ -96,6 +96,8 @@ interface ScopeTabState {
   recordHref: (href: string) => void;
   /** Let go of a route that belongs to the cluster just left. */
   retargetAfterSwitch: (connected: string | null) => void;
+  /** The window connected while the active tab named a lost cluster. */
+  adoptConnected: (connected: string) => void;
   routeSettled: () => void;
   reconcileContexts: (names: string[]) => void;
 }
@@ -333,6 +335,32 @@ export const useScopeTabStore = create<ScopeTabState>()(
           pendingHref: list,
         });
       },
+
+      // Picking a cluster on a lost tab's front door connects the window;
+      // the tab has to become that cluster's, or it keeps the lost name over
+      // another cluster's rows.
+      adoptConnected: (connected: string) =>
+        set((state) => {
+          const active = state.tabs.find((tab) => tab.id === state.activeId);
+          if (!active?.missing) return state;
+          // The scope `connect` restored for that cluster, not an empty one
+          // that the next launch would apply over it.
+          const { currentNamespace, namespaceScope } =
+            useClusterStore.getState();
+          return {
+            tabs: state.tabs.map((tab) =>
+              tab.id === state.activeId
+                ? {
+                    ...tab,
+                    missing: false,
+                    context: connected,
+                    namespace: currentNamespace,
+                    scope: namespaceScope,
+                  }
+                : tab
+            ),
+          };
+        }),
 
       recordHref: (href: string) =>
         set((state) => {

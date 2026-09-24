@@ -16,6 +16,7 @@ import type { T } from "@/i18n/useT";
 import { useClusterFilter } from "@/hooks/useClusterFilter";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterRecencyStore } from "@/stores/clusterRecencyStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ContextInfo } from "@/generated/types";
 
@@ -352,5 +353,19 @@ describe("the recency groups, under a filter", () => {
     expect(
       screen.queryByText(t("cluster", "allContexts"))
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("the recent clusters, in Russian", () => {
+  /** The row said "last used 58m ago" on a Russian screen: the words were a
+   *  template literal the catalogue never saw. */
+  it("says when a cluster was last used in the reader's language", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    useClusterRecencyStore.setState({ lastUsed: { "prod-eus2-mki": 1_000 } });
+    render(<Harness />);
+
+    expect(screen.getByText(/открывался .* назад/)).toBeInTheDocument();
+    expect(screen.queryByText(/last used/)).not.toBeInTheDocument();
+    useLocaleStore.setState({ choice: "en" });
   });
 });

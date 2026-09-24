@@ -80,6 +80,7 @@ export function ActionWarnings({
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="text-xs font-medium text-warn">
         {t("readings", headingFor, {
+          n: warnings.length,
           count: COUNT_WORD[warnings.length]
             ? t("readings", COUNT_WORD[warnings.length])
             : String(warnings.length),

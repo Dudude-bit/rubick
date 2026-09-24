@@ -62,12 +62,12 @@ export function verdictOf(
           since !== null
             ? t("monitors", "verdictDownSince", {
                 down: worst.down,
-                total: worst.total,
+                of: t("monitors", "ofTargets", { n: worst.total }),
                 since: hourMinute(since),
               })
             : t("monitors", "verdictDown", {
                 down: worst.down,
-                total: worst.total,
+                of: t("monitors", "ofTargets", { n: worst.total }),
               }),
         body: worst.lastError ? (
           <>

@@ -104,7 +104,7 @@ const GLOBAL: Record<string, (value: string, t: T) => string | null> = {
   },
   "hsts-max-age": (value, t) => {
     const age = whole(value);
-    return age === null ? null : t("readings", "ngxHstsAge", { age });
+    return age === null ? null : t("readings", "ngxHstsAge", { n: age });
   },
   "use-http2": (value, t) => {
     const on = bool(value);

@@ -115,6 +115,40 @@ describe("the router bridge", () => {
   });
 });
 
+describe("a tab whose cluster is gone", () => {
+  /** The hook is what hands the connection to the tab; without it the tab
+   *  keeps the lost cluster's name after the window connected elsewhere. */
+  it("takes the cluster a connect from it lands on", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "gone", missing: true })],
+      activeId: "a",
+    });
+    mount("/");
+    await act(async () => {
+      await useClusterStore.getState().connect("drain");
+    });
+    expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
+  });
+
+  /** Activating the lost tab drops the window's connection after the tab is
+   *  already active; the connection being dropped is not the tab's. */
+  it("does not take the cluster still open when it is activated", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", context: "prod" }),
+        tab({ id: "b", context: "gone", missing: true }),
+      ],
+      activeId: "a",
+    });
+    mount("/");
+    await act(async () => {
+      await state().activateTab("b");
+    });
+    expect(state().tabs[1]).toMatchObject({ missing: true, context: "gone" });
+  });
+});
+
 describe("the keyboard", () => {
   const press = async (init: KeyboardEventInit) => {
     await act(async () => {

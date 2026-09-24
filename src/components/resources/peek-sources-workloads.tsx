@@ -252,7 +252,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
             label: t("columns", "ready"),
             value: t("readings", "readyOfNodes", {
               ready: set.ready,
-              desired: set.desired,
+              of: t("count", "ofNodes", { n: set.desired }),
             }),
             tone: set.ready < set.desired ? "warn" : undefined,
           },

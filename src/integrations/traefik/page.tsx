@@ -1,3 +1,4 @@
+import { hostsBrokenOfTotal, hostsNeedAttention } from "@/lib/two-counts";
 /**
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
@@ -184,7 +185,7 @@ export default function TraefikPage() {
       glyph: viewGlyph(Globe),
       mark: troubleMark(
         groups.map(hostSeverity),
-        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => hostsNeedAttention(n, total, t),
         (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (
@@ -307,7 +308,7 @@ function MapTab({
     <div className="flex flex-col gap-2">
       <p className="text-[11px] text-fg-fnt">
         {broken > 0
-          ? `${t("count", "hostsBrokenOfTotal", { n: broken, total: groups.length })}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
+          ? `${hostsBrokenOfTotal(broken, groups.length, t)}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
           : worthALook > 0
             ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
             : unchecked > 0

@@ -515,6 +515,7 @@ export const en = {
     kinds: "Kinds",
     hostname: "Hostname",
     gatewayAddress: "Gateway address",
+    listenerHostname: "Listener hostname {host}",
     whoInfra: "infra",
     whoYours: "your side",
     whoController: "controller",
@@ -751,7 +752,9 @@ export const en = {
     runsSubject: "jobs this CronJob still owns",
     barUpToDate: "up to date",
     barOutdated: "outdated",
-    historyLimits: "{succeeded} succeeded · {failed} failed kept",
+    historyLimits: "{succeeded} · {failed} kept",
+    jobsSucceeded: { one: "{n} succeeded", other: "{n} succeeded" },
+    jobsFailed: { one: "{n} failed", other: "{n} failed" },
     activePerController: "{n} active per the controller",
     howDeclared: "How it is declared",
     keptHistoryLimits: "{n} kept · history limits decide how many",
@@ -2043,7 +2046,7 @@ export const en = {
       "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
     nodeStatusesNotWritten:
       "the operator has written no node statuses, so how many nodes it tuned is unknown",
-    nodesSetUp: "{tuned} of {nodes} nodes set up",
+    nodesSetUp: "{tuned} {of} set up",
   },
   tell: {
     askRollout: "Tell me when the rollout finishes",
@@ -2199,8 +2202,9 @@ export const en = {
     verdictNoInstances:
       "No Prometheus object in the cluster, so nothing picks it up.",
     verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
-    verdictDown: "{down} of {total} targets down.",
-    verdictDownSince: "{down} of {total} targets down since {since}.",
+    verdictDown: "{down} {of} down.",
+    verdictDownSince: "{down} {of} down since {since}.",
+    ofTargets: { one: "of {n} target", other: "of {n} targets" },
     prometheusSays: "Prometheus says",
     verdictNoTargets: "Picked up, but Prometheus has no target for it yet.",
     verdictUp: {
@@ -2264,7 +2268,7 @@ export const en = {
     noTargetYet: "none yet",
     noTargets:
       "The operator has written no target for it: no endpoint behind the named port, or written for another Prometheus than the one connected.",
-    moreTargets: "+{n} more targets",
+    moreTargets: { one: "+{n} more target", other: "+{n} more targets" },
     notChecked: "not checked",
     mostLikely: "Most likely",
     hintLoopbackWhy:
@@ -2376,8 +2380,12 @@ export const en = {
       other: "{n} rule objects",
     },
     firingNow: {
-      one: "{n} alert firing across {rules} rule objects",
-      other: "{n} alerts firing across {rules} rule objects",
+      one: "{n} alert firing {where}",
+      other: "{n} alerts firing {where}",
+    },
+    inRuleObjects: {
+      one: "in {n} rule object",
+      other: "across {n} rule objects",
     },
     quietNow: {
       one: "{n} rule object, nothing firing",
@@ -2451,8 +2459,12 @@ export const en = {
     chipFile: "file",
     rules: "Rules",
     verdictFiring: {
-      one: "{n} alert firing from {rules} rules.",
-      other: "{n} alerts firing from {rules} rules.",
+      one: "{n} alert firing {from}.",
+      other: "{n} alerts firing {from}.",
+    },
+    fromRules: {
+      one: "from {n} rule",
+      other: "from {n} rules",
     },
     verdictNotPickedUp:
       "No Prometheus picks it up, so none of its rules is evaluated.",
@@ -2468,9 +2480,8 @@ export const en = {
       "Prometheus reports this rule's health as unknown, which is what it says about a rule it has loaded and not yet run.",
     verdictEvalError: "{rule} fails to evaluate.",
     verdictPending: {
-      one: "{n} alert pending from {rules} rules, not yet past its for clause.",
-      other:
-        "{n} alerts pending from {rules} rules, not yet past their for clauses.",
+      one: "{n} alert pending {from}, not yet past its for clause.",
+      other: "{n} alerts pending {from}, not yet past their for clauses.",
     },
     verdictNotChecked:
       "Picked up. Whether it is loaded and firing is not checked.",
@@ -2640,9 +2651,18 @@ export const en = {
     membersFolded: { one: "{n} object", other: "{n} objects" },
     twoWord: "Two",
     threeWord: "Three",
-    warnUndoThis: "{count} things will undo this.",
-    warnUndoApply: "{count} things will undo this apply.",
-    warnRevertCount: "{count} things will put this number back.",
+    warnUndoThis: {
+      one: "{count} thing will undo this.",
+      other: "{count} things will undo this.",
+    },
+    warnUndoApply: {
+      one: "{count} thing will undo this apply.",
+      other: "{count} things will undo this apply.",
+    },
+    warnRevertCount: {
+      one: "{count} thing will put this number back.",
+      other: "{count} things will put this number back.",
+    },
     rowsOfTotal: "{shown} of {total} {label}",
     rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
     rowCount: { one: "{n} row", other: "{n} rows" },
@@ -2689,7 +2709,7 @@ export const en = {
     envFromConfigMap: "configmap · envFrom",
     envAllSources: "all sources",
     envFromWord: "envFrom",
-    readyOfNodes: "{ready} of {desired} nodes",
+    readyOfNodes: "{ready} {of}",
     helmRelease: "Helm release",
     crdEstablished: "Established",
     crdNotEstablished: "Not established",
@@ -2917,7 +2937,10 @@ export const en = {
       one: "{n} restart since creation",
       other: "{n} restarts since creation",
     },
-    problemReplicasReady: "{ready}/{desired} replicas ready",
+    problemReplicasReady: {
+      one: "{ready}/{n} replica ready",
+      other: "{ready}/{n} replicas ready",
+    },
     problemUnschedulable: "marked unschedulable — no new pods will land here",
     certNoSecret: "no Secret of that name in this namespace",
     certSecretUnreadable: "the Secret could not be read — {said}",
@@ -3235,7 +3258,7 @@ export const en = {
     delApplyLabelDetail:
       "Nothing is applying this object, whatever its label says.",
     hpaPinnedAt: "pinned at {n}",
-    hpaRange: "{min} to {max} replicas",
+    hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
     hpaCannotReachDetail:
       "The autoscaler names {kind} {target} and cannot read its scale, so it is not scaling anything.",
@@ -3348,7 +3371,10 @@ export const en = {
       "Every TLS response tells the browser to refuse plain HTTP to this host in future.",
     ngxHstsOff:
       "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.",
-    ngxHstsAge: "The browser is told to remember that for {age} seconds.",
+    ngxHstsAge: {
+      one: "The browser is told to remember that for {n} second.",
+      other: "The browser is told to remember that for {n} seconds.",
+    },
     ngxHttp2On: "HTTP/2 is offered on the TLS listener.",
     ngxHttp2Off: "HTTP/2 is switched off; every client falls back to HTTP/1.1.",
     ngxGzipOn: "Responses are compressed before they leave nginx.",
@@ -3689,6 +3715,7 @@ export const en = {
     searchingInline: "searching…",
     failedInline: "failed",
     kindsUnreadInline: "could not read {kinds}",
+    lastUsedAgo: "last used {age} ago",
     retryInline: "retry",
     toSearchIt: "to search it",
     notInKubeconfig: "not in the kubeconfig",
@@ -5968,9 +5995,12 @@ export const en = {
     notScheduledSegment: "not scheduled",
     plusMore: "+{n} more",
     hostsNeedAttention: {
-      one: "{n} of {total} host needs attention",
-      other: "{n} of {total} hosts need attention",
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
     },
+    ofHosts: { one: "of {n} host", other: "of {n} hosts" },
+    ofApplications: { one: "of {n} application", other: "of {n} applications" },
+    binaryValues: { one: "{n} binary", other: "{n} binary" },
     snippetsOfRawNginx: {
       one: "{n} snippet of raw nginx config",
       other: "{n} snippets of raw nginx config",
@@ -5980,8 +6010,8 @@ export const en = {
       other: "{n} middlewares unused",
     },
     hostsBrokenOfTotal: {
-      one: "{n} of {total} host broken",
-      other: "{n} of {total} hosts broken",
+      one: "{n} {of} broken",
+      other: "{n} {of} broken",
     },
     hostsLandHere: { one: "{n} host lands here", other: "{n} hosts land here" },
     inDays: { one: "in {n} day", other: "in {n} days" },
@@ -6022,8 +6052,8 @@ export const en = {
       other: "{n} disruption budgets on this node allow nothing to be evicted.",
     },
     applicationsNeedAttention: {
-      one: "{n} of {total} applications need attention",
-      other: "{n} of {total} applications need attention",
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
     },
     failingAndFirst: "{n} of {total} failing, and first",
     objects: { one: "{n} object", other: "{n} objects" },
@@ -6051,8 +6081,8 @@ export const en = {
     params: { one: "{n} param", other: "{n} params" },
     chars: { one: "{n} char", other: "{n} chars" },
     valuesCopiedWithBinary: {
-      one: "{n} value copied, {binary} binary as base64.",
-      other: "{n} values copied, {binary} binary as base64.",
+      one: "{n} value copied, {binary} as base64.",
+      other: "{n} values copied, {binary} as base64.",
     },
     allValuesCopied: {
       one: "All {n} value copied.",
@@ -6104,7 +6134,10 @@ export const en = {
       other:
         "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
     },
-    densityTotals: "{lines} lines, {errors} errors, {warnings} warnings.",
+    densityTotals: "{lines}, {errors}, {warnings}.",
+    densityLines: { one: "{count} line", other: "{count} lines" },
+    densityErrors: { one: "{count} error", other: "{count} errors" },
+    densityWarnings: { one: "{count} warning", other: "{count} warnings" },
     busiestSlice: {
       one: "Busiest slice {clock} with {lines} line.",
       other: "Busiest slice {clock} with {lines} lines.",
@@ -6244,7 +6277,10 @@ export const en = {
     versions: { one: "{n} version", other: "{n} versions" },
     versionsWithDeprecated: "{n} · {deprecated} deprecated",
     slashReady: "{n}/{total} ready",
-    podsReadySlash: "{n}/{total} pods ready",
+    podsReadySlash: {
+      one: "{ready}/{n} pod ready",
+      other: "{ready}/{n} pods ready",
+    },
     readySummary: "{n} ready",
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",
@@ -6254,8 +6290,10 @@ export const en = {
     certificates: { one: "{n} certificate", other: "{n} certificates" },
     annotations: { one: "{n} annotation", other: "{n} annotations" },
     clustersAnswered: "{n} of {total} clusters answered",
-    podsRunning: "{n} of {total} pods running",
-    nodesReady: "{n} of {total} nodes ready",
+    podsRunning: "{n} {of} running",
+    nodesReady: "{n} {of} ready",
+    ofPods: { one: "of {n} pod", other: "of {n} pods" },
+    ofNodes: { one: "of {n} node", other: "of {n} nodes" },
     moreNotDrawn: {
       one: "{n} more not drawn — the counts above are the whole of it.",
       other: "{n} more not drawn — the counts above are the whole of it.",

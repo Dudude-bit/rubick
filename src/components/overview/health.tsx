@@ -43,7 +43,7 @@ function composedDetail(
     case "replicasReady":
       return t("readings", "problemReplicasReady", {
         ready: detail.ready,
-        desired: detail.desired,
+        n: detail.desired,
       });
     case "unschedulable":
       return t("readings", "problemUnschedulable");
@@ -301,13 +301,16 @@ export function ProblemsPanel({
             {t("cluster", "healthy")}
           </span>
           <span className="truncate text-fg-fnt">
-            {t("count", "podsRunning", { n: serving, total: podTotal(pods) })}
+            {t("count", "podsRunning", {
+              n: serving,
+              of: t("count", "ofPods", { n: podTotal(pods) }),
+            })}
             {nodesKnown && (
               <>
                 {" · "}
                 {t("count", "nodesReady", {
                   n: readyNodes,
-                  total: nodes.length,
+                  of: t("count", "ofNodes", { n: nodes.length }),
                 })}
               </>
             )}

@@ -51,6 +51,36 @@ export function useScopeTabs(): void {
       .retargetAfterSwitch(useClusterStore.getState().currentContext);
   }, [contextSwitches]);
 
+  // A lost tab takes the cluster a connect started from it lands on — not
+  // the one still open when it was activated, which is being dropped.
+  useEffect(() => {
+    let startedOn: { attempt: number; tab: string } | null = null;
+    return useClusterStore.subscribe((state, prev) => {
+      if (
+        state.connectionAttemptId !== prev.connectionAttemptId &&
+        state.pendingContext
+      ) {
+        const { tabs, activeId } = useScopeTabStore.getState();
+        const active = tabs.find((tab) => tab.id === activeId);
+        startedOn = active?.missing
+          ? { attempt: state.connectionAttemptId, tab: active.id }
+          : null;
+      }
+      if (
+        startedOn &&
+        state.isConnected &&
+        !prev.isConnected &&
+        state.connectionAttemptId === startedOn.attempt &&
+        state.currentContext
+      ) {
+        const tabs = useScopeTabStore.getState();
+        if (tabs.activeId === startedOn.tab)
+          tabs.adoptConnected(state.currentContext);
+        startedOn = null;
+      }
+    });
+  }, []);
+
   // Everything cached belonged to the connection the parked tab no longer
   // has, so none of it may be shown as live. Resource query keys do not
   // carry the context either — `["pods","default"]` is the same entry in

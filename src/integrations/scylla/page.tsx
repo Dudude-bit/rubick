@@ -627,7 +627,7 @@ function NodeConfigsTab({
               ? t("operators", "nodeStatusesNotWritten")
               : t("operators", "nodesSetUp", {
                   tuned: setup.tuned,
-                  nodes: setup.nodes,
+                  of: t("count", "ofNodes", { n: setup.nodes }),
                 })}
           </span>
           {setup.unsure.length > 0 && (

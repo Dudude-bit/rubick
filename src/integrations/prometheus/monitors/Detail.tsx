@@ -3,7 +3,6 @@ import {
   Check,
   Clock,
   Copy,
-  ExternalLink,
   HelpCircle,
   Search,
   X,
@@ -314,7 +313,6 @@ export function Detail({
                 site="Prometheus"
                 className="h-6 rounded-[5px] border border-hair px-2 text-[11px] text-fg-mid hover:bg-hover hover:no-underline"
               >
-                <ExternalLink className="size-3" aria-hidden />
                 {t("monitors", "openInPrometheus")}
               </OutLink>
             )}
