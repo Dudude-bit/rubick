@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.1] - 2026-09-25
+
+> **A large release under the hood.** 4.20 reworked much of how the app
+> reads the cluster: lists over several namespaces, discovery, the TLS
+> stack, watches and streams, and how routes are judged — most of it for
+> speed and for saying "could not read" where it used to guess. We checked
+> it on real clusters, but a change this wide can still miss a case. If a
+> screen says something your cluster does not, please open an issue —
+> 4.19.1 stays available if you need to step back.
+
+A review of everything 4.20.0 changed, and of every pull request behind it,
+found about 150 problems. This release fixes them. 4.20.0 stays a
+pre-release.
+
+### Fixed
+
+- **Identity providers with their own certificate authority sign in again.**
+  An `idp-certificate-authority` that is a self-signed `CA:TRUE` certificate,
+  the kind `openssl req -x509` makes, was refused on Linux in 4.20.0. The app
+  now trusts exactly that certificate, and still checks the host name and
+  the dates.
+
+- **A CRD installed after you connect is found.** 4.20.0 remembered what the
+  cluster served for the whole session. Answers now age out, and a kind that
+  is missing is looked up again after two minutes rather than on every poll.
+
+- **"Could not look" no longer reads as "none".** A refused or failed read
+  shows as unread, in its own colour, on Flux, Argo CD, Cilium, Traefik,
+  ingress-nginx, GKE, ALB, AKS, the Ingress list and page, the routing maps,
+  the peek, certificates and Secrets, and operator controllers. "TLS not
+  checked" is its own state, not "no TLS".
+
+- **Routes.** A route trace gives no verdict while its controller has said
+  nothing, or has only said `Unknown`: no `Accepted`, no `ResolvedRefs`, no
+  `Programmed` on its Gateway. A Gateway no controller has reported on is not
+  called a dead end. "All serving" is said only over routes the trace can
+  vouch for. A route's status entry for another listener, another port,
+  or a ListenerSet with the Gateway's name is no longer read as this
+  parent's, and one controller's answer for a listener does not hide
+  another controller's refusal. A route no controller has written status
+  for reads "a controller has not decided", not "something could not be
+  read"; with Services refused, the routes page says so instead of
+  "reading verdicts" forever; the connections graph's route stops are no
+  longer English on a Russian screen.
+
+- **Numbers.** A pod's reservation follows Kubernetes' own rules for native
+  sidecars, init containers, overhead and pod-level limits. Usage is measured
+  against the running containers. The Gateway map leaves finished pods out of
+  a backend's count. A Service whose port resolves on no pod, with the pods
+  unread, no longer calls every pod ready.
+
+- **Streams.** A "tell me when" watch that lost its connection keeps saying
+  so, and looks again after a lag. Log batches are cut by size too. A drain
+  stopped early ends as cancelled. Log Download works without a Downloads
+  folder and never overwrites a file.
+
+- **Search says what it could not read.** A cluster that lists Pods and
+  refuses Services shows "4 matches · could not read Service" instead of
+  "4 matches" in green, and "nothing matches" is said only over what was
+  searched. macOS no longer autocorrects text typed into the palette, the
+  log query or any list filter.
+
+- **Tabs.** Picking a cluster on the front door of a tab whose cluster left
+  the kubeconfig now makes the tab that cluster's, with the namespaces it was
+  last left on; it used to keep the lost name over the new cluster's rows.
+
+- **Russian.** Numbers agree with their nouns everywhere a sentence holds two
+  of them — "из 1 узла", "в 1 объекте правил", "5 вещей", "1 строка" — and in
+  English too ("1 of 5 hosts needs attention"). Links out read "Открыть в
+  Prometheus", with one arrow. The front door's recent clusters no longer read
+  "last used 5m ago" on a Russian screen.
+
+- **Smaller things.** The overview says when its warning events could not all
+  be read. The replica warning in the YAML editor reads the
+  right object in a file with several documents. A Gateway's not-programmed
+  reason is red in the peek, as in the list. An English fallback no longer
+  reads "0 pod". The Istio Subsets tab tells a subset that is maybe routed
+  from one that is not.
+
+### Known
+
+- A self-signed `CA:TRUE` certificate in the Linux system store is still
+  refused for integrations, which have no CA field of their own.
+- The shared integration client keeps the proxy it saw first.
+
 ## [4.20.0] - 2026-09-23
 
 ### Security
