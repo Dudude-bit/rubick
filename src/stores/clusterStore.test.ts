@@ -103,6 +103,22 @@ describe("moving between clusters", () => {
     expect(state().currentNamespace).toBe("");
   });
 
+  /** After a disconnect there is no current context, and the scope left
+   *  behind belonged to the last cluster: connecting elsewhere kept it, and
+   *  the new cluster opened filtered to a namespace it does not have. */
+  it("does not carry the last cluster's scope across a disconnect", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"] },
+      currentContext: null,
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().connect("staging");
+
+    expect(state().namespaceScope).toEqual([]);
+  });
+
   /** Switching to the cluster already open changes nothing. */
   it("leaves the scope alone when the context has not moved", async () => {
     useClusterStore.setState({

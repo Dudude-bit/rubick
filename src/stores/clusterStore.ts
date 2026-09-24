@@ -265,9 +265,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         // Best-effort cleanup to avoid stale auth sessions.
       });
     }
-    const changed = Boolean(
-      previousContext && previousContext !== targetContext
-    );
+    // After a disconnect there is no previous context, and the scope left
+    // behind is the last cluster's — not this one's.
+    const changed = previousContext !== targetContext;
     const attemptId = get().connectionAttemptId + 1;
 
     set({

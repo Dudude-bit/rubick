@@ -2377,8 +2377,12 @@ export const en = {
       other: "{n} rule objects",
     },
     firingNow: {
-      one: "{n} alert firing across {rules} rule objects",
-      other: "{n} alerts firing across {rules} rule objects",
+      one: "{n} alert firing {where}",
+      other: "{n} alerts firing {where}",
+    },
+    inRuleObjects: {
+      one: "in {n} rule object",
+      other: "across {n} rule objects",
     },
     quietNow: {
       one: "{n} rule object, nothing firing",
@@ -2452,8 +2456,12 @@ export const en = {
     chipFile: "file",
     rules: "Rules",
     verdictFiring: {
-      one: "{n} alert firing from {rules} rules.",
-      other: "{n} alerts firing from {rules} rules.",
+      one: "{n} alert firing {from}.",
+      other: "{n} alerts firing {from}.",
+    },
+    fromRules: {
+      one: "from {n} rule",
+      other: "from {n} rules",
     },
     verdictNotPickedUp:
       "No Prometheus picks it up, so none of its rules is evaluated.",
@@ -2469,9 +2477,8 @@ export const en = {
       "Prometheus reports this rule's health as unknown, which is what it says about a rule it has loaded and not yet run.",
     verdictEvalError: "{rule} fails to evaluate.",
     verdictPending: {
-      one: "{n} alert pending from {rules} rules, not yet past its for clause.",
-      other:
-        "{n} alerts pending from {rules} rules, not yet past their for clauses.",
+      one: "{n} alert pending {from}, not yet past its for clause.",
+      other: "{n} alerts pending {from}, not yet past their for clauses.",
     },
     verdictNotChecked:
       "Picked up. Whether it is loaded and firing is not checked.",
@@ -5970,9 +5977,12 @@ export const en = {
     notScheduledSegment: "not scheduled",
     plusMore: "+{n} more",
     hostsNeedAttention: {
-      one: "{n} of {total} host needs attention",
-      other: "{n} of {total} hosts need attention",
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
     },
+    ofHosts: { one: "of {n} host", other: "of {n} hosts" },
+    ofApplications: { one: "of {n} application", other: "of {n} applications" },
+    binaryValues: { one: "{n} binary", other: "{n} binary" },
     snippetsOfRawNginx: {
       one: "{n} snippet of raw nginx config",
       other: "{n} snippets of raw nginx config",
@@ -5982,8 +5992,8 @@ export const en = {
       other: "{n} middlewares unused",
     },
     hostsBrokenOfTotal: {
-      one: "{n} of {total} host broken",
-      other: "{n} of {total} hosts broken",
+      one: "{n} {of} broken",
+      other: "{n} {of} broken",
     },
     hostsLandHere: { one: "{n} host lands here", other: "{n} hosts land here" },
     inDays: { one: "in {n} day", other: "in {n} days" },
@@ -6024,8 +6034,8 @@ export const en = {
       other: "{n} disruption budgets on this node allow nothing to be evicted.",
     },
     applicationsNeedAttention: {
-      one: "{n} of {total} applications need attention",
-      other: "{n} of {total} applications need attention",
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
     },
     failingAndFirst: "{n} of {total} failing, and first",
     objects: { one: "{n} object", other: "{n} objects" },
@@ -6053,8 +6063,8 @@ export const en = {
     params: { one: "{n} param", other: "{n} params" },
     chars: { one: "{n} char", other: "{n} chars" },
     valuesCopiedWithBinary: {
-      one: "{n} value copied, {binary} binary as base64.",
-      other: "{n} values copied, {binary} binary as base64.",
+      one: "{n} value copied, {binary} as base64.",
+      other: "{n} values copied, {binary} as base64.",
     },
     allValuesCopied: {
       one: "All {n} value copied.",

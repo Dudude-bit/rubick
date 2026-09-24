@@ -18,6 +18,8 @@
 
 import { sayWords } from "@/i18n/say";
 import { useMemo } from "react";
+import { hostsNeedAttention } from "@/lib/two-counts";
+
 import {
   BACKING_NOT_READ,
   backingFrom,
@@ -168,7 +170,7 @@ export default function IngressNginxPage() {
       glyph: viewGlyph(Globe),
       mark: troubleMark(
         groups.map(hostSeverity),
-        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => hostsNeedAttention(n, total, t),
         (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (

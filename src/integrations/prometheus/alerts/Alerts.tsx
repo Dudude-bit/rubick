@@ -34,7 +34,7 @@ import {
   unknowableWords,
   type RowTone,
 } from "../monitors/words";
-import { rowWords } from "./words";
+import { firingWords, rowWords } from "./words";
 import { verdictOf } from "./verdict";
 import {
   OBJECT_LABEL,
@@ -207,7 +207,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
           {alerts === null
             ? t("alerts", "objects", { n: rows.length })
             : alerts > 0
-              ? t("alerts", "firingNow", { n: alerts, rules: firing })
+              ? firingWords(alerts, firing, t)
               : t("alerts", "quietNow", { n: rows.length })}
           {broken > 0 && (
             <span className="ml-2 font-normal text-err">

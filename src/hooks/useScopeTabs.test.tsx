@@ -115,6 +115,37 @@ describe("the router bridge", () => {
   });
 });
 
+describe("a tab whose cluster is gone", () => {
+  /** The hook is what hands the connection to the tab; without it the tab
+   *  keeps the lost cluster's name after the window connected elsewhere. */
+  it("takes the cluster the window connects to", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "gone", missing: true })],
+      activeId: "a",
+    });
+    mount("/");
+    await act(async () => {
+      useClusterStore.setState({ currentContext: "drain", isConnected: true });
+    });
+    expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
+  });
+
+  /** The other order: connected first, flagged lost when the kubeconfig
+   *  loads. The tab kept the lost name over the connected cluster. */
+  it("takes it when the tab is flagged lost after the window connected", async () => {
+    useClusterStore.setState({ currentContext: "drain", isConnected: true });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", context: "gone" })],
+      activeId: "a",
+    });
+    mount("/");
+    await act(async () => {
+      state().reconcileContexts(["drain"]);
+    });
+    expect(state().tabs[0]).toMatchObject({ missing: false, context: "drain" });
+  });
+});
+
 describe("the keyboard", () => {
   const press = async (init: KeyboardEventInit) => {
     await act(async () => {

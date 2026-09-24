@@ -16,6 +16,8 @@
  */
 
 import { useMemo } from "react";
+import { hostsNeedAttention } from "@/lib/two-counts";
+
 import { backingFrom, hostSeverity, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
@@ -104,7 +106,7 @@ export default function IstioPage() {
       glyph: viewGlyph(Waypoints),
       mark: troubleMark(
         groups.map(hostSeverity),
-        (n, total) => t("count", "hostsNeedAttention", { n, total }),
+        (n, total) => hostsNeedAttention(n, total, t),
         (n, total) => t("count", "notCheckedOfTotal", { n, total })
       ),
       content: (

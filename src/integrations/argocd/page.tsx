@@ -19,6 +19,7 @@
  * answers through the `service.routes` capability.
  */
 
+import { applicationsNeedAttention } from "@/lib/two-counts";
 import { useCallback, useMemo } from "react";
 import { Box, GitBranch, Layers, Shield } from "lucide-react";
 
@@ -139,7 +140,7 @@ export default function ArgoCdPage() {
       glyph: viewGlyph(GitBranch),
       mark: troubleMark(
         apps.map((app) => app.worst),
-        (n, total) => t("count", "applicationsNeedAttention", { n, total })
+        (n, total) => applicationsNeedAttention(n, total, t)
       ),
       content: (
         <ApplicationsTab apps={apps} loading={applications.isPending} ui={ui} />

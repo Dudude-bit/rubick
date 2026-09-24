@@ -1,3 +1,4 @@
+import { valuesCopiedWithBinary } from "@/lib/two-counts";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Eye, EyeOff, Pencil } from "lucide-react";
 
@@ -131,10 +132,7 @@ export function DataSection({
     copyToClipboard(
       JSON.stringify(payload, null, 2),
       blobCount > 0
-        ? t("count", "valuesCopiedWithBinary", {
-            n: readable.length,
-            binary: blobCount,
-          })
+        ? valuesCopiedWithBinary(readable.length, blobCount, t)
         : t("count", "allValuesCopied", { n: readable.length })
     );
   };

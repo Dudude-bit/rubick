@@ -24,6 +24,9 @@ export function useScopeTabs(): void {
   const activeId = useScopeTabStore((s) => s.activeId);
   const contexts = useClusterStore((s) => s.contexts);
   const contextSwitches = useClusterStore((s) => s.contextSwitches);
+  const connectedTo = useClusterStore((s) =>
+    s.isConnected ? s.currentContext : null
+  );
 
   // Router -> store. Every navigation belongs to the tab it happened in,
   // the way a browser tab tracks the page.
@@ -50,6 +53,16 @@ export function useScopeTabs(): void {
       .getState()
       .retargetAfterSwitch(useClusterStore.getState().currentContext);
   }, [contextSwitches]);
+
+  // Either may come second: the kubeconfig can flag the tab lost after the
+  // window has already connected.
+  const activeLost = useScopeTabStore(
+    (s) => s.tabs.find((tab) => tab.id === s.activeId)?.missing ?? false
+  );
+  useEffect(() => {
+    if (connectedTo && activeLost)
+      useScopeTabStore.getState().adoptConnected(connectedTo);
+  }, [connectedTo, activeLost]);
 
   // Everything cached belonged to the connection the parked tab no longer
   // has, so none of it may be shown as live. Resource query keys do not
