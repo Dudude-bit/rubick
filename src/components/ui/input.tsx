@@ -16,11 +16,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           className
         )}
         autoComplete="off"
+        {...props}
+        // After the spread: nothing typed here is prose to correct.
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
         ref={ref}
-        {...props}
       />
     );
   }
