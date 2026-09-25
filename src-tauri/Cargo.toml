@@ -1,6 +1,6 @@
 [package]
 name = "k8s-gui"
-version = "4.20.1"
+version = "4.20.2"
 edition = "2021"
 rust-version = "1.91"
 authors = ["Rubick Team"]
@@ -66,6 +66,8 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "for
 # Security
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 rustls-pemfile = "2.2"
+# P-521 signatures, which ring does not verify; pure Rust, no C build.
+p521 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 # The verifier reqwest would pick, built in `tls.rs` so it can be wrapped.
 rustls-platform-verifier = "0.7"
 webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["std"] }
@@ -127,3 +129,7 @@ tauri-build = { version = "2.0", features = [] }
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+# Signs a test message; the app only verifies.
+p521 = { version = "0.13", default-features = false, features = ["ecdsa", "getrandom"] }

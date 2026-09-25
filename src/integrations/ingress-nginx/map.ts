@@ -11,14 +11,9 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
-import { edgeTlsTag, hostSeverity } from "../ingress";
+import { hostSeverity, hostTlsTag } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
-import {
-  backingOf,
-  edgeTls,
-  type NginxHostGroup,
-  type NginxSources,
-} from "./model";
+import { backingOf, type NginxHostGroup, type NginxSources } from "./model";
 
 /** Where clicking a host goes: its own routes, filtered to it. */
 export const hostFilterPath = (host: string | null) =>
@@ -115,9 +110,7 @@ export function routingMap(
                   }),
             tone: "warn",
           }
-        : group.tlsSecrets.length > 0
-          ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-          : edgeTlsTag(edgeTls(group.host, sources), t),
+        : hostTlsTag(group.tls, tone === "err", t),
     };
   });
 

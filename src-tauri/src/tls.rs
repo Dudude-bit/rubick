@@ -1,24 +1,106 @@
 //! The TLS every `reqwest` client here is built on: rustls on the ring
 //! provider, verified by the platform. The cluster's client is kube's own.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::CryptoProvider;
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
+use rustls::pki_types::{
+    alg_id, AlgorithmIdentifier, CertificateDer, InvalidSignature, ServerName,
+    SignatureVerificationAlgorithm, UnixTime,
+};
 use rustls::{CertificateError, DigitallySignedStruct, SignatureScheme};
 
-/// ring, which `main` installs before anything else runs — and which is
-/// installed here when missing, because reqwest panics on `build()` without a
-/// process default and a test or a harness never went through `main`.
+/// ring, and an ECDSA P-521 verifier ring does not have: a Prometheus, Loki
+/// or identity provider serving a P-521 certificate reached through the
+/// platform's TLS until 4.20.0 and must still. `main` installs it as the
+/// process default, which is what kube's client uses; it is installed here
+/// when missing, because reqwest panics on `build()` without one and a test
+/// or a harness never went through `main`. Every `reqwest` client here takes
+/// this one whatever the default is.
 pub fn provider() -> Arc<CryptoProvider> {
-    if CryptoProvider::get_default().is_none() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+    static PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    let provider = PROVIDER
+        .get_or_init(|| {
+            let mut provider = rustls::crypto::ring::default_provider();
+            provider.signature_verification_algorithms =
+                with_p521(provider.signature_verification_algorithms);
+            Arc::new(provider)
+        })
+        .clone();
+    if CryptoProvider::get_default().is_none()
+        && CryptoProvider::install_default((*provider).clone()).is_ok()
+    {
+        INSTALLED.store(true, Ordering::Release);
     }
-    CryptoProvider::get_default().map_or_else(
-        || Arc::new(rustls::crypto::ring::default_provider()),
-        Arc::clone,
-    )
+    provider
+}
+
+/// Set when this module's own install became the process default: the
+/// default is once-only, so that is the whole proof of whose it is.
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the process default is this provider — what kube's client uses.
+/// One installed first by anything else would leave kube without P-521 while
+/// every `reqwest` client here had it.
+#[must_use]
+pub fn default_is_ours() -> bool {
+    INSTALLED.load(Ordering::Acquire)
+}
+
+fn with_p521(ring: WebPkiSupportedAlgorithms) -> WebPkiSupportedAlgorithms {
+    static P521: &[&dyn SignatureVerificationAlgorithm] = &[&EcdsaP521Sha512];
+    let all: Vec<&'static dyn SignatureVerificationAlgorithm> = ring
+        .all
+        .iter()
+        .copied()
+        .chain(P521.iter().copied())
+        .collect();
+    let mapping: Vec<(
+        SignatureScheme,
+        &'static [&'static dyn SignatureVerificationAlgorithm],
+    )> = ring
+        .mapping
+        .iter()
+        .copied()
+        .chain([(SignatureScheme::ECDSA_NISTP521_SHA512, P521)])
+        .collect();
+    // Once per process: `provider` builds this a single time.
+    WebPkiSupportedAlgorithms {
+        all: Vec::leak(all),
+        mapping: Vec::leak(mapping),
+    }
+}
+
+/// ECDSA over P-521 with SHA-512, the one combination a P-521 key signs a
+/// TLS handshake with and the usual one on a P-521 certificate.
+#[derive(Debug)]
+struct EcdsaP521Sha512;
+
+impl SignatureVerificationAlgorithm for EcdsaP521Sha512 {
+    fn verify_signature(
+        &self,
+        public_key: &[u8],
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), InvalidSignature> {
+        use p521::ecdsa::signature::Verifier;
+        let key =
+            p521::ecdsa::VerifyingKey::from_sec1_bytes(public_key).map_err(|_| InvalidSignature)?;
+        let signature =
+            p521::ecdsa::Signature::from_der(signature).map_err(|_| InvalidSignature)?;
+        key.verify(message, &signature)
+            .map_err(|_| InvalidSignature)
+    }
+
+    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
+        alg_id::ECDSA_P521
+    }
+
+    fn signature_alg_id(&self) -> AlgorithmIdentifier {
+        alg_id::ECDSA_SHA512
+    }
 }
 
 /// A builder for plain HTTP, or for a server whose certificate is not checked.
@@ -155,6 +237,72 @@ fn pinned_holds(
 mod tests {
     use super::*;
 
+    /// ring verifies no ECDSA P-521 signature, so without the extra verifier
+    /// a Prometheus, Loki or identity provider serving a P-521 certificate
+    /// failed the handshake from 4.20.0; a client only offers the scheme the
+    /// provider maps.
+    #[test]
+    fn the_provider_offers_p521_beside_rings_own() {
+        let offered = provider()
+            .signature_verification_algorithms
+            .supported_schemes();
+        assert!(offered.contains(&SignatureScheme::ECDSA_NISTP384_SHA384));
+        assert!(offered.contains(&SignatureScheme::ECDSA_NISTP521_SHA512));
+    }
+
+    /// Every place that installs a provider installs this one; a stray ring
+    /// install won the race in tests and left kube on a different policy.
+    /// (rustls itself installs ring on the first `ClientConfig::builder()`
+    /// in a process with no default, which is why `main` goes first and
+    /// asserts it did; the fresh-process test below checks that path.)
+    #[test]
+    fn nothing_but_this_module_installs_a_provider() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut stray = Vec::new();
+        let mut dirs = vec![root.join("src"), root.join("tests")];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).expect("dir") {
+                let path = entry.expect("an entry").path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|ext| ext == "rs")
+                    && !path.ends_with("src/tls.rs")
+                    && std::fs::read_to_string(&path)
+                        .expect("a source file")
+                        .contains("install_default")
+                {
+                    stray.push(path.display().to_string());
+                }
+            }
+        }
+        assert!(
+            stray.is_empty(),
+            "providers installed outside tls.rs: {stray:?}"
+        );
+    }
+
+    /// A signature is checked, not merely parsed: a verifier that returned
+    /// `Ok` for anything well-formed would pass the handshake too.
+    #[test]
+    fn a_p521_signature_verifies_and_a_changed_message_does_not() {
+        use p521::ecdsa::signature::Signer;
+        use p521::elliptic_curve::sec1::ToEncodedPoint;
+        let mut secret = [7u8; 66];
+        secret[0] = 0; // below the curve order
+        let signing = p521::ecdsa::SigningKey::from_slice(&secret).expect("key");
+        let public = p521::ecdsa::VerifyingKey::from(&signing)
+            .as_affine()
+            .to_encoded_point(false);
+        let signature: p521::ecdsa::Signature = signing.sign(b"handshake");
+        let der = signature.to_der();
+
+        let verify = |message: &[u8]| {
+            EcdsaP521Sha512.verify_signature(public.as_bytes(), message, der.as_bytes())
+        };
+        assert!(verify(b"handshake").is_ok());
+        assert!(verify(b"handshakf").is_err());
+    }
+
     /// Would break if a client built where `main` never ran — a filtered test
     /// run, a live harness — panicked with "No provider set" again. In a fresh
     /// process, because any earlier test may have installed one in this.
@@ -281,5 +429,6 @@ mod tests {
             "not a fresh process"
         );
         builder().build().expect("a plain client");
+        assert!(default_is_ours(), "the default is not this provider");
     }
 }

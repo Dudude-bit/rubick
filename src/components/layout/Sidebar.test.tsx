@@ -64,7 +64,7 @@ vi.mock("@/lib/commands", () => ({
     listCustomResources: (crdName: string) => listCustomResources(crdName),
     resolveIngressClass: () => resolveIngressClass(),
     getClusterOverview: vi.fn().mockResolvedValue(null),
-    checkListAccess: () => checkListAccess(),
+    checkListAccess: (...args: unknown[]) => checkListAccess(...args),
     // The CRD `get` review left with its lock. It answers "refused" so that a
     // lock brought back marks the rows, rather than failing unseen.
     checkCrdReadAccess: () => Promise.resolve(false),
@@ -368,6 +368,38 @@ describe("the Integrations category", () => {
     await screen.findByRole("link", { name: /Flux/ });
     expect(
       await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * #304: every vendor page lists across the cluster, so a reader allowed
+   * only in the namespaces they picked opened a page that was refused, with
+   * no lock on its row. The review has to ask what the page reads.
+   */
+  it("asks for a vendor's list at the cluster scope whatever namespaces are picked", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["team-a"],
+      currentNamespace: "team-a",
+    });
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.15.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "certificates", allowed: false },
+    ]);
+
+    wrap(<Sidebar />);
+
+    const vendorReview = () =>
+      checkListAccess.mock.calls.find(([queries]) =>
+        (queries as { resource: string }[] | undefined)?.some(
+          (query) => query.resource === "certificates"
+        )
+      );
+    await waitFor(() => expect(vendorReview()).toBeDefined());
+    expect(vendorReview()?.[1]).toEqual([]);
+    expect(
+      await screen.findByLabelText(/permission to list cert-manager/i)
     ).toBeInTheDocument();
   });
 

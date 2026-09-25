@@ -360,7 +360,7 @@ mod paging_tests {
     /// has to arrive exactly once, and the answer has to say it is complete.
     #[tokio::test]
     async fn every_page_arrives_once_and_the_walk_says_it_finished() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let (port, server) = two_page_apiserver().await;
         let config = kube::Config::new(
             format!("http://127.0.0.1:{port}")
@@ -390,7 +390,7 @@ mod paging_tests {
     /// incomplete, or the reader draws a short list as the whole truth.
     #[tokio::test]
     async fn a_cancelled_walk_does_not_call_itself_complete() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let (port, server) = two_page_apiserver().await;
         let config = kube::Config::new(
             format!("http://127.0.0.1:{port}")
@@ -434,7 +434,7 @@ mod scope_tests {
     }
 
     async fn paged(routes: Vec<(&'static str, u16, String)>) -> (Result<ScopePaged>, Vec<String>) {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let (client, _) = server(routes).await;
         let seen = Mutex::new(Vec::new());
         let cancel = CancellationToken::new();

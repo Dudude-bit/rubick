@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.20.2] - 2026-09-25
+
+### Fixed
+
+- **Integrations are locked again for a reader limited to their own
+  namespaces.** 4.20.1 asked whether the reader may list a vendor's objects in
+  the namespaces they picked, while every vendor page reads the whole cluster,
+  so such a reader saw an open cert-manager row and a page that was refused.
+  The lock now asks the question the page asks. (#304)
+
+- **Traefik and ingress-nginx say "TLS not checked" where they could not
+  check.** A host whose front, or Traefik's entry points, could not be read
+  was drawn green and counted fine; a row could also say "no TLS" on the left
+  and "TLS not checked" on the right. A host's TLS is now one answer, and the
+  row, the map, its tag and the counts all read it.
+
+### Known
+
+- A Prometheus, Loki or identity provider serving an ECDSA P-521 certificate
+  cannot be reached since 4.20.0: the app's TLS verifies no P-521 signature.
+  The cluster connection is not affected. P-256, P-384 and RSA work.
+
 ## [4.20.1] - 2026-09-25
 
 > **A large release under the hood.** 4.20 reworked much of how the app

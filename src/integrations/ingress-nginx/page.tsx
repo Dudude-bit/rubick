@@ -23,7 +23,7 @@ import { hostsNeedAttention } from "@/lib/two-counts";
 import {
   BACKING_NOT_READ,
   backingFrom,
-  edgeTlsWords,
+  hostTlsWords,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -78,7 +78,6 @@ import {
   allRoutes,
   PROXY_LABEL,
   backingOf,
-  edgeTls,
   hostGroups,
   hostState,
   nginxClasses,
@@ -441,8 +440,6 @@ function HostRow({
 }) {
   const t = useT();
   const state = hostState(group, sources?.backingError ?? null, t);
-  const tls = group.tlsSecrets[0];
-
   return (
     <TroubleRow
       title={group.host ?? t("empty", "anyHost")}
@@ -452,9 +449,7 @@ function HostRow({
           {t("count", "paths", { n: group.routes.length })}
           {group.split &&
             ` · ${t("empty", "splitShares", { shares: splitSummary(group) })}`}
-          {tls
-            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : ` · ${edgeTlsWords(sources ? edgeTls(group.host, sources) : { at: "unknown" }, t)}`}
+          {` · ${hostTlsWords(group.tls, t)}`}
         </>
       }
       state={state}

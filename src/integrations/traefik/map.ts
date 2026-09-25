@@ -16,13 +16,13 @@
 import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
+import { hostsBrokenOfTotal } from "@/lib/two-counts";
 
-import { edgeTlsTag, hostSeverity } from "../ingress";
+import { hostSeverity, hostTlsTag } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
   boundEntryPoints,
-  edgeTls,
   type HostGroup,
   type TraefikSources,
 } from "./model";
@@ -81,7 +81,6 @@ export function routingMap(
 
   const hosts = groups.map((group, index): MapNode => {
     const id = hostId(group, index);
-    const tls = group.tlsSecrets[0];
     const tone = toneOf(group);
 
     for (const route of group.routes) {
@@ -164,9 +163,7 @@ export function routingMap(
         .join(" · "),
       tone,
       to: hostFilterPath(group.host),
-      tag: tls
-        ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-        : edgeTlsTag(edgeTls(group.host, sources), t),
+      tag: hostTlsTag(group.tls, tone === "err", t),
     };
   });
 
@@ -181,4 +178,41 @@ export function routingMap(
     ],
     edges,
   };
+}
+
+/**
+ * The line over the map. The unchecked count goes beside trouble too, as the
+ * routes tab says it: a count of broken hosts over hosts nobody could check
+ * reads as the rest being fine.
+ */
+export function mapSummary(groups: HostGroup[], t: T): string {
+  const broken = groups.filter((group) => group.worst === "err").length;
+  const worthALook = groups.filter((group) => group.worst === "warn").length;
+  const unchecked = groups.filter(
+    (group) => hostSeverity(group) === "unknown"
+  ).length;
+  const parts =
+    broken > 0
+      ? [
+          hostsBrokenOfTotal(broken, groups.length, t),
+          ...(worthALook > 0
+            ? [t("count", "worthALook", { n: worthALook })]
+            : []),
+        ]
+      : worthALook > 0
+        ? [
+            t("empty", "nothingBroken"),
+            t("count", "worthALookOfTotal", {
+              n: worthALook,
+              total: groups.length,
+            }),
+          ]
+        : unchecked === 0
+          ? [t("count", "hostsNoneWithProblem", { n: groups.length })]
+          : [];
+  if (unchecked > 0)
+    parts.push(
+      t("count", "notCheckedOfTotal", { n: unchecked, total: groups.length })
+    );
+  return parts.join(" · ");
 }

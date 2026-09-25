@@ -26,7 +26,7 @@ fn context() -> String {
 }
 
 async fn connected() -> (AppState, kube::Client) {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let state = AppState::new().expect("app state");
     state
         .client_manager

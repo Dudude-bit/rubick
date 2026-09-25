@@ -314,6 +314,20 @@ mod tests {
         assert_eq!(display_status(&p), "Running");
     }
 
+    /// kubectl walks the containers and overwrites the reason as it goes,
+    /// so the first container's verdict is the one that stands. Its only
+    /// check was a shared corpus case deleted with the corpus; removing the
+    /// `.rev()` would show the second container's reason with nothing failing.
+    #[test]
+    fn the_first_containers_reason_is_the_one_shown() {
+        let mut p = pod("Pending");
+        p.status.as_mut().unwrap().container_statuses = Some(vec![
+            status("app", waiting("ImagePullBackOff"), false),
+            status("sidecar", waiting("CrashLoopBackOff"), false),
+        ]);
+        assert_eq!(display_status(&p), "ImagePullBackOff");
+    }
+
     #[test]
     fn crash_looping_pod_reads_crashloopbackoff_not_running() {
         let mut p = pod("Running");

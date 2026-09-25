@@ -1,4 +1,4 @@
-import { hostsBrokenOfTotal, hostsNeedAttention } from "@/lib/two-counts";
+import { hostsNeedAttention } from "@/lib/two-counts";
 /**
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
@@ -29,7 +29,7 @@ import { Fragment, useMemo, type ReactNode } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
-  edgeTlsWords,
+  hostTlsWords,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -68,7 +68,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
-import { routingMap } from "./map";
+import { mapSummary, routingMap } from "./map";
 import {
   servedGroupName,
   useBacking,
@@ -85,7 +85,6 @@ import {
   duplicatedServiceNames,
   hostGroups,
   hostState,
-  edgeTls,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -326,25 +325,10 @@ function MapTab({
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-  const unchecked = groups.filter(
-    (group) => hostSeverity(group) === "unknown"
-  ).length;
-
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[11px] text-fg-fnt">
-        {broken > 0
-          ? `${hostsBrokenOfTotal(broken, groups.length, t)}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-          : worthALook > 0
-            ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-            : unchecked > 0
-              ? t("count", "notCheckedOfTotal", {
-                  n: unchecked,
-                  total: groups.length,
-                })
-              : t("count", "hostsNoneWithProblem", { n: groups.length })}
+        {mapSummary(groups, t)}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
       <BackingUnread error={sources?.backingError ?? null} />
@@ -471,14 +455,6 @@ function HostRow({
 }) {
   const t = useT();
   const state = hostState(group, sources?.backingError ?? null, t);
-  const tls = group.tlsSecrets[0];
-  // Where the certificate is, when it is not here. Stated rather than merely
-  // not warned about: a reader who knows TLS ends at the load balancer learns
-  // nothing from silence, and a reader who does not is the one this line is
-  // for.
-  const edge = sources
-    ? edgeTls(group.host, sources)
-    : { at: "unknown" as const };
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -503,9 +479,10 @@ function HostRow({
           {t("count", "paths", { n: group.routes.length })}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
-          {tls
-            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : ` · ${edgeTlsWords(edge, t)}`}
+          {/* Where the certificate is, when it is not here: a reader who
+              knows TLS ends at the load balancer learns nothing from
+              silence. */}
+          {` · ${hostTlsWords(group.tls, t)}`}
         </>
       }
       state={state}

@@ -20,7 +20,7 @@ use k8s_gui_lib::state::AppState;
 async fn context(namespace: &str) -> ResourceContext {
     let name =
         std::env::var("K8S_GUI_INIT_CONTEXT").unwrap_or_else(|_| "kwok-rubick-gw".to_string());
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
 
     let state = AppState::new().expect("app state");
     state

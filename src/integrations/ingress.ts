@@ -179,8 +179,12 @@ export function backingFrom(
 export function hostSeverity(group: {
   worst: "err" | "warn" | null;
   backendsKnown: boolean;
+  tls: { at: string };
 }): "err" | "warn" | "unknown" | null {
-  return group.worst ?? (group.backendsKnown ? null : "unknown");
+  return (
+    group.worst ??
+    (group.backendsKnown && group.tls.at !== "unknown" ? null : "unknown")
+  );
 }
 
 function ref(kind: string, name: string, namespace: string): ObjectRef {
@@ -482,6 +486,30 @@ export function edgeTlsOf(
   if (said === true) return { at: "edge" };
   if (!sources.backingKnown || said === "unknown") return { at: "unknown" };
   return { at: "none" };
+}
+
+/**
+ * A host's TLS, worked out once in the model and read by everything that
+ * says it: the row, the map tag, the state, the severity and the counts.
+ * Each used to ask its own question, and one row said "no TLS" on the left
+ * and "TLS not checked" on the right.
+ */
+export type HostTls = { at: "own"; secret: string } | EdgeTls;
+
+export function hostTlsWords(tls: HostTls, t: T): string {
+  return tls.at === "own"
+    ? t("empty", "tlsFrom", { name: tls.secret })
+    : edgeTlsWords(tls, t);
+}
+
+export function hostTlsTag(
+  tls: HostTls,
+  broken: boolean,
+  t: T
+): { text: string; tone: "mute" | "warn" | "unknown" | "err" } {
+  return tls.at === "own"
+    ? { text: "TLS", tone: broken ? "err" : "mute" }
+    : edgeTlsTag(tls, t);
 }
 
 /** A host row's words for TLS it does not hold itself. */

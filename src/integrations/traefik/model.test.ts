@@ -841,11 +841,33 @@ describe("what it refuses to claim before it knows", () => {
         ingresses: [ingress("shop", "shop.example.com")],
         services: [service("web", { app: "web" })],
         published: [published("web", 2)],
+        entryPoints: [
+          { name: "websecure", address: ":8443", tls: true, redirectTo: null },
+        ],
       })
     );
 
     expect(hostSeverity(group)).toBeNull();
     expect(hostState(group, null, t).tone).toBe("ok");
+  });
+
+  /** The controller's entry points unread is the same unknown as the edge
+   *  unread: whether the host is served in the clear cannot be told. */
+  it("calls a host TLS not checked while the entry points are unread", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 2)],
+        entryPoints: [],
+      })
+    );
+
+    expect(group.tls).toEqual({ at: "unknown" });
+    expect(hostState(group, null, t)).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
   });
 });
 
@@ -1118,5 +1140,19 @@ describe("a host whose TLS ends in front of the proxy", () => {
   it("is not called clear while the capability has not answered", () => {
     const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
     expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+  });
+
+  /** Nor serving: dropping the warning left the row green and counted fine,
+   *  when the host may well be in the clear. */
+  it("reads a host that may be in the clear as TLS not checked", () => {
+    const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
+    expect(group.tls).toEqual({ at: "unknown" });
+    // With nothing else wrong under it, which is the case that was green.
+    const quiet = { ...group, findings: [], worst: null };
+    expect(hostSeverity(quiet)).toBe("unknown");
+    expect(hostState(quiet, null, t)).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
   });
 });
