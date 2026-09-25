@@ -123,9 +123,9 @@ export interface IstioHostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
-  /** Always true: an Istio row says nothing about plaintext, so there is no
-   *  TLS verdict here to be unknown. */
-  tlsKnown: true;
+  /** An Istio row says nothing about plaintext, so there is no TLS verdict
+   *  here to be unknown. */
+  tls: { at: "notJudged" };
 }
 
 // --- resolving the strings ----------------------------------------------
@@ -605,7 +605,7 @@ export function hostGroups(sources: IstioSources, t: T): IstioHostGroup[] {
               (destination) => destination.external !== true
             )
           ),
-        tlsKnown: true,
+        tls: { at: "notJudged" },
       };
     }
   );

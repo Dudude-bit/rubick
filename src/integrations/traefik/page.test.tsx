@@ -8,6 +8,7 @@ import type { IngressInfo } from "@/generated/types";
 
 const answers = vi.hoisted(() => ({
   backing: (): Promise<unknown> => Promise.resolve({}),
+  deployments: (): Promise<unknown> => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -30,7 +31,18 @@ vi.mock("@/lib/commands", () => ({
         ],
       }),
     listServiceBacking: () => answers.backing(),
-    listDeployments: () => Promise.resolve([]),
+    listDeployments: () => answers.deployments(),
+    getDeployment: () =>
+      Promise.resolve({
+        containers: [
+          {
+            name: "traefik",
+            image: "traefik:v3",
+            command: [],
+            args: ["--entrypoints.web.address=:8000"],
+          },
+        ],
+      }),
     listDaemonsets: () => Promise.resolve([]),
   },
 }));
@@ -80,6 +92,7 @@ function openOn(tab: string) {
 }
 
 beforeEach(() => {
+  answers.deployments = () => Promise.resolve([]);
   answers.backing = () =>
     Promise.reject(
       new Error("Tauri command 'listServiceBacking' failed: forbidden", {
@@ -108,9 +121,30 @@ describe("a host with no certificate of its own when the edge could not be read"
   /** The other half: with the Services read and nothing in front, the host really has no TLS, and says so. */
   it("says no TLS once the edge was read and nothing in front holds one", async () => {
     answers.backing = () => Promise.resolve({ services: [], published: [] });
+    // The controller read too: with its entry points unread, one of them may
+    // terminate TLS for the host, and "no TLS" would be a guess.
+    answers.deployments = () =>
+      Promise.resolve([
+        {
+          name: "traefik",
+          namespace: "traefik",
+          containers: [{ image: "traefik:v3" }],
+          replicas: { ready: 1, desired: 1 },
+        },
+      ]);
     openOn("routes");
 
     expect((await screen.findAllByText(/no TLS/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/TLS not checked/)).not.toBeInTheDocument();
+  });
+
+  /** And with the entry points unread, "no TLS" is a guess: the row said it
+   *  on the left and "TLS not checked" on the right. */
+  it("says TLS not checked while the entry points are unread", async () => {
+    answers.backing = () => Promise.resolve({ services: [], published: [] });
+    openOn("routes");
+
+    expect(await screen.findByText(/TLS not checked/)).toBeInTheDocument();
+    expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
   });
 });

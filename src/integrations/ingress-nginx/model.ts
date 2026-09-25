@@ -37,6 +37,7 @@ import {
   type BackingSources,
   type SecretRef,
   edgeTlsOf,
+  type HostTls,
   frontingIngressesOf,
   proxyServicesBy,
   terminatedUpstreamOf,
@@ -143,9 +144,8 @@ export interface NginxHostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
-  /** False where the host could be in the clear and what is in front of it
-   *  could not be read. */
-  tlsKnown: boolean;
+  /** The one answer to "is this host served over TLS"; see `HostTls`. */
+  tls: HostTls;
 }
 
 export interface NginxSources extends BackingSources {
@@ -515,7 +515,11 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       worst: worstOf(findings),
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service !== null),
-      tlsKnown: clear !== "tlsUnknown",
+      tls: tlsSecrets[0]
+        ? { at: "own" as const, secret: tlsSecrets[0].secretName }
+        : clear === "tlsUnknown"
+          ? { at: "unknown" as const }
+          : edgeTls(host === "" ? null : host, sources),
     };
   });
 
@@ -557,7 +561,7 @@ export function hostState(
       tone: "unknown",
     };
   }
-  if (!group.tlsKnown) {
+  if (group.tls.at === "unknown") {
     return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
   }
   return { text: t("empty", "serving"), tone: "ok" };
