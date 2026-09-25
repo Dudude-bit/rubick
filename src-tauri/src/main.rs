@@ -24,10 +24,8 @@ fn registers_its_own_scheme(flatpak_id: Option<&std::ffi::OsStr>) -> bool {
 fn main() {
     let started = std::time::Instant::now();
 
-    // Install rustls crypto provider before any TLS operations
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
+    // Before any TLS: kube's client takes the process default.
+    k8s_gui_lib::tls::provider();
 
     // First: it writes the environment, which nothing else may be reading
     // yet, and tracing below reads `RUST_LOG` from what the profile set.

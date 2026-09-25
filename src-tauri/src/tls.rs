@@ -1,24 +1,91 @@
 //! The TLS every `reqwest` client here is built on: rustls on the ring
 //! provider, verified by the platform. The cluster's client is kube's own.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::CryptoProvider;
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
+use rustls::pki_types::{
+    alg_id, AlgorithmIdentifier, CertificateDer, InvalidSignature, ServerName,
+    SignatureVerificationAlgorithm, UnixTime,
+};
 use rustls::{CertificateError, DigitallySignedStruct, SignatureScheme};
 
-/// ring, which `main` installs before anything else runs — and which is
-/// installed here when missing, because reqwest panics on `build()` without a
-/// process default and a test or a harness never went through `main`.
+/// ring, and an ECDSA P-521 verifier ring does not have: a Prometheus, Loki
+/// or identity provider serving a P-521 certificate reached through the
+/// platform's TLS until 4.20.0 and must still. `main` installs it as the
+/// process default, which is what kube's client uses; it is installed here
+/// when missing, because reqwest panics on `build()` without one and a test
+/// or a harness never went through `main`. Every `reqwest` client here takes
+/// this one whatever the default is.
 pub fn provider() -> Arc<CryptoProvider> {
+    static PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    let provider = PROVIDER
+        .get_or_init(|| {
+            let mut provider = rustls::crypto::ring::default_provider();
+            provider.signature_verification_algorithms =
+                with_p521(provider.signature_verification_algorithms);
+            Arc::new(provider)
+        })
+        .clone();
     if CryptoProvider::get_default().is_none() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _ = CryptoProvider::install_default((*provider).clone());
     }
-    CryptoProvider::get_default().map_or_else(
-        || Arc::new(rustls::crypto::ring::default_provider()),
-        Arc::clone,
-    )
+    provider
+}
+
+fn with_p521(ring: WebPkiSupportedAlgorithms) -> WebPkiSupportedAlgorithms {
+    static P521: &[&dyn SignatureVerificationAlgorithm] = &[&EcdsaP521Sha512];
+    let all: Vec<&'static dyn SignatureVerificationAlgorithm> = ring
+        .all
+        .iter()
+        .copied()
+        .chain(P521.iter().copied())
+        .collect();
+    let mapping: Vec<(
+        SignatureScheme,
+        &'static [&'static dyn SignatureVerificationAlgorithm],
+    )> = ring
+        .mapping
+        .iter()
+        .copied()
+        .chain([(SignatureScheme::ECDSA_NISTP521_SHA512, P521)])
+        .collect();
+    // Once per process: `provider` builds this a single time.
+    WebPkiSupportedAlgorithms {
+        all: Vec::leak(all),
+        mapping: Vec::leak(mapping),
+    }
+}
+
+/// ECDSA over P-521 with SHA-512, the one combination a P-521 key signs a
+/// TLS handshake with and the usual one on a P-521 certificate.
+#[derive(Debug)]
+struct EcdsaP521Sha512;
+
+impl SignatureVerificationAlgorithm for EcdsaP521Sha512 {
+    fn verify_signature(
+        &self,
+        public_key: &[u8],
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), InvalidSignature> {
+        use p521::ecdsa::signature::Verifier;
+        let key =
+            p521::ecdsa::VerifyingKey::from_sec1_bytes(public_key).map_err(|_| InvalidSignature)?;
+        let signature =
+            p521::ecdsa::Signature::from_der(signature).map_err(|_| InvalidSignature)?;
+        key.verify(message, &signature)
+            .map_err(|_| InvalidSignature)
+    }
+
+    fn public_key_alg_id(&self) -> AlgorithmIdentifier {
+        alg_id::ECDSA_P521
+    }
+
+    fn signature_alg_id(&self) -> AlgorithmIdentifier {
+        alg_id::ECDSA_SHA512
+    }
 }
 
 /// A builder for plain HTTP, or for a server whose certificate is not checked.
@@ -155,19 +222,39 @@ fn pinned_holds(
 mod tests {
     use super::*;
 
-    /// ring verifies no ECDSA P-521 signature, so a Prometheus, Loki or
-    /// identity provider serving a P-521 certificate fails the handshake;
-    /// 4.19.1 reached them through the platform's TLS and did not. Kept on
-    /// ring on purpose (aws-lc-rs is a C build on every platform) and stated
-    /// in the CHANGELOG. Fails if the provider changes, so that note is
-    /// revisited rather than left wrong.
+    /// ring verifies no ECDSA P-521 signature, so without the extra verifier
+    /// a Prometheus, Loki or identity provider serving a P-521 certificate
+    /// failed the handshake from 4.20.0; a client only offers the scheme the
+    /// provider maps.
     #[test]
-    fn the_provider_verifies_no_p521_signature() {
+    fn the_provider_offers_p521_beside_rings_own() {
         let offered = provider()
             .signature_verification_algorithms
             .supported_schemes();
-        assert!(offered.contains(&rustls::SignatureScheme::ECDSA_NISTP384_SHA384));
-        assert!(!offered.contains(&rustls::SignatureScheme::ECDSA_NISTP521_SHA512));
+        assert!(offered.contains(&SignatureScheme::ECDSA_NISTP384_SHA384));
+        assert!(offered.contains(&SignatureScheme::ECDSA_NISTP521_SHA512));
+    }
+
+    /// A signature is checked, not merely parsed: a verifier that returned
+    /// `Ok` for anything well-formed would pass the handshake too.
+    #[test]
+    fn a_p521_signature_verifies_and_a_changed_message_does_not() {
+        use p521::ecdsa::signature::Signer;
+        use p521::elliptic_curve::sec1::ToEncodedPoint;
+        let mut secret = [7u8; 66];
+        secret[0] = 0; // below the curve order
+        let signing = p521::ecdsa::SigningKey::from_slice(&secret).expect("key");
+        let public = p521::ecdsa::VerifyingKey::from(&signing)
+            .as_affine()
+            .to_encoded_point(false);
+        let signature: p521::ecdsa::Signature = signing.sign(b"handshake");
+        let der = signature.to_der();
+
+        let verify = |message: &[u8]| {
+            EcdsaP521Sha512.verify_signature(public.as_bytes(), message, der.as_bytes())
+        };
+        assert!(verify(b"handshake").is_ok());
+        assert!(verify(b"handshakf").is_err());
     }
 
     /// Would break if a client built where `main` never ran — a filtered test
