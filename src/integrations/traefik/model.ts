@@ -40,6 +40,7 @@ import {
   type BackingSources,
   type SecretRef,
   edgeTlsOf,
+  type HostTls,
   frontingIngressesOf,
   proxyServicesBy,
   terminatedUpstreamOf,
@@ -185,9 +186,8 @@ export interface HostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
-  /** False where the host could be in the clear and what is in front of it
-   *  could not be read. */
-  tlsKnown: boolean;
+  /** The one answer to "is this host served over TLS"; see `HostTls`. */
+  tls: HostTls;
 }
 
 export interface TraefikSources extends BackingSources {
@@ -748,17 +748,6 @@ export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
   return edgeTlsOf(host, sources, frontingIngresses(sources));
 }
 
-/** The TLS a host row and its map node say, for a host with no certificate
- *  of its own: "none" only once the entry points were read too, since one of
- *  them may terminate TLS for it. */
-export function hostEdgeTls(
-  group: HostGroup,
-  sources: TraefikSources
-): EdgeTls {
-  const edge = edgeTls(group.host, sources);
-  return edge.at === "none" && !group.tlsKnown ? { at: "unknown" } : edge;
-}
-
 /**
  * A host served with no encryption at all.
  *
@@ -904,7 +893,11 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       worst: worstOf(findings),
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service?.kubernetes),
-      tlsKnown: clear !== "tlsUnknown",
+      tls: tlsSecrets[0]
+        ? { at: "own" as const, secret: tlsSecrets[0].secretName }
+        : clear === "tlsUnknown"
+          ? { at: "unknown" as const }
+          : edgeTls(host === "" ? null : host, sources),
     };
   });
 
@@ -969,7 +962,7 @@ export function hostState(
       tone: "unknown",
     };
   }
-  if (!group.tlsKnown) {
+  if (group.tls.at === "unknown") {
     return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
   }
   return { text: t("empty", "serving"), tone: "ok" };

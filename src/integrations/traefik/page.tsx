@@ -29,7 +29,7 @@ import { Fragment, useMemo, type ReactNode } from "react";
 import {
   BACKING_NOT_READ,
   backingFrom,
-  edgeTlsWords,
+  hostTlsWords,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -81,7 +81,6 @@ import {
   duplicatedServiceNames,
   hostGroups,
   hostState,
-  hostEdgeTls,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -416,14 +415,6 @@ function HostRow({
 }) {
   const t = useT();
   const state = hostState(group, sources?.backingError ?? null, t);
-  const tls = group.tlsSecrets[0];
-  // Where the certificate is, when it is not here. Stated rather than merely
-  // not warned about: a reader who knows TLS ends at the load balancer learns
-  // nothing from silence, and a reader who does not is the one this line is
-  // for.
-  const edge = sources
-    ? hostEdgeTls(group, sources)
-    : { at: "unknown" as const };
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.
   const everywhere = group.routes.some((route) => !route.entryPoints);
@@ -448,9 +439,10 @@ function HostRow({
           {t("count", "paths", { n: group.routes.length })}
           {entryPoints.length > 0 &&
             ` · ${everywhere ? t("empty", "everyEntryPoint") : summariseNames(entryPoints)}`}
-          {tls
-            ? ` · ${t("empty", "tlsFrom", { name: tls.secretName })}`
-            : ` · ${edgeTlsWords(edge, t)}`}
+          {/* Where the certificate is, when it is not here: a reader who
+              knows TLS ends at the load balancer learns nothing from
+              silence. */}
+          {` · ${hostTlsWords(group.tls, t)}`}
         </>
       }
       state={state}

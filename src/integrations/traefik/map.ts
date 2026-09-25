@@ -18,12 +18,11 @@ import type { T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
 import { hostsBrokenOfTotal } from "@/lib/two-counts";
 
-import { edgeTlsTag, hostSeverity } from "../ingress";
+import { hostSeverity, hostTlsTag } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
   boundEntryPoints,
-  hostEdgeTls,
   type HostGroup,
   type TraefikSources,
 } from "./model";
@@ -82,7 +81,6 @@ export function routingMap(
 
   const hosts = groups.map((group, index): MapNode => {
     const id = hostId(group, index);
-    const tls = group.tlsSecrets[0];
     const tone = toneOf(group);
 
     for (const route of group.routes) {
@@ -165,9 +163,7 @@ export function routingMap(
         .join(" · "),
       tone,
       to: hostFilterPath(group.host),
-      tag: tls
-        ? { text: "TLS", tone: tone === "err" ? "err" : "mute" }
-        : edgeTlsTag(hostEdgeTls(group, sources), t),
+      tag: hostTlsTag(group.tls, tone === "err", t),
     };
   });
 

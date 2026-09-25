@@ -7,7 +7,13 @@ import type {
 } from "@/generated/types";
 
 import { mapSummary, routingMap } from "./map";
-import { hostGroups, type HostGroup, type TraefikSources } from "./model";
+import {
+  hostGroups,
+  hostState,
+  type HostGroup,
+  type TraefikSources,
+} from "./model";
+import { hostSeverity, hostTlsTag } from "../ingress";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -288,7 +294,7 @@ describe("the line over the map", () => {
       tlsSecrets: [],
       worst,
       backendsKnown: true,
-      tlsKnown: known,
+      tls: known ? { at: "none" } : { at: "unknown" },
     }) as never as HostGroup;
 
   /** Said only when nothing was broken, so "1 of 6 hosts broken" stood over
@@ -297,5 +303,43 @@ describe("the line over the map", () => {
     expect(
       mapSummary([group("err"), group(null, false), group(null, false)], t)
     ).toBe("1 of 3 hosts broken · 2 of 3 not checked");
+  });
+});
+
+/**
+ * One answer to "is this host served over TLS", read everywhere. The row,
+ * the map tag and the state each asked their own question, and a host read
+ * "no TLS" on the left and "TLS not checked" on the right. Fails if any of
+ * them stops reading `group.tls`.
+ */
+describe("a host's TLS, wherever it is said", () => {
+  const cases: Array<[string, Partial<TraefikSources>]> = [
+    ["read, nothing in front", {}],
+    ["entry points unread", { entryPoints: [] }],
+    ["edge unread", { upstreamTls: () => "unknown" }],
+    ["edge holds it", { upstreamTls: () => true }],
+  ];
+
+  it.each(cases)("agrees with itself when %s", (_name, over) => {
+    const src = sources({
+      ingresses: [ingress("promo", "promo.example.com")],
+      services: [service("web")],
+      ...over,
+    });
+    const groups = hostGroups(src);
+    const nodes = routingMap(groups, src, t).columns[1].nodes;
+    for (const [index, group] of groups.entries()) {
+      const unknown = group.tls.at === "unknown";
+      expect(nodes[index].tag).toEqual(
+        hostTlsTag(group.tls, nodes[index].tone === "err", t)
+      );
+      expect(nodes[index].tag?.text === "TLS not checked").toBe(unknown);
+      expect(hostSeverity(group) === "unknown" || group.worst !== null).toBe(
+        unknown || !group.backendsKnown || group.worst !== null
+      );
+      expect(hostState(group, null, t).text === "TLS not checked").toBe(
+        unknown && group.worst === null && group.backendsKnown
+      );
+    }
   });
 });

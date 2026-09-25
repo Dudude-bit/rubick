@@ -863,7 +863,7 @@ describe("what it refuses to claim before it knows", () => {
       })
     );
 
-    expect(group.tlsKnown).toBe(false);
+    expect(group.tls).toEqual({ at: "unknown" });
     expect(hostState(group, null, t)).toEqual({
       text: "TLS not checked",
       tone: "unknown",
@@ -1146,7 +1146,7 @@ describe("a host whose TLS ends in front of the proxy", () => {
    *  when the host may well be in the clear. */
   it("reads a host that may be in the clear as TLS not checked", () => {
     const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
-    expect(group.tlsKnown).toBe(false);
+    expect(group.tls).toEqual({ at: "unknown" });
     // With nothing else wrong under it, which is the case that was green.
     const quiet = { ...group, findings: [], worst: null };
     expect(hostSeverity(quiet)).toBe("unknown");
