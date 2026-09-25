@@ -19,7 +19,7 @@ fn context() -> String {
 }
 
 async fn client() -> Client {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let config = Config::from_custom_kubeconfig(
         Kubeconfig::read().expect("kubeconfig"),
         &KubeConfigOptions {

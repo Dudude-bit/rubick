@@ -25,7 +25,7 @@ use k8s_gui_lib::state::AppState;
 async fn client() -> kube::Client {
     let name =
         std::env::var("K8S_GUI_SHAPE_CONTEXT").unwrap_or_else(|_| "kind-rubick-gw".to_string());
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let state = AppState::new().expect("app state");
     state
         .client_manager

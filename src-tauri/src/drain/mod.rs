@@ -863,10 +863,9 @@ mod tests {
     ///
     /// Building a client puts a rustls stack together, and that needs the
     /// process-wide provider `main` installs at startup. Tests have no
-    /// `main`, so the first one here does it; `install_default` is
-    /// once-only, hence the ignored result rather than an `expect`.
+    /// `main`, so the first one here asks `tls::provider` for it.
     fn nowhere() -> Client {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
         Client::try_from(config).expect("a client that never connects")
     }

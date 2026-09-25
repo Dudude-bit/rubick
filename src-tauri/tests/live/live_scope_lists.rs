@@ -35,7 +35,7 @@ use tokio::sync::broadcast;
 const SCOPE: [&str; 3] = ["default", "k8s-gui-test", "kube-system"];
 
 async fn client_for(context: String) -> Client {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let config = Config::from_custom_kubeconfig(
         Kubeconfig::read().expect("kubeconfig"),
         &KubeConfigOptions {

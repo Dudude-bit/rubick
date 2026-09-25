@@ -971,7 +971,7 @@ mod tests {
     /// reader's namespace with only `activeDeadlineSeconds` behind it.
     #[tokio::test]
     async fn a_delete_that_failed_leaves_the_fallback_armed() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         // A cluster that is not there, so the delete cannot succeed.
         let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
         let client = kube::Client::try_from(config).expect("a client");

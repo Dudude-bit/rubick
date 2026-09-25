@@ -30,7 +30,7 @@ async fn fan_out_reports_every_cluster() {
 
     // Same install `main()` does before any TLS work; without it every
     // client build panics inside rustls.
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
 
     let state = AppState::new().expect("app state");
     state

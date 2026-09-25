@@ -1,6 +1,7 @@
 //! The TLS every `reqwest` client here is built on: rustls on the ring
 //! provider, verified by the platform. The cluster's client is kube's own.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -28,10 +29,24 @@ pub fn provider() -> Arc<CryptoProvider> {
             Arc::new(provider)
         })
         .clone();
-    if CryptoProvider::get_default().is_none() {
-        let _ = CryptoProvider::install_default((*provider).clone());
+    if CryptoProvider::get_default().is_none()
+        && CryptoProvider::install_default((*provider).clone()).is_ok()
+    {
+        INSTALLED.store(true, Ordering::Release);
     }
     provider
+}
+
+/// Set when this module's own install became the process default: the
+/// default is once-only, so that is the whole proof of whose it is.
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the process default is this provider — what kube's client uses.
+/// One installed first by anything else would leave kube without P-521 while
+/// every `reqwest` client here had it.
+#[must_use]
+pub fn default_is_ours() -> bool {
+    INSTALLED.load(Ordering::Acquire)
 }
 
 fn with_p521(ring: WebPkiSupportedAlgorithms) -> WebPkiSupportedAlgorithms {
@@ -235,6 +250,37 @@ mod tests {
         assert!(offered.contains(&SignatureScheme::ECDSA_NISTP521_SHA512));
     }
 
+    /// Every place that installs a provider installs this one; a stray ring
+    /// install won the race in tests and left kube on a different policy.
+    /// (rustls itself installs ring on the first `ClientConfig::builder()`
+    /// in a process with no default, which is why `main` goes first and
+    /// asserts it did; the fresh-process test below checks that path.)
+    #[test]
+    fn nothing_but_this_module_installs_a_provider() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut stray = Vec::new();
+        let mut dirs = vec![root.join("src"), root.join("tests")];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).expect("dir") {
+                let path = entry.expect("an entry").path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|ext| ext == "rs")
+                    && !path.ends_with("src/tls.rs")
+                    && std::fs::read_to_string(&path)
+                        .expect("a source file")
+                        .contains("install_default")
+                {
+                    stray.push(path.display().to_string());
+                }
+            }
+        }
+        assert!(
+            stray.is_empty(),
+            "providers installed outside tls.rs: {stray:?}"
+        );
+    }
+
     /// A signature is checked, not merely parsed: a verifier that returned
     /// `Ok` for anything well-formed would pass the handshake too.
     #[test]
@@ -383,5 +429,6 @@ mod tests {
             "not a fresh process"
         );
         builder().build().expect("a plain client");
+        assert!(default_is_ours(), "the default is not this provider");
     }
 }

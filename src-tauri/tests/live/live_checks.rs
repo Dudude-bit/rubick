@@ -14,7 +14,7 @@ use kube::api::Api;
 
 async fn client() -> (kube::Client, String) {
     let name = std::env::var("K8S_GUI_CHECK_CONTEXT").unwrap_or_else(|_| "killercoda".to_string());
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let state = AppState::new().expect("app state");
     state
         .client_manager
