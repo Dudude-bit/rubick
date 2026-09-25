@@ -841,11 +841,33 @@ describe("what it refuses to claim before it knows", () => {
         ingresses: [ingress("shop", "shop.example.com")],
         services: [service("web", { app: "web" })],
         published: [published("web", 2)],
+        entryPoints: [
+          { name: "websecure", address: ":8443", tls: true, redirectTo: null },
+        ],
       })
     );
 
     expect(hostSeverity(group)).toBeNull();
     expect(hostState(group, null, t).tone).toBe("ok");
+  });
+
+  /** The controller's entry points unread is the same unknown as the edge
+   *  unread: whether the host is served in the clear cannot be told. */
+  it("calls a host TLS not checked while the entry points are unread", () => {
+    const [group] = hostGroups(
+      sources({
+        ingresses: [ingress("shop", "shop.example.com")],
+        services: [service("web", { app: "web" })],
+        published: [published("web", 2)],
+        entryPoints: [],
+      })
+    );
+
+    expect(group.tlsKnown).toBe(false);
+    expect(hostState(group, null, t)).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
   });
 });
 

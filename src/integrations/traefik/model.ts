@@ -771,10 +771,9 @@ function clearFinding(
   // by design; or what is in front could not be read and cannot be ruled out.
   const edge = edgeTls(host, sources).at;
   if (edge === "ingress" || edge === "edge") return null;
-  // Nothing is claimed about entry points the controller never told us about:
-  // an empty list means the workload could not be read, not that it listens
-  // on nothing.
-  if (sources.entryPoints.length === 0) return null;
+  // An empty list is entry points that could not be read, not a controller
+  // listening on nothing: whether this host is in the clear is unknown.
+  if (sources.entryPoints.length === 0) return "tlsUnknown";
 
   const bound = new Map<string, EntryPoint>();
   for (const route of routes) {

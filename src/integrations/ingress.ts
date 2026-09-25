@@ -179,11 +179,10 @@ export function backingFrom(
 export function hostSeverity(group: {
   worst: "err" | "warn" | null;
   backendsKnown: boolean;
-  tlsKnown?: boolean;
+  tlsKnown: boolean;
 }): "err" | "warn" | "unknown" | null {
   return (
-    group.worst ??
-    (group.backendsKnown && group.tlsKnown !== false ? null : "unknown")
+    group.worst ?? (group.backendsKnown && group.tlsKnown ? null : "unknown")
   );
 }
 
