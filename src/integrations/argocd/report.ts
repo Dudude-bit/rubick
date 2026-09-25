@@ -163,7 +163,11 @@ function applicationSections(
 function appProjectSections(spec: unknown, t: T): ReportSection[] {
   const fields = (spec ?? {}) as {
     sourceRepos?: string[];
-    destinations?: Array<{ namespace?: string; server?: string }>;
+    destinations?: Array<{
+      namespace?: string;
+      server?: string;
+      name?: string;
+    }>;
     roles?: unknown[];
   };
   return [

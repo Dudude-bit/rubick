@@ -488,12 +488,21 @@ export function destinationOf(app: ArgoApp, t: T): string {
 /** An empty `sourceRepos` is Argo refusing every repository, not an unset field. */
 export function projectReposWords(repos: readonly string[], t: T): string {
   if (repos.length === 0) return t("empty", "noRepositoryAllowed");
-  if (repos.includes("*")) return t("empty", "anyRepository");
-  return repos.join(", ");
+  if (!repos.includes("*")) return repos.join(", ");
+  const denied = repos.filter((repo) => repo.startsWith("!"));
+  return denied.length === 0
+    ? t("empty", "anyRepository")
+    : t("empty", "anyRepositoryExcept", {
+        repos: denied.map((repo) => repo.slice(1)).join(", "),
+      });
 }
 
 export function projectDestinationsWords(
-  destinations: readonly { namespace?: string; server?: string }[],
+  destinations: readonly {
+    namespace?: string;
+    server?: string;
+    name?: string;
+  }[],
   t: T
 ): string {
   if (destinations.length === 0) return t("empty", "noDestinationAllowed");
@@ -505,9 +514,9 @@ export function projectDestinationsWords(
             ? t("empty", "anyNamespace")
             : destination.namespace,
         cluster:
-          !destination.server || destination.server === "*"
-            ? t("empty", "anyCluster")
-            : destination.server,
+          [destination.server, destination.name].find(
+            (cluster) => cluster && cluster !== "*"
+          ) ?? t("empty", "anyCluster"),
       })
     )
     .join(", ");

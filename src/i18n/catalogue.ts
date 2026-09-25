@@ -4876,6 +4876,7 @@ export const en = {
       "What each project lets an Application do: which repositories it may deploy from, and where it may deploy to.",
     noRepositoryAllowed: "no repository allowed",
     anyRepository: "any repository",
+    anyRepositoryExcept: "any repository except {repos}",
     noDestinationAllowed: "no destination allowed",
     anyNamespace: "any namespace",
     anyCluster: "any cluster",

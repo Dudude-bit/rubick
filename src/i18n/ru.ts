@@ -5361,6 +5361,7 @@ export const ru: Catalogue = {
       "Что каждый проект разрешает Application: из каких репозиториев разворачивать и куда.",
     noRepositoryAllowed: "репозитории не разрешены",
     anyRepository: "любой репозиторий",
+    anyRepositoryExcept: "любой репозиторий, кроме {repos}",
     noDestinationAllowed: "назначения не разрешены",
     anyNamespace: "любое пространство имён",
     anyCluster: "любой кластер",
