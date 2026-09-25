@@ -748,6 +748,17 @@ export function edgeTls(host: string | null, sources: TraefikSources): EdgeTls {
   return edgeTlsOf(host, sources, frontingIngresses(sources));
 }
 
+/** The TLS a host row and its map node say, for a host with no certificate
+ *  of its own: "none" only once the entry points were read too, since one of
+ *  them may terminate TLS for it. */
+export function hostEdgeTls(
+  group: HostGroup,
+  sources: TraefikSources
+): EdgeTls {
+  const edge = edgeTls(group.host, sources);
+  return edge.at === "none" && !group.tlsKnown ? { at: "unknown" } : edge;
+}
+
 /**
  * A host served with no encryption at all.
  *

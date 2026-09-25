@@ -1,4 +1,4 @@
-import { hostsBrokenOfTotal, hostsNeedAttention } from "@/lib/two-counts";
+import { hostsNeedAttention } from "@/lib/two-counts";
 /**
  * Traefik's page: the routing table, pivoted the way the question is asked.
  *
@@ -64,7 +64,7 @@ import {
 import { RoutingMap } from "../routing-map";
 import { useFrontingTls } from "../fronting-tls";
 import { ProxyControllerTab } from "../proxy-controller";
-import { routingMap } from "./map";
+import { mapSummary, routingMap } from "./map";
 import {
   servedGroupName,
   useBacking,
@@ -81,7 +81,7 @@ import {
   duplicatedServiceNames,
   hostGroups,
   hostState,
-  edgeTls,
+  hostEdgeTls,
   middlewareType,
   middlewareUses,
   traefikClasses,
@@ -298,25 +298,10 @@ function MapTab({
   }
   if (!data || groups.length === 0) return <NothingRoutes />;
 
-  const broken = groups.filter((group) => group.worst === "err").length;
-  const worthALook = groups.filter((group) => group.worst === "warn").length;
-  const unchecked = groups.filter(
-    (group) => hostSeverity(group) === "unknown"
-  ).length;
-
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[11px] text-fg-fnt">
-        {broken > 0
-          ? `${hostsBrokenOfTotal(broken, groups.length, t)}${worthALook > 0 ? ` · ${t("count", "worthALook", { n: worthALook })}` : ""}`
-          : worthALook > 0
-            ? `${t("empty", "nothingBroken")} · ${t("count", "worthALookOfTotal", { n: worthALook, total: groups.length })}`
-            : unchecked > 0
-              ? t("count", "notCheckedOfTotal", {
-                  n: unchecked,
-                  total: groups.length,
-                })
-              : t("count", "hostsNoneWithProblem", { n: groups.length })}
+        {mapSummary(groups, t)}
         {backingLoading && ` · ${t("empty", "checkingWhatIsBehind")}`}
       </p>
       <BackingUnread error={sources?.backingError ?? null} />
@@ -437,7 +422,7 @@ function HostRow({
   // nothing from silence, and a reader who does not is the one this line is
   // for.
   const edge = sources
-    ? edgeTls(group.host, sources)
+    ? hostEdgeTls(group, sources)
     : { at: "unknown" as const };
   // A route that declares no entry point is bound to all of them, and
   // enumerating four names to say "all of them" is longer and says less.

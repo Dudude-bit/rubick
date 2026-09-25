@@ -6,8 +6,8 @@ import type {
   ServiceInfo,
 } from "@/generated/types";
 
-import { routingMap } from "./map";
-import { hostGroups, type TraefikSources } from "./model";
+import { mapSummary, routingMap } from "./map";
+import { hostGroups, type HostGroup, type TraefikSources } from "./model";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -276,5 +276,26 @@ describe("the routing map", () => {
       services: [service("web")],
     });
     expect(map.columns[1].nodes[0].to).toBe("?tab=routes&q=shop.example.com");
+  });
+});
+
+describe("the line over the map", () => {
+  const group = (worst: "err" | "warn" | null, known = true): HostGroup =>
+    ({
+      host: "h",
+      routes: [],
+      findings: [],
+      tlsSecrets: [],
+      worst,
+      backendsKnown: true,
+      tlsKnown: known,
+    }) as never as HostGroup;
+
+  /** Said only when nothing was broken, so "1 of 6 hosts broken" stood over
+   *  three hosts nobody could check, which the routes tab counted. */
+  it("counts the hosts nobody could check beside the broken ones", () => {
+    expect(
+      mapSummary([group("err"), group(null, false), group(null, false)], t)
+    ).toBe("1 of 3 hosts broken · 2 of 3 not checked");
   });
 });
