@@ -143,6 +143,9 @@ export interface NginxHostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
+  /** False where the host could be in the clear and what is in front of it
+   *  could not be read. */
+  tlsKnown: boolean;
 }
 
 export interface NginxSources extends BackingSources {
@@ -362,11 +365,12 @@ function clearFinding(
   routes: NginxRoute[],
   sources: NginxSources,
   host: string | null
-): Finding | null {
+): Finding | "tlsUnknown" | null {
   if (routes.some((route) => route.tlsSecret)) return null;
   // Something in front holds the certificate, and the hop into the cluster is
   // plaintext by design; or what is in front could not be read.
-  if (edgeTls(host, sources).at !== "none") return null;
+  const edge = edgeTls(host, sources).at;
+  if (edge === "ingress" || edge === "edge") return null;
   const redirectAnyway = routes.some((route) =>
     route.annotations.some(
       (reading) =>
@@ -375,7 +379,10 @@ function clearFinding(
         reading.value.trim().toLowerCase() === "true"
     )
   );
-  return { kind: "clear", severity: "warn", redirectAnyway };
+  const finding: Finding = { kind: "clear", severity: "warn", redirectAnyway };
+  // What is in front could not be read: the host would be in the clear if
+  // nothing there holds the certificate, so it is not known to be fine.
+  return edge === "unknown" ? "tlsUnknown" : finding;
 }
 
 const URGENCY: Record<Finding["kind"], number> = {
@@ -486,7 +493,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
         (problem) => ({ kind: "certificate" as const, ...problem })
       ),
       ...orphans,
-      ...(clear ? [clear] : []),
+      ...(clear && clear !== "tlsUnknown" ? [clear] : []),
       ...duplicateFindings(own),
     ];
 
@@ -508,6 +515,7 @@ export function hostGroups(sources: NginxSources, t: T): NginxHostGroup[] {
       worst: worstOf(findings),
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service !== null),
+      tlsKnown: clear !== "tlsUnknown",
     };
   });
 
@@ -548,6 +556,9 @@ export function hostState(
       text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
       tone: "unknown",
     };
+  }
+  if (!group.tlsKnown) {
+    return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
   }
   return { text: t("empty", "serving"), tone: "ok" };
 }

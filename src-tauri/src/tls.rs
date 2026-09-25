@@ -155,6 +155,21 @@ fn pinned_holds(
 mod tests {
     use super::*;
 
+    /// ring verifies no ECDSA P-521 signature, so a Prometheus, Loki or
+    /// identity provider serving a P-521 certificate fails the handshake;
+    /// 4.19.1 reached them through the platform's TLS and did not. Kept on
+    /// ring on purpose (aws-lc-rs is a C build on every platform) and stated
+    /// in the CHANGELOG. Fails if the provider changes, so that note is
+    /// revisited rather than left wrong.
+    #[test]
+    fn the_provider_verifies_no_p521_signature() {
+        let offered = provider()
+            .signature_verification_algorithms
+            .supported_schemes();
+        assert!(offered.contains(&rustls::SignatureScheme::ECDSA_NISTP384_SHA384));
+        assert!(!offered.contains(&rustls::SignatureScheme::ECDSA_NISTP521_SHA512));
+    }
+
     /// Would break if a client built where `main` never ran — a filtered test
     /// run, a live harness — panicked with "No provider set" again. In a fresh
     /// process, because any earlier test may have installed one in this.

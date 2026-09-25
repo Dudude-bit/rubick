@@ -496,5 +496,11 @@ describe("a host whose TLS ends in front of nginx", () => {
       t
     );
     expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
+    // Nor serving: the row read green and counted fine.
+    expect(hostSeverity(group)).toBe("unknown");
+    expect(hostState(group, null, t)).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
   });
 });

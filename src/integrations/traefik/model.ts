@@ -185,6 +185,9 @@ export interface HostGroup {
   worst: "err" | "warn" | null;
   /** False while a Service this host routes to has not been read. */
   backendsKnown: boolean;
+  /** False where the host could be in the clear and what is in front of it
+   *  could not be read. */
+  tlsKnown: boolean;
 }
 
 export interface TraefikSources extends BackingSources {
@@ -762,15 +765,15 @@ function clearFinding(
   routes: TraefikRoute[],
   sources: TraefikSources,
   host: string | null
-): Finding | null {
+): Finding | "tlsUnknown" | null {
   if (routes.some((route) => route.tlsSecret)) return null;
   // Something in front holds the certificate, and the inside hop is plaintext
   // by design; or what is in front could not be read and cannot be ruled out.
-  if (edgeTls(host, sources).at !== "none") return null;
-  // Nothing is claimed about entry points the controller never told us about:
-  // an empty list means the workload could not be read, not that it listens
-  // on nothing.
-  if (sources.entryPoints.length === 0) return null;
+  const edge = edgeTls(host, sources).at;
+  if (edge === "ingress" || edge === "edge") return null;
+  // An empty list is entry points that could not be read, not a controller
+  // listening on nothing: whether this host is in the clear is unknown.
+  if (sources.entryPoints.length === 0) return "tlsUnknown";
 
   const bound = new Map<string, EntryPoint>();
   for (const route of routes) {
@@ -801,12 +804,15 @@ function clearFinding(
   );
   if (carriesRedirect) return null;
 
-  return {
+  const finding: Finding = {
     kind: "clear",
     severity: "warn",
     entryPoints: plain.map((entry) => entry.name),
     alsoOnTls: [...bound.values()].some((entry) => entry.tls),
   };
+  // What is in front could not be read: the host would be in the clear if
+  // nothing there holds the certificate, so it is not known to be fine.
+  return edge === "unknown" ? "tlsUnknown" : finding;
 }
 
 function certificateFindings(
@@ -863,7 +869,7 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
     const findings = [
       ...stops,
       ...certificateFindings(tlsSecrets, sources.certificates),
-      ...(clear ? [clear] : []),
+      ...(clear && clear !== "tlsUnknown" ? [clear] : []),
       ...duplicateFindings(own),
     ];
 
@@ -887,6 +893,7 @@ export function hostGroups(sources: TraefikSources): HostGroup[] {
       worst: worstOf(findings),
       backendsKnown:
         sources.backingKnown || !own.some((route) => route.service?.kubernetes),
+      tlsKnown: clear !== "tlsUnknown",
     };
   });
 
@@ -950,6 +957,9 @@ export function hostState(
       text: t("empty", backingError ? "endpointsUnread" : "readingEndpoints"),
       tone: "unknown",
     };
+  }
+  if (!group.tlsKnown) {
+    return { text: t("empty", "tlsNotChecked"), tone: "unknown" };
   }
   return { text: t("empty", "serving"), tone: "ok" };
 }
