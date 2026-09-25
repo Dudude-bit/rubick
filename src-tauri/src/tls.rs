@@ -269,7 +269,7 @@ mod tests {
                     && !path.ends_with("src/tls.rs")
                     && std::fs::read_to_string(&path)
                         .expect("a source file")
-                        .contains(".install_default()")
+                        .contains("install_default")
                 {
                     stray.push(path.display().to_string());
                 }
