@@ -21,7 +21,7 @@ async fn shell() -> (
     let namespace =
         std::env::var("K8S_GUI_INIT_NAMESPACE").unwrap_or_else(|_| "k8s-gui-test".to_string());
     let pod = std::env::var("K8S_GUI_TERMINAL_POD").unwrap_or_else(|_| "web.v1".to_string());
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let state = AppState::new().expect("app state");
     state
         .client_manager

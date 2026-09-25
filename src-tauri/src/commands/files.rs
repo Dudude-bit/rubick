@@ -383,7 +383,7 @@ mod tests {
         let _ = streams.stop("files-1");
         let (event_tx, mut rx) = tokio::sync::broadcast::channel(8);
         let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let client = kube::Client::try_from(config).expect("a client that never connects");
         let target = ListingTarget {
             namespace: "default".into(),

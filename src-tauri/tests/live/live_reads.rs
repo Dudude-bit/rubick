@@ -16,7 +16,7 @@ const EXPECTED: [&str; 3] = ["ok", "\u{fffd}\u{fffd}", "after"];
 async fn streamer() -> (AppState, LogStreamer) {
     let context =
         std::env::var("K8S_GUI_INIT_CONTEXT").unwrap_or_else(|_| "kind-rubick-gui".to_string());
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let state = AppState::new().expect("app state");
     state
         .client_manager

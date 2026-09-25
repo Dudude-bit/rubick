@@ -286,7 +286,7 @@ mod tests {
     /// one a namespace-scoped token is refused, and the 403 carried by name.
     #[tokio::test]
     async fn several_namespaces_are_read_one_apiece_and_a_refusal_is_named() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let forbidden = json!({
             "kind": "Status", "apiVersion": "v1", "status": "Failure",
             "message": "configmaps is forbidden", "reason": "Forbidden", "code": 403,
@@ -324,7 +324,7 @@ mod tests {
     /// as the command always did.
     #[tokio::test]
     async fn one_namespace_that_refused_fails_the_read() {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let (client, _) = server(vec![(
             "/api/v1/namespaces/prod/configmaps",
             403,

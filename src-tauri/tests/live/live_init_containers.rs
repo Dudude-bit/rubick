@@ -61,7 +61,7 @@ async fn init_containers_and_previous_runs_reach_the_frontend() {
     let namespace =
         std::env::var("K8S_GUI_INIT_NAMESPACE").unwrap_or_else(|_| "k8s-gui-test".to_string());
 
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
 
     let state = AppState::new().expect("app state");
     state

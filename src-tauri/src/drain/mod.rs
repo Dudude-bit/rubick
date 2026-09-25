@@ -866,7 +866,7 @@ mod tests {
     /// `main`, so the first one here does it; `install_default` is
     /// once-only, hence the ignored result rather than an `expect`.
     fn nowhere() -> Client {
-        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::tls::provider();
         let config = kube::Config::new("http://127.0.0.1:1".parse().expect("a uri"));
         Client::try_from(config).expect("a client that never connects")
     }
