@@ -13,6 +13,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
 import { conditionFromStatus } from "../kit";
+import { acmeServerLabel } from "./model";
 import { conditionRole } from "@/lib/condition-health";
 
 const GROUP = "cert-manager.io";
@@ -126,14 +127,9 @@ function issuerType(
   spec: unknown
 ): { type: string; detail: string | null } | null {
   if (at(spec, "acme")) {
-    const server = text(at(spec, "acme", "server"));
     return {
       type: "ACME",
-      detail: server?.includes("letsencrypt.org")
-        ? server.includes("staging")
-          ? "Let's Encrypt staging"
-          : "Let's Encrypt"
-        : server,
+      detail: acmeServerLabel(text(at(spec, "acme", "server"))),
     };
   }
   if (at(spec, "ca"))

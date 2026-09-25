@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { certificateRows, issuerRows, worstCertificateTone } from "./model";
+import {
+  acmeServerLabel,
+  certificateRows,
+  issuerRows,
+  worstCertificateTone,
+} from "./model";
 import type { CustomResourceInfo } from "@/generated/types";
 
 import { translate } from "@/i18n";
@@ -443,5 +448,27 @@ describe("issuers", () => {
     expect(rows[0].name).toBe("bad");
     expect(rows[0].message).toBe("Failed to register ACME account");
     expect(rows[1].message).toBeNull();
+  });
+});
+
+describe("acmeServerLabel", () => {
+  /**
+   * The name is read off the directory's host: a URL that only mentions
+   * letsencrypt.org in its path or under another domain is somebody else's
+   * ACME server and keeps its own address.
+   */
+  it("names Let's Encrypt only when the directory is on its host", () => {
+    expect(
+      acmeServerLabel("https://acme-v02.api.letsencrypt.org/directory")
+    ).toBe("Let's Encrypt");
+    expect(
+      acmeServerLabel("https://acme-staging-v02.api.letsencrypt.org/directory")
+    ).toBe("Let's Encrypt staging");
+    expect(
+      acmeServerLabel("https://acme.example.com/letsencrypt.org/directory")
+    ).toBe("https://acme.example.com/letsencrypt.org/directory");
+    expect(acmeServerLabel("https://letsencrypt.org.example.com/dir")).toBe(
+      "https://letsencrypt.org.example.com/dir"
+    );
   });
 });

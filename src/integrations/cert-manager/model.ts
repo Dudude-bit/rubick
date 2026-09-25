@@ -430,6 +430,15 @@ export function certificateRows(
     );
 }
 
+/** Let's Encrypt by the directory's host, not by the name appearing anywhere in the URL. */
+export function acmeServerLabel(server: string | null): string | null {
+  if (!server || !URL.canParse(server)) return server;
+  const host = new URL(server).hostname;
+  if (host !== "letsencrypt.org" && !host.endsWith(".letsencrypt.org"))
+    return server;
+  return host.includes("staging") ? "Let's Encrypt staging" : "Let's Encrypt";
+}
+
 /** ACME, CA, SelfSigned, Vault, Venafi — and what each one points at. */
 function issuerKindOf(
   issuer: CustomResourceInfo
@@ -439,16 +448,10 @@ function issuerKindOf(
   const fields = spec as Record<string, unknown>;
 
   if (fields.acme) {
-    const server = text(issuer, "spec.acme.server");
-    if (server?.includes("letsencrypt.org")) {
-      return {
-        type: "ACME",
-        detail: server.includes("staging")
-          ? "Let's Encrypt staging"
-          : "Let's Encrypt",
-      };
-    }
-    return { type: "ACME", detail: server };
+    return {
+      type: "ACME",
+      detail: acmeServerLabel(text(issuer, "spec.acme.server")),
+    };
   }
   if (fields.ca) {
     return { type: "CA", detail: text(issuer, "spec.ca.secretName") };
