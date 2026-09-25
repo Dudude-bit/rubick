@@ -144,7 +144,7 @@ async fn serve(dir: &Path, name: &str) -> (Server, u16) {
 #[tokio::test]
 #[ignore = "needs openssl and python3"]
 async fn the_https_clients_answer_as_the_one_tls_stack_should() {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    k8s_gui_lib::tls::provider();
     let dir = tempfile::tempdir().expect("tempdir");
     let dir = dir.path();
     std::fs::write(dir.join("server.py"), SERVER).expect("script");
@@ -190,10 +190,83 @@ async fn the_https_clients_answer_as_the_one_tls_stack_should() {
         ],
     );
     let ca = std::fs::read(dir.join("ca.crt")).expect("ca");
+    // An ECDSA P-521 CA and a leaf it signs with SHA-512: ring verifies no
+    // P-521 signature, so this failed from 4.20.0 until the app brought its
+    // own verifier.
+    let p521 = [
+        "-newkey",
+        "ec",
+        "-pkeyopt",
+        "ec_paramgen_curve:P-521",
+        "-nodes",
+    ];
+    openssl(
+        dir,
+        &[
+            &["req", "-x509"][..],
+            &p521,
+            &[
+                "-keyout",
+                "p521ca.key",
+                "-subj",
+                "/CN=Rubick P-521 CA",
+                "-days",
+                "2",
+                "-sha512",
+                "-out",
+                "p521ca.crt",
+            ],
+        ]
+        .concat(),
+    );
+    openssl(
+        dir,
+        &[
+            &["req"][..],
+            &p521,
+            &[
+                "-keyout",
+                "p521.key",
+                "-subj",
+                "/CN=localhost",
+                "-out",
+                "p521.csr",
+            ],
+        ]
+        .concat(),
+    );
+    std::fs::write(
+        dir.join("p521.ext"),
+        "subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n",
+    )
+    .expect("ext");
+    openssl(
+        dir,
+        &[
+            "x509",
+            "-req",
+            "-in",
+            "p521.csr",
+            "-CA",
+            "p521ca.crt",
+            "-CAkey",
+            "p521ca.key",
+            "-CAcreateserial",
+            "-days",
+            "2",
+            "-sha512",
+            "-extfile",
+            "p521.ext",
+            "-out",
+            "p521.crt",
+        ],
+    );
+    let p521_ca = std::fs::read(dir.join("p521ca.crt")).expect("p521 ca");
 
     let (_san, san_port) = serve(dir, "san").await;
     let (_cn, cn_port) = serve(dir, "cn").await;
     let (_self, self_port) = serve(dir, "self").await;
+    let (_p521, p521_port) = serve(dir, "p521").await;
     let get = |insecure: bool, port: u16| async move {
         wire::client(insecure)
             .expect("client")
@@ -271,6 +344,19 @@ async fn the_https_clients_answer_as_the_one_tls_stack_should() {
         .generate_auth_url("http://localhost:8000/callback")
         .await;
     assert!(impostor.is_err(), "self-signed, another one pinned");
+
+    // A provider on a P-521 certificate, with its CA named: the chain and
+    // the handshake signature are both P-521.
+    let p521_login = OidcAuth::new(
+        format!("https://localhost:{p521_port}"),
+        "rubick".into(),
+        None,
+        vec![],
+    )
+    .with_idp_ca(Some(p521_ca))
+    .generate_auth_url("http://localhost:8000/callback")
+    .await;
+    assert!(p521_login.is_ok(), "P-521: {:?}", p521_login.err());
 
     // The machine's own roots, through the platform verifier.
     let public = wire::client(false)
