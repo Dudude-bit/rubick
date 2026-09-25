@@ -392,6 +392,39 @@ describe("every node at once", () => {
   });
 });
 
+describe("a node read from its pods", () => {
+  const PODS = 'container!="",container!="POD",pod!=""';
+
+  /**
+   * The fallback for a Prometheus that drops pod-less cgroups. Fails if it
+   * reads the root cgroup it exists to replace, takes the max of one pod
+   * instead of adding them up, or loses the peak of each bucket.
+   */
+  it("sums the real containers per node and keeps the peak", () => {
+    const cpu = nodesQuery("cpu", RANGE_SPECS["6h"], "pods");
+    expect(cpu).toBe(
+      `max_over_time((sum by (${NODE_LABELS.join(", ")}) (rate(container_cpu_usage_seconds_total{${PODS}}[2m])))[180s:30s]) * 1000`
+    );
+    const memory = nodesQuery("memory", RANGE_SPECS["6h"], "pods");
+    expect(memory).toBe(
+      `max_over_time((sum by (${NODE_LABELS.join(", ")}) (container_memory_working_set_bytes{${PODS}}))[180s:30s])`
+    );
+    expect(nodesNewestQuery("pods")).toContain(PODS);
+    expect(nodesNewestQuery("pods")).not.toContain('id="/"');
+  });
+
+  /** The detail page's fallback: every node label, summed over pods. */
+  it("asks for one node's pods by every label that names it", () => {
+    const query = cpuQuery(node, HOUR, "pods");
+    expect(query.startsWith("max_over_time((sum(")).toBe(true);
+    for (const label of NODE_LABELS) {
+      expect(query).toContain(`${PODS},${label}="k3d-k8s-gui-dev-agent-0"`);
+    }
+    expect(query).not.toContain('id="/"');
+    expect(memoryQuery(node, HOUR, "pods")).toContain(`sum(`);
+  });
+});
+
 describe("a week", () => {
   it("reaches seven days back at a resolution that still holds a spike", () => {
     const spec = RANGE_SPECS["7d"];

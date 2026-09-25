@@ -20,6 +20,7 @@ import type {
   StatefulSetInfo,
 } from "@/generated/types";
 import type { DeliveryRevision } from "@/integrations";
+import type { T } from "@/i18n/useT";
 
 /**
  * The kinds whose history the Changes tab can draw, as a value as well as a
@@ -253,6 +254,41 @@ export interface JournalEntry {
    * before that.
    */
   atRelist?: boolean;
+}
+
+/**
+ * One journal entry in words, for every surface that states it. `values`
+ * lets a reader with less room shorten what `from` and `to` print.
+ */
+export function journalWords(
+  item: JournalEntry,
+  t: T,
+  values: (value: string | null) => string = (value) => value ?? "∅"
+): string {
+  const from = values(item.from);
+  const to = values(item.to);
+  switch (item.field) {
+    case "created":
+      return t("changes", "journalCreated", { kind: item.kind });
+    case "deleted":
+      return t("changes", "journalDeleted", { kind: item.kind });
+    case "generation":
+      return t("changes", "journalGeneration", { from, to });
+    case "image":
+      return t("changes", "journalImage", {
+        container: item.key ?? "",
+        from,
+        to,
+      });
+    case "replicas":
+      return t("changes", "journalReplicas", { from, to });
+    case "annotation":
+      return t("changes", "journalAnnotation", {
+        key: item.key ?? "",
+        from,
+        to,
+      });
+  }
 }
 
 /** The fields the journal watches, read off one list row. */

@@ -21,6 +21,8 @@ import { errorToShow } from "@/lib/error-utils";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import {
   createAgeColumn,
   createNameColumn,
@@ -168,6 +170,9 @@ export const columns = (
   createAgeColumn<NodeInfo>(),
 ];
 
+const NODES_TITLE = "Nodes";
+const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
+
 export function NodeList() {
   const t = useT();
   const grouping = useMemo(() => poolGrouping(t), [t]);
@@ -295,24 +300,36 @@ export function NodeList() {
     [t, navigate, actions]
   );
 
+  // The title row is ResourceList's own header in both views, fed the same
+  // list and the same watch, so switching views changes only what is below it.
   if (view === "utilisation") {
     return (
       <>
-        <div className="mb-3 flex items-baseline gap-3">
-          <h1 className="text-[13px] font-semibold tracking-tight text-fg">
-            Nodes
-          </h1>
-          {viewToggle}
+        <div className="flex h-full min-h-0 flex-col gap-4 animate-in fade-in duration-200">
+          <ResourceListHeader
+            title={NODES_TITLE}
+            count={nodesForTrends.data?.rows.length}
+            actions={
+              <>
+                {viewToggle}
+                <ShareScreenAction screen={NODES_SCREEN} />
+              </>
+            }
+            dataUpdatedAt={nodesForTrends.dataUpdatedAt}
+            live={live && !resyncing}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+            <NodeUtilisation
+              nodes={nodesForTrends.data?.rows ?? []}
+              nodesKnown={nodesForTrends.data !== undefined}
+              nodesReason={
+                nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
+              }
+              range={range}
+              onRange={setRange}
+            />
+          </div>
         </div>
-        <NodeUtilisation
-          nodes={nodesForTrends.data?.rows ?? []}
-          nodesKnown={nodesForTrends.data !== undefined}
-          nodesReason={
-            nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
-          }
-          range={range}
-          onRange={setRange}
-        />
         {actions.dialogs}
       </>
     );
@@ -321,7 +338,7 @@ export function NodeList() {
   return (
     <>
       <ResourceList<NodeInfo>
-        title="Nodes"
+        title={NODES_TITLE}
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
         queryFn={() => commands.listNodes(null).then(whole)}
@@ -333,13 +350,11 @@ export function NodeList() {
         refresh={refresh}
         live={live}
         resyncing={resyncing}
+        headerActions={viewToggle}
         headerContent={
-          <>
-            <div className="mb-2 flex justify-end">{viewToggle}</div>
-            {nodeStatus?.status !== "available" ? (
-              <MetricsStatusBanner status={nodeStatus} />
-            ) : null}
-          </>
+          nodeStatus?.status !== "available" ? (
+            <MetricsStatusBanner status={nodeStatus} />
+          ) : null
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />

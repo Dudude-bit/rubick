@@ -9,6 +9,7 @@ import { facts } from "./facts";
 import { serviceEdge } from "./edge";
 import { ingressTls } from "./ingress-tls";
 import { mark } from "./mark";
+import { reportOf } from "./report";
 
 /**
  * The AWS Load Balancer Controller — tier two.
@@ -38,7 +39,11 @@ export const awsLoadBalancerController = defineVendor({
     icon: Waypoints,
     facts,
   },
-  provides: { "service.edge": serviceEdge, "ingress.tls": ingressTls },
+  provides: {
+    "service.edge": serviceEdge,
+    "ingress.tls": ingressTls,
+    "object.report": reportOf,
+  },
   page: {
     count: pageCount({
       queryKey: ALB_SOURCES_KEY,

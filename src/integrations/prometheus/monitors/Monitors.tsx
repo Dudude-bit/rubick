@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useT } from "@/i18n/useT";
@@ -8,6 +8,8 @@ import { cn, formatSince } from "@/lib/utils";
 import { crdObjectPath } from "../../kit";
 import { integrationSettingsPath } from "../../paths";
 import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
+import { useShareSection } from "@/components/share/screen-share";
+import { ladderSection } from "./share";
 import { Detail } from "./Detail";
 import { useHeartbeat } from "./heartbeat";
 import { Strip } from "./Strip";
@@ -53,6 +55,7 @@ export default function Monitors() {
     () => (picture.data ? rowsOfPicture(picture.data) : null),
     [picture.data]
   );
+  useShareSection("prometheus-monitors-ladder", () => ladderSection(rows, t));
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.monitor.name)) : null),
     [rows]
@@ -72,6 +75,16 @@ export default function Monitors() {
   const asked = params.get("monitor");
   const selected =
     shown.find((row) => keyOf(row) === asked) ?? shown[0] ?? null;
+  const selectedKey = selected ? keyOf(selected) : null;
+  // The list is now its own scroller, so a row the arrows moved onto past
+  // the visible edge has to be asked for rather than dragged along by a page
+  // that used to scroll as one with it.
+  useEffect(() => {
+    if (selectedKey === null) return;
+    document
+      .getElementById(`monitor-${selectedKey}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedKey]);
   const select = (row: MonitorRow) => {
     const updated = new URLSearchParams(params);
     updated.set("monitor", keyOf(row));
@@ -116,10 +129,10 @@ export default function Monitors() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <Header picture={picture.data} rows={rows} />
       <Notices picture={picture.data} />
-      <div className="grid grid-cols-[340px_minmax(0,1fr)] gap-6 border-t border-hair pt-4">
+      <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
           rows={rows}
           shown={shown}
@@ -133,15 +146,21 @@ export default function Monitors() {
           onKeyDown={onKeyDown}
           targets={picture.data.targets}
         />
-        {selected ? (
-          <Detail key={keyOf(selected)} row={selected} picture={picture.data} />
-        ) : (
-          // The list beside this already says why it is empty. Saying it
-          // again here put the same sentence on the screen twice.
-          <p className="text-[11.5px] text-fg-mut">
-            {rows.length === 0 ? null : t("monitors", "pickOne")}
-          </p>
-        )}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-thin">
+          {selected ? (
+            <Detail
+              key={keyOf(selected)}
+              row={selected}
+              picture={picture.data}
+            />
+          ) : (
+            // The list beside this already says why it is empty. Saying it
+            // again here put the same sentence on the screen twice.
+            <p className="text-[11.5px] text-fg-mut">
+              {rows.length === 0 ? null : t("monitors", "pickOne")}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -389,7 +408,7 @@ function Ladder({
     ),
   ];
   return (
-    <div className="flex min-w-0 flex-col gap-2 border-r border-hair pr-3">
+    <div className="flex h-full w-[340px] min-h-0 flex-none flex-col gap-2 border-r border-hair pr-3">
       <FilterBox
         value={filter}
         onChange={onFilter}
@@ -428,7 +447,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex flex-col outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-thin outline-none focus-visible:ring-1 focus-visible:ring-info rounded-[5px]"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => groupOf(row) === group);

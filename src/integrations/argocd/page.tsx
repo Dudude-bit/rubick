@@ -26,6 +26,9 @@ import { Box, GitBranch, Layers, Shield } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { refOf } from "@/lib/report-parts";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
 import { Link } from "react-router-dom";
 import {
@@ -36,12 +39,7 @@ import {
 import type { CustomResourceInfo } from "@/generated/types";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
-import {
-  conditionsOf,
-  crdObjectsPath,
-  getValueByPath,
-  troubleMark,
-} from "../kit";
+import { crdObjectsPath, getValueByPath, troubleMark } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -75,12 +73,15 @@ import {
   byTrouble,
   destinationOf,
   differing,
+  projectDestinationsWords,
+  projectReposWords,
   resourceTone,
   type ArgoApp,
   type ArgoFinding,
   type ArgoResource,
   type ArgoSource,
 } from "./model";
+import { appSetsSection, controllerSection, failingConditionOf } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
@@ -195,6 +196,16 @@ export default function ArgoCdPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+  const activeTabIcon =
+    activeTab.id === "appsets"
+      ? Layers
+      : activeTab.id === "projects"
+        ? Shield
+        : activeTab.id === "controller"
+          ? Box
+          : GitBranch;
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -211,7 +222,19 @@ export default function ArgoCdPage() {
         }
         description={t("empty", "argoPageDescription")}
       />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Argo CD · ${activeTab.label}`,
+              icon: activeTabIcon,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -284,6 +307,22 @@ function ApplicationsTab({
       renderRow={(app, { openByDefault, last }) => (
         <AppRow app={app} ui={ui} openByDefault={openByDefault} last={last} />
       )}
+      share={{
+        title: "Applications",
+        toFinding: (app) =>
+          app.worst === null
+            ? null
+            : {
+                title: app.name,
+                detail: appState(app, t).text,
+                role: app.worst,
+                ref: refOf({
+                  kind: "Application",
+                  name: app.name,
+                  namespace: app.namespace,
+                }),
+              },
+      }}
     />
   );
 }
@@ -644,6 +683,7 @@ function Findings({
   url: string | null;
   brief?: boolean;
 }) {
+  const t = useT();
   return (
     <FindingList
       findings={app.findings}
@@ -651,6 +691,23 @@ function Findings({
       render={(finding) => (
         <FindingLine app={app} finding={finding} url={url} brief={brief} />
       )}
+      share={{
+        title: app.name,
+        id: `argo-app-findings-${app.namespace}/${app.name}`,
+        toFinding: (finding) => {
+          const said = describeFinding(t, app, finding);
+          return {
+            title: said.title,
+            detail: said.verbatim ?? said.note ?? null,
+            role: finding.severity,
+            ref: refOf({
+              kind: "Application",
+              name: app.name,
+              namespace: app.namespace,
+            }),
+          };
+        },
+      }}
     />
   );
 }
@@ -800,6 +857,7 @@ function AppSetsTab({
   apps: ArgoApp[];
 }) {
   const t = useT();
+  useShareSection("argocd-appsets", () => appSetsSection(sets, error, t));
   if (!sets) {
     return error ? (
       <VendorReadFailure
@@ -831,10 +889,7 @@ function AppSetsTab({
           const generated = apps.filter(
             (app) => app.generatedBy?.name === set.name
           );
-          const failing = conditionsOf(set).find(
-            (condition) =>
-              condition.type === "ErrorOccurred" && condition.status === "True"
-          );
+          const failing = failingConditionOf(set);
           return (
             <div
               key={`${set.namespace}/${set.name}`}
@@ -941,32 +996,10 @@ function ProjectsTab({
                 />
               </span>
               <span className="truncate text-fg-mut">
-                {repos.length === 0
-                  ? t("empty", "noRepositoryAllowed")
-                  : repos.includes("*")
-                    ? t("empty", "anyRepository")
-                    : repos.join(", ")}
+                {projectReposWords(repos, t)}
               </span>
               <span className="truncate text-fg-mut">
-                {destinations.length === 0
-                  ? t("empty", "noDestinationAllowed")
-                  : destinations
-                      .map((destination) => {
-                        const namespace =
-                          !destination.namespace ||
-                          destination.namespace === "*"
-                            ? t("empty", "anyNamespace")
-                            : destination.namespace;
-                        const cluster =
-                          !destination.server || destination.server === "*"
-                            ? t("empty", "anyCluster")
-                            : destination.server;
-                        return t("empty", "namespaceOnCluster", {
-                          namespace,
-                          cluster,
-                        });
-                      })
-                      .join(", ")}
+                {projectDestinationsWords(destinations, t)}
               </span>
               <span className="text-[11px] text-fg-fnt">
                 {t("readings", "kindCount", {
@@ -998,6 +1031,7 @@ function ControllerTab({
   routes: ServiceRoutes;
 }) {
   const t = useT();
+  useShareSection("argocd-controller", () => controllerSection(controller, t));
   if (!controller) {
     return (
       <p className="text-xs text-fg-fnt">

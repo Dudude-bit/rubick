@@ -139,3 +139,23 @@ export function nodeTrends(
     return a.headroom - b.headroom || a.node.name.localeCompare(b.node.name);
   });
 }
+
+/**
+ * Prometheus answered, on both bases, with no series for any node: one
+ * reason for every row, said once above the table instead of in each cell.
+ * A node with an old sample, or series keyed to names the cluster does not
+ * have, is a different story and keeps its own row note.
+ */
+export function everyNodeSilent(
+  window: NodeUsageWindow | null,
+  trends: readonly NodeTrend[]
+): boolean {
+  return (
+    window !== null &&
+    Object.keys(window.nodes).length === 0 &&
+    trends.length > 0 &&
+    trends.every(
+      (trend) => trend.blind === "noSeries" && trend.newestAgoMs === null
+    )
+  );
+}

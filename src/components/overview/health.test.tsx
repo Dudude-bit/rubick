@@ -4,8 +4,23 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { ProblemsPanel, WarningsPanel } from "./health";
-import type { ClusterProblem, WarningGroup } from "@/generated/types";
+import {
+  nodesShare,
+  problemsShare,
+  warningsShare,
+  workloadsShare,
+} from "./health-share";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import type {
+  ClusterOverview,
+  ClusterProblem,
+  NodeSummary,
+  WarningGroup,
+} from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
 
@@ -205,5 +220,100 @@ describe("the healthy line when the node read was refused", () => {
     );
     expect(known.getByText(/nodes ready/)).toBeInTheDocument();
     known.unmount();
+  });
+});
+
+describe("what the panels offer Share", () => {
+  /** Deleting the severity mapping breaks this: a critical problem would
+   *  read the same colour as a warning one in a shared report. */
+  it("carries each problem as a finding with a ref and the truncated tail", () => {
+    const section = problemsShare(
+      [problem, { ...problem, severity: "critical", reason: "CrashLoop" }],
+      2,
+      t
+    );
+    expect(section.count).toBe(4);
+    expect(section.body.type).toBe("findings");
+    const items = section.body.type === "findings" ? section.body.items : [];
+    expect(items[0]).toMatchObject({
+      title: "ScalingReplicaSet",
+      role: "warn",
+      ref: { kind: "Deployment", stem: "meshed-demo" },
+    });
+    expect(items[1]).toMatchObject({ title: "CrashLoop", role: "err" });
+    expect(items[2]?.title).toContain("2");
+  });
+
+  /** A refused node count must not be read as zero Nodes; deleting the null
+   *  guard turns "could not read" into a plain "None". */
+  it("says a refused count could not be read instead of drawing it as none", () => {
+    const overview = {
+      counts: { deployments: 1, nodes: null, jobs: 0 },
+      pods: {
+        running: 1,
+        pending: 0,
+        succeeded: 0,
+        failed: 0,
+        unknown: 0,
+        crashLooping: 0,
+      },
+      jobs: null,
+      nodes: [],
+      problems: [],
+    } as unknown as ClusterOverview;
+    const section = workloadsShare(overview, t);
+    expect(section.body.type).toBe("facts");
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    const nodesRow = rows.find((row) => row.label === "Nodes");
+    expect(nodesRow?.values[0]).toMatchObject({ text: "Could not be read" });
+  });
+
+  it("draws one table row per node, coloured by readiness", () => {
+    const nodes: NodeSummary[] = [
+      {
+        name: "node-a",
+        ready: true,
+        schedulable: true,
+        roles: ["control-plane"],
+        podCount: 4,
+        podCapacity: 110,
+        cpu: { requested: 0, allocatable: 0, usage: null },
+        memory: { requested: 0, allocatable: 0, usage: null },
+      },
+      {
+        name: "node-b",
+        ready: false,
+        schedulable: true,
+        roles: [],
+        podCount: 0,
+        podCapacity: null,
+        cpu: { requested: 0, allocatable: 0, usage: null },
+        memory: { requested: 0, allocatable: 0, usage: null },
+      },
+    ];
+    const section = nodesShare(nodes, "1.31.0", t);
+    expect(section.body.type).toBe("table");
+    const rows = section.body.type === "table" ? section.body.rows : [];
+    expect(rows[0].cells[1]).toMatchObject({ text: "Ready", role: "ok" });
+    expect(rows[1].cells[1]).toMatchObject({ text: "NotReady", role: "err" });
+  });
+
+  /** The events body carries the object a warning is about; deleting the ref
+   *  breaks the one link this row has back into the cluster. */
+  it("carries the warned object as the event row's ref", () => {
+    const section = warningsShare([warning], true, t);
+    expect(section.body.type).toBe("events");
+    const rows = section.body.type === "events" ? section.body.rows : [];
+    expect(rows[0]).toMatchObject({
+      reason: "ScalingReplicaSet",
+      ref: { kind: "Deployment", stem: "meshed-demo" },
+    });
+  });
+
+  it("marks the section unread when the events list failed", () => {
+    const section = warningsShare([], false, t);
+    expect(section.unread).toBe(
+      "Not every events list was read in full, so warnings may be missing here."
+    );
   });
 });

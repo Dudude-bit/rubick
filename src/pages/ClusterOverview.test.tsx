@@ -19,7 +19,12 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
+import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { ClusterOverview } from "./ClusterOverview";
@@ -129,5 +134,106 @@ describe("what stands when the cluster-wide read does not", () => {
       ).toBeInTheDocument()
     );
     expect(screen.getByText("payments")).toBeVisible();
+  });
+});
+
+const FULL_OVERVIEW: ClusterOverviewData = {
+  servedFrom: "list",
+  problems: [],
+  problemsTruncated: 0,
+  scheduler: {
+    cpu: { requested: 1000, allocatable: 4000, usage: null },
+    memory: { requested: 0, allocatable: 0, usage: null },
+  },
+  nodes: [
+    {
+      name: "node-a",
+      ready: true,
+      schedulable: true,
+      roles: [],
+      podCount: 1,
+      podCapacity: 110,
+      cpu: { requested: 0, allocatable: 0, usage: null },
+      memory: { requested: 0, allocatable: 0, usage: null },
+    },
+  ],
+  nodesKnown: true,
+  warnings: [],
+  warningsKnown: true,
+  namespaces: [],
+  counts: {
+    pods: 1,
+    deployments: 0,
+    statefulSets: 0,
+    daemonSets: 0,
+    jobs: 0,
+    cronJobs: 0,
+    nodes: 1,
+    namespaces: 1,
+    services: 0,
+    ingresses: 0,
+    configMaps: 0,
+    secrets: 0,
+    events: 0,
+  },
+  pods: {
+    running: 1,
+    pending: 0,
+    succeeded: 0,
+    failed: 0,
+    unknown: 0,
+    crashLooping: 0,
+  },
+  jobs: null,
+  metricsAvailable: false,
+};
+
+describe("what the overview offers Share", () => {
+  /** One section per panel, deleting a hook makes its panel's evidence
+   *  vanish from a report that otherwise looked complete. */
+  it("collects a section from every panel once the overview has loaded", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue(FULL_OVERVIEW);
+
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <TooltipProvider>
+            <ScreenShareProvider>
+              <ClusterOverview />
+              <Probe />
+            </ScreenShareProvider>
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() =>
+      expect(
+        collect?.().some((section) => section.id === "overview-problems")
+      ).toBe(true)
+    );
+    const ids = collect!().map((section) => section.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "overview-problems",
+        "overview-workloads",
+        "overview-scheduler",
+        "overview-nodes",
+        "overview-warnings",
+      ])
+    );
   });
 });

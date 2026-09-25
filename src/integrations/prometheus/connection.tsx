@@ -12,12 +12,16 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { Plug } from "lucide-react";
 
 import { Link } from "react-router-dom";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { integrationSettingsPath } from "../paths";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER } from "@/lib/report-parts";
 import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
 import { ROUTING_STALE } from "../ingress";
 import { useSavedConnection } from "./saved-connection";
@@ -47,6 +51,54 @@ export default function Connection() {
     base === null
       ? null
       : `${base}/graph?g0.expr=${encodeURIComponent(expression)}&g0.tab=0`;
+
+  useShareSection("prometheus-connection", () => {
+    if (!saved.data) return null;
+    const unread = found.error ? t("empty", "promCouldNotAsk") : null;
+    const reached = found.data ? verdict(found.data, t) : null;
+    return {
+      id: "prometheus-connection",
+      order: ORDER.own,
+      title: t("monitors", "tabConnection"),
+      icon: iconSvg(Plug),
+      unread,
+      body: {
+        type: "facts",
+        rows: [
+          {
+            label: t("columns", "address"),
+            values: [
+              {
+                text: saved.data.url
+                  .replace(/^https?:\/\//, "")
+                  .replace(/\/+$/, ""),
+                mono: true,
+              },
+            ],
+          },
+          {
+            label: t("share", "intConnectionAuth"),
+            values: [
+              {
+                text:
+                  saved.data.authType === "bearer"
+                    ? t("monitors", "bearerToken")
+                    : t("share", "intAuthNone"),
+              },
+            ],
+          },
+          ...(unread || !reached
+            ? []
+            : [
+                {
+                  label: t("share", "intConnectionReachable"),
+                  values: [{ text: reached.text, role: reached.tone }],
+                },
+              ]),
+        ],
+      },
+    };
+  });
 
   if (found.error) {
     return (

@@ -14,7 +14,7 @@
  * the occasional hairline, which is the same rhythm the overview uses.
  */
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -34,6 +34,8 @@ import { useDelivery } from "@/hooks/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
 import { useT } from "@/i18n/useT";
+import { ShareObjectAction } from "@/components/share/ShareAction";
+import type { ShareContribution } from "@/components/share/contribution";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
 export type { DetailTab } from "./detail-tab";
@@ -159,6 +161,11 @@ interface ResourceDetailLayoutProps {
    * that wrapped onto a second line would undo the whole point of the row.
    */
   actions?: ReactNode;
+  /**
+   * What this page adds to Share, from what it already read. Every detail
+   * page gets Share from this frame; this is only the page's own part.
+   */
+  share?: () => ShareContribution;
 
   onBack: () => void;
   onFindReplacement?: () => void;
@@ -206,6 +213,7 @@ export function ResourceDetailLayout({
   badges,
   delivery,
   actions,
+  share,
   onBack,
   onFindReplacement,
   isSearchingReplacement,
@@ -216,6 +224,13 @@ export function ResourceDetailLayout({
   onTabChange,
 }: ResourceDetailLayoutProps) {
   const { deliveries } = useDelivery(delivery ?? null);
+  const subject = useMemo(
+    () =>
+      resource
+        ? { kind: resourceKind, name: title, namespace: namespace ?? null }
+        : null,
+    [resource, resourceKind, title, namespace]
+  );
 
   // A page key (`l`, `y`, `e`, `o`) names a tab, and this frame is the one
   // thing every detail page renders through, so it answers for all of them:
@@ -325,7 +340,16 @@ export function ResourceDetailLayout({
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={onTabChange}
-          actions={actions}
+          actions={
+            <>
+              <ShareObjectAction
+                subject={subject}
+                resource={resource}
+                contribute={share}
+              />
+              {actions}
+            </>
+          }
         />
       </div>
     </CaptionScope>

@@ -3,6 +3,8 @@ import { ExternalLink, PinOff } from "lucide-react";
 
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { Journal } from "@/components/changes/ChangesTimeline";
+import { useShareSection } from "@/components/share/screen-share";
+import { pinShare } from "@/components/services/service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn, formatAge } from "@/lib/utils";
@@ -11,6 +13,7 @@ import {
   changesFor,
   entryPointsOf,
   openQuestionsOf,
+  pinKey,
   stateOf,
   waitingFor,
   type ServicePin,
@@ -65,6 +68,10 @@ export function ServiceCard({
   const changes = useMemo(() => changesFor(entries, pin), [entries, pin]);
   const waiting = useMemo(() => waitingFor(watches, pin), [watches, pin]);
   const latest = changes[0] ?? null;
+
+  useShareSection(`pin:${pinKey(pin)}`, () =>
+    pinShare(pin, state, ways, unread, latest, waiting, t)
+  );
 
   return (
     <div

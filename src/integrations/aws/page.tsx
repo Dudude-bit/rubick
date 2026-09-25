@@ -23,7 +23,9 @@ import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { ResourceType } from "@/lib/resource-registry";
+import { refOf } from "@/lib/report-parts";
 import {
   Cell,
   Chain,
@@ -96,6 +98,11 @@ export default function AwsLoadBalancerPage() {
             : t("count", "loadBalancers", { n: groups.length })
         }
         description={t("empty", "albPageDescription")}
+        actions={
+          <ShareScreenAction
+            screen={{ title: "AWS Load Balancer Controller" }}
+          />
+        }
       />
 
       {sources.data?.unread.map((kind) => (
@@ -141,6 +148,26 @@ export default function AwsLoadBalancerPage() {
                 last={last}
               />
             )}
+            share={{
+              title: "Load balancers",
+              toFinding: (group) => {
+                const severity = groupSeverity(group);
+                if (severity === null) return null;
+                const solo = group.name === null && group.members.length === 1;
+                return {
+                  title: group.name ?? group.members[0]?.ingress.name ?? "",
+                  detail: t("empty", groupState(group).key),
+                  role: severity === "unknown" ? "neutral" : severity,
+                  ref: solo
+                    ? refOf({
+                        kind: ResourceType.Ingress,
+                        name: group.members[0].ingress.name,
+                        namespace: group.members[0].ingress.namespace,
+                      })
+                    : undefined,
+                };
+              },
+            }}
           />
         )}
       </Section>

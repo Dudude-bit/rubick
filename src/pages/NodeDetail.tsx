@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { nodeReadyWord } from "@/lib/node-reporting";
 import { useNavigate } from "react-router-dom";
 import {
@@ -44,6 +44,15 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { SpotMark } from "@/components/resources/spot-mark";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
+import type { ShareContribution } from "@/components/share/contribution";
+import type { PlacedSection } from "@/lib/report-parts";
+import {
+  nodeAddressesFacts,
+  nodeStatsOf,
+  nodeStatusOf,
+  podsOnNodeSection,
+  taintsSection,
+} from "@/lib/share/node-share";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -132,6 +141,43 @@ export function NodeDetail() {
   });
 
   const actions = useNodeActions();
+
+  const share = useCallback((): ShareContribution => {
+    if (!node) return {};
+    const sections: PlacedSection[] = [
+      podsOnNodeSection(
+        podsOnThisNode.data,
+        podsOnThisNode.error ? errorToShow(podsOnThisNode.error) : null,
+        t
+      ),
+    ];
+    const taints = taintsSection(node.taints, t);
+    if (taints) sections.push(taints);
+    const addresses = nodeAddressesFacts(node, t);
+    if (addresses) sections.push(addresses);
+    return {
+      status: nodeStatusOf(node),
+      stats: nodeStatsOf(
+        node,
+        nodeWithMetrics
+          ? {
+              cpuMillicores: nodeWithMetrics.cpuMillicores ?? null,
+              memoryBytes: nodeWithMetrics.memoryBytes ?? null,
+            }
+          : null,
+        podCount,
+        t
+      ),
+      sections,
+    };
+  }, [
+    node,
+    podsOnThisNode.data,
+    podsOnThisNode.error,
+    nodeWithMetrics,
+    podCount,
+    t,
+  ]);
 
   if (!node && !isLoading && !error) {
     return null;
@@ -384,6 +430,7 @@ export function NodeDetail() {
       <ResourceDetailLayout
         freshness={freshness}
         resource={node}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.Node}

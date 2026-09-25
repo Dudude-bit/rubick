@@ -1,15 +1,29 @@
 import { useNavigate } from "react-router-dom";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
-import {
-  Composition,
-  type CompositionSegment,
-} from "@/components/resources/detail-blocks";
+import { Composition } from "@/components/resources/detail-blocks";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import {
   isRoutableKind,
   ResourceRef,
 } from "@/components/resources/ResourceRef";
+import { useShareSection } from "@/components/share/screen-share";
+import {
+  composedDetail,
+  cpuRatio,
+  deploymentSegments,
+  memoryRatio,
+  nodeSegments,
+  nodesShare,
+  podSegments,
+  podTotal,
+  PRESSURE_WARN,
+  problemsShare,
+  schedulerShare,
+  warningsShare,
+  workloadsShare,
+  type Ratio,
+} from "@/components/overview/health-share";
 import { eventReasonMark } from "@/lib/event-reason";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { cn, formatAge } from "@/lib/utils";
@@ -18,48 +32,12 @@ import type {
   ClusterOverview,
   ClusterProblem,
   NodeSummary,
-  ProblemDetail,
   PodComposition,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
-import { useT, type T } from "@/i18n/useT";
-
-/**
- * The detail line, for the rows this app writes itself.
- *
- * The `said` variant is deliberately not here: it carries the cluster's own
- * message, which {@link ResourceMessage} draws with the object names in it
- * turned into links. Only the sentences the app composes are looked up.
- */
-function composedDetail(
-  detail: Exclude<ProblemDetail, { says: "said" }>,
-  t: T
-): string {
-  switch (detail.says) {
-    case "restarts":
-      return t("readings", "problemRestarts", { n: detail.n });
-    case "replicasReady":
-      return t("readings", "problemReplicasReady", {
-        ready: detail.ready,
-        n: detail.desired,
-      });
-    case "unschedulable":
-      return t("readings", "problemUnschedulable");
-  }
-}
-
-/** Reserved share past which the scheduler is the binding constraint. */
-const PRESSURE_WARN = 0.85;
-
-const KIB = 1024;
-const MEMORY_UNITS: [string, number][] = [
-  ["Ti", KIB ** 4],
-  ["Gi", KIB ** 3],
-  ["Mi", KIB ** 2],
-  ["Ki", KIB],
-];
+import { useT } from "@/i18n/useT";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -67,37 +45,6 @@ const MEMORY_UNITS: [string, number][] = [
  */
 function Unit({ children }: { children: React.ReactNode }) {
   return <span className="text-[0.85em] text-fg-fnt">{children}</span>;
-}
-
-/** A pair of quantities sharing one unit: `3.2/4.5 cores`, `27.4/31.2Gi`. */
-type Ratio = { used: string; total: string; unit: string };
-
-function cpuRatio(pressure: ResourcePressure): Ratio {
-  // The unit is chosen from the denominator so both halves stay comparable —
-  // "250m/4.5 cores" makes the reader do the conversion.
-  if (pressure.allocatable >= 1000) {
-    return {
-      used: (pressure.requested / 1000).toFixed(1),
-      total: (pressure.allocatable / 1000).toFixed(1),
-      unit: " cores",
-    };
-  }
-  return {
-    used: String(Math.round(pressure.requested)),
-    total: String(Math.round(pressure.allocatable)),
-    unit: "m",
-  };
-}
-
-function memoryRatio(pressure: ResourcePressure): Ratio {
-  const [unit, size] = MEMORY_UNITS.find(
-    ([, size]) => pressure.allocatable >= size
-  ) ?? ["B", 1];
-  return {
-    used: (pressure.requested / size).toFixed(1),
-    total: (pressure.allocatable / size).toFixed(1),
-    unit,
-  };
 }
 
 const ROW =
@@ -262,6 +209,9 @@ export function ProblemsPanel({
   nodesKnown: boolean;
 }) {
   const t = useT();
+  useShareSection("overview-problems", () =>
+    problemsShare(problems, problemsTruncated, t)
+  );
   // The headline counts everything that is wrong, not everything that fits —
   // an outage that overflows the cap must not read as smaller than it is.
   const total = problems.length + problemsTruncated;
@@ -324,76 +274,6 @@ export function ProblemsPanel({
   );
 }
 
-/** The phases partition the scope, so their sum is the pod count. */
-function podTotal(pods: PodComposition): number {
-  return (
-    pods.running + pods.pending + pods.succeeded + pods.failed + pods.unknown
-  );
-}
-
-type Segment = CompositionSegment;
-
-/**
- * Pods by phase.
- *
- * Phase separates a replica that is serving from a Job pod that ran and
- * finished; one "Healthy" bar over both overstates the running workload of
- * anyone with a nightly CronJob. Crash-loopers are carved back out of
- * Running: the phase says Running while the container is in a back-off loop
- * serving nothing.
- */
-function podSegments(pods: PodComposition): Segment[] {
-  return [
-    { label: "Running", count: pods.running - pods.crashLooping, tone: "ok" },
-    { label: "CrashLoop", count: pods.crashLooping, tone: "err" },
-    { label: "Pending", count: pods.pending, tone: "warn" },
-    { label: "Failed", count: pods.failed, tone: "err" },
-    { label: "Completed", count: pods.succeeded, tone: "neutral" },
-    { label: "Unknown", count: pods.unknown, tone: "neutral" },
-  ];
-}
-
-/**
- * Deployments split into available and not.
- *
- * The unavailable half is the problem list, which the backend already ranked;
- * the available half is the total minus it, so the two agree by construction.
- */
-function deploymentSegments(
-  problems: ClusterProblem[],
-  total: number | null
-): Segment[] {
-  const unavailable = problems.filter((p) => p.kind === "Deployment").length;
-  return [
-    {
-      label: "Available",
-      count: Math.max(0, (total ?? 0) - unavailable),
-      tone: "ok",
-    },
-    { label: "Unavailable", count: unavailable, tone: "err" },
-  ];
-}
-
-function nodeSegments(nodes: NodeSummary[]): Segment[] {
-  return [
-    {
-      label: "Ready",
-      count: nodes.filter((n) => n.ready && n.schedulable).length,
-      tone: "ok",
-    },
-    {
-      label: "Cordoned",
-      count: nodes.filter((n) => n.ready && !n.schedulable).length,
-      tone: "warn",
-    },
-    {
-      label: "NotReady",
-      count: nodes.filter((n) => !n.ready).length,
-      tone: "err",
-    },
-  ];
-}
-
 /** Composition of what this scope is made of. */
 export function WorkloadsPanel({
   overview,
@@ -405,6 +285,7 @@ export function WorkloadsPanel({
   const t = useT();
   const { counts, pods, jobs, nodes, problems, problemsTruncated } = overview;
   const podCount = podTotal(pods);
+  useShareSection("overview-workloads", () => workloadsShare(overview, t));
 
   return (
     <Section>
@@ -520,6 +401,7 @@ export function SchedulerPanel({
   metricsAvailable: boolean;
 }) {
   const t = useT();
+  useShareSection("overview-scheduler", () => schedulerShare(scheduler, t));
   return (
     <Section>
       {/* Naming the denominator matters: people read a low bar as "room to
@@ -608,6 +490,8 @@ export function NodesPanel({
   /** Server version, shown here rather than in a page title of its own. */
   version?: string;
 }) {
+  const t = useT();
+  useShareSection("overview-nodes", () => nodesShare(nodes, version, t));
   // Rendered in full, unlike the problems list: node counts are bounded in
   // practice, and a "+N more" would hide the node someone opened this panel
   // to find.
@@ -638,6 +522,7 @@ export function WarningsPanel({
   known: boolean;
 }) {
   const t = useT();
+  useShareSection("overview-warnings", () => warningsShare(warnings, known, t));
   if (known && warnings.length === 0) return null;
 
   return (

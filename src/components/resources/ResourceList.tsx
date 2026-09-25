@@ -29,6 +29,8 @@ import {
 import { useNowSeconds } from "@/hooks/useNow";
 import { Button } from "@/components/ui/button";
 import { TriangleAlert } from "lucide-react";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { isResourceType, toKind } from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -234,6 +236,23 @@ export function ResourceList<
 }: ResourceListProps<Row>) {
   const t = useT();
   const { isConnected } = useClusterStore();
+  const namespaceScope = useClusterStore((state) => state.namespaceScope);
+  const listKind = useMemo(() => {
+    const said = [queryKey?.[0], emptyStateLabel, title].find(
+      (candidate): candidate is string =>
+        typeof candidate === "string" && isResourceType(candidate)
+    );
+    return said ? toKind(said) : null;
+  }, [queryKey, emptyStateLabel, title]);
+  const share = useMemo(() => ({ title, kind: listKind }), [title, listKind]);
+  const screen = useMemo(
+    () => ({
+      title,
+      kind: listKind,
+      namespace: namespaceScope.length === 1 ? namespaceScope[0] : null,
+    }),
+    [title, listKind, namespaceScope]
+  );
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
@@ -409,7 +428,12 @@ export function ResourceList<
           // admitting as much. A namespace unread leaves it no total either.
           count={partial ? undefined : resources.length}
           description={description}
-          actions={headerActions}
+          actions={
+            <>
+              {headerActions}
+              <ShareScreenAction screen={screen} />
+            </>
+          }
           dataUpdatedAt={dataUpdatedAt}
           // A resync is not live: the rows below it are the ones from before
           // the watch started re-listing, and the badge is the only thing that
@@ -549,6 +573,7 @@ export function ResourceList<
           rowLabel={emptyStateLabel.toLowerCase()}
           partial={partial}
           widthsKey={widthsKey}
+          share={embedded ? undefined : share}
           // "None in the scope" is a claim about the namespaces that did not
           // answer too; with any unread, it names the ones that did.
           emptyMessage={

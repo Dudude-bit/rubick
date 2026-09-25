@@ -2,9 +2,11 @@ import { Activity, Bell, Plug } from "lucide-react";
 
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { useWakeOnVisit } from "@/hooks/useClusterForwards";
+import type { ReportStat } from "@/lib/report";
 import Connection from "./connection";
 import Alerts from "./alerts/Alerts";
 import Monitors from "./monitors/Monitors";
@@ -61,6 +63,7 @@ export default function PrometheusPage() {
             id: "monitors",
             label: t("monitors", "tabMonitors"),
             glyph: viewGlyph(Activity),
+            kind: "surface" as const,
             mark:
               mark?.shows === "severity"
                 ? {
@@ -89,6 +92,7 @@ export default function PrometheusPage() {
             id: "alerts",
             label: t("alerts", "tabAlerts"),
             glyph: viewGlyph(Bell),
+            kind: "surface" as const,
             mark: alertsTabMark,
             content: <Alerts />,
           },
@@ -111,5 +115,76 @@ export default function PrometheusPage() {
   ];
 
   const tab = chosenTab || tabs[0].id;
-  return <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />;
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+
+  const monitorStats = (): ReportStat[] =>
+    !mark
+      ? []
+      : mark.shows === "severity"
+        ? [
+            {
+              label: t("monitors", "tabMonitors"),
+              value:
+                mark.total === null
+                  ? t("monitors", "needAttentionSomeUnread", { n: mark.n })
+                  : t("monitors", "needAttention", {
+                      n: mark.n,
+                      total: mark.total,
+                    }),
+              role: mark.tone,
+            },
+          ]
+        : [{ label: t("monitors", "tabMonitors"), value: String(mark.of) }];
+
+  const alertStats = (): ReportStat[] =>
+    !alerts
+      ? []
+      : alerts.shows === "severity"
+        ? [
+            {
+              label: t("alerts", "tabAlerts"),
+              value:
+                alerts.firing > 0
+                  ? t("alerts", "rowFiring", { n: alerts.firing })
+                  : t("alerts", "markBroken", { n: alerts.broken }),
+              role: alerts.tone,
+            },
+          ]
+        : alerts.shows === "unchecked"
+          ? [
+              {
+                label: t("alerts", "tabAlerts"),
+                value: t("alerts", "markUnchecked", { n: alerts.of }),
+              },
+            ]
+          : [{ label: t("alerts", "tabAlerts"), value: String(alerts.of) }];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Prometheus · ${activeTab.label}`,
+              icon:
+                activeTab.id === "monitors"
+                  ? Activity
+                  : activeTab.id === "alerts"
+                    ? Bell
+                    : Plug,
+              stats:
+                activeTab.id === "monitors"
+                  ? monitorStats
+                  : activeTab.id === "alerts"
+                    ? alertStats
+                    : undefined,
+            }}
+          />
+        }
+      />
+    </div>
+  );
 }

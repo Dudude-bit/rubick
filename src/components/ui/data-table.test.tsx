@@ -20,6 +20,10 @@ import { TooltipProvider } from "./tooltip";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 
 vi.mock("./data-table-rows", async (importOriginal) => {
   const original = await importOriginal<typeof import("./data-table-rows")>();
@@ -1510,5 +1514,41 @@ describe("the search box", () => {
     fireEvent.click(screen.getByRole("button", { name: "drop it" }));
     await waitFor(() => expect(search()).toHaveValue(""));
     expect(screen.getByText("a-1")).toBeInTheDocument();
+  });
+});
+
+describe("a table offered to the screen's Share", () => {
+  /** Every table registered under "table": the last one mounted, shared or
+   *  not, replaced the others, and a list left the report without a trace. */
+  it("reports each shared table and nothing for one without a share", () => {
+    function Probe() {
+      const collect = useScreenSections();
+      return (
+        <button
+          onClick={(event) => {
+            event.currentTarget.textContent = (collect?.() ?? [])
+              .map((section) => section.count)
+              .join(",");
+          }}
+        >
+          collect
+        </button>
+      );
+    }
+    wrap(
+      <ScreenShareProvider>
+        <DataTable columns={columns} data={DATA} share={{ title: "Pods" }} />
+        <DataTable
+          columns={columns}
+          data={DATA.slice(0, 1)}
+          share={{ title: "Pods" }}
+        />
+        <DataTable columns={columns} data={DATA} />
+        <Probe />
+      </ScreenShareProvider>
+    );
+    const probe = screen.getByRole("button", { name: "collect" });
+    fireEvent.click(probe);
+    expect(probe.textContent).toBe("2,1");
   });
 });

@@ -21,6 +21,7 @@ import { useUsageHistory } from "@/hooks/useUsageHistory";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type {
   DeclaredHistory,
+  NodeBasis,
   UsageRange,
   UsageScope,
   VolumeFullness,
@@ -288,6 +289,11 @@ export function UsageBlock({
                 {t("empty", "declaredUnknown")}
               </p>
             )}
+            {past.window?.basis === "pods" && kept && (
+              <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-mut">
+                {t("empty", "nodesFromPods", { vendor: past.vendor })}
+              </p>
+            )}
             {past.traffic && (
               // A window with nothing drawable draws no row, so the space is
               // held only for one that has something to draw.
@@ -453,6 +459,7 @@ interface RangedHistory {
     declared?: DeclaredHistory | null;
     /** See {@link UsageWindow.declaredKnown}: `false` is "could not tell". */
     declaredKnown?: boolean;
+    basis?: NodeBasis;
   } | null;
   traffic: TrafficLike | null;
   endpoint: string;

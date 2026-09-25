@@ -56,6 +56,8 @@ import type { RowGrouping } from "@/components/ui/row-grouping";
 import { cn } from "@/lib/utils";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { useShareSection } from "@/components/share/screen-share";
+import { tableSection, type TableShare } from "@/components/share/table-share";
 
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
@@ -113,6 +115,8 @@ interface DataTableProps<TData extends RowData> {
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
   partial?: boolean;
+  /** Offers the rows on screen to this screen's Share. */
+  share?: TableShare;
 }
 
 /**
@@ -280,6 +284,7 @@ function DataTableInner<TData extends RowData>({
   rowLabel,
   widthsKey,
   partial = false,
+  share,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -510,6 +515,9 @@ function DataTableInner<TData extends RowData>({
   });
 
   const rows = table.getRowModel().rows;
+  useShareSection(share ? `table:${tableId}` : null, () =>
+    share ? tableSection(table as never, share, t) : null
+  );
   const isClickable = !!(getRowHref || onRowClick);
   const visibleColumnCount = table.getVisibleFlatColumns().length;
 

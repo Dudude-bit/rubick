@@ -39,6 +39,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useJobShare } from "@/hooks/useJobShare";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -117,6 +118,8 @@ export function JobDetail() {
   const succeeded = job?.succeeded ?? 0;
   const failed = job?.failed ?? 0;
   const active = job?.active ?? 0;
+
+  const share = useJobShare(job, pods, podsError);
 
   const tabs = useMemo(
     () => [
@@ -319,6 +322,7 @@ export function JobDetail() {
       freshness={freshness}
       resource={job}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Job}

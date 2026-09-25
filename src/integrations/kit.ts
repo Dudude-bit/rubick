@@ -10,6 +10,7 @@
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import type {
+  ConditionInfo,
   CustomResourceInfo,
   CustomResourceDetailInfo,
 } from "@/generated/types";
@@ -107,6 +108,37 @@ export function readyStatus(
   conditionType: string = "Ready"
 ): string | null {
   return conditionOf(resource, conditionType)?.status ?? null;
+}
+
+/**
+ * The same read as {@link conditionsOf}, for `object.report`: that
+ * capability hands a vendor the object's `status` on its own, already one
+ * level in, rather than a whole `CustomResourceInfo` to walk a path through.
+ * Shaped as {@link ConditionInfo}, so a report can hand the result straight
+ * to `conditionRole` or to `conditionsSection`.
+ */
+export function conditionsFromStatus(status: unknown): ConditionInfo[] {
+  const conditions = (status as { conditions?: unknown } | null)?.conditions;
+  if (!Array.isArray(conditions)) return [];
+  return conditions.map((condition: VendorCondition) => ({
+    type: condition.type,
+    status: condition.status,
+    reason: condition.reason ?? null,
+    message: condition.message ?? null,
+    lastTransitionTime: condition.lastTransitionTime ?? null,
+  }));
+}
+
+/** One condition by type, off a bare `status`. See {@link conditionsFromStatus}. */
+export function conditionFromStatus(
+  status: unknown,
+  conditionType: string
+): ConditionInfo | null {
+  return (
+    conditionsFromStatus(status).find(
+      (condition) => condition.type === conditionType
+    ) ?? null
+  );
 }
 
 /** A column a vendor adds to the list of one of its own kinds. */

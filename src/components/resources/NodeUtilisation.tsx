@@ -10,11 +10,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useShareSection } from "@/components/share/screen-share";
+import { nodeUtilisationSections } from "./node-utilisation-share";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type { DeclaredPoint, UsageRange } from "@/integrations";
 import { errorToShow } from "@/lib/error-utils";
 import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
+  everyNodeSilent,
   nodeTrends,
   type NodeTrend,
   type TrendBlind,
@@ -25,7 +28,8 @@ import { ResourceType } from "@/lib/resource-registry";
 import { formatSince } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { NodeInfo } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import type { en } from "@/i18n/catalogue";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
@@ -82,6 +86,40 @@ export function NodeUtilisation({
   const trends = useMemo(
     () => nodeTrends(query.data ?? null, nodes, now, windowKnown),
     [query.data, nodes, now, windowKnown]
+  );
+  const silent = windowKnown && everyNodeSilent(query.data ?? null, trends);
+  const notes = trends.map((trend) => noteOf(trend, now, range, t));
+  const noted = notes.some((note) => note !== null);
+  const fromPods =
+    query.data?.basis === "pods" && Object.keys(query.data.nodes).length > 0;
+
+  useShareSection("utilisation", () =>
+    nodeUtilisationSections(
+      {
+        trends,
+        notes,
+        fromPods,
+        silent,
+        vendor: power.state === "absent" ? null : power.vendor,
+        capable: power.state !== "absent",
+        unread: !nodesKnown
+          ? nodesReason
+            ? t("empty", "nodesDidNotList", { reason: nodesReason })
+            : t("action", "reading")
+          : power.state === "unreachable"
+            ? t("empty", "vendorDidNotAnswer", {
+                vendor: power.vendor,
+                reason: power.reason,
+              })
+            : query.error
+              ? t("empty", "vendorDidNotAnswer", {
+                  vendor: power.state === "ready" ? power.vendor : "",
+                  reason: errorToShow(query.error),
+                })
+              : null,
+      },
+      t
+    )
   );
 
   // Before anything about Prometheus: with no node list there is nothing to
@@ -158,23 +196,97 @@ export function NodeUtilisation({
           })}
         </p>
       )}
+      {power.state === "ready" && fromPods && (
+        <p className="px-1 pb-2 text-[11px] text-fg-mut" role="note">
+          {t("empty", "nodesFromPods", { vendor: power.vendor })}
+        </p>
+      )}
+      {power.state === "ready" && silent && (
+        <SilentNodes vendor={power.vendor} page={power.page} />
+      )}
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t("columns", "node")}</TableHead>
             <TableHead>{t("columns", "cpuOfAllocatable")}</TableHead>
             <TableHead>{t("columns", "memoryOfAllocatable")}</TableHead>
-            <TableHead>{t("columns", "note")}</TableHead>
+            {noted && <TableHead>{t("columns", "note")}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {trends.map((trend) => (
-            <Row key={trend.node.name} trend={trend} range={range} now={now} />
+          {trends.map((trend, index) => (
+            <Row
+              key={trend.node.name}
+              trend={trend}
+              quiet={silent}
+              note={noted ? (notes[index] ?? "–") : null}
+            />
           ))}
         </TableBody>
       </Table>
-      <p className="px-1 pt-2 text-[11px] text-fg-fnt">
-        {t("empty", "trendsNotIncidents")}
+    </div>
+  );
+}
+
+/** What a row says that its CPU and Memory cells cannot, or `null`. */
+function noteOf(
+  trend: NodeTrend,
+  now: number,
+  range: UsageRange,
+  t: T
+): string | null {
+  if (trend.blind === "noAllocatable") return t("empty", "nodeNoAllocatable");
+  if (trend.blind === "noSeries" && trend.newestAgoMs !== null) {
+    return t("empty", "nodeNoSamplesYet", {
+      age: formatSince(now - trend.newestAgoMs, now),
+      range,
+    });
+  }
+  return null;
+}
+
+const CPU_METRIC = "container_cpu_usage_seconds_total";
+const MEMORY_METRIC = "container_memory_working_set_bytes";
+
+/** One answer for every row, said once: what was asked, why it is likely empty, where to look. */
+function SilentNodes({
+  vendor,
+  page,
+}: {
+  vendor: string;
+  page: string | null;
+}) {
+  const t = useT();
+  const mono = (text: string) => (
+    <code className="font-mono text-fg-mut">{text}</code>
+  );
+  const monitors = `${vendor} › ${t("monitors", "tabMonitors")}`;
+  return (
+    <div
+      className="mb-2 rounded border border-hair border-l-2 border-l-warn px-3 py-2 text-xs"
+      role="status"
+    >
+      <p className="text-fg">{t("empty", "nodesSilentTitle", { vendor })}</p>
+      <p className="mt-1 text-fg-mut">
+        {parts(t("empty", "nodesSilentAsked"), {
+          cpu: mono(CPU_METRIC),
+          memory: mono(MEMORY_METRIC),
+          root: mono('id="/"'),
+        })}
+      </p>
+      <p className="mt-1 text-fg-mut">
+        {t("empty", "nodesSilentReason", { vendor })}
+      </p>
+      <p className="mt-1 text-fg-mut">
+        {parts(t("empty", "nodesSilentCheck"), {
+          monitors: page ? (
+            <Link to={page} className="text-info hover:underline">
+              {monitors}
+            </Link>
+          ) : (
+            monitors
+          ),
+        })}
       </p>
     </div>
   );
@@ -182,12 +294,12 @@ export function NodeUtilisation({
 
 function Row({
   trend,
-  range,
-  now,
+  quiet,
+  note,
 }: {
   trend: NodeTrend;
-  range: UsageRange;
-  now: number;
+  quiet: boolean;
+  note: string | null;
 }) {
   const t = useT();
   const placement = nodePlacement(trend.node);
@@ -195,10 +307,10 @@ function Row({
     placement.pool,
     placement.machine,
     placement.spot ? "spot" : null,
+    trend.cordoned ? t("readings", "cordonedWord") : null,
   ]
     .filter((f): f is string => !!f)
     .join(" · ");
-  const silent = trend.cpu === null && trend.memory === null;
   return (
     <TableRow data-quiet>
       <TableCell>
@@ -208,35 +320,13 @@ function Row({
         >
           {trend.node.name}
         </Link>
-        {facts && (
-          <span className="ml-2 text-[11px] text-fg-fnt">
-            {facts}
-            {trend.cordoned ? ` · ${t("readings", "cordonedWord")}` : ""}
-          </span>
-        )}
+        {facts && <span className="ml-2 text-[11px] text-fg-fnt">{facts}</span>}
       </TableCell>
-      <Lane lane={trend.cpu} blind={trend.blind} />
-      <Lane lane={trend.memory} blind={trend.blind} />
-      <TableCell className="text-[11px] text-fg-fnt">
-        {silent
-          ? trend.blind === "notLooked"
-            ? t("empty", "nodeNotLooked")
-            : trend.blind === "noAllocatable"
-              ? t("empty", "nodeNoAllocatable")
-              : trend.newestAgoMs !== null
-                ? t("empty", "nodeNoSamplesYet", {
-                    age: formatSince(now - trend.newestAgoMs, now),
-                    range,
-                  })
-                : // Only where the staleness probe itself answered: a failed
-                  // probe leaves every node looking never-seen.
-                  trend.newestKnown
-                  ? t("empty", "nodeNoSeries")
-                  : t("empty", "nodeNotLooked")
-          : trend.cordoned
-            ? t("readings", "cordonedWord")
-            : "–"}
-      </TableCell>
+      <Lane lane={trend.cpu} blind={trend.blind} quiet={quiet} />
+      <Lane lane={trend.memory} blind={trend.blind} quiet={quiet} />
+      {note !== null && (
+        <TableCell className="text-[11px] text-fg-fnt">{note}</TableCell>
+      )}
     </TableRow>
   );
 }
@@ -250,15 +340,17 @@ const BLIND_SHORT: Record<TrendBlind, keyof typeof en.empty> = {
 function Lane({
   lane,
   blind,
+  quiet,
 }: {
   lane: TrendLane | null;
   blind: TrendBlind | null;
+  quiet: boolean;
 }) {
   const t = useT();
   if (lane === null) {
     return (
       <TableCell className="text-[11px] text-fg-fnt">
-        {t("empty", BLIND_SHORT[blind ?? "noSeries"])}
+        {quiet ? "–" : t("empty", BLIND_SHORT[blind ?? "noSeries"])}
       </TableCell>
     );
   }

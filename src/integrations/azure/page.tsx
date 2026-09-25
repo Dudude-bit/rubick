@@ -16,9 +16,12 @@
  */
 
 import { useMemo } from "react";
+import { KeyRound } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
 import { ResourceType } from "@/lib/resource-registry";
 import {
   Cell,
@@ -38,6 +41,7 @@ import {
   bindingSummary,
   danglingBindings,
 } from "./model";
+import { danglingSection } from "./share";
 import type { FederatedAccount } from "./workload-identity";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
@@ -56,9 +60,19 @@ export default function AksAddonsPage() {
   const legacy = picture.data ? picture.data.legacyInstalled : null;
   const podsKnown = picture.data?.podsKnown ?? true;
   const unread = picture.data?.unread ?? [];
-  const dangling = picture.data
-    ? danglingBindings(picture.data.bindings, picture.data.identities)
-    : [];
+  // With the identity list refused every binding would name a "missing"
+  // identity; the unread line says what is actually known.
+  const identitiesRead = !unread.some(
+    (read) => read.what === AZURE_IDENTITY_CRD
+  );
+  const dangling =
+    picture.data && identitiesRead
+      ? danglingBindings(picture.data.bindings, picture.data.identities)
+      : [];
+
+  useShareSection("azure-dangling-bindings", () =>
+    danglingSection(picture.data, picture.error, t)
+  );
 
   if (picture.error) {
     return (
@@ -80,6 +94,11 @@ export default function AksAddonsPage() {
             : t("count", "identities", { n: accounts.length })
         }
         description={t("empty", "aksAddonsHint")}
+        actions={
+          <ShareScreenAction
+            screen={{ title: "AKS add-ons", icon: KeyRound }}
+          />
+        }
       />
 
       {unread.map((read) => (
@@ -175,6 +194,18 @@ export default function AksAddonsPage() {
             renderRow={(account, { last }) => (
               <AccountRow account={account} last={last} />
             )}
+            share={{
+              title: "Identities",
+              toFinding: (account) => {
+                const state = accountState(account, t);
+                if (state.tone !== "warn") return null;
+                return {
+                  title: account.name,
+                  detail: state.text,
+                  role: "warn" as const,
+                };
+              },
+            }}
           />
         )}
       </Section>

@@ -1,4 +1,4 @@
-import { AlertCircle, Lock } from "lucide-react";
+import { AlertCircle, LayoutDashboard, Lock } from "lucide-react";
 
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { scopeLabel } from "@/lib/namespace-scope";
@@ -7,6 +7,7 @@ import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
 import { MyServices } from "@/components/services/MyServices";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
@@ -17,7 +18,32 @@ import {
   WarningsPanel,
   WorkloadsPanel,
 } from "@/components/overview/health";
+import { podTotal } from "@/components/overview/health-share";
+import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
+import type { ReportStat } from "@/lib/report";
 import { useT } from "@/i18n/useT";
+
+/** The headline numbers for Share: what is broken, and what is serving. */
+function overviewStats(overview: ClusterOverviewData): ReportStat[] {
+  const total = overview.problems.length + overview.problemsTruncated;
+  const critical = overview.problems.some((p) => p.severity === "critical");
+  const pods = podTotal(overview.pods);
+  const serving = overview.pods.running - overview.pods.crashLooping;
+  const stats: ReportStat[] = [
+    {
+      label: "Problems",
+      value: String(total),
+      role: total === 0 ? "ok" : critical ? "err" : "warn",
+    },
+    { label: "Pods", value: `${serving}/${pods}` },
+  ];
+  if (overview.nodesKnown)
+    stats.push({
+      label: "Nodes",
+      value: `${overview.nodes.filter((n) => n.ready).length}/${overview.nodes.length}`,
+    });
+  return stats;
+}
 
 /**
  * The overview answers one question — "do I need to do something right
@@ -110,9 +136,17 @@ export function ClusterOverview() {
   if (!overview) return pinned;
 
   const scope = scopeLabel(namespaceScope, t);
+  const screen = {
+    title: t("nav", "overview"),
+    icon: LayoutDashboard,
+    stats: () => overviewStats(overview),
+  };
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
+      <div className="flex justify-end">
+        <ShareScreenAction screen={screen} />
+      </div>
       {pinned}
       <ProblemsPanel
         problems={overview.problems}

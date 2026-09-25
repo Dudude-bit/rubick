@@ -4,9 +4,16 @@
  * where a second button is neither valid nor operable.
  */
 
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
+import type { PlacedSection } from "@/lib/report-parts";
 
 import {
   FindingList,
@@ -15,6 +22,27 @@ import {
   VendorReadFailure,
   type Severity,
 } from "./page-kit";
+
+/** Reads whatever the screen has registered, on demand rather than on mount,
+ * since the registration itself only lands after the first commit's effects. */
+function ShareProbe() {
+  const collect = useScreenSections();
+  const [sections, setSections] = useState<PlacedSection[]>([]);
+  return (
+    <>
+      <button onClick={() => setSections(collect ? collect() : [])}>
+        collect
+      </button>
+      <ul>
+        {sections.map((section) => (
+          <li key={section.id}>
+            {section.title} ({section.count})
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 
 const row = (copy?: string) =>
   render(
@@ -322,5 +350,119 @@ describe("a row's findings", () => {
       />
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+/**
+ * A vendor page drawn with `TroubleList` or `FindingList` gets a report of
+ * itself for free, with no per-page wiring: delete the `useShareSection`
+ * call inside either component and this fails.
+ */
+describe("a list ordered by trouble tells the screen's Share what it found", () => {
+  it("registers a findings section from the rows the vendor calls trouble", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <TroubleList
+            items={items}
+            severityOf={severityOf}
+            searchable={searchable}
+            filter={{ label: "Filter", placeholder: "name" }}
+            autoOpen={{ when: "err", upTo: 2 }}
+            noMatch={(query) => `nothing matches ${query}`}
+            keyOf={(item) => item.name}
+            renderRow={(item) => <p>{item.name}</p>}
+            share={{
+              title: "Applications",
+              toFinding: (item) =>
+                item.severity === "err" || item.severity === "warn"
+                  ? { title: item.name, detail: null, role: item.severity }
+                  : null,
+            }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    // Only shop (err) and promo (warn) are trouble; blog has none to report.
+    expect(screen.getByText("Applications (2)")).toBeInTheDocument();
+  });
+
+  it("leaves the screen's Share empty once every row clears", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <TroubleList
+            items={[{ name: "blog", severity: null }]}
+            severityOf={severityOf}
+            searchable={searchable}
+            filter={{ label: "Filter", placeholder: "name" }}
+            autoOpen={{ when: "err", upTo: 2 }}
+            noMatch={(query) => `nothing matches ${query}`}
+            keyOf={(item) => item.name}
+            renderRow={(item) => <p>{item.name}</p>}
+            share={{ title: "Applications", toFinding: () => null }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.queryByText(/Applications/)).not.toBeInTheDocument();
+  });
+
+  it("registers a row's own findings under the title the caller gives it", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={["clear", "broken"]}
+            render={(finding) => <p>{finding}</p>}
+            share={{
+              title: "Route findings",
+              toFinding: (finding) =>
+                finding === "clear"
+                  ? null
+                  : { title: finding, detail: null, role: "err" },
+            }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getByText("Route findings (1)")).toBeInTheDocument();
+  });
+
+  /** A Russian title slugged to "" and two such lists took one registry slot. */
+  it("keeps two lists with titles in another script as two sections", () => {
+    const broken = {
+      toFinding: (finding: string) => ({
+        title: finding,
+        detail: null,
+        role: "err" as const,
+      }),
+    };
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={["a"]}
+            render={(finding) => <p>{finding}</p>}
+            share={{ ...broken, title: "Маршруты" }}
+          />
+          <FindingList
+            findings={["b", "c"]}
+            render={(finding) => <p>{finding}</p>}
+            share={{ ...broken, title: "Издатели" }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getByText("Маршруты (1)")).toBeInTheDocument();
+    expect(screen.getByText("Издатели (2)")).toBeInTheDocument();
   });
 });
