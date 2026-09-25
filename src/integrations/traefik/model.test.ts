@@ -1119,4 +1119,18 @@ describe("a host whose TLS ends in front of the proxy", () => {
     const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
     expect(group.findings.some((f) => f.kind === "clear")).toBe(false);
   });
+
+  /** Nor serving: dropping the warning left the row green and counted fine,
+   *  when the host may well be in the clear. */
+  it("reads a host that may be in the clear as TLS not checked", () => {
+    const [group] = hostGroups(base({ upstreamTls: () => "unknown" }));
+    expect(group.tlsKnown).toBe(false);
+    // With nothing else wrong under it, which is the case that was green.
+    const quiet = { ...group, findings: [], worst: null };
+    expect(hostSeverity(quiet)).toBe("unknown");
+    expect(hostState(quiet, null, t)).toEqual({
+      text: "TLS not checked",
+      tone: "unknown",
+    });
+  });
 });
