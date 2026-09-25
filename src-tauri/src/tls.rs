@@ -1,6 +1,7 @@
 //! The TLS every `reqwest` client here is built on: rustls on the ring
 //! provider, verified by the platform. The cluster's client is kube's own.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -28,23 +29,24 @@ pub fn provider() -> Arc<CryptoProvider> {
             Arc::new(provider)
         })
         .clone();
-    if CryptoProvider::get_default().is_none() {
-        let _ = CryptoProvider::install_default((*provider).clone());
+    if CryptoProvider::get_default().is_none()
+        && CryptoProvider::install_default((*provider).clone()).is_ok()
+    {
+        INSTALLED.store(true, Ordering::Release);
     }
     provider
 }
+
+/// Set when this module's own install became the process default: the
+/// default is once-only, so that is the whole proof of whose it is.
+static INSTALLED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the process default is this provider — what kube's client uses.
 /// One installed first by anything else would leave kube without P-521 while
 /// every `reqwest` client here had it.
 #[must_use]
 pub fn default_is_ours() -> bool {
-    CryptoProvider::get_default().is_some_and(|default| {
-        default
-            .signature_verification_algorithms
-            .supported_schemes()
-            .contains(&SignatureScheme::ECDSA_NISTP521_SHA512)
-    })
+    INSTALLED.load(Ordering::Acquire)
 }
 
 fn with_p521(ring: WebPkiSupportedAlgorithms) -> WebPkiSupportedAlgorithms {
@@ -259,14 +261,14 @@ mod tests {
         let mut stray = Vec::new();
         let mut dirs = vec![root.join("src"), root.join("tests")];
         while let Some(dir) = dirs.pop() {
-            for entry in std::fs::read_dir(&dir).expect("dir").flatten() {
-                let path = entry.path();
+            for entry in std::fs::read_dir(&dir).expect("dir") {
+                let path = entry.expect("an entry").path();
                 if path.is_dir() {
                     dirs.push(path);
                 } else if path.extension().is_some_and(|ext| ext == "rs")
                     && !path.ends_with("src/tls.rs")
                     && std::fs::read_to_string(&path)
-                        .unwrap_or_default()
+                        .expect("a source file")
                         .contains(".install_default()")
                 {
                     stray.push(path.display().to_string());
