@@ -892,7 +892,6 @@ export function useIntegrationPages(): {
 
   const context = useClusterStore((state) => state.currentContext);
   const isConnected = useClusterStore((state) => state.isConnected);
-  const namespaceScope = useClusterStore((state) => state.namespaceScope);
   const saved = useClusterForwardStore((state) => state.forwards);
   const forwarded = new Set(
     forwardsFor(saved, context).map(([vendorId]) => vendorId)
@@ -979,15 +978,16 @@ export function useIntegrationPages(): {
       };
     })
   );
-  const namespaces = [...namespaceScope].sort();
+  // Asked at the cluster scope, whatever namespaces are picked: every vendor
+  // page lists its objects across the cluster, so a reader allowed only in
+  // their own namespaces opens a page that is refused.
   const { data: gateAnswers } = useQuery({
     queryKey: [
       "integration-access",
       context,
-      namespaces,
       gateQueries.map((q) => q.resource).sort(),
     ],
-    queryFn: () => commands.checkListAccess(gateQueries, namespaces),
+    queryFn: () => commands.checkListAccess(gateQueries, []),
     enabled: isConnected && Boolean(context) && gateQueries.length > 0,
     staleTime: 5 * 60 * 1000,
     // A cluster that cannot answer leaves every row as it was — the state the
