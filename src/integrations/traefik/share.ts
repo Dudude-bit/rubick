@@ -1,8 +1,10 @@
 import { Globe, Plug } from "lucide-react";
 
+import { sayWords } from "@/i18n/say";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
+import { hostRole } from "../ingress";
 import type { ControllerInfo } from "./data";
 import { type HostGroup, UNNAMED_TARGET } from "./model";
 import { describePath } from "./rule";
@@ -19,7 +21,7 @@ export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
       cells: [
         {
           text: group.host ?? t("empty", "anyHost"),
-          role: (group.worst ?? "ok") as "ok" | "warn" | "err",
+          role: hostRole(group) ?? ("ok" as const),
         },
         {
           text:
@@ -81,13 +83,33 @@ export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
  * reachable unencrypted, including the ones with a perfectly good
  * certificate. Said once, here, rather than eighty times on the Routes tab.
  */
-/** Every entry point Traefik listens on: its address, whether it is TLS, and where it lands or redirects. */
+/**
+ * Every entry point Traefik listens on: its address, whether it is TLS, and
+ * where it lands or redirects. None read is unread: Traefik always listens
+ * somewhere, so an empty list is the app not knowing where.
+ */
 export function entryPointsSection(
   controller: ControllerInfo | undefined,
   groups: HostGroup[],
   t: T
-): PlacedSection | null {
-  if (!controller || controller.entryPoints.length === 0) return null;
+): PlacedSection {
+  const shell = {
+    id: "traefik-entry-points",
+    order: ORDER.own,
+    title: t("nav", "entryPoints"),
+    icon: iconSvg(Plug),
+  };
+  if (!controller || controller.entryPoints.length === 0)
+    return {
+      ...shell,
+      count: null,
+      unread: !controller
+        ? t("share", "stillReading")
+        : controller.problem
+          ? sayWords(controller.problem, t)
+          : t("empty", "cannotSayWhatTraefikListensOn"),
+      body: { type: "table", columns: [], rows: [], more: null },
+    };
   const rows = controller.entryPoints.map((entry) => {
     const landing = groups.filter((group) =>
       group.routes.some(
@@ -116,10 +138,7 @@ export function entryPointsSection(
     };
   });
   return {
-    id: "traefik-entry-points",
-    order: ORDER.own,
-    title: t("nav", "entryPoints"),
-    icon: iconSvg(Plug),
+    ...shell,
     count: rows.length,
     body: {
       type: "table",

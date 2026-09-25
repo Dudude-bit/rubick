@@ -66,6 +66,53 @@ describe("what a ScyllaCluster tells a reader with no cluster access", () => {
   });
 });
 
+describe("Scylla counts the operator has not written yet", () => {
+  /** `?/3` was painted warn and `?/?` on a NodeConfig green: "nobody said"
+   *  drawn as short, and as fine. The page draws both in its unknown tone. */
+  it("colours unwritten member, rack and node counts as unknown", () => {
+    const cluster = reportOf(
+      {
+        group: "scylla.scylladb.com",
+        kind: "ScyllaCluster",
+        namespace: "data",
+        name: "fresh",
+        spec: {
+          datacenter: { name: "dc1", racks: [{ name: "rack1", members: 3 }] },
+        },
+        status: {},
+      },
+      t
+    );
+    const facts = cluster?.find((section) => section.id === "scylla-cluster");
+    if (facts?.body.type !== "facts") throw new Error("expected facts");
+    expect(
+      facts.body.rows.find((row) => row.label === "Members")?.values[0]?.role
+    ).toBe("neutral");
+    const racks = cluster?.find(
+      (section) => section.id === "scylla-cluster-racks"
+    );
+    if (racks?.body.type !== "table") throw new Error("expected a table");
+    expect(racks.body.rows[0]?.cells[1]?.role).toBe("neutral");
+
+    const config = reportOf(
+      {
+        group: "scylla.scylladb.com",
+        kind: "NodeConfig",
+        namespace: null,
+        name: "tuning",
+        spec: {},
+        status: {},
+      },
+      t
+    );
+    if (config?.[0]?.body.type !== "facts") throw new Error("expected facts");
+    expect(config[0].body.rows[0]?.values[0]).toMatchObject({
+      text: "?/?",
+      role: "neutral",
+    });
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines a Cluster: that is CloudNativePG's kind, not Scylla's", () => {
     const sections = reportOf(

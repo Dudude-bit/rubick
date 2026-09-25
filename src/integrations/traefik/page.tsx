@@ -30,6 +30,7 @@ import {
   BACKING_NOT_READ,
   backingFrom,
   hostTlsWords,
+  hostRole,
   hostSeverity,
   useRouteCertificates,
   STOP_UNDER,
@@ -418,14 +419,16 @@ function RoutesTab({
       )}
       share={{
         title: t("nav", "routes"),
-        toFinding: (group) =>
-          group.worst === null
+        toFinding: (group) => {
+          const role = hostRole(group);
+          return role === null
             ? null
             : {
                 title: group.host ?? t("empty", "anyHost"),
                 detail: hostState(group, sources?.backingError ?? null, t).text,
-                role: group.worst,
-              },
+                role,
+              };
+        },
       }}
     />
   );

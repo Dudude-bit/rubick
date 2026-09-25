@@ -86,10 +86,11 @@ function clusterSections(
         {
           text: `${cluster.readyMembers ?? "?"}/${cluster.members ?? "?"}`,
           role:
-            cluster.readyMembers !== null &&
-            cluster.readyMembers === cluster.members
-              ? "ok"
-              : "warn",
+            cluster.readyMembers === null || cluster.members === null
+              ? "neutral"
+              : cluster.readyMembers === cluster.members
+                ? "ok"
+                : "warn",
         },
       ],
     },
@@ -141,9 +142,11 @@ function clusterSections(
             {
               text: `${rack.ready ?? "?"}/${rack.members}`,
               role:
-                rack.ready !== null && rack.ready === rack.members
-                  ? "ok"
-                  : "warn",
+                rack.ready === null
+                  ? "neutral"
+                  : rack.ready === rack.members
+                    ? "ok"
+                    : "warn",
             },
             { text: rack.version ?? "-", mono: true },
           ],
@@ -174,9 +177,11 @@ function nodeConfigSections(
           role:
             config.problems.length > 0
               ? "err"
-              : config.tuned === config.nodes
-                ? "ok"
-                : "warn",
+              : config.tuned === null || config.nodes === null
+                ? "neutral"
+                : config.tuned === config.nodes
+                  ? "ok"
+                  : "warn",
         },
       ],
     },

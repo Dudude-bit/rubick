@@ -29,7 +29,7 @@ import {
 } from "../monitors/words";
 import { firingWords, rowWords } from "./words";
 import { verdictOf } from "./verdict";
-import { alertsSection } from "./share";
+import { alertsSection, rulesUnread } from "./share";
 import {
   OBJECT_LABEL,
   RULES_CRD,
@@ -83,7 +83,9 @@ export default function Alerts() {
       picture.data.alertRules
     );
   }, [picture.data]);
-  useShareSection("prometheus-alerts", () => alertsSection(rows, t));
+  useShareSection("prometheus-alerts", () =>
+    alertsSection(rows, rulesUnread(picture.data, picture.error, t), t)
+  );
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.object.name)) : null),
     [rows]

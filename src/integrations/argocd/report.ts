@@ -13,7 +13,14 @@ import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
 import { statusRole } from "@/lib/status-role";
-import { appState, byKind, destinationOf, readApplication } from "./model";
+import {
+  appState,
+  byKind,
+  destinationOf,
+  projectDestinationsWords,
+  projectReposWords,
+  readApplication,
+} from "./model";
 
 const GROUP = "argoproj.io";
 /** A report is read, not scrolled: past this the app is the place. */
@@ -153,7 +160,7 @@ function applicationSections(
   ];
 }
 
-function appProjectSections(spec: unknown): ReportSection[] {
+function appProjectSections(spec: unknown, t: T): ReportSection[] {
   const fields = (spec ?? {}) as {
     sourceRepos?: string[];
     destinations?: Array<{ namespace?: string; server?: string }>;
@@ -169,22 +176,13 @@ function appProjectSections(spec: unknown): ReportSection[] {
         rows: [
           {
             label: "sourceRepos",
-            values: [
-              {
-                text: (fields.sourceRepos ?? []).join(", ") || "-",
-                mono: true,
-              },
-            ],
+            values: [{ text: projectReposWords(fields.sourceRepos ?? [], t) }],
           },
           {
             label: "destinations",
             values: [
               {
-                text:
-                  (fields.destinations ?? [])
-                    .map((d) => `${d.server ?? "*"}/${d.namespace ?? "*"}`)
-                    .join(", ") || "-",
-                mono: true,
+                text: projectDestinationsWords(fields.destinations ?? [], t),
               },
             ],
           },
@@ -214,7 +212,7 @@ export function reportOf(
     case "Application":
       return applicationSections(object, t);
     case "AppProject":
-      return appProjectSections(object.spec);
+      return appProjectSections(object.spec, t);
     default:
       return null;
   }

@@ -18,7 +18,7 @@
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
 
-import { backingFrom, hostSeverity, STOP_UNDER } from "../ingress";
+import { backingFrom, hostRole, hostSeverity, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -315,14 +315,16 @@ function RoutesTab({
       )}
       share={{
         title: t("nav", "routes"),
-        toFinding: (group) =>
-          group.worst === null
+        toFinding: (group) => {
+          const role = hostRole(group);
+          return role === null
             ? null
             : {
                 title: group.host,
                 detail: hostState(group, sources?.backingError ?? null, t).text,
-                role: group.worst,
-              },
+                role,
+              };
+        },
       }}
     />
   );

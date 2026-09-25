@@ -264,6 +264,8 @@ export function ShareDialog({
                   reason: errorToShow(targets.error),
                 })}
               </p>
+            ) : targets.isPending ? (
+              <p className="text-fg-fnt">{t("share", "targetsReading")}</p>
             ) : !hasTargets ? (
               <p className="text-fg-fnt">{t("share", "noTargets")}</p>
             ) : null}

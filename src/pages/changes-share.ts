@@ -7,8 +7,13 @@ import type { ReportChange } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
 
+/** In UTC, like every other time in the file: the reader is not in the sender's zone. */
 const clock = (ms: number) =>
-  new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  `${new Date(ms).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  })} UTC`;
 
 /**
  * The cluster-wide timeline as one row per object, since `report-parts`'

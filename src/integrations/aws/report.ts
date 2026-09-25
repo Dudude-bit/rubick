@@ -20,6 +20,7 @@ import {
   ingressClassParamsSummary,
   targetGroupLabel,
 } from "./model";
+import { conditionOf } from "../kit";
 
 const GROUP = "elbv2.k8s.aws";
 
@@ -61,6 +62,7 @@ function targetGroupBindingSections(
   const port = boundPort(resource);
   const group = targetGroupLabel(resource);
   const failure = bindingFailure(resource);
+  const ready = conditionOf(resource, "Ready");
 
   const rows: { label: string; values: ReportValue[] }[] = [
     {
@@ -68,7 +70,14 @@ function targetGroupBindingSections(
       values: [
         failure
           ? { text: failure, role: "err" }
-          : { text: t("share", "awsNoFailure"), quiet: true },
+          : !ready
+            ? { text: t("share", "notWrittenYet"), quiet: true }
+            : ready.status === "True"
+              ? { text: t("share", "awsNoFailure"), quiet: true }
+              : {
+                  text: `Ready=${ready.status}`,
+                  role: ready.status === "False" ? "err" : "neutral",
+                },
       ],
     },
     {

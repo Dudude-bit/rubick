@@ -69,6 +69,39 @@ describe("what a PrometheusRule tells a reader with no cluster access", () => {
   });
 });
 
+describe("what a Prometheus tells a reader with no cluster access", () => {
+  const replicas = (spec: unknown, status: unknown) => {
+    const sections = reportOf(
+      {
+        group: "monitoring.coreos.com",
+        kind: "Prometheus",
+        namespace: "monitoring",
+        name: "k8s",
+        spec,
+        status,
+      },
+      t
+    );
+    if (sections?.[0]?.body.type !== "facts") throw new Error("expected facts");
+    return sections[0].body.rows[0].values[0];
+  };
+
+  /** No `availableReplicas` written is not a replica short: it was painted warn. */
+  it("colours replicas nobody reported as unknown, not as short", () => {
+    expect(replicas({ replicas: 2 }, {})).toEqual({
+      text: "?/2",
+      role: "neutral",
+    });
+  });
+
+  it("colours a full set green and a short one warn", () => {
+    expect(replicas({}, { availableReplicas: 1 })?.role).toBe("ok");
+    expect(replicas({ replicas: 2 }, { availableReplicas: 1 })?.role).toBe(
+      "warn"
+    );
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines a VirtualService: that is Istio's kind, not the Prometheus Operator's", () => {
     const sections = reportOf(

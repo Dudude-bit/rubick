@@ -28,8 +28,7 @@ import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
-import { iconSvg } from "@/lib/icon-svg";
-import { ORDER, refOf } from "@/lib/report-parts";
+import { refOf } from "@/lib/report-parts";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
 import { Link } from "react-router-dom";
 import {
@@ -40,12 +39,7 @@ import {
 import type { CustomResourceInfo } from "@/generated/types";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
-import {
-  conditionsOf,
-  crdObjectsPath,
-  getValueByPath,
-  troubleMark,
-} from "../kit";
+import { crdObjectsPath, getValueByPath, troubleMark } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -79,12 +73,15 @@ import {
   byTrouble,
   destinationOf,
   differing,
+  projectDestinationsWords,
+  projectReposWords,
   resourceTone,
   type ArgoApp,
   type ArgoFinding,
   type ArgoResource,
   type ArgoSource,
 } from "./model";
+import { appSetsSection, controllerSection, failingConditionOf } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { errorToShow } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
@@ -848,14 +845,6 @@ function describeFinding(
 
 // --- application sets ---------------------------------------------------
 
-/** The one condition that turns an ApplicationSet row red. */
-function failingConditionOf(set: CustomResourceInfo) {
-  return conditionsOf(set).find(
-    (condition) =>
-      condition.type === "ErrorOccurred" && condition.status === "True"
-  );
-}
-
 function AppSetsTab({
   sets,
   error,
@@ -868,33 +857,7 @@ function AppSetsTab({
   apps: ArgoApp[];
 }) {
   const t = useT();
-  useShareSection("argocd-appsets", () => {
-    const found = (sets ?? []).flatMap((set) => {
-      const failing = failingConditionOf(set);
-      if (!failing) return [];
-      return [
-        {
-          title: set.name,
-          detail: failing.message ?? null,
-          role: "err" as const,
-          ref: refOf({
-            kind: "ApplicationSet",
-            name: set.name,
-            namespace: set.namespace,
-          }),
-        },
-      ];
-    });
-    if (found.length === 0) return null;
-    return {
-      id: "argocd-appsets",
-      order: ORDER.own,
-      title: t("nav", "applicationSets"),
-      icon: iconSvg(Layers),
-      count: found.length,
-      body: { type: "findings", items: found },
-    };
-  });
+  useShareSection("argocd-appsets", () => appSetsSection(sets, error, t));
   if (!sets) {
     return error ? (
       <VendorReadFailure
@@ -1033,32 +996,10 @@ function ProjectsTab({
                 />
               </span>
               <span className="truncate text-fg-mut">
-                {repos.length === 0
-                  ? t("empty", "noRepositoryAllowed")
-                  : repos.includes("*")
-                    ? t("empty", "anyRepository")
-                    : repos.join(", ")}
+                {projectReposWords(repos, t)}
               </span>
               <span className="truncate text-fg-mut">
-                {destinations.length === 0
-                  ? t("empty", "noDestinationAllowed")
-                  : destinations
-                      .map((destination) => {
-                        const namespace =
-                          !destination.namespace ||
-                          destination.namespace === "*"
-                            ? t("empty", "anyNamespace")
-                            : destination.namespace;
-                        const cluster =
-                          !destination.server || destination.server === "*"
-                            ? t("empty", "anyCluster")
-                            : destination.server;
-                        return t("empty", "namespaceOnCluster", {
-                          namespace,
-                          cluster,
-                        });
-                      })
-                      .join(", ")}
+                {projectDestinationsWords(destinations, t)}
               </span>
               <span className="text-[11px] text-fg-fnt">
                 {t("readings", "kindCount", {
@@ -1090,41 +1031,7 @@ function ControllerTab({
   routes: ServiceRoutes;
 }) {
   const t = useT();
-  useShareSection("argocd-controller", () => {
-    const components = controller?.components ?? [];
-    const unread = controller?.unread ?? [];
-    const found = [
-      ...components
-        .filter((component) => component.ready < component.desired)
-        .map((component) => ({
-          title: component.name,
-          detail: t("count", "ofTotalReady", {
-            n: component.ready,
-            total: component.desired,
-          }),
-          role: "err" as const,
-          ref: refOf({
-            kind: component.kind,
-            name: component.name,
-            namespace: component.namespace,
-          }),
-        })),
-      ...unread.map(({ kind, failure }) => ({
-        title: t("empty", "argoWorkloadsUnread", { kinds: toPlural(kind) }),
-        detail: sayWords(failure, t),
-        role: "warn" as const,
-      })),
-    ];
-    if (found.length === 0) return null;
-    return {
-      id: "argocd-controller",
-      order: ORDER.own,
-      title: t("nav", "argoOwnWorkloads"),
-      icon: iconSvg(Box),
-      count: found.length,
-      body: { type: "findings", items: found },
-    };
-  });
+  useShareSection("argocd-controller", () => controllerSection(controller, t));
   if (!controller) {
     return (
       <p className="text-xs text-fg-fnt">

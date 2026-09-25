@@ -128,17 +128,19 @@ function prometheusSection(
       status,
     })
   );
+  const wanted = instance.replicas ?? 1;
   const rows: { label: string; values: ReportValue[] }[] = [
     {
       label: t("columns", "replicas"),
       values: [
         {
-          text: `${instance.available ?? "?"}/${instance.replicas ?? 1}`,
+          text: `${instance.available ?? "?"}/${wanted}`,
           role:
-            instance.available !== null &&
-            instance.available === instance.replicas
-              ? "ok"
-              : "warn",
+            instance.available === null
+              ? "neutral"
+              : instance.available === wanted
+                ? "ok"
+                : "warn",
         },
       ],
     },

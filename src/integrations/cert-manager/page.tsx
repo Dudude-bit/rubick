@@ -41,8 +41,7 @@ import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
-import { iconSvg } from "@/lib/icon-svg";
-import { ORDER, refOf } from "@/lib/report-parts";
+import { refOf } from "@/lib/report-parts";
 import {
   Finding,
   TroubleList,
@@ -50,6 +49,7 @@ import {
   VendorReadFailure,
 } from "../page-kit";
 import { usePicture } from "./data";
+import { issuersSection } from "./share";
 import { uncovered } from "./serves";
 import {
   CERTIFICATES_CRD,
@@ -675,33 +675,9 @@ function IssuersTab({
   unread: UnreadKind[];
 }) {
   const t = useT();
-  useShareSection("cert-manager-issuers", () => {
-    const found = rows.flatMap((row) =>
-      row.ready === false
-        ? [
-            {
-              title: row.name,
-              detail: row.message,
-              role: "err" as const,
-              ref: refOf({
-                kind: row.kind,
-                name: row.name,
-                namespace: row.namespace,
-              }),
-            },
-          ]
-        : []
-    );
-    if (found.length === 0) return null;
-    return {
-      id: "cert-manager-issuers",
-      order: ORDER.own,
-      title: "Issuers",
-      icon: iconSvg(Stamp),
-      count: found.length,
-      body: { type: "findings", items: found },
-    };
-  });
+  useShareSection("cert-manager-issuers", () =>
+    issuersSection(rows, loading, unread, t)
+  );
   if (loading)
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "readingIssuers")}</p>

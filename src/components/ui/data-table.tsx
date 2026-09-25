@@ -515,7 +515,7 @@ function DataTableInner<TData extends RowData>({
   });
 
   const rows = table.getRowModel().rows;
-  useShareSection("table", () =>
+  useShareSection(share ? `table:${tableId}` : null, () =>
     share ? tableSection(table as never, share, t) : null
   );
   const isClickable = !!(getRowHref || onRowClick);

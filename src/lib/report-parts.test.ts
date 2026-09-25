@@ -10,6 +10,7 @@ import {
   eventsSection,
   placed,
   refOf,
+  slugOf,
   ORDER,
 } from "./report-parts";
 import { graphSections } from "./report-graph";
@@ -279,6 +280,30 @@ describe("the rest of the parts", () => {
         at("events", ORDER.events),
       ]).map((section) => section.id)
     ).toEqual(["a", "b", "events", "logs"]);
+  });
+
+  /** Two tables or lists with one title each became `<section id="table">` twice. */
+  it("gives every section its own id when two arrive with the same one", () => {
+    const at = (id: string) => ({
+      id,
+      order: ORDER.own,
+      title: id,
+      icon: "",
+      body: { type: "text" as const, text: id },
+    });
+    expect(
+      placed([at("table"), at("table"), at("events")]).map(
+        (section) => section.id
+      )
+    ).toEqual(["table", "table-2", "events"]);
+  });
+
+  /** A Russian title kept only `[a-z0-9]` and became an empty id. */
+  it("makes an id from a title in any script and never an empty one", () => {
+    expect(slugOf("Маршруты")).toBe("маршруты");
+    expect(slugOf("Сертификаты и издатели")).toBe("сертификаты-и-издатели");
+    expect(slugOf("Routes")).toBe("routes");
+    expect(slugOf("…")).toBe("section");
   });
 
   /** The tail carries identity only when it is long enough to; a node's `-0` is not. */

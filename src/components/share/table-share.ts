@@ -3,7 +3,7 @@ import { Table2 } from "lucide-react";
 import type { T } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportValue } from "@/lib/report";
-import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import { ORDER, refOf, slugOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
 
 /** A table in a file is read, not scrolled: past this the app is the place. */
@@ -91,8 +91,13 @@ function statusOf(original: unknown): string | null {
   return null;
 }
 
+/** `Date.parse` also takes "110" and "1.2.3", which are versions and ports. */
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 function isoOf(value: unknown): string | null {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value))
+  return typeof value === "string" &&
+    ISO_TIME.test(value) &&
+    !Number.isNaN(Date.parse(value))
     ? value
     : null;
 }
@@ -179,7 +184,7 @@ export function tableSection(
   };
 
   return {
-    id: "table",
+    id: `table-${slugOf(share.title)}`,
     order: ORDER.own,
     title: share.title,
     icon: iconSvg(Table2),

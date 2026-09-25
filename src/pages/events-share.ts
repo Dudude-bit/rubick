@@ -8,13 +8,15 @@ import type { ReportValue } from "@/lib/report";
 import { WINDOW_MS, type StoryWindow } from "@/lib/event-stories";
 
 /** The filters narrowing what is on screen, so a shared report is not read
- *  as the whole feed when the reader had typed a search into it. */
+ *  as the whole feed when the reader had typed a search into it. With several
+ *  namespaces picked the frame names none, so the scope is said here. */
 export function eventsFiltersSection(
   view: "stories" | "list",
   window: StoryWindow,
   eventType: string,
   query: string,
   limit: string,
+  scope: readonly string[],
   t: T
 ): PlacedSection {
   const rows: { label: string; values: ReportValue[] }[] = [
@@ -28,6 +30,13 @@ export function eventsFiltersSection(
               : t("action", "eventsAll"),
         },
       ],
+    },
+    {
+      label: t("columns", "scope"),
+      values:
+        scope.length === 0
+          ? [{ text: t("cluster", "allNamespaces") }]
+          : scope.map((namespace) => ({ text: namespace, mono: true })),
     },
   ];
   if (view === "stories")

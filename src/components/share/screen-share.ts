@@ -53,8 +53,9 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
 /**
  * Offers `build` to this screen's Share while the surface holding it is the
  * one on screen: a tab parked behind another is not what the reader sees.
+ * A `null` id offers nothing, for a shared component used without a share.
  */
-export function useShareSection(id: string, build: Build): void {
+export function useShareSection(id: string | null, build: Build): void {
   const registry = useContext(ScreenShare);
   const visible = useSurfaceVisible();
   const latest = useRef(build);
@@ -62,7 +63,7 @@ export function useShareSection(id: string, build: Build): void {
     latest.current = build;
   });
   useEffect(() => {
-    if (!registry || !visible) return;
+    if (!registry || !visible || id === null) return;
     return registry.offer(id, () => latest.current);
   }, [registry, visible, id]);
 }

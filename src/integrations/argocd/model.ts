@@ -484,3 +484,31 @@ export function destinationOf(app: ArgoApp, t: T): string {
   if (namespaces.size === 1) return [...namespaces][0];
   return t("readings", "argoNamespaceCount", { n: namespaces.size });
 }
+
+/** An empty `sourceRepos` is Argo refusing every repository, not an unset field. */
+export function projectReposWords(repos: readonly string[], t: T): string {
+  if (repos.length === 0) return t("empty", "noRepositoryAllowed");
+  if (repos.includes("*")) return t("empty", "anyRepository");
+  return repos.join(", ");
+}
+
+export function projectDestinationsWords(
+  destinations: readonly { namespace?: string; server?: string }[],
+  t: T
+): string {
+  if (destinations.length === 0) return t("empty", "noDestinationAllowed");
+  return destinations
+    .map((destination) =>
+      t("empty", "namespaceOnCluster", {
+        namespace:
+          !destination.namespace || destination.namespace === "*"
+            ? t("empty", "anyNamespace")
+            : destination.namespace,
+        cluster:
+          !destination.server || destination.server === "*"
+            ? t("empty", "anyCluster")
+            : destination.server,
+      })
+    )
+    .join(", ");
+}

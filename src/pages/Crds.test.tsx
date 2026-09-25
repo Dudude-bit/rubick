@@ -132,7 +132,9 @@ describe("what the page offers Share", () => {
     );
 
     await waitFor(() => {
-      const table = collect?.().find((section) => section.id === "table");
+      const table = collect?.().find(
+        (section) => section.body.type === "table"
+      );
       expect(table?.count).toBe(1);
     });
   });

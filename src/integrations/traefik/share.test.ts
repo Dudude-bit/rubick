@@ -50,6 +50,7 @@ function group(overrides: Partial<HostGroup> = {}): HostGroup {
     tlsSecrets: [{ namespace: "web", secretName: "shop-tls" }],
     worst: null,
     backendsKnown: true,
+    tls: { at: "ingress", name: "shop-tls" },
     ...overrides,
   } as unknown as HostGroup;
 }
@@ -75,6 +76,15 @@ describe("the routes table registers every router with Share", () => {
     const section = routesTableSection([broken], t);
     if (section.body.type !== "table") throw new Error("expected a table");
     expect(section.body.rows[0].cells[0].role).toBe("err");
+  });
+
+  /** `worst ?? "ok"` painted a host whose backends were never read green,
+   *  while the Routes list above counted it as not checked. */
+  it("does not colour a host green when its backends could not be read", () => {
+    const blind = group({ backendsKnown: false });
+    const section = routesTableSection([blind], t);
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells[0].role).toBe("neutral");
   });
 
   it("names the backend by the object it actually lands on when there is no Service", () => {
@@ -115,16 +125,30 @@ describe("the entry points table registers itself with Share", () => {
       [group()],
       t
     );
-    expect(section).not.toBeNull();
-    if (section === null || section.body.type !== "table")
-      throw new Error("expected a table");
+    if (section.body.type !== "table") throw new Error("expected a table");
     expect(section.body.rows).toHaveLength(2);
     expect(section.body.rows[0].cells[2]).toMatchObject({ role: "warn" });
     expect(section.body.rows[1].cells[2]).toMatchObject({ role: "ok" });
   });
 
-  it("reports nothing when the proxy's own entry points could not be read", () => {
-    expect(entryPointsSection(undefined, [], t)).toBeNull();
-    expect(entryPointsSection(controller([]), [], t)).toBeNull();
+  /** An unread proxy returned no section, and the file read as a proxy that
+   *  listens nowhere rather than one nobody could look at. */
+  it("marks the entry points unread when the proxy could not be read", () => {
+    expect(entryPointsSection(undefined, [], t).unread).toBe(
+      "Still being read when the report was made."
+    );
+    expect(entryPointsSection(controller([]), [], t).unread).toBe(
+      "This cluster cannot say what Traefik listens on."
+    );
+    const refused = {
+      ...controller([]),
+      problem: {
+        key: "controllerLookupFailed",
+        values: { why: "deployments is forbidden" },
+      },
+    } as unknown as ControllerInfo;
+    expect(entryPointsSection(refused, [], t).unread).toContain(
+      "deployments is forbidden"
+    );
   });
 });

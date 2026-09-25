@@ -1701,6 +1701,7 @@ export const en = {
     sectionNotRead: "Not read",
     publishedNoLink: "The target did not say where it put it.",
     targetsUnread: "The list of targets could not be read: {reason}",
+    targetsReading: "Reading the list of targets…",
     chainStillReading:
       "The app had not finished reading what connects to this when the file was made.",
     nothingHere: "Nothing here.",
@@ -1862,6 +1863,7 @@ export const en = {
     azureBindsIdentity: "Identity",
     azureToPods: "To pods labelled",
     azureLeavesAlone: "Leaves alone",
+    azureDangling: "Bindings to a missing identity",
   },
   files: {
     noContainers: "This pod declares no containers.",

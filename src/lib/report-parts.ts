@@ -290,10 +290,28 @@ export function logsSectionShell(t: T): Omit<PlacedSection, "body"> {
   };
 }
 
-/** Sorted by where each belongs; the order a page contributed them in breaks ties. */
+/** A section id from a title in any script; never empty. */
+export function slugOf(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "section"
+  );
+}
+
+/**
+ * Sorted by where each belongs; the order a page contributed them in breaks
+ * ties. Ids are made unique, since sections registered apart can share one.
+ */
 export function placed(sections: PlacedSection[]): ReportSection[] {
+  const seen = new Map<string, number>();
   return sections
     .map((section, index) => ({ section, index }))
     .sort((a, b) => a.section.order - b.section.order || a.index - b.index)
-    .map(({ section }) => section);
+    .map(({ section }) => {
+      const n = (seen.get(section.id) ?? 0) + 1;
+      seen.set(section.id, n);
+      return n === 1 ? section : { ...section, id: `${section.id}-${n}` };
+    });
 }

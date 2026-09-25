@@ -23,8 +23,6 @@ import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { ResourceType } from "@/lib/resource-registry";
-import { iconSvg } from "@/lib/icon-svg";
-import { ORDER, refOf } from "@/lib/report-parts";
 import {
   Cell,
   Chain,
@@ -43,6 +41,7 @@ import {
   bindingSummary,
   danglingBindings,
 } from "./model";
+import { danglingSection } from "./share";
 import type { FederatedAccount } from "./workload-identity";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
@@ -61,33 +60,19 @@ export default function AksAddonsPage() {
   const legacy = picture.data ? picture.data.legacyInstalled : null;
   const podsKnown = picture.data?.podsKnown ?? true;
   const unread = picture.data?.unread ?? [];
-  const dangling = picture.data
-    ? danglingBindings(picture.data.bindings, picture.data.identities)
-    : [];
+  // With the identity list refused every binding would name a "missing"
+  // identity; the unread line says what is actually known.
+  const identitiesRead = !unread.some(
+    (read) => read.what === AZURE_IDENTITY_CRD
+  );
+  const dangling =
+    picture.data && identitiesRead
+      ? danglingBindings(picture.data.bindings, picture.data.identities)
+      : [];
 
-  useShareSection("azure-dangling-bindings", () => {
-    if (dangling.length === 0) return null;
-    return {
-      id: "azure-dangling-bindings",
-      order: ORDER.own,
-      title: "Dangling bindings",
-      icon: iconSvg(KeyRound),
-      count: dangling.length,
-      body: {
-        type: "findings",
-        items: dangling.map((binding) => ({
-          title: binding.name,
-          detail: bindingSummary(binding, t),
-          role: "err" as const,
-          ref: refOf({
-            kind: "AzureIdentityBinding",
-            name: binding.name,
-            namespace: binding.namespace,
-          }),
-        })),
-      },
-    };
-  });
+  useShareSection("azure-dangling-bindings", () =>
+    danglingSection(picture.data, picture.error, t)
+  );
 
   if (picture.error) {
     return (

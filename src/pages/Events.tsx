@@ -251,7 +251,15 @@ export function Events() {
         : null,
       true
     ),
-    eventsFiltersSection(view, window, eventType, query, eventLimit, t),
+    eventsFiltersSection(
+      view,
+      window,
+      eventType,
+      query,
+      eventLimit,
+      scope.scope,
+      t
+    ),
   ]);
 
   if (!isConnected) {

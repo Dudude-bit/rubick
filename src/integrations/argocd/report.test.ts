@@ -75,6 +75,28 @@ describe("what an Application tells a reader with no cluster access", () => {
   });
 });
 
+describe("what an AppProject tells a reader with no cluster access", () => {
+  /** An empty `sourceRepos` was written as "-", which reads as "unset"; in
+   *  Argo it refuses every repository, and the Projects tab says so. */
+  it("says an empty list allows nothing, in the words the Projects tab uses", () => {
+    const sections = reportOf(
+      {
+        group: "argoproj.io",
+        kind: "AppProject",
+        namespace: "argocd",
+        name: "locked",
+        spec: { sourceRepos: [], destinations: [] },
+        status: {},
+      },
+      t
+    );
+    if (sections?.[0]?.body.type !== "facts") throw new Error("expected facts");
+    const [repos, destinations] = sections[0].body.rows;
+    expect(repos.values[0].text).toBe("no repository allowed");
+    expect(destinations.values[0].text).toBe("no destination allowed");
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines a Certificate: that is cert-manager's kind, not Argo CD's", () => {
     const sections = reportOf(

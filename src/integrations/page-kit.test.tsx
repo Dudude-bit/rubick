@@ -434,4 +434,35 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Route findings (1)")).toBeInTheDocument();
   });
+
+  /** A Russian title slugged to "" and two such lists took one registry slot. */
+  it("keeps two lists with titles in another script as two sections", () => {
+    const broken = {
+      toFinding: (finding: string) => ({
+        title: finding,
+        detail: null,
+        role: "err" as const,
+      }),
+    };
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={["a"]}
+            render={(finding) => <p>{finding}</p>}
+            share={{ ...broken, title: "Маршруты" }}
+          />
+          <FindingList
+            findings={["b", "c"]}
+            render={(finding) => <p>{finding}</p>}
+            share={{ ...broken, title: "Издатели" }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getByText("Маршруты (1)")).toBeInTheDocument();
+    expect(screen.getByText("Издатели (2)")).toBeInTheDocument();
+  });
 });

@@ -18,7 +18,11 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { default: AksAddonsPage } = await import("./page");
-const { AZURE_IDENTITY_CRD, PROHIBITED_TARGET_CRD } = await import("./model");
+const {
+  AZURE_IDENTITY_BINDING_CRD,
+  AZURE_IDENTITY_CRD,
+  PROHIBITED_TARGET_CRD,
+} = await import("./model");
 const { en } = await import("@/i18n/catalogue");
 
 const failure = (code: string, message: string) =>
@@ -116,5 +120,39 @@ describe("the AKS add-ons page", () => {
 
     await screen.findByText(/could not be listed/);
     expect(screen.queryByText("0 identities")).toBeNull();
+  });
+
+  /**
+   * A refused AzureIdentity list reads as empty, and every binding then names
+   * an identity "that does not exist", in red. Fails if the page draws that
+   * finding over a list nobody got.
+   */
+  it("does not call a binding's identity missing when the identities were refused", async () => {
+    answers.crds = (crd) =>
+      crd === AZURE_IDENTITY_CRD
+        ? failure("PERMISSION_DENIED", "azureidentities is forbidden")
+        : crd === AZURE_IDENTITY_BINDING_CRD
+          ? Promise.resolve([
+              {
+                name: "web-binding",
+                namespace: "shop",
+                uid: "b1",
+                apiVersion: "aadpodidentity.k8s.io/v1",
+                kind: "AzureIdentityBinding",
+                spec: { azureIdentity: "web-id", selector: "web" },
+                status: null,
+                labels: {},
+                annotations: {},
+                createdAt: null,
+                ownerReferences: [],
+                generation: 1,
+              },
+            ])
+          : failure("NOT_FOUND", "not found");
+
+    renderPage();
+
+    await screen.findByText(/No pod in this cluster carries/);
+    expect(screen.queryByText("No AzureIdentity named web-id")).toBeNull();
   });
 });

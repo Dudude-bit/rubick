@@ -1744,6 +1744,7 @@ export const ru: Catalogue = {
     sectionNotRead: "Не прочитано",
     publishedNoLink: "Адресат не сказал, куда положил.",
     targetsUnread: "Список адресатов не прочитан: {reason}",
+    targetsReading: "Читаем список адресатов…",
     chainStillReading:
       "На момент снимка приложение ещё не дочитало, что с этим связано.",
     nothingHere: "Здесь пусто.",
@@ -1894,7 +1895,7 @@ export const ru: Catalogue = {
       one: "сужено {n} выражением, которое этот отчёт не может расписать",
       few: "сужено {n} выражениями, которые этот отчёт не может расписать",
       many: "сужено {n} выражениями, которые этот отчёт не может расписать",
-      other: "сужено {n} выражения, которое этот отчёт не может расписать",
+      other: "сужено {n} выражения, которые этот отчёт не может расписать",
     },
     ciliumNodes: "ноды, не эндпоинты подов",
     ciliumSpecNotHere:
@@ -1919,6 +1920,7 @@ export const ru: Catalogue = {
     azureBindsIdentity: "Identity",
     azureToPods: "Подам с меткой",
     azureLeavesAlone: "Не трогает",
+    azureDangling: "Привязки к несуществующей identity",
   },
   files: {
     noContainers: "У этого пода не объявлено контейнеров.",

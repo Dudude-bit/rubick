@@ -45,6 +45,43 @@ describe("what a TargetGroupBinding tells a reader with no cluster access", () =
   });
 });
 
+describe("a TargetGroupBinding the controller has said nothing about", () => {
+  const status = (status: unknown) => {
+    const sections = reportOf(
+      {
+        group: "elbv2.k8s.aws",
+        kind: "TargetGroupBinding",
+        namespace: "shop",
+        name: "web",
+        spec: { serviceRef: { name: "web", port: 80 } },
+        status,
+      },
+      t
+    );
+    if (sections?.[0]?.body.type !== "facts") throw new Error("expected facts");
+    return sections[0].body.rows[0].values[0];
+  };
+
+  /** No status at all read as "nothing the controller has flagged", which is
+   *  a verdict the controller never gave. */
+  it("says no status is written yet, not that nothing is flagged", () => {
+    expect(status({})).toEqual({ text: "not written yet", quiet: true });
+  });
+
+  /** `Ready=False` with no message or reason was filed under "nothing flagged". */
+  it("reports Ready=False as a failure even when the controller gave no words", () => {
+    expect(
+      status({ conditions: [{ type: "Ready", status: "False" }] })
+    ).toEqual({ text: "Ready=False", role: "err" });
+  });
+
+  it("says nothing is flagged only once Ready is True", () => {
+    expect(status({ conditions: [{ type: "Ready", status: "True" }] })).toEqual(
+      { text: "nothing the controller has flagged", quiet: true }
+    );
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines a BackendConfig: that is GKE Ingress's kind, not the AWS controller's", () => {
     const sections = reportOf(

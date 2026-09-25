@@ -304,6 +304,28 @@ describe("publishing", () => {
     ).not.toBeInTheDocument();
   });
 
+  /** "No target yet" while the list is still loading sends the reader off
+   *  to add a target they already have. */
+  it("says the targets are being read, not that there are none, while they load", async () => {
+    let answer: (list: typeof targets.list) => void = () => {};
+    vi.mocked(commands.listShareTargets).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve as never;
+      }) as never
+    );
+    mount();
+    expect(
+      await screen.findByText("Reading the list of targets…")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No publishing target yet/)
+    ).not.toBeInTheDocument();
+    answer([]);
+    expect(
+      await screen.findByText(/No publishing target yet/)
+    ).toBeInTheDocument();
+  });
+
   it("will not publish to a target whose key is missing", async () => {
     targets.list = [{ ...internal, hasKey: false }];
     mount();

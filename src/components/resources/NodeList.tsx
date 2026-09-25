@@ -171,6 +171,7 @@ export const columns = (
 ];
 
 const NODES_TITLE = "Nodes";
+const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
 
 export function NodeList() {
   const t = useT();
@@ -311,9 +312,7 @@ export function NodeList() {
             actions={
               <>
                 {viewToggle}
-                <ShareScreenAction
-                  screen={{ title: NODES_TITLE, kind: ResourceType.Node }}
-                />
+                <ShareScreenAction screen={NODES_SCREEN} />
               </>
             }
             dataUpdatedAt={nodesForTrends.dataUpdatedAt}

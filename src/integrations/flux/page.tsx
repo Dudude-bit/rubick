@@ -58,6 +58,7 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
+import { controllersSection } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
@@ -898,37 +899,7 @@ function SourceFinding({
 function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   const t = useT();
 
-  useShareSection("flux-controllers", () => {
-    if (!read) return null;
-    const found = read.controllers.flatMap((controller) =>
-      controller.ready < controller.desired
-        ? [
-            {
-              title: controller.name,
-              detail: t("count", "ofTotalReady", {
-                n: controller.ready,
-                total: controller.desired,
-              }),
-              role: "err" as const,
-              ref: refOf({
-                kind: "Deployment",
-                name: controller.name,
-                namespace: controller.namespace,
-              }),
-            },
-          ]
-        : []
-    );
-    if (found.length === 0) return null;
-    return {
-      id: "flux-controllers",
-      order: ORDER.own,
-      title: t("empty", "fluxWorkloadsTitle"),
-      icon: iconSvg(Box),
-      count: found.length,
-      body: { type: "findings", items: found },
-    };
-  });
+  useShareSection("flux-controllers", () => controllersSection(read, t));
 
   if (!read) {
     return (

@@ -74,6 +74,13 @@ export function ShareScreenAction({
   const version = useAppInfo();
   const collect = useScreenSections();
   const [open, setOpen] = useState(false);
+  // Per opening, not per render: the dialog keys the public-target tick and
+  // the published link on it, and a screen object built inline changes
+  // identity on every watch tick.
+  const capturedAt = useMemo(() => {
+    void open;
+    return new Date().toISOString();
+  }, [open]);
 
   const report = useMemo<Report | null>(() => {
     if (!open || !collect || version.data === undefined) return null;
@@ -96,7 +103,7 @@ export function ShareScreenAction({
         hue: null,
       },
       kicker: t("share", "kickerScreen"),
-      capturedAt: new Date().toISOString(),
+      capturedAt,
       appVersion: version.data.version,
       colouring,
       status: null,
@@ -117,6 +124,7 @@ export function ShareScreenAction({
   }, [
     open,
     collect,
+    capturedAt,
     version.data,
     screen,
     context,

@@ -20,6 +20,7 @@ import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
+import { nodeConfigsSection } from "./share";
 import {
   CLUSTERS_CRD,
   useClusters,
@@ -647,37 +648,7 @@ function NodeConfigsTab({
   read: ReturnType<typeof useNodeConfigs>["data"];
 }) {
   const t = useT();
-  useShareSection("scylla-node-configs", () => {
-    if (!read?.ok) return null;
-    const found = read.items.flatMap((resource) => {
-      const setup = readNodeConfig(resource);
-      if (setup.problems.length === 0 && setup.unsure.length === 0) return [];
-      const first = setup.problems[0];
-      return [
-        {
-          title: setup.name,
-          detail: first
-            ? (first.message ?? first.type)
-            : setup.unsure.join(", "),
-          role: "warn" as const,
-          ref: refOf({
-            kind: "NodeConfig",
-            name: setup.name,
-            namespace: resource.namespace ?? null,
-          }),
-        },
-      ];
-    });
-    if (found.length === 0) return null;
-    return {
-      id: "scylla-node-configs",
-      order: ORDER.own,
-      title: t("operators", "nodeConfigsTab"),
-      icon: iconSvg(HardDrive),
-      count: found.length,
-      body: { type: "findings" as const, items: found },
-    };
-  });
+  useShareSection("scylla-node-configs", () => nodeConfigsSection(read, t));
   if (!read)
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>

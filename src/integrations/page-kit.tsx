@@ -18,6 +18,7 @@ import {
   cloneElement,
   Fragment,
   isValidElement,
+  useId,
   useMemo,
   useState,
   type MouseEvent,
@@ -42,16 +43,8 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportFinding } from "@/lib/report";
-import { ORDER, type PlacedSection } from "@/lib/report-parts";
+import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
 import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
-
-/** A stable id from a title, so a section survives the title not changing. */
-function slugOf(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 /**
  * How a list registers what it draws for Share: a title for the section (and
@@ -63,6 +56,16 @@ export interface ListShare<T> {
   title: string;
   id?: string;
   toFinding: (item: T) => ReportFinding | ReportFinding[] | null;
+}
+
+/** Keyed by the list itself, so two lists with one title both reach the report. */
+function useListShare<T>(items: readonly T[], share: ListShare<T> | undefined) {
+  const key = useId();
+  useShareSection(share ? key : null, () =>
+    share
+      ? findingsSection(items, share, share.id ?? slugOf(share.title))
+      : null
+  );
 }
 
 function findingsSection<T>(
@@ -173,12 +176,7 @@ export function FindingList<F>({
   share?: ListShare<F>;
 }) {
   const t = useT();
-  const shareId = share
-    ? (share.id ?? slugOf(share.title))
-    : "unshared-findings";
-  useShareSection(shareId, () =>
-    share ? findingsSection(findings, share, shareId) : null
-  );
+  useListShare(findings, share);
   const worth =
     brief && worthRepeating ? findings.filter(worthRepeating) : findings;
   if (worth.length === 0) return null;
@@ -260,10 +258,7 @@ export function TroubleList<T>({
   const t = useT();
   const [filter, setFilter] = useSearchParam("q");
   const needle = filter.trim().toLowerCase();
-  const shareId = share ? (share.id ?? slugOf(share.title)) : "unshared-list";
-  useShareSection(shareId, () =>
-    share ? findingsSection(items, share, shareId) : null
-  );
+  useListShare(items, share);
 
   const shown = useMemo(
     () =>

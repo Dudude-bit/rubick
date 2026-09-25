@@ -31,6 +31,7 @@ import {
 } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
+import { backupsSection } from "./share";
 import {
   BACKUPS_CRD,
   CLUSTERS_CRD,
@@ -761,35 +762,7 @@ function BackupsLine({
 
 function BackupsTab({ companions }: { companions: Companions | undefined }) {
   const t = useT();
-  useShareSection("cloudnativepg-backups", () => {
-    if (!companions?.backups.ok) return null;
-    const found = companions.backups.items.flatMap((backup) => {
-      const phase = String(getValueByPath(backup, "status.phase") ?? "");
-      if (phase !== "failed") return [];
-      const error = getValueByPath(backup, "status.error");
-      return [
-        {
-          title: backup.name,
-          detail: typeof error === "string" && error ? error : phase,
-          role: "err" as const,
-          ref: refOf({
-            kind: "Backup",
-            name: backup.name,
-            namespace: backup.namespace ?? null,
-          }),
-        },
-      ];
-    });
-    if (found.length === 0) return null;
-    return {
-      id: "cloudnativepg-backups",
-      order: ORDER.own,
-      title: t("operators", "backupsTab"),
-      icon: iconSvg(Archive),
-      count: found.length,
-      body: { type: "findings" as const, items: found },
-    };
-  });
+  useShareSection("cloudnativepg-backups", () => backupsSection(companions, t));
   if (!companions) {
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
