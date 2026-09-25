@@ -39,6 +39,10 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import {
   Finding,
   TroubleList,
@@ -120,6 +124,8 @@ export default function CertManagerPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -133,7 +139,19 @@ export default function CertManagerPage() {
         }
         description={t("empty", "certManagerPageHint")}
       />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `cert-manager · ${activeTab.label}`,
+              icon: activeTab.id === "issuers" ? Stamp : ShieldCheck,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -260,6 +278,22 @@ function CertificatesTab({
         renderRow={(row, { openByDefault }) => (
           <CertificateRow row={row} openByDefault={openByDefault} />
         )}
+        share={{
+          title: "Certificates",
+          toFinding: (row) =>
+            row.state.tone === "ok"
+              ? null
+              : {
+                  title: row.name,
+                  detail: row.failure,
+                  role: row.state.tone,
+                  ref: refOf({
+                    kind: "Certificate",
+                    name: row.name,
+                    namespace: row.namespace,
+                  }),
+                },
+        }}
       />
     </div>
   );
@@ -641,6 +675,33 @@ function IssuersTab({
   unread: UnreadKind[];
 }) {
   const t = useT();
+  useShareSection("cert-manager-issuers", () => {
+    const found = rows.flatMap((row) =>
+      row.ready === false
+        ? [
+            {
+              title: row.name,
+              detail: row.message,
+              role: "err" as const,
+              ref: refOf({
+                kind: row.kind,
+                name: row.name,
+                namespace: row.namespace,
+              }),
+            },
+          ]
+        : []
+    );
+    if (found.length === 0) return null;
+    return {
+      id: "cert-manager-issuers",
+      order: ORDER.own,
+      title: "Issuers",
+      icon: iconSvg(Stamp),
+      count: found.length,
+      body: { type: "findings", items: found },
+    };
+  });
   if (loading)
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "readingIssuers")}</p>

@@ -40,39 +40,17 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useGatewayRouteShare } from "@/hooks/useGatewayRouteShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingFrom, backingOf, useBackingLists } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
+import { sayMatch } from "@/lib/route-match";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
-import type {
-  EventFilters,
-  RouteInfo,
-  RouteMatchInfo,
-  RouteRuleInfo,
-} from "@/generated/types";
-
-/** One match, in the kind's own vocabulary. */
-function sayMatch(match: RouteMatchInfo, t: T): string {
-  const parts: string[] = [];
-  if (match.path) {
-    parts.push(
-      match.pathType === "Exact" ? `= ${match.path}` : `${match.path}…`
-    );
-  }
-  if (match.method) parts.push(match.method);
-  if (match.grpcService || match.grpcMethod) {
-    parts.push([match.grpcService ?? "*", match.grpcMethod ?? "*"].join("/"));
-  }
-  parts.push(...match.headers);
-  parts.push(...match.queryParams.map((param) => `?${param}`));
-  return parts.length > 0
-    ? parts.join(" · ")
-    : t("empty", "matchesEverythingWord");
-}
+import type { EventFilters, RouteInfo, RouteRuleInfo } from "@/generated/types";
 
 function RuleRows({ route }: { route: RouteInfo }) {
   const t = useT();
@@ -259,6 +237,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
 
   const deliveryQuery = deliveryOfKind(kind, route ?? undefined);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  const share = useGatewayRouteShare(route);
 
   const { data: events = [] } = useLiveQuery({
     queryKey: ["gateway-route-events", kind, namespace, name],
@@ -364,6 +343,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
     <ResourceDetailLayout
       freshness={freshness}
       resource={route}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={kind}

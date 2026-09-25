@@ -64,6 +64,7 @@ import {
   VendorReadFailure,
   FindingList,
 } from "../page-kit";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { rawNote, type AnnotationReading } from "./annotations";
 import { readSettings, type SettingReading } from "./configmap";
 import {
@@ -216,6 +217,8 @@ export default function IngressNginxPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -227,7 +230,28 @@ export default function IngressNginxPage() {
         }
         description={t("empty", "nginxPageDescription")}
       />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `ingress-nginx · ${activeTab.label}`,
+              icon:
+                activeTab.id === "routes"
+                  ? Globe
+                  : activeTab.id === "map"
+                    ? Network
+                    : activeTab.id === "annotations"
+                      ? FileCode2
+                      : activeTab.id === "settings"
+                        ? SlidersHorizontal
+                        : Box,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -380,6 +404,17 @@ function RoutesTab({
           openByDefault={openByDefault}
         />
       )}
+      share={{
+        title: t("nav", "routes"),
+        toFinding: (group) =>
+          group.worst === null
+            ? null
+            : {
+                title: group.host ?? t("empty", "anyHost"),
+                detail: hostState(group, sources?.backingError ?? null, t).text,
+                role: group.worst,
+              },
+      }}
     />
   );
 }
@@ -838,6 +873,18 @@ function Findings({
             )}
           </FindingBlock>
         );
+      }}
+      share={{
+        id: `nginx-host-findings-${group.host ?? "catch-all"}`,
+        title: group.host ?? t("empty", "anyHost"),
+        toFinding: (finding) => {
+          const said = describeFinding(finding, t);
+          return {
+            title: said.title,
+            detail: said.note || null,
+            role: finding.severity,
+          };
+        },
       }}
     />
   );

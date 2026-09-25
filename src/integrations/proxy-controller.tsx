@@ -1,10 +1,15 @@
 import type { ReactNode } from "react";
+import { Box } from "lucide-react";
 
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
 import type { IngressClassSummary } from "@/generated/types";
 import { sayWords, type Saying } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import type { ReportValue } from "@/lib/report";
+import { ORDER, refOf } from "@/lib/report-parts";
 import type { ControllerWorkload } from "./ingress";
 
 /**
@@ -36,6 +41,57 @@ export function ProxyControllerTab({
   classesNote?: ReactNode;
 }) {
   const t = useT();
+  useShareSection(`proxy-controller-${words.title}`, () => {
+    if (!controller) return null;
+    const rows: { label: string; values: ReportValue[] }[] = [];
+    if (controller.workload) {
+      const { workload } = controller;
+      rows.push({
+        label: t("nav", "controller"),
+        values: [
+          {
+            text: `${workload.namespace}/${workload.name}`,
+            ref: refOf({
+              kind: workload.kind,
+              name: workload.name,
+              namespace: workload.namespace,
+            }),
+          },
+        ],
+      });
+      rows.push({
+        label: t("columns", "ready"),
+        values: [
+          {
+            text: t("count", "ofTotalReady", {
+              n: workload.ready,
+              total: workload.desired,
+            }),
+            role: workload.ready < workload.desired ? "err" : "ok",
+          },
+        ],
+      });
+    }
+    if (controller.problem)
+      rows.push({
+        label: t("share", "sectionVerdict"),
+        values: [{ text: sayWords(controller.problem, t), role: "warn" }],
+      });
+    rows.push({
+      label: t("empty", "classesItClaims"),
+      values:
+        classes.length > 0
+          ? classes.map((entry) => ({ text: entry.name, mono: true }))
+          : [{ text: words.claimsNoClass, role: "warn" }],
+    });
+    return {
+      id: `proxy-controller-${words.title}`,
+      order: ORDER.own,
+      title: words.title,
+      icon: iconSvg(Box),
+      body: { type: "facts", rows },
+    };
+  });
   if (!controller) {
     return <p className="text-xs text-fg-fnt">{words.reading}</p>;
   }

@@ -40,6 +40,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "react-router-dom";
 import { useConnections } from "@/hooks/useConnections";
+import { useIngressShare } from "@/hooks/useIngressShare";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
@@ -255,6 +256,8 @@ export function IngressDetail() {
     queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
     enabled: !!ingress,
   });
+
+  const share = useIngressShare(ingress, controller);
 
   // The soonest expiry across every certificate this Ingress serves: one
   // Ingress with four hosts has four certificates, and the badge can only
@@ -735,6 +738,7 @@ export function IngressDetail() {
       freshness={freshness}
       resource={ingress}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Ingress}

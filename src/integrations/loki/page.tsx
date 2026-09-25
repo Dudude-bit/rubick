@@ -16,12 +16,17 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { Database } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { Cell, Chain, Column, Finding, VendorReadFailure } from "../page-kit";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER } from "@/lib/report-parts";
 import { ROUTING_STALE } from "../ingress";
 import { coverage, verdict } from "./coverage";
 import { useT } from "@/i18n/useT";
@@ -54,6 +59,44 @@ export default function LokiPage() {
     staleTime: ROUTING_STALE,
   });
 
+  useShareSection("loki-coverage", () => {
+    const unread = found.error ? t("empty", "lokiCouldNotAsk") : null;
+    const rows = (found.data?.namespaces ?? []).map((entry) => ({
+      cells: [
+        { text: entry.namespace, mono: true },
+        {
+          text:
+            entry.problem !== null
+              ? t("empty", "lokiQueryFailed")
+              : entry.holds
+                ? t("empty", "lokiHasLines")
+                : t("empty", "lokiNothingInWindow"),
+          role:
+            entry.problem !== null
+              ? ("err" as const)
+              : entry.holds
+                ? ("ok" as const)
+                : ("warn" as const),
+        },
+      ],
+    }));
+    if (!unread && rows.length === 0) return null;
+    return {
+      id: "loki-coverage",
+      order: ORDER.own,
+      title: t("empty", "lokiNamespacesTitle"),
+      icon: iconSvg(Database),
+      count: rows.length,
+      unread,
+      body: {
+        type: "table",
+        columns: [t("columns", "namespace"), "Loki"],
+        rows,
+        more: null,
+      },
+    };
+  });
+
   if (found.error) {
     return (
       <VendorReadFailure
@@ -78,6 +121,9 @@ export default function LokiPage() {
         title="Loki"
         count={state?.text}
         description={t("empty", "lokiPageDescription")}
+        actions={
+          <ShareScreenAction screen={{ title: "Loki", icon: Database }} />
+        }
       />
 
       {asked.length === 0 ? (

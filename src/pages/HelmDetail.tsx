@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,13 @@ import {
 } from "lucide-react";
 import { dump } from "js-yaml";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import {
+  helmFactsSection,
+  helmHistorySection,
+  helmResourcesSection,
+  helmStatusOf,
+} from "@/lib/share/helm-share";
 import { fluxHelmReleasePath } from "@/integrations";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -176,6 +183,16 @@ export function HelmDetail() {
     () => installedObjects(release?.manifest ?? "", release?.namespace ?? ""),
     [release?.manifest, release?.namespace]
   );
+
+  const share = useCallback((): ShareContribution => {
+    if (!release) return {};
+    const sections = [helmFactsSection(release, t)];
+    const historySection = helmHistorySection(history, t);
+    if (historySection) sections.push(historySection);
+    const resourcesSection = helmResourcesSection(installed, t);
+    if (resourcesSection) sections.push(resourcesSection);
+    return { status: helmStatusOf(release), sections };
+  }, [release, history, installed, t]);
 
   if (!isConnected) {
     return (
@@ -472,6 +489,7 @@ export function HelmDetail() {
     <>
       <ResourceDetailLayout
         resource={release}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={t("readings", "helmRelease")}

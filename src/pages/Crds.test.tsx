@@ -18,6 +18,10 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import { useClusterStore } from "@/stores/clusterStore";
 import { Crds } from "./Crds";
 
@@ -78,6 +82,58 @@ describe("the CRD list when the read did not answer", () => {
       expect(
         screen.getByText(/has no custom resource definitions/i)
       ).toBeInTheDocument();
+    });
+  });
+});
+
+describe("what the page offers Share", () => {
+  /** The page bypasses ResourceList and builds its own DataTable; deleting
+   *  the `share` prop on it leaves the CRD list with a button that opens an
+   *  empty report. */
+  it("collects a table section naming every listed CRD", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cert-manager.io",
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/customresourcedefinitions"]}>
+          <TooltipProvider>
+            <ScreenShareProvider>
+              <Crds />
+              <Probe />
+            </ScreenShareProvider>
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      const table = collect?.().find((section) => section.id === "table");
+      expect(table?.count).toBe(1);
     });
   });
 });

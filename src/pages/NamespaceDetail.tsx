@@ -6,8 +6,14 @@
  * in it along, and this page exists to be glanced at from a peek.
  */
 
+import { useCallback } from "react";
 import { Info } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import {
+  namespaceLabelsSection,
+  namespaceStatusOf,
+} from "@/lib/share/namespace-share";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { viewGlyph } from "@/components/resources/detail-tab";
@@ -52,6 +58,14 @@ export function NamespaceDetail() {
     },
   ];
 
+  const share = useCallback((): ShareContribution => {
+    if (!ns) return {};
+    return {
+      status: namespaceStatusOf(ns),
+      sections: [namespaceLabelsSection(ns.labels ?? {}, t)],
+    };
+  }, [ns, t]);
+
   const tabs = [
     {
       id: "overview",
@@ -87,6 +101,7 @@ export function NamespaceDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={ns}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Namespace}

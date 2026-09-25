@@ -15,6 +15,7 @@ import type { UsageSample } from "@/lib/usage-history";
 import type {
   DeclaredHistory,
   DeclaredPoint,
+  NodeBasis,
   NodeUsageWindow,
   TrafficWindow,
   UsageRange,
@@ -31,10 +32,12 @@ import {
   nodesNewestQuery,
   nodesQuery,
   restartQuery,
+  rootCgroupProbeQuery,
   trafficQuery,
   volumeCapacityQuery,
   volumeUsedQuery,
 } from "./queries";
+import type { RangeSpec } from "./queries";
 
 /**
  * The buckets a series answered for, gaps kept as gaps.
@@ -130,20 +133,24 @@ export async function usageHistory(input: {
         declaredFailed = true;
         return [] as PromSeries[];
       });
-  const [cpu, memory, started, cpuReq, cpuLim, memReq, memLim] =
+  const usage = (basis: NodeBasis) =>
+    Promise.all([
+      commands.prometheusQueryRange(
+        cpuQuery(input.scope, spec, basis),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+      commands.prometheusQueryRange(
+        memoryQuery(input.scope, spec, basis),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+    ]);
+  const [[rootCpu, rootMemory], started, cpuReq, cpuLim, memReq, memLim] =
     await Promise.all([
-      commands.prometheusQueryRange(
-        cpuQuery(input.scope, spec),
-        start,
-        end,
-        spec.stepSeconds
-      ),
-      commands.prometheusQueryRange(
-        memoryQuery(input.scope, spec),
-        start,
-        end,
-        spec.stepSeconds
-      ),
+      usage("node"),
       restarts
         ? commands.prometheusQueryRange(restarts, start, end, spec.stepSeconds)
         : Promise.resolve([] as PromSeries[]),
@@ -152,6 +159,21 @@ export async function usageHistory(input: {
       declared("memory", "requests"),
       declared("memory", "limits"),
     ]);
+
+  let cpu = rootCpu;
+  let memory = rootMemory;
+  let basis: NodeBasis | undefined;
+  if (input.scope.kind === "node") {
+    basis = "node";
+    if (
+      cpu.length === 0 &&
+      memory.length === 0 &&
+      !(await clusterKeepsRootCgroup(spec))
+    ) {
+      basis = "pods";
+      [cpu, memory] = await usage("pods");
+    }
+  }
 
   const cpuAt = byTime(cpu);
   const memoryAt = byTime(memory);
@@ -195,34 +217,58 @@ export async function usageHistory(input: {
     resolution: spec.resolution,
     declared: keeps === true ? declaredSeries : null,
     declaredKnown: keeps !== null && !declaredFailed,
+    ...(basis && { basis }),
   };
 }
 
-/** Every node's usage in two range queries, plus when each last reported. */
+/**
+ * The node list's basis rule, asked about the whole cluster: a node whose
+ * root cgroup is silent while other nodes' are not is a node with no series,
+ * not one to read from its pods. A failed probe throws, so the chart says it
+ * could not look rather than drawing an empty window.
+ */
+async function clusterKeepsRootCgroup(spec: RangeSpec): Promise<boolean> {
+  const answer = await commands.prometheusQuery(rootCgroupProbeQuery(spec));
+  return answer.some((series) => (series.points[0]?.v ?? 0) > 0);
+}
+
+/**
+ * Every node's usage in two range queries, plus when each last reported.
+ *
+ * From the pods' sum only when no node's root cgroup answered at all; a
+ * failed read on either basis rejects, so it is never mistaken for silence.
+ */
 export async function nodeUsage(input: {
   range: UsageRange;
 }): Promise<NodeUsageWindow> {
   const spec = RANGE_SPECS[input.range];
   const end = Date.now();
   const start = end - spec.windowMs;
-  const [cpu, memory, newest] = await Promise.all([
-    commands.prometheusQueryRange(
-      nodesQuery("cpu", spec),
-      start,
-      end,
-      spec.stepSeconds
-    ),
-    commands.prometheusQueryRange(
-      nodesQuery("memory", spec),
-      start,
-      end,
-      spec.stepSeconds
-    ),
-    // Remembered rather than swallowed: an empty `newestAt` used to read as
-    // "Prometheus has never had a series for this node", which is a claim
-    // about the cluster made out of a failed request.
-    commands.prometheusQuery(nodesNewestQuery()).catch(() => null),
-  ]);
+  const read = (basis: NodeBasis) =>
+    Promise.all([
+      commands.prometheusQueryRange(
+        nodesQuery("cpu", spec, basis),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+      commands.prometheusQueryRange(
+        nodesQuery("memory", spec, basis),
+        start,
+        end,
+        spec.stepSeconds
+      ),
+      // Remembered rather than swallowed: an empty `newestAt` used to read as
+      // "Prometheus has never had a series for this node", which is a claim
+      // about the cluster made out of a failed request.
+      commands.prometheusQuery(nodesNewestQuery(basis)).catch(() => null),
+    ]);
+  let basis: NodeBasis = "node";
+  let [cpu, memory, newest] = await read(basis);
+  if (cpu.length === 0 && memory.length === 0) {
+    basis = "pods";
+    [cpu, memory, newest] = await read(basis);
+  }
 
   const nodes: NodeUsageWindow["nodes"] = {};
   const lane = (name: string) =>
@@ -245,6 +291,7 @@ export async function nodeUsage(input: {
     nodes,
     newestAt,
     newestKnown: newest !== null,
+    basis,
     resolution: spec.resolution,
   };
 }

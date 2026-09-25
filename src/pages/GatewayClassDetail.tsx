@@ -24,6 +24,7 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useGatewayClassShare } from "@/hooks/useGatewayClassShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -148,6 +149,7 @@ export function GatewayClassDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.GatewayClass, cls);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  const share = useGatewayClassShare(cls);
 
   const conditions: KeyValue[] = (cls?.conditions ?? []).map((condition) => ({
     label: condition.type,
@@ -216,6 +218,7 @@ export function GatewayClassDetail() {
       freshness={freshness}
       resource={cls}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.GatewayClass}

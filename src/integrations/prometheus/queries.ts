@@ -20,7 +20,7 @@
 
 import { escapeRegex, podPattern } from "../pod-names";
 import { RANGE_WINDOW_MS } from "../registry";
-import type { UsageRange, UsageScope } from "../registry";
+import type { NodeBasis, UsageRange, UsageScope } from "../registry";
 
 export { escapeRegex, podPattern };
 
@@ -116,11 +116,28 @@ function containerSelector(scope: UsageScope): string {
         podPattern(scope.ownerKind, scope.owner)
       )}",${real}`;
     case "node":
-      // The node's own root cgroup: everything the kubelet accounts for,
-      // including the containers no namespace owns.
-      return `id="/"`;
+      return NODE_BASIS_MATCHERS.node;
   }
 }
+
+/**
+ * The containers a node's reading is taken over, per {@link NodeBasis}.
+ *
+ * kube-prometheus-stack's default kubelet `cAdvisorMetricRelabelings` drop
+ * every cgroup series without a pod (`sourceLabels: [id, pod]`,
+ * `regex: '.+;'`), so on the most common install the root cgroup never
+ * exists and `pods` is the only reading there is.
+ */
+const NODE_BASIS_MATCHERS: Readonly<Record<NodeBasis, string>> = {
+  node: `id="/"`,
+  pods: `container!="",container!="POD",pod!=""`,
+};
+
+/** The root cgroup is one series per node, so the union dedupes by `max`; pods add up. */
+const NODE_BASIS_AGGREGATE: Readonly<Record<NodeBasis, "max" | "sum">> = {
+  node: "max",
+  pods: "sum",
+};
 
 /**
  * Which label names the node — asked every way, because the answer depends
@@ -159,12 +176,13 @@ export const NODE_LABELS = [
 function nodeUnion(
   fn: "rate" | "",
   node: string,
+  basis: NodeBasis,
   metric: string,
   window = ""
 ): string {
   const name = escapeLabel(node);
   return NODE_LABELS.map((label) => {
-    const selector = `${metric}{id="/",${label}="${name}"}${window}`;
+    const selector = `${metric}{${NODE_BASIS_MATCHERS[basis]},${label}="${name}"}${window}`;
     return fn === "" ? selector : `${fn}(${selector})`;
   }).join(" or ");
 }
@@ -182,12 +200,17 @@ function peak(expression: string, spec: RangeSpec): string {
  * app's charts are in millicores everywhere else, so the factor of a
  * thousand is applied here rather than left for a caller to forget.
  */
-export function cpuQuery(scope: UsageScope, spec: RangeSpec): string {
+export function cpuQuery(
+  scope: UsageScope,
+  spec: RangeSpec,
+  basis: NodeBasis = "node"
+): string {
   const expression =
     scope.kind === "node"
-      ? `max(${nodeUnion(
+      ? `${NODE_BASIS_AGGREGATE[basis]}(${nodeUnion(
           "rate",
           scope.node,
+          basis,
           `container_cpu_usage_seconds_total`,
           `[${spec.rateWindow}]`
         )})`
@@ -202,10 +225,19 @@ export function cpuQuery(scope: UsageScope, spec: RangeSpec): string {
  * killer acts on and the number `kubectl top` prints, so a chart drawn from
  * anything else would disagree with both.
  */
-export function memoryQuery(scope: UsageScope, spec: RangeSpec): string {
+export function memoryQuery(
+  scope: UsageScope,
+  spec: RangeSpec,
+  basis: NodeBasis = "node"
+): string {
   const expression =
     scope.kind === "node"
-      ? `max(${nodeUnion("", scope.node, "container_memory_working_set_bytes")})`
+      ? `${NODE_BASIS_AGGREGATE[basis]}(${nodeUnion(
+          "",
+          scope.node,
+          basis,
+          "container_memory_working_set_bytes"
+        )})`
       : `sum(container_memory_working_set_bytes{${containerSelector(scope)}})`;
   return peak(expression, spec);
 }
@@ -270,19 +302,35 @@ export function declaredQuery(
  */
 const NODE_GROUPING = `by (${NODE_LABELS.join(", ")})`;
 
-export function nodesQuery(kind: "cpu" | "memory", spec: RangeSpec): string {
-  const by = NODE_GROUPING;
+export function nodesQuery(
+  kind: "cpu" | "memory",
+  spec: RangeSpec,
+  basis: NodeBasis = "node"
+): string {
+  const head = `${NODE_BASIS_AGGREGATE[basis]} ${NODE_GROUPING}`;
+  const matchers = NODE_BASIS_MATCHERS[basis];
   const expression =
     kind === "cpu"
-      ? `max ${by} (rate(container_cpu_usage_seconds_total{id="/"}[${spec.rateWindow}]))`
-      : `max ${by} (container_memory_working_set_bytes{id="/"})`;
+      ? `${head} (rate(container_cpu_usage_seconds_total{${matchers}}[${spec.rateWindow}]))`
+      : `${head} (container_memory_working_set_bytes{${matchers}})`;
   const peaked = peak(expression, spec);
   return kind === "cpu" ? `${peaked} * 1000` : peaked;
 }
 
 /** When each node last reported anything, so an empty window can say how empty. */
-export function nodesNewestQuery(): string {
-  return `max ${NODE_GROUPING} (timestamp(container_cpu_usage_seconds_total{id="/"}))`;
+export function nodesNewestQuery(basis: NodeBasis = "node"): string {
+  return `max ${NODE_GROUPING} (timestamp(container_cpu_usage_seconds_total{${NODE_BASIS_MATCHERS[basis]}}))`;
+}
+
+/**
+ * Whether any node's root cgroup reported inside the window, for a reader
+ * that asked about one node and has to decide the basis the way
+ * {@link nodesQuery}'s reader decides it for the whole cluster.
+ */
+export function rootCgroupProbeQuery(spec: RangeSpec): string {
+  const over = `[${Math.round(spec.windowMs / 1000)}s]`;
+  const root = NODE_BASIS_MATCHERS.node;
+  return `count(last_over_time(container_cpu_usage_seconds_total{${root}}${over})) or count(last_over_time(container_memory_working_set_bytes{${root}}${over}))`;
 }
 
 export function restartQuery(scope: UsageScope, spec: RangeSpec): string {

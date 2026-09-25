@@ -16,10 +16,15 @@
  */
 
 import { useMemo } from "react";
+import { KeyRound } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
 import { ResourceType } from "@/lib/resource-registry";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import {
   Cell,
   Chain,
@@ -60,6 +65,30 @@ export default function AksAddonsPage() {
     ? danglingBindings(picture.data.bindings, picture.data.identities)
     : [];
 
+  useShareSection("azure-dangling-bindings", () => {
+    if (dangling.length === 0) return null;
+    return {
+      id: "azure-dangling-bindings",
+      order: ORDER.own,
+      title: "Dangling bindings",
+      icon: iconSvg(KeyRound),
+      count: dangling.length,
+      body: {
+        type: "findings",
+        items: dangling.map((binding) => ({
+          title: binding.name,
+          detail: bindingSummary(binding, t),
+          role: "err" as const,
+          ref: refOf({
+            kind: "AzureIdentityBinding",
+            name: binding.name,
+            namespace: binding.namespace,
+          }),
+        })),
+      },
+    };
+  });
+
   if (picture.error) {
     return (
       <VendorReadFailure
@@ -80,6 +109,11 @@ export default function AksAddonsPage() {
             : t("count", "identities", { n: accounts.length })
         }
         description={t("empty", "aksAddonsHint")}
+        actions={
+          <ShareScreenAction
+            screen={{ title: "AKS add-ons", icon: KeyRound }}
+          />
+        }
       />
 
       {unread.map((read) => (
@@ -175,6 +209,18 @@ export default function AksAddonsPage() {
             renderRow={(account, { last }) => (
               <AccountRow account={account} last={last} />
             )}
+            share={{
+              title: "Identities",
+              toFinding: (account) => {
+                const state = accountState(account, t);
+                if (state.tone !== "warn") return null;
+                return {
+                  title: account.name,
+                  detail: state.text,
+                  role: "warn" as const,
+                };
+              },
+            }}
           />
         )}
       </Section>

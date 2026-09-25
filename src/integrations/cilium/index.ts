@@ -10,6 +10,7 @@ import {
   PICTURE_KEY,
 } from "./data";
 import { facts } from "./facts";
+import { reportOf } from "./report";
 
 /**
  * Cilium.
@@ -52,5 +53,6 @@ export default defineVendor({
     load: () => import("./page"),
     gate: { crd: "ciliumnetworkpolicies.cilium.io", namespaced: true },
   },
+  provides: { "object.report": reportOf },
   crd,
 });

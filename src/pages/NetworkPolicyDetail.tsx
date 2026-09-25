@@ -11,6 +11,7 @@ import { yamlTab } from "@/components/resources/yaml-tab";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useNetworkPolicyShare } from "@/hooks/useNetworkPolicyShare";
 import { useResourceDetail } from "@/hooks";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
@@ -137,6 +138,7 @@ export function NetworkPolicyDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.NetworkPolicy, policy);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  const share = useNetworkPolicyShare(policy);
   // Only the rules the tab draws. A policy carrying an `ingress:` block that
   // `policyTypes` does not name keeps those rules on the object, and counting
   // them promised a reader rules the tab then refuses to show.
@@ -200,6 +202,7 @@ export function NetworkPolicyDetail() {
       freshness={freshness}
       resource={policy}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.NetworkPolicy}

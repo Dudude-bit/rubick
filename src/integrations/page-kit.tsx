@@ -23,7 +23,12 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { ChevronRight, ExternalLink, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  ExternalLink,
+  Search,
+} from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
@@ -32,9 +37,53 @@ import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { iconSvg } from "@/lib/icon-svg";
+import type { ReportFinding } from "@/lib/report";
+import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
+
+/** A stable id from a title, so a section survives the title not changing. */
+function slugOf(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * How a list registers what it draws for Share: a title for the section (and
+ * its id, when the title alone does not make a stable one) and how one item
+ * becomes a line in it. Returning `null` for an item leaves it out: a list
+ * ordered by trouble reports the trouble, not every row that has none.
+ */
+export interface ListShare<T> {
+  title: string;
+  id?: string;
+  toFinding: (item: T) => ReportFinding | ReportFinding[] | null;
+}
+
+function findingsSection<T>(
+  items: readonly T[],
+  share: ListShare<T>,
+  id: string
+): PlacedSection | null {
+  const found = items.flatMap((item) => {
+    const built = share.toFinding(item);
+    return built === null ? [] : Array.isArray(built) ? built : [built];
+  });
+  if (found.length === 0) return null;
+  return {
+    id,
+    order: ORDER.own,
+    title: share.title,
+    icon: iconSvg(AlertTriangle),
+    count: found.length,
+    body: { type: "findings", items: found },
+  };
+}
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -113,14 +162,23 @@ export function FindingList<F>({
   brief,
   worthRepeating,
   render,
+  share,
 }: {
   findings: readonly F[];
   brief?: boolean;
   /** Left out, every finding is worth a line on a closed row. */
   worthRepeating?: (finding: F) => boolean;
   render: (finding: F) => ReactNode;
+  /** Registers this list's findings with the screen's Share, by title. */
+  share?: ListShare<F>;
 }) {
   const t = useT();
+  const shareId = share
+    ? (share.id ?? slugOf(share.title))
+    : "unshared-findings";
+  useShareSection(shareId, () =>
+    share ? findingsSection(findings, share, shareId) : null
+  );
   const worth =
     brief && worthRepeating ? findings.filter(worthRepeating) : findings;
   if (worth.length === 0) return null;
@@ -173,6 +231,8 @@ export interface TroubleListProps<T> {
     item: T,
     row: { openByDefault: boolean; last: boolean; shown: number }
   ) => ReactNode;
+  /** Registers the whole list's findings with the screen's Share, by title. */
+  share?: ListShare<T>;
 }
 
 /**
@@ -195,10 +255,15 @@ export function TroubleList<T>({
   aside,
   keyOf,
   renderRow,
+  share,
 }: TroubleListProps<T>) {
   const t = useT();
   const [filter, setFilter] = useSearchParam("q");
   const needle = filter.trim().toLowerCase();
+  const shareId = share ? (share.id ?? slugOf(share.title)) : "unshared-list";
+  useShareSection(shareId, () =>
+    share ? findingsSection(items, share, shareId) : null
+  );
 
   const shown = useMemo(
     () =>

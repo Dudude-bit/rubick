@@ -8,6 +8,7 @@ import { serviceEdge } from "./edge";
 import { ingressTls } from "./ingress-tls";
 import { facts } from "./facts";
 import { mark } from "./mark";
+import { reportOf } from "./report";
 
 /**
  * AKS's add-ons — tier two.
@@ -44,7 +45,11 @@ export const aksAddons = defineVendor({
   // AGIC keeps its certificate on the Application Gateway and names it in an
   // annotation, so `spec.tls` is empty on the ordinary AGIC Ingress and every
   // core surface read it as plain HTTP.
-  provides: { "ingress.tls": ingressTls, "service.edge": serviceEdge },
+  provides: {
+    "ingress.tls": ingressTls,
+    "service.edge": serviceEdge,
+    "object.report": reportOf,
+  },
   page: {
     count: pageCount({
       queryKey: AKS_PICTURE_KEY,

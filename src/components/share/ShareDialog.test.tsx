@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const save = vi.hoisted(() => vi.fn(async () => "/home/me/report.html"));
+const openExternal = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/lib/open-external", () => ({ openExternal }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save }));
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -43,34 +45,79 @@ const report: Report = {
     namespace: "shop",
     context: "prod-eu-1",
   },
-  chainUnread: null,
+  hero: {
+    ref: {
+      kind: "Pod",
+      namespace: "shop",
+      stem: "payments",
+      tail: "-7b6d9c5f4-x8k2p",
+      icon: "<svg></svg>",
+      kindHue: 264,
+      identHue: 132,
+    },
+    title: "payments-7b6d9c5f4-x8k2p",
+    icon: "<svg></svg>",
+    hue: 264,
+  },
+  kicker: "Investigation",
   capturedAt: "2026-09-09T18:12:03.001Z",
   appVersion: "4.10.0",
+  colouring: "full",
+  status: { text: "CrashLoopBackOff", role: "err" },
+  chips: [],
+  stats: [],
   verdict:
     "Most likely: it cannot reach its database, and probably exits on that.",
-  facts: [{ label: "Status", value: "CrashLoopBackOff" }],
-  chain: [],
-  changes: [],
-  logs: [{ source: "p/app", lines: ["ERROR refused"], previous: true }],
+  sections: [
+    {
+      id: "changes",
+      title: "What changed",
+      icon: "",
+      count: 3,
+      body: { type: "changes", changes: [] },
+    },
+    {
+      id: "logs",
+      title: "Log lines",
+      icon: "",
+      count: 1,
+      body: {
+        type: "logs",
+        logs: [
+          {
+            source: "p/app",
+            lines: [{ text: "ERROR refused", level: "error" }],
+            previous: true,
+            caption: null,
+          },
+        ],
+        absent: null,
+      },
+    },
+  ],
   notRead: ["NetworkPolicy in shop (403)"],
   link: "rubick://open/prod-eu-1/pods/shop/payments-7b6d9c5f4-x8k2p",
   words: {
     lang: "en",
-    title: "Investigation",
-    captured: "captured",
+    captured: "Captured",
     openInRubick: "Open in Rubick",
-    linkFallback: "Paste this into its search:",
+    linkFallback: "or paste this link into Rubick's search:",
     verdict: "Most likely",
-    facts: "Facts",
-    chain: "Traffic chain at capture",
-    changes: "What changed",
-    logs: "Log lines",
     notRead: "Not read",
+    notReadCount: "1 thing could not be read.",
+    allRead: "Everything this report names was read.",
     nothingHere: "Nothing here.",
     previousRun: "previous run",
-    notLookedAt: "not looked at",
+    init: "init",
     madeBy: "Made by Rubick",
     noSecrets: "No Secret value is ever written into this file.",
+  },
+  icons: {
+    roles: { ok: "", pending: "", warn: "", err: "", neutral: "" },
+    verdict: "",
+    notRead: "",
+    open: "",
+    shield: "",
   },
 };
 
@@ -135,10 +182,24 @@ describe("ShareDialog", () => {
     mount();
     const preview = screen.getByTestId("share-preview");
     expect(preview.textContent).toContain("Most likely");
+    expect(preview.textContent).toContain("What changed");
     expect(preview.textContent).toContain("Not read");
     expect(
       screen.getByText(/No Secret value is ever written/)
     ).toBeInTheDocument();
+  });
+
+  /** Log lines are the part most likely to carry what a team would not publish. */
+  it("leaves the log lines out when the reader unticks them", async () => {
+    mount();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Save as HTML/ }));
+    await waitFor(() => expect(commands.writeTextFile).toHaveBeenCalled());
+    const html = vi.mocked(commands.writeTextFile).mock.calls[0][1];
+    expect(html).not.toContain("ERROR refused");
+    expect(html).toContain("left out of this report");
   });
 
   it("offers nothing to save when there is no report yet", () => {
@@ -204,9 +265,15 @@ describe("publishing", () => {
     expect(object).toBe("Pod/shop/payments-7b6d9c5f4-x8k2p");
     expect(filename).toContain("payments-7b6d9c5f4-x8k2p");
     expect(html).toContain("<!doctype html>");
-    expect(
-      await screen.findByText("https://abc123.postplan.dev")
-    ).toBeInTheDocument();
+    const links = await screen.findAllByRole("link", {
+      name: "https://abc123.postplan.dev",
+    });
+    await userEvent.click(links[0]);
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://abc123.postplan.dev",
+      "abc123.postplan.dev",
+      expect.any(Function)
+    );
   });
 
   it("asks nothing extra of a target only your team can read", async () => {

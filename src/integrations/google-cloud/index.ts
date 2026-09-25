@@ -9,6 +9,7 @@ import { serviceEdge } from "./edge";
 import { serviceRoutes } from "./service-routes";
 import { ingressTls } from "./ingress-tls";
 import { mark } from "./mark";
+import { reportOf } from "./report";
 import { countHosts } from "./routes";
 
 /**
@@ -55,6 +56,7 @@ export const gkeIngress = defineVendor({
     "service.edge": serviceEdge,
     "service.routes": serviceRoutes,
     "ingress.tls": ingressTls,
+    "object.report": reportOf,
   },
   page: {
     count: pageCount({

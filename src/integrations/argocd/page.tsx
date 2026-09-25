@@ -26,6 +26,10 @@ import { Box, GitBranch, Layers, Shield } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
 import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
 import { Link } from "react-router-dom";
 import {
@@ -195,6 +199,16 @@ export default function ArgoCdPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+  const activeTabIcon =
+    activeTab.id === "appsets"
+      ? Layers
+      : activeTab.id === "projects"
+        ? Shield
+        : activeTab.id === "controller"
+          ? Box
+          : GitBranch;
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -211,7 +225,19 @@ export default function ArgoCdPage() {
         }
         description={t("empty", "argoPageDescription")}
       />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Argo CD · ${activeTab.label}`,
+              icon: activeTabIcon,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -284,6 +310,22 @@ function ApplicationsTab({
       renderRow={(app, { openByDefault, last }) => (
         <AppRow app={app} ui={ui} openByDefault={openByDefault} last={last} />
       )}
+      share={{
+        title: "Applications",
+        toFinding: (app) =>
+          app.worst === null
+            ? null
+            : {
+                title: app.name,
+                detail: appState(app, t).text,
+                role: app.worst,
+                ref: refOf({
+                  kind: "Application",
+                  name: app.name,
+                  namespace: app.namespace,
+                }),
+              },
+      }}
     />
   );
 }
@@ -644,6 +686,7 @@ function Findings({
   url: string | null;
   brief?: boolean;
 }) {
+  const t = useT();
   return (
     <FindingList
       findings={app.findings}
@@ -651,6 +694,23 @@ function Findings({
       render={(finding) => (
         <FindingLine app={app} finding={finding} url={url} brief={brief} />
       )}
+      share={{
+        title: app.name,
+        id: `argo-app-findings-${app.namespace}/${app.name}`,
+        toFinding: (finding) => {
+          const said = describeFinding(t, app, finding);
+          return {
+            title: said.title,
+            detail: said.verbatim ?? said.note ?? null,
+            role: finding.severity,
+            ref: refOf({
+              kind: "Application",
+              name: app.name,
+              namespace: app.namespace,
+            }),
+          };
+        },
+      }}
     />
   );
 }
@@ -788,6 +848,14 @@ function describeFinding(
 
 // --- application sets ---------------------------------------------------
 
+/** The one condition that turns an ApplicationSet row red. */
+function failingConditionOf(set: CustomResourceInfo) {
+  return conditionsOf(set).find(
+    (condition) =>
+      condition.type === "ErrorOccurred" && condition.status === "True"
+  );
+}
+
 function AppSetsTab({
   sets,
   error,
@@ -800,6 +868,33 @@ function AppSetsTab({
   apps: ArgoApp[];
 }) {
   const t = useT();
+  useShareSection("argocd-appsets", () => {
+    const found = (sets ?? []).flatMap((set) => {
+      const failing = failingConditionOf(set);
+      if (!failing) return [];
+      return [
+        {
+          title: set.name,
+          detail: failing.message ?? null,
+          role: "err" as const,
+          ref: refOf({
+            kind: "ApplicationSet",
+            name: set.name,
+            namespace: set.namespace,
+          }),
+        },
+      ];
+    });
+    if (found.length === 0) return null;
+    return {
+      id: "argocd-appsets",
+      order: ORDER.own,
+      title: t("nav", "applicationSets"),
+      icon: iconSvg(Layers),
+      count: found.length,
+      body: { type: "findings", items: found },
+    };
+  });
   if (!sets) {
     return error ? (
       <VendorReadFailure
@@ -831,10 +926,7 @@ function AppSetsTab({
           const generated = apps.filter(
             (app) => app.generatedBy?.name === set.name
           );
-          const failing = conditionsOf(set).find(
-            (condition) =>
-              condition.type === "ErrorOccurred" && condition.status === "True"
-          );
+          const failing = failingConditionOf(set);
           return (
             <div
               key={`${set.namespace}/${set.name}`}
@@ -998,6 +1090,41 @@ function ControllerTab({
   routes: ServiceRoutes;
 }) {
   const t = useT();
+  useShareSection("argocd-controller", () => {
+    const components = controller?.components ?? [];
+    const unread = controller?.unread ?? [];
+    const found = [
+      ...components
+        .filter((component) => component.ready < component.desired)
+        .map((component) => ({
+          title: component.name,
+          detail: t("count", "ofTotalReady", {
+            n: component.ready,
+            total: component.desired,
+          }),
+          role: "err" as const,
+          ref: refOf({
+            kind: component.kind,
+            name: component.name,
+            namespace: component.namespace,
+          }),
+        })),
+      ...unread.map(({ kind, failure }) => ({
+        title: t("empty", "argoWorkloadsUnread", { kinds: toPlural(kind) }),
+        detail: sayWords(failure, t),
+        role: "warn" as const,
+      })),
+    ];
+    if (found.length === 0) return null;
+    return {
+      id: "argocd-controller",
+      order: ORDER.own,
+      title: t("nav", "argoOwnWorkloads"),
+      icon: iconSvg(Box),
+      count: found.length,
+      body: { type: "findings", items: found },
+    };
+  });
   if (!controller) {
     return (
       <p className="text-xs text-fg-fnt">

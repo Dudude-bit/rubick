@@ -28,6 +28,7 @@ import {
   worstTone,
 } from "./monitors/data";
 import { RANGE_SPECS } from "./queries";
+import { reportOf } from "./report";
 import { readSavedConnection } from "./saved-connection";
 import { formatSince } from "@/lib/utils";
 
@@ -203,7 +204,7 @@ export default defineVendor({
     // The Connection tab stands without the operator's kinds, so a token
     // refused the monitors still has a page to open.
     gate: null,
-    answers: { "alerts.about": "?tab=alerts" },
+    answers: { "alerts.about": "?tab=alerts", "usage.nodes": "?tab=monitors" },
   },
   crd,
   provides: {
@@ -212,6 +213,7 @@ export default defineVendor({
     "usage.nodes": nodeUsage,
     "volume.fullness": volumeFullness,
     "network.traffic": networkTraffic,
+    "object.report": reportOf,
   },
 });
 

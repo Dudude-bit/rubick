@@ -46,6 +46,7 @@ import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
 import { verdictOf } from "@/lib/route-verdict";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { useGatewayShare } from "@/hooks/useGatewayShare";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
@@ -285,6 +286,7 @@ export function GatewayDetail() {
   const detection = detectionQuery.data;
   const deliveryQuery = deliveryOfKind(ResourceType.Gateway, gateway);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  const share = useGatewayShare(gateway);
 
   // The class claim, resolved the way IngressClass claiming is: the class
   // carries the controller that answers for it, and Accepted is that
@@ -592,6 +594,7 @@ export function GatewayDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={gateway}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Gateway}

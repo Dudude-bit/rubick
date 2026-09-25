@@ -46,6 +46,10 @@ import {
   VendorReadFailure,
   FindingList,
 } from "../page-kit";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import { KINDS, sourcesFrom, useBacking, useMesh } from "./data";
 import { describeMatch, fullyRead, type MatchReading } from "./match";
 import {
@@ -155,6 +159,8 @@ export default function IstioPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -166,7 +172,26 @@ export default function IstioPage() {
         }
         description={t("empty", "istioPageDescription")}
       />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Istio · ${activeTab.label}`,
+              icon:
+                activeTab.id === "routes"
+                  ? Waypoints
+                  : activeTab.id === "map"
+                    ? Network
+                    : activeTab.id === "gateways"
+                      ? DoorOpen
+                      : Split,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -288,6 +313,17 @@ function RoutesTab({
           openByDefault={openByDefault}
         />
       )}
+      share={{
+        title: t("nav", "routes"),
+        toFinding: (group) =>
+          group.worst === null
+            ? null
+            : {
+                title: group.host,
+                detail: hostState(group, sources?.backingError ?? null, t).text,
+                role: group.worst,
+              },
+      }}
     />
   );
 }
@@ -658,6 +694,18 @@ function Findings({
           </FindingBlock>
         );
       }}
+      share={{
+        id: `istio-host-findings-${group.host}`,
+        title: group.host,
+        toFinding: (finding) => {
+          const said = describeFinding(finding, t);
+          return {
+            title: said.title,
+            detail: said.note || null,
+            role: finding.severity,
+          };
+        },
+      }}
     />
   );
 }
@@ -752,6 +800,43 @@ function GatewaysTab({
   loading: boolean;
 }) {
   const t = useT();
+  useShareSection("istio-gateways", () => {
+    const found = gateways.flatMap((gateway) => {
+      const bound = groups.filter((group) =>
+        group.gateways.some(
+          (named) => named.gateway === gateway && named.serves
+        )
+      );
+      if (bound.length > 0) return [];
+      const named = groups.filter((group) =>
+        group.gateways.some((entry) => entry.gateway === gateway)
+      );
+      return [
+        {
+          title: gateway.name,
+          detail:
+            named.length > 0
+              ? t("count", "hostsNameItNoneCovered", { n: named.length })
+              : t("empty", "nothingBindsToIt"),
+          role: "warn" as const,
+          ref: refOf({
+            kind: "Gateway",
+            name: gateway.name,
+            namespace: gateway.namespace,
+          }),
+        },
+      ];
+    });
+    if (found.length === 0) return null;
+    return {
+      id: "istio-gateways",
+      order: ORDER.own,
+      title: "Gateways",
+      icon: iconSvg(DoorOpen),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   if (loading)
     return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (gateways.length === 0) {
@@ -857,6 +942,28 @@ function SubsetsTab({
     () => (sources ? subsetUses(rules, groups, sources) : null),
     [rules, groups, sources]
   );
+  useShareSection("istio-subsets-missing", () => {
+    const found = groups
+      .flatMap((group) =>
+        group.findings.flatMap((finding): Destination[] =>
+          finding.kind === "noSubset" ? [finding.destination] : []
+        )
+      )
+      .map((destination) => ({
+        title: `${destination.host}/${destination.subset}`,
+        detail: null,
+        role: "err" as const,
+      }));
+    if (found.length === 0) return null;
+    return {
+      id: "istio-subsets-missing",
+      order: ORDER.own,
+      title: t("nav", "routedDefinedNowhere"),
+      icon: iconSvg(Split),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   if (loading)
     return <p className="text-xs text-fg-fnt">{t("empty", "readingMesh")}</p>;
   if (rules.length === 0) {

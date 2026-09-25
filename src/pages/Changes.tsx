@@ -3,6 +3,9 @@ import { useMemo, useState } from "react";
 import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { changesScreenSection, watchedSection } from "./changes-share";
 import { timelineOf } from "@/lib/changes";
 import { cn } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
@@ -52,6 +55,15 @@ export function Changes() {
     ? (spans[currentContext] ?? []).find((span) => span.to === null)
     : undefined;
 
+  useShareSection("changes", () => [
+    changesScreenSection(items, t),
+    watchedSection(
+      watching,
+      items.filter((item) => item.kind === "gap").length,
+      t
+    ),
+  ]);
+
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={t("nav", "changes")} />;
   }
@@ -68,22 +80,25 @@ export function Changes() {
             : t("changes", "notWatchingNow")
         }
         actions={
-          <div className="flex items-center gap-0.5" role="group">
-            {(Object.keys(WINDOWS) as Window[]).map((candidate) => (
-              <button
-                key={candidate}
-                type="button"
-                aria-pressed={window === candidate}
-                onClick={() => setWindow(candidate)}
-                className={cn(
-                  "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
-                  window === candidate ? "bg-sel text-fg" : "text-fg-mut"
-                )}
-              >
-                {t("changes", candidate === "24h" ? "window24h" : "window7d")}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="flex items-center gap-0.5" role="group">
+              {(Object.keys(WINDOWS) as Window[]).map((candidate) => (
+                <button
+                  key={candidate}
+                  type="button"
+                  aria-pressed={window === candidate}
+                  onClick={() => setWindow(candidate)}
+                  className={cn(
+                    "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                    window === candidate ? "bg-sel text-fg" : "text-fg-mut"
+                  )}
+                >
+                  {t("changes", candidate === "24h" ? "window24h" : "window7d")}
+                </button>
+              ))}
+            </div>
+            <ShareScreenAction screen={{ title: t("changes", "title") }} />
+          </>
         }
       />
       <Section>

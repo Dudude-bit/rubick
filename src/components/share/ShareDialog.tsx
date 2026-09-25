@@ -33,7 +33,25 @@ import {
 } from "@/lib/share-targets";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT } from "@/i18n/useT";
+import { openExternal } from "@/lib/open-external";
 import { toastError } from "@/lib/toast-error";
+
+function WebLink({ url, className }: { url: string; className?: string }) {
+  const t = useT();
+  return (
+    <a
+      href={url}
+      title={t("share", "openLink", { url })}
+      onClick={(event) => {
+        event.preventDefault();
+        void openExternal(url, URL.canParse(url) ? new URL(url).host : url, t);
+      }}
+      className={className}
+    >
+      {url}
+    </a>
+  );
+}
 
 /**
  * Saving is always here; publishing only where the reader configured a
@@ -55,6 +73,7 @@ export function ShareDialog({
   const copy = useCopyToClipboard();
   const [saving, setSaving] = useState(false);
   const [targetId, setTargetId] = useState<string | null>(null);
+  const [withLogs, setWithLogs] = useState(true);
   // Both of these are about one report going to one target. Keeping what
   // they belong to beside them is what makes changing either take the tick
   // and the link away, without an effect that races the render.
@@ -68,7 +87,33 @@ export function ShareDialog({
     url: string | null;
   } | null>(null);
 
-  const html = report ? renderReport(report) : "";
+  const logLines = (report?.sections ?? []).reduce(
+    (sum, section) =>
+      section.body.type === "logs"
+        ? sum + section.body.logs.reduce((n, log) => n + log.lines.length, 0)
+        : sum,
+    0
+  );
+  const shared: Report | null =
+    report && !withLogs && logLines > 0
+      ? {
+          ...report,
+          sections: report.sections.map((section) =>
+            section.body.type === "logs"
+              ? {
+                  ...section,
+                  count: null,
+                  body: {
+                    type: "logs",
+                    logs: [],
+                    absent: t("share", "logsLeftOut"),
+                  },
+                }
+              : section
+          ),
+        }
+      : report;
+  const html = shared ? renderReport(shared) : "";
   const targets = useQuery({
     queryKey: queryKeys.shareTargets(),
     queryFn: () => commands.listShareTargets(),
@@ -76,6 +121,9 @@ export function ShareDialog({
   });
   const target =
     (targets.data ?? []).find((entry) => entry.id === targetId) ?? null;
+
+  const hasTargets = !targets.error && (targets.data ?? []).length > 0;
+  const needsAck = target !== null && needsAcknowledgement(target);
 
   const belongsHere = (value: { target: string; report: string } | null) =>
     value !== null &&
@@ -105,7 +153,11 @@ export function ShareDialog({
         title: t("share", "published", { n: result.version ?? 1 }),
         // The target's own address is not the report's link, and printing it
         // as one sent the reader to somebody else's index page.
-        description: result.url ?? t("share", "publishedNoLink"),
+        description: result.url ? (
+          <WebLink url={result.url} className="text-info hover:underline" />
+        ) : (
+          t("share", "publishedNoLink")
+        ),
       });
     },
     onError: (error) => toastError(t("share", "publishFailed"), error),
@@ -143,35 +195,38 @@ export function ShareDialog({
               className="flex flex-col gap-1 text-fg-mut"
               data-testid="share-preview"
             >
-              <li>
-                <span className="text-fg">{t("share", "sectionVerdict")}</span>{" "}
-                <span className="text-fg-fnt">
-                  {report.verdict ?? t("share", "noVerdict")}
-                </span>
-              </li>
-              <li>
-                <span className="text-fg">{t("share", "sectionFacts")}</span>{" "}
-                <span className="tabular-nums text-fg-fnt">
-                  {report.facts.length}
-                </span>
-              </li>
-              <li>
-                <span className="text-fg">{t("share", "sectionChain")}</span>{" "}
-                <span className="tabular-nums text-fg-fnt">
-                  {report.chain.length}
-                </span>
-              </li>
-              <li>
-                <span className="text-fg">{t("share", "sectionChanges")}</span>{" "}
-                <span className="tabular-nums text-fg-fnt">
-                  {report.changes.length}
-                </span>
-              </li>
-              <li>
-                <span className="text-fg">{t("share", "sectionLogs")}</span>{" "}
-                <span className="tabular-nums text-fg-fnt">
-                  {report.logs.reduce((sum, log) => sum + log.lines.length, 0)}
-                </span>
+              {report.verdict ? (
+                <li>
+                  <span className="text-fg">
+                    {t("share", "sectionVerdict")}
+                  </span>{" "}
+                  <span className="text-fg-fnt">{report.verdict}</span>
+                </li>
+              ) : null}
+              {report.sections
+                .filter((section) => section.body.type !== "logs")
+                .map((section) => (
+                  <li key={section.id}>
+                    <span className="text-fg">{section.title}</span>{" "}
+                    <span className="tabular-nums text-fg-fnt">
+                      {section.unread ? "?" : (section.count ?? "")}
+                    </span>
+                  </li>
+                ))}
+              <li hidden={logLines === 0}>
+                {logLines > 0 ? (
+                  <label className="inline-flex items-center gap-2">
+                    <Checkbox
+                      checked={withLogs}
+                      onCheckedChange={(value) => setWithLogs(value === true)}
+                      aria-label={t("share", "includeLogs")}
+                    />
+                    <span className="text-fg">{t("share", "sectionLogs")}</span>
+                    <span className="tabular-nums text-fg-fnt">
+                      {withLogs ? logLines : 0}
+                    </span>
+                  </label>
+                ) : null}
               </li>
               <li
                 className={report.notRead.length > 0 ? "text-warn" : undefined}
@@ -198,7 +253,7 @@ export function ShareDialog({
         ) : (
           <p className="text-xs text-fg-fnt">{t("share", "nothingToShare")}</p>
         )}
-        {report ? (
+        {report && (targets.error || !hasTargets || needsAck || link) ? (
           <div className="flex flex-col gap-2 border-t border-hair pt-3 text-xs">
             {targets.error ? (
               // A list the app could not read is not a list with nothing in
@@ -209,86 +264,84 @@ export function ShareDialog({
                   reason: errorToShow(targets.error),
                 })}
               </p>
-            ) : (targets.data ?? []).length === 0 ? (
+            ) : !hasTargets ? (
               <p className="text-fg-fnt">{t("share", "noTargets")}</p>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={targetId ?? ""}
-                    onValueChange={(value) => setTargetId(value)}
-                  >
-                    <SelectTrigger
-                      aria-label={t("share", "target")}
-                      className="h-7 w-64 text-xs"
-                    >
-                      <SelectValue placeholder={t("share", "target")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(targets.data ?? []).map((entry) => (
-                        <SelectItem key={entry.id} value={entry.id}>
-                          <span className="flex items-center gap-2">
-                            <span
-                              aria-hidden="true"
-                              className="h-2.5 w-[3px] rounded-sm"
-                              style={{ background: targetColor(entry) }}
-                            />
-                            {entry.label}
-                            <span className="font-mono text-[11px] text-fg-fnt">
-                              {entry.host}
-                            </span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {target && !readyToPublish(target) ? (
-                    <span className="text-warn">
-                      {t("share", "targetNoKey")}
-                    </span>
-                  ) : null}
-                </div>
-                {target && needsAcknowledgement(target) ? (
-                  <label className="flex items-start gap-2 rounded border border-err/40 bg-err/5 p-2 text-err">
-                    <Checkbox
-                      checked={acknowledged}
-                      onCheckedChange={(value) =>
-                        setAck(
-                          value === true
-                            ? { target: target.id, report: report.capturedAt }
-                            : null
-                        )
-                      }
-                      aria-label={t("share", "publicAcknowledge")}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      {t("share", "publicWarning", { host: target.host })}{" "}
-                      <span className="font-medium">
-                        {t("share", "publicAcknowledge")}
-                      </span>
-                    </span>
-                  </label>
-                ) : null}
-                {link ? (
-                  <div className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-info">
-                      {link}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copy(link, t("share", "copyLink"))}
-                    >
-                      {t("share", "copyLink")}
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            )}
+            ) : null}
+            {target && needsAck ? (
+              <label className="flex items-start gap-2 rounded border border-err/40 bg-err/5 p-2 text-err">
+                <Checkbox
+                  checked={acknowledged}
+                  onCheckedChange={(value) =>
+                    setAck(
+                      value === true
+                        ? { target: target.id, report: report.capturedAt }
+                        : null
+                    )
+                  }
+                  aria-label={t("share", "publicAcknowledge")}
+                  className="mt-0.5"
+                />
+                <span>
+                  {t("share", "publicWarning", { host: target.host })}{" "}
+                  <span className="font-medium">
+                    {t("share", "publicAcknowledge")}
+                  </span>
+                </span>
+              </label>
+            ) : null}
+            {link ? (
+              <div className="flex items-center gap-2">
+                <WebLink
+                  url={link}
+                  className="min-w-0 flex-1 truncate font-mono text-[11px] text-info hover:underline"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copy(link, t("share", "copyLink"))}
+                >
+                  {t("share", "copyLink")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="sm:items-center">
+          {report && hasTargets ? (
+            <div className="flex min-w-0 items-center gap-2 text-xs sm:mr-auto">
+              <Select
+                value={targetId ?? ""}
+                onValueChange={(value) => setTargetId(value)}
+              >
+                <SelectTrigger
+                  aria-label={t("share", "target")}
+                  className="h-7 w-56 text-xs"
+                >
+                  <SelectValue placeholder={t("share", "target")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(targets.data ?? []).map((entry) => (
+                    <SelectItem key={entry.id} value={entry.id}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="h-2.5 w-[3px] rounded-sm"
+                          style={{ background: targetColor(entry) }}
+                        />
+                        {entry.label}
+                        <span className="font-mono text-[11px] text-fg-fnt">
+                          {entry.host}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {target && !readyToPublish(target) ? (
+                <span className="text-warn">{t("share", "targetNoKey")}</span>
+              ) : null}
+            </div>
+          ) : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("action", "cancel")}
           </Button>
@@ -299,7 +352,7 @@ export function ShareDialog({
               disabled={
                 !readyToPublish(target) ||
                 publish.isPending ||
-                (needsAcknowledgement(target) && !acknowledged)
+                (needsAck && !acknowledged)
               }
             >
               <Upload aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
