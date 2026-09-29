@@ -29,7 +29,6 @@ import {
   hintFor,
   poolPrefix,
   readPrometheus,
-  selectorIsEmpty,
   loopbackFlag,
   selectorWords,
   type Hint,
@@ -38,7 +37,13 @@ import {
 } from "./model";
 import { verdictOf } from "./verdict";
 import { Chip, Chips, Step, Sub } from "./story";
-import { rowTone, rowWords, unknowableWords, type RowTone } from "./words";
+import {
+  picksUpWords,
+  rowTone,
+  rowWords,
+  unknowableWords,
+  type RowTone,
+} from "./words";
 
 const TONE_TEXT: Record<RowTone, string> = {
   err: "text-err",
@@ -520,17 +525,7 @@ function PickedUpStep({
               {t("monitors", "picksUp")}
             </span>
             <span className="text-fg-mid">
-              {selectorIsEmpty(objects) &&
-              scope !== null &&
-              selectorIsEmpty(scope)
-                ? t("monitors", "picksUpAll")
-                : selectorIsEmpty(objects) && scope === null
-                  ? t("monitors", "picksUpOwn")
-                  : `${t("monitors", "picksUpMatching", { selector: selectorWords(objects) || "{}" })}${
-                      scope === null
-                        ? ""
-                        : `, ${t("monitors", "inNamespacesMatching", { selector: selectorWords(scope) || "{}" })}`
-                    }`}
+              {picksUpWords(objects, scope, t)}
             </span>
           </div>
         );

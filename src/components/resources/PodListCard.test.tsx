@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithProviders } from "@/test/render";
 import { PodListCard } from "./PodListCard";
 import type { PodInfo } from "@/generated/types";
@@ -71,5 +72,24 @@ describe("a pod list that could not be read", () => {
     expect(container.textContent).toContain("web-1");
     expect(screen.queryByText(/could not read/i)).toBeNull();
     expect(screen.queryByText(/connection refused/i)).toBeNull();
+  });
+});
+
+describe("what a pod row says about its containers", () => {
+  /**
+   * The row detail was "1/1 ready · 3 restarts" in English on a Russian
+   * page, and the restart count had one form for every number.
+   */
+  it("says readiness and restarts in the reader's language", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const { container } = card({
+        pods: [{ ...pod("web-1"), restartCount: 3 } as PodInfo],
+      });
+      expect(container.textContent).toContain("готово 1/1 · 3 перезапуска");
+      expect(container.textContent).not.toMatch(/ready|restarts/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });

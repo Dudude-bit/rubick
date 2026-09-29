@@ -26,6 +26,7 @@ import { formatSince } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import type { NodeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { sayWords } from "@/i18n/say";
 import type { en } from "@/i18n/catalogue";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
@@ -116,7 +117,7 @@ export function NodeUtilisation({
         {power.state === "ready" && (
           <span>
             {t("count", "fromEndpoint", { endpoint: power.endpoint })}
-            {query.data ? ` · ${query.data.resolution}` : ""}
+            {query.data ? ` · ${sayWords(query.data.resolution, t)}` : ""}
           </span>
         )}
         <span className="ml-auto flex items-center gap-0.5">

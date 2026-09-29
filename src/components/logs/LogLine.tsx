@@ -385,7 +385,12 @@ export const LogRunRow = memo(function LogRunRow({
         </span>
         <Message log={run.head} />{" "}
         <span className="text-fg-fnt">
-          &times; {formatCount(run.count)} over {formatSpan(runSpanMs(run))}
+          {runSpanMs(run) > 0
+            ? t("count", "runOverSpan", {
+                count: formatCount(run.count),
+                span: formatSpan(runSpanMs(run)),
+              })
+            : t("count", "runAtOnce", { count: formatCount(run.count) })}
         </span>
       </span>
     </button>

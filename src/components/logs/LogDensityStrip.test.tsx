@@ -6,10 +6,12 @@
  * at the same moment.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+import { useLocaleStore } from "@/stores/localeStore";
 import { LogDensityStrip } from "./LogDensityStrip";
+import type { StreamedLogLine } from "./types";
 
 const common = {
   logs: [],
@@ -42,5 +44,72 @@ describe("what the density strip says with nothing to map", () => {
   it("still tells an empty buffer from a query that found nothing", () => {
     render(<LogDensityStrip {...common} retained={0} settling={false} />);
     expect(screen.queryByText(/no line matches/i)).toBeNull();
+  });
+});
+
+const line = (id: number, epoch: number): StreamedLogLine => ({
+  id,
+  epoch,
+  groupKey: `k${id}`,
+  timestamp: null,
+  format: "plain",
+  raw: "m",
+  message: "m",
+  pod: "p",
+  container: "app",
+  namespace: "n",
+  level: "info",
+  fields: null,
+});
+
+const burst = (offsets: number[]) =>
+  offsets.map((offset, index) => line(index, 1_700_000_000_000 + offset));
+
+describe("what the density strip says when the lines are too close to map", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /**
+   * A burst inside one clock tick printed its span as the English word
+   * "instant", and the count took one Russian form for every number:
+   * "Все 3 строк пришли в пределах instant друг от друга".
+   */
+  it("says a burst with no span landed at one moment, in the reader's language", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const logs = burst([0, 0, 0]);
+    render(
+      <LogDensityStrip {...common} mode="full" logs={logs} retained={3} />
+    );
+    expect(document.body.textContent).toContain(
+      "Все 3 строки пришли в один и тот же момент"
+    );
+    expect(document.body.textContent).not.toMatch(/instant/);
+  });
+
+  /** Would break if the count stopped choosing its form by the number. */
+  it("counts the lines with the form the number takes", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const logs = burst([0, 50, 100, 150]);
+    render(
+      <LogDensityStrip {...common} mode="full" logs={logs} retained={4} />
+    );
+    expect(document.body.textContent).toContain(
+      "Все 4 строки пришли в пределах 150ms"
+    );
+  });
+
+  /** English keeps its own sentence for the same burst. */
+  it("says the same moment in English", () => {
+    useLocaleStore.setState({ choice: "en" });
+    render(
+      <LogDensityStrip
+        {...common}
+        mode="full"
+        logs={burst([0, 0])}
+        retained={2}
+      />
+    );
+    expect(document.body.textContent).toContain(
+      "All 2 lines landed at the same moment"
+    );
   });
 });

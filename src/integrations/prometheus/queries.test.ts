@@ -21,6 +21,16 @@ import {
 } from "./queries";
 import { nodeNameOf } from "./coverage";
 import type { PromSeries } from "@/generated/types";
+import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+
+const inEnglish: T = (section, key, values) =>
+  translate("en", section, key, values);
+const inRussian: T = (section, key, values) =>
+  translate("ru", section, key, values);
+const words = (range: keyof typeof RANGE_SPECS, t: T = inEnglish) =>
+  sayWords(RANGE_SPECS[range].resolution, t);
 
 const pod: UsageScope = {
   kind: "pod",
@@ -70,13 +80,13 @@ describe("CPU", () => {
         // The shortest range's bucket *is* the scrape resolution: there is
         // nothing finer to take a maximum over, and the label says so.
         expect(query).not.toContain("max_over_time");
-        expect(spec.resolution).toMatch(/at the scrape resolution/);
+        expect(words(range)).toMatch(/at the scrape resolution/);
       } else {
         expect(query).toContain(
           `max_over_time((sum(rate(container_cpu_usage_seconds_total`
         );
         expect(query).toContain(`[${spec.stepSeconds}s:${spec.inner}])`);
-        expect(spec.resolution).toMatch(/max over a/);
+        expect(words(range)).toContain(`max over a ${spec.inner} resolution`);
       }
     }
   });
@@ -298,11 +308,38 @@ describe("the ranges", () => {
     }
   });
 
-  /** Every range says what a bucket is worth, because that is the contract. */
+  /**
+   * Every range says what a bucket is worth, because that is the contract —
+   * and says the bucket the query actually asks for, not a neighbour's.
+   */
   it("names its own resolution", () => {
     for (const range of USAGE_RANGES) {
-      expect(RANGE_SPECS[range].resolution).toMatch(/bucket/);
+      const seconds = RANGE_SPECS[range].stepSeconds;
+      const step = seconds % 60 === 0 ? `${seconds / 60}m` : `${seconds}s`;
+      expect(words(range)).toMatch(new RegExp(`^${step} buckets`));
     }
+  });
+
+  /**
+   * The resolution was an English literal in this table, so a Russian chart
+   * captioned itself "3m buckets, max over a 30s resolution". Words are
+   * chosen at render now; the durations stay as Prometheus spells them.
+   */
+  it("says its resolution in the reader's language", () => {
+    for (const range of USAGE_RANGES) {
+      expect(words(range, inRussian)).toMatch(/^шаг \d+[sm], /);
+      expect(words(range, inRussian)).not.toMatch(/bucket|resolution/);
+    }
+    expect(words("6h", inRussian)).toBe("шаг 3m, максимум при разрешении 30s");
+    expect(
+      sayWords(
+        {
+          key: "promResolutionOf",
+          values: { range: "1h", resolution: RANGE_SPECS["1h"].resolution },
+        },
+        inRussian
+      )
+    ).toBe("1h: шаг 30s, максимум при разрешении 15s");
   });
 });
 
@@ -397,6 +434,6 @@ describe("a week", () => {
     const spec = RANGE_SPECS["7d"];
     expect(spec.windowMs).toBe(7 * 24 * 60 * 60_000);
     expect(spec.inner).not.toBeNull();
-    expect(spec.resolution).toMatch(/max over/);
+    expect(words("7d")).toMatch(/max over/);
   });
 });

@@ -6,7 +6,9 @@ import { columns as persistentVolumeClaimColumns } from "./PersistentVolumeClaim
 import { columns as storageClassColumns } from "./StorageClassList";
 import { columns as namespaceColumns } from "./NamespaceList";
 import { columns as nodeColumns } from "./NodeList";
+import { createDataKeysColumn } from "./columns";
 import type { ColumnDef } from "@/components/ui/table-features";
+import { useLocaleStore } from "@/stores/localeStore";
 
 /**
  * Every list shows an object's age the same way, and none of them shows a
@@ -70,5 +72,30 @@ describe("how a list says how old something is", () => {
     // "5m", in whatever the catalogue spells it — a column reading a
     // pre-formatted string off the row would render nothing here.
     expect(screen.getByText(/\d+\s*[a-zA-Zа-яА-Я]/)).toBeInTheDocument();
+  });
+});
+
+describe("the keys a ConfigMap or Secret holds, past the first few", () => {
+  /**
+   * The overflow was "+2 more" in English on a Russian list, beside key
+   * names that are the cluster's own words and stay as written.
+   */
+  it("counts the rest in the reader's language", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const cell = createDataKeysColumn<{ dataKeys?: string[] }>().cell;
+      if (typeof cell !== "function") throw new Error("no keys cell");
+      const { container } = render(
+        <>
+          {cell({
+            row: { original: { dataKeys: ["a", "b", "c", "d", "e"] } },
+          } as never)}
+        </>
+      );
+      expect(container.textContent).toContain("ещё 2");
+      expect(container.textContent).not.toMatch(/more/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });

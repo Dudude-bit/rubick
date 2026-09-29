@@ -166,12 +166,11 @@ export function formatTimestampPrecise(timestamp: string | null, t: T): string {
 
 /**
  * A run's duration, at the precision the number deserves. A burst that
- * landed inside one clock tick is "instant" rather than "0ms", which
- * reads like a measurement that failed.
+ * landed inside one clock tick reads as a measurement that failed at
+ * "0ms", so a caller that can see one says so in its own sentence.
  */
 export function formatSpan(ms: number): string {
-  if (ms <= 0) return "instant";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   const minutes = Math.floor(ms / 60000);
   const seconds = Math.round((ms % 60000) / 1000);

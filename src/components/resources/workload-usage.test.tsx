@@ -112,7 +112,10 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
       { t: 1_700_000_000_000, cpuMillicores: 40, memoryBytes: 30e6 },
       { t: 1_700_000_060_000, cpuMillicores: 90, memoryBytes: 52e6 },
     ],
-    resolution: "1m steps",
+    resolution: {
+      key: "promBucketsMaxOver" as const,
+      values: { step: "1m", inner: "15s" },
+    },
   };
 
   beforeEach(() => {
@@ -203,7 +206,13 @@ describe("WorkloadUsage with nothing running and a supplier that kept it", () =>
             vendor: "Prometheus",
             endpoint: "prometheus.monitoring:9090",
             page: null,
-            use: vi.fn().mockResolvedValue({ samples: [], resolution: "3m" }),
+            use: vi.fn().mockResolvedValue({
+              samples: [],
+              resolution: {
+                key: "promBucketsMaxOver",
+                values: { step: "3m", inner: "30s" },
+              },
+            }),
           }
         : ({ state: "absent" } as never)
     );

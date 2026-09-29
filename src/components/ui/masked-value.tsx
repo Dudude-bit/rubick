@@ -35,6 +35,8 @@ export function MaskedValue({
   const t = useT();
   const copyToClipboard = useCopyToClipboard();
   const displayValue = isRevealed ? value : placeholder;
+  const toggleName = isRevealed ? t("action", "hide") : t("action", "reveal");
+  const copyName = t("action", "copy");
 
   const handleCopy = () => {
     copyToClipboard(
@@ -62,6 +64,8 @@ export function MaskedValue({
             onClick={onToggleReveal}
             disabled={isLoading}
             className="h-6 w-6 p-0 shrink-0"
+            aria-label={toggleName}
+            title={toggleName}
           >
             {isRevealed ? (
               <EyeOff className="h-3 w-3" />
@@ -77,6 +81,8 @@ export function MaskedValue({
             onClick={handleCopy}
             disabled={isLoading}
             className="h-6 w-6 p-0 shrink-0"
+            aria-label={copyName}
+            title={copyName}
           >
             <Copy className="h-3 w-3" />
           </Button>
@@ -98,6 +104,8 @@ export function MaskedValue({
             onClick={onToggleReveal}
             disabled={isLoading}
             className="h-8 w-8 p-0"
+            aria-label={toggleName}
+            title={toggleName}
           >
             {isRevealed ? (
               <EyeOff className="h-4 w-4" />
@@ -113,6 +121,8 @@ export function MaskedValue({
             onClick={handleCopy}
             disabled={isLoading}
             className="h-8 w-8 p-0"
+            aria-label={copyName}
+            title={copyName}
           >
             <Copy className="h-4 w-4" />
           </Button>

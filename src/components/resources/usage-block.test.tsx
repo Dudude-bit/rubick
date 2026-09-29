@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useUsageHistoryStore } from "@/stores/usageHistoryStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import type {
   ConnectionEdge,
@@ -473,6 +474,29 @@ describe("UsageBlock and a history supplier", () => {
     expect(
       screen.getByText(/30s buckets, max over a 15s resolution/)
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The resolution came from the range table as an English literal, so the
+   * caption read "из prometheus.monitoring:9090 · 30s buckets, max over a
+   * 15s resolution" on a Russian page.
+   */
+  it("working: the resolution is in the reader's language", async () => {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      wrap(<UsageBlock {...live} uid="uid-11-ru" />);
+      const hour = await screen.findByRole("button", { name: "1h" });
+      await waitFor(() => expect(hour).toBeEnabled());
+      await userEvent.click(hour);
+
+      expect(
+        await screen.findByText(/шаг 30s, максимум при разрешении 15s/)
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/buckets/)).toBeNull();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /**

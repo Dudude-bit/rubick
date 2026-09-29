@@ -113,8 +113,8 @@ export type UsageScope =
  */
 export interface UsageWindow {
   samples: readonly UsageSample[];
-  /** "30s buckets, max over a 15s resolution". */
-  resolution: string;
+  /** "30s buckets, max over a 15s resolution", worded at render. */
+  resolution: Saying;
   /**
    * What was declared over the window, where the supplier kept it.
    * `null` when it did not: the lines are then drawn flat at today's
@@ -166,7 +166,7 @@ export interface NodeUsageWindow {
    * never one the supplier has never seen.
    */
   newestKnown?: boolean;
-  resolution: string;
+  resolution: Saying;
 }
 
 /**
@@ -254,7 +254,7 @@ export interface LogHistory {
 /** Bytes in and out, over the same window and buckets as {@link UsageWindow}. */
 export interface TrafficWindow {
   points: ReadonlyArray<{ t: number; rx: number | null; tx: number | null }>;
-  resolution: string;
+  resolution: Saying;
 }
 
 /**

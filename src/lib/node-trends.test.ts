@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { NodeUsageWindow } from "@/integrations";
 import type { NodeInfo } from "@/generated/types";
+import type { Saying } from "@/i18n/say";
 import { nodeTrends } from "./node-trends";
 
 function node(name: string, unschedulable = false): NodeInfo {
@@ -31,6 +32,7 @@ function node(name: string, unschedulable = false): NodeInfo {
 
 const GI = 1024 ** 3;
 const T0 = 1_700_000_000_000;
+const BUCKETS: Saying = { key: "promBucketsAtScrape", values: { step: "30s" } };
 
 const window: NodeUsageWindow = {
   nodes: {
@@ -51,7 +53,7 @@ const window: NodeUsageWindow = {
     },
   },
   newestAt: { "ip-10-0-1-3": T0 - 4 * 60_000 },
-  resolution: "30s buckets",
+  resolution: BUCKETS,
 };
 
 describe("nodeTrends", () => {
@@ -117,7 +119,7 @@ describe("why a row has no lane", () => {
   /** A window that was read and holds nothing is the one case that may say so. */
   it("says no series only when the window was actually read", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, resolution: "30s" },
+      { nodes: {}, newestAt: {}, resolution: BUCKETS },
       [node("worker-1")],
       T0
     );
@@ -137,7 +139,7 @@ describe("why a row has no lane", () => {
           "worker-1": { cpuMillicores: [{ t: T0, v: 500 }], memoryBytes: [] },
         },
         newestAt: {},
-        resolution: "30s",
+        resolution: BUCKETS,
       },
       [broken],
       T0
@@ -148,7 +150,7 @@ describe("why a row has no lane", () => {
   /** A failed staleness probe must not leave every node looking never-seen. */
   it("carries the staleness probe's own failure", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, newestKnown: false, resolution: "30s" },
+      { nodes: {}, newestAt: {}, newestKnown: false, resolution: BUCKETS },
       [node("worker-1")],
       T0
     );

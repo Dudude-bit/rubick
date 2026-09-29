@@ -262,7 +262,11 @@ export function createDataKeysColumn<
           ))}
           {keys.length > maxDisplay && (
             <span className="text-fg-fnt">
-              +{keys.length - maxDisplay} more
+              <T
+                section="count"
+                k="plusMore"
+                values={{ n: keys.length - maxDisplay }}
+              />
             </span>
           )}
         </span>
