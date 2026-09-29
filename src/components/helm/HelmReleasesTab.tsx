@@ -328,6 +328,7 @@ export function HelmReleasesTab({
           searchPlaceholder={t("action", "searchReleases")}
           getRowId={getHelmReleaseRowId}
           getRowHref={helmReleaseHref}
+          share={{ title: t("nav", "releases") }}
           partial={unread.length > 0}
           emptyMessage={
             unread.length > 0

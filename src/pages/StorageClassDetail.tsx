@@ -1,5 +1,8 @@
+import { useCallback } from "react";
 import { Info, SlidersHorizontal, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import { storageClassFactsSection } from "@/lib/share/storage-class-share";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
@@ -72,6 +75,11 @@ export function StorageClassDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.StorageClass, sc);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const share = useCallback((): ShareContribution => {
+    if (!sc) return {};
+    return { sections: [storageClassFactsSection(sc, t)] };
+  }, [sc, t]);
+
   const tabs = [
     {
       id: "overview",
@@ -113,6 +121,7 @@ export function StorageClassDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={sc}
+      share={share}
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}

@@ -25,8 +25,10 @@ import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { ResourceType } from "@/lib/resource-registry";
 import { describeStop } from "@/lib/connections";
+import { refOf } from "@/lib/report-parts";
 import {
   Cell,
   Chain,
@@ -105,6 +107,7 @@ export default function GkeIngressPage() {
             : t("count", "hosts", { n: hosts.length })
         }
         description={t("empty", "gkeIngressHint")}
+        actions={<ShareScreenAction screen={{ title: "GKE Ingress" }} />}
       />
 
       {sources.data?.unread.map((kind) => (
@@ -190,6 +193,27 @@ export default function GkeIngressPage() {
                 alone={shown === 1}
               />
             )}
+            share={{
+              title: "Hosts",
+              toFinding: (host) => {
+                const severity = severityOfHost(host);
+                if (severity === null) return null;
+                const state = hostState(host, joined?.backingError ?? null, t);
+                return {
+                  title: host.host ?? "(unmatched host)",
+                  detail: state.text,
+                  role: severity === "unknown" ? "neutral" : severity,
+                  ref:
+                    host.fronts.length === 1
+                      ? refOf({
+                          kind: ResourceType.Ingress,
+                          name: host.fronts[0].ingress.name,
+                          namespace: host.fronts[0].ingress.namespace,
+                        })
+                      : undefined,
+                };
+              },
+            }}
           />
         )}
       </Section>

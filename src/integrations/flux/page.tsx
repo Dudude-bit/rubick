@@ -13,7 +13,7 @@
  * log, and both are linked from here.
  */
 
-import { Box, GitBranch, Layers } from "lucide-react";
+import { AlertTriangle, Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/resources/DetailTabs";
@@ -24,6 +24,11 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { formatAge } from "@/lib/utils";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import type { ReportFinding } from "@/lib/report";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import { gitRepoLink } from "../gitops";
 import { troubleMark } from "../kit";
 import {
@@ -53,6 +58,7 @@ import {
   type FluxReconciler,
   type FluxSource,
 } from "./model";
+import { controllersSection } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { sayWords } from "@/i18n/say";
@@ -79,6 +85,25 @@ export default function FluxPage() {
   const unread = picture.data?.unread ?? [];
   const releasesUnread = unread.some((read) => read.kind === "HelmRelease");
   const sourcesUnread = unread.some((read) => read.kind !== "HelmRelease");
+
+  useShareSection("flux-unread", () => {
+    if (unread.length === 0) return null;
+    return {
+      id: "flux-unread",
+      order: ORDER.own,
+      title: t("empty", "notReadLower"),
+      icon: iconSvg(AlertTriangle),
+      count: unread.length,
+      body: {
+        type: "findings",
+        items: unread.map((read) => ({
+          title: t("empty", "crdCouldNotBeListed", { crd: read.crd }),
+          detail: read.reason,
+          role: "warn" as const,
+        })),
+      },
+    };
+  });
 
   if (picture.error) {
     return (
@@ -138,6 +163,14 @@ export default function FluxPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
+  const activeTabIcon =
+    activeTab.id === "sources"
+      ? GitBranch
+      : activeTab.id === "controllers"
+        ? Box
+        : Layers;
+
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -164,7 +197,19 @@ export default function FluxPage() {
           {t("empty", "fluxUnreadNote")}
         </Finding>
       ))}
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Flux · ${activeTab.label}`,
+              icon: activeTabIcon,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -241,6 +286,26 @@ function ReconcilersTab({
           last={last}
         />
       )}
+      share={{
+        title: t("nav", "reconcilers"),
+        toFinding: (reconciler) =>
+          reconciler.findings.flatMap((finding) => {
+            const said = describe(reconciler, finding, t);
+            if (!said.title) return [];
+            return [
+              {
+                title: said.title,
+                detail: said.verbatim ?? null,
+                role: finding.severity,
+                ref: refOf({
+                  kind: reconciler.kind,
+                  name: reconciler.name,
+                  namespace: reconciler.namespace,
+                }),
+              },
+            ];
+          }),
+      }}
     />
   );
 }
@@ -418,6 +483,7 @@ function Findings({
   reconciler: FluxReconciler;
   brief?: boolean;
 }) {
+  const t = useT();
   return (
     <FindingList
       findings={reconciler.findings}
@@ -429,6 +495,28 @@ function Findings({
           brief={brief}
         />
       )}
+      share={
+        brief
+          ? undefined
+          : {
+              id: `flux-reconciler-${reconciler.kind}-${reconciler.namespace}-${reconciler.name}`,
+              title: reconciler.name,
+              toFinding: (finding) => {
+                const said = describe(reconciler, finding, t);
+                if (!said.title) return null;
+                return {
+                  title: said.title,
+                  detail: said.verbatim ?? null,
+                  role: finding.severity,
+                  ref: refOf({
+                    kind: reconciler.kind,
+                    name: reconciler.name,
+                    namespace: reconciler.namespace,
+                  }),
+                };
+              },
+            }
+      }
     />
   );
 }
@@ -571,6 +659,52 @@ function SourcesTab({
   partial: boolean;
 }) {
   const t = useT();
+
+  useShareSection("flux-sources", () => {
+    const found = sources.flatMap((source) =>
+      source.findings.flatMap((finding): ReportFinding[] => {
+        if (finding.kind === "fetchFailing") {
+          return [
+            {
+              title: fetchTitle(finding.everFetched, t),
+              detail: finding.message,
+              role: "err" as const,
+              ref: refOf({
+                kind: source.kind,
+                name: source.name,
+                namespace: source.namespace,
+              }),
+            },
+          ];
+        }
+        if (finding.kind === "unused") {
+          return [
+            {
+              title: t("empty", "fluxSourceUnusedTitle"),
+              detail: null,
+              role: "warn" as const,
+              ref: refOf({
+                kind: source.kind,
+                name: source.name,
+                namespace: source.namespace,
+              }),
+            },
+          ];
+        }
+        return [];
+      })
+    );
+    if (found.length === 0) return null;
+    return {
+      id: "flux-sources",
+      order: ORDER.own,
+      title: t("nav", "sources"),
+      icon: iconSvg(GitBranch),
+      count: found.length,
+      body: { type: "findings", items: found },
+    };
+  });
+
   if (loading) {
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "readingSources")}</p>
@@ -764,6 +898,9 @@ function SourceFinding({
 
 function ControllersTab({ read }: { read: FluxControllers | undefined }) {
   const t = useT();
+
+  useShareSection("flux-controllers", () => controllersSection(read, t));
+
   if (!read) {
     return (
       <p className="text-xs text-fg-fnt">

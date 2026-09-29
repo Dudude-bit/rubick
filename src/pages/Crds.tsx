@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "@/components/resources/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
@@ -26,6 +27,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
@@ -101,7 +103,7 @@ export function Crds() {
     () => [
       {
         accessorKey: "kind",
-        header: () => <T section="columns" k="kind" />,
+        header: columnHeader("columns", "kind"),
         size: 220,
         // An `ObjectLink` and not a `RouteLink`: the row's own href resolves
         // to a peek, so a click on the whitespace opens one. A name that
@@ -119,7 +121,7 @@ export function Crds() {
       },
       {
         accessorKey: "plural",
-        header: () => <T section="columns" k="plural" />,
+        header: columnHeader("columns", "plural"),
         size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.plural}</span>
@@ -127,7 +129,7 @@ export function Crds() {
       },
       {
         accessorKey: "scope",
-        header: () => <T section="columns" k="scope" />,
+        header: columnHeader("columns", "scope"),
         size: 110,
         cell: ({ row }) => (
           <span className="text-fg-mut">{row.original.scope}</span>
@@ -135,7 +137,7 @@ export function Crds() {
       },
       {
         accessorKey: "version",
-        header: () => <T section="columns" k="version" />,
+        header: columnHeader("columns", "version"),
         size: 110,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.version}</span>
@@ -143,7 +145,7 @@ export function Crds() {
       },
       {
         accessorKey: "shortNames",
-        header: () => <T section="columns" k="shortNames" />,
+        header: columnHeader("columns", "shortNames"),
         size: 160,
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;
@@ -206,6 +208,14 @@ export function Crds() {
             ? t("empty", "noneInline")
             : `${crds.length} · ${t("count", "apiGroups", { n: crdGroups.length })}`
         }
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: "Custom Resource Definitions",
+              kind: ResourceType.CustomResourceDefinition,
+            }}
+          />
+        }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}
       />
@@ -226,6 +236,10 @@ export function Crds() {
         getRowHref={(row) => crdHref(row.name)}
         grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
+        share={{
+          title: "Custom Resource Definitions",
+          kind: ResourceType.CustomResourceDefinition,
+        }}
         // A read that failed leaves `crdGroups` empty exactly as a cluster
         // with no CRDs does, and the two mean opposite things: one is an
         // answer, the other is that nobody could look. Since the deadline

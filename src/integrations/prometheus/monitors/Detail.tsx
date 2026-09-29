@@ -16,6 +16,9 @@ import { useT, type T } from "@/i18n/useT";
 import { cn, formatSince } from "@/lib/utils";
 import { crdObjectPath, hourMinute } from "../../kit";
 import { OutLink } from "../../page-kit";
+import { useShareSection } from "@/components/share/screen-share";
+import { monitorDetailSections } from "./share";
+import { utcMoment } from "@/lib/report-parts";
 import type { Picture } from "./data";
 import { useSavedConnection } from "../saved-connection";
 import { useHeartbeat, STEP } from "./heartbeat";
@@ -97,6 +100,14 @@ export function Detail({
 
   const verdict = verdictOf(row, instances.length, since, lastScrapeAgo, t);
   const Icon = ICON[tone];
+
+  useShareSection("prometheus-monitor-detail", () =>
+    monitorDetailSections(
+      row,
+      verdictOf(row, instances.length, since, lastScrapeAgo, t, utcMoment),
+      t
+    )
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-4">

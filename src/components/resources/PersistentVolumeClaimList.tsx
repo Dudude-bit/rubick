@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { useNavigate } from "react-router-dom";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
@@ -38,14 +38,14 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 110,
     accessorKey: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
     cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
   },
   {
     // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
     size: 300,
     accessorKey: "volume",
-    header: () => <T section="columns" k="volume" />,
+    header: columnHeader("columns", "volume"),
     cell: ({ row }) =>
       row.original.volume ? (
         <ResourceRef
@@ -62,7 +62,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   {
     size: 160,
     accessorKey: "storageClass",
-    header: () => <T section="columns" k="storageClass" />,
+    header: columnHeader("columns", "storageClass"),
     cell: ({ row }) => (
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),

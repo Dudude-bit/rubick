@@ -18,12 +18,18 @@ import {
   cloneElement,
   Fragment,
   isValidElement,
+  useId,
   useMemo,
   useState,
   type MouseEvent,
   type ReactNode,
 } from "react";
-import { ChevronRight, ExternalLink, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  ExternalLink,
+  Search,
+} from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
@@ -32,9 +38,105 @@ import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translator } from "@/i18n/useT";
+import { iconSvg } from "@/lib/icon-svg";
+import type { ReportFinding } from "@/lib/report";
+import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
 import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
+
+/**
+ * How a list registers what it draws for Share: a title for the section (and
+ * its id, when the title alone does not make a stable one) and how one item
+ * becomes a line in it. Returning `null` for an item leaves it out: a list
+ * ordered by trouble reports the trouble, not every row that has none.
+ */
+export interface ListShare<T> {
+  title: string;
+  id?: string;
+  toFinding: (item: T) => ReportFinding | ReportFinding[] | null;
+}
+
+/**
+ * Keyed by the list itself, so two lists with one title both reach the
+ * report — or by the id the caller gives, so one list drawn twice (a closed
+ * row's brief and its open body) is one section.
+ */
+function useListShare<T>(
+  items: readonly T[],
+  share: ListShare<T> | undefined,
+  whenClear: "say" | "omit",
+  search = "",
+  severityOf?: (item: T) => Severity
+) {
+  const own = useId();
+  const t = useT();
+  useShareSection(share ? (share.id ?? own) : null, () =>
+    share
+      ? findingsSection(
+          items,
+          share,
+          share.id ?? slugOf(share.title),
+          whenClear,
+          search,
+          severityOf,
+          t
+        )
+      : null
+  );
+}
+
+function findingsSection<T>(
+  items: readonly T[],
+  share: ListShare<T>,
+  id: string,
+  whenClear: "say" | "omit",
+  search: string,
+  severityOf: ((item: T) => Severity) | undefined,
+  t: Translator
+): PlacedSection | null {
+  // A row nobody could check and that says nothing of itself is not a row
+  // that is fine: the file names how many there are.
+  let unchecked = 0;
+  const found = items.flatMap((item) => {
+    const built = share.toFinding(item);
+    if (built === null && severityOf?.(item) === "unknown") unchecked += 1;
+    return built === null ? [] : Array.isArray(built) ? built : [built];
+  });
+  const shell = {
+    id,
+    order: ORDER.own,
+    title: share.title,
+    icon: iconSvg(AlertTriangle),
+    caption: search ? t("share", "tableSearched", { query: search }) : null,
+    partial:
+      unchecked > 0
+        ? t("count", "notCheckedOfTotal", { n: unchecked, total: items.length })
+        : null,
+  };
+  // A list of rows that read them and found nothing wrong says so: left
+  // out, it is the same file as a list that was never read. A row's own
+  // findings are that row's, and a row with none adds nothing.
+  if (found.length === 0 && whenClear === "omit") return null;
+  if (found.length === 0)
+    return {
+      ...shell,
+      count: 0,
+      body: {
+        type: "text",
+        text:
+          items.length - unchecked > 0
+            ? t("share", "checkedNoneWrong", { n: items.length - unchecked })
+            : t("share", "nothingHere"),
+      },
+    };
+  return {
+    ...shell,
+    count: found.length,
+    body: { type: "findings", items: found },
+  };
+}
 
 /** The narrowing box above a list ordered by trouble. */
 export function FilterBox({
@@ -113,14 +215,18 @@ export function FindingList<F>({
   brief,
   worthRepeating,
   render,
+  share,
 }: {
   findings: readonly F[];
   brief?: boolean;
   /** Left out, every finding is worth a line on a closed row. */
   worthRepeating?: (finding: F) => boolean;
   render: (finding: F) => ReactNode;
+  /** Registers this list's findings with the screen's Share, by title. */
+  share?: ListShare<F>;
 }) {
   const t = useT();
+  useListShare(findings, share, "omit");
   const worth =
     brief && worthRepeating ? findings.filter(worthRepeating) : findings;
   if (worth.length === 0) return null;
@@ -173,6 +279,8 @@ export interface TroubleListProps<T> {
     item: T,
     row: { openByDefault: boolean; last: boolean; shown: number }
   ) => ReactNode;
+  /** Registers the whole list's findings with the screen's Share, by title. */
+  share?: ListShare<T>;
 }
 
 /**
@@ -195,6 +303,7 @@ export function TroubleList<T>({
   aside,
   keyOf,
   renderRow,
+  share,
 }: TroubleListProps<T>) {
   const t = useT();
   const [filter, setFilter] = useSearchParam("q");
@@ -211,6 +320,9 @@ export function TroubleList<T>({
           ),
     [items, needle, searchable]
   );
+  // The rows the reader narrowed to, and the words they narrowed by: a
+  // report of "what this page shows" does not carry the rows it hides.
+  useListShare(shown, share, "say", filter.trim(), severityOf);
 
   const broken = items.filter((item) => severityOf(item) === "err").length;
   const worthALook = items.filter((item) => severityOf(item) === "warn").length;

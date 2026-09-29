@@ -1,6 +1,6 @@
 import { workloadStatus } from "@/lib/workload-status";
 import type { ColumnDef } from "@/components/ui/table-features";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { Scale, RotateCw } from "lucide-react";
 
 import type { DeploymentInfo } from "@/generated/types";
@@ -32,7 +32,11 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     // "RollingUpdate" or "Recreate".
     size: 130,
     id: "strategy",
-    header: () => <T section="columns" k="strategy" />,
+    header: columnHeader("columns", "strategy"),
+    meta: {
+      share: (row: DeploymentInfoWithMetrics) =>
+        row.strategy || "RollingUpdate",
+    },
     cell: ({ row }) => (
       <span className="text-fg-mut">
         {row.original.strategy || "RollingUpdate"}
@@ -42,7 +46,10 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   {
     size: 120,
     id: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
+    meta: {
+      share: (row: DeploymentInfoWithMetrics) => workloadStatus(row.replicas),
+    },
     cell: ({ row }) => {
       return <StatusBadge status={workloadStatus(row.original.replicas)} />;
     },

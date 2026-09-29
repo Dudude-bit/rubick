@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { NodeUsageWindow } from "@/integrations";
 import type { NodeInfo } from "@/generated/types";
-import { nodeTrends } from "./node-trends";
+import { everyNodeSilent, nodeTrends } from "./node-trends";
 
 function node(name: string, unschedulable = false): NodeInfo {
   return {
@@ -51,6 +51,7 @@ const window: NodeUsageWindow = {
     },
   },
   newestAt: { "ip-10-0-1-3": T0 - 4 * 60_000 },
+  basis: "node",
   resolution: "30s buckets",
 };
 
@@ -117,7 +118,7 @@ describe("why a row has no lane", () => {
   /** A window that was read and holds nothing is the one case that may say so. */
   it("says no series only when the window was actually read", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, resolution: "30s" },
+      { nodes: {}, newestAt: {}, basis: "node", resolution: "30s" },
       [node("worker-1")],
       T0
     );
@@ -137,6 +138,7 @@ describe("why a row has no lane", () => {
           "worker-1": { cpuMillicores: [{ t: T0, v: 500 }], memoryBytes: [] },
         },
         newestAt: {},
+        basis: "node",
         resolution: "30s",
       },
       [broken],
@@ -148,10 +150,53 @@ describe("why a row has no lane", () => {
   /** A failed staleness probe must not leave every node looking never-seen. */
   it("carries the staleness probe's own failure", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, newestKnown: false, resolution: "30s" },
+      {
+        nodes: {},
+        newestAt: {},
+        newestKnown: false,
+        basis: "node",
+        resolution: "30s",
+      },
       [node("worker-1")],
       T0
     );
     expect(trends[0].newestKnown).toBe(false);
+  });
+});
+
+describe("everyNodeSilent", () => {
+  const empty: NodeUsageWindow = {
+    nodes: {},
+    newestAt: {},
+    basis: "pods",
+    resolution: "30s",
+  };
+
+  /** The one case that may collapse every row into a single sentence. */
+  it("holds when the window was read and no node has a series on either basis", () => {
+    const nodes = [node("a"), node("b")];
+    expect(everyNodeSilent(empty, nodeTrends(empty, nodes, T0))).toBe(true);
+  });
+
+  /**
+   * A refused read is "could not look" on every row, which is the same for
+   * every row too. Fails if the collapse stops checking that it was a read.
+   */
+  it("does not hold for a window that could not be read", () => {
+    const nodes = [node("a")];
+    expect(everyNodeSilent(null, nodeTrends(null, nodes, T0, false))).toBe(
+      false
+    );
+    expect(everyNodeSilent(empty, nodeTrends(empty, nodes, T0, false))).toBe(
+      false
+    );
+  });
+
+  /** A node whose newest sample is older than the window has its own story to tell. */
+  it("does not hold when a node reported before the window", () => {
+    const stale = { ...empty, newestAt: { a: T0 - 3_600_000 } };
+    expect(everyNodeSilent(stale, nodeTrends(stale, [node("a")], T0))).toBe(
+      false
+    );
   });
 });

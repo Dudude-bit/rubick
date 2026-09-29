@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Info, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import { pvcFactsSection, pvcStatusOf } from "@/lib/share/pvc-share";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PhaseBadge } from "@/components/ui/status-badge";
@@ -130,6 +133,14 @@ export function PersistentVolumeClaimDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.PersistentVolumeClaim, pvc);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const share = useCallback((): ShareContribution => {
+    if (!pvc) return {};
+    return {
+      status: pvcStatusOf(pvc),
+      sections: [pvcFactsSection(pvc, t)],
+    };
+  }, [pvc, t]);
+
   const tabs = [
     {
       id: "overview",
@@ -195,6 +206,7 @@ export function PersistentVolumeClaimDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={pvc}
+      share={share}
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}

@@ -17,6 +17,10 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -380,5 +384,42 @@ describe("stories", () => {
     await userEvent.click(screen.getByRole("tab", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("BackOff");
+  });
+});
+
+describe("what the page offers Share", () => {
+  /** Deleting the registration leaves a colleague's report of "what's on
+   *  screen" with no events in it at all, in either view. */
+  it("collects an events section carrying what is on screen, in both views", async () => {
+    listEvents.mockResolvedValue([{ ...event("prod", 0), type: "Warning" }]);
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/events?view=list"]}>
+          <TooltipProvider>
+            <ScreenShareProvider>
+              <Events />
+              <Probe />
+            </ScreenShareProvider>
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      const events = collect?.().find((section) => section.id === "events");
+      expect(events?.count).toBe(1);
+    });
+    const sections = collect!();
+    expect(sections.some((section) => section.id === "events-filters")).toBe(
+      true
+    );
   });
 });

@@ -68,3 +68,13 @@ export function usageRole(ratio: number): UsageRole {
   if (ratio > 0.75) return "warn";
   return "ok";
 }
+
+/**
+ * Two decimals turn a column of memory into "320.00Ki, 336.00Ki" — noise
+ * that reads as precision. One decimal separates any two pods worth
+ * separating, and a trailing `.0` carries nothing.
+ */
+export function formatUsage(value: number, type: "cpu" | "memory"): string {
+  if (type === "cpu") return formatCPU(value);
+  return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
+}

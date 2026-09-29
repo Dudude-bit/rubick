@@ -665,3 +665,45 @@ describe("UsageBlock without metrics-server but with a history supplier", () => 
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * kube-prometheus-stack drops the root cgroup series, so a node's chart is
+ * the sum of its pods, lower than what the node uses. The Nodes list says so
+ * and was tested; the same chart on the node's own page was not.
+ */
+describe("UsageBlock for a node summed from its pods", () => {
+  const node = {
+    kind: "Node" as const,
+    cpu: 480,
+    memory: 960,
+    cpuLimit: 4000,
+    memoryLimit: 8192,
+    sampledAt: 1_700_000_000_000,
+    status: { status: "available" as const, message: null },
+    history: { kind: "node" as const, node: "worker-1" },
+  };
+
+  async function openHour(uid: string) {
+    getPrometheusConnection.mockResolvedValue(CONNECTED);
+    wrap(<UsageBlock {...node} uid={uid} />);
+    const hour = await screen.findByRole("button", { name: "1h" });
+    await waitFor(() => expect(hour).toBeEnabled());
+    await userEvent.click(hour);
+  }
+
+  it("says the figures are a sum of pods when the root cgroup is not there", async () => {
+    prometheusQueryRange.mockImplementation(async (query) =>
+      query.includes('id="/"') ? [] : series()
+    );
+    await openHour("uid-node-pods");
+    expect(
+      await screen.findByText(/Summed from each node's pods/)
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing of pods when the node's own series answered", async () => {
+    await openHour("uid-node-root");
+    await screen.findByText(/from prometheus\.monitoring:9090/);
+    expect(screen.queryByText(/Summed from each node's pods/)).toBeNull();
+  });
+});

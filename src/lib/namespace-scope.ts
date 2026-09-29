@@ -27,6 +27,7 @@
 
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { narrowingHelps, type ResourceKind } from "@/lib/resource-registry";
 
 /**
  * How many namespaces one window may watch at once.
@@ -229,4 +230,17 @@ export function inNamespace<T extends { namespace: string }>(
 ): T[] {
   if (!scope) return items;
   return items.filter((item) => item.namespace === scope);
+}
+
+/**
+ * The one namespace a list is about, for a file's header: none for a
+ * cluster-scoped kind, which is one list whatever the tab is on, and none
+ * when the tab spans several.
+ */
+export function namespaceOfList(
+  scope: readonly string[],
+  kind: ResourceKind | null
+): string | null {
+  if (scope.length !== 1) return null;
+  return kind && !narrowingHelps(kind) ? null : scope[0];
 }

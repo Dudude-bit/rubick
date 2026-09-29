@@ -40,6 +40,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "react-router-dom";
 import { useConnections } from "@/hooks/useConnections";
+import { useIngressShare } from "@/hooks/useIngressShare";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
@@ -271,6 +272,26 @@ export function IngressDetail() {
     // expiring today all tie on `days`, and this picks the one to show.
     .sort((a, b) => a.left - b.left)[0];
 
+  // Once the certificate has been read, how long it has left is a more useful
+  // answer than how many hosts it covers — the host count is a shape, and the
+  // expiry is a date somebody has to act on. Said once, for the page and the
+  // shared file both.
+  const tlsFact: { text: string; tone: "warn" | "err" | null } =
+    tls === "no"
+      ? { text: t("empty", "noneTrafficUnencrypted"), tone: "warn" }
+      : tls === "unknown"
+        ? { text: t("empty", "tlsNotChecked"), tone: null }
+        : soonest
+          ? { text: expiryText(soonest, t), tone: soonest.tone ?? null }
+          : hasCatchAllTls
+            ? { text: t("empty", "catchAllCertificate"), tone: "warn" }
+            : { text: t("count", "hosts", { n: tlsHosts.length }), tone: null };
+
+  const share = useIngressShare(ingress, controller, {
+    tls: { ...tlsFact, known: tls !== "unknown" },
+    certificates,
+  });
+
   const {
     data: events = [],
     isLoading: eventsLoading,
@@ -329,29 +350,13 @@ export function IngressDetail() {
     { label: t("columns", "paths"), value: accessUrls.length, mono: true },
     {
       label: "TLS",
-      // Once the certificate has been read, how long it has left is a more
-      // useful answer than how many hosts it covers — the host count is a
-      // shape, and the expiry is a date somebody has to act on.
       value:
-        tls === "no" ? (
-          t("empty", "noneTrafficUnencrypted")
-        ) : tls === "unknown" ? (
-          <span className={TLS_NOT_CHECKED_TONE}>
-            {t("empty", "tlsNotChecked")}
-          </span>
-        ) : soonest ? (
-          expiryText(soonest, t)
-        ) : hasCatchAllTls ? (
-          t("empty", "catchAllCertificate")
+        tls === "unknown" ? (
+          <span className={TLS_NOT_CHECKED_TONE}>{tlsFact.text}</span>
         ) : (
-          t("count", "hosts", { n: tlsHosts.length })
+          tlsFact.text
         ),
-      tone:
-        tls === "no"
-          ? "warn"
-          : tls === "unknown"
-            ? undefined
-            : (soonest?.tone ?? (hasCatchAllTls ? "warn" : undefined)),
+      tone: tlsFact.tone ?? undefined,
     },
   ];
 
@@ -735,6 +740,7 @@ export function IngressDetail() {
       freshness={freshness}
       resource={ingress}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Ingress}

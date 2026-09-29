@@ -18,11 +18,14 @@ import { columns as services } from "./ServiceList";
 import { columns as statefulSets } from "./StatefulSetList";
 import { columns as storageClasses } from "./StorageClassList";
 
-/** Only the three fields a width question needs, so one array can hold them all. */
+/** The fields the questions below need, so one array can hold them all. */
 interface Column {
   size?: number;
   id?: string;
   accessorKey?: unknown;
+  accessorFn?: unknown;
+  header?: unknown;
+  meta?: { share?: unknown; label?: unknown };
 }
 
 /**
@@ -95,4 +98,52 @@ describe("what a list page declares about its columns", () => {
     const wider = columns.filter((c) => c !== name && (c.size ?? 0) > nameSize);
     expect(wider.map(nameOf)).toEqual([]);
   });
+
+  /**
+   * A shared file carries each column in the words its cell draws: a value
+   * behind it, or a `share` that says them. A column with neither is named
+   * in the file as left out, which is honest and is also a column a
+   * colleague does not get — the Deployments list sent Name and Created
+   * while its Replicas and Status said `0/3` and `Progressing`.
+   *
+   * The ones here draw what the row does not hold, and are left out by name.
+   */
+  const CANNOT_SAY: Record<string, string> = {
+    // Namespaces: counted from the pod list by the page, not the row.
+    pods: "a count the page keeps beside the list",
+  };
+  const OWN = new Set(["name", "namespace", "age"]);
+
+  it.each(PAGES)(
+    "%s can say, in a shared file, what every column draws",
+    (_page, columns) => {
+      const mute = columns
+        .filter((c) => !OWN.has(nameOf(c)))
+        .filter(
+          (c) =>
+            !c.meta?.share &&
+            !c.accessorKey &&
+            !c.accessorFn &&
+            !(nameOf(c) in CANNOT_SAY)
+        )
+        .map(nameOf);
+      expect(mute).toEqual([]);
+    }
+  );
+
+  /** A header the file cannot name is a column in the file with no title. */
+  it.each(PAGES)(
+    "%s names every column in words the file can use",
+    (_page, columns) => {
+      const unnamed = columns
+        .filter(
+          (c) =>
+            typeof c.header !== "string" &&
+            !(c.header as { saying?: unknown } | undefined)?.saying &&
+            !c.meta?.label
+        )
+        .map(nameOf);
+      expect(unnamed).toEqual([]);
+    }
+  );
 });

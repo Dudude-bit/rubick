@@ -33,4 +33,42 @@ describe("DetailTabs", () => {
     render(<DetailTabs tabs={tabs} activeTab="logs" onTabChange={() => {}} />);
     expect(screen.getByText("the logs panel")).toBeInTheDocument();
   });
+
+  /** A clipped label reads as one letter; nothing here may shrink to get there. */
+  it("never shrinks or truncates a tab label", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    const label = screen.getByText("Overview");
+    expect(label.className).not.toContain("truncate");
+    const trigger = label.closest('[role="tab"]');
+    expect(trigger?.className).not.toContain("min-w-0");
+    expect(trigger?.className).toContain("shrink-0");
+  });
+
+  /** A tab strip too wide for the row wraps the actions below it, right-aligned. */
+  it("wraps the actions onto their own line instead of squeezing the tabs", () => {
+    render(
+      <DetailTabs
+        tabs={tabs}
+        activeTab="overview"
+        onTabChange={() => {}}
+        actions={<button type="button">Delete</button>}
+      />
+    );
+    const row = screen.getByRole("tablist").parentElement;
+    expect(row?.className).toContain("flex-wrap");
+    const actions = screen.getByText("Delete").closest("div");
+    expect(actions?.className).toContain("ml-auto");
+  });
+
+  /** The strip itself, not the individual tabs, is what absorbs overflow. */
+  it("lets the tab strip scroll horizontally rather than clip its tabs", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    const list = screen.getByRole("tablist");
+    expect(list.className).toContain("overflow-x-auto");
+    expect(list.className).not.toContain("truncate");
+  });
 });

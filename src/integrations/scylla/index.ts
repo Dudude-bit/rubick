@@ -10,6 +10,7 @@ import {
 } from "./data";
 import { facts } from "./facts";
 import { readScyllaCluster } from "./model";
+import { reportOf } from "./report";
 
 export default defineVendor({
   id: "scylla",
@@ -36,5 +37,6 @@ export default defineVendor({
     load: () => import("./page"),
     gate: { crd: CLUSTERS_CRD, namespaced: true },
   },
+  provides: { "object.report": reportOf },
   crd,
 });

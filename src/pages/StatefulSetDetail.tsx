@@ -54,6 +54,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
+import { useStatefulSetShare } from "@/hooks/useStatefulSetShare";
 import { useConnections } from "@/hooks/useConnections";
 import {
   CountBlock,
@@ -215,6 +216,8 @@ export function StatefulSetDetail() {
   const desired = replicas?.desired ?? 0;
   const current = replicas?.current ?? 0;
   const ready = replicas?.ready ?? 0;
+
+  const share = useStatefulSetShare(statefulSet, pods, podsError);
 
   const tabs = useMemo(
     () => [
@@ -432,6 +435,7 @@ export function StatefulSetDetail() {
         freshness={freshness}
         resource={statefulSet}
         delivery={deliveryQuery}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.StatefulSet}

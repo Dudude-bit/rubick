@@ -12,8 +12,8 @@ import {
 } from "./columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "./ResourceRef";
-import { T } from "@/i18n/T";
-import { useT } from "@/i18n/useT";
+import { columnHeader } from "@/i18n/column-header";
+import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
@@ -21,36 +21,43 @@ import { gatewayProgrammed } from "@/lib/route-trace";
 
 /** The controller's reason is quoted raw; only this app's own words are
  *  spoken through the catalogue. */
-// eslint-disable-next-line react-refresh/only-export-components
-function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
-  const t = useT();
+function programmedOf(
+  gateway: GatewayInfo,
+  t: T
+): { text: string; tone: "ok" | "err" | "mute" } {
   const condition = gatewayProgrammed(gateway);
-  const said = !condition
-    ? { text: t("empty", "gwNoControllerShort"), tone: "mute" as const }
+  return !condition
+    ? { text: t("empty", "gwNoControllerShort"), tone: "mute" }
     : condition.status === "True"
-      ? { text: t("empty", "gwProgrammedWord"), tone: "ok" as const }
+      ? { text: t("empty", "gwProgrammedWord"), tone: "ok" }
       : condition.status === "False"
         ? {
             text: condition.reason ?? t("empty", "gwNotProgrammedWord"),
-            tone: "err" as const,
+            tone: "err",
           }
-        : { text: t("empty", "gwPolicyUnknown"), tone: "mute" as const };
+        : { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
+  const t = useT();
+  const said = programmedOf(gateway, t);
   return <span className={TONE_CLASS[said.tone]}>{said.text}</span>;
+}
+
+function listenersOf(gateway: GatewayInfo, t: T): string {
+  const contributed = gateway.listeners.filter(
+    (l) => l.fromListenerSet !== null
+  ).length;
+  return `${gateway.listeners.length}${
+    contributed > 0 ? ` ${t("count", "fromSets", { n: contributed })}` : ""
+  }`;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
 function ListenersCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
-  const total = gateway.listeners.length;
-  const contributed = gateway.listeners.filter(
-    (l) => l.fromListenerSet !== null
-  ).length;
-  return (
-    <span className="text-fg-fnt">
-      {total}
-      {contributed > 0 && ` ${t("count", "fromSets", { n: contributed })}`}
-    </span>
-  );
+  return <span className="text-fg-fnt">{listenersOf(gateway, t)}</span>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -90,7 +97,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     createNamespaceColumn<GatewayInfo>(),
     {
       accessorKey: "className",
-      header: () => <T section="columns" k="class" />,
+      header: columnHeader("columns", "class"),
       size: 140,
       cell: ({ row }) =>
         row.original.className ? (
@@ -105,19 +112,35 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
     },
     {
       id: "listeners",
-      header: () => <T section="columns" k="listeners" />,
+      header: columnHeader("columns", "listeners"),
+      meta: { share: (row: GatewayInfo, t) => listenersOf(row, t) },
       size: 90,
       cell: ({ row }) => <ListenersCell gateway={row.original} />,
     },
     {
       id: "addresses",
-      header: () => <T section="columns" k="addresses" />,
+      header: columnHeader("columns", "addresses"),
+      meta: {
+        share: (row: GatewayInfo) => ({
+          text: row.addresses.join(", ") || "—",
+          mono: true,
+        }),
+      },
       size: 180,
       cell: ({ row }) => <AddressesCell gateway={row.original} />,
     },
     {
       id: "programmed",
-      header: () => <T section="columns" k="programmed" />,
+      header: columnHeader("columns", "programmed"),
+      meta: {
+        share: (row: GatewayInfo, t) => {
+          const said = programmedOf(row, t);
+          return {
+            text: said.text,
+            role: said.tone === "mute" ? "neutral" : said.tone,
+          };
+        },
+      },
       size: 170,
       cell: ({ row }) => <ProgrammedCell gateway={row.original} />,
     },

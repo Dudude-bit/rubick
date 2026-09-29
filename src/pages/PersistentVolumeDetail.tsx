@@ -1,5 +1,8 @@
+import { useCallback } from "react";
 import { Info, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import { pvFactsSection, pvStatusOf } from "@/lib/share/pv-share";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
@@ -92,6 +95,14 @@ export function PersistentVolumeDetail() {
   // what it says about itself, which a link cannot.
   const connections = useConnections(ResourceType.PersistentVolume, name, null);
 
+  const share = useCallback((): ShareContribution => {
+    if (!pv) return {};
+    return {
+      status: pvStatusOf(pv),
+      sections: [pvFactsSection(pv, t)],
+    };
+  }, [pv, t]);
+
   const tabs = [
     {
       id: "overview",
@@ -116,6 +127,7 @@ export function PersistentVolumeDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={pv}
+      share={share}
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}

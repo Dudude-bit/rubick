@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import {
+  customResourceFactsSection,
+  ownersSection,
+  statusSummarySection,
+} from "@/lib/share/custom-resource-share";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -433,10 +439,25 @@ export function CustomResourceDetail() {
   // delivered on an app-of-apps cluster, and nothing here has heard of one.
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const share = useCallback((): ShareContribution => {
+    if (!resource) return {};
+    const sections = [customResourceFactsSection(resource, t)];
+    const ownedBy = ownersSection(
+      resource.ownerReferences,
+      resource.namespace ?? null,
+      t
+    );
+    if (ownedBy) sections.push(ownedBy);
+    const summary = statusSummarySection(resource.status, t);
+    if (summary) sections.push(summary);
+    return { sections };
+  }, [resource, t]);
+
   return (
     <>
       <ResourceDetailLayout
         resource={resource}
+        share={share}
         isLoading={isLoading}
         error={error}
         delivery={deliveryQuery}

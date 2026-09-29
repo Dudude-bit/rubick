@@ -165,4 +165,34 @@ describe("the sentence the monitor card leads with", () => {
     expect(verdict.head).toContain("up, scraped");
     expect(verdict.body).toBe(translate("en", "monitors", "nothingToDo"));
   });
+
+  /**
+   * The page speaks the reader's clock. The shared file spoke it too, under
+   * a header in UTC and beside a targets table in UTC: "down since 01:21"
+   * two lines above "last scrape 23:21".
+   */
+  it("says since when in the clock it is handed", () => {
+    const row = rowWith({
+      state: "read",
+      targets: [
+        {
+          scrapePool: "serviceMonitor/shop/web/0",
+          scrapeUrl: "http://a",
+          health: "down",
+          lastError: "connection refused",
+          lastScrape: "2026-09-20T18:00:00Z",
+          labels: {},
+        },
+      ],
+    });
+    const verdict = verdictOf(
+      row,
+      1,
+      Date.parse("2026-09-20T17:00:00Z"),
+      null,
+      t,
+      () => "17:00 UTC"
+    );
+    expect(verdict.head).toContain("17:00 UTC");
+  });
 });

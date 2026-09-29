@@ -23,12 +23,13 @@ import {
 } from "@/components/ui/copyable-value";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
-import { expiryOf } from "@/lib/certificates";
 import {
   chainSilence,
   describeExistence,
+  hopTone,
   trafficChains,
   type ChainHop,
+  type HopTone,
 } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
@@ -78,8 +79,6 @@ function HopName({ object }: { object: ObjectRef }) {
   );
 }
 
-type HopTone = "on" | "warn" | "bad";
-
 // A quiet ring for the ordinary hop: the rail's job is to carry the eye,
 // not to compete with the verdicts riding on it. Trouble keeps its hue.
 const NODE_TONE: Record<HopTone, string> = {
@@ -125,27 +124,6 @@ export function Rail({
       )}
     </div>
   );
-}
-
-function toneOf(hop: ChainHop): HopTone {
-  if (hop.at === "stop") return "bad";
-  // A hop the app could not look up is not a hop it found. The Services
-  // list being refused hands the chain a backend with `notChecked`, and
-  // drawing it in the ordinary tone made it indistinguishable from a
-  // Service that exists and is healthy — on the one view that exists to
-  // show where traffic stops.
-  if (hop.at === "object" && hop.object.existence === "notChecked")
-    return "warn";
-  if (hop.at === "published") return hop.tone;
-  if (hop.at === "controller") return hop.binding.resolved ? "on" : "bad";
-  if (hop.at === "certificate") {
-    // Not read back yet is not a finding; read back and unreadable is.
-    if (!hop.read) return "on";
-    if (!hop.read.certificate) return "warn";
-    const tone = expiryOf(hop.read.certificate).tone;
-    return tone === "err" ? "bad" : (tone ?? "on");
-  }
-  return "on";
 }
 
 /**
@@ -368,8 +346,8 @@ function Hop({
       {/* The run of line below a hop carries the colour of what comes next,
           so the segment leading into a stop is the part that turns red. */}
       <Rail
-        tone={toneOf(hop)}
-        into={next ? toneOf(next) : null}
+        tone={hopTone(hop)}
+        into={next ? hopTone(next) : null}
         here={hop.at === "object" && hop.self}
       />
       <div className={cn("min-w-0", last ? "" : "pb-3")}>

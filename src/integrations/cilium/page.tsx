@@ -15,9 +15,15 @@
  */
 
 import { useMemo } from "react";
+import { ShieldAlert } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useT } from "@/i18n/useT";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
+import type { StatusRole } from "@/lib/status-role";
 import {
   Cell,
   Chain,
@@ -56,6 +62,15 @@ const VERDICT_WORD: Record<
   cannotSay: "ciliumCannotSay",
 };
 
+// "cannotSay" is a third state, not a colour: StatusRole has no "unknown",
+// so it lands on "neutral" rather than borrowing warn or err.
+const FINDING_ROLE: Record<Coverage["verdict"], StatusRole | null> = {
+  covered: null,
+  unrestricted: "warn",
+  onlyRejected: "err",
+  cannotSay: "neutral",
+};
+
 export default function CiliumPage() {
   const t = useT();
   const picture = usePicture();
@@ -79,6 +94,33 @@ export default function CiliumPage() {
     ...(picture.data?.clusterwide ?? []),
   ].filter((policy) => enforcementOf(policy).state === "rejected");
 
+  useShareSection("cilium-rejected-policies", () => {
+    if (rejected.length === 0) return null;
+    return {
+      id: "cilium-rejected-policies",
+      order: ORDER.own,
+      title: "Rejected policies",
+      icon: iconSvg(ShieldAlert),
+      count: rejected.length,
+      body: {
+        type: "findings",
+        items: rejected.map((policy) => {
+          const enforcement = enforcementOf(policy);
+          return {
+            title: policy.name,
+            detail: enforcement.state === "rejected" ? enforcement.why : null,
+            role: "err" as const,
+            ref: refOf({
+              kind: policy.kind,
+              name: policy.name,
+              namespace: policy.namespace,
+            }),
+          };
+        }),
+      },
+    };
+  });
+
   if (picture.error) {
     return (
       <VendorReadFailure
@@ -96,6 +138,7 @@ export default function CiliumPage() {
         <SectionHeader
           title="Cilium"
           description={t("empty", "ciliumPageDescription")}
+          actions={<ShareScreenAction screen={{ title: "Cilium" }} />}
         />
         <div className="flex flex-col gap-2">
           {rejected.length > 0 && (
@@ -151,6 +194,23 @@ export default function CiliumPage() {
               `${one.endpoint.namespace}/${one.endpoint.name}`
             }
             renderRow={(one, { last }) => <CoverageRow one={one} last={last} />}
+            share={{
+              title: "Endpoints",
+              toFinding: (one) => {
+                const role = FINDING_ROLE[one.verdict];
+                if (!role) return null;
+                return {
+                  title: one.endpoint.name,
+                  detail: t("readings", VERDICT_WORD[one.verdict]),
+                  role,
+                  ref: refOf({
+                    kind: "CiliumEndpoint",
+                    name: one.endpoint.name,
+                    namespace: one.endpoint.namespace,
+                  }),
+                };
+              },
+            }}
           />
         )}
       </Section>

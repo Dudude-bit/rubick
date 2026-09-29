@@ -8,19 +8,13 @@
  * answered without reading a percentage.
  */
 import { cn } from "@/lib/utils";
-import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
-import { splitUnit, usageRole, type UsageRole } from "@/lib/metric-format";
+import {
+  formatUsage,
+  splitUnit,
+  usageRole,
+  type UsageRole,
+} from "@/lib/metric-format";
 import { useT } from "@/i18n/useT";
-
-/**
- * Two decimals turn a column of memory into "320.00Ki, 336.00Ki" — noise
- * that reads as precision. One decimal separates any two pods worth
- * separating, and a trailing `.0` carries nothing.
- */
-function formatUsage(value: number, type: "cpu" | "memory"): string {
-  if (type === "cpu") return formatCPU(value);
-  return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
-}
 
 const BAR_ROLE: Record<UsageRole, string> = {
   ok: "bg-ok",

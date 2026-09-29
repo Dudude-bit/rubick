@@ -42,6 +42,8 @@
  */
 
 import type { Saying } from "@/i18n/say";
+import type { T } from "@/i18n/useT";
+import type { ReportSection } from "@/lib/report";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -102,6 +104,14 @@ export type UsageScope =
   | { kind: "node"; node: string };
 
 /**
+ * What a node's reading is made of. `node` is its root cgroup, everything the
+ * kubelet accounts for. `pods` is the sum of its pods' containers, read only
+ * where no root cgroup series exists, and lower than the node's real usage:
+ * the kubelet, system daemons and the OS are not in it.
+ */
+export type NodeBasis = "node" | "pods";
+
+/**
  * A range of readings, and the two things the chart must say about them.
  *
  * `resolution` is not decoration. A supplier answering a 24h window is
@@ -130,6 +140,8 @@ export interface UsageWindow {
    * where one was really had.
    */
   declaredKnown?: boolean;
+  /** Set for a node scope only; see {@link NodeBasis}. */
+  basis?: NodeBasis;
 }
 
 /** One value per bucket; `null` where nothing was declared then. */
@@ -166,6 +178,8 @@ export interface NodeUsageWindow {
    * never one the supplier has never seen.
    */
   newestKnown?: boolean;
+  /** `pods` also when neither basis had a series: both were asked. */
+  basis: NodeBasis;
   resolution: string;
 }
 
@@ -661,6 +675,26 @@ export interface Capabilities {
     namespace: string | null;
     name: string;
   }) => Promise<RelatedObject[] | null>;
+  /**
+   * What a vendor knows about one of its own objects, as sections of the
+   * shared report: a Traefik route's rule, entry points and middlewares, a
+   * Certificate's issuer and expiry.
+   *
+   * Read from the object the page already holds and synchronous, because it
+   * runs while the report is written and the words are resolved there. `null`
+   * is "not my kind", the same contract as `object.related`.
+   */
+  "object.report": (
+    object: {
+      group: string;
+      kind: string;
+      namespace: string | null;
+      name: string;
+      spec: unknown;
+      status: unknown;
+    },
+    t: T
+  ) => ReportSection[] | null;
   /**
    * The alerts firing or pending about one object right now, from whatever
    * evaluates alerting rules for this cluster. Absent means no such thing

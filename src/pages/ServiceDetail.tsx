@@ -26,6 +26,7 @@ import { PublishedEndpoints } from "@/components/resources/PublishedEndpoints";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useServiceShare } from "@/hooks/useServiceShare";
 import { ResourceType } from "@/lib/resource-registry";
 import { deliveryOfKind } from "@/lib/delivery";
 import { publishedFor } from "@/lib/published";
@@ -59,6 +60,7 @@ export function ServiceDetail() {
   const published = connections.data
     ? publishedFor(connections.data, connections.data.subject)
     : undefined;
+  const share = useServiceShare(service, connections);
 
   if (!service && !isLoading && !error) {
     return null;
@@ -251,6 +253,7 @@ export function ServiceDetail() {
       freshness={freshness}
       resource={service}
       delivery={deliveryQuery}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Service}

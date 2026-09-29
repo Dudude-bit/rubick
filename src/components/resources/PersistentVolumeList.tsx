@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -23,7 +24,7 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
     // "Retain" or "Delete" under a two-word header.
     size: 120,
     accessorKey: "reclaimPolicy",
-    header: () => <T section="columns" k="reclaimPolicy" />,
+    header: columnHeader("columns", "reclaimPolicy"),
     cell: ({ row }) => (
       <span
         className={row.original.reclaimPolicy ? "text-fg-mid" : "text-fg-mut"}
@@ -37,20 +38,20 @@ export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   {
     size: 110,
     accessorKey: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
     cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
   },
   {
     // A namespace and a claim name together, so as wide as a name column.
     size: 240,
     accessorKey: "claim",
-    header: () => <T section="columns" k="claim" />,
+    header: columnHeader("columns", "claim"),
     cell: ({ row }) => <ClaimRef claim={row.original.claim} />,
   },
   {
     size: 160,
     accessorKey: "storageClass",
-    header: () => <T section="columns" k="storageClass" />,
+    header: columnHeader("columns", "storageClass"),
     cell: ({ row }) => <StorageClassRef name={row.original.storageClass} />,
   },
   createAgeColumn<PersistentVolumeInfo>(),

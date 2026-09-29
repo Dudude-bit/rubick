@@ -34,6 +34,7 @@ import {
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
+import { useReplicaSetShare } from "@/hooks/useReplicaSetShare";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -116,6 +117,15 @@ export function ReplicaSetDetail() {
   const retired = siblings.filter(
     (rs) => rs.replicas.desired === 0 && rs.name !== replicaSet?.name
   ).length;
+
+  const share = useReplicaSetShare(
+    replicaSet,
+    standing,
+    owner,
+    retired,
+    pods,
+    podsError
+  );
 
   // Why there is nothing running here. Said twice because both places are on
   // screen at once — the short form beside the missing pods, the full one
@@ -311,6 +321,7 @@ export function ReplicaSetDetail() {
       freshness={freshness}
       resource={replicaSet}
       delivery={deliveryOfKind(ResourceType.ReplicaSet, replicaSet)}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.ReplicaSet}

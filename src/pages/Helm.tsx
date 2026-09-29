@@ -8,6 +8,7 @@ import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog
 import { SectionHeader } from "@/components/ui/section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import {
   HelmStatusBanner,
   HelmInstallDialog,
@@ -336,20 +337,23 @@ export function Helm() {
               : t("count", "releases", { n: releases.length })
           }
           actions={
-            <TabsList>
-              <TabsTrigger value="releases">
-                <Package className="h-3 w-3" aria-hidden="true" />
-                {t("nav", "releases")}
-              </TabsTrigger>
-              <TabsTrigger value="charts" disabled={!helmCliAvailable}>
-                <Search className="h-3 w-3" aria-hidden="true" />
-                {t("nav", "charts")}
-              </TabsTrigger>
-              <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
-                <FolderGit2 className="h-3 w-3" aria-hidden="true" />
-                {t("nav", "repositories")}
-              </TabsTrigger>
-            </TabsList>
+            <>
+              <TabsList>
+                <TabsTrigger value="releases">
+                  <Package className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "releases")}
+                </TabsTrigger>
+                <TabsTrigger value="charts" disabled={!helmCliAvailable}>
+                  <Search className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "charts")}
+                </TabsTrigger>
+                <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
+                  <FolderGit2 className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "repositories")}
+                </TabsTrigger>
+              </TabsList>
+              <ShareScreenAction screen={{ title: "Helm" }} />
+            </>
           }
         />
 

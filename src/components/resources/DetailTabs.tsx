@@ -8,7 +8,7 @@
  * strip beside this one would drift from it by the second vendor.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CaptionScope } from "@/components/ui/section";
@@ -39,13 +39,12 @@ function DetailTabTrigger({
           : undefined)
       }
       aria-label={says ?? undefined}
-      className="group -mb-px h-8 min-w-0 justify-start gap-1.5 rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
     >
-      {/* `flex-none` on both the glyph and the mark, `truncate` only on the
-          label: a tab that gave up its glyph to fit would lose the half of
-          itself that can be read without reading. */}
+      {/* A one-letter tab is unreadable, so nothing here shrinks or
+          truncates; the strip scrolls instead. */}
       <TabGlyph glyph={tab.glyph} isActive={isActive} />
-      <span className="truncate">{tab.label}</span>
+      <span className="whitespace-nowrap">{tab.label}</span>
       {tab.mark && <TabMark mark={tab.mark} isActive={isActive} />}
     </TabsTrigger>
   );
@@ -97,6 +96,13 @@ export function DetailTabs({
   // the cluster for a panel nobody can see, and since the panel is mounted
   // nothing downstream can work that out for itself.
   const pageVisible = useSurfaceVisible();
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    stripRef.current
+      ?.querySelector<HTMLElement>('[data-state="active"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current]);
 
   return (
     <Tabs
@@ -110,9 +116,18 @@ export function DetailTabs({
           actions share the row's hairline so it reads as one band, held off
           by a pip — a control flush against a tab strip reads as another
           destination, and "Delete" must never be mistaken for a place to
-          go. */}
-      <div className="flex flex-none items-stretch gap-3">
-        <TabsList className="h-auto min-w-0 flex-1 justify-start gap-4 rounded-none border-b border-hair bg-transparent p-0 text-fg-mut">
+          go. Tabs never shrink: when the actions do not fit they wrap to
+          their own row, and only tabs wider than the page scroll. */}
+      <div className="flex flex-wrap items-stretch gap-3">
+        <TabsList
+          ref={stripRef}
+          onWheel={(event) => {
+            const el = event.currentTarget;
+            if (el.scrollWidth <= el.clientWidth) return;
+            el.scrollLeft += event.deltaY || event.deltaX;
+          }}
+          className="h-auto min-w-0 flex-auto justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-thin"
+        >
           {tabs.map((tab) => (
             <DetailTabTrigger
               key={tab.id}
@@ -122,7 +137,7 @@ export function DetailTabs({
           ))}
         </TabsList>
         {actions && (
-          <div className="flex flex-none items-center gap-1 border-b border-hair">
+          <div className="ml-auto flex flex-none items-center gap-1 border-b border-hair">
             <span
               aria-hidden="true"
               className="mr-2 h-3.5 w-px flex-none bg-hair"

@@ -16,7 +16,9 @@ export function verdictOf(
   instanceCount: number,
   since: number | null,
   lastScrapeAgo: string | null,
-  t: T
+  t: T,
+  /** The reader's clock on the page; a shared file speaks UTC. */
+  clock: (at: number) => string = hourMinute
 ): { head: string; body: ReactNode } {
   const worst = row.findings[0];
   const { scrape } = row;
@@ -63,7 +65,7 @@ export function verdictOf(
             ? t("monitors", "verdictDownSince", {
                 down: worst.down,
                 of: t("monitors", "ofTargets", { n: worst.total }),
-                since: hourMinute(since),
+                since: clock(since),
               })
             : t("monitors", "verdictDown", {
                 down: worst.down,

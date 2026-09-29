@@ -751,14 +751,21 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
 const SECRET_SHAPES: Array<[RegExp, string]> = [
   // scheme://user:pass@host
   [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1…:…@"],
-  // password=…, token: …, api_key=…, secret=…, in query strings or logfmt
-  [
-    /\b(pass(?:word|wd)?|pwd|token|secret|api[-_]?key|access[-_]?key|auth)\b(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&,;)"']+)/gi,
-    "$1$2…",
-  ],
-  // Authorization: Bearer …, and a bare JWT
+  // Authorization: Bearer …, and a bare JWT; before the keys below, which
+  // would otherwise take "Bearer" for the value and leave the token
   [/\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 …"],
   [/\beyJ[A-Za-z0-9._-]{16,}/g, "…"],
+  // Access key ids and the tokens that announce themselves by prefix
+  [
+    /\b(?:A[KS]IA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_\w{30,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|[sr]k[-_]live[-_]\w{10,})\b/g,
+    "…",
+  ],
+  // password=…, DB_PASSWORD=…, "apiKey": "…", in query strings, env, logfmt
+  // and JSON; a prefix or a quote before the colon is how most of them look
+  [
+    /([\w.-]*(?:pass(?:word|wd)?|pwd|token|secret|api[-_]?key|access[-_]?key|auth)[\w.-]*)(["']?\s*[=:]\s*)(?!(?:bearer|basic) )("[^"]*"|'[^']*'|[^\s&,;)}"']+)/gi,
+    "$1$2…",
+  ],
 ];
 
 /**

@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table2, Tag, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import { secretKeysSection, secretTypeOf } from "@/lib/share/secret-share";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
@@ -61,6 +64,14 @@ export function SecretDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.Secret, secret);
   const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const share = useCallback((): ShareContribution => {
+    if (!secret) return {};
+    return {
+      status: secretTypeOf(secret),
+      sections: [secretKeysSection(secret.dataKeys, t)],
+    };
+  }, [secret, t]);
 
   if (!secret && !isLoading && !error) {
     return null;
@@ -142,6 +153,7 @@ export function SecretDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={secret}
+      share={share}
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}

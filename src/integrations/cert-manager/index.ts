@@ -11,6 +11,7 @@ import {
 import { facts } from "./facts";
 import { worstCertificateTone } from "./model";
 import { relatedTo } from "./related";
+import { reportOf } from "./report";
 
 /**
  * cert-manager.
@@ -50,6 +51,7 @@ export default defineVendor({
     "certificate.issuance": ({ namespace, secretName }) =>
       commands.getCertificateIssuance(namespace, secretName),
     "object.related": relatedTo,
+    "object.report": reportOf,
   },
   page: {
     // The certificates list only, not the whole picture — see `data.ts` for
