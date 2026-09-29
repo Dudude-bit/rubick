@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.0] - 2026-09-29
+
+> **Much of this release is under the hood.** Besides Share on every
+> screen, a large part of it is optimisation and reworked code, most of it so
+> that a report and the screen it came from read each fact the same way. If
+> a screen or a report says something your cluster does not, please open an
+> issue.
+
+### Added
+
+- **Share any object or screen, not only a pod.** Every detail page, every
+  list, Overview, Events, Changes, node utilisation and the integration pages
+  have a Share button, and so do the resources of Traefik, cert-manager,
+  Argo CD, Flux, the Prometheus operator, Istio, CloudNativePG, Scylla,
+  Cilium, GKE, AWS and Azure. The file looks like the app in both themes and
+  gives times in UTC. A list that was refused, read in part, still loading or
+  narrowed by a search says so, and whatever could not be read is listed at
+  the top instead of drawn as an empty section. Log lines can be left out of
+  one report. (#309)
+
+### Changed
+
+- **Shared reports hide more secrets.** Log lines and settings in a report
+  now lose values such as `DB_PASSWORD=…`, JSON keys named like a password or
+  token, and prefixed tokens from GitHub, GitLab, Slack, AWS and Stripe; an
+  address loses its `user:pass@`. (#309)
+
+- **A published link belongs to its cluster.** Publishing the same object
+  from staging no longer replaces the link you published from prod. The first
+  publish after updating gets a new link. (#309)
+
+### Fixed
+
+- **Prometheus, Loki and identity providers with an ECDSA P-521 certificate
+  can be reached again**, as they could before 4.20.0. (#307, #308)
+
+- **Node utilisation on kube-prometheus-stack.** Every cell read "no series",
+  because that chart drops the node's root cgroup series by default. The page
+  now adds up each node's pods and says that this undercounts; the node page
+  reads the same way. (#309)
+
+- **Prometheus Monitors and Alerts** scroll the list apart from the detail,
+  and detail tab labels no longer clip to one letter. (#309)
+
+- **English words and wrong count forms in the Russian interface**: logs,
+  charts, CronJobs, pod and Job rows, Secret and ConfigMap actions, and the
+  connections graph. Prometheus › Monitors printed an empty namespace
+  selector as `{}`; it now says every namespace. (#317)
+
 ## [4.20.2] - 2026-09-25
 
 ### Fixed
