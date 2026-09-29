@@ -1,12 +1,21 @@
 import { useCallback } from "react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { templateContainersSection } from "@/components/share/containers-section";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportStat, ReportValue } from "@/lib/report";
-import { ORDER, kindIcon, refOf, type PlacedSection } from "@/lib/report-parts";
+import {
+  ORDER,
+  kindIcon,
+  refOf,
+  type PlacedSection,
+  utcMoment,
+} from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
-import { formatDate, formatSince } from "@/lib/utils";
+import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
@@ -34,7 +43,9 @@ export function cronJobStatsOf(
     cronJob.lastSuccessfulTime
       ? {
           label: t("columns", "lastSuccess"),
-          value: formatDate(cronJob.lastSuccessfulTime) ?? "–",
+          value: Number.isNaN(Date.parse(cronJob.lastSuccessfulTime))
+            ? "–"
+            : utcMoment(Date.parse(cronJob.lastSuccessfulTime)),
         }
       : {
           label: t("columns", "lastSuccess"),
@@ -100,17 +111,19 @@ export function useCronJobShare(
   cronJob: CronJobDetailInfo | undefined,
   jobs: readonly JobInfo[],
   jobsError: unknown
-): () => ShareContribution {
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
-  return useCallback((): ShareContribution => {
-    if (!cronJob) return {};
-    const capturedAt = new Date().toISOString();
-    const jobs_ = jobsSection(jobs, jobsError, capturedAt, t);
-    return {
-      status: cronJobStatusOf(cronJob),
-      stats: cronJobStatsOf(cronJob, capturedAt, t),
-      notRead: jobs_.unread ? [jobs_.unread] : [],
-      sections: [templateContainersSection(cronJob, t), jobs_],
-    };
-  }, [cronJob, jobs, jobsError, t]);
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!cronJob) return {};
+      const { capturedAt } = frame;
+      const jobs_ = jobsSection(jobs, jobsError, capturedAt, t);
+      return {
+        status: cronJobStatusOf(cronJob),
+        stats: cronJobStatsOf(cronJob, capturedAt, t),
+        sections: [templateContainersSection(cronJob, t), jobs_],
+      };
+    },
+    [cronJob, jobs, jobsError, t]
+  );
 }

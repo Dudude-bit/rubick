@@ -11,7 +11,9 @@ import {
   placed,
   refOf,
   slugOf,
+  unreadLines,
   ORDER,
+  type PlacedSection,
 } from "./report-parts";
 import { graphSections } from "./report-graph";
 
@@ -26,6 +28,12 @@ const subject = {
   kind: "Pod",
   name: "payments-7b6d9c5f4-x8k2p",
   namespace: "shop",
+};
+
+/** The pod as its page hands it to the frame: owned by the Deployment's ReplicaSet. */
+const owned = {
+  ...subject,
+  owners: [{ kind: "ReplicaSet", name: "payments-7b6d9c5f4" }],
 };
 
 const read = (over: Partial<ResourceConnections> = {}) => ({
@@ -53,7 +61,8 @@ describe("graphSections", () => {
   it("says the graph could not be read instead of drawing an empty one", () => {
     const { sections, unread } = graphSections(
       { data: undefined, error: new Error("forbidden"), isPending: false },
-      t
+      t,
+      true
     );
     expect(unread).toBe("empty.couldNotReadWhatConnects");
     expect(sections.every((section) => section.unread === unread)).toBe(true);
@@ -63,7 +72,8 @@ describe("graphSections", () => {
   it("tells a graph still being read from one that was refused", () => {
     const { unread } = graphSections(
       { data: undefined, error: null, isPending: true },
-      t
+      t,
+      true
     );
     expect(unread).toBe("share.chainStillReading");
   });
@@ -90,7 +100,8 @@ describe("graphSections", () => {
           },
         ] as never,
       }),
-      t
+      t,
+      true
     );
     const traffic = sections.find((section) => section.id === "traffic")!;
     expect(traffic.body.type).toBe("traffic");
@@ -129,7 +140,8 @@ describe("graphSections", () => {
           },
         ] as never,
       }),
-      t
+      t,
+      true
     );
     const traffic = sections.find((section) => section.id === "traffic")!;
     const hop =
@@ -138,8 +150,163 @@ describe("graphSections", () => {
   });
 });
 
+describe("what the graph says about objects it could not check", () => {
+  const object = (
+    kind: string,
+    name: string,
+    existence: "present" | "missing" | "notChecked" = "present"
+  ) => ({ kind, name, namespace: "shop", existence, facts: null }) as never;
+
+  /**
+   * An Ingress whose Service could not be looked up: the page draws that hop
+   * amber with "not checked", and the file drew an unbroken path through a
+   * plain Service, the same as one that exists.
+   */
+  it("draws a hop it could not check as not checked, not as a working one", () => {
+    const ingress = object("Ingress", "shop");
+    const { sections } = graphSections(
+      {
+        data: {
+          subject: ingress,
+          edges: [
+            {
+              from: ingress,
+              to: object("Service", "shop", "notChecked"),
+              relation: {
+                verb: "routes",
+                host: "shop.example.com",
+                path: "/",
+                pathType: "Prefix",
+                port: "80",
+                tls: false,
+              },
+            },
+          ],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        } as ResourceConnections,
+        error: null,
+        isPending: false,
+      },
+      t,
+      true
+    );
+    const traffic = sections.find((section) => section.id === "traffic")!;
+    const hops =
+      traffic.body.type === "traffic" ? traffic.body.paths[0].hops : [];
+    const service = hops.find((hop) => hop.ref?.kind === "Service");
+    expect(service?.tone).toBe("warn");
+    expect(service?.detail).toContain("nav.notChecked");
+  });
+
+  /**
+   * A pod stuck because its ConfigMap does not exist: the Connections tab
+   * tags that row red. Without the tag the file lists it like a present one
+   * and sends the colleague away from the cause.
+   */
+  it("tags a connection that is missing, and one it could not check", () => {
+    const deployment = object("Deployment", "web");
+    const usage = {
+      how: "mount",
+      container: "app",
+      path: "/etc/app",
+      readOnly: true,
+      subPath: null,
+      volume: "cfg",
+      projected: false,
+    };
+    const { sections } = graphSections(
+      {
+        data: {
+          subject: deployment,
+          edges: [
+            {
+              from: deployment,
+              to: object("ConfigMap", "gone", "missing"),
+              relation: { verb: "uses", usages: [usage] },
+            },
+            {
+              from: deployment,
+              to: object("Secret", "unread", "notChecked"),
+              relation: { verb: "uses", usages: [usage] },
+            },
+          ],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        } as unknown as ResourceConnections,
+        error: null,
+        isPending: false,
+      },
+      t,
+      true
+    );
+    const connections = sections.find((s) => s.id === "connections")!;
+    const rows =
+      connections.body.type === "connections"
+        ? connections.body.groups.flatMap((group) => group.rows)
+        : [];
+    const byName = (name: string) =>
+      rows.find((row) => row.ref && row.ref.stem + row.ref.tail === name);
+    expect(byName("gone")).toMatchObject({
+      existence: "nav.notInThisNamespace",
+      missing: true,
+    });
+    expect(byName("unread")).toMatchObject({ existence: "nav.notChecked" });
+  });
+
+  /**
+   * A Secret has no path traffic takes to it. Its report said no Service
+   * selects "these pods", so traffic never reaches "this object (Secret)".
+   */
+  it("draws no traffic for a kind whose page draws no chain", () => {
+    const { sections } = graphSections(read(), t, false);
+    expect(sections.map((section) => section.id)).toEqual(["connections"]);
+  });
+});
+
+describe("unreadLines", () => {
+  const section = (title: string, unread: string | null): PlacedSection => ({
+    id: title,
+    order: ORDER.own,
+    title,
+    icon: "",
+    unread,
+    body: { type: "text", text: "" },
+  });
+
+  /**
+   * A section that says in place it could not be read has to be in the
+   * summary too: the Node report said "Pods tab not opened" under a footer
+   * saying everything was read.
+   */
+  it("says every section that could not be read, once per reason", () => {
+    expect(
+      unreadLines([
+        section("Traffic", "still reading"),
+        section("Connections", "still reading"),
+        section("Pods on this node", "Pods tab not opened"),
+        section("Events", null),
+      ])
+    ).toEqual([
+      "Traffic, Connections: still reading",
+      "Pods on this node: Pods tab not opened",
+    ]);
+  });
+});
+
 describe("changesSection", () => {
   const at = Date.parse("2026-09-21T17:14:55Z");
+  const AT = "2026-09-21T18:00:00Z";
+  /** Watched the whole window, so no gap rows get in the way of the others. */
+  const WATCHED = [
+    {
+      from: Date.parse(AT) - 8 * 24 * 60 * 60_000,
+      seenAt: Date.parse(AT),
+      to: null,
+    },
+  ];
   const entry = (over: Partial<JournalEntry>): JournalEntry =>
     ({
       id: String(Math.random()),
@@ -162,12 +329,13 @@ describe("changesSection", () => {
    */
   it("still says it was not watching when the journal is another cluster's", () => {
     const section = changesSection(
-      [entry({ context: "staging-eu" })],
+      { entries: [entry({ context: "staging-eu" })], spans: [] },
       "prod-eu",
-      subject,
+      owned,
+      AT,
       t
     );
-    expect(section.body).toMatchObject({
+    expect(section?.body).toMatchObject({
       type: "changes",
       changes: [{ at: null }],
     });
@@ -180,18 +348,23 @@ describe("changesSection", () => {
    */
   it("puts one rollout under one time, the image first and only its tags", () => {
     const section = changesSection(
-      [
-        entry({ field: "generation", key: null, from: "84", to: "86" }),
-        entry({
-          from: "registry.example/shop/payments:2.19.0",
-          to: "registry.example/shop/payments:2.21.0",
-        }),
-      ],
+      {
+        entries: [
+          entry({ field: "generation", key: null, from: "84", to: "86" }),
+          entry({
+            from: "registry.example/shop/payments:2.19.0",
+            to: "registry.example/shop/payments:2.21.0",
+          }),
+        ],
+        spans: WATCHED,
+      },
       "prod-eu",
-      subject,
+      owned,
+      AT,
       t
     );
-    const changes = section.body.type === "changes" ? section.body.changes : [];
+    const changes =
+      section?.body.type === "changes" ? section.body.changes : [];
     expect(changes).toHaveLength(1);
     expect(changes[0].ref).toMatchObject({
       kind: "Deployment",
@@ -206,12 +379,94 @@ describe("changesSection", () => {
   /** The object itself, not only what owns it: a Deployment's page shares its own journal. */
   it("reads the subject's own entries when the subject is the watched kind", () => {
     const section = changesSection(
-      [entry({})],
+      { entries: [entry({})], spans: WATCHED },
       "prod-eu",
-      { kind: "Deployment", name: "payments", namespace: "shop" },
+      { kind: "Deployment", name: "payments", namespace: "shop", owners: [] },
+      AT,
       t
     );
-    expect(section.count).toBe(1);
+    expect(section?.count).toBe(1);
+  });
+
+  /**
+   * The journal watches three kinds. A ConfigMap's report said "What
+   * changed — Nothing here.", a claim about an object nobody was watching.
+   */
+  it("says nothing about changes to an object no watched workload owns", () => {
+    expect(
+      changesSection(
+        { entries: [entry({})], spans: WATCHED },
+        "prod-eu",
+        { kind: "ConfigMap", name: "payments", namespace: "shop", owners: [] },
+        AT,
+        t
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * By name prefix, `web-worker-7d9f8b6c4-x2x9z` belonged to Deployment
+   * `web` as much as to `web-worker`, and the file listed `web`'s rollout as
+   * this pod's.
+   */
+  it("reads the owner from ownerReferences, not from a name that starts the same", () => {
+    const section = changesSection(
+      {
+        entries: [
+          entry({ name: "web", from: "web:1", to: "web:2" }),
+          entry({ name: "web-worker", from: "worker:1", to: "worker:2" }),
+        ],
+        spans: WATCHED,
+      },
+      "prod-eu",
+      {
+        kind: "Pod",
+        name: "web-worker-7d9f8b6c4-x2x9z",
+        namespace: "shop",
+        owners: [{ kind: "ReplicaSet", name: "web-worker-7d9f8b6c4" }],
+      },
+      AT,
+      t
+    );
+    const refs =
+      section?.body.type === "changes"
+        ? section.body.changes.flatMap((change) =>
+            change.ref ? [change.ref.stem + change.ref.tail] : []
+          )
+        : [];
+    expect(refs).toEqual(["web-worker"]);
+  });
+
+  /**
+   * The Changes screen draws a stretch nobody watched as a row, so it is not
+   * read as a stretch nothing happened; the object's report dropped it.
+   */
+  it("draws a stretch the app was not watching as a row of its own", () => {
+    const section = changesSection(
+      {
+        entries: [entry({})],
+        spans: [
+          {
+            from: Date.parse(AT) - 2 * 60 * 60_000,
+            seenAt: Date.parse(AT) - 60 * 60_000,
+            to: Date.parse(AT) - 60 * 60_000,
+          },
+        ],
+      },
+      "prod-eu",
+      owned,
+      AT,
+      t
+    );
+    const texts =
+      section?.body.type === "changes"
+        ? section.body.changes.flatMap((change) =>
+            change.parts.map((part) => part.text)
+          )
+        : [];
+    expect(texts.some((text) => text.startsWith("changes.notObserved("))).toBe(
+      true
+    );
   });
 });
 

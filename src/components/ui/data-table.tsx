@@ -516,7 +516,9 @@ function DataTableInner<TData extends RowData>({
 
   const rows = table.getRowModel().rows;
   useShareSection(share ? `table:${tableId}` : null, () =>
-    share ? tableSection(table as never, share, t) : null
+    share
+      ? tableSection(table as never, { ...share, search: globalFilter }, t)
+      : null
   );
   const isClickable = !!(getRowHref || onRowClick);
   const visibleColumnCount = table.getVisibleFlatColumns().length;

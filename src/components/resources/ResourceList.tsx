@@ -1,5 +1,5 @@
 import { ReactNode, useMemo, useState } from "react";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import type { ColumnDef, RowData } from "@/components/ui/table-features";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -30,6 +30,8 @@ import { useNowSeconds } from "@/hooks/useNow";
 import { Button } from "@/components/ui/button";
 import { TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { NO_TABLE, tableSection } from "@/components/share/table-share";
 import { isResourceType, toKind } from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
@@ -54,7 +56,7 @@ const NOTHING_UNREAD: UnreadNamespace[] = [];
 const DELIVERY_COLUMN: ColumnDef<never> = {
   size: 150,
   id: "delivery",
-  header: () => <T section="columns" k="delivery" />,
+  header: columnHeader("columns", "delivery"),
   enableSorting: false,
   cell: ({ row }) => <DeliveryColumnCell row={row.original} />,
 };
@@ -244,7 +246,6 @@ export function ResourceList<
     );
     return said ? toKind(said) : null;
   }, [queryKey, emptyStateLabel, title]);
-  const share = useMemo(() => ({ title, kind: listKind }), [title, listKind]);
   const screen = useMemo(
     () => ({
       title,
@@ -413,6 +414,57 @@ export function ResourceList<
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
   const partial = ranOutOfTime || unread.length > 0 || placeholder;
+
+  // What the file says about the read, in the words the screen uses: a list
+  // nobody could read, or read only part of, is not an empty or a whole one.
+  const label = emptyStateLabel.toLowerCase();
+  const failedWords = failed
+    ? ranOutOfTime
+      ? t("empty", "readDeadline", {
+          label,
+          scope: scope.inWords,
+          seconds: LIST_DEADLINE_SECONDS,
+        })
+      : `${
+          isRefusal(failed)
+            ? t("nav", "noListAccess")
+            : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
+        } (${verbatim(failed.message)})`
+    : null;
+  const listUnread =
+    failedWords && resources.length === 0
+      ? failedWords
+      : showSkeleton
+        ? t("share", "stillReading")
+        : null;
+  const listPartial = !partial
+    ? null
+    : unread.length > 0
+      ? unread
+          .map(
+            (missing) =>
+              `${t("empty", "couldNotReadInNamespace", {
+                label,
+                namespace: missing.namespace,
+              })} (${verbatim(missing.message)})`
+          )
+          .join(" ")
+      : (failedWords ?? t("share", "stillReading"));
+  const share = useMemo(
+    () => ({
+      title,
+      kind: listKind,
+      unread: listUnread,
+      partial: listPartial,
+    }),
+    [title, listKind, listUnread, listPartial]
+  );
+  // The table registers itself; a read that failed with nothing to show has
+  // no table, and still has to reach the file.
+  useShareSection(
+    !embedded && listUnread && failedWords ? "table-unread" : null,
+    () => tableSection(NO_TABLE, share, t)
+  );
 
   if (!isConnected) {
     return <ConnectClusterEmptyState resourceLabel={emptyStateLabel} />;

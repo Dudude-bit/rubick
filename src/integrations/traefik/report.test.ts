@@ -82,6 +82,48 @@ describe("what a Middleware tells a reader with no cluster access", () => {
       ],
     });
   });
+
+  const middleware = (spec: unknown) => {
+    const sections = reportOf(
+      {
+        group: "traefik.io",
+        kind: "Middleware",
+        namespace: "shop",
+        name: "auth",
+        spec,
+        status: {},
+      },
+      t
+    );
+    const body = sections?.[0]?.body;
+    if (body?.type !== "facts") throw new Error("expected facts");
+    return body.rows.map((row) => row.values.map((v) => v.text).join(" "));
+  };
+
+  /**
+   * Every key went out as `key=value`, under a footer promising no Secret:
+   * an htpasswd hash is a password with extra steps, and a forwardAuth
+   * address can carry its token in the query.
+   */
+  it("keeps credentials a middleware spells out of the file", () => {
+    const [basic] = middleware({
+      basicAuth: { users: ["admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"] },
+    });
+    expect(basic).toBe("users=…");
+    const [forward] = middleware({
+      forwardAuth: { address: "https://auth.example/verify?token=s3cr3t" },
+    });
+    expect(forward).not.toContain("s3cr3t");
+    expect(forward).toContain("auth.example");
+  });
+
+  /** A nested setting written as `[object Object]` says nothing at all. */
+  it("writes a nested setting out rather than as an object's name", () => {
+    const [headers] = middleware({
+      headers: { customRequestHeaders: { "X-Team": "shop" } },
+    });
+    expect(headers).toBe('customRequestHeaders={"X-Team":"shop"}');
+  });
 });
 
 describe("what an object of another vendor's kind gets", () => {

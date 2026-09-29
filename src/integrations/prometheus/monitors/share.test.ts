@@ -1,9 +1,9 @@
 /**
  * The Monitors screen and its detail panel are bespoke, drawn by a ladder and
  * a set of steps rather than by `page-kit`'s `TroubleList`, so nothing wires
- * them into Share automatically. Delete either `useShareSection` call in
- * `Monitors.tsx` or `Detail.tsx`, or the section builders they call, and
- * these fail.
+ * them into Share automatically. These hold the section builders; the
+ * `useShareSection` calls in `Monitors.tsx` and `Detail.tsx` are not
+ * rendered here.
  */
 
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { MonitorRow } from "./model";
-import { ladderSection, monitorDetailSections } from "./share";
+import { ladderSection, ladderUnread, monitorDetailSections } from "./share";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -44,6 +44,8 @@ function row(overrides: Partial<MonitorRow> = {}): MonitorRow {
   } as unknown as MonitorRow;
 }
 
+const READ = { unread: null, partial: null };
+
 describe("the monitor ladder registers itself with Share", () => {
   it("gives every monitor a finding with the row's own role, sentence and ref", () => {
     const broken = row({
@@ -64,7 +66,7 @@ describe("the monitor ladder registers itself with Share", () => {
       ],
     });
     const healthy = row();
-    const section = ladderSection([broken, healthy], t);
+    const section = ladderSection([broken, healthy], READ, t);
 
     expect(section).not.toBeNull();
     if (section === null || section.body.type !== "findings")
@@ -76,9 +78,66 @@ describe("the monitor ladder registers itself with Share", () => {
     expect(brokenFinding.ref?.kind).toBe("ServiceMonitor");
   });
 
-  it("reports nothing for a screen with no monitors, not an empty section", () => {
-    expect(ladderSection([], t)).toBeNull();
-    expect(ladderSection(null, t)).toBeNull();
+  /**
+   * A cluster with no monitors and a read that never landed were the same
+   * file: no section, and "everything was read". Read and empty says so.
+   */
+  it("says a read list is empty, rather than leaving the section out", () => {
+    const section = ladderSection([], READ, t);
+    expect(section.count).toBe(0);
+    expect(section.unread ?? null).toBeNull();
+    expect(section.body).toMatchObject({ type: "findings", items: [] });
+  });
+
+  /** A refused kind is named above the rows that were read, and no total is given. */
+  it("names a kind the cluster refused and gives no total", () => {
+    const partial = "PodMonitor objects could not be read: forbidden";
+    const section = ladderSection([row()], { unread: null, partial }, t);
+    expect(section.partial).toBe(partial);
+    expect(section.count).toBeNull();
+  });
+
+  it("says the monitors were not read when nothing came back", () => {
+    const section = ladderSection(
+      null,
+      { unread: "forbidden", partial: null },
+      t
+    );
+    expect(section.unread).toBe("forbidden");
+  });
+});
+
+describe("what the ladder could not see", () => {
+  const kind = (state: "read" | "unread" | "absent") =>
+    state === "read"
+      ? { state, items: [] }
+      : state === "unread"
+        ? { state, reason: "forbidden" }
+        : { state };
+
+  /**
+   * A 403 on PodMonitors drops that kind from the rows without a trace; the
+   * page names it above them, and the file has to as well.
+   */
+  it("names each kind the cluster refused", () => {
+    const said = ladderUnread(
+      {
+        data: {
+          serviceMonitors: kind("read"),
+          podMonitors: kind("unread"),
+        } as never,
+        error: null,
+      },
+      t
+    );
+    expect(said.unread).toBeNull();
+    expect(said.partial).toContain("PodMonitor");
+  });
+
+  it("says the picture is still being read before it lands", () => {
+    expect(ladderUnread({ data: undefined, error: null }, t).unread).toBe(
+      t("share", "stillReading")
+    );
   });
 });
 

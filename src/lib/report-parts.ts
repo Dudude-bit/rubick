@@ -13,9 +13,15 @@ import {
 
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { journalWords, type JournalEntry } from "./changes";
+import {
+  gapsOf,
+  hasChangesTab,
+  journalWords,
+  type Gap,
+  type JournalEntry,
+  type ObservedSpan,
+} from "./changes";
 import { conditionRole } from "./condition-health";
-import { familyOf } from "./event-stories";
 import { iconSvg } from "./icon-svg";
 import { parseImageRef } from "./image-ref";
 import {
@@ -68,8 +74,39 @@ export const CONNECTED_KINDS = new Set([
   "PersistentVolume",
 ]);
 
+/** The kinds whose page draws how traffic reaches them; for the rest there is no such path. */
+export const TRAFFIC_KINDS = new Set([
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "Service",
+  "Ingress",
+]);
+
+/**
+ * Every section that could not be read, as one line of the file's "Not read"
+ * each: the section says it in place, and the summary has to agree with it.
+ * Sections that failed for the same reason share a line.
+ */
+export function unreadLines(sections: readonly PlacedSection[]): string[] {
+  const byReason = new Map<string, string[]>();
+  for (const section of sections) {
+    const reason = section.unread ?? section.partial;
+    if (!reason) continue;
+    const titles = byReason.get(reason) ?? [];
+    titles.push(section.title);
+    byReason.set(reason, titles);
+  }
+  return [...byReason].map(
+    ([reason, titles]) => `${titles.join(", ")}: ${reason}`
+  );
+}
+
 /** As many journal entries as a reader scrolls; older ones are in the app. */
 const MAX_CHANGES = 20;
+/** How far back the Changes tab looks, and so how far back a gap is worth naming. */
+const JOURNAL_WINDOW_MS = 7 * 24 * 60 * 60_000;
 /** Enough events to see a pattern; the Events screen has the rest. */
 const MAX_EVENTS = 25;
 
@@ -127,6 +164,7 @@ export function frameWords(t: T, lang: string, notRead: number): ReportWords {
     init: t("share", "initContainer"),
     madeBy: t("share", "madeBy"),
     noSecrets: t("share", "noSecrets"),
+    noSecretsLogs: t("share", "noSecretsLogs"),
   };
 }
 
@@ -217,31 +255,98 @@ function valuesOf(entry: JournalEntry) {
 }
 
 /**
- * What this app watched change on the object or on what owns it, one row per
- * moment, and a sentence rather than silence when it never watched this
- * cluster at all.
+ * A day and a time for a line of text, in UTC like every other time in the
+ * file: the reader is not in the sender's zone.
+ */
+export function utcMoment(ms: number): string {
+  return `${new Date(ms).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  })} UTC`;
+}
+
+/** A stretch nobody watched, as a row of its own rather than a silence. */
+export function gapChange(gap: Gap, t: T): ReportChange {
+  return {
+    at: new Date(gap.to).toISOString(),
+    ref: null,
+    parts: [
+      {
+        text: t("changes", "notObserved", {
+          from: utcMoment(gap.from),
+          to: utcMoment(gap.to),
+        }),
+        quiet: false,
+      },
+    ],
+  };
+}
+
+/** A ReplicaSet is named for its Deployment plus the template hash. */
+const TEMPLATE_HASH = /^(.+)-[bcdfghjklmnpqrstvwxz2456789]{5,10}$/;
+
+/**
+ * The watched workloads a change to would be a change to this object: the
+ * object itself when the journal watches its kind, otherwise the owner its
+ * `ownerReferences` name — through the ReplicaSet, for a Deployment's pod.
+ * `null` when there is none, and then nothing about changes can be said.
+ */
+function watchedAs(
+  subject: { kind: string; name: string },
+  owners: readonly { kind: string; name: string }[]
+): { kind: string; name: string }[] | null {
+  if (hasChangesTab(subject.kind))
+    return [{ kind: subject.kind, name: subject.name }];
+  const out = owners.flatMap((owner) => {
+    if (hasChangesTab(owner.kind)) return [owner];
+    const deployment =
+      owner.kind === "ReplicaSet" ? TEMPLATE_HASH.exec(owner.name)?.[1] : null;
+    return deployment ? [{ kind: "Deployment", name: deployment }] : [];
+  });
+  return out.length > 0 ? out : null;
+}
+
+/**
+ * What this app watched change on the object or on the workload that owns
+ * it, one row per moment, with the stretches it was not watching as rows of
+ * their own. `null` for an object no watched workload owns: the journal has
+ * nothing to say about it, and an empty list would read as "nothing changed".
  */
 export function changesSection(
-  entries: readonly JournalEntry[],
+  journal: {
+    entries: readonly JournalEntry[];
+    spans: readonly ObservedSpan[];
+  },
   context: string,
-  subject: { kind: string; name: string; namespace: string | null },
+  subject: {
+    kind: string;
+    name: string;
+    namespace: string | null;
+    owners: readonly { kind: string; name: string }[];
+  },
+  capturedAt: string,
   t: T
-): PlacedSection {
-  const family = familyOf(subject.name);
-  const mine = entries
+): PlacedSection | null {
+  const targets = watchedAs(subject, subject.owners);
+  if (!targets) return null;
+  const mine = journal.entries
     .filter(
       (entry) =>
         entry.context === context &&
         entry.namespace === (subject.namespace ?? "") &&
-        (entry.kind === subject.kind
-          ? entry.name === subject.name
-          : entry.name === family || family.startsWith(`${entry.name}-`))
+        targets.some(
+          (target) => target.kind === entry.kind && target.name === entry.name
+        )
     )
-    .slice(-MAX_CHANGES)
-    .reverse();
-  const watched = entries.some((entry) => entry.context === context);
-  const out: (ReportChange & { key: string })[] = [];
-  for (const entry of mine) {
+    .slice(-MAX_CHANGES);
+  const watched =
+    journal.spans.length > 0 ||
+    journal.entries.some((entry) => entry.context === context);
+  const out: (ReportChange & { key: string; ms: number })[] = [];
+  for (const entry of [...mine].reverse()) {
     const at = new Date(entry.at).toISOString();
     const key = `${at}/${entry.kind}/${entry.name}`;
     const parts = [
@@ -255,28 +360,36 @@ export function changesSection(
     ];
     const last = out.at(-1);
     if (last && last.key === key) last.parts.push(...parts);
-    else out.push({ key, at, ref: refOf(entry), parts });
+    else out.push({ key, ms: entry.at, at, ref: refOf(entry), parts });
   }
-  const changes: ReportChange[] =
-    mine.length === 0 && !watched
-      ? [
-          {
-            at: null,
-            ref: null,
-            parts: [{ text: t("share", "journalEmpty"), quiet: true }],
-          },
-        ]
-      : out.map(({ at, ref, parts }) => ({
-          at,
-          ref,
-          parts: [...parts].sort((a, b) => Number(a.quiet) - Number(b.quiet)),
-        }));
+  const now = Date.parse(capturedAt);
+  // As far back as the journal keeps, or as the oldest row shown.
+  const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
+  const gaps = watched ? gapsOf([...journal.spans], from, now) : [];
+  const rows: (ReportChange & { ms: number })[] = [
+    ...out.map(({ ms, at, ref, parts }) => ({
+      ms,
+      at,
+      ref,
+      parts: [...parts].sort((a, b) => Number(a.quiet) - Number(b.quiet)),
+    })),
+    ...gaps.map((gap) => ({ ms: gap.to, ...gapChange(gap, t) })),
+  ].sort((a, b) => b.ms - a.ms);
+  const changes: ReportChange[] = !watched
+    ? [
+        {
+          at: null,
+          ref: null,
+          parts: [{ text: t("share", "journalEmpty"), quiet: true }],
+        },
+      ]
+    : rows.map(({ at, ref, parts }) => ({ at, ref, parts }));
   return {
     id: "changes",
     order: ORDER.changes,
     title: t("share", "sectionChanges"),
     icon: iconSvg(History),
-    count: changes.filter((change) => change.at !== null).length,
+    count: out.length,
     body: { type: "changes", changes },
   };
 }

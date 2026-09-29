@@ -94,6 +94,24 @@ describe("the listeners table", () => {
   });
 });
 
+describe("a listener nobody wrote status for", () => {
+  /**
+   * No conditions is a controller that never wrote any, not a listener
+   * that passed every check; the page draws no check for it and the file
+   * drew a green one.
+   */
+  it("gets no green check", () => {
+    const section = gatewayListenersSection(
+      gateway({
+        listeners: [{ ...gateway().listeners[0], conditions: [] }],
+      }),
+      t
+    );
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells.at(-1)?.role).toBe("neutral");
+  });
+});
+
 describe("listener conditions", () => {
   it("names which listener each condition belongs to", () => {
     const section = gatewayListenerConditionsSection(gateway(), t);

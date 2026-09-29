@@ -21,17 +21,17 @@ import {
 import { podTotal } from "@/components/overview/health-share";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /** The headline numbers for Share: what is broken, and what is serving. */
-function overviewStats(overview: ClusterOverviewData): ReportStat[] {
+function overviewStats(overview: ClusterOverviewData, t: T): ReportStat[] {
   const total = overview.problems.length + overview.problemsTruncated;
   const critical = overview.problems.some((p) => p.severity === "critical");
   const pods = podTotal(overview.pods);
   const serving = overview.pods.running - overview.pods.crashLooping;
   const stats: ReportStat[] = [
     {
-      label: "Problems",
+      label: t("action", "needsAttention"),
       value: String(total),
       role: total === 0 ? "ok" : critical ? "err" : "warn",
     },
@@ -139,7 +139,7 @@ export function ClusterOverview() {
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
-    stats: () => overviewStats(overview),
+    stats: () => overviewStats(overview, t),
   };
 
   return (

@@ -1,14 +1,17 @@
 import { useCallback, useMemo } from "react";
 import { Container } from "lucide-react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { readLogView, logViewKey } from "@/components/logs/shared-view";
 import { logsToText } from "@/components/logs/types";
 import { useHintChain } from "@/components/pod/useHintChain";
 import { hintFor, sayingWords, troubleOf } from "@/lib/hints";
 import { iconSvg } from "@/lib/icon-svg";
 import { parseImageRef } from "@/lib/image-ref";
-import { silenceNote, silenceOf, type NodeSilence } from "@/lib/node-reporting";
+import { silenceOf, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportContainer, ReportLog, ReportStat } from "@/lib/report";
 import {
   ORDER,
@@ -16,10 +19,11 @@ import {
   refOf,
   type PlacedSection,
 } from "@/lib/report-parts";
+import { podStatusValue } from "@/lib/share/pod-status";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { formatSince } from "@/lib/utils";
 import { describeTermination, lastTermination } from "@/lib/pod-status";
-import { useSilentNodes } from "@/hooks/useSilentNodes";
+import { errorToShow } from "@/lib/error-utils";
 import { useT, type T } from "@/i18n/useT";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import type { ContainerInfo, EventInfo, PodInfo } from "@/generated/types";
@@ -27,13 +31,14 @@ import type { ContainerInfo, EventInfo, PodInfo } from "@/generated/types";
 /** A published page, not a log store: the tail is what a colleague reads. */
 const MAX_LOG_LINES = 500;
 
-function statusOf(pod: PodInfo, silence: NodeSilence | null, t: T) {
-  return {
-    text: silence
-      ? `${pod.status.display} · ${silenceNote(silence, t)}`
-      : pod.status.display,
-    role: silence ? ("warn" as const) : statusRole(pod.status.display),
-  };
+function statusOf(
+  pod: PodInfo,
+  silence: NodeSilence | null,
+  capturedAt: string,
+  t: T
+) {
+  const value = podStatusValue(pod, silence, t, capturedAt);
+  return { text: value.text, role: value.role ?? statusRole(value.text) };
 }
 
 function statsOf(pod: PodInfo, capturedAt: string, t: T): ReportStat[] {
@@ -138,8 +143,8 @@ function logsOf(
           caption:
             tail.length < viewed.lines.length
               ? t("share", "logsTail", {
-                  n: tail.length,
-                  total: viewed.lines.length,
+                  n: viewed.lines.length,
+                  shown: tail.length,
                 })
               : t("share", "logsShown", { n: tail.length }),
         },
@@ -182,47 +187,71 @@ function containersSection(pod: PodInfo, t: T): PlacedSection {
  */
 export function usePodShare(
   pod: PodInfo | undefined,
-  events: EventInfo[]
-): () => ShareContribution {
+  events: EventInfo[],
+  eventsError: unknown
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   const trouble = useMemo(
     () => (pod ? troubleOf(pod, events) : null),
     [pod, events]
   );
-  // The setting the panel reads: turning «Most likely» off has to stop the
-  // reading behind it too, not only the panel.
+  // The two settings the panel reads: turning «Most likely» off has to stop
+  // the reading behind it too, and turning log lines off has to keep them
+  // out of every hand-off, this one included.
   const showPanel = useHintSettingsStore((state) => state.showPanel);
+  const includeLogLines = useHintSettingsStore(
+    (state) => state.includeLogLines
+  );
   const { chain, logLines, logContainer, previous } = useHintChain(
     pod ?? EMPTY_POD,
     trouble,
     pod !== undefined && showPanel
   );
-  // What the page says beside the status badge: when the node stopped
-  // answering, everything the kubelet wrote is the last thing it said.
-  const silence = silenceOf(pod?.nodeName, useSilentNodes(pod !== undefined));
 
-  return useCallback((): ShareContribution => {
-    if (!pod) return {};
-    const { logs, absent } = logsOf(
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!pod) return {};
+      const { logs, absent } = includeLogLines
+        ? logsOf(pod, { container: logContainer, lines: logLines, previous }, t)
+        : { logs: [], absent: t("share", "logsOffInSettings") };
+      // The verdict reads the events; built from none, it has to say so.
+      const notRead = [...chain.notRead];
+      if (eventsError)
+        notRead.push(
+          t("hints", "notReadEvents", { reason: errorToShow(eventsError) })
+        );
+      return {
+        status: statusOf(
+          pod,
+          silenceOf(pod.nodeName, frame.silent),
+          frame.capturedAt,
+          t
+        ),
+        stats: statsOf(pod, frame.capturedAt, t),
+        verdict: trouble ? sayHint(trouble, pod, chain, t) : null,
+        notRead,
+        sections: [
+          containersSection(pod, t),
+          {
+            ...logsSectionShell(t),
+            count: logs.reduce((sum, log) => sum + log.lines.length, 0),
+            body: { type: "logs", logs, absent },
+          },
+        ],
+      };
+    },
+    [
       pod,
-      { container: logContainer, lines: logLines, previous },
-      t
-    );
-    return {
-      status: statusOf(pod, silence, t),
-      stats: statsOf(pod, new Date().toISOString(), t),
-      verdict: trouble ? sayHint(trouble, pod, chain, t) : null,
-      notRead: [...chain.notRead],
-      sections: [
-        containersSection(pod, t),
-        {
-          ...logsSectionShell(t),
-          count: logs.reduce((sum, log) => sum + log.lines.length, 0),
-          body: { type: "logs", logs, absent },
-        },
-      ],
-    };
-  }, [pod, logContainer, logLines, previous, t, silence, trouble, chain]);
+      includeLogLines,
+      logContainer,
+      logLines,
+      previous,
+      t,
+      trouble,
+      chain,
+      eventsError,
+    ]
+  );
 }
 
 function sayHint(

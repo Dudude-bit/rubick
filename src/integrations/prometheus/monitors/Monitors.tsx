@@ -9,7 +9,7 @@ import { crdObjectPath } from "../../kit";
 import { integrationSettingsPath } from "../../paths";
 import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
-import { ladderSection } from "./share";
+import { ladderSection, ladderUnread } from "./share";
 import { Detail } from "./Detail";
 import { useHeartbeat } from "./heartbeat";
 import { Strip } from "./Strip";
@@ -55,7 +55,9 @@ export default function Monitors() {
     () => (picture.data ? rowsOfPicture(picture.data) : null),
     [picture.data]
   );
-  useShareSection("prometheus-monitors-ladder", () => ladderSection(rows, t));
+  useShareSection("prometheus-monitors-ladder", () =>
+    ladderSection(rows, ladderUnread(picture, t), t)
+  );
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.monitor.name)) : null),
     [rows]

@@ -9,6 +9,7 @@ import {
   endpointCount,
   endpointState,
   publishedFor,
+  sourceNote,
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
@@ -33,7 +34,21 @@ export function serviceStats(
     stats.push({
       label: t("nav", "published"),
       value: `${published.ready}/${total}`,
-      role: published.ready === total ? ("ok" as const) : ("warn" as const),
+      // Nothing published is the page's red stop, not 0 of 0 done; and a
+      // count deduced from pods, because neither list could be read, is not
+      // one the controller wrote.
+      role:
+        total === 0
+          ? "warn"
+          : published.source === "podReadiness"
+            ? "neutral"
+            : published.ready === total
+              ? "ok"
+              : "warn",
+      note:
+        total === 0
+          ? t("empty", "servicePublishesNothing")
+          : sourceNote(published, t),
     });
   }
   return stats;

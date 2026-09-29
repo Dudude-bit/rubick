@@ -40,7 +40,7 @@ import { CopyableValue } from "@/components/ui/copyable-value";
 import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
-import { useT } from "@/i18n/useT";
+import { useT, type T as Translator } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
@@ -61,9 +61,10 @@ export interface ListShare<T> {
 /** Keyed by the list itself, so two lists with one title both reach the report. */
 function useListShare<T>(items: readonly T[], share: ListShare<T> | undefined) {
   const key = useId();
+  const t = useT();
   useShareSection(share ? key : null, () =>
     share
-      ? findingsSection(items, share, share.id ?? slugOf(share.title))
+      ? findingsSection(items, share, share.id ?? slugOf(share.title), t)
       : null
   );
 }
@@ -71,18 +72,35 @@ function useListShare<T>(items: readonly T[], share: ListShare<T> | undefined) {
 function findingsSection<T>(
   items: readonly T[],
   share: ListShare<T>,
-  id: string
-): PlacedSection | null {
+  id: string,
+  t: Translator
+): PlacedSection {
   const found = items.flatMap((item) => {
     const built = share.toFinding(item);
     return built === null ? [] : Array.isArray(built) ? built : [built];
   });
-  if (found.length === 0) return null;
-  return {
+  const shell = {
     id,
     order: ORDER.own,
     title: share.title,
     icon: iconSvg(AlertTriangle),
+  };
+  // A list that read its rows and found nothing wrong says so: left out, it
+  // is the same file as a list that was never read.
+  if (found.length === 0)
+    return {
+      ...shell,
+      count: 0,
+      body: {
+        type: "text",
+        text:
+          items.length > 0
+            ? t("share", "checkedNoneWrong", { n: items.length })
+            : t("share", "nothingHere"),
+      },
+    };
+  return {
+    ...shell,
     count: found.length,
     body: { type: "findings", items: found },
   };

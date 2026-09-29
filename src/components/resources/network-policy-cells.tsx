@@ -11,98 +11,87 @@ import type {
   NetworkPolicyInfo,
   PolicyDirection,
   PolicyPeer,
+  PolicySelects,
 } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import {
+  directionWords,
   namespacesOf,
   podsOf,
   reachOf,
+  reachWords,
+  selectsWords,
   verdictOf,
   type DirectionVerdict,
+  type Reach,
 } from "@/lib/network-policy";
 
 /**
  * What each of the four answers looks like. A total map, so a fifth verdict
  * cannot be added without this failing to compile — the alternative is a
  * lookup with a fallback, which paints a new state neutral and says nothing.
+ * The words are `directionWords`, which the shared file reads too.
  */
-const VERDICT: Record<DirectionVerdict, { k: string; tone: string }> = {
+const VERDICT_TONE: Record<DirectionVerdict, string> = {
   // The policy says nothing about this direction; another policy may.
-  notGoverned: { k: "saysNothing", tone: "text-fg-fnt" },
-  deniesEverything: { k: "deniesAll", tone: "text-fg-mid" },
+  notGoverned: "text-fg-fnt",
+  deniesEverything: "text-fg-mid",
   // The one worth a colour: a governed direction with a rule that names no
   // peer is wide open, and it looks like a configured policy from every
   // other screen.
-  opensToEverything: { k: "allowsAll", tone: "text-warn" },
-  restricts: { k: "", tone: "text-fg-mut" },
+  opensToEverything: "text-warn",
+  restricts: "text-fg-mut",
 };
 
 export function DirectionCell({ direction }: { direction: PolicyDirection }) {
-  const verdict = verdictOf(direction);
-  const { k, tone } = VERDICT[verdict];
+  const t = useT();
   return (
-    <span className={tone}>
-      {verdict === "restricts" ? (
-        <T section="count" k="rules" values={{ n: direction.rules.length }} />
-      ) : (
-        <T section="empty" k={k as "deniesAll"} />
-      )}
+    <span className={VERDICT_TONE[verdictOf(direction)]}>
+      {directionWords(direction, t).text}
     </span>
   );
 }
 
+/**
+ * `cannotSay` is not a zero and not a blank: the pods were never read. A
+ * policy behind no pod at all is the finding this page exists for — accepted,
+ * listed, enforcing nothing, and every other screen shows the namespace as
+ * protected.
+ */
+const REACH_TONE: Record<Reach["kind"], string> = {
+  cannotSay: "text-fg-fnt",
+  nothing: "text-warn",
+  pods: "text-fg-mut",
+};
+
 export function ReachCell({ policy }: { policy: NetworkPolicyInfo }) {
-  const reach = reachOf(policy.selected);
-  switch (reach.kind) {
-    // Not a zero, and not a blank: the pods were never read, so this page
-    // has no number to give and says which of the two it is.
-    case "cannotSay":
-      return (
-        <span className="text-fg-fnt">
-          <T section="empty" k="podsNotRead" />
-        </span>
-      );
-    // The finding this page exists for. A policy behind no pod at all is
-    // accepted by the API server, listed like any other, and enforces
-    // nothing — every other screen shows the namespace as protected.
-    case "nothing":
-      return (
-        <span className="text-warn">
-          <T section="empty" k="selectsNoPods" />
-        </span>
-      );
-    case "pods":
-      return (
-        <span className="text-fg-mut">
-          <T section="count" k="pods" values={{ n: reach.count }} />
-        </span>
-      );
-  }
+  const t = useT();
+  return (
+    <span className={REACH_TONE[reachOf(policy.selected).kind]}>
+      {reachWords(policy.selected, t).text}
+    </span>
+  );
 }
 
+/**
+ * The widest thing a NetworkPolicy can say, `everything`, would read as the
+ * narrowest row on the page as a blank cell.
+ */
+const SELECTS_TONE: Record<PolicySelects["kind"], string> = {
+  everything: "text-fg-mid",
+  written: "font-mono text-fg-mid",
+  notSaid: "text-fg-fnt",
+};
+
 export function SelectsCell({ policy }: { policy: NetworkPolicyInfo }) {
-  switch (policy.selects.kind) {
-    // The widest thing a NetworkPolicy can say, and as a blank cell it would
-    // read as the narrowest row on the page.
-    case "everything":
-      return (
-        <span className="text-fg-mid">
-          <T section="empty" k="everyPodHere" />
-        </span>
-      );
-    case "written":
-      return (
-        <span className="font-mono text-fg-mid">{policy.selects.query}</span>
-      );
-    case "notSaid":
-      return (
-        <span className="text-fg-fnt">
-          <T section="empty" k="noSelectorOnPolicy" />
-        </span>
-      );
-  }
+  const t = useT();
+  return (
+    <span className={SELECTS_TONE[policy.selects.kind]}>
+      {selectsWords(policy.selects, t)}
+    </span>
+  );
 }
 
 export function Peer({ peer }: { peer: PolicyPeer }) {

@@ -389,7 +389,12 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     expect(screen.getByText("Applications (2)")).toBeInTheDocument();
   });
 
-  it("leaves the screen's Share empty once every row clears", () => {
+  /**
+   * Left out once every row cleared, the section made the same file as a
+   * list that was never read: nothing, under "everything was read". A list
+   * with nothing wrong says how many it checked.
+   */
+  it("says how many it checked once every row clears", () => {
     render(
       <MemoryRouter>
         <ScreenShareProvider>
@@ -409,7 +414,7 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
       </MemoryRouter>
     );
     fireEvent.click(screen.getByText("collect"));
-    expect(screen.queryByText(/Applications/)).not.toBeInTheDocument();
+    expect(screen.getByText("Applications (0)")).toBeInTheDocument();
   });
 
   it("registers a row's own findings under the title the caller gives it", () => {

@@ -29,6 +29,16 @@ describe("release history", () => {
     expect(section.body.more).toContain("5");
   });
 
+  /** Written as a time for a person in UTC, not in the sender's zone unmarked. */
+  it("writes when each revision was updated as a time the file draws in UTC", () => {
+    const section = helmHistorySection([revision(1)], t);
+    if (!section || section.body.type !== "table")
+      throw new Error("expected a table");
+    expect(section.body.rows[0].cells[4]).toMatchObject({
+      at: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
   it("is absent rather than an empty table for a release with no history read", () => {
     expect(helmHistorySection([], t)).toBeNull();
   });

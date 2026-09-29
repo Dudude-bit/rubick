@@ -31,11 +31,27 @@ export function needsAcknowledgement(target: ShareTargetInfo): boolean {
   return target.public;
 }
 
-/** The key the draft is remembered against: one link per object per target. */
-export function objectKey(subject: {
-  kind: string;
-  namespace: string | null;
-  name: string;
+/**
+ * The key the draft is remembered against: one link per object per cluster
+ * per target, so a second share of the same object updates its link and a
+ * share from another cluster never replaces it. A screen is not one object
+ * with versions: its key is the route it was taken on, filters and all.
+ */
+export function objectKey(report: {
+  subject: {
+    kind: string;
+    namespace: string | null;
+    name: string;
+    context: string;
+  };
+  hero: { ref: unknown };
+  link: string;
 }): string {
-  return `${subject.kind}/${subject.namespace ?? ""}/${subject.name}`;
+  const { subject } = report;
+  if (report.hero.ref !== null)
+    return `${subject.context}/${subject.kind}/${subject.namespace ?? ""}/${subject.name}`;
+  const route = report.link
+    .replace(/([?&])t=[^&]*&?/, "$1")
+    .replace(/[?&]$/, "");
+  return `${subject.context}/screen/${subject.namespace ?? ""}/${route}`;
 }

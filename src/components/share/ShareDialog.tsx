@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Download, Upload } from "lucide-react";
@@ -24,7 +24,12 @@ import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
-import { renderReport, reportFileName, type Report } from "@/lib/report";
+import {
+  carriesLogLines,
+  renderReport,
+  reportFileName,
+  type Report,
+} from "@/lib/report";
 import {
   needsAcknowledgement,
   objectKey,
@@ -53,6 +58,23 @@ function WebLink({ url, className }: { url: string; className?: string }) {
   );
 }
 
+/** What the dialog lists about a report: the part a reader consents to. */
+function shapeOf(report: Report | null): string {
+  if (!report) return "";
+  return JSON.stringify([
+    report.sections.map((section) => [
+      section.id,
+      section.count ?? null,
+      section.unread ?? null,
+      section.partial ?? null,
+      section.body.type === "logs"
+        ? section.body.logs.reduce((n, log) => n + log.lines.length, 0)
+        : null,
+    ]),
+    report.notRead,
+  ]);
+}
+
 /**
  * Saving is always here; publishing only where the reader configured a
  * target. Sending a cluster's names to a server is a decision, so it is
@@ -74,10 +96,11 @@ export function ShareDialog({
   const [saving, setSaving] = useState(false);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [withLogs, setWithLogs] = useState(true);
-  // Both of these are about one report going to one target. Keeping what
-  // they belong to beside them is what makes changing either take the tick
-  // and the link away, without an effect that races the render.
-  const [ack, setAck] = useState<{ target: string; report: string } | null>(
+  // The tick is consent to what the dialog shows going to one target: what
+  // it showed is kept beside it, so re-including the logs, or a section that
+  // lands or grows after the tick, takes it away. A clock ticking inside the
+  // file does not. The link belongs to the capture and the target.
+  const [ack, setAck] = useState<{ target: string; shape: string } | null>(
     null
   );
   const [published, setPublished] = useState<{
@@ -94,26 +117,32 @@ export function ShareDialog({
         : sum,
     0
   );
-  const shared: Report | null =
-    report && !withLogs && logLines > 0
-      ? {
-          ...report,
-          sections: report.sections.map((section) =>
-            section.body.type === "logs"
-              ? {
-                  ...section,
-                  count: null,
-                  body: {
-                    type: "logs",
-                    logs: [],
-                    absent: t("share", "logsLeftOut"),
-                  },
-                }
-              : section
-          ),
-        }
-      : report;
-  const html = shared ? renderReport(shared) : "";
+  const shared = useMemo<Report | null>(
+    () =>
+      report && !withLogs && logLines > 0
+        ? {
+            ...report,
+            sections: report.sections.map((section) =>
+              section.body.type === "logs"
+                ? {
+                    ...section,
+                    count: null,
+                    body: {
+                      type: "logs",
+                      logs: [],
+                      absent: t("share", "logsLeftOut"),
+                    },
+                  }
+                : section
+            ),
+          }
+        : report,
+    [report, withLogs, logLines, t]
+  );
+  // Built when the report changes, not on every tick of the dialog: a list
+  // report is hundreds of rows, and a checkbox is not a reason to redo them.
+  const html = useMemo(() => (shared ? renderReport(shared) : ""), [shared]);
+  const shape = useMemo(() => shapeOf(shared), [shared]);
   const targets = useQuery({
     queryKey: queryKeys.shareTargets(),
     queryFn: () => commands.listShareTargets(),
@@ -125,21 +154,25 @@ export function ShareDialog({
   const hasTargets = !targets.error && (targets.data ?? []).length > 0;
   const needsAck = target !== null && needsAcknowledgement(target);
 
-  const belongsHere = (value: { target: string; report: string } | null) =>
-    value !== null &&
-    value.target === (targetId ?? "") &&
-    value.report === (report?.capturedAt ?? "");
-  const acknowledged = belongsHere(ack);
-  const link = belongsHere(published) ? (published?.url ?? null) : null;
+  const acknowledged =
+    ack !== null && ack.target === (targetId ?? "") && ack.shape === shape;
+  const link =
+    published !== null &&
+    published.target === (targetId ?? "") &&
+    published.report === (report?.capturedAt ?? "")
+      ? published.url
+      : null;
 
   const publish = useMutation({
     mutationFn: async () => {
       if (!report || !target) throw new Error("no target");
       return commands.publishReport(
         target.id,
-        objectKey(report.subject),
+        objectKey(report),
         reportFileName(report),
-        `${report.subject.kind} ${report.subject.name}`,
+        report.hero.ref
+          ? `${report.subject.kind} ${report.subject.name}`
+          : report.hero.title,
         html
       );
     },
@@ -241,7 +274,9 @@ export function ShareDialog({
             </ul>
             <p className="text-[11px] text-fg-fnt">
               {t("share", "charactersLong", { n: html.length })} ·{" "}
-              {t("share", "noSecrets")}
+              {shared && carriesLogLines(shared)
+                ? t("share", "noSecretsLogs")
+                : t("share", "noSecrets")}
             </p>
             <p
               className="truncate font-mono text-[11px] text-fg-fnt"
@@ -274,11 +309,7 @@ export function ShareDialog({
                 <Checkbox
                   checked={acknowledged}
                   onCheckedChange={(value) =>
-                    setAck(
-                      value === true
-                        ? { target: target.id, report: report.capturedAt }
-                        : null
-                    )
+                    setAck(value === true ? { target: target.id, shape } : null)
                   }
                   aria-label={t("share", "publicAcknowledge")}
                   className="mt-0.5"

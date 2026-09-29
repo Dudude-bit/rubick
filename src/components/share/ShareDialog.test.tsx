@@ -111,6 +111,8 @@ const report: Report = {
     init: "init",
     madeBy: "Made by Rubick",
     noSecrets: "No Secret value is ever written into this file.",
+    noSecretsLogs:
+      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
   },
   icons: {
     roles: { ok: "", pending: "", warn: "", err: "", neutral: "" },
@@ -125,13 +127,15 @@ function mount(value: Report | null = report) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const tree = (next: Report | null) => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <ShareDialog report={value} open onOpenChange={() => {}} />
+        <ShareDialog report={next} open onOpenChange={() => {}} />
       </TooltipProvider>
     </QueryClientProvider>
   );
+  const view = render(tree(value));
+  return { ...view, show: (next: Report | null) => view.rerender(tree(next)) };
 }
 
 // Radix's Select drives its listbox through pointer capture, which jsdom
@@ -184,6 +188,22 @@ describe("ShareDialog", () => {
     expect(preview.textContent).toContain("Most likely");
     expect(preview.textContent).toContain("What changed");
     expect(preview.textContent).toContain("Not read");
+  });
+
+  /**
+   * A container that printed a password prints it into the file too; the
+   * redaction takes out what it recognises and no more. "No Secret value,
+   * ever" over those lines was a promise nothing kept.
+   */
+  it("promises no more than the redaction does once log lines are in", async () => {
+    mount();
+    expect(screen.getByText(/cannot be complete/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No Secret value is ever written/)
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
     expect(
       screen.getByText(/No Secret value is ever written/)
     ).toBeInTheDocument();
@@ -261,8 +281,10 @@ describe("publishing", () => {
       commands.publishReport
     ).mock.calls[0];
     expect(targetId).toBe("t-public");
-    // One link per object per target: the draft is remembered against this key.
-    expect(object).toBe("Pod/shop/payments-7b6d9c5f4-x8k2p");
+    // One link per object per cluster per target: the draft is remembered
+    // against this key, so another cluster's pod of the same name never
+    // replaces it.
+    expect(object).toBe("prod-eu-1/Pod/shop/payments-7b6d9c5f4-x8k2p");
     expect(filename).toContain("payments-7b6d9c5f4-x8k2p");
     expect(html).toContain("<!doctype html>");
     const links = await screen.findAllByRole("link", {
@@ -339,5 +361,90 @@ describe("publishing", () => {
       await screen.findByRole("button", { name: /Publish to/ })
     ).toBeDisabled();
     expect(screen.getByText(/has no key yet/)).toBeInTheDocument();
+  });
+
+  async function tickFor(label: RegExp) {
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(await screen.findByRole("option", { name: label }));
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I understand what leaves this machine/,
+      })
+    );
+    return screen.findByRole("button", { name: /Publish to/ });
+  }
+
+  /**
+   * The tick was given for a file without the logs. Ticking them back on
+   * changes what leaves; the consent has to be given again.
+   */
+  it("takes the tick away when the log lines are put back in", async () => {
+    targets.list = [publicTarget];
+    mount();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    const publish = await tickFor(/postplan/);
+    expect(publish).toBeEnabled();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(publish).toBeDisabled();
+  });
+
+  /** Consent to one public target is not consent to another. */
+  it("takes the tick away when another public target is picked", async () => {
+    targets.list = [
+      publicTarget,
+      { ...publicTarget, id: "t-other", label: "elsewhere", host: "x.dev" },
+    ];
+    mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    await userEvent.click(screen.getByRole("combobox", { name: "Target" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: /elsewhere/ })
+    );
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
+  });
+
+  /**
+   * Events land after Share is pressed. The reader ticked a file with three
+   * changes; one with four is not what they looked at.
+   */
+  it("takes the tick away when what the dialog lists changes", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      sections: report.sections.map((section) =>
+        section.id === "changes" ? { ...section, count: 4 } : section
+      ),
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
+  });
+
+  /**
+   * A clock inside the file — "restarted 2m ago" becoming "3m ago" — is
+   * not a different file to consent to. Keyed on the whole file, the tick
+   * cleared itself on every tick of a live screen and nobody could publish.
+   */
+  it("keeps the tick when only the words inside a section move", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      verdict: "Most likely: it cannot reach its database, 3m ago.",
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeEnabled();
   });
 });

@@ -19,6 +19,7 @@ import { Link } from "react-router-dom";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { integrationSettingsPath } from "../paths";
 import { useClusterStore } from "@/stores/clusterStore";
+import { addressOf } from "./address";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER } from "@/lib/report-parts";
@@ -54,6 +55,7 @@ export default function Connection() {
 
   useShareSection("prometheus-connection", () => {
     if (!saved.data) return null;
+    const address = addressOf(saved.data.url);
     const unread = found.error ? t("empty", "promCouldNotAsk") : null;
     const reached = found.data ? verdict(found.data, t) : null;
     return {
@@ -69,9 +71,7 @@ export default function Connection() {
             label: t("columns", "address"),
             values: [
               {
-                text: saved.data.url
-                  .replace(/^https?:\/\//, "")
-                  .replace(/\/+$/, ""),
+                text: address.shown,
                 mono: true,
               },
             ],
@@ -83,7 +83,9 @@ export default function Connection() {
                 text:
                   saved.data.authType === "bearer"
                     ? t("monitors", "bearerToken")
-                    : t("share", "intAuthNone"),
+                    : address.basic
+                      ? t("share", "intAuthBasicInUrl")
+                      : t("share", "intAuthNone"),
               },
             ],
           },

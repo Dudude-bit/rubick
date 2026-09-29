@@ -26,6 +26,8 @@ const WORDS: ReportWords = {
   init: "init",
   madeBy: "Made by Rubick",
   noSecrets: "No Secret value is ever written into this file.",
+  noSecretsLogs:
+    "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
 };
 
 const svg = (name: string) => `<svg data-icon="${name}"></svg>`;
@@ -430,13 +432,47 @@ describe("renderReport", () => {
     expect(html).toContain("&lt;/pre&gt;&lt;script&gt;");
   });
 
-  /** The claim in the file's own footer, asserted where it can actually fail. */
-  it("keeps the promise where the promise can be broken", () => {
+  /**
+   * The redaction takes out what it recognises, and a log line is whatever
+   * the container printed; the footer over it says exactly that, and only a
+   * file with no log lines promises "never".
+   */
+  it("promises in the footer no more than the redaction keeps", () => {
     const html = renderReport(
       report({ sections: [logs("connecting with password=hunter2")] })
     );
     expect(html).not.toContain("hunter2");
-    expect(html).toContain("No Secret value is ever written into this file.");
+    expect(html).toContain("that cannot be complete");
+    expect(html).not.toContain("No Secret value is ever written");
+    expect(renderReport(report({ sections: [] }))).toContain(
+      "No Secret value is ever written into this file."
+    );
+  });
+
+  /**
+   * Two of three namespaces answered: the rows that came back are drawn,
+   * with what did not above them, and no count that reads as the whole.
+   */
+  it("draws what was read of a section with what was not above it, and no count", () => {
+    const html = renderReport(
+      report({
+        sections: [
+          {
+            ...section("pods", {
+              type: "table",
+              columns: ["Name"],
+              rows: [{ cells: [{ text: "web-1" }] }],
+              more: null,
+            }),
+            count: 14,
+            partial: "Could not read pods in team-c",
+          },
+        ],
+      })
+    );
+    expect(html).toContain('<p class="warn">Could not read pods in team-c</p>');
+    expect(html).toContain("web-1");
+    expect(html).not.toContain('<span class="n">14</span>');
   });
 });
 

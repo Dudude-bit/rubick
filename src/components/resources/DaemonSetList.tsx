@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@/components/ui/table-features";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 
 import type { DaemonSetInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -26,19 +26,28 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
   {
     size: 90,
     id: "desired",
-    header: () => <T section="columns" k="desired" />,
+    header: columnHeader("columns", "desired"),
+    meta: { share: (row: DaemonSetInfoWithMetrics) => String(row.desired) },
     cell: ({ row }) => row.original.desired,
   },
   {
     size: 90,
     id: "current",
-    header: () => <T section="columns" k="current" />,
+    header: columnHeader("columns", "current"),
+    meta: { share: (row: DaemonSetInfoWithMetrics) => String(row.current) },
     cell: ({ row }) => row.original.current,
   },
   {
     size: 80,
     id: "ready",
-    header: () => <T section="columns" k="ready" />,
+    header: columnHeader("columns", "ready"),
+    meta: {
+      share: (row: DaemonSetInfoWithMetrics) => ({
+        text: String(row.ready),
+        mono: true,
+        role: row.ready === row.desired ? undefined : "warn",
+      }),
+    },
     cell: ({ row }) => {
       const { ready, desired } = row.original;
       // Full coverage is the expected state and stays quiet; only a shortfall

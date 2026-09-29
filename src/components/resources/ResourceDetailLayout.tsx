@@ -35,7 +35,10 @@ import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import { ShareObjectAction } from "@/components/share/ShareAction";
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
 export type { DetailTab } from "./detail-tab";
@@ -165,7 +168,7 @@ interface ResourceDetailLayoutProps {
    * What this page adds to Share, from what it already read. Every detail
    * page gets Share from this frame; this is only the page's own part.
    */
-  share?: () => ShareContribution;
+  share?: (frame: ShareFrame) => ShareContribution;
 
   onBack: () => void;
   onFindReplacement?: () => void;

@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { templateContainersSection } from "@/components/share/containers-section";
 import { podsSection } from "@/components/share/pods-section";
 import type { ReportStat } from "@/lib/report";
@@ -60,17 +63,27 @@ export function useStatefulSetShare(
   statefulSet: StatefulSetDetailInfo | undefined,
   pods: readonly PodInfo[],
   podsError: unknown
-): () => ShareContribution {
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
-  return useCallback((): ShareContribution => {
-    if (!statefulSet) return {};
-    const { desired, ready } = statefulSet.replicas;
-    const pods_ = podsSection({ pods, error: podsError }, t);
-    return {
-      status: statefulSetStatusOf(ready, desired, t),
-      stats: statefulSetStatsOf(statefulSet, t),
-      notRead: pods_.unread ? [pods_.unread] : [],
-      sections: [templateContainersSection(statefulSet, t), pods_],
-    };
-  }, [statefulSet, pods, podsError, t]);
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!statefulSet) return {};
+      const { desired, ready } = statefulSet.replicas;
+      const pods_ = podsSection(
+        {
+          pods,
+          error: podsError,
+          silent: frame.silent,
+          capturedAt: frame.capturedAt,
+        },
+        t
+      );
+      return {
+        status: statefulSetStatusOf(ready, desired, t),
+        stats: statefulSetStatsOf(statefulSet, t),
+        sections: [templateContainersSection(statefulSet, t), pods_],
+      };
+    },
+    [statefulSet, pods, podsError, t]
+  );
 }

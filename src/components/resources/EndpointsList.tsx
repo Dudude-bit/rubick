@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { CircleDot } from "lucide-react";
 
 import type { EndpointsInfo } from "@/generated/types";
@@ -25,7 +26,27 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
   {
     size: 200,
     id: "endpoints",
-    header: () => <T section="columns" k="endpoints" />,
+    header: columnHeader("columns", "endpoints"),
+    meta: {
+      share: (row: EndpointsInfo, t) => {
+        const ready = row.subsets.reduce((n, s) => n + s.addresses.length, 0);
+        const notReady = row.subsets.reduce(
+          (n, s) => n + s.notReadyAddresses.length,
+          0
+        );
+        if (ready === 0 && notReady === 0)
+          return { text: t("empty", "noEndpoints"), role: "err" };
+        return {
+          text: [
+            ready > 0 ? t("count", "nReady", { n: ready }) : null,
+            notReady > 0 ? t("count", "nNotReady", { n: notReady }) : null,
+          ]
+            .filter(Boolean)
+            .join(", "),
+          role: notReady > 0 ? "warn" : "ok",
+        };
+      },
+    },
     cell: ({ row }) => {
       const readyCount = row.original.subsets.reduce(
         (acc, s) => acc + s.addresses.length,
@@ -105,7 +126,20 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     // Three `name:port/protocol` triples side by side, and a "+2" after them.
     size: 220,
     id: "ports",
-    header: () => <T section="columns" k="ports" />,
+    header: columnHeader("columns", "ports"),
+    meta: {
+      share: (row: EndpointsInfo) => ({
+        text:
+          row.subsets
+            .flatMap((s) => s.ports)
+            .map(
+              (port) =>
+                `${port.name ? `${port.name}:` : ""}${port.port}/${port.protocol}`
+            )
+            .join(" ") || "—",
+        mono: true,
+      }),
+    },
     cell: ({ row }) => {
       const ports = row.original.subsets.flatMap((s) => s.ports);
       if (ports.length === 0) return <span className="text-fg-fnt">—</span>;
@@ -131,7 +165,16 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     // A count, and the addresses themselves are in the tooltip.
     size: 70,
     id: "addresses",
-    header: () => <T section="columns" k="ips" />,
+    header: columnHeader("columns", "ips"),
+    meta: {
+      share: (row: EndpointsInfo) => ({
+        text:
+          row.subsets
+            .flatMap((s) => s.addresses.map((address) => address.ip))
+            .join(", ") || "—",
+        mono: true,
+      }),
+    },
     cell: ({ row }) => {
       const addresses = row.original.subsets.flatMap((s) => s.addresses);
       if (addresses.length === 0) {

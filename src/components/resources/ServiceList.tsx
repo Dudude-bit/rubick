@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@/components/ui/table-features";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -28,7 +28,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // "ExternalName" is the longest word this column ever holds.
     size: 120,
     accessorKey: "type",
-    header: () => <T section="columns" k="type" />,
+    header: columnHeader("columns", "type"),
     cell: ({ row }) => (
       <span
         className={
@@ -44,7 +44,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   {
     size: 130,
     accessorKey: "clusterIp",
-    header: () => <T section="columns" k="clusterIp" />,
+    header: columnHeader("columns", "clusterIp"),
     cell: ({ row }) => (
       <AddressCell value={row.original.clusterIp} labelKey="clusterIp" />
     ),
@@ -53,7 +53,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     // An address per line, each behind an icon.
     size: 160,
     accessorKey: "externalIps",
-    header: () => <T section="columns" k="externalIps" />,
+    header: columnHeader("columns", "externalIps"),
     cell: ({ row }) => {
       const ips = row.original.externalIps;
       if (!ips || ips.length === 0)
@@ -80,7 +80,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
           [port.name, port.port, port.protocol].filter(Boolean).join(" ")
         )
         .join(" "),
-    header: () => <T section="columns" k="ports" />,
+    header: columnHeader("columns", "ports"),
     cell: ({ row }) => (
       <PortsDisplay ports={row.original.ports} maxDisplay={2} />
     ),

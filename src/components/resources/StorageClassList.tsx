@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
@@ -18,7 +19,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // The name plus the "default" marker that sits beside it.
     size: 300,
     accessorKey: "name",
-    header: () => <T section="columns" k="name" />,
+    header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">
         <ResourceRef
@@ -38,7 +39,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // A CSI driver name in full: `pd.csi.storage.gke.io`, `rancher.io/local-path`.
     size: 240,
     accessorKey: "provisioner",
-    header: () => <T section="columns" k="provisioner" />,
+    header: columnHeader("columns", "provisioner"),
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.provisioner}</span>
     ),
@@ -46,7 +47,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     size: 120,
     accessorKey: "reclaimPolicy",
-    header: () => <T section="columns" k="reclaimPolicy" />,
+    header: columnHeader("columns", "reclaimPolicy"),
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.reclaimPolicy}</span>
     ),
@@ -55,7 +56,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // "WaitForFirstConsumer" is one unbreakable word.
     size: 170,
     accessorKey: "volumeBindingMode",
-    header: () => <T section="columns" k="bindingMode" />,
+    header: columnHeader("columns", "bindingMode"),
     cell: ({ row }) => (
       <span className="text-fg-mid">{row.original.volumeBindingMode}</span>
     ),
@@ -63,7 +64,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
     size: 100,
     accessorKey: "allowVolumeExpansion",
-    header: () => <T section="columns" k="expansion" />,
+    header: columnHeader("columns", "expansion"),
     cell: ({ row }) => (
       <span className="text-fg-mid">
         {row.original.allowVolumeExpansion ? (
@@ -82,7 +83,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
       Object.entries(row.parameters)
         .map(([key, value]) => `${key}=${value}`)
         .join(" "),
-    header: () => <T section="columns" k="parameters" />,
+    header: columnHeader("columns", "parameters"),
     cell: ({ row }) => {
       const params = Object.entries(row.original.parameters);
       if (params.length === 0) return <span className="text-fg-fnt">—</span>;

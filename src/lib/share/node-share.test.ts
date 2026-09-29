@@ -72,6 +72,8 @@ describe("what the node's own status says in the file", () => {
   });
 });
 
+const AT = "2026-09-25T12:00:00Z";
+
 describe("the pods-on-node table", () => {
   /**
    * The pods list is fetched only while the Pods tab is open. Reading
@@ -79,7 +81,7 @@ describe("the pods-on-node table", () => {
    * on this node", the exact bug this app exists to never make.
    */
   it("says the tab was not opened instead of printing an empty table", () => {
-    const section = podsOnNodeSection(undefined, null, t);
+    const section = podsOnNodeSection(undefined, null, null, AT, t);
     expect(section.unread).toBeTruthy();
     expect(section.body).toMatchObject({ type: "table", rows: [] });
   });
@@ -99,7 +101,7 @@ describe("the pods-on-node table", () => {
       restartCount: 0,
       createdAt: null,
     } as unknown as PodInfo;
-    const section = podsOnNodeSection([pod], null, t);
+    const section = podsOnNodeSection([pod], null, null, AT, t);
     expect(section.unread).toBeNull();
     expect(section.body).toMatchObject({ type: "table" });
     if (section.body.type !== "table") throw new Error("expected a table");
@@ -107,6 +109,32 @@ describe("the pods-on-node table", () => {
       text: "payments-abc",
       ref: { kind: "Pod", stem: "payments-abc" },
     });
+  });
+});
+
+describe("the pods on a node that stopped reporting", () => {
+  /**
+   * The node's own report drew it red NotReady and every pod on it green
+   * `Running`: those statuses are its kubelet's last word, and the Pods tab
+   * drops their colour.
+   */
+  it("draws them without colour and says why", () => {
+    const pod = {
+      name: "payments-abc",
+      namespace: "shop",
+      status: { phase: "Running", display: "Running" },
+      restartCount: 0,
+      createdAt: null,
+    } as unknown as PodInfo;
+    const section = podsOnNodeSection(
+      [pod],
+      null,
+      { node: "n1", since: null, reason: "NodeStatusUnknown" },
+      AT,
+      t
+    );
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells[1].role).toBe("neutral");
   });
 });
 

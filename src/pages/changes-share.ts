@@ -4,7 +4,12 @@ import type { ChangeItem, ObservedSpan } from "@/lib/changes";
 import { journalWords } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportChange } from "@/lib/report";
-import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import {
+  ORDER,
+  gapChange,
+  refOf,
+  type PlacedSection,
+} from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
 
 /** In UTC, like every other time in the file: the reader is not in the sender's zone. */
@@ -41,23 +46,7 @@ export function changesScreenSection(
         },
       ];
     }
-    if (item.kind === "gap") {
-      return [
-        {
-          at: new Date(item.gap.to).toISOString(),
-          ref: null,
-          parts: [
-            {
-              text: t("changes", "notObserved", {
-                from: clock(item.gap.from),
-                to: clock(item.gap.to),
-              }),
-              quiet: false,
-            },
-          ],
-        },
-      ];
-    }
+    if (item.kind === "gap") return [gapChange(item.gap, t)];
     // The screen only ever hands this section journal entries and gaps; a
     // revision, a delivery or a Helm release row has nowhere to attach on a
     // page with no single object, so it is left for the object's own page.

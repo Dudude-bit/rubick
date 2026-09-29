@@ -1,10 +1,15 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useConnections } from "@/hooks/useConnections";
+import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { useCapabilities } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
@@ -16,6 +21,7 @@ import type { Report } from "@/lib/report";
 import {
   CONNECTED_KINDS,
   ORDER,
+  TRAFFIC_KINDS,
   changesSection,
   conditionsSection,
   eventsSection,
@@ -24,6 +30,7 @@ import {
   kindIcon,
   placed,
   refOf,
+  unreadLines,
   type PlacedSection,
 } from "@/lib/report-parts";
 import { graphSections } from "@/lib/report-graph";
@@ -60,6 +67,21 @@ function conditionsIn(resource: unknown): ConditionInfo[] | null {
   return null;
 }
 
+/** Who owns the object, wherever its shape keeps `ownerReferences`. */
+function ownersIn(resource: unknown): { kind: string; name: string }[] {
+  const object = resource as {
+    ownerReferences?: unknown;
+    metadata?: { ownerReferences?: unknown };
+  } | null;
+  const refs = object?.ownerReferences ?? object?.metadata?.ownerReferences;
+  return Array.isArray(refs)
+    ? refs.filter(
+        (ref): ref is { kind: string; name: string } =>
+          typeof ref?.kind === "string" && typeof ref?.name === "string"
+      )
+    : [];
+}
+
 function groupOf(resource: unknown): string {
   const apiVersion = (resource as { apiVersion?: unknown })?.apiVersion;
   return typeof apiVersion === "string" && apiVersion.includes("/")
@@ -75,18 +97,20 @@ function groupOf(resource: unknown): string {
 export function useObjectReport(
   subject: ObjectSubject | null,
   resource: unknown,
-  contribute: (() => ShareContribution) | undefined,
+  contribute: ((frame: ShareFrame) => ShareContribution) | undefined,
   capturing: boolean
 ): { report: Report | null; isPending: boolean } {
   const t = useT();
   const locale = useLocale();
   const context = useClusterStore((s) => s.currentContext) ?? "";
   const journal = useChangeJournalStore((s) => s.entries);
+  const spans = useChangeJournalStore((s) => s.spans);
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
   const vendors = useCapabilities("object.report");
   const location = useLocation();
   const graphed = !!subject && CONNECTED_KINDS.has(subject.kind);
+  const silent = useSilentNodes(capturing);
 
   const connections = useConnections(
     subject?.kind ?? "",
@@ -94,6 +118,9 @@ export function useObjectReport(
     subject?.namespace,
     capturing && graphed
   );
+  // The certificates and controllers in front of the object, as the page's
+  // chain reads them; nothing until Share is pressed, like the graph itself.
+  const routed = useIngressRouting(capturing ? connections.data : undefined);
   const events = useLiveQuery({
     queryKey: [
       ...queryKeys.events(subject?.namespace ?? null),
@@ -123,12 +150,7 @@ export function useObjectReport(
 
   const report = useMemo<Report | null>(() => {
     if (!subject || !capturing || version.data === undefined) return null;
-    const own = contribute?.() ?? {};
-    const notRead = [...(own.notRead ?? [])];
-    const eventsUnread = events.error
-      ? t("hints", "notReadEvents", { reason: errorToShow(events.error) })
-      : null;
-    if (eventsUnread) notRead.push(eventsUnread);
+    const own = contribute?.({ silent, capturedAt }) ?? {};
 
     const sections: PlacedSection[] = [...(own.sections ?? [])];
     const found = conditionsIn(resource);
@@ -142,17 +164,36 @@ export function useObjectReport(
     sections.push(
       eventsSection(
         events.data,
-        eventsUnread ??
-          (events.isPending && !events.data ? t("share", "stillReading") : null)
+        events.error
+          ? errorToShow(events.error)
+          : events.isPending && !events.data
+            ? t("share", "stillReading")
+            : null
       )
     );
-    sections.push(changesSection(journal, context, subject, t));
+    const changes = changesSection(
+      { entries: journal, spans: spans[context] ?? [] },
+      context,
+      { ...subject, owners: ownersIn(resource) },
+      capturedAt,
+      t
+    );
+    if (changes) sections.push(changes);
+    const notLookedAt: string[] = [];
     if (graphed) {
-      const graph = graphSections(connections, t);
+      const graph = graphSections(
+        connections,
+        t,
+        TRAFFIC_KINDS.has(subject.kind),
+        {
+          certificates: own.chain?.certificates ?? routed.certificates,
+          controller: own.chain?.controller,
+          routing: routed.routing,
+        }
+      );
       sections.push(...graph.sections);
-      if (graph.unread) notRead.push(graph.unread);
       for (const unread of connections.data?.notLookedAt ?? [])
-        notRead.push(t("share", "kindNotLookedAt", { kind: unread.kind }));
+        notLookedAt.push(t("share", "kindNotLookedAt", { kind: unread.kind }));
     }
     const spec = (resource as { spec?: unknown })?.spec;
     const status = (resource as { status?: unknown })?.status;
@@ -171,6 +212,15 @@ export function useObjectReport(
       for (const section of theirs ?? [])
         sections.push({ ...section, order: ORDER.vendor });
     }
+    // Everything a section says it could not read, said again where the
+    // reader looks for it; a page's own words about the rest come first.
+    const notRead = [
+      ...new Set([
+        ...(own.notRead ?? []),
+        ...unreadLines(sections),
+        ...notLookedAt,
+      ]),
+    ];
 
     const ref = refOf(subject);
     return {
@@ -196,7 +246,11 @@ export function useObjectReport(
       verdict: own.verdict ?? null,
       sections: placed(sections),
       notRead,
-      link: buildDeepLink(context, `${location.pathname}${location.search}`),
+      link: buildDeepLink(
+        context,
+        `${location.pathname}${location.search}`,
+        new Date(capturedAt)
+      ),
       words: frameWords(t, locale, notRead.length),
       icons: frameIcons(),
     };
@@ -211,9 +265,13 @@ export function useObjectReport(
     t,
     resource,
     journal,
+    spans,
+    silent,
     context,
     graphed,
     connections,
+    routed.certificates,
+    routed.routing,
     vendors,
     capturedAt,
     colouring,

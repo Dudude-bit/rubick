@@ -18,6 +18,7 @@ import { crdObjectPath, hourMinute } from "../../kit";
 import { OutLink } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
 import { monitorDetailSections } from "./share";
+import { utcMoment } from "@/lib/report-parts";
 import type { Picture } from "./data";
 import { useSavedConnection } from "../saved-connection";
 import { useHeartbeat, STEP } from "./heartbeat";
@@ -101,7 +102,11 @@ export function Detail({
   const Icon = ICON[tone];
 
   useShareSection("prometheus-monitor-detail", () =>
-    monitorDetailSections(row, verdict, t)
+    monitorDetailSections(
+      row,
+      verdictOf(row, instances.length, since, lastScrapeAgo, t, utcMoment),
+      t
+    )
   );
 
   return (

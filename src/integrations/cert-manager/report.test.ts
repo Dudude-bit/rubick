@@ -78,6 +78,55 @@ describe("what an Issuer tells a reader with no cluster access", () => {
   });
 });
 
+const statusOf = (kind: string, group: string, status: unknown, spec = {}) => {
+  const sections = reportOf(
+    { group, kind, namespace: "shop", name: "x", spec, status },
+    t
+  );
+  const body = sections?.[0]?.body;
+  if (body?.type !== "facts") throw new Error("expected facts");
+  return body.rows.find((row) => row.label === "Status")!.values[0];
+};
+
+describe("what a CertificateRequest tells a reader", () => {
+  /**
+   * cert-manager writes conditions on a CertificateRequest, never the
+   * `state` an ACME step has, so every shared request said "not written
+   * yet" beside a Conditions section saying Ready.
+   */
+  it("reads its conditions, as the chain on the page does", () => {
+    expect(
+      statusOf("CertificateRequest", "cert-manager.io", {
+        conditions: [
+          { type: "Approved", status: "True", reason: "cert-manager.io" },
+          { type: "Ready", status: "True", reason: "Issued" },
+        ],
+      })
+    ).toEqual({ text: "Issued", role: "ok" });
+  });
+
+  /** An approver's "no" ends the request, whatever Ready says. */
+  it("says a denied request was denied", () => {
+    expect(
+      statusOf("CertificateRequest", "cert-manager.io", {
+        conditions: [
+          { type: "Denied", status: "True", reason: "PolicyDenied" },
+          { type: "Ready", status: "False", reason: "Denied" },
+        ],
+      })
+    ).toEqual({ text: "PolicyDenied", role: "err" });
+  });
+});
+
+describe("what an ACME step tells a reader", () => {
+  /** The page counts an expired Challenge as failed; the file drew it as still pending. */
+  it("counts an expired Challenge as failed, as the page does", () => {
+    expect(
+      statusOf("Challenge", "acme.cert-manager.io", { state: "expired" })
+    ).toMatchObject({ role: "err" });
+  });
+});
+
 describe("what an object of another vendor's kind gets", () => {
   it("declines an IngressRoute: that is Traefik's kind, not cert-manager's", () => {
     const sections = reportOf(

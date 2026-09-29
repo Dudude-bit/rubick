@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@/components/ui/table-features";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 
 import type { JobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -26,14 +26,19 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     // "1/1", under a header that is the widest thing in the column.
     size: 110,
     id: "completions",
-    header: () => <T section="columns" k="completions" />,
+    header: columnHeader("columns", "completions"),
+    meta: {
+      share: (row: JobInfoWithMetrics) =>
+        `${row.succeeded}/${row.completions || "∞"}`,
+    },
     cell: ({ row }) =>
       `${row.original.succeeded}/${row.original.completions || "∞"}`,
   },
   {
     size: 110,
     id: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
+    meta: { share: (row: JobInfoWithMetrics) => row.status },
     cell: ({ row }) => <StatusBadge status={row.original.status} />,
   },
   createAgeColumn<JobInfoWithMetrics>(),

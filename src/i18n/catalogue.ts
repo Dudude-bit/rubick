@@ -382,6 +382,7 @@ export const en = {
     clusterIp: "Cluster IP",
     external: "External",
     progress: "Progress",
+    message: "Message",
     reason: "Reason",
     runtime: "Runtime",
     scheduling: "Scheduling",
@@ -1729,19 +1730,34 @@ export const en = {
       other: "{n} lines, as the Logs tab showed it",
     },
     logsTail: {
-      one: "the last {n} of {total} lines the Logs tab showed",
-      other: "the last {n} of {total} lines the Logs tab showed",
+      one: "the last {shown} of {n} line the Logs tab showed",
+      other: "the last {shown} of {n} lines the Logs tab showed",
     },
     logsFromHint: "the lines «Most likely» read for its verdict",
     logsNotOpened:
       "None: the Logs tab was not open on this page when the report was made.",
     logsLeftOut:
       "Log lines were left out of this report by the person who shared it.",
+    logsOffInSettings:
+      "The person who shared this has log lines turned off for everything the app hands over.",
     openLink: "Open {url}",
     journalEmpty:
       "This app was not watching this cluster, so it recorded no changes.",
     madeBy: "Made by Rubick",
     noSecrets: "No Secret value is ever written into this file.",
+    screenGaveNothing:
+      "Nothing on this screen was put into the file: open it in Rubick to see it.",
+    tableSearched:
+      "Only the rows matching «{query}», as the list was searched.",
+    columnsLeftOut: "Not in this file: {names}.",
+    checkedNoneWrong: {
+      one: "{n} checked, no problems.",
+      other: "{n} checked, no problems.",
+    },
+    traefikRouters: "Every router",
+    utilisationWindow: "Peak and average over the last {range}.",
+    noSecretsLogs:
+      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
     saveHtml: "Save as HTML",
     saved: "Saved to {path}",
     saveFailed: "Could not write the file",
@@ -1834,6 +1850,7 @@ export const en = {
     scyllaNodes: "Tuned nodes",
     intConnectionAuth: "Authentication",
     intConnectionReachable: "Reachable",
+    intAuthBasicInUrl: "basic, in the address",
     intAuthNone: "no authentication",
     ciliumEveryEndpoint: "every endpoint in scope",
     ciliumExpressions: {
@@ -4048,7 +4065,7 @@ export const en = {
     stripNames: "Strip names from the search query",
     stripNamesHint:
       "Pod, namespace, image and host names are replaced with … before the query leaves the app. Turn off if your names are not sensitive.",
-    handoffLogLines: "«Copy for agent» includes log lines",
+    handoffLogLines: "«Copy for agent» and Share include log lines",
     handoffLogLinesHint:
       "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too — passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
     showMostLikely: "Show the «Most likely» panel",

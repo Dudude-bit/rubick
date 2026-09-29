@@ -68,16 +68,13 @@ function targetGroupBindingSections(
     {
       label: t("columns", "status"),
       values: [
+        // No conditions is the normal, healthy case for this controller:
+        // it writes Ready only when something failed.
         failure
           ? { text: failure, role: "err" }
-          : !ready
-            ? { text: t("share", "notWrittenYet"), quiet: true }
-            : ready.status === "True"
-              ? { text: t("share", "awsNoFailure"), quiet: true }
-              : {
-                  text: `Ready=${ready.status}`,
-                  role: ready.status === "False" ? "err" : "neutral",
-                },
+          : ready && ready.status !== "True"
+            ? { text: `Ready=${ready.status}`, role: "neutral" }
+            : { text: t("share", "awsNoFailure"), quiet: true },
       ],
     },
     {

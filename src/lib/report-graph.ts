@@ -2,29 +2,44 @@ import { Link2, Route } from "lucide-react";
 
 import type { ChainStop, ResourceConnections } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { expiryOf, expiryText, problemWords } from "./certificates";
 import {
   chainSilence,
   connectionGroups,
   describeExistence,
   describeStop,
+  hopTone,
   trafficChains,
   type ChainHop,
+  type HopTone,
 } from "./connections";
+
+/** What the page read beyond the graph, handed to the chain the same way. */
+export type ChainExtra = Parameters<typeof trafficChains>[2];
 import { iconSvg } from "./icon-svg";
 import type { ReportHop, ReportPath } from "./report";
 import { ORDER, refOf, type PlacedSection } from "./report-parts";
 
-function hopOf(hop: ChainHop): ReportHop {
+/** The chain's tone as the file draws it: a working hop carries none. */
+const ROLE_OF_TONE: Record<HopTone, ReportHop["tone"]> = {
+  on: null,
+  warn: "warn",
+  bad: "err",
+};
+
+function hopOf(hop: ChainHop, t: T): ReportHop {
   const plain = { ref: null, text: null, detail: null, self: false };
+  const tone = ROLE_OF_TONE[hopTone(hop)];
   switch (hop.at) {
     case "object":
       return {
         ...plain,
         ref: refOf(hop.object),
         detail:
-          [hop.detail, hop.via, ...hop.urls].filter(Boolean).join(" · ") ||
-          null,
-        tone: hop.object.existence === "missing" ? "err" : null,
+          [describeExistence(hop.object, t), hop.detail, hop.via, ...hop.urls]
+            .filter(Boolean)
+            .join(" · ") || null,
+        tone: hop.object.existence === "missing" ? "err" : tone,
         self: hop.self,
       };
     case "published":
@@ -40,15 +55,25 @@ function hopOf(hop: ChainHop): ReportHop {
       return {
         ...plain,
         ref: refOf(hop.secret),
-        detail: hop.hosts.join(", ") || null,
-        tone: null,
+        detail:
+          [
+            hop.read?.certificate
+              ? expiryText(expiryOf(hop.read.certificate), t)
+              : hop.read?.problem
+                ? problemWords(hop.read.problem, t)
+                : null,
+            hop.hosts.join(", "),
+          ]
+            .filter(Boolean)
+            .join(" · ") || null,
+        tone,
       };
     case "controller":
       return {
         ...plain,
         text: `IngressClass ${hop.binding.resolved ?? hop.binding.requested ?? "?"}`,
         detail: hop.binding.controller,
-        tone: hop.binding.controller ? null : "warn",
+        tone,
       };
   }
 }
@@ -79,8 +104,12 @@ function stopSubject(stop: ChainStop) {
  * path stops is the sharpest thing the graph knows, and a Service that
  * publishes no endpoint must not arrive as an ordinary working hop.
  */
-export function trafficOf(conns: ResourceConnections, t: T): ReportPath[] {
-  const chains = trafficChains(conns, t);
+export function trafficOf(
+  conns: ResourceConnections,
+  t: T,
+  extra: ChainExtra = {}
+): ReportPath[] {
+  const chains = trafficChains(conns, t, extra);
   const drawn = new Set(
     chains.flatMap((path) =>
       path.hops.flatMap((hop) => (hop.at === "stop" ? [hop.title] : []))
@@ -88,7 +117,7 @@ export function trafficOf(conns: ResourceConnections, t: T): ReportPath[] {
   );
   const paths: ReportPath[] = chains.map((path) => ({
     broken: path.broken,
-    hops: path.hops.map(hopOf),
+    hops: path.hops.map((hop) => hopOf(hop, t)),
   }));
   for (const stop of conns.stops) {
     const said = describeStop(stop, t);
@@ -126,7 +155,10 @@ export function graphSections(
     error: unknown;
     isPending: boolean;
   },
-  t: T
+  t: T,
+  /** Only where the page draws the chain: other kinds have no path to draw. */
+  withTraffic: boolean,
+  extra: ChainExtra = {}
 ): { sections: PlacedSection[]; unread: string | null } {
   const unread =
     connections.error !== null && connections.error !== undefined
@@ -135,7 +167,7 @@ export function graphSections(
         ? t("share", "chainStillReading")
         : null;
   const data = connections.data;
-  const paths = data ? trafficOf(data, t) : [];
+  const paths = data && withTraffic ? trafficOf(data, t, extra) : [];
   const groups = data
     ? connectionGroups(data, t)
         .filter((group) => group.rows.length > 0)
@@ -157,18 +189,22 @@ export function graphSections(
   return {
     unread,
     sections: [
-      {
-        id: "traffic",
-        order: ORDER.traffic,
-        title: t("share", "sectionTraffic"),
-        icon: iconSvg(Route),
-        unread,
-        body: {
-          type: "traffic",
-          paths,
-          note: data ? chainSilence(data, t) : null,
-        },
-      },
+      ...(withTraffic
+        ? [
+            {
+              id: "traffic",
+              order: ORDER.traffic,
+              title: t("share", "sectionTraffic"),
+              icon: iconSvg(Route),
+              unread,
+              body: {
+                type: "traffic" as const,
+                paths,
+                note: data ? chainSilence(data, t) : null,
+              },
+            },
+          ]
+        : []),
       {
         id: "connections",
         order: ORDER.connections,

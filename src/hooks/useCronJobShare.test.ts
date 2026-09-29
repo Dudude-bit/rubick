@@ -85,6 +85,18 @@ describe("what the CronJob page adds to Share", () => {
     expect(status).toEqual({ text: "Suspended", role: "warn" });
   });
 
+  /**
+   * The file's header says it was captured in UTC; the last success was in
+   * the sender's zone with no zone marked, so a reader elsewhere read it
+   * hours wrong.
+   */
+  it("says when it last succeeded in UTC, and says so", () => {
+    const lastSuccess = cronJobStatsOf(cronJob, "2026-09-25T12:00:00Z", t).find(
+      (stat) => stat.label === "columns.lastSuccess"
+    );
+    expect(lastSuccess?.value).toMatch(/\b0?2:03\b.*UTC$/);
+  });
+
   /** No success yet, distinct from never having run at all. */
   it("warns when it has fired but never succeeded", () => {
     const stats = cronJobStatsOf(
@@ -104,7 +116,10 @@ describe("what the CronJob page adds to Share", () => {
   /** The wiring itself: dropping the runs table from the hook's return must fail this. */
   it("puts the schedule stat and a runs table in what the hook hands to Share", () => {
     const { result } = renderHook(() => useCronJobShare(cronJob, jobs, null));
-    const contribution = result.current();
+    const contribution = result.current({
+      silent: new Map(),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
     expect(contribution.stats).toContainEqual(
       expect.objectContaining({ label: "Schedule", value: "0 2 * * *" })
     );

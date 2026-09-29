@@ -84,6 +84,35 @@ describe("what the Service report leads with", () => {
     const last = stats.at(-1);
     expect(last).toMatchObject({ value: "1/2", role: "warn" });
   });
+
+  /**
+   * Zero ready of zero is not "all ready": the Published tab says the
+   * Service publishes nothing and the chain ends in a red stop, and the
+   * file led with `0/0` and a green check above it.
+   */
+  it("does not call a Service that publishes nothing healthy", () => {
+    const last = serviceStats(
+      service,
+      published({ ready: 0, draining: 0, notReady: 0 }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({ value: "0/0", role: "warn" });
+    expect(last?.note).toBeTruthy();
+  });
+
+  /**
+   * With neither EndpointSlices nor Endpoints readable, the count is
+   * deduced from pods; it is not the controller's word, and says so.
+   */
+  it("draws a count deduced from pods without colour, with the page's note", () => {
+    const last = serviceStats(
+      service,
+      published({ source: "podReadiness", ready: 2 }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({ value: "2/2", role: "neutral" });
+    expect(last?.note).toBeTruthy();
+  });
 });
 
 describe("the ports the Service declares", () => {

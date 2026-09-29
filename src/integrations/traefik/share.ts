@@ -4,7 +4,7 @@ import { sayWords } from "@/i18n/say";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
-import { hostRole } from "../ingress";
+import { hostRole, hostTlsWords } from "../ingress";
 import type { ControllerInfo } from "./data";
 import { type HostGroup, UNNAMED_TARGET } from "./model";
 import { describePath } from "./rule";
@@ -15,7 +15,11 @@ import { describePath } from "./rule";
  * The trouble list above says which host is broken; this says how every one
  * of them, broken or not, is actually wired.
  */
-export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
+export function routesTableSection(
+  groups: HostGroup[],
+  reading: boolean,
+  t: T
+): PlacedSection {
   const rows = groups.flatMap((group) =>
     group.routes.map((route) => ({
       cells: [
@@ -39,7 +43,18 @@ export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
             route.middlewares.map((middleware) => middleware.name).join(", ") ||
             "–",
         },
-        { text: route.tlsSecret ?? "–" },
+        // The host's TLS as the status list reads it, not only the Secret
+        // this one router names: "–" beside "TLS not checked" is two answers.
+        {
+          text: route.tlsSecret ?? hostTlsWords(group.tls, t),
+          role: route.tlsSecret
+            ? undefined
+            : group.tls.at === "unknown"
+              ? ("neutral" as const)
+              : group.tls.at === "none"
+                ? ("warn" as const)
+                : undefined,
+        },
         route.service
           ? {
               text: route.service.name,
@@ -56,9 +71,10 @@ export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
   return {
     id: "traefik-routes-table",
     order: ORDER.own,
-    title: t("nav", "routes"),
+    title: t("share", "traefikRouters"),
     icon: iconSvg(Globe),
-    count: rows.length,
+    count: reading ? null : rows.length,
+    unread: reading ? t("share", "stillReading") : null,
     body: {
       type: "table",
       columns: [
@@ -75,14 +91,6 @@ export function routesTableSection(groups: HostGroup[], t: T): PlacedSection {
   };
 }
 
-/**
- * The one statement that is about the proxy rather than about a host.
- *
- * A router that names no entry point is bound to every one of them, so a
- * plain entry point with no redirection makes *every* host in the cluster
- * reachable unencrypted, including the ones with a perfectly good
- * certificate. Said once, here, rather than eighty times on the Routes tab.
- */
 /**
  * Every entry point Traefik listens on: its address, whether it is TLS, and
  * where it lands or redirects. None read is unread: Traefik always listens

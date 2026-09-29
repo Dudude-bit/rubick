@@ -47,6 +47,8 @@ export interface UtilisationShareInput {
    * carries it instead of drawing an empty table in its place.
    */
   unread: string | null;
+  /** The window every peak and average is over. */
+  range: string;
 }
 
 /**
@@ -58,7 +60,8 @@ export function nodeUtilisationSections(
   input: UtilisationShareInput,
   t: T
 ): PlacedSection[] {
-  const { trends, notes, fromPods, silent, vendor, capable, unread } = input;
+  const { trends, notes, fromPods, silent, vendor, capable, unread, range } =
+    input;
   if (!capable)
     return [
       {
@@ -76,6 +79,7 @@ export function nodeUtilisationSections(
     icon: iconSvg(Gauge),
     count: trends.length,
     unread,
+    caption: t("share", "utilisationWindow", { range }),
     body: {
       type: "table",
       columns: [

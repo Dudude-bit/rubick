@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import { useNavigate } from "react-router-dom";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
@@ -28,6 +29,8 @@ import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
+import { refOf } from "@/lib/report-parts";
+import { podStatusValue } from "@/lib/share/pod-status";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 
@@ -98,6 +101,11 @@ export const columns: ColumnDef<PodRow>[] = [
     // the phase of a pod that has crashed six hundred times.
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
+    meta: {
+      label: { section: "columns", key: "status" },
+      share: (pod: PodRow, t) =>
+        podStatusValue(pod, pod.nodeSilence ?? null, t),
+    },
     header: ({ column }) => (
       <SortableHeader column={column}>
         <T section="columns" k="status" />
@@ -120,6 +128,13 @@ export const columns: ColumnDef<PodRow>[] = [
       return total - ready;
     },
     enableSorting: true,
+    meta: {
+      label: { section: "columns", key: "ready" },
+      share: (pod: PodRow) => {
+        const { ready, total } = podReadiness(pod);
+        return { text: `${ready}/${total}`, mono: true };
+      },
+    },
     header: ({ column }) => (
       <SortableHeader column={column}>
         <T section="columns" k="ready" />
@@ -143,6 +158,14 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "restarts",
     accessorFn: (pod) => pod.restartCount,
     enableSorting: true,
+    meta: {
+      label: { section: "columns", key: "restarts" },
+      share: (pod: PodRow) => ({
+        text: String(pod.restartCount),
+        mono: true,
+        role: pod.restartCount > 5 ? "warn" : undefined,
+      }),
+    },
     header: ({ column }) => (
       <SortableHeader column={column}>
         <T section="columns" k="restarts" />
@@ -174,7 +197,16 @@ export const columns: ColumnDef<PodRow>[] = [
     // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
     size: 220,
     id: "node",
-    header: () => <T section="columns" k="node" />,
+    header: columnHeader("columns", "node"),
+    meta: {
+      share: (pod: PodRow) =>
+        pod.nodeName
+          ? {
+              text: pod.nodeName,
+              ref: refOf({ kind: "Node", name: pod.nodeName, namespace: null }),
+            }
+          : "-",
+    },
     cell: ({ row }) =>
       row.original.nodeName ? (
         <ResourceRef
@@ -189,7 +221,8 @@ export const columns: ColumnDef<PodRow>[] = [
   {
     size: 130,
     id: "ip",
-    header: () => <T section="columns" k="ip" />,
+    header: columnHeader("columns", "ip"),
+    meta: { share: (pod: PodRow) => ({ text: pod.podIp ?? "-", mono: true }) },
     cell: ({ row }) => <PodIpCell pod={row.original} />,
   },
   createAgeColumn<PodRow>(),

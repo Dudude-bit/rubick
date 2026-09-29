@@ -8,6 +8,7 @@ import {
   agentReport,
   hintFor,
   namespaceOf,
+  redact,
   searchQuery,
   searchUrl,
   troubleOf,
@@ -869,5 +870,54 @@ describe("agentReport", () => {
     expect(report).toContain("Service shop/shop-db-rw: 0 of 3 endpoints ready");
     expect(report).toContain("BackOff x9");
     expect(report.startsWith("# Rubick 4.9.2 · context prod-eu-1")).toBe(true);
+  });
+});
+
+describe("redact", () => {
+  /**
+   * The lines a shared report carries are what a container printed at
+   * start-up, and that is env and config: a key with a prefix, a JSON key
+   * with a quote before its colon. Matching only a bare `password=` let
+   * `DB_PASSWORD=hunter2` out under a footer that promised otherwise.
+   */
+  it("takes the value out of env, logfmt, JSON and YAML keys that name a secret", () => {
+    for (const line of [
+      "DB_PASSWORD=hunter2",
+      "MYSQL_ROOT_PASSWORD: hunter2",
+      '{"password":"hunter2","user":"app"}',
+      '{"apiKey": "hunter2"}',
+      "client_secret=hunter2&scope=read",
+      "AWS_SECRET_ACCESS_KEY=hunter2",
+      "jdbc:postgresql://db:5432/app?user=svc&password=hunter2",
+      "dsn=postgres://app:hunter2@db:5432/app",
+    ])
+      expect(redact(line)).not.toContain("hunter2");
+    expect(redact('{"password":"hunter2","user":"app"}')).toBe(
+      '{"password":…,"user":"app"}'
+    );
+  });
+
+  /**
+   * "Authorization" is a key the pattern above takes too; reading "Bearer"
+   * as its value replaced the word and left the token beside it.
+   */
+  it("takes out the token after Bearer, not the word Bearer", () => {
+    expect(redact("Authorization: Bearer abcdefghijklmnopqrstuvwxyz")).toBe(
+      "Authorization: Bearer …"
+    );
+  });
+
+  /** Tokens that say what they are by their first letters, with no key in front. */
+  it("takes out access key ids and prefixed tokens standing alone", () => {
+    expect(redact("aws key AKIAIOSFODNN7EXAMPLE")).toBe("aws key …");
+    expect(redact("using ghp_abcdefghijklmnopqrstuvwxyz0123456789")).toBe(
+      "using …"
+    );
+  });
+
+  /** A line with nothing secret in it reaches the reader as it was written. */
+  it("leaves an ordinary line alone", () => {
+    const line = 'time=2026-09-28T23:14:09Z level=info msg="ok" port=8080';
+    expect(redact(line)).toBe(line);
   });
 });

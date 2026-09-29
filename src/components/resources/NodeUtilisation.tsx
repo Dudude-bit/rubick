@@ -116,7 +116,10 @@ export function NodeUtilisation({
                   vendor: power.state === "ready" ? power.vendor : "",
                   reason: errorToShow(query.error),
                 })
-              : null,
+              : ready && query.isPending
+                ? t("share", "stillReading")
+                : null,
+        range,
       },
       t
     )

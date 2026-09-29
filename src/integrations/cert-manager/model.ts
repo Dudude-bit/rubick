@@ -20,7 +20,7 @@ import { expiryText, managedExpiryOf, type Expiry } from "@/lib/certificates";
 import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 
-import { conditionOf, getValueByPath, type VendorCondition } from "../kit";
+import { conditionOf, getValueByPath } from "../kit";
 import type { Tone } from "../page-kit";
 import { certificateUse, type CertificateUse } from "./serves";
 
@@ -142,8 +142,39 @@ function strings(resource: CustomResourceInfo, path: string): string[] {
 }
 
 /** The controller's word for where a condition stands, then its type. */
-function stateOf(condition: VendorCondition | null, fallback: string): string {
+type Said = {
+  status: string;
+  reason?: string | null;
+  message?: string | null;
+} | null;
+
+function stateOf(condition: Said, fallback: string): string {
   return condition?.reason || condition?.status || fallback;
+}
+
+/**
+ * Where a CertificateRequest stands, from its `Denied` and `Ready`
+ * conditions: a denial first, since an approver's "no" ends it. The chain
+ * and the shared file both read it here.
+ */
+export function requestStep(
+  denied: Said,
+  ready: Said
+): { state: string; note: string | null; failed: boolean; done: boolean } {
+  return {
+    state: stateOf(denied?.status === "True" ? denied : ready, "pending"),
+    note: denied?.message ?? ready?.message ?? null,
+    failed:
+      denied?.status === "True" ||
+      ready?.reason === "Failed" ||
+      ready?.reason === "Denied",
+    done: denied?.status !== "True" && ready?.status === "True",
+  };
+}
+
+/** An ACME Order or Challenge `state` the chain calls a failure. */
+export function acmeFailed(state: string): boolean {
+  return state === "invalid" || state === "errored" || state === "expired";
 }
 
 const ownedBy = (resource: CustomResourceInfo, uid: string): boolean =>
@@ -206,26 +237,21 @@ function walk(
   );
   if (!request) return { steps, failure: deepest };
 
-  const requestReady = conditionOf(request, "Ready");
-  const denied = conditionOf(request, "Denied");
-  const requestFailed =
-    denied?.status === "True" ||
-    requestReady?.reason === "Failed" ||
-    requestReady?.reason === "Denied";
-  deepest = denied?.message ?? requestReady?.message ?? deepest;
+  const step = requestStep(
+    conditionOf(request, "Denied"),
+    conditionOf(request, "Ready")
+  );
+  deepest = step.note ?? deepest;
   steps.push({
     kind: "CertificateRequest",
     name: request.name,
     namespace: request.namespace,
     crd: REQUESTS_CRD,
-    state: stateOf(
-      denied?.status === "True" ? denied : requestReady,
-      "pending"
-    ),
-    note: denied?.message ?? requestReady?.message ?? null,
-    failed: requestFailed,
+    state: step.state,
+    note: step.note,
+    failed: step.failed,
   });
-  if (requestFailed) return { steps, failure: deepest };
+  if (step.failed) return { steps, failure: deepest };
 
   const order = newest(orders.filter((item) => ownedBy(item, request.uid)));
   if (!order) return { steps, failure: deepest };
@@ -233,7 +259,7 @@ function walk(
   const orderState = text(order, "status.state") ?? "pending";
   const orderReason = text(order, "status.reason");
   deepest = orderReason ?? deepest;
-  const orderFailed = orderState === "errored" || orderState === "invalid";
+  const orderFailed = acmeFailed(orderState);
   steps.push({
     kind: "Order",
     name: order.name,
@@ -252,7 +278,7 @@ function walk(
   )) {
     const state = text(challenge, "status.state") ?? "pending";
     const reason = text(challenge, "status.reason");
-    const failed = state === "invalid" || state === "expired";
+    const failed = acmeFailed(state);
     if (reason && (failed || state !== "valid")) deepest = reason;
     // Without a reason, which domain is being proved and how is the whole of
     // what the step says — and it is what tells `_acme-challenge` apart from

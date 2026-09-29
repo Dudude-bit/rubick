@@ -183,6 +183,13 @@ export interface ReportSection {
    * list and a refused read are opposite answers.
    */
   unread?: string | null;
+  /**
+   * Why some of it could not be read, when the rest was: drawn above what
+   * was, and the count left off, because it is not the whole.
+   */
+  partial?: string | null;
+  /** How the rows were narrowed, or what the screen had that the file does not. */
+  caption?: string | null;
   body: ReportSectionBody;
 }
 
@@ -245,6 +252,8 @@ export interface ReportWords {
   init: string;
   madeBy: string;
   noSecrets: string;
+  /** The same promise, as far as it goes once a container's own lines are in. */
+  noSecretsLogs: string;
 }
 
 export function escapeHtml(value: string): string {
@@ -409,12 +418,18 @@ function none(text: string): string {
   return `<p class="none">${e(text)}</p>`;
 }
 
+const formats = new Map<string, Intl.DateTimeFormat>();
+
 function stamp(iso: string, lang: string, parts: Intl.DateTimeFormatOptions) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(lang, { ...parts, timeZone: "UTC" }).format(
-    date
-  );
+  const key = `${lang}|${JSON.stringify(parts)}`;
+  let format = formats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(lang, { ...parts, timeZone: "UTC" });
+    formats.set(key, format);
+  }
+  return format.format(date);
 }
 
 function when(iso: string, lang: string): string {
@@ -718,11 +733,16 @@ function bodyHtml(body: ReportSectionBody, ctx: Ctx): string {
 }
 
 function sectionHtml(section: ReportSection, ctx: Ctx): string {
+  const caption = section.caption ? none(section.caption) : "";
   const body = section.unread
     ? `<p class="warn">${e(section.unread)}</p>`
-    : bodyHtml(section.body, ctx);
+    : section.partial
+      ? `<p class="warn">${e(section.partial)}</p>${caption}${bodyHtml(section.body, ctx)}`
+      : `${caption}${bodyHtml(section.body, ctx)}`;
   return `<section id="${e(section.id)}"><h2>${section.icon}${e(section.title)}${
-    section.count ? ` <span class="n">${section.count}</span>` : ""
+    section.count && !section.partial
+      ? ` <span class="n">${section.count}</span>`
+      : ""
   }</h2>${body}</section>`;
 }
 
@@ -753,6 +773,15 @@ function notReadHtml(report: Report): string {
  * script, so it reads in a mail client that blocks everything and never
  * phones home.
  */
+/** Whether any of the container's own words are in the file. */
+export function carriesLogLines(report: Report): boolean {
+  return report.sections.some(
+    (section) =>
+      section.body.type === "logs" &&
+      section.body.logs.some((log) => log.lines.length > 0)
+  );
+}
+
 export function renderReport(report: Report): string {
   const w = report.words;
   const icons = report.icons;
@@ -805,7 +834,7 @@ export function renderReport(report: Report): string {
         ? ` <span class="n">${report.notRead.length}</span>`
         : ""
     }</h2>${notReadHtml(report)}</section>`,
-    `<footer>${icons.shield}${e(`${w.madeBy} ${report.appVersion}`)} · ${e(w.noSecrets)}</footer>`,
+    `<footer>${icons.shield}${e(`${w.madeBy} ${report.appVersion}`)} · ${e(carriesLogLines(report) ? w.noSecretsLogs : w.noSecrets)}</footer>`,
   ].join("");
   return `<!doctype html>
 <html lang="${e(w.lang)}">

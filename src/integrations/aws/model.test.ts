@@ -129,4 +129,16 @@ describe("what the controller complained about", () => {
       )
     ).toBe("AccessDenied");
   });
+  /**
+   * The page, the CRD column and the edge all read this; a `False` with no
+   * words used to be `null` here, so they said nothing while the shared
+   * file said it had failed.
+   */
+  it("names a Ready=False the controller gave no words for", () => {
+    expect(
+      bindingFailure(
+        binding({}, { conditions: [{ type: "Ready", status: "False" }] })
+      )
+    ).toBe("Ready=False");
+  });
 });

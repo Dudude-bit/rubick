@@ -1,4 +1,4 @@
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nodeReadyWord } from "@/lib/node-reporting";
@@ -18,6 +18,7 @@ import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
 import { errorToShow } from "@/lib/error-utils";
+import { formatUsage } from "@/lib/metric-format";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
@@ -84,7 +85,8 @@ export const columns = (
   {
     size: 110,
     id: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
+    meta: { share: (row: NodeInfo) => nodeReadyWord(row) },
     cell: ({ row }) => {
       // A cordoned node keeps `Ready: True`, so judging it by conditions
       // alone called it healthy full stop — the overview said "Cordoned"
@@ -97,7 +99,7 @@ export const columns = (
     // "control-plane master etcd" on a single-node cluster.
     size: 170,
     accessorKey: "roles",
-    header: () => <T section="columns" k="roles" />,
+    header: columnHeader("columns", "roles"),
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -112,12 +114,20 @@ export const columns = (
     // A kubelet version with its distro suffix: `v1.31.4+k3s1`.
     size: 120,
     accessorKey: "version",
-    header: () => <T section="columns" k="version" />,
+    header: columnHeader("columns", "version"),
   },
   {
     size: 130,
     id: "internal_ip",
-    header: () => <T section="columns" k="internalIp" />,
+    header: columnHeader("columns", "internalIp"),
+    meta: {
+      share: (row: NodeInfo) => ({
+        text:
+          row.status.addresses.find((a) => a.type === "InternalIP")?.address ??
+          "—",
+        mono: true,
+      }),
+    },
     cell: ({ row }) => {
       const address = row.original.status.addresses.find(
         (a) => a.type === "InternalIP"
@@ -130,7 +140,13 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: () => <T section="columns" k="cpuUsage" />,
+    header: columnHeader("columns", "cpuUsage"),
+    meta: {
+      share: (row: NodeInfo) => {
+        const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
+        return typeof used === "number" ? formatUsage(used, "cpu") : "-";
+      },
+    },
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity ? row.original.capacity.cpu : null;
@@ -146,7 +162,13 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: () => <T section="columns" k="memoryUsage" />,
+    header: columnHeader("columns", "memoryUsage"),
+    meta: {
+      share: (row: NodeInfo) => {
+        const used = nodeMetricsByName.get(row.name)?.memoryBytes;
+        return typeof used === "number" ? formatUsage(used, "memory") : "-";
+      },
+    },
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity
@@ -164,7 +186,8 @@ export const columns = (
   {
     size: 120,
     id: "capacity_pods",
-    header: () => <T section="columns" k="podCap" />,
+    header: columnHeader("columns", "podCap"),
+    meta: { share: (row: NodeInfo) => row.capacity?.pods || "-" },
     cell: ({ row }) => row.original.capacity?.pods || "-",
   },
   createAgeColumn<NodeInfo>(),

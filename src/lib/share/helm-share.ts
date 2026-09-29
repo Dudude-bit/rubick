@@ -7,7 +7,6 @@ import { iconSvg } from "@/lib/icon-svg";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
-import { formatDate } from "@/lib/utils";
 
 export function helmStatusOf(release: HelmReleaseDetail): {
   text: string;
@@ -79,7 +78,12 @@ export function helmHistorySection(
           { text: rev.status, role: statusRole(rev.status) },
           { text: rev.chart, mono: true },
           { text: rev.appVersion || "–" },
-          { text: formatDate(rev.updated) ?? "–" },
+          Number.isNaN(Date.parse(rev.updated))
+            ? { text: "–" }
+            : {
+                text: rev.updated,
+                at: new Date(Date.parse(rev.updated)).toISOString(),
+              },
           { text: rev.description || "–" },
         ],
       })),

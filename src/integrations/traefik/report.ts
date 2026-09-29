@@ -7,6 +7,7 @@ import { Route, Waypoints } from "lucide-react";
 
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import { redact } from "@/lib/hints";
 import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
@@ -162,6 +163,25 @@ function ingressRouteSections(
   ];
 }
 
+/** Inline htpasswd entries: a hash is a password with extra steps. */
+const CREDENTIAL_KEYS = new Set(["users", "usersFile"]);
+
+/**
+ * One setting of a middleware, as the file may carry it: nested values
+ * written out rather than `[object Object]`, credentials left out by name,
+ * and the rest through the same redaction as a log line — a `forwardAuth`
+ * address or a header can hold a token.
+ */
+function settingWords(key: string, value: unknown): string {
+  if (CREDENTIAL_KEYS.has(key)) return "…";
+  const word = (item: unknown) =>
+    typeof item === "object" && item !== null
+      ? JSON.stringify(item)
+      : String(item);
+  const text = Array.isArray(value) ? value.map(word).join(",") : word(value);
+  return redact(text);
+}
+
 function middlewareSections(spec: unknown, t: T): ReportSection[] {
   const entries = Object.entries((spec ?? {}) as Record<string, unknown>);
   return [
@@ -180,11 +200,14 @@ function middlewareSections(spec: unknown, t: T): ReportSection[] {
                   typeof config === "object" && config !== null
                     ? {
                         text: Object.entries(config as Record<string, unknown>)
-                          .map(([key, value]) => `${key}=${String(value)}`)
+                          .map(
+                            ([key, value]) =>
+                              `${key}=${settingWords(key, value)}`
+                          )
                           .join(", "),
                         mono: true,
                       }
-                    : { text: String(config), mono: true },
+                    : { text: redact(String(config)), mono: true },
                 ],
               }))
             : [{ label: t("empty", "anEmptySpec"), values: [] }],

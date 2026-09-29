@@ -5,7 +5,7 @@
  */
 
 import type { ColumnDef } from "@/components/ui/table-features";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
 import {
@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
+import { formatUsage } from "@/lib/metric-format";
 import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "./ResourceRef";
@@ -53,7 +54,7 @@ export function createNameColumn<
   return {
     size: 320,
     accessorKey: "name",
-    header: () => <T section="columns" k="name" />,
+    header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">
         <ResourceRef
@@ -77,7 +78,7 @@ export function createNamespaceColumn<
   return {
     size: 190,
     accessorKey: "namespace",
-    header: () => <T section="columns" k="namespace" />,
+    header: columnHeader("columns", "namespace"),
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.namespace}</span>
     ),
@@ -92,7 +93,7 @@ export function createAgeColumn<Row extends WithCreatedAt>(): ColumnDef<Row> {
   return {
     size: 80,
     id: "age",
-    header: () => <T section="columns" k="age" />,
+    header: columnHeader("columns", "age"),
     cell: ({ row }) => (
       <span className="text-fg-fnt">
         <RealtimeAge timestamp={row.original.createdAt} />
@@ -111,7 +112,13 @@ export function createCpuColumn<
   return {
     size: 90,
     id: "cpu",
-    header: () => <T section="columns" k="cpu" />,
+    header: columnHeader("columns", "cpu"),
+    meta: {
+      share: (row: Row) =>
+        typeof row.cpuMillicores === "number"
+          ? formatUsage(row.cpuMillicores, "cpu")
+          : "-",
+    },
     cell: ({ row }) => {
       const used = row.original.cpuMillicores ?? null;
       const request = row.original.cpuRequests
@@ -137,7 +144,13 @@ export function createMemoryColumn<
   return {
     size: 100,
     id: "memory",
-    header: () => <T section="columns" k="memory" />,
+    header: columnHeader("columns", "memory"),
+    meta: {
+      share: (row: Row) =>
+        typeof row.memoryBytes === "number"
+          ? formatUsage(row.memoryBytes, "memory")
+          : "-",
+    },
     cell: ({ row }) => {
       const used = row.original.memoryBytes ?? null;
       const request = row.original.memoryRequests
@@ -178,7 +191,7 @@ export function createAccessModesColumn<
   return {
     size: 130,
     accessorKey: "accessModes",
-    header: () => <T section="columns" k="accessModes" />,
+    header: columnHeader("columns", "accessModes"),
     cell: ({ row }) => {
       const modes = row.original.accessModes;
       if (modes.length === 0) return <span className="text-fg-fnt">—</span>;
@@ -207,7 +220,7 @@ export function createCapacityColumn<
   return {
     size: 100,
     accessorKey: "capacity",
-    header: () => <T section="columns" k="capacity" />,
+    header: columnHeader("columns", "capacity"),
     cell: ({ row }) =>
       row.original.capacity ? (
         <UnitValue value={row.original.capacity} />
@@ -226,7 +239,14 @@ export function createReplicasColumn<
   return {
     size: 100,
     id: "replicas",
-    header: () => <T section="columns" k="replicas" />,
+    header: columnHeader("columns", "replicas"),
+    meta: {
+      share: (row: Row) => ({
+        text: `${row.replicas.ready}/${row.replicas.desired}`,
+        mono: true,
+        role: row.replicas.ready === row.replicas.desired ? undefined : "warn",
+      }),
+    },
     cell: ({ row }) => {
       const { ready, desired } = row.original.replicas;
       const isHealthy = ready === desired;
@@ -249,7 +269,13 @@ export function createDataKeysColumn<
   return {
     size: 160,
     id: "dataKeys",
-    header: () => <T section="columns" k="keys" />,
+    header: columnHeader("columns", "keys"),
+    meta: {
+      share: (row: Row) => ({
+        text: (row.dataKeys ?? []).join(", ") || "—",
+        mono: true,
+      }),
+    },
     cell: ({ row }) => {
       const keys = row.original.dataKeys ?? [];
       if (keys.length === 0) return <span className="text-fg-fnt">—</span>;

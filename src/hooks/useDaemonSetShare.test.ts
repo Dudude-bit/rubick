@@ -74,7 +74,10 @@ describe("what the DaemonSet page adds to Share", () => {
     const { result } = renderHook(() =>
       useDaemonSetShare(daemonSet, pods, null)
     );
-    const contribution = result.current();
+    const contribution = result.current({
+      silent: new Map(),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
     expect(contribution.stats).toContainEqual(
       expect.objectContaining({ value: "3/4" })
     );

@@ -8,13 +8,13 @@
  * files. TanStack renders a column's `header` through `flexRender`, inside the
  * React tree — so a component put there can use the hook the array cannot.
  *
- *     { id: "name", size: 220, header: () => <T section="columns" k="name" /> }
+ *     { id: "name", size: 220, header: columnHeader("columns", "name") }
  *
- * Define the arrow inside the column literal, where it is created once at
- * import. An arrow rebuilt on every render is what broke the row action
- * buttons: `flexRender` treats a renderer as a component *type*, so a new
- * function each render is a new type, and the DOM node under the pointer
- * changes between mousedown and mouseup.
+ * Call it inside the column literal, where it runs once at import. An arrow
+ * rebuilt on every render is what broke the row action buttons: `flexRender`
+ * treats a renderer as a component *type*, so a new function each render is
+ * a new type, and the DOM node under the pointer changes between mousedown
+ * and mouseup.
  *
  * @module i18n/T
  */

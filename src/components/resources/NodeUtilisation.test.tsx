@@ -292,6 +292,48 @@ describe("what the view offers Share", () => {
       ref: { kind: "Node", stem: "hot" },
     });
     expect(hot.cells[1]).toMatchObject({ text: "peak 90% · avg 58%" });
+    // A peak with no window is a number about nothing.
+    expect(section.caption).toContain("6h");
+  });
+
+  /**
+   * On kube-prometheus-stack the root cgroup is dropped and the figures are
+   * a sum of pods, lower than the node's use. The view says so; the file
+   * has to, or a colleague reads the sum as the node's headroom.
+   */
+  it("carries the pods-summed basis into the file", async () => {
+    capability.mockReturnValue({
+      state: "ready",
+      endpoint: "localhost:20000",
+      vendor: "Prometheus",
+      page: null,
+      use: vi.fn(async () => ({ ...window, basis: "pods" })),
+    });
+    let collect: ReturnType<typeof useScreenSections> = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter>
+          <ScreenShareProvider>
+            <NodeUtilisation
+              nodes={[node("hot")]}
+              range="6h"
+              onRange={() => {}}
+            />
+            <Probe />
+          </ScreenShareProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await screen.findByText("peak 90% · avg 58%");
+    expect(collect!().map((s) => s.id)).toContain("utilisation-basis");
   });
 
   /** A node list this token could not read must not leave the utilisation

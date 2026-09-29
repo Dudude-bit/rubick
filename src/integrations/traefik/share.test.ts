@@ -56,8 +56,32 @@ function group(overrides: Partial<HostGroup> = {}): HostGroup {
 }
 
 describe("the routes table registers every router with Share", () => {
+  /**
+   * The status list said "TLS not checked" for a host and the table beside
+   * it said "–": two answers to one question, because the table read only
+   * the Secret the router names and not the host's TLS.
+   */
+  it("says a host's TLS as the status list does when the router names no Secret", () => {
+    const blind = group({
+      tls: { at: "unknown" },
+      routes: [route({ tlsSecret: null })],
+    });
+    const section = routesTableSection([blind], false, t);
+    if (section.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells[4]).toMatchObject({
+      text: translate("en", "empty", "tlsNotChecked"),
+      role: "neutral",
+    });
+  });
+
+  /** A table still being read is not a table of no routers. */
+  it("says the routers are still being read instead of drawing none", () => {
+    const section = routesTableSection([], true, t);
+    expect(section.unread).toBe(translate("en", "share", "stillReading"));
+  });
+
   it("carries the rule, entry points, middlewares, TLS secret and backend ref for each router", () => {
-    const section = routesTableSection([group()], t);
+    const section = routesTableSection([group()], false, t);
     expect(section.body.type).toBe("table");
     if (section.body.type !== "table") throw new Error("expected a table");
     expect(section.body.rows).toHaveLength(1);
@@ -73,7 +97,7 @@ describe("the routes table registers every router with Share", () => {
 
   it("colours a row by the host's own worst finding, not a fixed tone", () => {
     const broken = group({ host: "broken.example.com", worst: "err" });
-    const section = routesTableSection([broken], t);
+    const section = routesTableSection([broken], false, t);
     if (section.body.type !== "table") throw new Error("expected a table");
     expect(section.body.rows[0].cells[0].role).toBe("err");
   });
@@ -82,7 +106,7 @@ describe("the routes table registers every router with Share", () => {
    *  while the Routes list above counted it as not checked. */
   it("does not colour a host green when its backends could not be read", () => {
     const blind = group({ backendsKnown: false });
-    const section = routesTableSection([blind], t);
+    const section = routesTableSection([blind], false, t);
     if (section.body.type !== "table") throw new Error("expected a table");
     expect(section.body.rows[0].cells[0].role).toBe("neutral");
   });
@@ -96,6 +120,7 @@ describe("the routes table registers every router with Share", () => {
           ],
         }),
       ],
+      false,
       t
     );
     if (section.body.type !== "table") throw new Error("expected a table");

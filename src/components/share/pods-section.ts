@@ -1,8 +1,9 @@
 import { podReadiness } from "@/lib/container-sequence";
 import { iconSvg } from "@/lib/icon-svg";
+import { silenceOf, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, kindIcon, refOf, type PlacedSection } from "@/lib/report-parts";
-import { statusRole } from "@/lib/status-role";
+import { podStatusValue } from "@/lib/share/pod-status";
 import type { PodInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
@@ -13,6 +14,9 @@ export interface PodsShare {
   pods: readonly PodInfo[];
   /** The list read failed; not the same as the workload owning no pods. */
   error?: unknown;
+  /** The nodes that stopped reporting, from `useSilentNodes`. */
+  silent: Map<string, NodeSilence>;
+  capturedAt: string;
 }
 
 /**
@@ -30,7 +34,12 @@ export function podsSection(share: PodsShare, t: T): PlacedSection {
         text: pod.name,
         ref: refOf({ kind: "Pod", name: pod.name, namespace: pod.namespace }),
       },
-      { text: pod.status.display, role: statusRole(pod.status.display) },
+      podStatusValue(
+        pod,
+        silenceOf(pod.nodeName, share.silent),
+        t,
+        share.capturedAt
+      ),
       { text: `${ready}/${total}` },
       { text: String(restarts), role: restarts > 0 ? "warn" : undefined },
     ];

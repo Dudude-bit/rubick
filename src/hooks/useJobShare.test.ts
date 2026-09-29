@@ -38,7 +38,7 @@ const job = {
 describe("what the Job page adds to Share", () => {
   /** Succeeded over completions is the number the reader came to check. */
   it("carries succeeded over completions as a stat", () => {
-    const stats = jobStatsOf(job, t);
+    const stats = jobStatsOf(job, "2026-09-25T12:00:00Z", t);
     expect(stats).toContainEqual(
       expect.objectContaining({ label: "columns.completions", value: "3/5" })
     );
@@ -46,7 +46,7 @@ describe("what the Job page adds to Share", () => {
 
   /** Failed pods are a warning even mid-run, since a Job with retries left can still be in trouble. */
   it("flags failed pods with a warn role when any have failed", () => {
-    const stats = jobStatsOf(job, t);
+    const stats = jobStatsOf(job, "2026-09-25T12:00:00Z", t);
     const failedStat = stats.find((stat) => stat.label === "share.wlFailed");
     expect(failedStat).toMatchObject({ value: "1", role: "warn" });
   });
@@ -71,7 +71,10 @@ describe("what the Job page adds to Share", () => {
       },
     ] as unknown as PodInfo[];
     const { result } = renderHook(() => useJobShare(job, pods, null));
-    const contribution = result.current();
+    const contribution = result.current({
+      silent: new Map(),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
     expect(contribution.stats).toContainEqual(
       expect.objectContaining({ value: "3/5" })
     );

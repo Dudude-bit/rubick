@@ -49,7 +49,6 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
-import { describeStop } from "@/lib/connections";
 import { crdObjectPath, troubleMark, summariseNames } from "../kit";
 import {
   BackingUnread,
@@ -96,8 +95,8 @@ import {
   UNNAMED_TARGET,
 } from "./model";
 import { describePath, fullyRead } from "./rule";
+import { describeFinding, findingDetail } from "./finding-words";
 import { entryPointsSection, routesTableSection } from "./share";
-import { problemWords } from "@/lib/certificates";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 
@@ -197,6 +196,7 @@ export default function TraefikPage() {
         <RoutesTab
           groups={groups}
           sources={sources}
+          controller={controller.data}
           loading={routeSources.isPending}
           backingLoading={backing.isPending}
         />
@@ -216,6 +216,7 @@ export default function TraefikPage() {
         <MapTab
           groups={groups}
           sources={sources}
+          controller={controller.data}
           loading={routeSources.isPending}
           backingLoading={backing.isPending}
         />
@@ -305,15 +306,25 @@ function allRoutesOf(groups: HostGroup[]): TraefikRoute[] {
 function MapTab({
   groups,
   sources,
+  controller,
   loading,
   backingLoading,
 }: {
   groups: HostGroup[];
   sources: TraefikSources | null;
+  controller: ControllerInfo | undefined;
   loading: boolean;
   backingLoading: boolean;
 }) {
   const t = useT();
+  // The map draws every router and where it lands, and whether a host is
+  // served in clear rests on the entry points: the file carries both.
+  useShareSection("traefik-routes-table", () =>
+    routesTableSection(groups, loading, t)
+  );
+  useShareSection("traefik-entry-points", () =>
+    entryPointsSection(controller, groups, t)
+  );
   const data = useMemo(
     () => (sources ? routingMap(groups, sources, t) : null),
     [groups, sources, t]
@@ -361,18 +372,26 @@ function NothingRoutes() {
 function RoutesTab({
   groups,
   sources,
+  controller,
   loading,
   backingLoading,
 }: {
   groups: HostGroup[];
   sources: TraefikSources | null;
+  controller: ControllerInfo | undefined;
   loading: boolean;
   backingLoading: boolean;
 }) {
   const t = useT();
   // Once per table, not per row: the same set decides every row's spelling.
   const duplicated = useMemo(() => duplicatedServiceNames(groups), [groups]);
-  useShareSection("traefik-routes-table", () => routesTableSection(groups, t));
+  useShareSection("traefik-routes-table", () =>
+    routesTableSection(groups, loading, t)
+  );
+  // "Served in clear" and "TLS not checked" rest on these.
+  useShareSection("traefik-entry-points", () =>
+    entryPointsSection(controller, groups, t)
+  );
 
   if (loading) {
     return (
@@ -893,7 +912,7 @@ function Findings({ group, brief }: { group: HostGroup; brief?: boolean }) {
         title: group.host ?? t("empty", "anyHost"),
         toFinding: (finding) => ({
           title: describeFinding(finding, t).title,
-          detail: null,
+          detail: findingDetail(finding, t),
           role: finding.severity === "err" ? "err" : "warn",
         }),
       }}
@@ -914,6 +933,7 @@ function FindingLine({
   const said = describeFinding(finding, t);
   return (
     <FindingBlock tone={finding.severity} title={said.title}>
+      {!brief && said.objects.length > 0 && <>{objectRefs(said.objects, t)} </>}
       {!brief && said.note}
       {/* Core above, extension below, in that order and never the other way
           round: the finding reads whole on a cluster with cert-manager
@@ -966,79 +986,6 @@ function objectRefs(
       {objectRef(route)}
     </Fragment>
   ));
-}
-
-function describeFinding(
-  finding: Finding,
-  t: ReturnType<typeof useT>
-): {
-  title: string;
-  note: ReactNode;
-} {
-  switch (finding.kind) {
-    case "stop": {
-      // The same three sentences the traffic chain uses, so "no pod carries
-      // app=promo" reads identically whether it was reached from a
-      // Deployment or from a hostname.
-      const said = describeStop(finding.stop, t);
-      return {
-        title: t("empty", "everyRequest502", {
-          reason: `${said.title.charAt(0).toLowerCase()}${said.title.slice(1)}`,
-        }),
-        note: said.note,
-      };
-    }
-    case "clear":
-      return {
-        title: t("empty", "servedInClearTitle"),
-        note: t("empty", "traefikClearNote", {
-          n: finding.entryPoints.length,
-          list: finding.entryPoints.join(", "),
-        }),
-      };
-    case "duplicate":
-      return {
-        title: t("empty", "twoObjectsClaimPath", { path: finding.path }),
-        note: finding.winner ? (
-          <>
-            {objectRef(finding.winner)}{" "}
-            {t("empty", "traefikDuplicateWinner", {
-              because:
-                finding.winner.priority !== null
-                  ? t("empty", "traefikPriorityDeclared", {
-                      n: finding.winner.priority,
-                    })
-                  : t("empty", "traefikPriorityLongest"),
-            })}
-          </>
-        ) : finding.tied ? (
-          <>
-            {objectRefs(finding.routes, t)} {t("empty", "traefikDuplicateTied")}
-          </>
-        ) : (
-          <>
-            {objectRefs(finding.routes, t)}{" "}
-            {t("empty", "traefikDuplicateUnsettled")}
-          </>
-        ),
-      };
-    case "certificate": {
-      if (!finding.expiry) {
-        return {
-          title: t("empty", "secretNotACertificate", {
-            name: finding.secretName,
-          }),
-          note: finding.read?.problem
-            ? problemWords(finding.read.problem, t)
-            : t("empty", "secretNotParsable"),
-        };
-      }
-      return {
-        title: `${finding.secretName} ${finding.expiry.text}`,
-        note: t("empty", "certExpiryBrowserNote"),
-      };
-    }
-  }
 }
 
 // --- middlewares --------------------------------------------------------

@@ -27,6 +27,26 @@ export function verdictOf(direction: PolicyDirection): DirectionVerdict {
   return "restricts";
 }
 
+/** One direction in words, with the one verdict worth a colour marked. */
+export function directionWords(
+  direction: PolicyDirection,
+  t: Translator
+): { text: string; role: "warn" | null } {
+  switch (verdictOf(direction)) {
+    case "notGoverned":
+      return { text: t("empty", "saysNothing"), role: null };
+    case "deniesEverything":
+      return { text: t("empty", "deniesAll"), role: null };
+    case "opensToEverything":
+      return { text: t("empty", "allowsAll"), role: "warn" };
+    case "restricts":
+      return {
+        text: t("count", "rules", { n: direction.rules.length }),
+        role: null,
+      };
+  }
+}
+
 /** How many pods the policy picks, with the read that never happened kept. */
 export type Reach =
   { kind: "cannotSay" } | { kind: "nothing" } | { kind: "pods"; count: number };
@@ -40,6 +60,34 @@ export function reachOf(selected: number | null): Reach {
   if (selected === null) return { kind: "cannotSay" };
   if (selected === 0) return { kind: "nothing" };
   return { kind: "pods", count: selected };
+}
+
+/** The pods behind a policy in words: a refused read is not a zero. */
+export function reachWords(
+  selected: number | null,
+  t: Translator
+): { text: string; role: "warn" | "neutral" | null } {
+  const reach = reachOf(selected);
+  switch (reach.kind) {
+    case "cannotSay":
+      return { text: t("empty", "podsNotRead"), role: "neutral" };
+    case "nothing":
+      return { text: t("empty", "selectsNoPods"), role: "warn" };
+    case "pods":
+      return { text: t("count", "pods", { n: reach.count }), role: null };
+  }
+}
+
+/** Which pods the policy is written for, in the words the list uses. */
+export function selectsWords(selects: PolicySelects, t: Translator): string {
+  switch (selects.kind) {
+    case "everything":
+      return t("empty", "everyPodHere");
+    case "written":
+      return selects.query;
+    case "notSaid":
+      return t("empty", "noSelectorOnPolicy");
+  }
 }
 
 /**

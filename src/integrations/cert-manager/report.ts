@@ -13,7 +13,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
 import { conditionFromStatus } from "../kit";
-import { acmeServerLabel } from "./model";
+import { acmeFailed, acmeServerLabel, requestStep } from "./model";
 import { conditionRole } from "@/lib/condition-health";
 
 const GROUP = "cert-manager.io";
@@ -167,6 +167,37 @@ function issuerSection(
   };
 }
 
+/** A CertificateRequest writes conditions, not the `state` an ACME step does. */
+function requestSection(status: unknown, t: T): ReportSection {
+  const denied = conditionFromStatus(status, "Denied");
+  const ready = conditionFromStatus(status, "Ready");
+  const step = requestStep(denied, ready);
+  const rows: { label: string; values: ReportValue[] }[] = [
+    {
+      label: t("columns", "status"),
+      values: [
+        !denied && !ready
+          ? { text: t("share", "notWrittenYet"), quiet: true }
+          : {
+              text: step.state,
+              role: step.failed ? "err" : step.done ? "ok" : "pending",
+            },
+      ],
+    },
+  ];
+  if (step.note)
+    rows.push({
+      label: t("columns", "message"),
+      values: [{ text: step.note }],
+    });
+  return {
+    id: "cert-manager-request",
+    title: "CertificateRequest",
+    icon: iconSvg(ShieldCheck),
+    body: { type: "facts", rows },
+  };
+}
+
 function stepSection(
   id: string,
   kind: string,
@@ -184,12 +215,11 @@ function stepSection(
         state
           ? {
               text: state,
-              role:
-                state === "invalid" || state === "errored"
-                  ? "err"
-                  : state === "valid" || state === "ready"
-                    ? "ok"
-                    : "pending",
+              role: acmeFailed(state)
+                ? "err"
+                : state === "valid" || state === "ready"
+                  ? "ok"
+                  : "pending",
             }
           : { text: t("share", "notWrittenYet"), quiet: true },
       ],
@@ -226,15 +256,7 @@ export function reportOf(
       case "ClusterIssuer":
         return [issuerSection(object.spec, object.status, object.kind, t)];
       case "CertificateRequest":
-        return [
-          stepSection(
-            "cert-manager-request",
-            object.kind,
-            object.status,
-            [],
-            t
-          ),
-        ];
+        return [requestSection(object.status, t)];
       default:
         return null;
     }

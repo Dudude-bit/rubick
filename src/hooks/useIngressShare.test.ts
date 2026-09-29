@@ -42,14 +42,41 @@ const ingress: IngressInfo = {
 };
 
 describe("what the Ingress report leads with", () => {
-  it("names the class, the host and TLS counts, and warns with no load balancer address", () => {
-    const stats = ingressStats(ingress, undefined, t);
+  const tls = { text: "expires in 4 days", tone: "warn" as const, known: true };
+
+  it("names the class, the host count and TLS, and warns with no load balancer address", () => {
+    const stats = ingressStats(ingress, undefined, tls, t);
     expect(stats).toMatchObject([
       { value: "nginx" },
       { value: "1" },
-      { value: "1" },
+      { value: "expires in 4 days", role: "warn" },
       { role: "warn" },
     ]);
+  });
+
+  /**
+   * The page says the certificate has expired, in red; the file said
+   * "TLS 2", a count of hosts. It carries the page's own reading now.
+   */
+  it("carries the page's TLS reading and its tone, not a count of hosts", () => {
+    const [, , stat] = ingressStats(
+      ingress,
+      undefined,
+      { text: "expired 3 days ago", tone: "err", known: true },
+      t
+    );
+    expect(stat).toMatchObject({ value: "expired 3 days ago", role: "err" });
+  });
+
+  /** A host nobody could check TLS for is not a host without it. */
+  it("draws TLS the page could not check without colour", () => {
+    const [, , stat] = ingressStats(
+      ingress,
+      undefined,
+      { text: "TLS not checked", tone: null, known: false },
+      t
+    );
+    expect(stat).toMatchObject({ value: "TLS not checked", role: "neutral" });
   });
 });
 

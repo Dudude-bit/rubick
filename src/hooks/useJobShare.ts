@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { templateContainersSection } from "@/components/share/containers-section";
 import { podsSection } from "@/components/share/pods-section";
 import type { ReportStat } from "@/lib/report";
@@ -9,10 +12,14 @@ import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
 /** Wall-clock time the job has been running, or ran for, the same reading `JobDetail` shows. */
-function duration(start: string | null, end: string | null): string | null {
+function duration(
+  start: string | null,
+  end: string | null,
+  capturedAt: string
+): string | null {
   if (!start) return null;
   const from = new Date(start).getTime();
-  const to = end ? new Date(end).getTime() : Date.now();
+  const to = new Date(end ?? capturedAt).getTime();
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
   const seconds = Math.max(0, Math.round((to - from) / 1000));
   if (seconds < 60) return `${seconds}s`;
@@ -26,12 +33,16 @@ export function jobStatusOf(job: JobDetailInfo) {
   return { text: job.status, role: statusRole(job.status) };
 }
 
-export function jobStatsOf(job: JobDetailInfo, t: T): ReportStat[] {
+export function jobStatsOf(
+  job: JobDetailInfo,
+  capturedAt: string,
+  t: T
+): ReportStat[] {
   const completions = job.completions ?? 1;
   const succeeded = job.succeeded ?? 0;
   const failed = job.failed ?? 0;
   const active = job.active ?? 0;
-  const ran = duration(job.startTime, job.completionTime);
+  const ran = duration(job.startTime, job.completionTime, capturedAt);
   const stats: ReportStat[] = [
     {
       label: t("columns", "completions"),
@@ -62,16 +73,26 @@ export function useJobShare(
   job: JobDetailInfo | undefined,
   pods: readonly PodInfo[],
   podsError: unknown
-): () => ShareContribution {
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
-  return useCallback((): ShareContribution => {
-    if (!job) return {};
-    const pods_ = podsSection({ pods, error: podsError }, t);
-    return {
-      status: jobStatusOf(job),
-      stats: jobStatsOf(job, t),
-      notRead: pods_.unread ? [pods_.unread] : [],
-      sections: [templateContainersSection(job, t), pods_],
-    };
-  }, [job, pods, podsError, t]);
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!job) return {};
+      const pods_ = podsSection(
+        {
+          pods,
+          error: podsError,
+          silent: frame.silent,
+          capturedAt: frame.capturedAt,
+        },
+        t
+      );
+      return {
+        status: jobStatusOf(job),
+        stats: jobStatsOf(job, frame.capturedAt, t),
+        sections: [templateContainersSection(job, t), pods_],
+      };
+    },
+    [job, pods, podsError, t]
+  );
 }

@@ -125,11 +125,42 @@ describe("what the Deployment page adds to Share", () => {
     const { result } = renderHook(() =>
       useDeploymentShare(deployment, revisions, pods, null, false)
     );
-    const contribution = result.current();
+    const contribution = result.current({
+      silent: new Map(),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
     expect(contribution.stats).toContainEqual(
       expect.objectContaining({ value: "2/3" })
     );
     const podsSection = contribution.sections?.find((s) => s.id === "pods");
     expect(podsSection?.count).toBe(1);
+  });
+
+  /**
+   * The frame reads the silent nodes once Share is pressed and hands them
+   * in; a hook that dropped them would paint a pod on a dead node green.
+   */
+  it("draws its pods through the silent nodes the frame hands it", () => {
+    const pods = [
+      {
+        name: "payments-abc",
+        namespace: "shop",
+        nodeName: "n2",
+        status: { display: "Running" },
+        restartCount: 0,
+        containers: [{ ready: true, state: { type: "running" } }],
+        initContainers: [],
+      },
+    ] as unknown as import("@/generated/types").PodInfo[];
+    const { result } = renderHook(() =>
+      useDeploymentShare(deployment, revisions, pods, null, false)
+    );
+    const contribution = result.current({
+      silent: new Map([["n2", { node: "n2", since: null, reason: null }]]),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
+    const section = contribution.sections?.find((s) => s.id === "pods");
+    if (section?.body.type !== "table") throw new Error("expected a table");
+    expect(section.body.rows[0].cells[1].role).toBe("neutral");
   });
 });

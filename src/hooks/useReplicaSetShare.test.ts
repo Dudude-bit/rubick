@@ -85,7 +85,10 @@ describe("what the ReplicaSet page adds to Share", () => {
     const { result } = renderHook(() =>
       useReplicaSetShare(replicaSet, "current", owner, 0, pods, null)
     );
-    const contribution = result.current();
+    const contribution = result.current({
+      silent: new Map(),
+      capturedAt: "2026-09-25T12:00:00Z",
+    });
     expect(contribution.stats).toContainEqual(
       expect.objectContaining({ value: "2/3" })
     );

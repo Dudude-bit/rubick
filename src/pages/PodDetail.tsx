@@ -353,7 +353,7 @@ export function PodDetail() {
     retry: false,
   });
 
-  const share = usePodShare(pod, podEvents.data ?? []);
+  const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
   // The kubelet on this pod's node writes its status. If the node stopped
   // answering, everything below is the last thing it said, not the state now.

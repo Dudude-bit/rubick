@@ -10,13 +10,19 @@ import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
 import { iconSvg } from "@/lib/icon-svg";
 import type { Report, ReportStat } from "@/lib/report";
-import { frameIcons, frameWords, kindIcon, placed } from "@/lib/report-parts";
+import {
+  frameIcons,
+  frameWords,
+  kindIcon,
+  placed,
+  unreadLines,
+} from "@/lib/report-parts";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocale } from "@/stores/localeStore";
 import { Server } from "lucide-react";
 
-import type { ShareContribution } from "./contribution";
+import type { ShareContribution, ShareFrame } from "./contribution";
 import { useScreenSections } from "./screen-share";
 import { ShareDialog } from "./ShareDialog";
 
@@ -28,7 +34,7 @@ export function ShareObjectAction({
 }: {
   subject: ObjectSubject | null;
   resource: unknown;
-  contribute?: () => ShareContribution;
+  contribute?: (frame: ShareFrame) => ShareContribution;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -85,9 +91,12 @@ export function ShareScreenAction({
   const report = useMemo<Report | null>(() => {
     if (!open || !collect || version.data === undefined) return null;
     const sections = collect();
-    const notRead = sections.flatMap((section) =>
-      section.unread ? [`${section.title}: ${section.unread}`] : []
-    );
+    // A screen whose parts registered nothing still gets a file; it must not
+    // be one that reads as "all of it, and all of it was read".
+    const notRead =
+      sections.length === 0
+        ? [t("share", "screenGaveNothing")]
+        : unreadLines(sections);
     const icon = screen.icon ?? (screen.kind ? kindIcon(screen.kind) : Share2);
     return {
       subject: {
@@ -117,7 +126,11 @@ export function ShareScreenAction({
       verdict: null,
       sections: placed(sections),
       notRead,
-      link: buildDeepLink(context, `${location.pathname}${location.search}`),
+      link: buildDeepLink(
+        context,
+        `${location.pathname}${location.search}`,
+        new Date(capturedAt)
+      ),
       words: frameWords(t, locale, notRead.length),
       icons: frameIcons(),
     };

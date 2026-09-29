@@ -27,6 +27,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
 
 const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
@@ -102,7 +103,7 @@ export function Crds() {
     () => [
       {
         accessorKey: "kind",
-        header: () => <T section="columns" k="kind" />,
+        header: columnHeader("columns", "kind"),
         size: 220,
         // An `ObjectLink` and not a `RouteLink`: the row's own href resolves
         // to a peek, so a click on the whitespace opens one. A name that
@@ -120,7 +121,7 @@ export function Crds() {
       },
       {
         accessorKey: "plural",
-        header: () => <T section="columns" k="plural" />,
+        header: columnHeader("columns", "plural"),
         size: 200,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.plural}</span>
@@ -128,7 +129,7 @@ export function Crds() {
       },
       {
         accessorKey: "scope",
-        header: () => <T section="columns" k="scope" />,
+        header: columnHeader("columns", "scope"),
         size: 110,
         cell: ({ row }) => (
           <span className="text-fg-mut">{row.original.scope}</span>
@@ -136,7 +137,7 @@ export function Crds() {
       },
       {
         accessorKey: "version",
-        header: () => <T section="columns" k="version" />,
+        header: columnHeader("columns", "version"),
         size: 110,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.version}</span>
@@ -144,7 +145,7 @@ export function Crds() {
       },
       {
         accessorKey: "shortNames",
-        header: () => <T section="columns" k="shortNames" />,
+        header: columnHeader("columns", "shortNames"),
         size: 160,
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;

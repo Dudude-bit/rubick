@@ -44,10 +44,17 @@ export function gatewayStats(gateway: GatewayInfo, t: T): ReportStat[] {
   ];
 }
 
-function listenerRole(listener: ListenerInfo): {
-  role: "ok" | "warn" | "err";
+function listenerRole(
+  listener: ListenerInfo,
+  t: T
+): {
+  role: "ok" | "warn" | "err" | "neutral";
   text: string;
 } {
+  // No conditions is a controller that never wrote status, not a listener
+  // that passed every check.
+  if (listener.conditions.length === 0)
+    return { role: "neutral", text: t("share", "notWrittenYet") };
   const broken = failingCondition(listener.conditions);
   if (broken) return { role: "err", text: broken.reason ?? broken.type };
   const caution = listener.conditions.find((c) => conditionRole(c) === "warn");
@@ -76,7 +83,7 @@ export function gatewayListenersSection(
         t("columns", "status"),
       ],
       rows: gateway.listeners.map((listener) => {
-        const state = listenerRole(listener);
+        const state = listenerRole(listener, t);
         return {
           cells: [
             { text: listener.name },

@@ -7,11 +7,23 @@ import type { ReportStat } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
-import type { IngressClassBinding, IngressInfo } from "@/generated/types";
+import type {
+  IngressClassBinding,
+  IngressInfo,
+  TlsCertificate,
+} from "@/generated/types";
+
+/** The page's TLS fact, as it drew it: words, tone, and whether it could tell. */
+export interface IngressTlsFact {
+  text: string;
+  tone: "warn" | "err" | null;
+  known: boolean;
+}
 
 export function ingressStats(
   ingress: IngressInfo,
   controller: IngressClassBinding | undefined,
+  tls: IngressTlsFact,
   t: T
 ): ReportStat[] {
   const loadBalancerIps = ingress.loadBalancerIps;
@@ -27,7 +39,11 @@ export function ingressStats(
       label: t("columns", "hostnames"),
       value: String(ingress.rules.length),
     },
-    { label: "TLS", value: String(ingress.tlsHosts.length) },
+    {
+      label: "TLS",
+      value: tls.text,
+      role: tls.known ? (tls.tone ?? undefined) : "neutral",
+    },
     {
       label: t("columns", "loadBalancer"),
       value:
@@ -124,17 +140,24 @@ export function ingressTlsSection(ingress: IngressInfo, t: T): PlacedSection {
  */
 export function useIngressShare(
   ingress: IngressInfo | undefined,
-  controller: IngressClassBinding | undefined
+  controller: IngressClassBinding | undefined,
+  page: {
+    tls: IngressTlsFact;
+    certificates: Map<string, TlsCertificate> | undefined;
+  }
 ): () => ShareContribution {
   const t = useT();
+  const { certificates } = page;
+  const { text, tone, known } = page.tls;
   return useCallback((): ShareContribution => {
     if (!ingress) return {};
     return {
-      stats: ingressStats(ingress, controller, t),
+      stats: ingressStats(ingress, controller, { text, tone, known }, t),
       sections: [
         ingressRulesSection(ingress, t),
         ingressTlsSection(ingress, t),
       ],
+      chain: { certificates, controller },
     };
-  }, [ingress, controller, t]);
+  }, [ingress, controller, text, tone, known, certificates, t]);
 }

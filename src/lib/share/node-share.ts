@@ -10,9 +10,10 @@ import {
   parseMemory,
 } from "@/lib/k8s-quantity";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
-import { nodeReadyWord } from "@/lib/node-reporting";
+import { nodeReadyWord, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportStat, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
+import { podStatusValue } from "@/lib/share/pod-status";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { formatSince } from "@/lib/utils";
 
@@ -145,6 +146,9 @@ const MAX_PODS = 100;
 export function podsOnNodeSection(
   pods: PodInfo[] | undefined,
   errorText: string | null,
+  /** This node's own silence: every pod on it is then its kubelet's last word. */
+  silence: NodeSilence | null,
+  capturedAt: string,
   t: T
 ): PlacedSection {
   const kept = (pods ?? []).slice(0, MAX_PODS);
@@ -175,7 +179,7 @@ export function podsOnNodeSection(
               namespace: pod.namespace,
             }),
           },
-          { text: pod.status.display, role: statusRole(pod.status.display) },
+          podStatusValue(pod, silence, t, capturedAt),
           {
             text: String(pod.restartCount),
             mono: true,
@@ -183,7 +187,7 @@ export function podsOnNodeSection(
           },
           {
             text: pod.createdAt
-              ? formatSince(Date.parse(pod.createdAt), Date.now())
+              ? formatSince(Date.parse(pod.createdAt), Date.parse(capturedAt))
               : "–",
           },
         ],

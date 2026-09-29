@@ -12,7 +12,7 @@
  */
 
 import type { T } from "@/i18n/useT";
-import { covers } from "./certificates";
+import { covers, expiryOf } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
@@ -280,6 +280,30 @@ export function describeExistence(
   if (ref.existence === "notChecked" && verifiable)
     return t("nav", "notChecked");
   return null;
+}
+
+export type HopTone = "on" | "warn" | "bad";
+
+/** How the chain draws a hop, on the page and in a shared file alike. */
+export function hopTone(hop: ChainHop): HopTone {
+  if (hop.at === "stop") return "bad";
+  // A hop the app could not look up is not a hop it found. The Services
+  // list being refused hands the chain a backend with `notChecked`, and
+  // drawing it in the ordinary tone made it indistinguishable from a
+  // Service that exists and is healthy — on the one view that exists to
+  // show where traffic stops.
+  if (hop.at === "object" && hop.object.existence === "notChecked")
+    return "warn";
+  if (hop.at === "published") return hop.tone;
+  if (hop.at === "controller") return hop.binding.resolved ? "on" : "bad";
+  if (hop.at === "certificate") {
+    // Not read back yet is not a finding; read back and unreadable is.
+    if (!hop.read) return "on";
+    if (!hop.read.certificate) return "warn";
+    const tone = expiryOf(hop.read.certificate).tone;
+    return tone === "err" ? "bad" : (tone ?? "on");
+  }
+  return "on";
 }
 
 // --- where the path stops ----------------------------------------------

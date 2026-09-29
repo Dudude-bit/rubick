@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { templateContainersSection } from "@/components/share/containers-section";
 import { podsSection } from "@/components/share/pods-section";
 import type { ReportStat } from "@/lib/report";
@@ -56,22 +59,32 @@ export function useDaemonSetShare(
   daemonSet: DaemonSetDetailInfo | undefined,
   pods: readonly PodInfo[],
   podsError: unknown
-): () => ShareContribution {
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
-  return useCallback((): ShareContribution => {
-    if (!daemonSet) return {};
-    const rollingOut = daemonSet.upToDate < daemonSet.desired;
-    const pods_ = podsSection({ pods, error: podsError }, t);
-    return {
-      status: daemonSetStatusOf(
-        daemonSet.ready,
-        daemonSet.desired,
-        rollingOut,
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!daemonSet) return {};
+      const rollingOut = daemonSet.upToDate < daemonSet.desired;
+      const pods_ = podsSection(
+        {
+          pods,
+          error: podsError,
+          silent: frame.silent,
+          capturedAt: frame.capturedAt,
+        },
         t
-      ),
-      stats: daemonSetStatsOf(daemonSet, t),
-      notRead: pods_.unread ? [pods_.unread] : [],
-      sections: [templateContainersSection(daemonSet, t), pods_],
-    };
-  }, [daemonSet, pods, podsError, t]);
+      );
+      return {
+        status: daemonSetStatusOf(
+          daemonSet.ready,
+          daemonSet.desired,
+          rollingOut,
+          t
+        ),
+        stats: daemonSetStatsOf(daemonSet, t),
+        sections: [templateContainersSection(daemonSet, t), pods_],
+      };
+    },
+    [daemonSet, pods, podsError, t]
+  );
 }

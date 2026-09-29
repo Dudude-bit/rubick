@@ -5,6 +5,8 @@ import type { ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
 import type { T } from "@/i18n/useT";
+import { errorToShow } from "@/lib/error-utils";
+import type { Picture } from "./data";
 import { selectorWords, type MonitorRow } from "./model";
 import { rowTone, rowWords, unknowableWords, type RowTone } from "./words";
 
@@ -16,12 +18,52 @@ const LADDER_ROLE_OF_ROW_TONE: Record<RowTone, StatusRole> = {
   mut: "pending",
 };
 
+/**
+ * What the ladder could not see: the picture itself, or one of the two
+ * kinds, which the page names above the rows and a file has to name too.
+ */
+export function ladderUnread(
+  picture: { data?: Picture; error: unknown },
+  t: T
+): { unread: string | null; partial: string | null } {
+  if (picture.error)
+    return { unread: errorToShow(picture.error), partial: null };
+  if (!picture.data)
+    return { unread: t("share", "stillReading"), partial: null };
+  const kinds: Array<[string, Picture["serviceMonitors"]]> = [
+    ["ServiceMonitor", picture.data.serviceMonitors],
+    ["PodMonitor", picture.data.podMonitors],
+  ];
+  const refused = kinds.flatMap(([kind, read]) =>
+    read.state === "unread"
+      ? [t("monitors", "kindUnread", { kind, reason: read.reason })]
+      : []
+  );
+  return {
+    unread: null,
+    partial: refused.length > 0 ? refused.join(" ") : null,
+  };
+}
+
 /** The ladder as the reader sees it: every monitor, its group's tone, the same sentence the row draws. */
 export function ladderSection(
   rows: MonitorRow[] | null,
+  read: { unread: string | null; partial: string | null },
   t: T
-): PlacedSection | null {
-  if (!rows || rows.length === 0) return null;
+): PlacedSection {
+  const shell = {
+    id: "prometheus-monitors-ladder",
+    order: ORDER.own,
+    title: t("monitors", "tabMonitors"),
+    icon: iconSvg(Activity),
+  };
+  if (read.unread || !rows)
+    return {
+      ...shell,
+      count: null,
+      unread: read.unread ?? t("share", "stillReading"),
+      body: { type: "findings", items: [] },
+    };
   const items: ReportFinding[] = rows.map((row) => ({
     title: row.monitor.name,
     detail: rowWords(row, t),
@@ -33,11 +75,9 @@ export function ladderSection(
     }),
   }));
   return {
-    id: "prometheus-monitors-ladder",
-    order: ORDER.own,
-    title: t("monitors", "tabMonitors"),
-    icon: iconSvg(Activity),
-    count: items.length,
+    ...shell,
+    count: read.partial ? null : items.length,
+    partial: read.partial,
     body: { type: "findings", items },
   };
 }

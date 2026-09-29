@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 
-import type { ShareContribution } from "@/components/share/contribution";
+import type {
+  ShareContribution,
+  ShareFrame,
+} from "@/components/share/contribution";
 import { templateContainersSection } from "@/components/share/containers-section";
 import { podsSection } from "@/components/share/pods-section";
 import { parseImageRef } from "@/lib/image-ref";
@@ -132,20 +135,30 @@ export function useDeploymentShare(
   pods: readonly PodInfo[],
   podsError: unknown,
   isRolloutInProgress: boolean
-): () => ShareContribution {
+): (frame: ShareFrame) => ShareContribution {
   const t = useT();
-  return useCallback((): ShareContribution => {
-    if (!deployment) return {};
-    const pods_ = podsSection({ pods, error: podsError }, t);
-    return {
-      status: deploymentStatusOf(deployment.replicas, isRolloutInProgress, t),
-      stats: deploymentStatsOf(deployment, revisions, t),
-      notRead: pods_.unread ? [pods_.unread] : [],
-      sections: [
-        templateContainersSection(deployment, t),
-        revisionsSection(revisions, new Date().toISOString(), t),
-        pods_,
-      ],
-    };
-  }, [deployment, revisions, pods, podsError, isRolloutInProgress, t]);
+  return useCallback(
+    (frame: ShareFrame): ShareContribution => {
+      if (!deployment) return {};
+      const pods_ = podsSection(
+        {
+          pods,
+          error: podsError,
+          silent: frame.silent,
+          capturedAt: frame.capturedAt,
+        },
+        t
+      );
+      return {
+        status: deploymentStatusOf(deployment.replicas, isRolloutInProgress, t),
+        stats: deploymentStatsOf(deployment, revisions, t),
+        sections: [
+          templateContainersSection(deployment, t),
+          revisionsSection(revisions, frame.capturedAt, t),
+          pods_,
+        ],
+      };
+    },
+    [deployment, revisions, pods, podsError, isRolloutInProgress, t]
+  );
 }

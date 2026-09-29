@@ -62,10 +62,27 @@ describe("a TargetGroupBinding the controller has said nothing about", () => {
     return sections[0].body.rows[0].values[0];
   };
 
-  /** No status at all read as "nothing the controller has flagged", which is
-   *  a verdict the controller never gave. */
-  it("says no status is written yet, not that nothing is flagged", () => {
-    expect(status({})).toEqual({ text: "not written yet", quiet: true });
+  /**
+   * This controller writes `Ready` only when something failed, so a binding
+   * with no conditions is the healthy one. Calling it "not written yet" told
+   * the reader that every working binding had never been reconciled.
+   */
+  it("says nothing is flagged for a binding with no conditions, the healthy case", () => {
+    expect(status({})).toEqual({
+      text: "nothing the controller has flagged",
+      quiet: true,
+    });
+    expect(status({ observedGeneration: 3 })).toEqual({
+      text: "nothing the controller has flagged",
+      quiet: true,
+    });
+  });
+
+  /** A Ready the controller could not decide is not a flag either way. */
+  it("says Ready=Unknown as it is, in no colour", () => {
+    expect(
+      status({ conditions: [{ type: "Ready", status: "Unknown" }] })
+    ).toEqual({ text: "Ready=Unknown", role: "neutral" });
   });
 
   /** `Ready=False` with no message or reason was filed under "nothing flagged". */
