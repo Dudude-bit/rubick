@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,6 +10,12 @@ import {
   Trash2,
 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import {
+  crdConditionsSection,
+  crdFactsSection,
+  crdVersionsSection,
+} from "@/lib/share/crd-share";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -183,6 +189,14 @@ export function CrdDetail() {
     crd
   );
   const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const share = useCallback((): ShareContribution => {
+    if (!crd) return {};
+    return {
+      sections: [crdFactsSection(crd, t), crdVersionsSection(crd, t)],
+      conditions: crdConditionsSection(crd.conditions, t),
+    };
+  }, [crd, t]);
 
   const tabs: DetailTab[] = [
     {
@@ -375,6 +389,7 @@ export function CrdDetail() {
     <>
       <ResourceDetailLayout
         resource={crd}
+        share={share}
         delivery={deliveryQuery}
         isLoading={isLoading}
         error={error}

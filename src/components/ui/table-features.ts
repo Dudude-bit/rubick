@@ -26,6 +26,23 @@ import {
   type RowData,
 } from "@tanstack/react-table";
 
+import type { HeaderSaying } from "@/i18n/column-header";
+import type { T } from "@/i18n/useT";
+import type { ReportValue } from "@/lib/report";
+
+/**
+ * What a column says about itself beyond what it draws. `share` is the words
+ * its cell draws, for a shared file: a column whose value is not what the
+ * cell shows says it here, or the file cannot say it at all.
+ */
+export interface AppColumnMeta {
+  // `never`: each list types its own row, and the file calls every column
+  // with the row the table was given.
+  share?: (row: never, t: T) => ReportValue | string | null;
+  /** The header's words, where the header is a control rather than `columnHeader`. */
+  label?: HeaderSaying;
+}
+
 /**
  * Sorting, per-column filtering, one search box over every column, hiding
  * columns and column widths — what `DataTable` actually offers. Row
@@ -50,6 +67,7 @@ import {
  * global filtering depend on it.
  */
 export const tableStack = tableFeatures({
+  columnMeta: {} as AppColumnMeta,
   rowSortingFeature,
   columnFilteringFeature,
   columnSizingFeature,

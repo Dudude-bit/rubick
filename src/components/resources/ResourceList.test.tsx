@@ -29,6 +29,11 @@ vi.mock("@/stores/clusterStore", () => ({
   ),
 }));
 
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
+import type { PlacedSection } from "@/lib/report-parts";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
@@ -443,5 +448,75 @@ describe("a read on a large cluster", () => {
     expect(screen.getByTestId("slow-read")).toHaveTextContent(
       /Still reading pods/
     );
+  });
+});
+
+describe("what a list hands to Share", () => {
+  /** The list as Share collects it, with the read in whatever state the props say. */
+  function collected(props: {
+    data?: Item[];
+    error?: Error | null;
+    unread?: UnreadNamespace[];
+  }): PlacedSection[] {
+    let collect: (() => PlacedSection[]) | null = null;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={["/pods"]}>
+          <TooltipProvider>
+            <ScreenShareProvider>
+              <ResourceList<Item>
+                title="Pods"
+                columns={columns}
+                emptyStateLabel="Pods"
+                {...props}
+              />
+              <Probe />
+            </ScreenShareProvider>
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    return collect!();
+  }
+
+  /**
+   * Refused outright, the list has no table and registered nothing; the
+   * file had no sections and still said everything was read.
+   */
+  it("says the list could not be read when the read failed", () => {
+    const [section] = collected({
+      data: [],
+      error: new Error("pods is forbidden: RBAC"),
+    });
+    expect(section.unread).toMatch(/forbidden/);
+  });
+
+  /**
+   * Two of three namespaces answered: the page names the third and drops
+   * the total, and the file wrote the rows it had as the whole list.
+   */
+  it("draws the rows it has and names the namespace that did not answer", () => {
+    const [section] = collected({
+      data: [{ name: "web-1", namespace: "shop" }],
+      unread: [{ namespace: "team-c", code: "Forbidden", message: "denied" }],
+    });
+    expect(section.partial).toMatch(/team-c/);
+    expect(section.count).toBeNull();
+  });
+
+  it("gives the whole count when every namespace answered", () => {
+    const [section] = collected({
+      data: [{ name: "web-1", namespace: "shop" }],
+    });
+    expect(section.partial ?? null).toBeNull();
+    expect(section.count).toBe(1);
   });
 });

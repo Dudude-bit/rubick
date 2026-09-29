@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { useNavigate } from "react-router-dom";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
@@ -107,7 +107,7 @@ export function CustomResourceList({
     cols.push({
       size: 320,
       accessorKey: "name",
-      header: () => <T section="columns" k="name" />,
+      header: columnHeader("columns", "name"),
       cell: ({ row }) => (
         <RouteLink
           to={getDetailPath(row.original)}

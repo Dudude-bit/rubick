@@ -6,6 +6,8 @@ import {
   byKind,
   byTrouble,
   differing,
+  projectDestinationsWords,
+  projectReposWords,
   readApplication,
   resourceTone,
   type ArgoResource,
@@ -364,5 +366,28 @@ describe("what an Application manages", () => {
   /** A healthy object earns no colour at all. */
   it("leaves a synced, healthy object uncoloured", () => {
     expect(resourceTone(resource("Service", "api"))).toBeNull();
+  });
+});
+
+describe("what a project allows, in words", () => {
+  const say = t;
+
+  /** `*` with a `!pattern` is "everything but", and dropping the exclusion misstates the project. */
+  it("keeps a repository a project denies beside its wildcard", () => {
+    expect(
+      projectReposWords(["*", "!https://github.com/example/restricted-*"], say)
+    ).toBe("any repository except https://github.com/example/restricted-*");
+    expect(projectReposWords(["*"], say)).toBe("any repository");
+    expect(projectReposWords([], say)).toBe("no repository allowed");
+  });
+
+  /** A destination named by cluster name, with no server, is one cluster, not any. */
+  it("names a destination's cluster by name when it has no server", () => {
+    expect(
+      projectDestinationsWords([{ namespace: "shop", name: "prod-eu" }], say)
+    ).toContain("prod-eu");
+    expect(
+      projectDestinationsWords([{ namespace: "shop", server: "*" }], say)
+    ).toContain("any cluster");
   });
 });

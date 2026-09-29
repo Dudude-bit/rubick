@@ -5,6 +5,7 @@ import { ROUTING_STALE } from "../ingress";
 import { crd } from "./crd";
 import { countHosts, fetchMesh, MESH_KEY } from "./data";
 import { facts } from "./facts";
+import { reportOf } from "./report";
 
 /**
  * Istio.
@@ -43,5 +44,6 @@ export default defineVendor({
     load: () => import("./page"),
     gate: { crd: "virtualservices.networking.istio.io", namespaced: true },
   },
+  provides: { "object.report": reportOf },
   crd,
 });

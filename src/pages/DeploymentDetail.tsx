@@ -78,6 +78,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "@/components/services/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
+import { useDeploymentShare } from "@/hooks/useDeploymentShare";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
@@ -293,10 +294,6 @@ export function DeploymentDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Deployment, deployment);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
-  if (!deployment && !isLoading && !error) {
-    return null;
-  }
-
   const rolloutDesired =
     rolloutStatus?.replicas ?? deployment?.replicas.desired ?? 0;
   const rolloutReady =
@@ -312,6 +309,18 @@ export function DeploymentDetail() {
       rolloutAvailable >= rolloutDesired &&
       rolloutReady >= rolloutDesired
     );
+
+  const share = useDeploymentShare(
+    deployment,
+    revisions,
+    pods,
+    podsError,
+    isRolloutInProgress
+  );
+
+  if (!deployment && !isLoading && !error) {
+    return null;
+  }
 
   const rolloutMessage = (() => {
     if (!rolloutStatus) return null;
@@ -540,6 +549,7 @@ export function DeploymentDetail() {
         freshness={freshness}
         resource={deployment}
         delivery={deliveryQuery}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.Deployment}

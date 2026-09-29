@@ -18,6 +18,10 @@ import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatAge, formatSince } from "@/lib/utils";
 import type { CustomResourceInfo } from "@/generated/types";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 import {
   crdObjectPath,
   crdObjectsPath,
@@ -27,6 +31,7 @@ import {
 } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
+import { backupsSection } from "./share";
 import {
   BACKUPS_CRD,
   CLUSTERS_CRD,
@@ -144,6 +149,7 @@ export default function CloudNativePgPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -161,7 +167,26 @@ export default function CloudNativePgPage() {
         description={t("operators", "cnpgPageDescription")}
       />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `CloudNativePG · ${activeTab?.label ?? ""}`,
+              icon:
+                activeTab?.id === "clusters"
+                  ? Database
+                  : activeTab?.id === "backups"
+                    ? Archive
+                    : activeTab?.id === "poolers"
+                      ? Network
+                      : Box,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -243,6 +268,25 @@ export function OperatorStrip({
   );
 }
 
+/** The words behind a finding, from fields the kind actually carries; never invented prose. */
+function pgFindingDetail(finding: PgFinding): string | null {
+  switch (finding.kind) {
+    case "switchover":
+    case "failover":
+      return finding.reason;
+    case "notReady":
+    case "archivingFailing":
+      return finding.message;
+    case "phase":
+      return finding.reason ?? finding.phase;
+    case "failedInstances":
+    case "fenced":
+      return finding.names.join(", ");
+    default:
+      return null;
+  }
+}
+
 function ClustersTab({
   clusters,
   loading,
@@ -255,6 +299,35 @@ function ClustersTab({
   operator: OperatorInfo | undefined;
 }) {
   const t = useT();
+  useShareSection("cloudnativepg-clusters", () => {
+    const found = clusters.flatMap((cluster) => {
+      if (cluster.worst === null) return [];
+      const worst =
+        cluster.findings.find((f) => f.severity === cluster.worst) ??
+        cluster.findings[0];
+      return [
+        {
+          title: cluster.name,
+          detail: worst ? pgFindingDetail(worst) : cluster.phase,
+          role: cluster.worst,
+          ref: refOf({
+            kind: "Cluster",
+            name: cluster.name,
+            namespace: cluster.namespace,
+          }),
+        },
+      ];
+    });
+    if (found.length === 0) return null;
+    return {
+      id: "cloudnativepg-clusters",
+      order: ORDER.own,
+      title: t("operators", "clustersTab"),
+      icon: iconSvg(Database),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   if (loading) {
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
@@ -689,6 +762,7 @@ function BackupsLine({
 
 function BackupsTab({ companions }: { companions: Companions | undefined }) {
   const t = useT();
+  useShareSection("cloudnativepg-backups", () => backupsSection(companions, t));
   if (!companions) {
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
@@ -811,6 +885,54 @@ function OperatorTab({
   pending: boolean;
 }) {
   const t = useT();
+  useShareSection("cloudnativepg-operator", () => {
+    const found = [
+      ...(operator?.controller &&
+      operator.controller.ready < operator.controller.desired
+        ? [
+            {
+              title: operator.controller.name,
+              detail: t("count", "ofTotalReady", {
+                n: operator.controller.ready,
+                total: operator.controller.desired,
+              }),
+              role: "err" as const,
+              ref: refOf({
+                kind: "Deployment",
+                name: operator.controller.name,
+                namespace: operator.controller.namespace,
+              }),
+            },
+          ]
+        : []),
+      ...(operator && !operator.controllerKnown
+        ? [
+            {
+              title: t("operators", "deploymentsUnreadable"),
+              detail: operator.controllerReason,
+              role: "warn" as const,
+            },
+          ]
+        : operator && !operator.controller
+          ? [
+              {
+                title: t("operators", "controllerNotFound"),
+                detail: null,
+                role: "warn" as const,
+              },
+            ]
+          : []),
+    ];
+    if (found.length === 0) return null;
+    return {
+      id: "cloudnativepg-operator",
+      order: ORDER.own,
+      title: t("operators", "operatorTab"),
+      icon: iconSvg(Box),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   return (
     <div className="flex max-w-[64ch] flex-col gap-3 text-xs text-fg-mut">
       <p>{t("operators", "cnpgOperatorExplained")}</p>

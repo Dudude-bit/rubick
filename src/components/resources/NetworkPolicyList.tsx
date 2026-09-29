@@ -1,8 +1,9 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 
 import type { NetworkPolicyInfo } from "@/generated/types";
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { commands } from "@/lib/commands";
+import { directionWords, reachWords, selectsWords } from "@/lib/network-policy";
 import { ResourceType } from "@/lib/resource-registry";
 import { DirectionCell, ReachCell, SelectsCell } from "./network-policy-cells";
 import {
@@ -24,13 +25,22 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
     // tagged union would stringify to `[object Object]`.
     accessorFn: (row) =>
       row.selects.kind === "written" ? row.selects.query : "",
-    header: () => <T section="columns" k="selects" />,
+    header: columnHeader("columns", "selects"),
+    meta: {
+      share: (row: NetworkPolicyInfo, t) => selectsWords(row.selects, t),
+    },
     cell: ({ row }) => <SelectsCell policy={row.original} />,
   },
   {
     size: 110,
     id: "behind",
-    header: () => <T section="columns" k="pods" />,
+    header: columnHeader("columns", "pods"),
+    meta: {
+      share: (row: NetworkPolicyInfo, t) => {
+        const said = reachWords(row.selected, t);
+        return { text: said.text, role: said.role ?? undefined };
+      },
+    },
     cell: ({ row }) => <ReachCell policy={row.original} />,
   },
   {
@@ -38,12 +48,24 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
     id: "ingress",
     // `policyTypes` writes these two words; they are the cluster's, not ours.
     header: "Ingress",
+    meta: {
+      share: (row: NetworkPolicyInfo, t) => {
+        const said = directionWords(row.ingress, t);
+        return { text: said.text, role: said.role ?? undefined };
+      },
+    },
     cell: ({ row }) => <DirectionCell direction={row.original.ingress} />,
   },
   {
     size: 130,
     id: "egress",
     header: "Egress",
+    meta: {
+      share: (row: NetworkPolicyInfo, t) => {
+        const said = directionWords(row.egress, t);
+        return { text: said.text, role: said.role ?? undefined };
+      },
+    },
     cell: ({ row }) => <DirectionCell direction={row.original.egress} />,
   },
   createAgeColumn<NetworkPolicyInfo>(),

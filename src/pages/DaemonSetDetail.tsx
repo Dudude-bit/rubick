@@ -56,6 +56,7 @@ import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "@/components/services/PinAction";
 import { useAsk } from "@/hooks/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
+import { useDaemonSetShare } from "@/hooks/useDaemonSetShare";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -173,6 +174,8 @@ export function DaemonSetDetail() {
   const ready = daemonSet?.ready ?? 0;
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;
+
+  const share = useDaemonSetShare(daemonSet, pods, podsError);
 
   const tabs = useMemo(
     () => [
@@ -414,6 +417,7 @@ export function DaemonSetDetail() {
         freshness={freshness}
         resource={daemonSet}
         delivery={deliveryQuery}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.DaemonSet}

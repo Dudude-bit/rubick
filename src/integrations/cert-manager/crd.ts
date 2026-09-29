@@ -11,6 +11,7 @@ import type { CrdColumn } from "../kit";
 import { getValueByPath, matchByGroup } from "../kit";
 import type { CrdView } from "../registry";
 import { daysUntil } from "@/lib/utils";
+import { acmeServerLabel } from "./model";
 
 /**
  * Status configuration for Certificate resources
@@ -123,12 +124,7 @@ const issuerColumns: CrdColumn[] = [
 
       if (spec.acme) {
         const acme = spec.acme as { server?: string };
-        if (acme.server?.includes("letsencrypt.org")) {
-          return acme.server.includes("staging")
-            ? "Let's Encrypt (Staging)"
-            : "Let's Encrypt";
-        }
-        return acme.server ?? null;
+        return acmeServerLabel(acme.server ?? null);
       }
       if (spec.ca) {
         const ca = spec.ca as { secretName?: string };

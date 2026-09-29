@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import type { CellContext, ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
@@ -58,19 +59,19 @@ export const columns: ColumnDef<NamespaceInfo>[] = [
   {
     size: 420,
     accessorKey: "name",
-    header: () => <T section="columns" k="name" />,
+    header: columnHeader("columns", "name"),
     cell: NameCell,
   },
   {
     size: 120,
     accessorKey: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
     cell: ({ row }) => <StatusBadge status={row.original.status} showDot />,
   },
   {
     size: 80,
     id: "pods",
-    header: () => <T section="columns" k="pods" />,
+    header: columnHeader("columns", "pods"),
     cell: PodsCell,
   },
   createAgeColumn<NamespaceInfo>(),

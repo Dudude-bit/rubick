@@ -48,6 +48,7 @@ import {
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "@/components/services/PinAction";
 import { useResourceDetail } from "@/hooks";
+import { useCronJobShare } from "@/hooks/useCronJobShare";
 import { useRealtimeAge, useRealtimeCountdown } from "@/hooks/useRealtimeAge";
 import { commands } from "@/lib/commands";
 import { matchCronJobPods } from "@/lib/metrics";
@@ -245,6 +246,8 @@ export function CronJobDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.CronJob, cronJob);
   const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const share = useCronJobShare(cronJob, jobs, jobsError);
 
   const tabs = useMemo(
     () => [
@@ -459,6 +462,7 @@ export function CronJobDetail() {
         freshness={freshness}
         resource={cronJob}
         delivery={deliveryQuery}
+        share={share}
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.CronJob}

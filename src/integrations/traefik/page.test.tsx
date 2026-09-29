@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -48,6 +48,8 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { default: TraefikPage } = await import("./page");
+const { ScreenShareProvider, useScreenSections } =
+  await import("@/components/share/screen-share");
 
 const shop: IngressInfo = {
   name: "shop",
@@ -78,17 +80,26 @@ const shop: IngressInfo = {
 };
 
 function openOn(tab: string) {
+  let collect: ReturnType<typeof useScreenSections> = null;
+  function Probe() {
+    collect = useScreenSections();
+    return null;
+  }
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/integrations/traefik?tab=${tab}`]}>
-        {children}
+        <ScreenShareProvider>
+          {children}
+          <Probe />
+        </ScreenShareProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );
   render(<TraefikPage />, { wrapper });
+  return () => collect!();
 }
 
 beforeEach(() => {
@@ -146,5 +157,37 @@ describe("a host with no certificate of its own when the edge could not be read"
 
     expect(await screen.findByText(/TLS not checked/)).toBeInTheDocument();
     expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
+  });
+});
+
+describe("what the Traefik tabs hand to Share", () => {
+  /**
+   * The map registered nothing: its file was a title over no sections and
+   * "everything this report names was read".
+   */
+  it("gives the map's routers and entry points to the file", async () => {
+    const sections = openOn("map");
+    await screen.findByText("TLS not checked");
+    await waitFor(() =>
+      expect(sections().map((section) => section.id)).toEqual(
+        expect.arrayContaining(["traefik-routes-table", "traefik-entry-points"])
+      )
+    );
+  });
+
+  /**
+   * "TLS not checked" rests on entry points nobody could read; the Routes
+   * file said everything was read and never named them.
+   */
+  it("names the entry points it could not read beside the routes", async () => {
+    answers.backing = () => Promise.resolve({ services: [], published: [] });
+    const sections = openOn("routes");
+    await screen.findByText(/TLS not checked/);
+    await waitFor(() => {
+      const points = sections().find(
+        (section) => section.id === "traefik-entry-points"
+      );
+      expect(points?.unread).toBeTruthy();
+    });
   });
 });

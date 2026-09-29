@@ -28,6 +28,7 @@ import {
   type LaneRule,
 } from "./lanes";
 import { useLogHistory } from "./hooks/useLogHistory";
+import { logViewKey, offerLogView, type LogView } from "./shared-view";
 import { useIntake } from "./hooks/useIntake";
 import { historyRoom, lostLines } from "./hooks/log-buffer";
 import { LogHistoryBar } from "./LogHistoryBar";
@@ -721,6 +722,15 @@ export function LogViewer({
       })
     );
   }, [copyToClipboard, visibleLogs, settling, t]);
+
+  const shown = useRef<LogView>({ lines: [], previous: false });
+  useEffect(() => {
+    shown.current = { lines: visibleLogs, previous: previousRun };
+  });
+  useEffect(() => {
+    if (lanes) return;
+    return offerLogView(logViewKey(namespace, podName), () => shown.current);
+  }, [lanes, namespace, podName]);
 
   const shownContainers = useMemo(
     () => (lanes ? containers : containers.filter((name) => !hidden.has(name))),

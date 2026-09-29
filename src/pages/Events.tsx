@@ -18,6 +18,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
 import { StoryCard } from "@/components/events/StoryCard";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { eventsFiltersSection } from "./events-share";
+import { eventsSection } from "@/lib/report-parts";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
@@ -219,12 +223,6 @@ export function Events() {
   // have answered, but what is on screen is no longer the scope's whole story.
   const failed = several ? parts.error : single.error;
 
-  if (!isConnected) {
-    return (
-      <ConnectClusterEmptyState resourceLabel={toPlural(ResourceType.Event)} />
-    );
-  }
-
   // Two ceilings, and a filter makes them diverge. `windowFull` is about
   // the pool the limit bought — cut by the apiserver per namespace and by
   // the join above — and it is the only one that says whether anything was
@@ -244,6 +242,31 @@ export function Events() {
   const warningCount = counted.filter((e) => e.type === "Warning").length;
   const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
+
+  useShareSection("events", () => [
+    eventsSection(
+      counted,
+      failed
+        ? t("hints", "notReadEvents", { reason: errorToShow(failed) })
+        : null,
+      true
+    ),
+    eventsFiltersSection(
+      view,
+      window,
+      eventType,
+      query,
+      eventLimit,
+      scope.scope,
+      t
+    ),
+  ]);
+
+  if (!isConnected) {
+    return (
+      <ConnectClusterEmptyState resourceLabel={toPlural(ResourceType.Event)} />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 animate-in fade-in duration-200">
@@ -387,6 +410,9 @@ export function Events() {
             <DataFreshness
               dataUpdatedAt={freshness.dataUpdatedAt}
               slowed={freshness.slowed}
+            />
+            <ShareScreenAction
+              screen={{ title: "Events", namespace: currentNamespace }}
             />
           </>
         }

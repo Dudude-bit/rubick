@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table2, Tag, Trash2 } from "lucide-react";
 
+import type { ShareContribution } from "@/components/share/contribution";
+import { configMapKeysSection } from "@/lib/share/config-map-share";
 import { yamlTab } from "@/components/resources/yaml-tab";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
@@ -45,7 +48,11 @@ export function ConfigMapDetail() {
 
   const connections = useConnections(ResourceType.ConfigMap, name, namespace);
 
-  const { data: configMapData, isLoading: isDataLoading } = useQuery({
+  const {
+    data: configMapData,
+    error: configMapDataError,
+    isLoading: isDataLoading,
+  } = useQuery({
     queryKey: queryKeys.configMapData(namespace, name),
     queryFn: () => commands.getConfigmapData(name!, namespace!),
     enabled: !!name && !!namespace,
@@ -75,6 +82,19 @@ export function ConfigMapDetail() {
 
   const deliveryQuery = deliveryOfKind(ResourceType.ConfigMap, configMap);
   const intercept = useDeliveryIntercept(deliveryQuery);
+
+  const share = useCallback((): ShareContribution => {
+    if (!configMap) return {};
+    return {
+      sections: [
+        configMapKeysSection(
+          configMap.dataKeys,
+          { data: configMapData, error: configMapDataError },
+          t
+        ),
+      ],
+    };
+  }, [configMap, configMapData, configMapDataError, t]);
 
   if (!configMap && !isLoading && !error) {
     return null;
@@ -140,6 +160,7 @@ export function ConfigMapDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={configMap}
+      share={share}
       delivery={deliveryQuery}
       isLoading={isLoading}
       error={error}

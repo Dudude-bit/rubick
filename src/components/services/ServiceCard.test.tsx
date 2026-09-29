@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+import {
+  ScreenShareProvider,
+  useScreenSections,
+} from "@/components/share/screen-share";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ChainPath } from "@/lib/connections";
 
@@ -42,6 +46,11 @@ vi.mock("@/lib/connections", async (original) => ({
 }));
 
 import { ServiceCard } from "./ServiceCard";
+import { pinShare } from "./service-card-share";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
 
 const pin = {
   context: "prod",
@@ -163,5 +172,69 @@ describe("what a card says about a way in", () => {
     mount();
 
     expect(screen.getByText(/nothing behind|ничего нет/i)).toBeVisible();
+  });
+});
+
+describe("what a card offers Share", () => {
+  /** Deleting the `ref` on the name row breaks this: a pinned service's
+   *  card would offer a section with no way back to the object it is about. */
+  it("carries a ref back to the pinned object on the name row", () => {
+    const section = pinShare(
+      pin,
+      { state: "ready", ready: 2, total: 2 },
+      { entries: [], known: true },
+      [],
+      null,
+      [],
+      t
+    );
+    expect(section.body.type).toBe("facts");
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    expect(rows[0]).toMatchObject({
+      values: [
+        { text: "payments", ref: { kind: "Deployment", stem: "payments" } },
+      ],
+    });
+    expect(rows[1]).toMatchObject({ values: [{ role: "ok" }] });
+  });
+
+  /** A service this app could not read at all must not offer the rest of
+   *  the card's fields as though they were answers. */
+  it("marks the whole section unread when the neighbourhood could not be read", () => {
+    const section = pinShare(
+      pin,
+      { state: "unread", why: "Forbidden" },
+      { entries: [], known: false },
+      [],
+      null,
+      [],
+      t
+    );
+    expect(section.unread).toBe("Forbidden");
+  });
+
+  it("registers into the screen's Share while the card is mounted", () => {
+    let collect = null as ReturnType<typeof useScreenSections>;
+    function Probe() {
+      collect = useScreenSections();
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <TooltipProvider>
+          <ScreenShareProvider>
+            <ServiceCard pin={pin} onUnpin={() => {}} />
+            <Probe />
+          </ScreenShareProvider>
+        </TooltipProvider>
+      </MemoryRouter>
+    );
+    const sections = collect?.() ?? [];
+    expect(
+      sections.some(
+        (section) =>
+          section.id === `pin:${pin.kind}/${pin.namespace}/${pin.name}`
+      )
+    ).toBe(true);
   });
 });

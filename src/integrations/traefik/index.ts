@@ -9,6 +9,7 @@ import {
   ROUTE_STALE,
 } from "./data";
 import { facts } from "./facts";
+import { reportOf } from "./report";
 import { proxyBehind, serviceRoutes } from "./routes";
 
 /**
@@ -36,7 +37,11 @@ export default defineVendor({
   // What the backend's connection graph cannot know: its `Routes` edges come
   // from `Ingress` objects, and this cluster's edge may be entirely
   // IngressRoutes. See `service.routes`.
-  provides: { "service.routes": serviceRoutes, "proxy.behind": proxyBehind },
+  provides: {
+    "service.routes": serviceRoutes,
+    "proxy.behind": proxyBehind,
+    "object.report": reportOf,
+  },
   page: {
     count: pageCount({
       queryKey: ROUTE_SOURCES,

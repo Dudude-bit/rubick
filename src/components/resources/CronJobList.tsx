@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 
@@ -29,7 +30,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     // Five mono fields and their spaces: `0 */6 * * MON-FRI`.
     size: 150,
     accessorKey: "schedule",
-    header: () => <T section="columns" k="schedule" />,
+    header: columnHeader("columns", "schedule"),
     cell: ({ row }) => (
       <span className="font-mono text-fg-mid">{row.original.schedule}</span>
     ),
@@ -37,7 +38,11 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   {
     size: 100,
     id: "suspend",
-    header: () => <T section="columns" k="suspend" />,
+    header: columnHeader("columns", "suspend"),
+    meta: {
+      share: (row: CronJobInfoWithMetrics) =>
+        row.suspend ? { text: "Suspended", role: "warn" } : null,
+    },
     // Suspended is the exception worth colouring; "No" is the resting
     // state of every cronjob and stays quiet text.
     cell: ({ row }) =>
@@ -52,14 +57,21 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   {
     size: 70,
     id: "active",
-    header: () => <T section="columns" k="active" />,
+    header: columnHeader("columns", "active"),
+    meta: { share: (row: CronJobInfoWithMetrics) => String(row.active) },
     cell: ({ row }) => row.original.active,
   },
   {
     // "3d ago", under a header twice the width of its own values.
     size: 160,
     id: "last_schedule",
-    header: () => <T section="columns" k="lastSchedule" />,
+    header: columnHeader("columns", "lastSchedule"),
+    meta: {
+      share: (row: CronJobInfoWithMetrics, t) =>
+        row.lastSchedule
+          ? { text: row.lastSchedule, at: row.lastSchedule }
+          : t("action", "never"),
+    },
     cell: ({ row }) => <LastSchedule at={row.original.lastSchedule} />,
   },
   createAgeColumn<CronJobInfoWithMetrics>(),

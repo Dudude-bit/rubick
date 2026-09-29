@@ -26,6 +26,7 @@ import { useT } from "@/i18n/useT";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { ScreenShareProvider } from "@/components/share/screen-share";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -122,7 +123,9 @@ export function Layout() {
                   <>
                     <DeepLinkBanner />
                     <ObjectMenu />
-                    <Outlet />
+                    <ScreenShareProvider>
+                      <Outlet />
+                    </ScreenShareProvider>
                   </>
                 )}
               </Suspense>

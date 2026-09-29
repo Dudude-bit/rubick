@@ -20,6 +20,7 @@ import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { actionsFor, perform, type ScyllaAction } from "./actions";
+import { nodeConfigsSection } from "./share";
 import {
   CLUSTERS_CRD,
   useClusters,
@@ -39,6 +40,10 @@ import { useT, type T } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
 import { troubleMark, allowedWord } from "../kit";
 import { toastError } from "@/lib/toast-error";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import { useShareSection } from "@/components/share/screen-share";
+import { iconSvg } from "@/lib/icon-svg";
+import { ORDER, refOf } from "@/lib/report-parts";
 
 export default function ScyllaPage() {
   const t = useT();
@@ -109,6 +114,7 @@ export default function ScyllaPage() {
     },
   ];
 
+  const activeTab = tabs.find((entry) => entry.id === tab) ?? tabs[0];
   return (
     <div className="flex flex-col gap-[22px]">
       <SectionHeader
@@ -126,7 +132,24 @@ export default function ScyllaPage() {
         description={t("operators", "scyllaPageDescription")}
       />
       <OperatorStrip operator={operator.data} pending={operator.isPending} />
-      <DetailTabs tabs={tabs} activeTab={tab} onTabChange={setTab} />
+      <DetailTabs
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setTab}
+        actions={
+          <ShareScreenAction
+            screen={{
+              title: `Scylla · ${activeTab?.label ?? ""}`,
+              icon:
+                activeTab?.id === "clusters"
+                  ? Layers
+                  : activeTab?.id === "nodes"
+                    ? HardDrive
+                    : Box,
+            }}
+          />
+        }
+      />
     </div>
   );
 }
@@ -216,6 +239,35 @@ function ClustersTab({
   operator: OperatorInfo | undefined;
 }) {
   const t = useT();
+  useShareSection("scylla-clusters", () => {
+    const found = clusters.flatMap((cluster) => {
+      if (cluster.worst === null) return [];
+      const worst =
+        cluster.findings.find((f) => f.severity === cluster.worst) ??
+        cluster.findings[0];
+      return [
+        {
+          title: cluster.name,
+          detail: worst?.detail ?? null,
+          role: cluster.worst,
+          ref: refOf({
+            kind: "ScyllaCluster",
+            name: cluster.name,
+            namespace: cluster.namespace,
+          }),
+        },
+      ];
+    });
+    if (found.length === 0) return null;
+    return {
+      id: "scylla-clusters",
+      order: ORDER.own,
+      title: t("operators", "clustersTab"),
+      icon: iconSvg(Layers),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   if (loading)
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
@@ -596,6 +648,7 @@ function NodeConfigsTab({
   read: ReturnType<typeof useNodeConfigs>["data"];
 }) {
   const t = useT();
+  useShareSection("scylla-node-configs", () => nodeConfigsSection(read, t));
   if (!read)
     return (
       <p className="text-xs text-fg-fnt">{t("action", "readingInline")}</p>
@@ -656,6 +709,71 @@ function NodeConfigsTab({
 
 function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
   const t = useT();
+  useShareSection("scylla-operator", () => {
+    const found = [
+      ...(operator?.operator &&
+      operator.operator.ready < operator.operator.desired
+        ? [
+            {
+              title: operator.operator.name,
+              detail: t("count", "ofTotalReady", {
+                n: operator.operator.ready,
+                total: operator.operator.desired,
+              }),
+              role: "err" as const,
+              ref: refOf({
+                kind: "Deployment",
+                name: operator.operator.name,
+                namespace: operator.operator.namespace,
+              }),
+            },
+          ]
+        : []),
+      ...(operator && !operator.operatorKnown
+        ? [
+            {
+              title: t("operators", "deploymentsUnreadable"),
+              detail: operator.operatorReason,
+              role: "warn" as const,
+            },
+          ]
+        : operator && !operator.operator
+          ? [
+              {
+                title: t("operators", "scyllaOperatorNotFound"),
+                detail: null,
+                role: "warn" as const,
+              },
+            ]
+          : []),
+      ...(operator?.manager && operator.manager.ready < operator.manager.desired
+        ? [
+            {
+              title: operator.manager.name,
+              detail: t("count", "ofTotalReady", {
+                n: operator.manager.ready,
+                total: operator.manager.desired,
+              }),
+              role: "err" as const,
+              ref: refOf({
+                kind: "Deployment",
+                name: operator.manager.name,
+                namespace: operator.manager.namespace,
+              }),
+            },
+          ]
+        : []),
+    ];
+    if (found.length === 0) return null;
+    return {
+      id: "scylla-operator",
+      order: ORDER.own,
+      title: t("operators", "operatorTab"),
+      icon: iconSvg(Box),
+      count: found.length,
+      body: { type: "findings" as const, items: found },
+    };
+  });
   return (
     <div className="flex max-w-[64ch] flex-col gap-3 text-xs text-fg-mut">
       <p>{t("operators", "scyllaOperatorExplained")}</p>

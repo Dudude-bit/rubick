@@ -187,6 +187,14 @@ export function hostSeverity(group: {
   );
 }
 
+/** `hostSeverity` as a report colours it: a host nobody could check is neutral, never green. */
+export function hostRole(
+  group: Parameters<typeof hostSeverity>[0]
+): "err" | "warn" | "neutral" | null {
+  const severity = hostSeverity(group);
+  return severity === "unknown" ? "neutral" : severity;
+}
+
 function ref(kind: string, name: string, namespace: string): ObjectRef {
   return { kind, name, namespace, existence: "present", facts: null };
 }

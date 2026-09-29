@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { backingFrom, backingOf, type BackingSources } from "./ingress";
+import {
+  backingFrom,
+  backingOf,
+  hostRole,
+  type BackingSources,
+} from "./ingress";
 import type { ServiceInfo, ServicePublished } from "@/generated/types";
 
 const service = (overrides: Partial<ServiceInfo> = {}): ServiceInfo =>
@@ -139,5 +144,29 @@ describe("what a route's backend is doing", () => {
     expect(
       backingFrom({ services: [], published: [] }, new Error("a later refetch"))
     ).toMatchObject({ backingKnown: true, backingError: null });
+  });
+});
+
+describe("how a host is coloured in a shared report", () => {
+  const host = (over: Partial<Parameters<typeof hostRole>[0]> = {}) => ({
+    worst: null,
+    backendsKnown: true,
+    tls: { at: "none" },
+    ...over,
+  });
+
+  /** The Istio, ingress-nginx and Traefik lists dropped a host with unread
+   *  backends from the report, and the page counted it as not checked. */
+  it("reports a host nobody could check as neutral, not as clean", () => {
+    expect(hostRole(host({ backendsKnown: false }))).toBe("neutral");
+    expect(hostRole(host({ tls: { at: "unknown" } }))).toBe("neutral");
+  });
+
+  it("leaves out a host that was read and has nothing wrong", () => {
+    expect(hostRole(host())).toBeNull();
+  });
+
+  it("keeps a host's own worst finding", () => {
+    expect(hostRole(host({ worst: "err", backendsKnown: false }))).toBe("err");
   });
 });

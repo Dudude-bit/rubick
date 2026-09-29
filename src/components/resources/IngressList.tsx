@@ -1,5 +1,6 @@
 import { commands } from "@/lib/commands";
 import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -96,7 +97,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An ingress class name: "nginx", "traefik", "alb".
     size: 110,
     accessorKey: "className",
-    header: () => <T section="columns" k="class" />,
+    header: columnHeader("columns", "class"),
     cell: ({ row }) => (
       <span className="text-fg-mut">{row.original.className || "default"}</span>
     ),
@@ -113,7 +114,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
         .map((rule) => rule.host)
         .filter((host): host is string => Boolean(host))
         .join(" "),
-    header: () => <T section="columns" k="hosts" />,
+    header: columnHeader("columns", "hosts"),
     cell: ({ row }) => {
       const hosts = row.original.rules
         .map((rule) => rule.host)
@@ -157,7 +158,13 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // "12 paths", with the routes themselves in the tooltip.
     size: 90,
     id: "paths",
-    header: () => <T section="columns" k="paths" />,
+    header: columnHeader("columns", "paths"),
+    meta: {
+      share: (row: IngressInfo, t) => {
+        const paths = row.rules.flatMap((rule) => rule.paths).length;
+        return paths === 0 ? "—" : t("count", "paths", { n: paths });
+      },
+    },
     cell: ({ row }) => {
       const allPaths = row.original.rules.flatMap((rule) => rule.paths);
       if (allPaths.length === 0) return <span className="text-fg-fnt">—</span>;
@@ -181,13 +188,13 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     // An IPv4 address and a "+2 more" beside it.
     size: 150,
     accessorKey: "loadBalancerIps",
-    header: () => <T section="columns" k="address" />,
+    header: columnHeader("columns", "address"),
     cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
   {
     size: 80,
     accessorKey: "tlsHosts",
-    header: () => <T section="columns" k="tls" />,
+    header: columnHeader("columns", "tls"),
     cell: ({ row }) => <VendorTlsCell ingress={row.original} />,
   },
   createAgeColumn<IngressInfo>(),

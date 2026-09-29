@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Bell, Check, Copy, HelpCircle, X } from "lucide-react";
 
@@ -10,6 +10,7 @@ import { cn, formatSince } from "@/lib/utils";
 import { crdObjectPath, hourMinute } from "../../kit";
 import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
 import { integrationSettingsPath } from "../../paths";
+import { useShareSection } from "@/components/share/screen-share";
 import { usePicture, type Picture } from "../monitors/data";
 import { useSavedConnection } from "../saved-connection";
 import {
@@ -28,6 +29,7 @@ import {
 } from "../monitors/words";
 import { firingWords, rowWords } from "./words";
 import { verdictOf } from "./verdict";
+import { alertsSection, rulesUnread } from "./share";
 import {
   OBJECT_LABEL,
   RULES_CRD,
@@ -81,6 +83,9 @@ export default function Alerts() {
       picture.data.alertRules
     );
   }, [picture.data]);
+  useShareSection("prometheus-alerts", () =>
+    alertsSection(rows, rulesUnread(picture.data, picture.error, t), t)
+  );
   const prefix = useMemo(
     () => (rows ? sharedPrefix(rows.map((row) => row.object.name)) : null),
     [rows]
@@ -101,6 +106,16 @@ export default function Alerts() {
   const asked = params.get("rule");
   const selected =
     shown.find((row) => keyOf(row) === asked) ?? shown[0] ?? null;
+  const selectedKey = selected ? keyOf(selected) : null;
+  // The list is now its own scroller, so a row the arrows moved onto past
+  // the visible edge has to be asked for rather than dragged along by a page
+  // that used to scroll as one with it.
+  useEffect(() => {
+    if (selectedKey === null) return;
+    document
+      .getElementById(`alert-rule-${selectedKey}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedKey]);
   const select = (row: RuleRow) => {
     const updated = new URLSearchParams(params);
     updated.set("rule", keyOf(row));
@@ -146,9 +161,9 @@ export default function Alerts() {
   if (!rows) return null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <Header picture={picture.data} rows={rows} />
-      <div className="grid grid-cols-[340px_minmax(0,1fr)] gap-6 border-t border-hair pt-4">
+      <div className="flex min-h-0 flex-1 gap-6 border-t border-hair pt-4">
         <Ladder
           rows={rows}
           shown={shown}
@@ -161,15 +176,21 @@ export default function Alerts() {
           onSelect={select}
           onKeyDown={onKeyDown}
         />
-        {selected ? (
-          <Detail key={keyOf(selected)} row={selected} picture={picture.data} />
-        ) : (
-          // The list beside this already says why it is empty. Saying it
-          // again here put the same sentence on the screen twice.
-          <p className="text-[11.5px] text-fg-mut">
-            {rows.length === 0 ? null : t("alerts", "pickOne")}
-          </p>
-        )}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-thin">
+          {selected ? (
+            <Detail
+              key={keyOf(selected)}
+              row={selected}
+              picture={picture.data}
+            />
+          ) : (
+            // The list beside this already says why it is empty. Saying it
+            // again here put the same sentence on the screen twice.
+            <p className="text-[11.5px] text-fg-mut">
+              {rows.length === 0 ? null : t("alerts", "pickOne")}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -302,7 +323,7 @@ function Ladder({
     ),
   ];
   return (
-    <div className="flex min-w-0 flex-col gap-2 border-r border-hair pr-3">
+    <div className="flex h-full w-[340px] min-h-0 flex-none flex-col gap-2 border-r border-hair pr-3">
       <FilterBox
         value={filter}
         onChange={onFilter}
@@ -348,7 +369,7 @@ function Ladder({
         aria-activedescendant={selected ? rowDomId(selected) : undefined}
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="flex flex-col rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto scrollbar-thin rounded-[5px] outline-none focus-visible:ring-1 focus-visible:ring-info"
       >
         {GROUPS.map((group) => {
           const members = shown.filter((row) => row.group === group);

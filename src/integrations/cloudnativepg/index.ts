@@ -5,6 +5,7 @@ import { crd } from "./crd";
 import { CLUSTERS_CRD, CLUSTERS_KEY, CNPG_STALE, fetchClusters } from "./data";
 import { facts } from "./facts";
 import { readCluster } from "./model";
+import { reportOf } from "./report";
 
 export default defineVendor({
   id: "cloudnativepg",
@@ -32,5 +33,6 @@ export default defineVendor({
     // The page is the Clusters list and what hangs off it.
     gate: { crd: CLUSTERS_CRD, namespaced: true },
   },
+  provides: { "object.report": reportOf },
   crd,
 });

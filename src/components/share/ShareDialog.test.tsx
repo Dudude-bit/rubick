@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const save = vi.hoisted(() => vi.fn(async () => "/home/me/report.html"));
+const openExternal = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/lib/open-external", () => ({ openExternal }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save }));
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -43,34 +45,81 @@ const report: Report = {
     namespace: "shop",
     context: "prod-eu-1",
   },
-  chainUnread: null,
+  hero: {
+    ref: {
+      kind: "Pod",
+      namespace: "shop",
+      stem: "payments",
+      tail: "-7b6d9c5f4-x8k2p",
+      icon: "<svg></svg>",
+      kindHue: 264,
+      identHue: 132,
+    },
+    title: "payments-7b6d9c5f4-x8k2p",
+    icon: "<svg></svg>",
+    hue: 264,
+  },
+  kicker: "Investigation",
   capturedAt: "2026-09-09T18:12:03.001Z",
   appVersion: "4.10.0",
+  colouring: "full",
+  status: { text: "CrashLoopBackOff", role: "err" },
+  chips: [],
+  stats: [],
   verdict:
     "Most likely: it cannot reach its database, and probably exits on that.",
-  facts: [{ label: "Status", value: "CrashLoopBackOff" }],
-  chain: [],
-  changes: [],
-  logs: [{ source: "p/app", lines: ["ERROR refused"], previous: true }],
+  sections: [
+    {
+      id: "changes",
+      title: "What changed",
+      icon: "",
+      count: 3,
+      body: { type: "changes", changes: [] },
+    },
+    {
+      id: "logs",
+      title: "Log lines",
+      icon: "",
+      count: 1,
+      body: {
+        type: "logs",
+        logs: [
+          {
+            source: "p/app",
+            lines: [{ text: "ERROR refused", level: "error" }],
+            previous: true,
+            caption: null,
+          },
+        ],
+        absent: null,
+      },
+    },
+  ],
   notRead: ["NetworkPolicy in shop (403)"],
   link: "rubick://open/prod-eu-1/pods/shop/payments-7b6d9c5f4-x8k2p",
   words: {
     lang: "en",
-    title: "Investigation",
-    captured: "captured",
+    captured: "Captured",
     openInRubick: "Open in Rubick",
-    linkFallback: "Paste this into its search:",
+    linkFallback: "or paste this link into Rubick's search:",
     verdict: "Most likely",
-    facts: "Facts",
-    chain: "Traffic chain at capture",
-    changes: "What changed",
-    logs: "Log lines",
     notRead: "Not read",
+    notReadCount: "1 thing could not be read.",
+    allRead: "Everything this report names was read.",
     nothingHere: "Nothing here.",
     previousRun: "previous run",
-    notLookedAt: "not looked at",
+    init: "init",
     madeBy: "Made by Rubick",
     noSecrets: "No Secret value is ever written into this file.",
+    noSecretsLogs:
+      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
+  },
+  icons: {
+    roles: { ok: "", pending: "", warn: "", err: "", neutral: "" },
+    verdict: "",
+    notRead: "",
+    open: "",
+    shield: "",
   },
 };
 
@@ -78,13 +127,15 @@ function mount(value: Report | null = report) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const tree = (next: Report | null) => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <ShareDialog report={value} open onOpenChange={() => {}} />
+        <ShareDialog report={next} open onOpenChange={() => {}} />
       </TooltipProvider>
     </QueryClientProvider>
   );
+  const view = render(tree(value));
+  return { ...view, show: (next: Report | null) => view.rerender(tree(next)) };
 }
 
 // Radix's Select drives its listbox through pointer capture, which jsdom
@@ -135,10 +186,40 @@ describe("ShareDialog", () => {
     mount();
     const preview = screen.getByTestId("share-preview");
     expect(preview.textContent).toContain("Most likely");
+    expect(preview.textContent).toContain("What changed");
     expect(preview.textContent).toContain("Not read");
+  });
+
+  /**
+   * A container that printed a password prints it into the file too; the
+   * redaction takes out what it recognises and no more. "No Secret value,
+   * ever" over those lines was a promise nothing kept.
+   */
+  it("promises no more than the redaction does once log lines are in", async () => {
+    mount();
+    expect(screen.getByText(/cannot be complete/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No Secret value is ever written/)
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
     expect(
       screen.getByText(/No Secret value is ever written/)
     ).toBeInTheDocument();
+  });
+
+  /** Log lines are the part most likely to carry what a team would not publish. */
+  it("leaves the log lines out when the reader unticks them", async () => {
+    mount();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Save as HTML/ }));
+    await waitFor(() => expect(commands.writeTextFile).toHaveBeenCalled());
+    const html = vi.mocked(commands.writeTextFile).mock.calls[0][1];
+    expect(html).not.toContain("ERROR refused");
+    expect(html).toContain("left out of this report");
   });
 
   it("offers nothing to save when there is no report yet", () => {
@@ -200,13 +281,21 @@ describe("publishing", () => {
       commands.publishReport
     ).mock.calls[0];
     expect(targetId).toBe("t-public");
-    // One link per object per target: the draft is remembered against this key.
-    expect(object).toBe("Pod/shop/payments-7b6d9c5f4-x8k2p");
+    // One link per object per cluster per target: the draft is remembered
+    // against this key, so another cluster's pod of the same name never
+    // replaces it.
+    expect(object).toBe("prod-eu-1/Pod/shop/payments-7b6d9c5f4-x8k2p");
     expect(filename).toContain("payments-7b6d9c5f4-x8k2p");
     expect(html).toContain("<!doctype html>");
-    expect(
-      await screen.findByText("https://abc123.postplan.dev")
-    ).toBeInTheDocument();
+    const links = await screen.findAllByRole("link", {
+      name: "https://abc123.postplan.dev",
+    });
+    await userEvent.click(links[0]);
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://abc123.postplan.dev",
+      "abc123.postplan.dev",
+      expect.any(Function)
+    );
   });
 
   it("asks nothing extra of a target only your team can read", async () => {
@@ -237,6 +326,28 @@ describe("publishing", () => {
     ).not.toBeInTheDocument();
   });
 
+  /** "No target yet" while the list is still loading sends the reader off
+   *  to add a target they already have. */
+  it("says the targets are being read, not that there are none, while they load", async () => {
+    let answer: (list: typeof targets.list) => void = () => {};
+    vi.mocked(commands.listShareTargets).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve as never;
+      }) as never
+    );
+    mount();
+    expect(
+      await screen.findByText("Reading the list of targets…")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No publishing target yet/)
+    ).not.toBeInTheDocument();
+    answer([]);
+    expect(
+      await screen.findByText(/No publishing target yet/)
+    ).toBeInTheDocument();
+  });
+
   it("will not publish to a target whose key is missing", async () => {
     targets.list = [{ ...internal, hasKey: false }];
     mount();
@@ -250,5 +361,225 @@ describe("publishing", () => {
       await screen.findByRole("button", { name: /Publish to/ })
     ).toBeDisabled();
     expect(screen.getByText(/has no key yet/)).toBeInTheDocument();
+  });
+
+  async function tickFor(label: RegExp) {
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(await screen.findByRole("option", { name: label }));
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I understand what leaves this machine/,
+      })
+    );
+    return screen.findByRole("button", { name: /Publish to/ });
+  }
+
+  /**
+   * The tick was given for a file without the logs. Ticking them back on
+   * changes what leaves; the consent has to be given again.
+   */
+  it("takes the tick away when the log lines are put back in", async () => {
+    targets.list = [publicTarget];
+    mount();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    const publish = await tickFor(/postplan/);
+    expect(publish).toBeEnabled();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(publish).toBeDisabled();
+  });
+
+  /** Consent to one public target is not consent to another. */
+  it("takes the tick away when another public target is picked", async () => {
+    targets.list = [
+      publicTarget,
+      { ...publicTarget, id: "t-other", label: "elsewhere", host: "x.dev" },
+    ];
+    mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    await userEvent.click(screen.getByRole("combobox", { name: "Target" }));
+    await userEvent.click(
+      await screen.findByRole("option", { name: /elsewhere/ })
+    );
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
+  });
+
+  /**
+   * Events land after Share is pressed. The reader ticked a file with three
+   * changes; one with four is not what they looked at.
+   */
+  it("takes the tick away when what the dialog lists changes", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      sections: report.sections.map((section) =>
+        section.id === "changes" ? { ...section, count: 4 } : section
+      ),
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
+  });
+
+  /**
+   * A clock inside the file — "restarted 2m ago" becoming "3m ago" — is
+   * not a different file to consent to. Keyed on the whole file, the tick
+   * cleared itself on every tick of a live screen and nobody could publish.
+   */
+  it("keeps the tick when only the words inside a section move", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      verdict: "Most likely: it cannot reach its database, 3m ago.",
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeEnabled();
+  });
+
+  /**
+   * A row that changed after the tick without changing what the dialog
+   * lists kept the tick, and the file that went out was not the one the
+   * reader consented to. What goes out is the file as it was at the tick.
+   */
+  it("publishes the file as it was when the tick was given", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    const publish = await tickFor(/postplan/);
+    view.show({
+      ...report,
+      verdict: "Most likely: something the reader never saw.",
+    });
+    await userEvent.click(publish);
+    await waitFor(() =>
+      expect(commands.publishReport).toHaveBeenCalledTimes(1)
+    );
+    const html = vi.mocked(commands.publishReport).mock.calls[0][4];
+    expect(html).toContain("it cannot reach its database");
+    expect(html).not.toContain("something the reader never saw");
+  });
+
+  /**
+   * The link to a version published with its log lines stayed on screen
+   * once the lines were left out; copied from there, it hands over the
+   * version the dialog no longer shows.
+   */
+  it("takes the link away once the log lines are left out", async () => {
+    targets.list = [internal];
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    expect(
+      await screen.findByRole("button", { name: "Copy link" })
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  });
+
+  /**
+   * The link was labelled with the dialog's log choice when the answer came
+   * back. Turned off while the upload with logs was in flight, the link to
+   * the version with logs read as the one without.
+   */
+  it("labels the link with the choice the upload was sent with", async () => {
+    targets.list = [internal];
+    let answer: (value: unknown) => void = () => {};
+    vi.mocked(commands.publishReport).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as never
+    );
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    answer({
+      url: "https://abc123.postplan.dev",
+      rawUrl: null,
+      draftId: "abc123",
+      version: 1,
+    });
+    // Done when the button says "Publish to" again rather than "Publishing".
+    await screen.findByRole("button", { name: /Publish to/ });
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    // Put back to the choice it went out with, the link is its own again.
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(
+      await screen.findByRole("button", { name: "Copy link" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The tick was kept for another object's report of the same shape, and
+   * the snapshot of the first went out under the second one's key and name.
+   */
+  it("takes the tick away when the report is of another object", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      subject: { ...report.subject, name: "orders-5c8d7b9f6-q2w4e" },
+      capturedAt: "2026-09-09T18:13:00.000Z",
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
+  });
+
+  /** A target that answers with an address that is not a web page gets no link to click. */
+  it("offers no link for an answer that is not a web address", async () => {
+    targets.list = [internal];
+    vi.mocked(commands.publishReport).mockResolvedValueOnce({
+      url: "file:///etc/passwd",
+      rawUrl: null,
+      draftId: "abc123",
+      version: 1,
+    });
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    await waitFor(() => expect(commands.publishReport).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Publish to/ });
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(screen.queryByText("file:///etc/passwd")).toBeNull();
   });
 });

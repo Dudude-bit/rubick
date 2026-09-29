@@ -19,6 +19,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { useResourceDetail } from "@/hooks";
+import { useEndpointsShare } from "@/hooks/useEndpointsShare";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
@@ -67,6 +68,7 @@ export function EndpointsDetail() {
   const published = slices.data?.find(
     (entry) => entry.service.name === (endpoints?.name ?? name)
   );
+  const share = useEndpointsShare(endpoints);
 
   const subsets = endpoints?.subsets ?? [];
   const backends: Backend[] = subsets.flatMap((subset, index) => [
@@ -291,6 +293,7 @@ export function EndpointsDetail() {
     <ResourceDetailLayout
       freshness={freshness}
       resource={endpoints}
+      share={share}
       isLoading={isLoading}
       error={error}
       resourceKind={ResourceType.Endpoints}

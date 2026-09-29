@@ -1,4 +1,4 @@
-import { T } from "@/i18n/T";
+import { columnHeader } from "@/i18n/column-header";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nodeReadyWord } from "@/lib/node-reporting";
@@ -18,9 +18,12 @@ import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
 import { errorToShow } from "@/lib/error-utils";
+import { formatUsage } from "@/lib/metric-format";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { ShareScreenAction } from "@/components/share/ShareAction";
 import {
   createAgeColumn,
   createNameColumn,
@@ -82,7 +85,8 @@ export const columns = (
   {
     size: 110,
     id: "status",
-    header: () => <T section="columns" k="status" />,
+    header: columnHeader("columns", "status"),
+    meta: { share: (row: NodeInfo) => nodeReadyWord(row) },
     cell: ({ row }) => {
       // A cordoned node keeps `Ready: True`, so judging it by conditions
       // alone called it healthy full stop — the overview said "Cordoned"
@@ -95,7 +99,7 @@ export const columns = (
     // "control-plane master etcd" on a single-node cluster.
     size: 170,
     accessorKey: "roles",
-    header: () => <T section="columns" k="roles" />,
+    header: columnHeader("columns", "roles"),
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -110,12 +114,20 @@ export const columns = (
     // A kubelet version with its distro suffix: `v1.31.4+k3s1`.
     size: 120,
     accessorKey: "version",
-    header: () => <T section="columns" k="version" />,
+    header: columnHeader("columns", "version"),
   },
   {
     size: 130,
     id: "internal_ip",
-    header: () => <T section="columns" k="internalIp" />,
+    header: columnHeader("columns", "internalIp"),
+    meta: {
+      share: (row: NodeInfo) => ({
+        text:
+          row.status.addresses.find((a) => a.type === "InternalIP")?.address ??
+          "—",
+        mono: true,
+      }),
+    },
     cell: ({ row }) => {
       const address = row.original.status.addresses.find(
         (a) => a.type === "InternalIP"
@@ -128,7 +140,13 @@ export const columns = (
   {
     size: 120,
     id: "cpu",
-    header: () => <T section="columns" k="cpuUsage" />,
+    header: columnHeader("columns", "cpuUsage"),
+    meta: {
+      share: (row: NodeInfo) => {
+        const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
+        return typeof used === "number" ? formatUsage(used, "cpu") : "-";
+      },
+    },
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity ? row.original.capacity.cpu : null;
@@ -144,7 +162,13 @@ export const columns = (
   {
     size: 140,
     id: "memory",
-    header: () => <T section="columns" k="memoryUsage" />,
+    header: columnHeader("columns", "memoryUsage"),
+    meta: {
+      share: (row: NodeInfo) => {
+        const used = nodeMetricsByName.get(row.name)?.memoryBytes;
+        return typeof used === "number" ? formatUsage(used, "memory") : "-";
+      },
+    },
     cell: ({ row }) => {
       const metrics = nodeMetricsByName.get(row.original.name);
       const capacity = row.original.capacity
@@ -162,11 +186,15 @@ export const columns = (
   {
     size: 120,
     id: "capacity_pods",
-    header: () => <T section="columns" k="podCap" />,
+    header: columnHeader("columns", "podCap"),
+    meta: { share: (row: NodeInfo) => row.capacity?.pods || "-" },
     cell: ({ row }) => row.original.capacity?.pods || "-",
   },
   createAgeColumn<NodeInfo>(),
 ];
+
+const NODES_TITLE = "Nodes";
+const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
 
 export function NodeList() {
   const t = useT();
@@ -295,24 +323,36 @@ export function NodeList() {
     [t, navigate, actions]
   );
 
+  // The title row is ResourceList's own header in both views, fed the same
+  // list and the same watch, so switching views changes only what is below it.
   if (view === "utilisation") {
     return (
       <>
-        <div className="mb-3 flex items-baseline gap-3">
-          <h1 className="text-[13px] font-semibold tracking-tight text-fg">
-            Nodes
-          </h1>
-          {viewToggle}
+        <div className="flex h-full min-h-0 flex-col gap-4 animate-in fade-in duration-200">
+          <ResourceListHeader
+            title={NODES_TITLE}
+            count={nodesForTrends.data?.rows.length}
+            actions={
+              <>
+                {viewToggle}
+                <ShareScreenAction screen={NODES_SCREEN} />
+              </>
+            }
+            dataUpdatedAt={nodesForTrends.dataUpdatedAt}
+            live={live && !resyncing}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+            <NodeUtilisation
+              nodes={nodesForTrends.data?.rows ?? []}
+              nodesKnown={nodesForTrends.data !== undefined}
+              nodesReason={
+                nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
+              }
+              range={range}
+              onRange={setRange}
+            />
+          </div>
         </div>
-        <NodeUtilisation
-          nodes={nodesForTrends.data?.rows ?? []}
-          nodesKnown={nodesForTrends.data !== undefined}
-          nodesReason={
-            nodesForTrends.error ? errorToShow(nodesForTrends.error) : null
-          }
-          range={range}
-          onRange={setRange}
-        />
         {actions.dialogs}
       </>
     );
@@ -321,7 +361,7 @@ export function NodeList() {
   return (
     <>
       <ResourceList<NodeInfo>
-        title="Nodes"
+        title={NODES_TITLE}
         queryKey={queryKeys.resources(ResourceType.Node, null)}
         getRowId={getResourceRowId}
         queryFn={() => commands.listNodes(null).then(whole)}
@@ -333,13 +373,11 @@ export function NodeList() {
         refresh={refresh}
         live={live}
         resyncing={resyncing}
+        headerActions={viewToggle}
         headerContent={
-          <>
-            <div className="mb-2 flex justify-end">{viewToggle}</div>
-            {nodeStatus?.status !== "available" ? (
-              <MetricsStatusBanner status={nodeStatus} />
-            ) : null}
-          </>
+          nodeStatus?.status !== "available" ? (
+            <MetricsStatusBanner status={nodeStatus} />
+          ) : null
         }
         getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
       />
