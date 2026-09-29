@@ -564,7 +564,7 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
       </MemoryRouter>
     );
     fireEvent.click(screen.getByText("collect"));
-    expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
+    expect(document.body.textContent).not.toContain("shop.example.com");
   });
 
   /**
