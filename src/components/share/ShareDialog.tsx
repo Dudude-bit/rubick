@@ -96,16 +96,23 @@ export function ShareDialog({
   const [saving, setSaving] = useState(false);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [withLogs, setWithLogs] = useState(true);
-  // The tick is consent to what the dialog shows going to one target: what
-  // it showed is kept beside it, so re-including the logs, or a section that
-  // lands or grows after the tick, takes it away. A clock ticking inside the
-  // file does not. The link belongs to the capture and the target.
-  const [ack, setAck] = useState<{ target: string; shape: string } | null>(
-    null
-  );
+  // The tick is consent to what the dialog shows going to one target: the
+  // file as it was at the tick is kept beside it and is what goes out, so a
+  // row that changes afterwards is not published unseen. Re-including the
+  // logs, or a section that lands or grows, takes the tick away; a clock
+  // ticking inside the file does not.
+  const [ack, setAck] = useState<{
+    target: string;
+    shape: string;
+    html: string;
+  } | null>(null);
+  // The link belongs to the capture, the target and whether the logs went
+  // with it: a link to the version with logs is not the one on screen once
+  // they are left out.
   const [published, setPublished] = useState<{
     target: string;
     report: string;
+    logs: boolean;
     /** `null` when the target published it and named no link. */
     url: string | null;
   } | null>(null);
@@ -156,10 +163,12 @@ export function ShareDialog({
 
   const acknowledged =
     ack !== null && ack.target === (targetId ?? "") && ack.shape === shape;
+  const logsGoing = withLogs && logLines > 0;
   const link =
     published !== null &&
     published.target === (targetId ?? "") &&
-    published.report === (report?.capturedAt ?? "")
+    published.report === (report?.capturedAt ?? "") &&
+    published.logs === logsGoing
       ? published.url
       : null;
 
@@ -173,13 +182,14 @@ export function ShareDialog({
         report.hero.ref
           ? `${report.subject.kind} ${report.subject.name}`
           : report.hero.title,
-        html
+        needsAck && ack ? ack.html : html
       );
     },
     onSuccess: (result) => {
       setPublished({
         target: targetId ?? "",
         report: report?.capturedAt ?? "",
+        logs: logsGoing,
         url: result.url,
       });
       toast({
@@ -309,7 +319,9 @@ export function ShareDialog({
                 <Checkbox
                   checked={acknowledged}
                   onCheckedChange={(value) =>
-                    setAck(value === true ? { target: target.id, shape } : null)
+                    setAck(
+                      value === true ? { target: target.id, shape, html } : null
+                    )
                   }
                   aria-label={t("share", "publicAcknowledge")}
                   className="mt-0.5"

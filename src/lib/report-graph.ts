@@ -52,21 +52,25 @@ function hopOf(hop: ChainHop, t: T): ReportHop {
     case "stop":
       return { ...plain, text: hop.title, detail: hop.note, tone: "err" };
     case "certificate":
+      // On the page a certificate not read back yet is a moment; in a file
+      // it is for good, and a hop with no warning reads as one that is fine.
       return {
         ...plain,
         ref: refOf(hop.secret),
         detail:
           [
-            hop.read?.certificate
-              ? expiryText(expiryOf(hop.read.certificate), t)
-              : hop.read?.problem
-                ? problemWords(hop.read.problem, t)
-                : null,
+            hop.read === undefined
+              ? t("nav", "notChecked")
+              : hop.read.certificate
+                ? expiryText(expiryOf(hop.read.certificate), t)
+                : hop.read.problem
+                  ? problemWords(hop.read.problem, t)
+                  : null,
             hop.hosts.join(", "),
           ]
             .filter(Boolean)
             .join(" · ") || null,
-        tone,
+        tone: hop.read === undefined ? "warn" : tone,
       };
     case "controller":
       return {

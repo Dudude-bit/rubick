@@ -58,13 +58,27 @@ export interface ListShare<T> {
   toFinding: (item: T) => ReportFinding | ReportFinding[] | null;
 }
 
-/** Keyed by the list itself, so two lists with one title both reach the report. */
-function useListShare<T>(items: readonly T[], share: ListShare<T> | undefined) {
-  const key = useId();
+/**
+ * Keyed by the list itself, so two lists with one title both reach the
+ * report — or by the id the caller gives, so one list drawn twice (a closed
+ * row's brief and its open body) is one section.
+ */
+function useListShare<T>(
+  items: readonly T[],
+  share: ListShare<T> | undefined,
+  whenClear: "say" | "omit"
+) {
+  const own = useId();
   const t = useT();
-  useShareSection(share ? key : null, () =>
+  useShareSection(share ? (share.id ?? own) : null, () =>
     share
-      ? findingsSection(items, share, share.id ?? slugOf(share.title), t)
+      ? findingsSection(
+          items,
+          share,
+          share.id ?? slugOf(share.title),
+          whenClear,
+          t
+        )
       : null
   );
 }
@@ -73,8 +87,9 @@ function findingsSection<T>(
   items: readonly T[],
   share: ListShare<T>,
   id: string,
+  whenClear: "say" | "omit",
   t: Translator
-): PlacedSection {
+): PlacedSection | null {
   const found = items.flatMap((item) => {
     const built = share.toFinding(item);
     return built === null ? [] : Array.isArray(built) ? built : [built];
@@ -85,8 +100,10 @@ function findingsSection<T>(
     title: share.title,
     icon: iconSvg(AlertTriangle),
   };
-  // A list that read its rows and found nothing wrong says so: left out, it
-  // is the same file as a list that was never read.
+  // A list of rows that read them and found nothing wrong says so: left
+  // out, it is the same file as a list that was never read. A row's own
+  // findings are that row's, and a row with none adds nothing.
+  if (found.length === 0 && whenClear === "omit") return null;
   if (found.length === 0)
     return {
       ...shell,
@@ -194,7 +211,7 @@ export function FindingList<F>({
   share?: ListShare<F>;
 }) {
   const t = useT();
-  useListShare(findings, share);
+  useListShare(findings, share, "omit");
   const worth =
     brief && worthRepeating ? findings.filter(worthRepeating) : findings;
   if (worth.length === 0) return null;
@@ -276,7 +293,7 @@ export function TroubleList<T>({
   const t = useT();
   const [filter, setFilter] = useSearchParam("q");
   const needle = filter.trim().toLowerCase();
-  useListShare(items, share);
+  useListShare(items, share, "say");
 
   const shown = useMemo(
     () =>

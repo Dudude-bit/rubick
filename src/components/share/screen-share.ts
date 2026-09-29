@@ -30,18 +30,23 @@ const ScreenShare = createContext<Registry | null>(null);
  * keeps a second copy of what a screen shows.
  */
 export function ScreenShareProvider({ children }: { children: ReactNode }) {
-  const [builders] = useState(() => new Map<string, () => Build>());
+  // Every registration under an id, newest last: one list drawn twice (a
+  // closed row's brief and its open body) is one section, and either copy
+  // unmounting leaves the other's in place.
+  const [builders] = useState(() => new Map<string, (() => Build)[]>());
   const registry = useMemo<Registry>(
     () => ({
       offer: (id, read) => {
-        builders.set(id, read);
+        builders.set(id, [...(builders.get(id) ?? []), read]);
         return () => {
-          if (builders.get(id) === read) builders.delete(id);
+          const left = (builders.get(id) ?? []).filter((r) => r !== read);
+          if (left.length > 0) builders.set(id, left);
+          else builders.delete(id);
         };
       },
       collect: () =>
-        [...builders.values()].flatMap((read) => {
-          const built = read()();
+        [...builders.values()].flatMap((reads) => {
+          const built = reads[reads.length - 1]()();
           return built === null ? [] : Array.isArray(built) ? built : [built];
         }),
     }),

@@ -470,4 +470,91 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     expect(screen.getByText("Маршруты (1)")).toBeInTheDocument();
     expect(screen.getByText("Издатели (2)")).toBeInTheDocument();
   });
+
+  const flagged = {
+    id: "host-findings-shop",
+    title: "shop.example.com",
+    toFinding: (finding: string) => ({
+      title: finding,
+      detail: null,
+      role: "err" as const,
+    }),
+  };
+
+  /**
+   * A closed row draws its findings in brief and the open row draws them
+   * again; each copy registered its own section, and the file listed the
+   * host's findings twice under one anchor.
+   */
+  it("gives the file one section for a row's findings drawn twice", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={["broken"]}
+            brief
+            render={(finding) => <p>{finding}</p>}
+            share={flagged}
+          />
+          <FindingList
+            findings={["broken"]}
+            render={(finding) => <p>{finding}</p>}
+            share={flagged}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getAllByText("shop.example.com (1)")).toHaveLength(1);
+  });
+
+  /** Closing the row takes one copy away; the other is still the row's findings. */
+  it("keeps the brief copy's section once the open copy is gone", () => {
+    const view = (open: boolean) => (
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={["broken"]}
+            brief
+            render={(finding) => <p>{finding}</p>}
+            share={flagged}
+          />
+          {open && (
+            <FindingList
+              findings={["broken"]}
+              render={(finding) => <p>{finding}</p>}
+              share={flagged}
+            />
+          )}
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = render(view(true));
+    rerender(view(false));
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getByText("shop.example.com (1)")).toBeInTheDocument();
+  });
+
+  /**
+   * A row with no findings is not a section: the file got a "Nothing here."
+   * for every open host with nothing wrong.
+   */
+  it("gives the file nothing for a row with no findings", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <FindingList
+            findings={[]}
+            render={(finding: string) => <p>{finding}</p>}
+            share={flagged}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
+  });
 });

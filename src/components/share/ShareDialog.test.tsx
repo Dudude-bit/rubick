@@ -447,4 +447,52 @@ describe("publishing", () => {
       await screen.findByRole("button", { name: /Publish to/ })
     ).toBeEnabled();
   });
+
+  /**
+   * A row that changed after the tick without changing what the dialog
+   * lists kept the tick, and the file that went out was not the one the
+   * reader consented to. What goes out is the file as it was at the tick.
+   */
+  it("publishes the file as it was when the tick was given", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    const publish = await tickFor(/postplan/);
+    view.show({
+      ...report,
+      verdict: "Most likely: something the reader never saw.",
+    });
+    await userEvent.click(publish);
+    await waitFor(() =>
+      expect(commands.publishReport).toHaveBeenCalledTimes(1)
+    );
+    const html = vi.mocked(commands.publishReport).mock.calls[0][4];
+    expect(html).toContain("it cannot reach its database");
+    expect(html).not.toContain("something the reader never saw");
+  });
+
+  /**
+   * The link to a version published with its log lines stayed on screen
+   * once the lines were left out; copied from there, it hands over the
+   * version the dialog no longer shows.
+   */
+  it("takes the link away once the log lines are left out", async () => {
+    targets.list = [internal];
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    expect(
+      await screen.findByRole("button", { name: "Copy link" })
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  });
 });

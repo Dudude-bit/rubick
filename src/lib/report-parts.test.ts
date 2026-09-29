@@ -258,6 +258,64 @@ describe("what the graph says about objects it could not check", () => {
   });
 
   /**
+   * On the page a certificate not read back yet is "reading…" for a moment;
+   * in a file that moment is for good, and a hop drawn with no warning read
+   * as a certificate that is fine.
+   */
+  it("draws a certificate it has not read as not checked", () => {
+    const deployment = object("Deployment", "web");
+    const svc = object("Service", "web");
+    const ingress = object("Ingress", "web");
+    const data = {
+      subject: deployment,
+      edges: [
+        {
+          from: svc,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=web" },
+        },
+        {
+          from: ingress,
+          to: svc,
+          relation: {
+            verb: "routes",
+            host: "web.example.com",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: true,
+          },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    } as unknown as ResourceConnections;
+    const routing = new Map([
+      [
+        "Ingress/shop/web",
+        {
+          tls: [{ secretName: "web-tls", hosts: ["web.example.com"] }],
+          addresses: [],
+          binding: null,
+        },
+      ],
+    ]) as never;
+    const { sections } = graphSections(
+      { data, error: null, isPending: false },
+      t,
+      true,
+      { routing }
+    );
+    const traffic = sections.find((section) => section.id === "traffic")!;
+    const hops =
+      traffic.body.type === "traffic" ? traffic.body.paths[0].hops : [];
+    const certificate = hops.find((hop) => hop.ref?.kind === "Secret");
+    expect(certificate?.tone).toBe("warn");
+    expect(certificate?.detail).toContain("nav.notChecked");
+  });
+
+  /**
    * A Secret has no path traffic takes to it. Its report said no Service
    * selects "these pods", so traffic never reaches "this object (Secret)".
    */
