@@ -256,16 +256,11 @@ function valuesOf(entry: JournalEntry) {
 
 /**
  * A day and a time for a line of text, in UTC like every other time in the
- * file: the reader is not in the sender's zone.
+ * file: the reader is not in the sender's zone. Digits only, so a sentence
+ * in the reader's language carries no month name in the sender's.
  */
 export function utcMoment(ms: number): string {
-  return `${new Date(ms).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  })} UTC`;
+  return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 /** A stretch nobody watched, as a row of its own rather than a silence. */

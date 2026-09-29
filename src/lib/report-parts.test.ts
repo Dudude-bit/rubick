@@ -12,6 +12,7 @@ import {
   refOf,
   slugOf,
   unreadLines,
+  utcMoment,
   ORDER,
   type PlacedSection,
 } from "./report-parts";
@@ -263,6 +264,18 @@ describe("what the graph says about objects it could not check", () => {
   it("draws no traffic for a kind whose page draws no chain", () => {
     const { sections } = graphSections(read(), t, false);
     expect(sections.map((section) => section.id)).toEqual(["connections"]);
+  });
+});
+
+describe("utcMoment", () => {
+  /**
+   * The sentence is in the reader's language and the moment was written in
+   * the sender's: "с 28 Sep at 23:57" in a Russian file. Digits carry none.
+   */
+  it("writes a moment in digits and UTC, with no month name to translate", () => {
+    expect(utcMoment(Date.UTC(2026, 8, 28, 23, 57, 12))).toBe(
+      "2026-09-28 23:57 UTC"
+    );
   });
 });
 

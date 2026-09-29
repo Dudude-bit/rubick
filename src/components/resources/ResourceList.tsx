@@ -41,7 +41,12 @@ import {
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
-import { keepWatched, noneWhereAnswered, whole } from "@/lib/namespace-scope";
+import {
+  keepWatched,
+  namespaceOfList,
+  noneWhereAnswered,
+  whole,
+} from "@/lib/namespace-scope";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
 
@@ -250,7 +255,7 @@ export function ResourceList<
     () => ({
       title,
       kind: listKind,
-      namespace: namespaceScope.length === 1 ? namespaceScope[0] : null,
+      namespace: namespaceOfList(namespaceScope, listKind),
     }),
     [title, listKind, namespaceScope]
   );

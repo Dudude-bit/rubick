@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  namespaceOfList,
   SCOPE_LIMIT,
   clampScope,
   decodeScope,
@@ -20,6 +21,7 @@ import {
 } from "./namespace-scope";
 
 import { translate } from "@/i18n";
+import { ResourceType } from "@/lib/resource-registry";
 import type { T } from "@/i18n/useT";
 
 /** The English catalogue — what these expectations are written in. */
@@ -270,5 +272,20 @@ describe("reading a list across the selection", () => {
       rows: [{ name: "api", namespace: "prod" }],
       unread: [staging],
     });
+  });
+});
+
+describe("the namespace a shared list names in its header", () => {
+  /**
+   * Nodes are one list whatever the tab is on; the file's header named the
+   * tab's namespace above them, as if the nodes were in it.
+   */
+  it("names none for a cluster-scoped kind", () => {
+    expect(namespaceOfList(["shop"], ResourceType.Node)).toBeNull();
+    expect(namespaceOfList(["shop"], ResourceType.Pod)).toBe("shop");
+  });
+
+  it("names none when the tab spans several", () => {
+    expect(namespaceOfList(["shop", "web"], ResourceType.Pod)).toBeNull();
   });
 });
