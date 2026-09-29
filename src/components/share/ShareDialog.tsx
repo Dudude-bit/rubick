@@ -172,24 +172,32 @@ export function ShareDialog({
       ? published.url
       : null;
 
+  // What the link is labelled with is what the request carried, not what the
+  // dialog says when the answer arrives: a log toggle during the upload
+  // must not relabel a link to the version with logs as one without.
   const publish = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (sent: {
+      target: string;
+      report: string;
+      logs: boolean;
+      html: string;
+    }) => {
       if (!report || !target) throw new Error("no target");
       return commands.publishReport(
-        target.id,
+        sent.target,
         objectKey(report),
         reportFileName(report),
         report.hero.ref
           ? `${report.subject.kind} ${report.subject.name}`
           : report.hero.title,
-        needsAck && ack ? ack.html : html
+        sent.html
       );
     },
-    onSuccess: (result) => {
+    onSuccess: (result, sent) => {
       setPublished({
-        target: targetId ?? "",
-        report: report?.capturedAt ?? "",
-        logs: logsGoing,
+        target: sent.target,
+        report: sent.report,
+        logs: sent.logs,
         url: result.url,
       });
       toast({
@@ -393,7 +401,14 @@ export function ShareDialog({
           {target ? (
             <Button
               variant="outline"
-              onClick={() => publish.mutate()}
+              onClick={() =>
+                publish.mutate({
+                  target: target.id,
+                  report: report?.capturedAt ?? "",
+                  logs: logsGoing,
+                  html: needsAck && ack ? ack.html : html,
+                })
+              }
               disabled={
                 !readyToPublish(target) ||
                 publish.isPending ||

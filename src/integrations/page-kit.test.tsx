@@ -40,6 +40,9 @@ function ShareProbe() {
           </li>
         ))}
       </ul>
+      {sections.map((section) =>
+        section.caption ? <p key={section.id}>{section.caption}</p> : null
+      )}
     </>
   );
 }
@@ -556,5 +559,43 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
+  });
+
+  /**
+   * The list shared every row while the reader had searched it down to a
+   * few, so the file carried findings the screen was not showing.
+   */
+  it("gives the file the rows the search left, and says what was searched", () => {
+    render(
+      <MemoryRouter initialEntries={["/x?q=shop"]}>
+        <ScreenShareProvider>
+          <TroubleList
+            items={[
+              { name: "shop", severity: "err" as const },
+              { name: "blog", severity: "err" as const },
+            ]}
+            severityOf={severityOf}
+            searchable={searchable}
+            filter={{ label: "Filter", placeholder: "name" }}
+            autoOpen={{ when: "err", upTo: 2 }}
+            noMatch={(query) => `nothing matches ${query}`}
+            keyOf={(item) => item.name}
+            renderRow={(item) => <p>{item.name}</p>}
+            share={{
+              title: "Applications",
+              toFinding: (item) => ({
+                title: item.name,
+                detail: null,
+                role: "err",
+              }),
+            }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(screen.getByText("Applications (1)")).toBeInTheDocument();
+    expect(screen.getByText(/«shop»/)).toBeInTheDocument();
   });
 });

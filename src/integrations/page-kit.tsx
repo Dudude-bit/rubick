@@ -66,7 +66,8 @@ export interface ListShare<T> {
 function useListShare<T>(
   items: readonly T[],
   share: ListShare<T> | undefined,
-  whenClear: "say" | "omit"
+  whenClear: "say" | "omit",
+  search = ""
 ) {
   const own = useId();
   const t = useT();
@@ -77,6 +78,7 @@ function useListShare<T>(
           share,
           share.id ?? slugOf(share.title),
           whenClear,
+          search,
           t
         )
       : null
@@ -88,6 +90,7 @@ function findingsSection<T>(
   share: ListShare<T>,
   id: string,
   whenClear: "say" | "omit",
+  search: string,
   t: Translator
 ): PlacedSection | null {
   const found = items.flatMap((item) => {
@@ -99,6 +102,7 @@ function findingsSection<T>(
     order: ORDER.own,
     title: share.title,
     icon: iconSvg(AlertTriangle),
+    caption: search ? t("share", "tableSearched", { query: search }) : null,
   };
   // A list of rows that read them and found nothing wrong says so: left
   // out, it is the same file as a list that was never read. A row's own
@@ -293,7 +297,6 @@ export function TroubleList<T>({
   const t = useT();
   const [filter, setFilter] = useSearchParam("q");
   const needle = filter.trim().toLowerCase();
-  useListShare(items, share, "say");
 
   const shown = useMemo(
     () =>
@@ -306,6 +309,9 @@ export function TroubleList<T>({
           ),
     [items, needle, searchable]
   );
+  // The rows the reader narrowed to, and the words they narrowed by: a
+  // report of "what this page shows" does not carry the rows it hides.
+  useListShare(shown, share, "say", filter.trim());
 
   const broken = items.filter((item) => severityOf(item) === "err").length;
   const worthALook = items.filter((item) => severityOf(item) === "warn").length;

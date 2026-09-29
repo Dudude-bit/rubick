@@ -495,4 +495,47 @@ describe("publishing", () => {
     );
     expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
   });
+
+  /**
+   * The link was labelled with the dialog's log choice when the answer came
+   * back. Turned off while the upload with logs was in flight, the link to
+   * the version with logs read as the one without.
+   */
+  it("labels the link with the choice the upload was sent with", async () => {
+    targets.list = [internal];
+    let answer: (value: unknown) => void = () => {};
+    vi.mocked(commands.publishReport).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }) as never
+    );
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    answer({
+      url: "https://abc123.postplan.dev",
+      rawUrl: null,
+      draftId: "abc123",
+      version: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    // Put back to the choice it went out with, the link is its own again.
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Include log lines" })
+    );
+    expect(
+      await screen.findByRole("button", { name: "Copy link" })
+    ).toBeInTheDocument();
+  });
 });
