@@ -67,7 +67,8 @@ function useListShare<T>(
   items: readonly T[],
   share: ListShare<T> | undefined,
   whenClear: "say" | "omit",
-  search = ""
+  search = "",
+  severityOf?: (item: T) => Severity
 ) {
   const own = useId();
   const t = useT();
@@ -79,6 +80,7 @@ function useListShare<T>(
           share.id ?? slugOf(share.title),
           whenClear,
           search,
+          severityOf,
           t
         )
       : null
@@ -91,18 +93,31 @@ function findingsSection<T>(
   id: string,
   whenClear: "say" | "omit",
   search: string,
+  severityOf: ((item: T) => Severity) | undefined,
   t: Translator
 ): PlacedSection | null {
   const found = items.flatMap((item) => {
     const built = share.toFinding(item);
     return built === null ? [] : Array.isArray(built) ? built : [built];
   });
+  // A row nobody could check and that says nothing of itself is not a row
+  // that is fine: the file names how many there are.
+  const unchecked = severityOf
+    ? items.filter(
+        (item) =>
+          severityOf(item) === "unknown" && share.toFinding(item) === null
+      ).length
+    : 0;
   const shell = {
     id,
     order: ORDER.own,
     title: share.title,
     icon: iconSvg(AlertTriangle),
     caption: search ? t("share", "tableSearched", { query: search }) : null,
+    partial:
+      unchecked > 0
+        ? t("count", "notCheckedOfTotal", { n: unchecked, total: items.length })
+        : null,
   };
   // A list of rows that read them and found nothing wrong says so: left
   // out, it is the same file as a list that was never read. A row's own
@@ -115,8 +130,8 @@ function findingsSection<T>(
       body: {
         type: "text",
         text:
-          items.length > 0
-            ? t("share", "checkedNoneWrong", { n: items.length })
+          items.length - unchecked > 0
+            ? t("share", "checkedNoneWrong", { n: items.length - unchecked })
             : t("share", "nothingHere"),
       },
     };
@@ -311,7 +326,7 @@ export function TroubleList<T>({
   );
   // The rows the reader narrowed to, and the words they narrowed by: a
   // report of "what this page shows" does not carry the rows it hides.
-  useListShare(shown, share, "say", filter.trim());
+  useListShare(shown, share, "say", filter.trim(), severityOf);
 
   const broken = items.filter((item) => severityOf(item) === "err").length;
   const worthALook = items.filter((item) => severityOf(item) === "warn").length;

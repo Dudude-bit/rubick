@@ -58,6 +58,42 @@ function WebLink({ url, className }: { url: string; className?: string }) {
   );
 }
 
+/** One publication, all taken from the same report at the same moment. */
+interface Sent {
+  target: string;
+  report: string;
+  logs: boolean;
+  key: string;
+  fileName: string;
+  description: string;
+  html: string;
+}
+
+/** The report as an object and a moment: two objects' files are two reports. */
+function identityOf(report: Report | null): string {
+  return report ? `${objectKey(report)}@${report.capturedAt}` : "";
+}
+
+function sentOf(
+  report: Report | null,
+  target: string,
+  logs: boolean,
+  html: string
+): Sent | null {
+  if (!report) return null;
+  return {
+    target,
+    report: report.capturedAt,
+    logs,
+    key: objectKey(report),
+    fileName: reportFileName(report),
+    description: report.hero.ref
+      ? `${report.subject.kind} ${report.subject.name}`
+      : report.hero.title,
+    html,
+  };
+}
+
 /** What the dialog lists about a report: the part a reader consents to. */
 function shapeOf(report: Report | null): string {
   if (!report) return "";
@@ -104,7 +140,9 @@ export function ShareDialog({
   const [ack, setAck] = useState<{
     target: string;
     shape: string;
-    html: string;
+    /** Which report, so another object's file of the same shape is not it. */
+    report: string;
+    sent: Sent;
   } | null>(null);
   // The link belongs to the capture, the target and whether the logs went
   // with it: a link to the version with logs is not the one on screen once
@@ -162,7 +200,10 @@ export function ShareDialog({
   const needsAck = target !== null && needsAcknowledgement(target);
 
   const acknowledged =
-    ack !== null && ack.target === (targetId ?? "") && ack.shape === shape;
+    ack !== null &&
+    ack.target === (targetId ?? "") &&
+    ack.shape === shape &&
+    ack.report === identityOf(report);
   const logsGoing = withLogs && logLines > 0;
   const link =
     published !== null &&
@@ -176,23 +217,14 @@ export function ShareDialog({
   // dialog says when the answer arrives: a log toggle during the upload
   // must not relabel a link to the version with logs as one without.
   const publish = useMutation({
-    mutationFn: async (sent: {
-      target: string;
-      report: string;
-      logs: boolean;
-      html: string;
-    }) => {
-      if (!report || !target) throw new Error("no target");
-      return commands.publishReport(
+    mutationFn: async (sent: Sent) =>
+      commands.publishReport(
         sent.target,
-        objectKey(report),
-        reportFileName(report),
-        report.hero.ref
-          ? `${report.subject.kind} ${report.subject.name}`
-          : report.hero.title,
+        sent.key,
+        sent.fileName,
+        sent.description,
         sent.html
-      );
-    },
+      ),
     onSuccess: (result, sent) => {
       setPublished({
         target: sent.target,
@@ -327,9 +359,17 @@ export function ShareDialog({
                 <Checkbox
                   checked={acknowledged}
                   onCheckedChange={(value) =>
-                    setAck(
-                      value === true ? { target: target.id, shape, html } : null
-                    )
+                    setAck(() => {
+                      const sent = sentOf(report, target.id, logsGoing, html);
+                      return value === true && sent
+                        ? {
+                            target: target.id,
+                            shape,
+                            report: identityOf(report),
+                            sent,
+                          }
+                        : null;
+                    })
                   }
                   aria-label={t("share", "publicAcknowledge")}
                   className="mt-0.5"
@@ -401,14 +441,11 @@ export function ShareDialog({
           {target ? (
             <Button
               variant="outline"
-              onClick={() =>
-                publish.mutate({
-                  target: target.id,
-                  report: report?.capturedAt ?? "",
-                  logs: logsGoing,
-                  html: needsAck && ack ? ack.html : html,
-                })
-              }
+              onClick={() => {
+                const now = sentOf(report, target.id, logsGoing, html);
+                const sent = needsAck && ack ? ack.sent : now;
+                if (sent) publish.mutate(sent);
+              }}
               disabled={
                 !readyToPublish(target) ||
                 publish.isPending ||

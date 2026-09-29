@@ -528,7 +528,8 @@ describe("publishing", () => {
       draftId: "abc123",
       version: 1,
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Done when the button says "Publish to" again rather than "Publishing".
+    await screen.findByRole("button", { name: /Publish to/ });
     expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
     // Put back to the choice it went out with, the link is its own again.
     await userEvent.click(
@@ -537,5 +538,23 @@ describe("publishing", () => {
     expect(
       await screen.findByRole("button", { name: "Copy link" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The tick was kept for another object's report of the same shape, and
+   * the snapshot of the first went out under the second one's key and name.
+   */
+  it("takes the tick away when the report is of another object", async () => {
+    targets.list = [publicTarget];
+    const view = mount();
+    expect(await tickFor(/postplan/)).toBeEnabled();
+    view.show({
+      ...report,
+      subject: { ...report.subject, name: "orders-5c8d7b9f6-q2w4e" },
+      capturedAt: "2026-09-09T18:13:00.000Z",
+    });
+    expect(
+      await screen.findByRole("button", { name: /Publish to/ })
+    ).toBeDisabled();
   });
 });

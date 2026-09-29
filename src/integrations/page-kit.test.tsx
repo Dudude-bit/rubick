@@ -13,6 +13,7 @@ import {
   ScreenShareProvider,
   useScreenSections,
 } from "@/components/share/screen-share";
+import { translate } from "@/i18n";
 import type { PlacedSection } from "@/lib/report-parts";
 
 import {
@@ -42,6 +43,11 @@ function ShareProbe() {
       </ul>
       {sections.map((section) =>
         section.caption ? <p key={section.id}>{section.caption}</p> : null
+      )}
+      {sections.map((section) =>
+        section.partial ? (
+          <p key={`${section.id}-partial`}>{section.partial}</p>
+        ) : null
       )}
     </>
   );
@@ -597,5 +603,39 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Applications (1)")).toBeInTheDocument();
     expect(screen.getByText(/«shop»/)).toBeInTheDocument();
+  });
+
+  /**
+   * Rows nobody could check gave no finding, and the file said they were
+   * checked and had no problems.
+   */
+  it("says how many rows it could not check, rather than that all are fine", () => {
+    render(
+      <MemoryRouter>
+        <ScreenShareProvider>
+          <TroubleList
+            items={[
+              { name: "shop", severity: "unknown" as const },
+              { name: "blog", severity: null },
+            ]}
+            severityOf={severityOf}
+            searchable={searchable}
+            filter={{ label: "Filter", placeholder: "name" }}
+            autoOpen={{ when: "err", upTo: 2 }}
+            noMatch={(query) => `nothing matches ${query}`}
+            keyOf={(item) => item.name}
+            renderRow={(item) => <p>{item.name}</p>}
+            share={{ title: "Applications", toFinding: () => null }}
+          />
+          <ShareProbe />
+        </ScreenShareProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByText("collect"));
+    expect(
+      screen.getByText(
+        translate("en", "count", "notCheckedOfTotal", { n: 1, total: 2 })
+      )
+    ).toBeInTheDocument();
   });
 });
