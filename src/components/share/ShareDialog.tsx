@@ -34,6 +34,7 @@ import {
   needsAcknowledgement,
   objectKey,
   readyToPublish,
+  reportLink,
   targetColor,
 } from "@/lib/share-targets";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -225,7 +226,8 @@ export function ShareDialog({
         sent.description,
         sent.html
       ),
-    onSuccess: (result, sent) => {
+    onSuccess: (answer, sent) => {
+      const result = { ...answer, url: reportLink(answer.url) };
       setPublished({
         target: sent.target,
         report: sent.report,
@@ -443,7 +445,7 @@ export function ShareDialog({
               variant="outline"
               onClick={() => {
                 const now = sentOf(report, target.id, logsGoing, html);
-                const sent = needsAck && ack ? ack.sent : now;
+                const sent = needsAck ? (acknowledged ? ack.sent : null) : now;
                 if (sent) publish.mutate(sent);
               }}
               disabled={

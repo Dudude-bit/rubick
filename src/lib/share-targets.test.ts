@@ -6,6 +6,7 @@ import {
   needsAcknowledgement,
   objectKey,
   readyToPublish,
+  reportLink,
   targetColor,
 } from "./share-targets";
 
@@ -96,5 +97,29 @@ describe("the key a published link is remembered against", () => {
     );
     expect(objectKey(screen("pods", "1"))).toContain("q=api");
     expect(objectKey(screen("pods", "1"))).not.toContain("t=");
+  });
+});
+
+describe("the link a target answers with", () => {
+  /**
+   * The target is somebody else's server, and the dialog opens its answer on
+   * a click: an address that is not a web page is not a report link.
+   */
+  it("keeps a web address and refuses anything else", () => {
+    expect(reportLink("https://abc123.postplan.dev")).toBe(
+      "https://abc123.postplan.dev"
+    );
+    expect(reportLink("http://plans.internal/r/1")).toBe(
+      "http://plans.internal/r/1"
+    );
+    for (const hostile of [
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "vscode://open?file=x",
+      "not a url",
+      "",
+      null,
+    ])
+      expect(reportLink(hostile)).toBeNull();
   });
 });

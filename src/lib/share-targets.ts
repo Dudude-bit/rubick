@@ -55,3 +55,16 @@ export function objectKey(report: {
     .replace(/[?&]$/, "");
   return `${subject.context}/screen/${subject.namespace ?? ""}/${route}`;
 }
+
+/**
+ * The address a target answered with, if it is one a browser should be sent
+ * to. The target is somebody else's server: a `file:`, `javascript:` or an
+ * app's own scheme in that field is not a report link, whatever it claims.
+ * The host is not held to the target's — a generic target may serve its
+ * reports from another one — and the full address is on screen before a click.
+ */
+export function reportLink(url: string | null): string | null {
+  if (!url || !URL.canParse(url)) return null;
+  const { protocol } = new URL(url);
+  return protocol === "https:" || protocol === "http:" ? url : null;
+}

@@ -96,18 +96,14 @@ function findingsSection<T>(
   severityOf: ((item: T) => Severity) | undefined,
   t: Translator
 ): PlacedSection | null {
-  const found = items.flatMap((item) => {
-    const built = share.toFinding(item);
-    return built === null ? [] : Array.isArray(built) ? built : [built];
-  });
   // A row nobody could check and that says nothing of itself is not a row
   // that is fine: the file names how many there are.
-  const unchecked = severityOf
-    ? items.filter(
-        (item) =>
-          severityOf(item) === "unknown" && share.toFinding(item) === null
-      ).length
-    : 0;
+  let unchecked = 0;
+  const found = items.flatMap((item) => {
+    const built = share.toFinding(item);
+    if (built === null && severityOf?.(item) === "unknown") unchecked += 1;
+    return built === null ? [] : Array.isArray(built) ? built : [built];
+  });
   const shell = {
     id,
     order: ORDER.own,

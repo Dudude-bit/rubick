@@ -557,4 +557,29 @@ describe("publishing", () => {
       await screen.findByRole("button", { name: /Publish to/ })
     ).toBeDisabled();
   });
+
+  /** A target that answers with an address that is not a web page gets no link to click. */
+  it("offers no link for an answer that is not a web address", async () => {
+    targets.list = [internal];
+    vi.mocked(commands.publishReport).mockResolvedValueOnce({
+      url: "file:///etc/passwd",
+      rawUrl: null,
+      draftId: "abc123",
+      version: 1,
+    });
+    mount();
+    await userEvent.click(
+      await screen.findByRole("combobox", { name: "Target" })
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: /internal/ })
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Publish to/ })
+    );
+    await waitFor(() => expect(commands.publishReport).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Publish to/ });
+    expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+    expect(screen.queryByText("file:///etc/passwd")).toBeNull();
+  });
 });
