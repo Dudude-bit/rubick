@@ -97,4 +97,17 @@ describe("what the Monitors page says a Prometheus picks up", () => {
       screen.getByText("every monitor, in namespaces matching team=shop")
     ).toBeInTheDocument();
   });
+
+  /** `{}` is every monitor; where from is the namespace selector's to say. */
+  it.each([
+    [{}, "все мониторы во всех namespace"],
+    [null, "все мониторы в своём namespace"],
+  ])("reads an empty monitor selector with namespaces %j", (scope, words) => {
+    useLocaleStore.setState({ choice: "ru" });
+    draw({
+      serviceMonitorSelector: {},
+      serviceMonitorNamespaceSelector: scope,
+    });
+    expect(screen.getByText(words)).toBeInTheDocument();
+  });
 });

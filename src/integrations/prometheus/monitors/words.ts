@@ -1,4 +1,5 @@
 import type { T } from "@/i18n/useT";
+import { requirementsOf } from "@/lib/label-selector";
 import type { Picture } from "./data";
 import {
   selectorIsEmpty,
@@ -101,6 +102,11 @@ export function picksUpWords(
   scope: LabelSelector | null,
   t: T
 ): string {
+  // Absent picks up nothing, and a selector Kubernetes would not build says
+  // nothing about what it picks: neither is "monitors matching" nothing.
+  if (objects === null) return t("monitors", "picksUpNone");
+  if (requirementsOf(objects) === null)
+    return t("monitors", "picksUpUnevaluable");
   const everyObject = selectorIsEmpty(objects);
   if (everyObject && scope === null) return t("monitors", "picksUpOwn");
   if (everyObject && selectorIsEmpty(scope)) return t("monitors", "picksUpAll");

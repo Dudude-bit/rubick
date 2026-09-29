@@ -8,7 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { headlineKey } from "./words";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { headlineKey, picksUpWords } from "./words";
 import type { Picture } from "./data";
 import type { MonitorRow } from "./model";
 
@@ -62,4 +64,43 @@ describe("the headline above the monitor list", () => {
       "needAttention"
     );
   });
+});
+
+describe("what a Prometheus picks up, in words", () => {
+  const en = ((
+    section: string,
+    key: string,
+    values?: Record<string, unknown>
+  ) => translate("en", section as never, key as never, values as never)) as T;
+
+  /**
+   * Absent, the monitor selector picks up nothing; the sentence read
+   * "monitors matching" over an empty selector as if it picked something.
+   */
+  it("says a Prometheus with no monitor selector picks up none", () => {
+    expect(picksUpWords(null, {}, en)).toBe(
+      translate("en", "monitors", "picksUpNone")
+    );
+  });
+
+  /** A selector Kubernetes would not build says nothing about what it picks. */
+  it("says a selector Kubernetes would not build picks nothing it can name", () => {
+    const broken = { matchExpressions: [{ key: "app", operator: "Near" }] };
+    expect(picksUpWords(broken as never, {}, en)).toBe(
+      translate("en", "monitors", "picksUpUnevaluable")
+    );
+  });
+
+  /** `{}` is every monitor, and where from depends on the namespace selector. */
+  it.each([
+    [{}, "picksUpAll"],
+    [null, "picksUpOwn"],
+  ] as const)(
+    "reads an empty monitor selector with namespaces %j",
+    (scope, key) => {
+      expect(picksUpWords({}, scope, en)).toBe(
+        translate("en", "monitors", key)
+      );
+    }
+  );
 });

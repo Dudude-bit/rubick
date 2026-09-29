@@ -61,4 +61,14 @@ describe("how a collapsed run of repeats says how long it took", () => {
     draw(1_200);
     expect(screen.getByTestId("log-run")).toHaveTextContent("× 3 за 1.2s");
   });
+
+  /** Both sentences have their own English, which the Russian cases above do not hold. */
+  it.each([
+    [0, "× 3 at the same moment"],
+    [1_200, "× 3 over 1.2s"],
+  ])("says a run of span %i ms in English", (span, words) => {
+    useLocaleStore.setState({ choice: "en" });
+    draw(span);
+    expect(screen.getByTestId("log-run")).toHaveTextContent(words);
+  });
 });

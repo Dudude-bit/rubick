@@ -112,4 +112,20 @@ describe("what the density strip says when the lines are too close to map", () =
       "All 2 lines landed at the same moment"
     );
   });
+
+  /** The English sentence for a burst that did take time, with its count and span. */
+  it("says a short burst's span in English", () => {
+    useLocaleStore.setState({ choice: "en" });
+    render(
+      <LogDensityStrip
+        {...common}
+        mode="full"
+        logs={burst([0, 50, 100, 150])}
+        retained={4}
+      />
+    );
+    expect(document.body.textContent).toContain(
+      "All 4 lines landed within 150ms"
+    );
+  });
 });

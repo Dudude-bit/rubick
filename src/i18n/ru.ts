@@ -2360,6 +2360,8 @@ export const ru: Catalogue = {
     picksUpOwn: "все мониторы в своём namespace",
     picksUpMatching: "мониторы по {selector}",
     picksUpEvery: "все мониторы",
+    picksUpNone: "никакие мониторы: селектор для них не задан",
+    picksUpUnevaluable: "мониторы по селектору, который Kubernetes не соберёт",
     inNamespacesMatching: "в namespace по {selector}",
     inEveryNamespace: "во всех namespace",
     inItsOwnNamespace: "в своём namespace",

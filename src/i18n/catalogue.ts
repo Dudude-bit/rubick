@@ -2264,6 +2264,8 @@ export const en = {
     picksUpOwn: "every monitor in its own namespace",
     picksUpMatching: "monitors matching {selector}",
     picksUpEvery: "every monitor",
+    picksUpNone: "no monitors: it names no selector for them",
+    picksUpUnevaluable: "monitors by a selector Kubernetes would not build",
     inNamespacesMatching: "in namespaces matching {selector}",
     inEveryNamespace: "in every namespace",
     inItsOwnNamespace: "in its own namespace",
