@@ -40,8 +40,10 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "suspend",
     header: columnHeader("columns", "suspend"),
     meta: {
-      share: (row: CronJobInfoWithMetrics) =>
-        row.suspend ? { text: "Suspended", role: "warn" } : null,
+      share: (row: CronJobInfoWithMetrics, t) =>
+        row.suspend
+          ? { text: "Suspended", role: "warn" }
+          : t("empty", "noWord"),
     },
     // Suspended is the exception worth colouring; "No" is the resting
     // state of every cronjob and stays quiet text.

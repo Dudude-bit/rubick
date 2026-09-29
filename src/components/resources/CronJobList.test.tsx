@@ -1,7 +1,8 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { ColumnDef } from "@/components/ui/table-features";
+import type { AppColumnMeta, ColumnDef } from "@/components/ui/table-features";
+import { translate } from "@/i18n";
 import { useLocaleStore } from "@/stores/localeStore";
 import { columns } from "./CronJobList";
 
@@ -40,5 +41,19 @@ describe("what the CronJob list says about schedules", () => {
     expect(cellOf("last_schedule", { lastSchedule: null })).toHaveTextContent(
       /^никогда$/
     );
+  });
+
+  /**
+   * The shared file is the second reader of this column: it left the cell
+   * empty for a cronjob the screen called "Нет".
+   */
+  it("gives a shared file the same word the cell draws", () => {
+    const column = (columns() as ColumnDef<never>[]).find(
+      (c) => c.id === "suspend"
+    );
+    const share = (column?.meta as AppColumnMeta | undefined)?.share;
+    const t = ((section: string, key: string) =>
+      translate("ru", section as never, key as never)) as never;
+    expect(share?.({ suspend: false } as never, t)).toBe("Нет");
   });
 });
