@@ -174,6 +174,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    govNow: "Сейчас",
     selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
@@ -2759,6 +2760,10 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govBothClauses: "{first} и {second}",
+    govNoReading: "нет показаний",
+    govAgainstTarget: "при цели {target}",
+    govBudgetKeeps: "держит {rule} — {room}",
     storyRollout:
       "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
     storyJob: "Отработало за {span}: {created}, завершено {completed}.",

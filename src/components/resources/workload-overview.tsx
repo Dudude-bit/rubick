@@ -176,7 +176,9 @@ function caption(
 
   if (earned.length === 0) return own;
   const said =
-    earned.length === 2 ? `${earned[0]}, and ${earned[1]}` : earned[0];
+    earned.length === 2
+      ? t("readings", "govBothClauses", { first: earned[0], second: earned[1] })
+      : earned[0];
   return own ? (
     <>
       {own}, {said}

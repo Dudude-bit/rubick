@@ -204,6 +204,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    govNow: "Now",
     selects: "Selects",
     files: "Files",
     members: "Members",
@@ -2608,6 +2609,10 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govBothClauses: "{first}, and {second}",
+    govNoReading: "no reading",
+    govAgainstTarget: "against {target}",
+    govBudgetKeeps: "keeps {rule} — {room}",
     storyRollout:
       "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyJob: "Ran within {span}: {created}, {completed} completed.",
