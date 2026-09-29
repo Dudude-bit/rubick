@@ -231,7 +231,11 @@ export function DataSection({
                       // the difference between "this is hidden" and "this is
                       // empty", and that guess is expensive on a Secret.
                       <DetailAction
-                        label={isRevealed ? "Hide" : "Reveal"}
+                        label={
+                          isRevealed
+                            ? t("action", "hide")
+                            : t("action", "reveal")
+                        }
                         icon={isRevealed ? EyeOff : Eye}
                         onClick={() => toggle(key)}
                       />
@@ -254,7 +258,9 @@ export function DataSection({
                         where every other row hands over the value is a
                         surprise the reader finds out about in a shell. */}
                     <DetailAction
-                      label={blob ? "Copy base64" : "Copy"}
+                      label={
+                        blob ? t("action", "copyBase64") : t("action", "copy")
+                      }
                       icon={Copy}
                       onClick={() =>
                         blob

@@ -32,6 +32,7 @@ import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { sayWords, type Saying } from "@/i18n/say";
 import type { EmptyKey } from "@/components/resources/usage-chart";
 
 export interface UsageBlockProps {
@@ -188,7 +189,7 @@ export function UsageBlock({
       ? [
           scope,
           t("count", "fromEndpoint", { endpoint: past.endpoint }),
-          past.window.resolution,
+          sayWords(past.window.resolution, t),
         ]
           .filter(Boolean)
           .join(" · ")
@@ -455,7 +456,7 @@ interface RangedHistory {
   loading: boolean;
   window: {
     samples: readonly UsageSampleLike[];
-    resolution: string;
+    resolution: Saying;
     declared?: DeclaredHistory | null;
     /** See {@link UsageWindow.declaredKnown}: `false` is "could not tell". */
     declaredKnown?: boolean;

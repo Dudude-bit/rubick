@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { DataSection } from "./data-rows";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 
 const writeText = vi.fn().mockResolvedValue(undefined);
 Object.defineProperty(navigator, "clipboard", {
@@ -171,6 +172,43 @@ describe("DataSection", () => {
       ok: "hello",
       blob: "AAEC//4=",
     });
+  });
+});
+
+describe("the per-key controls, in the reader's language", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /**
+   * Each row's buttons read "Reveal" and "Copy" in English beside the
+   * header's Russian "Показать все" and "Копировать всё".
+   */
+  it("names reveal, hide and copy in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<DataSection data={{ password: "hunter2" }} sensitive />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Показать" }));
+    expect(screen.getByRole("button", { name: "Скрыть" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Копировать" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Reveal|Hide|Copy/ })
+    ).toBeNull();
+  });
+
+  /** Would break if the base64 copy went back to an English label. */
+  it("names the base64 copy in Russian", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <DataSection
+        data={{}}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["blob"]}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: "Копировать base64" })
+    ).toBeInTheDocument();
   });
 });
 

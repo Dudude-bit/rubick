@@ -5,6 +5,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
 import type { PodInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 interface PodListCardProps {
   pods: PodInfo[];
@@ -36,11 +37,16 @@ export function PodListCard({ pods, emptyMessage, error }: PodListCardProps) {
           unverified: silenceOf(pod.nodeName, silent) !== null,
           detail: (
             <>
-              {ready}
-              <span className="text-fg-fnt">/{total}</span>
-              <span className="text-fg-fnt"> ready</span>
+              <span className="text-fg-fnt">
+                {parts(t("count", "readyFraction", { total }), {
+                  ready: <span className="text-fg-mut">{ready}</span>,
+                })}
+              </span>
               {restarts > 0 && (
-                <span className="text-warn"> · {restarts} restarts</span>
+                <span className="text-warn">
+                  {" · "}
+                  {t("count", "restartsPlain", { n: restarts })}
+                </span>
               )}
             </>
           ),

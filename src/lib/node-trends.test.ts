@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { NodeUsageWindow } from "@/integrations";
 import type { NodeInfo } from "@/generated/types";
+import type { Saying } from "@/i18n/say";
 import { everyNodeSilent, nodeTrends } from "./node-trends";
 
 function node(name: string, unschedulable = false): NodeInfo {
@@ -31,6 +32,7 @@ function node(name: string, unschedulable = false): NodeInfo {
 
 const GI = 1024 ** 3;
 const T0 = 1_700_000_000_000;
+const BUCKETS: Saying = { key: "promBucketsAtScrape", values: { step: "30s" } };
 
 const window: NodeUsageWindow = {
   nodes: {
@@ -52,7 +54,7 @@ const window: NodeUsageWindow = {
   },
   newestAt: { "ip-10-0-1-3": T0 - 4 * 60_000 },
   basis: "node",
-  resolution: "30s buckets",
+  resolution: BUCKETS,
 };
 
 describe("nodeTrends", () => {
@@ -118,7 +120,7 @@ describe("why a row has no lane", () => {
   /** A window that was read and holds nothing is the one case that may say so. */
   it("says no series only when the window was actually read", () => {
     const trends = nodeTrends(
-      { nodes: {}, newestAt: {}, basis: "node", resolution: "30s" },
+      { nodes: {}, newestAt: {}, basis: "node", resolution: BUCKETS },
       [node("worker-1")],
       T0
     );
@@ -139,7 +141,7 @@ describe("why a row has no lane", () => {
         },
         newestAt: {},
         basis: "node",
-        resolution: "30s",
+        resolution: BUCKETS,
       },
       [broken],
       T0
@@ -155,7 +157,7 @@ describe("why a row has no lane", () => {
         newestAt: {},
         newestKnown: false,
         basis: "node",
-        resolution: "30s",
+        resolution: BUCKETS,
       },
       [node("worker-1")],
       T0
@@ -169,7 +171,7 @@ describe("everyNodeSilent", () => {
     nodes: {},
     newestAt: {},
     basis: "pods",
-    resolution: "30s",
+    resolution: BUCKETS,
   };
 
   /** The one case that may collapse every row into a single sentence. */

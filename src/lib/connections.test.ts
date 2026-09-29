@@ -798,6 +798,19 @@ describe("the groups", () => {
     ]);
   });
 
+  /**
+   * The environment clause was a template literal with an English verb,
+   * so the Connections tab and every shared report read
+   * "APP_PASSWORD reads password" between Russian clauses.
+   */
+  it("says which key a variable reads in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(describeUsages([mount, env], ru)).toEqual([
+      "смонтирован в /etc/app и APP_MESSAGE читает ключ app.conf",
+    ]);
+  });
+
   it("breaks a pile of usages into lines and names the containers", () => {
     /** A ConfigMap mounted by two containers at the same path, read as an
      *  environment variable and imported wholesale is five clauses in one

@@ -10,6 +10,7 @@ import { ResourceRef } from "./ResourceRef";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 
@@ -194,17 +195,18 @@ export function RevisionRows({
           detail: (
             <>
               {rs.revision !== null && (
-                <span className="text-fg-fnt">revision {rs.revision} · </span>
+                <span className="text-fg-fnt">
+                  {t("changes", "revisionNumber", { n: rs.revision })}
+                  {" · "}
+                </span>
               )}
-              {desired === 0 ? (
-                <span className="text-fg-fnt">scaled to zero</span>
-              ) : (
-                <>
-                  {ready}
-                  <span className="text-fg-fnt">/{desired}</span>
-                  <span className="text-fg-fnt"> ready</span>
-                </>
-              )}
+              <span className="text-fg-fnt">
+                {desired === 0
+                  ? t("empty", "scaledToZero")
+                  : parts(t("count", "readyFraction", { total: desired }), {
+                      ready: <span className="text-fg-mut">{ready}</span>,
+                    })}
+              </span>
             </>
           ),
           timestamp: rs.createdAt,
@@ -233,11 +235,19 @@ export function JobRows({
         status: job.status || "Unknown",
         detail: (
           <>
-            {job.succeeded}
-            <span className="text-fg-fnt">/{job.completions ?? 1}</span>
-            <span className="text-fg-fnt"> completed</span>
+            <span className="text-fg-fnt">
+              {parts(
+                t("count", "completedFraction", {
+                  total: job.completions ?? 1,
+                }),
+                { done: <span className="text-fg-mut">{job.succeeded}</span> }
+              )}
+            </span>
             {job.failed > 0 && (
-              <span className="text-err"> · {job.failed} failed</span>
+              <span className="text-err">
+                {" · "}
+                {t("action", "jobsFailed", { n: job.failed })}
+              </span>
             )}
           </>
         ),

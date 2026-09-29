@@ -1,6 +1,13 @@
 import type { T } from "@/i18n/useT";
+import { requirementsOf } from "@/lib/label-selector";
 import type { Picture } from "./data";
-import type { MonitorRow, Unknowable } from "./model";
+import {
+  selectorIsEmpty,
+  selectorWords,
+  type LabelSelector,
+  type MonitorRow,
+  type Unknowable,
+} from "./model";
 
 /** The tone a row is drawn in, as one word so every reader of it agrees. */
 export type RowTone = "err" | "warn" | "ok" | "none" | "mut";
@@ -83,6 +90,38 @@ export function unknowableWords(why: Unknowable, t: T): string {
         prometheus: why.prometheus,
       });
   }
+}
+
+/**
+ * What a Prometheus picks up, from its two selectors. The operator reads an
+ * empty selector as every one and an absent namespace selector as its own
+ * namespace only, so neither is printed as `{}` or left unsaid.
+ */
+export function picksUpWords(
+  objects: LabelSelector | null,
+  scope: LabelSelector | null,
+  t: T
+): string {
+  // Absent picks up nothing, and a selector Kubernetes would not build says
+  // nothing about what it picks: neither is "monitors matching" nothing.
+  if (objects === null) return t("monitors", "picksUpNone");
+  if (requirementsOf(objects) === null)
+    return t("monitors", "picksUpUnevaluable");
+  const everyObject = selectorIsEmpty(objects);
+  if (everyObject && scope === null) return t("monitors", "picksUpOwn");
+  if (everyObject && selectorIsEmpty(scope)) return t("monitors", "picksUpAll");
+  const what = everyObject
+    ? t("monitors", "picksUpEvery")
+    : t("monitors", "picksUpMatching", { selector: selectorWords(objects) });
+  const where =
+    scope === null
+      ? t("monitors", "inItsOwnNamespace")
+      : selectorIsEmpty(scope)
+        ? t("monitors", "inEveryNamespace")
+        : t("monitors", "inNamespacesMatching", {
+            selector: selectorWords(scope),
+          });
+  return `${what}, ${where}`;
 }
 
 /** The one line above the list, as a key so each branch is distinguishable. */

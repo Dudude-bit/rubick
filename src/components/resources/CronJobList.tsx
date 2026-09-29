@@ -1,5 +1,8 @@
 import type { ColumnDef } from "@/components/ui/table-features";
+import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
+import { parts } from "@/i18n/parts";
+import { useT } from "@/i18n/useT";
 
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -37,8 +40,10 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "suspend",
     header: columnHeader("columns", "suspend"),
     meta: {
-      share: (row: CronJobInfoWithMetrics) =>
-        row.suspend ? { text: "Suspended", role: "warn" } : null,
+      share: (row: CronJobInfoWithMetrics, t) =>
+        row.suspend
+          ? { text: "Suspended", role: "warn" }
+          : t("empty", "noWord"),
     },
     // Suspended is the exception worth colouring; "No" is the resting
     // state of every cronjob and stays quiet text.
@@ -46,7 +51,9 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
       row.original.suspend ? (
         <StatusBadge status="Suspended" />
       ) : (
-        <span className="text-fg-fnt">No</span>
+        <span className="text-fg-fnt">
+          <T section="empty" k="noWord" />
+        </span>
       ),
   },
   {
@@ -67,20 +74,26 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
           ? { text: row.lastSchedule, at: row.lastSchedule }
           : t("action", "never"),
     },
-    cell: ({ row }) => (
-      <span className="text-fg-fnt">
-        {row.original.lastSchedule ? (
-          <>
-            <RealtimeAge timestamp={row.original.lastSchedule} /> ago
-          </>
-        ) : (
-          "Never"
-        )}
-      </span>
-    ),
+    cell: ({ row }) => <LastSchedule at={row.original.lastSchedule} />,
   },
   createAgeColumn<CronJobInfoWithMetrics>(),
 ];
+
+// The cell needs the translator, so it is a component; `columns` is exported
+// for `column-widths.test.ts`, which costs this file its fast refresh.
+// eslint-disable-next-line react-refresh/only-export-components
+function LastSchedule({ at }: { at: string | null }) {
+  const t = useT();
+  return (
+    <span className="text-fg-fnt">
+      {at
+        ? parts(t("action", "agoSuffix"), {
+            age: <RealtimeAge timestamp={at} />,
+          })
+        : t("action", "never")}
+    </span>
+  );
+}
 
 export const CronJobList = createWorkloadListPage<CronJobInfo>({
   resourceType: ResourceType.CronJob,

@@ -18,6 +18,8 @@
  * minus loopback, which is a pod talking to itself.
  */
 
+import type { Saying } from "@/i18n/say";
+
 import { escapeRegex, podPattern } from "../pod-names";
 import { RANGE_WINDOW_MS } from "../registry";
 import type { NodeBasis, UsageRange, UsageScope } from "../registry";
@@ -53,8 +55,8 @@ export interface RangeSpec {
   rateWindow: string;
   /** The resolution each bucket takes its maximum across, or `null`. */
   inner: string | null;
-  /** What the chart says it is drawing, in words. */
-  resolution: string;
+  /** What the chart says it is drawing, worded at render. */
+  resolution: Saying;
 }
 
 export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
@@ -64,7 +66,7 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     stepSeconds: 15,
     rateWindow: "1m",
     inner: null,
-    resolution: "15s buckets, at the scrape resolution",
+    resolution: { key: "promBucketsAtScrape", values: { step: "15s" } },
   },
   "1h": {
     id: "1h",
@@ -72,7 +74,10 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     stepSeconds: 30,
     rateWindow: "1m",
     inner: "15s",
-    resolution: "30s buckets, max over a 15s resolution",
+    resolution: {
+      key: "promBucketsMaxOver",
+      values: { step: "30s", inner: "15s" },
+    },
   },
   "6h": {
     id: "6h",
@@ -80,7 +85,10 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     stepSeconds: 180,
     rateWindow: "2m",
     inner: "30s",
-    resolution: "3m buckets, max over a 30s resolution",
+    resolution: {
+      key: "promBucketsMaxOver",
+      values: { step: "3m", inner: "30s" },
+    },
   },
   "24h": {
     id: "24h",
@@ -88,7 +96,10 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     stepSeconds: 720,
     rateWindow: "5m",
     inner: "2m",
-    resolution: "12m buckets, max over a 2m resolution",
+    resolution: {
+      key: "promBucketsMaxOver",
+      values: { step: "12m", inner: "2m" },
+    },
   },
   "7d": {
     id: "7d",
@@ -96,7 +107,10 @@ export const RANGE_SPECS: Readonly<Record<UsageRange, RangeSpec>> = {
     stepSeconds: 5400,
     rateWindow: "10m",
     inner: "5m",
-    resolution: "90m buckets, max over a 5m resolution",
+    resolution: {
+      key: "promBucketsMaxOver",
+      values: { step: "90m", inner: "5m" },
+    },
   },
 };
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
@@ -6,6 +6,7 @@ import { CountBlock } from "./workload-overview";
 import { Composition } from "./detail-blocks";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
+import { useLocaleStore } from "@/stores/localeStore";
 
 const subject = {
   kind: "StatefulSet",
@@ -149,5 +150,38 @@ describe("CountBlock", () => {
     expect(
       screen.getByText(/is below its own floor — 1 healthy, 2 required/)
     ).toBeInTheDocument();
+  });
+});
+
+describe("CountBlock in Russian", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /**
+   * The caption joined its two clauses with ", and ", the autoscaler row was
+   * labelled "Now" over "no reading against 80%", and a budget "keeps" its
+   * floor: English words inside a Russian sentence.
+   */
+  it("says who sets the count and what a drain waits on in the reader's words", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    renderBlock(
+      query(
+        conns(
+          autoscaler({
+            metrics: [
+              { name: "cpu", source: "resource", target: "80%", current: null },
+            ],
+          }),
+          budget()
+        )
+      )
+    );
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("кто его задаёт и ");
+    expect(text).toContain("Сейчас");
+    expect(text).toContain("нет показаний");
+    expect(text).toContain("при цели 80%");
+    expect(text).toContain("держит ");
+    for (const english of [", and ", "Now", "no reading", "against", "keeps"])
+      expect(text).not.toContain(english);
   });
 });

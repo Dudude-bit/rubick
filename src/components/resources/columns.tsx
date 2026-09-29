@@ -5,6 +5,7 @@
  */
 
 import type { ColumnDef } from "@/components/ui/table-features";
+import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
@@ -288,7 +289,11 @@ export function createDataKeysColumn<
           ))}
           {keys.length > maxDisplay && (
             <span className="text-fg-fnt">
-              +{keys.length - maxDisplay} more
+              <T
+                section="count"
+                k="plusMore"
+                values={{ n: keys.length - maxDisplay }}
+              />
             </span>
           )}
         </span>

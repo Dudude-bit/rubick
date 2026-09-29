@@ -6,9 +6,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { UsageChart } from "@/components/resources/usage-chart";
 import type { UsageSample } from "@/lib/usage-history";
+import { useLocaleStore } from "@/stores/localeStore";
 
 // The band is loaded lazily; loaded once here, each render below resolves it
 // inside `act` instead of drawing the fallback.
@@ -370,6 +371,68 @@ describe("UsageChart on an object with a capacity rather than limits", () => {
       />
     );
     await hover(container, 560, /% of capacity/);
+  });
+});
+
+describe("UsageChart in the reader's language", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /**
+   * A range with nothing running read "peak 2.2/8.0 · 28%" beside the
+   * Russian "среднее" under it: the word before the value was a literal.
+   */
+  it("calls the value of a finished range its peak in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={series([40, 56, 48])}
+        limit={200}
+        current={null}
+        live={false}
+        ranged
+      />
+    );
+    expect(container.textContent).toMatch(/пик 56m\/200m · 28\s*%/);
+    expect(container.textContent).not.toMatch(/peak/);
+  });
+
+  /**
+   * The ceiling's rule was labelled with a default English "limit", on a
+   * node as well, where the ceiling is capacity: "limit 8.0 сейчас".
+   */
+  it("names the ceiling's rule by what the caller calls it, in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const { container } = await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={series([40, 45, 48])}
+        limit={200}
+        limitNoun="capacityWord"
+        current={48}
+        declared={null}
+      />
+    );
+    const svg = container.querySelector("svg")!.textContent;
+    expect(svg).toContain("ёмкость 200m сейчас");
+    expect(svg).not.toMatch(/limit/);
+  });
+
+  /** Would break if an object with no reading said so in English again. */
+  it("says nothing is reporting in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    await draw(
+      <UsageChart
+        label="CPU"
+        type="cpu"
+        samples={[]}
+        limit={200}
+        current={null}
+      />
+    );
+    expect(screen.getByText("нет показаний")).toBeInTheDocument();
   });
 });
 

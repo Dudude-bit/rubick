@@ -199,6 +199,7 @@ export default function Band(props: BandProps) {
               strokeDasharray="3 3"
               label={
                 <LimitLabel
+                  word={t("readings", limitNoun)}
                   text={`${formatQuantity(limit!, type)}${flatLabel}`}
                 />
               }
@@ -311,11 +312,11 @@ export default function Band(props: BandProps) {
 /** The rule's own value, so "how close am I" is read rather than computed. */
 function LimitLabel({
   text,
-  word = "limit",
+  word,
   viewBox,
 }: {
   text: string;
-  word?: string;
+  word: string;
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
 }) {
   if (!viewBox) return null;

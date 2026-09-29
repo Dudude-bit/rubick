@@ -35,6 +35,7 @@ export const ru: Catalogue = {
     fromSubPath: " из {subPath}",
     mountedAt: "смонтирован в {path}",
     projectedInto: "проецируется в {path}",
+    envReadsKey: "{env} читает ключ {key}",
     noListAccess: "У вас нет прав смотреть этот список",
     noVendorAccess: "У вас нет прав смотреть ресурсы интеграции {vendor}",
     relatedResources: "Связанные ресурсы",
@@ -173,6 +174,7 @@ export const ru: Catalogue = {
     gwSectionNamed: "секция {name}",
   },
   columns: {
+    govNow: "Сейчас",
     selects: "Выбирает",
     files: "Файлы",
     members: "Члены",
@@ -1222,9 +1224,11 @@ export const ru: Catalogue = {
     goBack: "Вернуться",
     show: "Показать",
     hide: "Скрыть",
+    reveal: "Показать",
     revealAll: "Показать все",
     hideAll: "Скрыть все",
     copyAll: "Копировать всё",
+    copyBase64: "Копировать base64",
     clearSearch: "Очистить поиск",
     logs: "Логи",
     updateImage: "Обновить образ",
@@ -2524,7 +2528,12 @@ export const ru: Catalogue = {
     picksUpAll: "все мониторы во всех namespace",
     picksUpOwn: "все мониторы в своём namespace",
     picksUpMatching: "мониторы по {selector}",
+    picksUpEvery: "все мониторы",
+    picksUpNone: "никакие мониторы: селектор для них не задан",
+    picksUpUnevaluable: "мониторы по селектору, который Kubernetes не соберёт",
     inNamespacesMatching: "в namespace по {selector}",
+    inEveryNamespace: "во всех namespace",
+    inItsOwnNamespace: "в своём namespace",
     targets: "Targets",
     health: "Состояние",
     scrapeUrl: "Адрес скрейпа",
@@ -2922,6 +2931,10 @@ export const ru: Catalogue = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govBothClauses: "{first} и {second}",
+    govNoReading: "нет показаний",
+    govAgainstTarget: "при цели {target}",
+    govBudgetKeeps: "держит {rule} — {room}",
     storyRollout:
       "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
     storyJob: "Отработало за {span}: {created}, завершено {completed}.",
@@ -3039,6 +3052,8 @@ export const ru: Catalogue = {
     usageAvg: "среднее {value}",
     usageAt: "в {clock}",
     usageNowWord: "сейчас",
+    usagePeakWord: "пик",
+    usageNotReporting: "нет показаний",
     requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "{noun} не задан, масштаб по {value} потребления",
@@ -3125,7 +3140,9 @@ export const ru: Catalogue = {
       many: "до {n} строк на страницу",
       other: "до {n} строк на страницу",
     },
-    promResolutionOf: "{range} с шагом {resolution}",
+    promResolutionOf: "{range}: {resolution}",
+    promBucketsAtScrape: "шаг {step}, с разрешением скрейпа",
+    promBucketsMaxOver: "шаг {step}, максимум при разрешении {inner}",
     argoMissing: "отсутствует",
     argoFailedToApply: "применить не удалось",
     argoDegraded: "деградировал",
@@ -5533,8 +5550,20 @@ export const ru: Catalogue = {
       "Ни одна строка в буфере не подходит под запрос, поэтому показывать нечего.",
     oneLineSoFar:
       "Пока одна строка, в {clock} — показывать нечего, пока не наберётся отрезок времени.",
-    allLinesWithinSpan:
-      "Все {count} строк пришли в пределах {span} друг от друга — слишком короткий отрезок, чтобы делить его на срезы.",
+    allLinesWithinSpan: {
+      one: "Все {count} строка пришла в пределах {span} друг от друга — слишком короткий отрезок, чтобы делить его на срезы.",
+      few: "Все {count} строки пришли в пределах {span} друг от друга — слишком короткий отрезок, чтобы делить его на срезы.",
+      many: "Все {count} строк пришли в пределах {span} друг от друга — слишком короткий отрезок, чтобы делить его на срезы.",
+      other:
+        "Все {count} строки пришли в пределах {span} друг от друга — слишком короткий отрезок, чтобы делить его на срезы.",
+    },
+    allLinesAtOnce: {
+      one: "Все {count} строка пришла в один и тот же момент — делить на срезы нечего.",
+      few: "Все {count} строки пришли в один и тот же момент — делить на срезы нечего.",
+      many: "Все {count} строк пришли в один и тот же момент — делить на срезы нечего.",
+      other:
+        "Все {count} строки пришли в один и тот же момент — делить на срезы нечего.",
+    },
     intakeNotOnBand:
       "Приём отбросил остальные строки до буфера, поэтому на этой полоске их нет.",
     intakeNotOnMap:
@@ -6618,6 +6647,8 @@ export const ru: Catalogue = {
       other: "Один адрес клиента может держать {n} соединений одновременно.",
     },
     readyOfTotal: "готовы {ready} из {total}",
+    readyFraction: "готово {ready}/{total}",
+    completedFraction: "завершено {done}/{total}",
     restartsWithLast: {
       one: "{n} перезапуск, последний {ago} назад",
       few: "{n} перезапуска, последний {ago} назад",
@@ -7037,6 +7068,8 @@ export const ru: Catalogue = {
       other: "{count} замороженных строк",
     },
     spanInSlices: "{span}, срезы по {step}",
+    runOverSpan: "× {count} за {span}",
+    runAtOnce: "× {count} в один и тот же момент",
     densitySummary: {
       one: "Плотность лога во времени: {n} срез по {step}, с {from} до {to}.",
       few: "Плотность лога во времени: {n} среза по {step}, с {from} до {to}.",

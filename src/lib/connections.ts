@@ -119,7 +119,9 @@ function describeUsage(
     case "unmounted":
       return t("nav", "inVolumeUnmounted", { volume: usage.volume });
     case "env":
-      return inside(`${usage.name} reads ${usage.key}`);
+      return inside(
+        t("nav", "envReadsKey", { env: usage.name, key: usage.key })
+      );
     case "envFrom":
       return inside(t("nav", "everyKeyBecomesEnv"));
     case "imagePullSecret":

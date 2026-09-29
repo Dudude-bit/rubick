@@ -68,12 +68,14 @@ function nowValue(facts: AutoscalerFacts, t: T) {
         >
           <span className="font-mono">{metric.label}</span>
           {metric.current === null ? (
-            <span className="text-[11px] text-warn">no reading</span>
+            <span className="text-[11px] text-warn">
+              {t("readings", "govNoReading")}
+            </span>
           ) : (
             <span className="font-mono">{metric.current}</span>
           )}
           <span className="text-[11px] text-fg-fnt">
-            against {metric.target}
+            {t("readings", "govAgainstTarget", { target: metric.target })}
             {metric.from ? ` · ${metric.from}` : ""}
           </span>
         </span>
@@ -173,7 +175,7 @@ export function governanceRows(
     });
 
     const now = nowValue(auto.facts, t);
-    if (now) rows.push({ label: "Now", value: now });
+    if (now) rows.push({ label: t("columns", "govNow"), value: now });
 
     const finding = autoscalerFinding(auto, t);
     if (finding) findings.push(finding);
@@ -192,7 +194,10 @@ export function governanceRows(
           />
           <span className="text-fg-fnt">
             {" "}
-            keeps {budgetRule(budget.facts, t)} — {budgetRoom(budget.facts, t)}
+            {t("readings", "govBudgetKeeps", {
+              rule: budgetRule(budget.facts, t),
+              room: budgetRoom(budget.facts, t),
+            })}
           </span>
           <EditGoverning object={budget.object} />
         </>

@@ -55,6 +55,7 @@ export const en = {
     fromSubPath: " from {subPath}",
     mountedAt: "mounted at {path}",
     projectedInto: "projected into {path}",
+    envReadsKey: "{env} reads {key}",
     // Said on a nav row the authorizer refused, and on the page behind it.
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
@@ -203,6 +204,7 @@ export const en = {
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
+    govNow: "Now",
     selects: "Selects",
     files: "Files",
     members: "Members",
@@ -1222,9 +1224,11 @@ export const en = {
     goBack: "Go back",
     show: "Show",
     hide: "Hide",
+    reveal: "Reveal",
     revealAll: "Reveal all",
     hideAll: "Hide all",
     copyAll: "Copy all",
+    copyBase64: "Copy base64",
     clearSearch: "Clear search",
     logs: "Logs",
     updateImage: "Update image",
@@ -2414,7 +2418,12 @@ export const en = {
     picksUpAll: "every monitor in every namespace",
     picksUpOwn: "every monitor in its own namespace",
     picksUpMatching: "monitors matching {selector}",
+    picksUpEvery: "every monitor",
+    picksUpNone: "no monitors: it names no selector for them",
+    picksUpUnevaluable: "monitors by a selector Kubernetes would not build",
     inNamespacesMatching: "in namespaces matching {selector}",
+    inEveryNamespace: "in every namespace",
+    inItsOwnNamespace: "in its own namespace",
     targets: "Targets",
     health: "Health",
     scrapeUrl: "Scrape URL",
@@ -2757,6 +2766,10 @@ export const en = {
    * copy for something the app no longer offers.
    */
   readings: {
+    govBothClauses: "{first}, and {second}",
+    govNoReading: "no reading",
+    govAgainstTarget: "against {target}",
+    govBudgetKeeps: "keeps {rule} — {room}",
     storyRollout:
       "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyJob: "Ran within {span}: {created}, {completed} completed.",
@@ -2841,6 +2854,8 @@ export const en = {
     usageAvg: "avg {value}",
     usageAt: "at {clock}",
     usageNowWord: "now",
+    usagePeakWord: "peak",
+    usageNotReporting: "not reporting",
     requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "no {noun} set, scaled to {value} used",
@@ -2917,6 +2932,8 @@ export const en = {
       other: "up to {n} lines a page",
     },
     promResolutionOf: "{range} in {resolution}",
+    promBucketsAtScrape: "{step} buckets, at the scrape resolution",
+    promBucketsMaxOver: "{step} buckets, max over a {inner} resolution",
     argoMissing: "missing",
     argoFailedToApply: "failed to apply",
     argoDegraded: "degraded",
@@ -5038,8 +5055,16 @@ export const en = {
       "No line in the buffer matches the query, so there is no shape to show.",
     oneLineSoFar:
       "One line so far, at {clock} — nothing to map until there is a stretch of time to map.",
-    allLinesWithinSpan:
-      "All {count} lines landed within {span} of each other — too short a stretch to slice.",
+    allLinesWithinSpan: {
+      one: "All {count} line landed within {span} of each other — too short a stretch to slice.",
+      other:
+        "All {count} lines landed within {span} of each other — too short a stretch to slice.",
+    },
+    allLinesAtOnce: {
+      one: "All {count} line landed at the same moment — there is no stretch of time to slice.",
+      other:
+        "All {count} lines landed at the same moment — there is no stretch of time to slice.",
+    },
     intakeNotOnBand:
       "Intake discarded the rest before they reached the buffer, so they are not on this band.",
     intakeNotOnMap:
@@ -6068,6 +6093,8 @@ export const en = {
       other: "One client address may hold {n} connections at a time.",
     },
     readyOfTotal: "{ready} of {total} ready",
+    readyFraction: "{ready}/{total} ready",
+    completedFraction: "{done}/{total} completed",
     restartsWithLast: {
       one: "{n} restart, last {ago} ago",
       other: "{n} restarts, last {ago} ago",
@@ -6289,6 +6316,8 @@ export const en = {
       other: "{count} frozen lines",
     },
     spanInSlices: "{span} in {step} slices",
+    runOverSpan: "× {count} over {span}",
+    runAtOnce: "× {count} at the same moment",
     densitySummary: {
       one: "Density of the log over time: {n} slice of {step}, from {from} to {to}.",
       other:

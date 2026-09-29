@@ -184,12 +184,20 @@ function UsageChartInner({
               className="text-fg-fnt"
               title={t("empty", "noMetricsReading")}
             >
-              not reporting
+              {t("readings", "usageNotReporting")}
             </span>
           ) : (
             <>
-              {!live && <span className="text-fg-fnt">peak </span>}
-              {live && ranged && <span className="text-fg-fnt">now </span>}
+              {!live && (
+                <span className="text-fg-fnt">
+                  {t("readings", "usagePeakWord")}{" "}
+                </span>
+              )}
+              {live && ranged && (
+                <span className="text-fg-fnt">
+                  {t("readings", "usageNowWord")}{" "}
+                </span>
+              )}
               <UnitValue value={formatQuantity(value, type)} />
               {limit !== null && limit > 0 && (
                 <>

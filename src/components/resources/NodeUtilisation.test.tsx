@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -9,6 +9,7 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import type { NodeUsageWindow } from "@/integrations";
+import { useLocaleStore } from "@/stores/localeStore";
 import type { NodeInfo } from "@/generated/types";
 
 const capability = vi.fn();
@@ -78,7 +79,10 @@ const window: NodeUsageWindow = {
   },
   newestAt: { fresh: T0 - 4 * 60_000 },
   basis: "node",
-  resolution: "30s buckets, max over a 15s resolution",
+  resolution: {
+    key: "promBucketsMaxOver",
+    values: { step: "30s", inner: "15s" },
+  },
 };
 
 beforeEach(() => {
@@ -91,6 +95,8 @@ beforeEach(() => {
 });
 
 describe("NodeUtilisation", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
   /** The busiest node first, its peak and average in words a reader can act on. */
   it("orders by headroom and prints peak and average as shares of allocatable", async () => {
     wrap(
@@ -126,6 +132,22 @@ describe("NodeUtilisation", () => {
     expect(rows[2]).not.toHaveTextContent("peak 0%");
   });
 
+  /**
+   * The resolution under the table was an English literal from the range
+   * table, so a Russian reader got "30s buckets, max over a 15s resolution"
+   * beside the Russian endpoint line.
+   */
+  it("says the resolution in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    wrap(
+      <NodeUtilisation nodes={[node("calm")]} range="1h" onRange={() => {}} />
+    );
+    expect(
+      await screen.findByText(/шаг 30s, максимум при разрешении 15s/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/buckets/)).toBeNull();
+  });
+
   it("marks a cordoned node as a decision rather than a fault", async () => {
     wrap(
       <NodeUtilisation
@@ -156,7 +178,10 @@ describe("NodeUtilisation", () => {
         newestAt: {},
         newestKnown: true,
         basis: "pods",
-        resolution: "3m buckets",
+        resolution: {
+          key: "promBucketsMaxOver",
+          values: { step: "3m", inner: "30s" },
+        },
       })),
     });
     wrap(
