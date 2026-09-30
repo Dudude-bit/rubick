@@ -58,9 +58,10 @@ runs:
         # librsvg2-dev and libgtk-3-bin are the AppImage's: linuxdeploy's gtk
         # plugin reads librsvg-2.0.pc through pkg-config and exits 1 without
         # it, and calls gtk-query-immodules-3.0 for the input modules.
+        # file is appimagetool's, which a runner has and a container does not;
         # squashfs-tools is scripts/check-appimage.sh's.
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
           build-essential curl git pkg-config \
           libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
           libsoup-3.0-dev ca-certificates \
-          librsvg2-dev libgtk-3-bin squashfs-tools
+          librsvg2-dev libgtk-3-bin squashfs-tools file
