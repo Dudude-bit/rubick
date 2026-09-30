@@ -74,6 +74,9 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             sudo git curl ca-certificates unzip xz-utils
+          # The workspace belongs to the runner's user and the container runs as
+          # root; checkout trusts it only for itself, and `bun install` runs git.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Checkout tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
