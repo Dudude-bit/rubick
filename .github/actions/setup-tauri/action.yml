@@ -21,3 +21,18 @@ runs:
       with:
         target: ${{ inputs.target }}
         is_linux: ${{ inputs.is_linux }}
+
+    # The bundler saves the AppRun it downloads as 0770 and copies it into
+    # the AppImage as AppRun.wrapped, which a user other than the mount's
+    # owner cannot start: firejail --appimage, and the AppImage catalog's
+    # test (tauri#16155). A copy already in its cache is used as it is.
+    - name: AppRun anyone can start (Linux)
+      if: inputs.is_linux == 'true'
+      shell: bash
+      run: |
+        tools="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+        mkdir -p "$tools"
+        apprun="$tools/AppRun-$(uname -m)"
+        curl -fsSL --retry 3 -o "$apprun" \
+          "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-$(uname -m)"
+        chmod 755 "$apprun"
