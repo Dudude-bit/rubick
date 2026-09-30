@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.21.1] - 2026-09-30
+
+### Fixed
+
+- **The AppImage starts for a user other than the one who mounted it.** Its
+  launcher could be run only by the mount's owner, so
+  `firejail --appimage`, and the AppImage catalog's test, stopped with
+  "Permission denied". Other installers are unchanged. (#318)
+
 ## [4.21.0] - 2026-09-29
 
 > **Much of this release is under the hood.** Besides Share on every
