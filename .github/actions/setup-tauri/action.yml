@@ -9,6 +9,10 @@ inputs:
     description: 'Set to "true" when the job builds on Linux'
     required: false
     default: 'false'
+  image:
+    description: 'The container the job builds in, if any'
+    required: false
+    default: ''
 
 # No tauri-cli install: the CLI is a devDependency, and `bun run tauri` is the
 # one bun.lock pins — the same one tauri-action picks up in release.yml. A
@@ -21,6 +25,7 @@ runs:
       with:
         target: ${{ inputs.target }}
         is_linux: ${{ inputs.is_linux }}
+        image: ${{ inputs.image }}
 
     # The bundler saves the AppRun it downloads as 0770 and copies it into
     # the AppImage as AppRun.wrapped, which a user other than the mount's
