@@ -21,7 +21,9 @@ import sys
 
 PLATFORMS = {
     "linux-x64": {
-        "os": "ubuntu-24.04",
+        # The oldest supported LTS: the binary needs the glibc it was built
+        # against, and the AppImage catalog tests on 22.04.
+        "os": "ubuntu-22.04",
         "artifact_name": "k8s-gui-linux-x64",
         "target": "x86_64-unknown-linux-gnu",
         "is_linux": True,

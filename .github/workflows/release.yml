@@ -40,7 +40,8 @@ jobs:
           # renaming the product, the target, or the bundle format breaks
           # the package.
           - name: linux-x64
-            os: ubuntu-24.04
+            # The oldest supported LTS, as in build-matrix.py.
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             is_linux: true
           # linux-arm64 disabled: libglib2.0-dev arm64 deps unresolvable on GitHub runners.
@@ -128,7 +129,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # linuxdeploy, which bundles the AppImage, is an AppImage itself and
           # mounts itself to run — needing FUSE 2 and /dev/fuse, neither of
-          # which ubuntu-24.04 has. Extracting instead needs neither.
+          # which the runner has. Extracting instead needs neither.
           APPIMAGE_EXTRACT_AND_RUN: 1
           # Updater signing (minisign). Unrelated to Apple code signing —
           # this is what proves an update payload came from us; Gatekeeper
