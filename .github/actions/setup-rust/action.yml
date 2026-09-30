@@ -29,10 +29,13 @@ runs:
     # Saved from main only. A tag or a PR can read main's cache but its own
     # never gets read again — and the repository sits at GitHub's 10 GB
     # limit, where every such save evicts one of main's.
+    #
+    # And by image on Linux: runner.os is "Linux" on every Ubuntu, and a
+    # cache 24.04 saved failed a 22.04 build with "can't find crate for tauri".
     - name: Rust cache
       uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
       with:
-        key: ${{ inputs.target }}
+        key: ${{ inputs.is_linux == 'true' && format('{0}-{1}', inputs.target, env.ImageOS) || inputs.target }}
         cache-on-failure: true
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
