@@ -165,3 +165,9 @@ jobs:
           # Renamed from `includeUpdaterJson` in tauri-action v1.0.0.
           uploadUpdaterJson: true
           args: --target ${{ matrix.target }}
+
+      # After the upload, so a failure leaves the draft to be fixed, not
+      # published.
+      - name: AppImage starts for any user
+        if: matrix.is_linux
+        run: bash scripts/check-appimage.sh target/${{ matrix.target }}/release/bundle/appimage/*.AppImage

@@ -112,6 +112,10 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: bun run tauri build --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --timings
 
+      - name: AppImage starts for any user
+        if: matrix.is_linux
+        run: bash scripts/check-appimage.sh target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+
       - name: Collect installers
         # The installers only: the bundle directories also hold the AppImage's
         # unpacked AppDir and the unpacked .app, hundreds of files nobody
