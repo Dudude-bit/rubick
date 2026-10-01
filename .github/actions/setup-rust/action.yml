@@ -9,6 +9,10 @@ inputs:
     description: 'Set to "true" when the job builds on Linux'
     required: false
     default: 'false'
+  image:
+    description: 'The container the job builds in, if any'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -18,6 +22,24 @@ runs:
     - name: Set up Rust toolchain
       shell: bash
       run: |
+        # A container has no rustup; rust-toolchain.toml still names the version.
+        # A pinned rustup-init, checked before it runs: this runs ahead of
+        # release signing.
+        if ! command -v rustup >/dev/null; then
+          case "$(uname -m)" in
+            x86_64) sum=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71 ;;
+            aarch64) sum=15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdfdef615fac433 ;;
+            *) echo "::error::no rustup-init digest for $(uname -m)"; exit 1 ;;
+          esac
+          init="$RUNNER_TEMP/rustup-init"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 -o "$init" \
+            "https://static.rust-lang.org/rustup/archive/1.29.1/$(uname -m)-unknown-linux-gnu/rustup-init"
+          echo "$sum  $init" | sha256sum -c --quiet
+          chmod 755 "$init"
+          "$init" -y --no-modify-path --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
         rustup toolchain install
         rustup target add ${{ inputs.target }}
         rustc --version
@@ -30,12 +52,12 @@ runs:
     # never gets read again — and the repository sits at GitHub's 10 GB
     # limit, where every such save evicts one of main's.
     #
-    # And by image on Linux: runner.os is "Linux" on every Ubuntu, and a
-    # cache 24.04 saved failed a 22.04 build with "can't find crate for tauri".
+    # And by container: runner.os is "Linux" in and out of one, and a cache
+    # 24.04 saved failed a 22.04 build with "can't find crate for tauri".
     - name: Rust cache
       uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
       with:
-        key: ${{ inputs.is_linux == 'true' && format('{0}-{1}', inputs.target, env.ImageOS) || inputs.target }}
+        key: ${{ inputs.image && format('{0}-{1}', inputs.target, inputs.image) || inputs.target }}
         cache-on-failure: true
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
@@ -47,9 +69,10 @@ runs:
         # librsvg2-dev and libgtk-3-bin are the AppImage's: linuxdeploy's gtk
         # plugin reads librsvg-2.0.pc through pkg-config and exits 1 without
         # it, and calls gtk-query-immodules-3.0 for the input modules.
+        # file is appimagetool's, which a runner has and a container does not;
         # squashfs-tools is scripts/check-appimage.sh's.
-        sudo apt-get install -y \
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
           build-essential curl git pkg-config \
           libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
           libsoup-3.0-dev ca-certificates \
-          librsvg2-dev libgtk-3-bin squashfs-tools
+          librsvg2-dev libgtk-3-bin squashfs-tools file

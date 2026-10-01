@@ -70,6 +70,7 @@ jobs:
     needs: plan
     if: fromJSON(needs.plan.outputs.matrix).include[0] != null
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     # Nothing here takes an hour; without a limit a hung job holds one of
     # five macOS slots for GitHub's default six.
     timeout-minutes: 60
@@ -92,6 +93,19 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.lto == 'fat' && '1' || '16' }}
 
     steps:
+      # The Linux build runs in an ubuntu:22.04 container, which has none of
+      # what a runner has; checkout wants git before anything else runs.
+      - name: Container prerequisites
+        if: matrix.container
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            sudo git curl ca-certificates unzip xz-utils
+          # The workspace belongs to the runner's user and the container runs as
+          # root; checkout trusts it only for itself, and `bun install` runs git.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -100,6 +114,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           is_linux: ${{ matrix.is_linux || false }}
+          image: ${{ matrix.container }}
 
       - name: Build (tauri)
         # Skip updater-artifact signing in PR validation — release.yml has the secrets.
