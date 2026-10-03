@@ -59,6 +59,10 @@ What one recording holds:
 - **Renders.** `DataTable`, `LogList`, `ConnectionsPanel` and `UsageChart`
   sit inside a React Profiler. React reports render timings only from a dev
   or profiling build, so a release build shows none and says so.
+- **Navigations.** From the router writing history to the first paint after
+  the new page rendered, one row per route shape. The start is read off
+  `history`, not the router, so a number taken before a router change means
+  the same thing as one taken after it.
 - **Backend counters.** Events pushed over the bridge, their total and
   largest payload, and how many watch changes they carried.
 

@@ -1,3 +1,4 @@
+import { startNavigationWatch } from "./perf-navigation";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { perf } from "@/lib/perf";
@@ -32,13 +33,15 @@ const tauriBackend: Backend = {
 export class PerfSession {
   private state: SessionState = { phase: "idle", error: null };
   private stopFrames: (() => void) | null = null;
+  private stopNavigations: (() => void) | null = null;
   private transition: Promise<void> = Promise.resolve();
   private listeners = new Set<() => void>();
 
   constructor(
     private recorder: PerfRecorder = perf,
     private backend: Backend = tauriBackend,
-    private frames: (r: PerfRecorder) => () => void = startFrameWatch
+    private frames: (r: PerfRecorder) => () => void = startFrameWatch,
+    private navigations: (r: PerfRecorder) => () => void = startNavigationWatch
   ) {}
 
   get current(): SessionState {
@@ -72,6 +75,7 @@ export class PerfSession {
     }
     this.recorder.start();
     this.stopFrames = this.frames(this.recorder);
+    this.stopNavigations = this.navigations(this.recorder);
     this.set({ phase: "recording", error: null });
   }
 
@@ -80,6 +84,8 @@ export class PerfSession {
     this.set({ phase: "stopping", error: null });
     this.stopFrames?.();
     this.stopFrames = null;
+    this.stopNavigations?.();
+    this.stopNavigations = null;
     let error: string | null = null;
     try {
       this.recorder.backend = await this.backend.counters();

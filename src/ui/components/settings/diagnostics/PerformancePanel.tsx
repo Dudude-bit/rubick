@@ -111,6 +111,9 @@ export function PerformancePanel() {
   const renderRows = Object.entries(report?.renders ?? {}).sort(
     (a, b) => b[1].p95 - a[1].p95
   );
+  const navigationRows = Object.entries(report?.navigations ?? {}).sort(
+    (a, b) => b[1].p95 - a[1].p95
+  );
   const sampled = ipcRows.some(([, s]) => s.sampled < s.count);
 
   return (
@@ -181,6 +184,12 @@ export function PerformancePanel() {
               {t("settings", "perfTasks")}: {report.tasks.count} · p95{" "}
               {ms(report.tasks.p95)} · max {ms(report.tasks.max)}
             </p>
+          )}
+          {navigationRows.length > 0 && (
+            <StatsRows
+              rows={navigationRows}
+              nameLabel={t("settings", "perfNavigation")}
+            />
           )}
           {renderRows.length > 0 ? (
             <StatsRows

@@ -1,6 +1,6 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { CredentialsExpired } from "@/components/cluster/CredentialsExpired";
 import { useExpiredCredentials } from "@/hooks/useExpiredCredentials";
@@ -27,6 +27,7 @@ import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { ScreenShareProvider } from "@/components/share/screen-share";
+import { navigationName, navigationRendered } from "@/lib/perf-navigation";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -126,6 +127,7 @@ export function Layout() {
                     <ScreenShareProvider>
                       <Outlet />
                     </ScreenShareProvider>
+                    <NavigationMark />
                   </>
                 )}
               </Suspense>
@@ -143,4 +145,11 @@ export function Layout() {
       <PeekPanel />
     </div>
   );
+}
+
+/** Inside the page's Suspense boundary, so it commits with the page and not with its skeleton. */
+function NavigationMark() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => navigationRendered(navigationName(pathname)), [pathname]);
+  return null;
 }

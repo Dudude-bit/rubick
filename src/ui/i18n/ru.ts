@@ -4484,6 +4484,7 @@ export const ru: Catalogue = {
     perfBytes: "байт",
     perfTasks: "Долгие задачи",
     perfRenders: "Рендер",
+    perfNavigation: "Переход",
     perfNoRenders:
       "Нет таймингов рендера: React отдаёт их только из dev-сборки или профилирующей сборки.",
     perfBackend:

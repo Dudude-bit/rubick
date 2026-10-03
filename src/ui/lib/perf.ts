@@ -8,7 +8,7 @@
  * the slow part of a screen nobody asked to measure.
  */
 
-export type PerfKind = "ipc" | "task" | "render";
+export type PerfKind = "ipc" | "task" | "render" | "navigation";
 
 export interface PerfSample {
   kind: PerfKind;
@@ -41,6 +41,7 @@ export interface PerfReport {
   ipc: Record<string, PerfStats>;
   tasks: PerfStats | null;
   renders: Record<string, PerfStats>;
+  navigations: Record<string, PerfStats>;
   /** How long tasks were observed: the platform observer, or frame gaps. */
   taskSource: "longtask" | "frame-gap" | "none";
   /** Percentiles come from at most this many recent samples per kind. */
@@ -164,11 +165,17 @@ export class PerfRecorder {
       ipc: new Ring(SAMPLE_CAP),
       task: new Ring(SAMPLE_CAP),
       render: new Ring(SAMPLE_CAP),
+      navigation: new Ring(SAMPLE_CAP),
     };
   }
 
   private freshLifetimes(): Record<PerfKind, Map<string, Lifetime>> {
-    return { ipc: new Map(), task: new Map(), render: new Map() };
+    return {
+      ipc: new Map(),
+      task: new Map(),
+      render: new Map(),
+      navigation: new Map(),
+    };
   }
 
   get recording(): boolean {
@@ -232,6 +239,10 @@ export class PerfRecorder {
       tasks: taskLifetime ? stats(taskLifetime, tasks) : null,
       renders: summariseByName(
         this.rings.render.toArray(),
+      navigations: summariseByName(
+        this.rings.navigation.toArray(),
+        this.lifetimes.navigation
+      ),
         this.lifetimes.render
       ),
       taskSource: this.taskSource,

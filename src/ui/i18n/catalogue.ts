@@ -4056,6 +4056,7 @@ export const en = {
     perfBytes: "bytes",
     perfTasks: "Long tasks",
     perfRenders: "Render",
+    perfNavigation: "Navigation",
     perfNoRenders:
       "No render timings: React reports them only from a dev or profiling build.",
     perfBackend:
