@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { PodRow } from "@/generated/types";
@@ -80,5 +80,32 @@ describe("the pod list while a new scope is read", () => {
     expect(
       screen.getByText("1 pod, from the namespaces that answered")
     ).toBeVisible();
+  });
+});
+
+describe("the row's shell button", () => {
+  /** It asked for `?tab=terminal`, a tab the pod page does not have, and
+   *  landed on the overview with no shell anywhere. */
+  it("opens the pod page on its shell tab", () => {
+    function Landed() {
+      const { pathname, search } = useLocation();
+      return <p>{`${pathname}${search}`}</p>;
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/workloads/pods"]}>
+          <TooltipProvider>
+            <Routes>
+              <Route path="/workloads/pods" element={<PodList />} />
+              <Route path="/pods/:namespace/:name" element={<Landed />} />
+            </Routes>
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Shell" }));
+
+    expect(screen.getByText("/pods/prod/api-0?tab=shell")).toBeInTheDocument();
   });
 });

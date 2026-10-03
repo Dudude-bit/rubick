@@ -47,6 +47,7 @@ import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   getResourceDefinition,
+  getResourceListUrl,
   ResourceType,
   toKind,
   type ResourceKind,
@@ -548,7 +549,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
         onClick={() => {
           void switchNamespace(namespace);
           close();
-          navigate(`/${definition.category}/${definition.plural}`);
+          navigate(getResourceListUrl(kind));
         }}
         title={t("action", "openScopedTo", {
           plural: definition.displayPlural,

@@ -8,7 +8,7 @@
 
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -137,5 +137,43 @@ describe("what the page offers Share", () => {
       );
       expect(table?.count).toBe(1);
     });
+  });
+});
+
+describe("the row's way to a CRD's objects", () => {
+  /** The link was built as `<crd>/instances`, a path no route serves, and
+   *  opened an empty pane. The objects are a tab on the CRD's own page. */
+  it("opens the CRD's page on its instances tab", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cert-manager.io",
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+    draw();
+
+    const trigger = await screen.findByRole("button", {
+      name: "Open actions",
+    });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const item = await screen.findByRole("menuitem", {
+      name: "View instances",
+    });
+
+    expect(item.getAttribute("href")).toBe(
+      "/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
+    );
   });
 });

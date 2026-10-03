@@ -274,7 +274,7 @@ export function PodList() {
         label: t("action", "shell"),
         onClick: (item) =>
           navigate(
-            `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=terminal`
+            `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=shell`
           ),
       },
       {

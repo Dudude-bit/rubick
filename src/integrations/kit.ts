@@ -19,11 +19,11 @@ import {
   severityMark,
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
-import { getCustomResourceUrl } from "@/lib/navigation-utils";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import {
+  getCrdInstancesUrl,
+  getCustomResourceUrl,
+} from "@/lib/navigation-utils";
 import type { CrdView } from "./registry";
-
-const CRDS = toPlural(ResourceType.CustomResourceDefinition);
 
 /**
  * The route to the objects of one CRD, and to one of them.
@@ -33,7 +33,7 @@ const CRDS = toPlural(ResourceType.CustomResourceDefinition);
  * link went nowhere with nothing to say so.
  */
 export function crdObjectsPath(crdName: string): string {
-  return `/${CRDS}/${encodeURIComponent(crdName)}?tab=instances`;
+  return getCrdInstancesUrl(crdName);
 }
 
 /**

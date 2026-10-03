@@ -1,15 +1,12 @@
 import { workloadStatus } from "@/lib/workload-status";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { columnHeader } from "@/i18n/column-header";
-import { Scale, RotateCw } from "lucide-react";
 
 import type { DeploymentInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import { matchDeploymentPods, type ResourceMetrics } from "@/lib/metrics";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { QuickAction } from "@/components/ui/quick-actions";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -57,29 +54,6 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   createAgeColumn<DeploymentInfoWithMetrics>(),
 ];
 
-const extraActions = ({
-  navigate,
-}: {
-  navigate: (path: string) => void;
-}): QuickAction<DeploymentInfoWithMetrics>[] => [
-  {
-    icon: Scale,
-    label: "Scale",
-    onClick: (item) =>
-      navigate(
-        `${getResourceDetailUrl(ResourceType.Deployment, item.name, item.namespace)}?action=scale`
-      ),
-  },
-  {
-    icon: RotateCw,
-    label: "Restart",
-    onClick: (item) =>
-      navigate(
-        `${getResourceDetailUrl(ResourceType.Deployment, item.name, item.namespace)}?action=restart`
-      ),
-  },
-];
-
 export const DeploymentList = createWorkloadListPage<DeploymentInfo>({
   resourceType: ResourceType.Deployment,
   title: "Deployments",
@@ -88,5 +62,4 @@ export const DeploymentList = createWorkloadListPage<DeploymentInfo>({
   watch: ({ scope }) => commands.subscribeDeploymentWatch(scope),
   deleter: (item) => commands.deleteDeployment(item.name, item.namespace),
   columns,
-  extraActions,
 });

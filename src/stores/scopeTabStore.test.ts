@@ -12,7 +12,11 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import {
+  getResourceListUrl,
+  ResourceType,
+  toPlural,
+} from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 import {
   listBehind,
@@ -682,11 +686,12 @@ describe("retargetAfterSwitch", () => {
 describe("every route this could send a tab to", () => {
   /**
    * The retarget is only an improvement if it lands somewhere. `/workloads/
-   * replicasets` and `/network/httproutes` are what `getResourceListUrl`
+   * replicasets` and `/network/httproutes` are what the category path
    * answers and neither matches a route, so a tab sent there renders an empty
-   * pane — worse than the stale detail page. This reads the app's own route
-   * tables, so a kind that gains a detail route without a list one fails here
-   * rather than in somebody's window.
+   * pane — worse than the stale detail page. The detail page's breadcrumb
+   * asks the same question, and a GatewayClass's led to such a pane. This
+   * reads the app's own route tables, so a kind that gains a detail route
+   * without a list one fails here rather than in somebody's window.
    */
   it("is a route the app actually serves", () => {
     const read = (file: string) =>
@@ -751,6 +756,11 @@ describe("every route this could send a tab to", () => {
       .map((href) => [href, listBehind(href)] as const)
       .filter(([, list]) => list !== null && !served.has(list));
     expect(missing).toEqual([]);
+
+    const crumbs = [...named, ...mapped]
+      .map(([p]) => getResourceListUrl(p))
+      .filter((list) => !served.has(list));
+    expect(crumbs).toEqual([]);
   });
 });
 

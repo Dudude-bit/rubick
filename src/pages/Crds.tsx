@@ -21,6 +21,7 @@ import { createAgeColumn } from "@/components/resources/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { getCrdInstancesUrl } from "@/lib/navigation-utils";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -175,7 +176,7 @@ export function Crds() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to={`${crdHref(row.original.name)}/instances`}>
+              <Link to={getCrdInstancesUrl(row.original.name)}>
                 <List className="mr-2 h-3.5 w-3.5" />
                 <T section="action" k="viewInstances" />
               </Link>

@@ -45,6 +45,11 @@ export function isClusterScoped(kind: ResourceKind | string): boolean {
 
 const CRD_INSTANCES = toPlural(ResourceType.CustomResourceDefinition);
 
+/** The CRD's own page, opened on the tab that lists its objects. */
+export function getCrdInstancesUrl(crdName: string): string {
+  return `/${CRD_INSTANCES}/${encodeURIComponent(crdName)}?tab=instances`;
+}
+
 /**
  * Where one object of a CRD lives.
  *

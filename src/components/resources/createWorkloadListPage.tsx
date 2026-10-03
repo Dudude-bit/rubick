@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useNavigate, type NavigateFunction } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -57,10 +57,6 @@ export interface WorkloadListPageConfig<T extends Workload> {
   deleter: (item: T) => Promise<unknown>;
   /** Build columns. T includes the attached `cpuMillicores` and `memoryBytes`. */
   columns: () => ColumnDef<T & ResourceMetrics>[];
-  /** Extra quick actions (e.g. Scale, Restart for Deployment). */
-  extraActions?: (deps: {
-    navigate: NavigateFunction;
-  }) => QuickAction<T & ResourceMetrics>[];
   /** Override the empty-state label (defaults to plural of `resourceType`). */
   emptyStateLabel?: string;
   /**
@@ -151,7 +147,6 @@ export function createWorkloadListPage<T extends Workload>(
                 )
               ),
           },
-          ...(config.extraActions?.({ navigate }) ?? []),
           {
             icon: Trash2,
             label: t("action", "delete"),

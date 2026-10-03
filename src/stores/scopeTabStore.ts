@@ -506,26 +506,7 @@ export function listBehind(href: string): string | null {
   return list;
 }
 
-/**
- * Where a kind's list actually lives, for the ones whose detail route the app
- * serves and whose own list it does not: a ReplicaSet through its Deployment,
- * the Gateway API route kinds on one page, a GatewayClass beside Gateways.
- * `getResourceListUrl` answers `/workloads/replicasets`, which matches no
- * route and renders an empty pane. The test beside this reads the app's own
- * route tables and fails when the list goes stale.
- */
-const LIST_ELSEWHERE: Record<string, string> = {
-  replicasets: "/workloads/deployments",
-  gatewayclasses: "/network/gateways",
-  httproutes: "/network/routes",
-  grpcroutes: "/network/routes",
-  tlsroutes: "/network/routes",
-  tcproutes: "/network/routes",
-  udproutes: "/network/routes",
-};
-
 function listOf(first: string): string | null {
-  if (LIST_ELSEWHERE[first]) return LIST_ELSEWHERE[first];
   if (isResourceType(first)) return getResourceListUrl(first);
   // Helm keeps its releases on the same shape without being a kind.
   return first === "helm" ? "/helm" : null;

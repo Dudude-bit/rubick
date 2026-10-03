@@ -402,6 +402,23 @@ export function getResourceIcon(kind: ResourceKind | string): LucideIcon {
 }
 
 /**
+ * Where a kind's list actually lives, for the ones whose detail route the app
+ * serves and whose own list it does not: a ReplicaSet through its Deployment,
+ * the Gateway API route kinds on one page, a GatewayClass beside Gateways.
+ * The category path would match no route and render an empty pane, in a
+ * breadcrumb as much as in a tab moved to another cluster.
+ */
+const LIST_ELSEWHERE: Partial<Record<ResourceKind, string>> = {
+  ReplicaSet: "/workloads/deployments",
+  GatewayClass: "/network/gateways",
+  HTTPRoute: "/network/routes",
+  GRPCRoute: "/network/routes",
+  TLSRoute: "/network/routes",
+  TCPRoute: "/network/routes",
+  UDPRoute: "/network/routes",
+};
+
+/**
  * Get the URL for a resource list page (respects category structure)
  * @example getResourceListUrl("Pod") // "/workloads/pods"
  * @example getResourceListUrl("pods") // "/workloads/pods"
@@ -415,6 +432,9 @@ export function getResourceListUrl(resourceKindOrPlural: string): string {
   if (!def) {
     return `/${resourceKindOrPlural.toLowerCase()}`;
   }
+
+  const elsewhere = LIST_ELSEWHERE[def.kind];
+  if (elsewhere) return elsewhere;
 
   if (def.category) {
     return `/${def.category}/${def.plural}`;
