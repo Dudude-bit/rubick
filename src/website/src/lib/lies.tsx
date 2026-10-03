@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Trace } from "../components/motion/trace";
 import { TruthSwap } from "../components/motion/truth-swap";
-import { IMG, SITE } from "./site";
+import { articleLd, IMG, SITE } from "./site";
 
 export type Lie = {
   slug: string;
@@ -168,5 +168,6 @@ export function lieHead(l: Lie) {
       { name: "twitter:image", content: image },
     ],
     links: [{ rel: "canonical", href: url }],
+    scripts: [articleLd({ title, description: l.description, url, image })],
   };
 }

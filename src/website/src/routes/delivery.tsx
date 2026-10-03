@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DeliveryPage } from "../components/delivery-page";
-import { SITE } from "../lib/site";
+import { articleLd, SITE } from "../lib/site";
+import { DELIVERY, pageUrl } from "../lib/pages";
 
-const url = `${SITE.url}/delivery`;
-const title = "Delivered by Argo CD or Flux, and whether your edit survives";
-const description =
-  "Argo CD Applications and Flux Kustomizations read live from Rubick's specimens: the controllers' status words, the revision each one applied, and what happens to a change made by hand.";
+const { title, description } = DELIVERY;
+const image = `${SITE.url}/og/delivery.png`;
+const url = pageUrl(DELIVERY);
 
 export const Route = createFileRoute("/delivery")({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/delivery")({
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:url", content: url },
-      { property: "og:image", content: `${SITE.url}/og/delivery.png` },
+      { property: "og:image", content: image },
       {
         property: "og:image:alt",
         content:
@@ -23,9 +23,10 @@ export const Route = createFileRoute("/delivery")({
       },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
-      { name: "twitter:image", content: `${SITE.url}/og/delivery.png` },
+      { name: "twitter:image", content: image },
     ],
     links: [{ rel: "canonical", href: url }],
+    scripts: [articleLd({ title, description, url, image })],
   }),
   component: DeliveryPage,
 });

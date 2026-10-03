@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CertificatesPage } from "../components/certificates-page";
-import { SITE } from "../lib/site";
+import { articleLd, SITE } from "../lib/site";
+import { CERTIFICATES, pageUrl } from "../lib/pages";
 
-const url = `${SITE.url}/certificates`;
-const title = "Valid. For somebody else.";
-const description =
-  "cert-manager chains read live from Rubick's specimens: issuer, renewal dates, the Challenge that holds the sentence worth reading, and the host a valid certificate does not cover.";
+const { title, description } = CERTIFICATES;
+const image = `${SITE.url}/og/certificates.png`;
+const url = pageUrl(CERTIFICATES);
 
 export const Route = createFileRoute("/certificates")({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/certificates")({
       { property: "og:title", content: title },
       { property: "og:description", content: description },
       { property: "og:url", content: url },
-      { property: "og:image", content: `${SITE.url}/og/certificates.png` },
+      { property: "og:image", content: image },
       {
         property: "og:image:alt",
         content:
@@ -23,9 +23,10 @@ export const Route = createFileRoute("/certificates")({
       },
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
-      { name: "twitter:image", content: `${SITE.url}/og/certificates.png` },
+      { name: "twitter:image", content: image },
     ],
     links: [{ rel: "canonical", href: url }],
+    scripts: [articleLd({ title, description, url, image })],
   }),
   component: CertificatesPage,
 });

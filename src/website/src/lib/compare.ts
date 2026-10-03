@@ -1,4 +1,4 @@
-import { SITE } from "./site";
+import { articleLd, OG_IMAGE, SITE } from "./site";
 
 export type CompareRow = {
   label: string;
@@ -30,8 +30,21 @@ export function compareHead(c: Competitor) {
       { property: "og:title", content: title },
       { property: "og:description", content: c.metaDescription },
       { property: "og:url", content: url },
+      { property: "og:image", content: OG_IMAGE.url },
+      { property: "og:image:alt", content: OG_IMAGE.alt },
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: c.metaDescription },
+      { name: "twitter:image", content: OG_IMAGE.url },
     ],
     links: [{ rel: "canonical", href: url }],
+    scripts: [
+      articleLd({
+        title,
+        description: c.metaDescription,
+        url,
+        image: OG_IMAGE.url,
+      }),
+    ],
   };
 }
 

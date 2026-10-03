@@ -16,6 +16,7 @@ export const LINKS = {
   security: `${GH}/blob/main/SECURITY.md`,
   license: `${GH}/blob/main/LICENSE`,
   aur: "https://aur.archlinux.org/packages/rubick-kubernetes-bin",
+  kubetools: "https://github.com/collabnix/kubetools",
   brew: "brew install --cask Dudude-bit/tap/rubick",
   lies: "https://rubick.tech/lies.yaml",
   reportLie: `${GH}/issues/new?${new URLSearchParams({
@@ -48,6 +49,7 @@ export const JSON_LD = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: SITE.name,
+  alternateName: ["Rubick Kubernetes client", "Rubick for Kubernetes"],
   description: SITE.description,
   url: SITE.url,
   image: `${SITE.url}/logo.svg`,
@@ -59,6 +61,11 @@ export const JSON_LD = JSON.stringify({
   downloadUrl: `${GH}/releases/latest`,
   screenshot: OG_IMAGE.url,
   sameAs: [GH],
+  subjectOf: {
+    "@type": "CreativeWork",
+    name: "Kubetools, a curated list of Kubernetes tools by Collabnix",
+    url: LINKS.kubetools,
+  },
 });
 
 export type Shot = { src: string; width: number; height: number };
@@ -79,3 +86,29 @@ export const IMG = {
   scale: { src: "/images/scale-interception.webp", width: 512, height: 220 },
   cilium: { src: "/images/cilium-coverage.webp", width: 1150, height: 420 },
 } satisfies Record<string, Shot>;
+
+/**
+ * A page that explains one thing in depth, as structured data. Built from the
+ * same title and description the page's meta tags carry, so the two cannot
+ * say different things.
+ */
+export function articleLd(page: {
+  title: string;
+  description: string;
+  url: string;
+  image: string;
+}) {
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      headline: page.title,
+      description: page.description,
+      url: page.url,
+      image: page.image,
+      about: { "@type": "SoftwareApplication", name: SITE.name, url: SITE.url },
+      isPartOf: { "@type": "WebSite", name: SITE.name, url: SITE.url },
+    }),
+  };
+}
