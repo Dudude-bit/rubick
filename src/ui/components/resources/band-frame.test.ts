@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const source = (file: string) =>
-  readFileSync(join("src", "components", "resources", file), "utf8");
+  readFileSync(join("src", "ui", "components", "resources", file), "utf8");
 
 describe("the frame the usage and traffic bands are drawn in", () => {
   /**

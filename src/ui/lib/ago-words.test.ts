@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 const SOURCES = import.meta.glob<string>(
-  ["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/generated/**"],
+  [
+    "/src/ui/**/*.{ts,tsx}",
+    "!/src/ui/**/*.test.{ts,tsx}",
+    "!/src/ui/generated/**",
+  ],
   { query: "?raw", import: "default", eager: true }
 );
 

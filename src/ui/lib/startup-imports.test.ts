@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 const SOURCES = import.meta.glob<string>(
-  ["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/generated/**"],
+  [
+    "/src/ui/**/*.{ts,tsx}",
+    "!/src/ui/**/*.test.{ts,tsx}",
+    "!/src/ui/generated/**",
+  ],
   { query: "?raw", import: "default", eager: true }
 );
 
 /** Modules that load after startup: the editor's chunk and a lazy route. */
 const MAY_IMPORT_YAML = new Set([
-  "/src/components/yaml/manifest-reads.ts",
-  "/src/lib/helm-manifest.ts",
-  "/src/pages/HelmDetail.tsx",
+  "/src/ui/components/yaml/manifest-reads.ts",
+  "/src/ui/lib/helm-manifest.ts",
+  "/src/ui/pages/HelmDetail.tsx",
 ]);
 
 describe("what startup loads", () => {

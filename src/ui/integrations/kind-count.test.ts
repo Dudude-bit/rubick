@@ -18,7 +18,7 @@ describe("the shared kind counter", () => {
   it("is handed only kinds an `s` actually pluralises", () => {
     const wrong: string[] = [];
     const facts = SOURCE_FILES.filter((path) =>
-      /^src\/integrations\/[^/]+\/facts\.ts$/.test(path)
+      /^src\/ui\/integrations\/[^/]+\/facts\.ts$/.test(path)
     );
     expect(facts.length).toBeGreaterThan(0);
 

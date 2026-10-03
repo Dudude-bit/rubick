@@ -6,7 +6,11 @@ vi.mock("@/components/ui/use-toast", () => ({ toast }));
 import { toastError } from "./toast-error";
 
 const SOURCES = import.meta.glob<string>(
-  ["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/generated/**"],
+  [
+    "/src/ui/**/*.{ts,tsx}",
+    "!/src/ui/**/*.test.{ts,tsx}",
+    "!/src/ui/generated/**",
+  ],
   { query: "?raw", import: "default", eager: true }
 );
 
@@ -17,9 +21,9 @@ const SOURCES = import.meta.glob<string>(
  * alert panel printed "Tauri command 'connectCluster' failed:".
  */
 const KEEPS_THE_PREFIX = new Set([
-  "/src/lib/error-utils.ts",
-  "/src/lib/commands.ts",
-  "/src/components/terminal/PodTerminal.tsx",
+  "/src/ui/lib/error-utils.ts",
+  "/src/ui/lib/commands.ts",
+  "/src/ui/components/terminal/PodTerminal.tsx",
 ]);
 
 /**
@@ -41,17 +45,20 @@ const BY_HAND = new RegExp(
 
 /** Where that spelling is compared, logged or kept, and never shown. */
 const NOT_SHOWN = new Map([
-  ["/src/lib/error-utils.ts", "the normaliser itself"],
-  ["/src/lib/read-deadline.ts", "searched for a marker"],
-  ["/src/lib/log-queue.ts", "kept for the retry"],
-  ["/src/main.tsx", "logged"],
-  ["/src/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
-  ["/src/workers/diff.worker.ts", "a worker's own failure, not a command's"],
-  ["/src/stores/updaterStore.ts", "the updater plugin's, not a command's"],
-  ["/src/App.tsx", "a render error, not a command's"],
-  ["/src/components/ui/error-boundary.tsx", "a render error, not a command's"],
-  ["/src/hooks/useIngressRouting.ts", "searched for a verdict"],
-  ["/src/hooks/useDeepLinks.ts", "logged"],
+  ["/src/ui/lib/error-utils.ts", "the normaliser itself"],
+  ["/src/ui/lib/read-deadline.ts", "searched for a marker"],
+  ["/src/ui/lib/log-queue.ts", "kept for the retry"],
+  ["/src/ui/main.tsx", "logged"],
+  ["/src/ui/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
+  ["/src/ui/workers/diff.worker.ts", "a worker's own failure, not a command's"],
+  ["/src/ui/stores/updaterStore.ts", "the updater plugin's, not a command's"],
+  ["/src/ui/App.tsx", "a render error, not a command's"],
+  [
+    "/src/ui/components/ui/error-boundary.tsx",
+    "a render error, not a command's",
+  ],
+  ["/src/ui/hooks/useIngressRouting.ts", "searched for a verdict"],
+  ["/src/ui/hooks/useDeepLinks.ts", "logged"],
 ]);
 
 describe("a failure shown to the reader", () => {

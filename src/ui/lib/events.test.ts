@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 const SOURCES = import.meta.glob<string>(
-  ["/src/**/*.{ts,tsx}", "!/src/**/*.test.{ts,tsx}", "!/src/generated/**"],
+  [
+    "/src/ui/**/*.{ts,tsx}",
+    "!/src/ui/**/*.test.{ts,tsx}",
+    "!/src/ui/generated/**",
+  ],
   { query: "?raw", import: "default", eager: true }
 );
 
 /** The typed door, and the window's own `tauri://` events, which are not the backend's. */
 const MAY_LISTEN = new Set([
-  "/src/lib/events.ts",
-  "/src/lib/window-activity.ts",
+  "/src/ui/lib/events.ts",
+  "/src/ui/lib/window-activity.ts",
 ]);
 
 describe("listening to the backend", () => {

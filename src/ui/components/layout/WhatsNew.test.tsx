@@ -12,7 +12,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { getAppInfo: () => getAppInfo() },
 }));
 
-vi.mock("../../../CHANGELOG.md?raw", () => ({
+vi.mock("../../../../CHANGELOG.md?raw", () => ({
   default: `## [4.13.0] - 2026-09-12
 
 ### Added

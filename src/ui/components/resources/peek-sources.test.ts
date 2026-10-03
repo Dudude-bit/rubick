@@ -37,7 +37,7 @@ async function peekOf(target: {
  * rather than restated, so a page that changes what it asks shows up here.
  */
 function detailGetters(): Array<[string, string, string | null]> {
-  const dir = join("src", "pages");
+  const dir = join("src", "ui", "pages");
   return readdirSync(dir)
     .filter((file) => file.endsWith("Detail.tsx"))
     .flatMap((file) => {
@@ -80,7 +80,7 @@ describe("the peek's Overview against the detail pages", () => {
 
   it("reads a route where the route's page does", async () => {
     const page = readFileSync(
-      join("src", "pages", "GatewayRouteDetail.tsx"),
+      join("src", "ui", "pages", "GatewayRouteDetail.tsx"),
       "utf8"
     );
     expect(page).toMatch(/fetchResource:[^\n]*commands\.getGatewayRoute\(/);

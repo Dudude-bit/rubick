@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
-/// The file the current run is written to, inside {@link log_dir}.
+/// The file the current run is written to, inside [`log_dir`].
 pub const LOG_FILE: &str = "rubick.log";
 
 /// How many previous runs are kept beside it.
@@ -54,7 +54,7 @@ impl std::io::Write for Capped {
 /// Initialize tracing subscriber with default configuration
 ///
 /// This function sets up the tracing subscriber with:
-/// - Environment variable filter (RUST_LOG) or default "info" level
+/// - Environment variable filter (`RUST_LOG`) or default "info" level
 /// - Standard formatting layer on stderr
 /// - A plain-text file in `dir`, when one is given
 ///
@@ -207,12 +207,12 @@ mod tests {
     /// they actually want the moment they restart to reproduce it.
     #[test]
     fn each_run_gets_its_own_file_and_the_ones_before_it_survive() {
+        use std::io::Write;
         let dir = std::env::temp_dir().join(format!("rubick-log-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
         for run in 1..=3 {
             let mut file = open_log(&dir).expect("a log file");
-            use std::io::Write;
             writeln!(file, "run {run}").expect("written");
         }
 
