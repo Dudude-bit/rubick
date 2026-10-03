@@ -1,16 +1,13 @@
 import type { MouseEvent, ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
 import { ResourceName } from "@/components/resources/ResourceName";
 import { CopyName } from "@/components/resources/CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
-import {
-  getResourceListUrl,
-  toPlural,
-  type ResourceKind,
-} from "@/lib/resource-registry";
+import { clusterLink, hrefOf, listLink, type AppLink } from "@/lib/links";
+import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -21,7 +18,7 @@ export interface ResourceDetailHeaderProps {
   kind: ResourceKind | string;
   /**
    * Where the breadcrumb's kind segment points. Defaults to the registry's
-   * list route, which is wrong for kinds the registry does not own: a Helm
+   * list page, which is wrong for kinds the registry does not own: a Helm
    * release lists at `/helm`, and a custom resource's parent is its CRD.
    *
    * `null` says there is nowhere to go, and the segment becomes plain text.
@@ -29,7 +26,7 @@ export interface ResourceDetailHeaderProps {
    * breadcrumb reading `replicasets` that leads to a blank window is a worse
    * bug than the missing page it advertises.
    */
-  listUrl?: string | null;
+  listLink?: AppLink | null;
   /** The word in that segment, when the registry's plural is not it. */
   listLabel?: string;
   namespace?: string;
@@ -42,7 +39,7 @@ export interface ResourceDetailHeaderProps {
    * this scope does not drive. Narrowing the tab is then all the segment can
    * honestly offer, so it does that and stays where it is.
    */
-  namespaceUrl?: string | null;
+  namespaceLink?: AppLink | null;
   /** The one badge that says whether this object is healthy. */
   status?: ReactNode;
   /** Facts that qualify the name: node roles, an ingress class, a count. */
@@ -76,11 +73,11 @@ const SEGMENT =
  */
 function NamespaceSegment({
   namespace,
-  to,
+  link,
   label,
 }: {
   namespace: string;
-  to: string | null;
+  link: AppLink | null;
   label: string;
 }) {
   const t = useT();
@@ -94,23 +91,23 @@ function NamespaceSegment({
     if (narrows) void switchNamespace(namespace);
   };
 
-  if (to) {
+  if (link) {
     const says = narrows
       ? t("action", "showInNamespaceNarrows", { label, namespace })
       : t("action", "showInNamespace", { label, namespace });
     const handle = (event: MouseEvent<HTMLAnchorElement>) =>
       gesture(
         event,
-        to,
+        hrefOf(link),
         () => {
           narrow();
-          navigate(to);
+          navigate(link);
         },
         namespace
       );
     return (
       <Link
-        to={to}
+        {...link}
         title={says}
         aria-label={says}
         onClick={handle}
@@ -129,7 +126,7 @@ function NamespaceSegment({
   // The new tab a modified gesture opens has no list to land on either, so it
   // starts where a new tab always starts — the overview, under this scope.
   const handle = (event: MouseEvent<HTMLButtonElement>) =>
-    gesture(event, "/", narrow, namespace);
+    gesture(event, hrefOf(clusterLink()), narrow, namespace);
   return (
     <button
       type="button"
@@ -157,10 +154,10 @@ function NamespaceSegment({
 export function ResourceDetailHeader({
   name,
   kind,
-  listUrl,
+  listLink: given,
   listLabel,
   namespace,
-  namespaceUrl,
+  namespaceLink,
   status,
   meta,
   createdAt,
@@ -170,7 +167,7 @@ export function ResourceDetailHeader({
 }: ResourceDetailHeaderProps) {
   const t = useT();
   const segment = {
-    to: listUrl === null ? null : (listUrl ?? getResourceListUrl(kind)),
+    link: given === null ? null : (given ?? listLink(kind)),
     label: listLabel ?? toPlural(kind as ResourceKind),
   };
 
@@ -184,8 +181,8 @@ export function ResourceDetailHeader({
       >
         <ArrowLeft className="h-3.5 w-3.5" />
       </button>
-      {segment.to ? (
-        <Link to={segment.to} className={`${SEGMENT} flex-none`}>
+      {segment.link ? (
+        <Link {...segment.link} className={`${SEGMENT} flex-none`}>
           {segment.label}
         </Link>
       ) : (
@@ -196,7 +193,7 @@ export function ResourceDetailHeader({
           <span aria-hidden="true">/</span>
           <NamespaceSegment
             namespace={namespace}
-            to={namespaceUrl === undefined ? segment.to : namespaceUrl}
+            link={namespaceLink === undefined ? segment.link : namespaceLink}
             label={segment.label}
           />
         </>

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, renderHook, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook, screen, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 
 /** What this cluster answers for each CRD, per test. */
 const answers = vi.hoisted(
@@ -40,16 +40,17 @@ const denied = () =>
   new Error(`Tauri command 'listCustomResources' failed: ${FORBIDDEN}`);
 
 function wrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = testQueryClient();
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/integrations/cert-manager?tab=issuers"]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
+}
+
+function renderPage() {
+  return renderWithRouter(<CertManagerPage />, {
+    at: "/c/test/integrations/cert-manager?tab=issuers",
+    route: "/c/$cluster/integrations/$vendor",
+  });
 }
 
 beforeEach(() => {
@@ -108,7 +109,7 @@ describe("what the issuers tab is allowed to claim", () => {
   it("never states an absence on the strength of a read that failed", async () => {
     answers.set(CLUSTER_ISSUERS_CRD, () => Promise.reject(denied()));
 
-    render(<CertManagerPage />, { wrapper: wrapper() });
+    await renderPage();
 
     await waitFor(() =>
       expect(screen.getByText(FORBIDDEN)).toBeInTheDocument()
@@ -124,7 +125,7 @@ describe("what the issuers tab is allowed to claim", () => {
    * where "there is no issuer" is the whole answer.
    */
   it("states it when both kinds were read and both are empty", async () => {
-    render(<CertManagerPage />, { wrapper: wrapper() });
+    await renderPage();
 
     await waitFor(() =>
       expect(

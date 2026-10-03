@@ -4713,6 +4713,24 @@ export const ru: Catalogue = {
     systemLanguage: "Как в системе",
   },
   empty: {
+    addressMissing: "По этому адресу ничего нет",
+    addressMissingBody:
+      "{path} это не страница Rubick. Возможно, ссылка осталась от старой версии или в ней опечатка.",
+    toOverview: "Обзор кластера",
+    toClusters: "Все кластеры",
+    clusterMissing: "Кластера {cluster} нет в kubeconfig",
+    clusterMissingBody:
+      "Ссылка ведёт в кластер, которого нет в этом kubeconfig. Откройте один из тех, что в нём есть.",
+    kubeconfigUnread: "Не удалось прочитать kubeconfig",
+    kubeconfigUnreadBody:
+      "Поэтому неизвестно, есть ли в нём {cluster}. {error}",
+    resourceNotOpened: "Rubick пока не открывает {resource}",
+    resourceNotOpenedBody:
+      "Это не kind, который знает Rubick, и не имя CustomResourceDefinition.",
+    listNotShown: "Rubick пока не показывает список {resource}",
+    listNotShownBody:
+      "Каждый объект этого kind открывается из любого места, которое на него ссылается.",
+    objectUnread: "Не удалось прочитать этот объект",
     saysNothing: "ничего не говорит",
     deniesAll: "запрещает всё",
     allowsAll: "разрешает всё",

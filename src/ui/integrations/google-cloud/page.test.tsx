@@ -1,14 +1,12 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen } from "@testing-library/react";
 
 import type {
   CustomResourceInfo,
   IngressInfo,
   ServiceInfo,
 } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   crds: (): Promise<CustomResourceInfo[]> => Promise.resolve([]),
@@ -79,15 +77,10 @@ const failing = (code: string, words: string) => () =>
   );
 
 async function openShop() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  await renderWithRouter(<GkeIngressPage />, {
+    at: "/c/test/integrations/gke-ingress",
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  );
-  render(<GkeIngressPage />, { wrapper });
   const row = await screen.findByRole("button", {
     name: "shop.example.com — expand",
   });

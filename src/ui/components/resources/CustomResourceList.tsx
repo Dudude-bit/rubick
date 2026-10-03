@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { columnHeader } from "@/i18n/column-header";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { RouteLink } from "@/components/ui/route-link";
@@ -10,7 +10,7 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { createAgeColumn, createNamespaceColumn } from "./columns";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { hrefOf, objectLink } from "@/lib/links";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
 import { drawnSeparately } from "./printer-columns";
@@ -62,17 +62,20 @@ export function CustomResourceList({
   const oneNamespace = wire?.length === 1 ? wire[0] : null;
   const cacheKey = isNamespaced ? scopeCacheKey(nsScope.scope) : null;
 
-  // Generate detail path for a custom resource. Wrapped in
+  // Generate detail link for a custom resource. Wrapped in
   // `useCallback` so the two `useMemo` blocks below can list it as a
   // direct dependency — this is what `react-hooks/exhaustive-deps`
   // wants to see, instead of unrolling its `[scope, crdName]` closure
   // captures into the consumer's dep arrays.
-  const getDetailPath = useCallback(
+  const getDetailLink = useCallback(
     (item: CustomResourceListItem) =>
-      scope === "Namespaced"
-        ? `/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(crdName)}/instances/${item.namespace}/${item.name}`
-        : `/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(crdName)}/instances/${item.name}`,
-    [scope, crdName]
+      objectLink({
+        kind: crdKind,
+        name: item.name,
+        namespace: scope === "Namespaced" ? item.namespace : null,
+        crd: crdName,
+      })!,
+    [scope, crdKind, crdName]
   );
 
   const quickActions = useMemo<
@@ -85,7 +88,7 @@ export function CustomResourceList({
         icon: Eye,
         label: t("action", "viewDetails"),
         onClick: (item: CustomResourceListItem) =>
-          navigate(getDetailPath(item)),
+          navigate(getDetailLink(item)),
       },
       {
         icon: Trash2,
@@ -94,7 +97,7 @@ export function CustomResourceList({
         variant: "destructive" as const,
       },
     ],
-    [navigate, getDetailPath, t]
+    [navigate, getDetailLink, t]
   );
 
   // Build columns from the vendor's view, or from the CRD's printer columns
@@ -110,7 +113,7 @@ export function CustomResourceList({
       header: columnHeader("columns", "name"),
       cell: ({ row }) => (
         <RouteLink
-          to={getDetailPath(row.original)}
+          {...getDetailLink(row.original)}
           className="font-mono text-info hover:underline"
         >
           {row.original.name}
@@ -174,7 +177,7 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, crdView, getDetailPath, t]);
+  }, [crdKind, scope, printerColumns, crdView, getDetailLink, t]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
@@ -256,7 +259,7 @@ export function CustomResourceList({
         kind: crdKind,
       })}
       embedded={embedded}
-      getRowHref={getDetailPath}
+      getRowHref={(row) => hrefOf(getDetailLink(row))}
     />
   );
 }

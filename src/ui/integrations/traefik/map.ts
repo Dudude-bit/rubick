@@ -18,7 +18,7 @@ import type { T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
 import { hostsBrokenOfTotal } from "@/lib/two-counts";
 
-import { hostSeverity, hostTlsTag } from "../ingress";
+import { hostFilterLink, hostSeverity, hostTlsTag } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import {
   backingOf,
@@ -31,9 +31,6 @@ const hostId = (group: HostGroup, index: number) =>
   `host/${group.host ?? `catch-all-${index}`}`;
 
 /** Where clicking a host goes: its own routes, filtered to it. */
-export const hostFilterPath = (host: string | null) =>
-  `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
-
 function toneOf(group: HostGroup): MapTone {
   return hostSeverity(group) ?? "ok";
 }
@@ -162,7 +159,7 @@ export function routingMap(
         .filter(Boolean)
         .join(" · "),
       tone,
-      to: hostFilterPath(group.host),
+      to: hostFilterLink(group.host),
       tag: hostTlsTag(group.tls, tone === "err", t),
     };
   });

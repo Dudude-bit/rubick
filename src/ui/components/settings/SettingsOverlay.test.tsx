@@ -1,14 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 
 import { SETTINGS_SECTIONS } from "./settings-sections";
 
@@ -30,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { renderWithRouter } from "@/test/render";
 import { SettingsOverlay } from "./SettingsOverlay";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -44,17 +38,13 @@ function Underneath() {
  * No settings route anywhere: the layer has to open over whatever route
  * the window is on, which is the reason it stopped being a page.
  */
-function renderOver(path = "/workloads/pods") {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]}>
-        <Underneath />
-        <SettingsOverlay />
-      </MemoryRouter>
-    </QueryClientProvider>
+function renderOver(path = "/c/prod/pods") {
+  return renderWithRouter(
+    <>
+      <Underneath />
+      <SettingsOverlay />
+    </>,
+    { at: path }
   );
 }
 
@@ -86,14 +76,14 @@ describe("SettingsOverlay", () => {
       "opens straight into %s",
       async (id) => {
         open(id);
-        renderOver();
+        await renderOver();
         expect(await screen.findByText(PANE_MARK[id])).toBeVisible();
       }
     );
 
     it("names the open section in the pane heading", async () => {
       open("handoff");
-      renderOver();
+      await renderOver();
       expect(
         await screen.findByRole("heading", {
           name: "Search and hand-off",
@@ -104,7 +94,7 @@ describe("SettingsOverlay", () => {
 
     it("marks the open section in the nav as the current one", async () => {
       open("about");
-      renderOver();
+      await renderOver();
       expect(
         await screen.findByRole("button", { name: /About/ })
       ).toHaveAttribute("aria-current", "true");
@@ -119,14 +109,14 @@ describe("SettingsOverlay", () => {
      */
     it("leaves the route underneath where it was", async () => {
       open("appearance");
-      renderOver("/workloads/pods");
+      await renderOver("/c/prod/pods");
       expect(await screen.findByText(/Resource colouring/)).toBeVisible();
 
       await userEvent.click(screen.getByRole("button", { name: /About/ }));
       expect(await screen.findByText(/Automatic updates/)).toBeVisible();
 
       expect(screen.getByTestId("underneath")).toHaveTextContent(
-        "/workloads/pods"
+        "/c/prod/pods"
       );
       expect(useSettingsStore.getState().section).toBe("about");
     });
@@ -143,7 +133,7 @@ describe("SettingsOverlay", () => {
      */
     it("clears the filter on Escape rather than closing, when typing in it", async () => {
       open("appearance");
-      renderOver();
+      await renderOver();
       expect(await screen.findByRole("dialog")).toBeInTheDocument();
 
       const box = screen.getByRole("searchbox");
@@ -160,7 +150,7 @@ describe("SettingsOverlay", () => {
     /** And with nothing typed, Escape still closes — the ordinary way out. */
     it("still closes on Escape from the search box when it is empty", async () => {
       open("appearance");
-      renderOver();
+      await renderOver();
       expect(await screen.findByRole("dialog")).toBeInTheDocument();
 
       fireEvent.keyDown(screen.getByRole("searchbox"), { key: "Escape" });
@@ -172,7 +162,7 @@ describe("SettingsOverlay", () => {
 
     it("closes on Escape", async () => {
       open("appearance");
-      renderOver();
+      await renderOver();
       expect(await screen.findByRole("dialog")).toBeInTheDocument();
 
       fireEvent.keyDown(document.activeElement ?? document.body, {
@@ -186,7 +176,7 @@ describe("SettingsOverlay", () => {
     });
 
     it("toggles with the preferences shortcut from any screen", async () => {
-      renderOver();
+      await renderOver();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
       fireEvent.keyDown(window, { key: ",", ctrlKey: true });
@@ -200,7 +190,7 @@ describe("SettingsOverlay", () => {
 
     it("lands focus on the open section rather than the search box", async () => {
       open("about");
-      renderOver();
+      await renderOver();
       const about = await screen.findByRole("button", { name: /About/ });
       await waitFor(() => expect(about).toHaveFocus());
     });
@@ -210,7 +200,7 @@ describe("SettingsOverlay", () => {
     it("hides the rows that do not match and keeps the ones that do", async () => {
       const user = userEvent.setup();
       open("appearance");
-      renderOver();
+      await renderOver();
       await user.type(searchbox(), "colouring");
 
       await waitFor(() => expect(screen.getByText("Theme")).not.toBeVisible());
@@ -220,7 +210,7 @@ describe("SettingsOverlay", () => {
     it("says how many settings matched in the section you are in", async () => {
       const user = userEvent.setup();
       open("appearance");
-      renderOver();
+      await renderOver();
       await user.type(searchbox(), "colouring");
 
       expect(await screen.findByText(/1 setting matches/)).toBeInTheDocument();
@@ -231,7 +221,7 @@ describe("SettingsOverlay", () => {
     it("finds a row by a word it does not print", async () => {
       const user = userEvent.setup();
       open("appearance");
-      renderOver();
+      await renderOver();
       await user.type(searchbox(), "color");
 
       await waitFor(() =>
@@ -243,7 +233,7 @@ describe("SettingsOverlay", () => {
     it("counts the sections the reader is not standing in", async () => {
       const user = userEvent.setup();
       open("appearance");
-      renderOver();
+      await renderOver();
       await user.type(searchbox(), "tauri");
 
       // About is not the open section, so the only way its one match can
@@ -262,7 +252,7 @@ describe("SettingsOverlay", () => {
     it("admits when a query matches nothing in the open section", async () => {
       const user = userEvent.setup();
       open("appearance");
-      renderOver();
+      await renderOver();
       await user.type(searchbox(), "zzzznotasetting");
 
       expect(
@@ -288,7 +278,7 @@ describe("what a filter belongs to", () => {
    */
   it("is forgotten when the layer closes", async () => {
     open("appearance");
-    renderOver();
+    await renderOver();
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox"), {

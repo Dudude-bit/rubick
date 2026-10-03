@@ -8,8 +8,8 @@
  */
 
 import { commands } from "@/lib/commands";
+import { vendorLink } from "@/lib/links";
 
-import { integrationPagePath } from "../paths";
 import type { VendorFact } from "../registry";
 import { APPLICATIONS_CRD } from "./data";
 import { readApplication } from "./model";
@@ -58,7 +58,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (apps.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("argocd"),
+      to: vendorLink("argocd"),
     });
   }
 

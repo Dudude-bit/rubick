@@ -26,7 +26,15 @@ function source(over: Partial<DeliverySource> = {}): DeliverySource {
       kind: "Application",
       name: "shop",
       namespace: "argocd",
-      to: "/crds/applications.argoproj.io/instances/argocd/shop",
+      to: {
+        to: "/c/$cluster/$resource/$namespace/$name",
+        params: {
+          cluster: "prod",
+          resource: "applications.argoproj.io",
+          namespace: "argocd",
+          name: "shop",
+        },
+      },
     },
     revision: "a3f21c9d4e5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c",
     repoUrl: "https://github.com/acme/infra",
@@ -56,7 +64,15 @@ const claimed = (over: Partial<Extract<Delivery, { state: "claimed" }>> = {}) =>
       kind: "Application",
       name: "shop",
       namespace: "argocd",
-      to: "/crds/applications.argoproj.io/instances/argocd/shop",
+      to: {
+        to: "/c/$cluster/$resource/$namespace/$name",
+        params: {
+          cluster: "prod",
+          resource: "applications.argoproj.io",
+          namespace: "argocd",
+          name: "shop",
+        },
+      },
     },
     ...over,
   }) as Delivery;
@@ -273,7 +289,7 @@ describe("applying an edited manifest", () => {
     expect(intercept?.confirmLabel).toBe("Apply anyway");
     expect(intercept?.title).toContain("Argo CD will undo this");
     expect(intercept?.description).toContain("manifests/shop");
-    expect(intercept?.where?.to).toContain("shop");
+    expect(intercept?.where?.to?.params).toMatchObject({ name: "shop" });
   });
 
   /**

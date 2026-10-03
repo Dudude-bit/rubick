@@ -28,7 +28,10 @@ describe("the IPC budget", () => {
   /** The Rust side reads the same file; a constant edited on one side only is the drift this catches. */
   it("matches src/contracts/ipc-budget.json", () => {
     const shared = JSON.parse(
-      readFileSync(resolve(process.cwd(), "src/contracts/ipc-budget.json"), "utf8")
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/ipc-budget.json"),
+        "utf8"
+      )
     ) as { targetMessageBytes: number; maxMessageBytes: number };
     expect(IPC_TARGET_BYTES).toBe(shared.targetMessageBytes);
     expect(IPC_LIMIT_BYTES).toBe(shared.maxMessageBytes);

@@ -1,12 +1,13 @@
 /**
- * `rubick://open/<context>/<app path>?t=<when>`: the place a person was in
+ * `rubick://open/c/<cluster>/<app path>?t=<when>`: the place a person was in
  * the app, as text that survives a chat message and opens the same place
  * for someone else with Rubick.
  *
- * The context is a path segment, percent-encoded, not the URL's host: hosts
- * are lower-cased by every URL parser and may not hold a `/`, and an EKS
- * context name is an ARN with both. `open` is the only host, so a link that
- * says anything else is not ours.
+ * The path is the app's own address, so the cluster is its second segment,
+ * percent-encoded, not the URL's host: hosts are lower-cased by every URL
+ * parser and may not hold a `/`, and an EKS context name is an ARN with
+ * both. `open` is the only host, so a link that says anything else is not
+ * ours.
  *
  * A link only opens. Nothing in it names an action, and the parser would
  * not know what to do with one: the app never mutates on arrival.
@@ -31,26 +32,46 @@ const HOST = "open";
 const SAFE_PARAMS = new Set(["tab", "vendor", "type"]);
 
 export interface DeepLink {
+  /** The cluster the address names. */
   context: string;
-  /** The router path, with its search string when the page had one. */
+  /** The in-app address, `/c/<cluster>/...`, with its search string when the page had one. */
   path: string;
   /** When the link was made, if it says. */
   capturedAt: Date | null;
 }
 
+/**
+ * A query value as the router will read it. Its default parser JSON-parses
+ * every value it can, so `?tab="shell"` is the shell tab to it, quotes and
+ * all, and a check on the literal text would wave it through.
+ */
+function asTheRouterReads(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/** One segment percent-encoded exactly once, whether or not it came encoded. */
+function asSegment(segment: string): string {
+  try {
+    return encodeURIComponent(decodeURIComponent(segment));
+  } catch {
+    return encodeURIComponent(segment);
+  }
+}
+
+/** A link to `href`, an in-app address that already names its cluster. */
 export function buildDeepLink(
-  context: string,
-  path: string,
+  href: string,
   capturedAt: Date = new Date()
 ): string {
-  const [pathname, search = ""] = path.split("?", 2);
-  const segments = pathname
-    .split("/")
-    .filter(Boolean)
-    .map((s) => encodeURIComponent(s));
+  const [pathname, search = ""] = href.split("?", 2);
+  const segments = pathname.split("/").filter(Boolean).map(asSegment);
   const params = new URLSearchParams(search);
   params.set("t", capturedAt.toISOString().replace(/\.\d{3}Z$/, "Z"));
-  return `${DEEP_LINK_SCHEME}://${HOST}/${encodeURIComponent(context)}/${segments.join("/")}?${params}`;
+  return `${DEEP_LINK_SCHEME}://${HOST}/${segments.join("/")}?${params}`;
 }
 
 /** The link's parts, or `null` for anything that is not one of ours. */
@@ -62,17 +83,19 @@ export function parseDeepLink(raw: string): DeepLink | null {
     return null;
   }
   if (url.protocol !== `${DEEP_LINK_SCHEME}:` || url.host !== HOST) return null;
-  const [contextSegment, ...rest] = url.pathname.split("/").filter(Boolean);
-  if (!contextSegment) return null;
+  const [root, clusterSegment, ...rest] = url.pathname
+    .split("/")
+    .filter(Boolean);
+  if (root !== "c" || !clusterSegment) return null;
   let context: string;
   let segments: string[];
   try {
-    context = decodeURIComponent(contextSegment);
+    context = decodeURIComponent(clusterSegment);
     segments = rest.map((s) => decodeURIComponent(s));
   } catch {
     return null;
   }
-  if (segments.some((s) => s === "." || s === "..")) return null;
+  if ([context, ...segments].some((s) => s === "." || s === "..")) return null;
   const params = new URLSearchParams(url.search);
   const stamp = params.get("t");
   // Keep only the view-selection params, and never the shell tab — an
@@ -80,14 +103,15 @@ export function parseDeepLink(raw: string): DeepLink | null {
   const safe = new URLSearchParams();
   for (const [key, value] of params) {
     if (!SAFE_PARAMS.has(key)) continue;
-    if (key === "tab" && value === "shell") continue;
+    if (key === "tab" && asTheRouterReads(value) === "shell") continue;
     safe.set(key, value);
   }
   const capturedAt = stamp ? new Date(stamp) : null;
   const search = safe.toString();
+  const path = ["c", context, ...segments].map(encodeURIComponent).join("/");
   return {
     context,
-    path: `/${segments.join("/")}${search ? `?${search}` : ""}`,
+    path: `/${path}${search ? `?${search}` : ""}`,
     capturedAt:
       capturedAt && !Number.isNaN(capturedAt.getTime()) ? capturedAt : null,
   };

@@ -10,7 +10,8 @@
  */
 
 import type { en } from "@/i18n/catalogue";
-import { getResourceListUrl, ResourceType } from "@/lib/resource-registry";
+import { clusterLink, listLink, type AppLink } from "@/lib/links";
+import { ResourceType } from "@/lib/resource-registry";
 
 export type ShortcutSection =
   "global" | "navigate" | "page" | "tabs" | "table" | "logs";
@@ -22,7 +23,7 @@ export interface Shortcut {
   keys: string[];
   labelKey: keyof typeof en.shortcuts;
   /** Where a chord goes. Only the navigate section has one. */
-  path?: string;
+  path?: AppLink;
   /** Which detail tab a page key opens. Only the page section has one. */
   tab?: string;
 }
@@ -92,63 +93,63 @@ export const SHORTCUTS: readonly Shortcut[] = [
     section: "navigate",
     keys: ["g", "o"],
     labelKey: "goOverview",
-    path: "/",
+    path: clusterLink(),
   },
   {
     id: "goPods",
     section: "navigate",
     keys: ["g", "p"],
     labelKey: "goPods",
-    path: getResourceListUrl(ResourceType.Pod),
+    path: listLink(ResourceType.Pod),
   },
   {
     id: "goDeployments",
     section: "navigate",
     keys: ["g", "d"],
     labelKey: "goDeployments",
-    path: getResourceListUrl(ResourceType.Deployment),
+    path: listLink(ResourceType.Deployment),
   },
   {
     id: "goServices",
     section: "navigate",
     keys: ["g", "s"],
     labelKey: "goServices",
-    path: getResourceListUrl(ResourceType.Service),
+    path: listLink(ResourceType.Service),
   },
   {
     id: "goIngresses",
     section: "navigate",
     keys: ["g", "i"],
     labelKey: "goIngresses",
-    path: getResourceListUrl(ResourceType.Ingress),
+    path: listLink(ResourceType.Ingress),
   },
   {
     id: "goNodes",
     section: "navigate",
     keys: ["g", "n"],
     labelKey: "goNodes",
-    path: getResourceListUrl(ResourceType.Node),
+    path: listLink(ResourceType.Node),
   },
   {
     id: "goEvents",
     section: "navigate",
     keys: ["g", "e"],
     labelKey: "goEvents",
-    path: getResourceListUrl(ResourceType.Event),
+    path: listLink(ResourceType.Event),
   },
   {
     id: "goJobs",
     section: "navigate",
     keys: ["g", "j"],
     labelKey: "goJobs",
-    path: getResourceListUrl(ResourceType.Job),
+    path: listLink(ResourceType.Job),
   },
   {
     id: "goConfigMaps",
     section: "navigate",
     keys: ["g", "c"],
     labelKey: "goConfigMaps",
-    path: getResourceListUrl(ResourceType.ConfigMap),
+    path: listLink(ResourceType.ConfigMap),
   },
 
   {

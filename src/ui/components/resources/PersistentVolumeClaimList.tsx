@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { columnHeader } from "@/i18n/column-header";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { PhaseBadge } from "@/components/ui/status-badge";
@@ -20,7 +20,7 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
@@ -70,6 +70,13 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   createAgeColumn<PersistentVolumeClaimInfo>(),
 ];
 
+const pvcLink = (pvc: PersistentVolumeClaimInfo) =>
+  objectLink({
+    kind: ResourceType.PersistentVolumeClaim,
+    name: pvc.name,
+    namespace: pvc.namespace,
+  })!;
+
 export function PersistentVolumeClaimList() {
   const t = useT();
   const scope = useNamespaceScope();
@@ -103,14 +110,7 @@ export function PersistentVolumeClaimList() {
       {
         icon: Eye,
         label: t("action", "viewDetails"),
-        onClick: (item) =>
-          navigate(
-            getResourceDetailUrl(
-              ResourceType.PersistentVolumeClaim,
-              item.name,
-              item.namespace
-            )
-          ),
+        onClick: (item) => navigate(pvcLink(item)),
       },
       {
         icon: Trash2,
@@ -147,13 +147,7 @@ export function PersistentVolumeClaimList() {
       refresh={refresh}
       live={live}
       resyncing={resyncing}
-      getRowHref={(row) =>
-        getResourceDetailUrl(
-          ResourceType.PersistentVolumeClaim,
-          row.name,
-          row.namespace
-        )
-      }
+      getRowHref={(row) => hrefOf(pvcLink(row))}
     />
   );
 }

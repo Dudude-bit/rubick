@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 
 import {
   ScreenShareProvider,
@@ -9,28 +7,23 @@ import {
 } from "@/components/share/screen-share";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import { Changes } from "./Changes";
 
 const NOW = Date.now();
 
-function mount() {
+async function mount() {
   let collect: ReturnType<typeof useScreenSections> = null;
   function Probe() {
     collect = useScreenSections();
     return null;
   }
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <Changes />
-          <Probe />
-        </ScreenShareProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
+  await renderWithRouter(
+    <ScreenShareProvider>
+      <Changes />
+      <Probe />
+    </ScreenShareProvider>,
+    { at: "/c/prod/changes", route: "/c/$cluster/changes" }
   );
   return () => collect!();
 }
@@ -38,7 +31,7 @@ function mount() {
 describe("what the Changes page offers Share", () => {
   /** Deleting the object's ref on a journal row leaves a shared report of a
    *  cluster-wide timeline with no way to tell which workload a row is about. */
-  it("carries a ref on a journal row and marks the section watched", () => {
+  it("carries a ref on a journal row and marks the section watched", async () => {
     useClusterStore.setState({
       isConnected: true,
       currentContext: "prod",
@@ -64,7 +57,7 @@ describe("what the Changes page offers Share", () => {
       },
     });
 
-    const collect = mount();
+    const collect = await mount();
     const sections = collect();
     const changes = sections.find((section) => section.id === "changes");
     expect(changes?.body.type).toBe("changes");
@@ -100,7 +93,7 @@ describe("what the Changes page offers Share", () => {
       },
     });
 
-    const collect = mount();
+    const collect = await mount();
     await waitFor(() => {
       const watched = collect().find(
         (section) => section.id === "changes-watched"

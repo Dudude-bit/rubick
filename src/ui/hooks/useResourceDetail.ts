@@ -9,8 +9,8 @@
  * - Copy to clipboard
  */
 
-import { useState, useCallback } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useCallback } from "react";
+import { useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import {
   useMutation,
   useQueryClient,
@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useResourceYaml } from "./useResourceYaml";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
@@ -106,21 +107,25 @@ export function useResourceDetail<T>(
   } = options;
 
   // For cluster-scoped resources, namespace won't be in the URL
-  const { namespace: nsParam, name } = useParams<{
-    namespace?: string;
-    name: string;
-  }>();
+  const { namespace: nsParam, name } = useParams({ strict: false });
   const namespace = isClusterScoped ? undefined : nsParam;
   const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   const copyToClipboard = useCopyToClipboard();
   const queryClient = useQueryClient();
 
   // A link may name the tab it was copied from; the page's own default is
   // for arrivals that did not say.
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(
-    searchParams.get("tab") ?? defaultTab
+  const activeTab = useAppSearch().tab ?? defaultTab;
+  const setSearch = useSetSearch();
+  const setActiveTab = useCallback(
+    (tab: string) =>
+      setSearch(
+        { tab: tab === defaultTab ? undefined : tab },
+        { replace: true }
+      ),
+    [setSearch, defaultTab]
   );
 
   // Fetch resource data
@@ -175,8 +180,8 @@ export function useResourceDetail<T>(
   }, [yaml, copyToClipboard, t]);
 
   const goBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
+    router.history.back();
+  }, [router]);
 
   const deleteMutation = useMutation({
     mutationFn: async () => {

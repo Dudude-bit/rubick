@@ -1,4 +1,5 @@
-import { integrationPagePath } from "../paths";
+import { vendorLink } from "@/lib/links";
+
 import type { VendorFact } from "../registry";
 import { fetchClusters } from "./data";
 import { readCluster } from "./model";
@@ -32,7 +33,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (clusters.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("cloudnativepg"),
+      to: vendorLink("cloudnativepg"),
     });
   }
   return lines;

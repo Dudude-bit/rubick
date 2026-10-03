@@ -35,7 +35,7 @@ import {
   useRouteCertificates,
   STOP_UNDER,
 } from "../ingress";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -49,7 +49,8 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
-import { crdObjectPath, troubleMark, summariseNames } from "../kit";
+import { objectLink } from "@/lib/links";
+import { troubleMark, summariseNames } from "../kit";
 import {
   BackingUnread,
   TroubleList,
@@ -1041,11 +1042,12 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
             className="grid grid-cols-[minmax(0,220px)_minmax(0,140px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1.5 text-[11.5px]"
           >
             <Link
-              to={crdObjectPath(
-                `middlewares.${servedGroupName()}`,
-                use.middleware.namespace,
-                use.middleware.name
-              )}
+              {...objectLink({
+                kind: "Middleware",
+                name: use.middleware.name,
+                namespace: use.middleware.namespace,
+                crd: `middlewares.${servedGroupName()}`,
+              })!}
               className="truncate font-mono text-info hover:underline"
             >
               {use.middleware.name}

@@ -14,10 +14,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Plug } from "lucide-react";
 
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { integrationSettingsPath } from "../paths";
+import { pageLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { addressOf } from "./address";
 import { useShareSection } from "@/components/share/screen-share";
@@ -115,7 +115,7 @@ export default function Connection() {
   const state = found.data ? verdict(found.data, t) : null;
   const edit = (
     <Link
-      to={integrationSettingsPath("prometheus")}
+      {...pageLink("integrations", { vendor: "prometheus" })}
       className="text-info hover:underline"
     >
       {t("monitors", "editInSettings")}

@@ -1,12 +1,14 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, screen } from "@testing-library/react";
 
 import { RouteLink } from "./route-link";
+import { helmReleaseLink, objectLink } from "@/lib/links";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
+import { renderWithRouter } from "@/test/render";
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, { at: "/c/prod/helm", route: "/c/$cluster/$resource" });
 
 describe("the right-click menu of a link that is not a resource reference", () => {
   beforeEach(() => useObjectMenuStore.setState({ target: null }));
@@ -19,8 +21,18 @@ describe("the right-click menu of a link that is not a resource reference", () =
    * `preventDefault` is asserted because it is the whole of what stops the
    * webview menu appearing.
    */
-  it("opens the app's menu at the pointer and claims the event", () => {
-    wrap(<RouteLink to="/helm/shop/api">api</RouteLink>);
+  it("opens the app's menu at the pointer and claims the event", async () => {
+    await wrap(
+      <RouteLink
+        {...helmReleaseLink({
+          source: "native",
+          namespace: "shop",
+          name: "api",
+        })}
+      >
+        api
+      </RouteLink>
+    );
     const claimed = fireEvent.contextMenu(screen.getByRole("link"), {
       clientX: 12,
       clientY: 34,
@@ -28,7 +40,7 @@ describe("the right-click menu of a link that is not a resource reference", () =
     expect(claimed).toBe(false);
     expect(useObjectMenuStore.getState().target).toEqual({
       name: "api",
-      to: "/helm/shop/api",
+      to: "/c/prod/helm/native/shop/api",
       x: 12,
       y: 34,
     });
@@ -39,10 +51,13 @@ describe("the right-click menu of a link that is not a resource reference", () =
    * `applications.argoproj.io`; "Copy name" must give the name. Fails if
    * the menu goes back to reading the words on screen for every link.
    */
-  it("copies the object's name where the label is not it", () => {
-    wrap(
+  it("copies the object's name where the label is not it", async () => {
+    await wrap(
       <RouteLink
-        to="/customresourcedefinitions/applications.argoproj.io"
+        {...objectLink({
+          kind: "CustomResourceDefinition",
+          name: "applications.argoproj.io",
+        })!}
         menuName="applications.argoproj.io"
       >
         Application

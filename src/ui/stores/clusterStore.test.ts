@@ -242,25 +242,36 @@ describe("restoring the last cluster on launch", () => {
     });
   });
 
-  /** The plain launch: reconnect to the saved cluster. */
-  it("auto-connects to the saved cluster when nothing else has claimed one", async () => {
+  /**
+   * The address is the only thing that connects. A store that still
+   * connected on launch would race the cluster the address names, and a
+   * deep link would open under the saved cluster's name.
+   */
+  it("remembers the saved cluster for the front door and connects to nothing", async () => {
     await state().loadContexts();
-    expect(vi.mocked(commands.connectCluster)).toHaveBeenCalledWith("prod");
+    expect(state().lastContext).toBe("prod");
+    expect(state().contextsKnown).toBe(true);
+    expect(vi.mocked(commands.connectCluster)).not.toHaveBeenCalled();
   });
 
   /**
-   * A window launched from a deep link connects to the link's own context;
-   * the saved-cluster restore must not race it and win, or the link opens
-   * the wrong cluster under a "live" banner. A claimed connection (attempt id
-   * off zero) is the signal to stand down.
+   * An unreadable kubeconfig is not one that lists nothing: the cluster
+   * route says "could not read", never "not in your kubeconfig".
    */
-  it("stands down when a deep link has already claimed the connection", async () => {
-    useClusterStore.setState({
-      connectionAttemptId: 1,
-      pendingContext: "staging",
-    });
+  it("does not call the contexts known when they could not be read", async () => {
+    useClusterStore.setState({ contextsKnown: false });
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
     await state().loadContexts();
-    expect(vi.mocked(commands.connectCluster)).not.toHaveBeenCalledWith("prod");
+    expect(state().contextsKnown).toBe(false);
+  });
+
+  /** Leaving a cluster on purpose must not bounce the front door straight back to it. */
+  it("forgets the last cluster on a deliberate disconnect", async () => {
+    await state().loadContexts();
+    await state().disconnect();
+    expect(state().lastContext).toBeNull();
   });
 });
 

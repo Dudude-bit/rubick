@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -123,6 +123,7 @@ export function ChildRows({
 
 function ChildRowItem({ row }: { row: ChildRow }) {
   const navigate = useNavigate();
+  const link = objectLink(row);
   const role = row.unverified ? "neutral" : statusRole(row.status);
   const age = useRealtimeAge(row.timestamp ?? null);
 
@@ -134,11 +135,11 @@ function ChildRowItem({ row }: { row: ChildRow }) {
       tabIndex={0}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("a")) return;
-        navigate(getResourceDetailUrl(row.kind, row.name, row.namespace));
+        if (link) navigate(link);
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;
-        navigate(getResourceDetailUrl(row.kind, row.name, row.namespace));
+        if (link) navigate(link);
       }}
       className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
     >

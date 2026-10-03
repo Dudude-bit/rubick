@@ -7,9 +7,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -18,7 +17,6 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   ScreenShareProvider,
   useScreenSections,
@@ -27,23 +25,13 @@ import { commands } from "@/lib/commands";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
+import { renderWithRouter } from "@/test/render";
 import { ClusterOverview } from "./ClusterOverview";
 
 const getClusterOverview = vi.mocked(commands.getClusterOverview);
 
-function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>
-          <ClusterOverview />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+function mount(ui: ReactElement = <ClusterOverview />) {
+  return renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster" });
 }
 
 beforeEach(() => {
@@ -61,7 +49,7 @@ describe("what the overview does when the read is refused", () => {
       'Tauri command \'getClusterOverview\' failed: pods is forbidden: User "kc" cannot list resource "pods" in API group "" at the cluster scope: Forbidden (code: 403)'
     );
 
-    mount();
+    await mount();
 
     await waitFor(() =>
       expect(
@@ -86,7 +74,7 @@ describe("what the overview does when the read is refused", () => {
       "Tauri command 'getClusterOverview' failed: error trying to connect: connection refused"
     );
 
-    mount();
+    await mount();
 
     await waitFor(() =>
       expect(
@@ -124,7 +112,7 @@ describe("what stands when the cluster-wide read does not", () => {
       'pods is forbidden: User "kc" cannot list resource "pods" (code: 403)'
     );
 
-    mount();
+    await mount();
 
     // The refusal first, so this asserts about the refused screen and not
     // about the skeleton that precedes it.
@@ -204,20 +192,11 @@ describe("what the overview offers Share", () => {
       collect = useScreenSections();
       return null;
     }
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <TooltipProvider>
-            <ScreenShareProvider>
-              <ClusterOverview />
-              <Probe />
-            </ScreenShareProvider>
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await mount(
+      <ScreenShareProvider>
+        <ClusterOverview />
+        <Probe />
+      </ScreenShareProvider>
     );
 
     await waitFor(() =>

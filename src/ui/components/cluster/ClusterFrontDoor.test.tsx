@@ -7,7 +7,8 @@
  * disagreed: the screen simply said "42 contexts" over three rows.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { RouterProvider } from "@tanstack/react-router";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +18,7 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterRecencyStore } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ContextInfo } from "@/generated/types";
+import { renderWithRouter, testRouter } from "@/test/render";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -82,16 +84,16 @@ function mount() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <ClusterFrontDoor />
-    </QueryClientProvider>
-  );
+  return renderWithRouter(<ClusterFrontDoor />, {
+    client,
+    at: "/",
+    route: "/",
+  });
 }
 
 describe("the front door's count", () => {
-  it("names every context in the kubeconfig before anything is typed", () => {
-    mount();
+  it("names every context in the kubeconfig before anything is typed", async () => {
+    await mount();
     expect(
       screen.getByText(new RegExp(t("count", "contexts", { n: 4 })))
     ).toBeInTheDocument();
@@ -104,7 +106,7 @@ describe("the front door's count", () => {
    */
   it("counts the contexts on screen against the total once the filter narrows the list", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.type(
       screen.getByRole("textbox", { name: t("action", "filterClusters") }),
@@ -126,7 +128,7 @@ describe("the front door's count", () => {
    */
   it("stops telling the reader to pick one when the filter has left nothing to pick", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
     expect(
       screen.getByText(new RegExp(t("cluster", "pickOneToStart")))
     ).toBeInTheDocument();
@@ -149,7 +151,7 @@ describe("the front door's count", () => {
    */
   it("keeps the noun plural when one row matches out of many", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.type(
       screen.getByRole("textbox", { name: t("action", "filterClusters") }),
@@ -201,7 +203,9 @@ describe("the heading and the rows, mid-transition", () => {
     });
     root.render(
       <QueryClientProvider client={client}>
-        <ClusterFrontDoor />
+        <RouterProvider
+          router={testRouter(<ClusterFrontDoor />, { at: "/", route: "/" })}
+        />
       </QueryClientProvider>
     );
     await new Promise((resolve) => setTimeout(resolve, 60));

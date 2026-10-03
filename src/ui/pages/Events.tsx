@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 
@@ -36,6 +35,7 @@ import {
   type StoryWindow,
 } from "@/lib/event-stories";
 import { useNow } from "@/hooks/useNow";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ const ORDERS: Array<{ value: StoryOrder; label: keyof typeof en.action }> = [
   { value: "newest", label: "newestFirst" },
 ];
 
-function isWindow(value: string | null): value is StoryWindow {
+function isWindow(value: string | undefined): value is StoryWindow {
   return (STORY_WINDOWS as readonly string[]).includes(value ?? "");
 }
 
@@ -96,26 +96,15 @@ export function Events() {
   const scope = useNamespaceScope();
   const [eventType, setEventType] = useState<string>("all");
   const [eventLimit, setEventLimit] = useState<string>("500");
-  const [params, setParams] = useSearchParams();
-  const view: View = params.get("view") === "list" ? "list" : "stories";
-  const range = params.get("range");
+  const { view: viewParam, range, q: query = "" } = useAppSearch();
+  const setSearch = useSetSearch();
+  const view: View = viewParam === "list" ? "list" : "stories";
   const window: StoryWindow = isWindow(range) ? range : "1h";
   const [order, setOrder] = useState<StoryOrder>("warningsFirst");
-  const setParam = (key: string, value: string | null) =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        if (value === null) next.delete(key);
-        else next.set(key, value);
-        return next;
-      },
-      { replace: true }
-    );
   // In the address, like every other list's search: a term carried here from
   // another kind arrives as `?q=`, and a page that kept it in local state
   // showed every event while the address claimed it was filtered.
-  const query = params.get("q") ?? "";
-  const setQuery = (value: string) => setParam("q", value || null);
+  const setQuery = (value: string) => setSearch({ q: value || undefined });
   const now = useNow();
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
@@ -293,7 +282,9 @@ export function Events() {
                   role="tab"
                   aria-selected={view === candidate}
                   onClick={() =>
-                    setParam("view", candidate === "stories" ? null : "list")
+                    setSearch({
+                      view: candidate === "stories" ? undefined : "list",
+                    })
                   }
                   className={cn(
                     "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
@@ -320,7 +311,9 @@ export function Events() {
                       type="button"
                       aria-pressed={window === candidate}
                       onClick={() =>
-                        setParam("range", candidate === "1h" ? null : candidate)
+                        setSearch({
+                          range: candidate === "1h" ? undefined : candidate,
+                        })
                       }
                       className={cn(
                         "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",

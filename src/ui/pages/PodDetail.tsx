@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlignLeft,
@@ -81,7 +81,9 @@ import { normalizeTauriError } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { mergePodsWithMetrics } from "@/lib/metrics";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
+import { objectLink } from "@/lib/links";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { failingCondition } from "@/lib/condition-health";
 import {
   lifetimeContainers,
@@ -265,6 +267,7 @@ function podProblem(
 export function PodDetail() {
   const t = useT();
   const navigate = useNavigate();
+  const router = useRouter();
   const { toast } = useToast();
   const { currentContext } = useClusterStore();
   const queryClient = useQueryClient();
@@ -273,8 +276,8 @@ export function PodDetail() {
   // `?shell=<container>` is how somewhere else — the peek panel, a link —
   // asks for a shell on this pod. A terminal is unusable in a drawer, so it
   // opens here, at full width, where the session behaves like any other.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedShell = searchParams.get("shell");
+  const requestedShell = useAppSearch().shell ?? null;
+  const setSearch = useSetSearch();
 
   // Which container the Shell tab is attached to, once the reader has said.
   // `container: null` is the reader having ended the session, which is not the
@@ -441,8 +444,11 @@ export function PodDetail() {
   const handleDebugStart = (result: DebugResult) => {
     if (result.isNewPod) {
       navigate(
-        `/${toPlural(ResourceType.Pod)}/${result.namespace}/${result.podName}`,
-        { replace: false }
+        objectLink({
+          kind: ResourceType.Pod,
+          name: result.podName,
+          namespace: result.namespace,
+        })!
       );
     } else if (debugFor === "files") {
       setFilesVia({ container: result.containerName, root: "/proc/1/root" });
@@ -464,16 +470,7 @@ export function PodDetail() {
     setShellChoice({ pod: podKey, container: null });
     // The URL asked for this shell; once it is closed it would be lying, and
     // a reload would reopen a terminal nobody asked for again.
-    if (searchParams.has("shell")) {
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          next.delete("shell");
-          return next;
-        },
-        { replace: true }
-      );
-    }
+    if (requestedShell) setSearch({ shell: undefined }, { replace: true });
 
     if (isDebugPod && pod) {
       toast({
@@ -490,7 +487,7 @@ export function PodDetail() {
                   title: t("action", "debugPodDeleted"),
                   description: pod.name,
                 });
-                navigate(-1);
+                router.history.back();
               } catch (err) {
                 toastError(t("action", "failedToDelete"), err);
               }
@@ -502,16 +499,7 @@ export function PodDetail() {
         duration: 10000,
       });
     }
-  }, [
-    isDebugPod,
-    pod,
-    podKey,
-    t,
-    toast,
-    navigate,
-    searchParams,
-    setSearchParams,
-  ]);
+  }, [isDebugPod, pod, podKey, t, toast, router, requestedShell, setSearch]);
 
   const handleFindReplacement = savedLabels
     ? () =>
@@ -523,10 +511,14 @@ export function PodDetail() {
                 name: replacement.name,
               }),
             });
-            navigate(
-              `/${toPlural(ResourceType.Pod)}/${replacement.namespace}/${replacement.name}`,
-              { replace: true }
-            );
+            navigate({
+              ...objectLink({
+                kind: ResourceType.Pod,
+                name: replacement.name,
+                namespace: replacement.namespace,
+              })!,
+              replace: true,
+            });
           } else {
             toast({
               title: t("action", "noReplacementFound"),
@@ -648,7 +640,7 @@ export function PodDetail() {
         title={pod?.name || name || "Pod"}
         namespace={pod?.namespace || namespace}
         createdAt={pod?.createdAt}
-        onBack={() => navigate(-1)}
+        onBack={() => router.history.back()}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         statusBadge={

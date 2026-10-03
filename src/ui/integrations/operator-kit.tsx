@@ -4,11 +4,11 @@
  */
 
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
@@ -69,11 +69,11 @@ export function ControllerLine({
   return (
     <>
       <Link
-        to={getResourceDetailUrl(
-          ResourceType.Deployment,
-          controller.name,
-          controller.namespace
-        )}
+        {...objectLink({
+          kind: ResourceType.Deployment,
+          name: controller.name,
+          namespace: controller.namespace,
+        })!}
         className={cn(
           "font-mono hover:underline",
           controller.ready < controller.desired ? "text-err" : "text-fg"

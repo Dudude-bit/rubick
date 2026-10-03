@@ -1,10 +1,21 @@
 import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useRouterState } from "@tanstack/react-router";
 import { Link2, TriangleAlert, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
+
+/** One spelling of a path, whichever of its characters arrived encoded. */
+const plain = (path: string) => {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
 
 /**
  * What the reader needs to know about the link that brought them here, until
@@ -12,10 +23,15 @@ import { useT } from "@/i18n/useT";
  */
 export function DeepLinkBanner() {
   const t = useT();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const arrival = useDeepLinkStore((s) => s.arrival);
   const dismiss = useDeepLinkStore((s) => s.dismiss);
+  const openSettings = useSettingsStore((s) => s.openSettings);
+  // "Live" is a claim about the connection, and the route makes it: until
+  // the link's own cluster has connected, there is nothing live to say.
+  const live = useClusterStore(
+    (s) => s.isConnected && s.currentContext === arrival?.link.context
+  );
 
   // Leaving the page the link opened is reading the banner; it should not
   // follow the reader around the app.
@@ -24,11 +40,11 @@ export function DeepLinkBanner() {
     if (
       arrival?.status === "live" &&
       arrivedAt &&
-      location.pathname !== arrivedAt
+      plain(pathname) !== plain(arrivedAt)
     ) {
       dismiss();
     }
-  }, [arrival, arrivedAt, location.pathname, dismiss]);
+  }, [arrival, arrivedAt, pathname, dismiss]);
 
   if (!arrival) return null;
 
@@ -37,6 +53,7 @@ export function DeepLinkBanner() {
     : null;
 
   if (arrival.status === "live") {
+    if (!live) return null;
     return (
       <div
         role="status"
@@ -91,7 +108,7 @@ export function DeepLinkBanner() {
             size="sm"
             onClick={() => {
               dismiss();
-              navigate("/settings/clusters");
+              openSettings("clusters");
             }}
           >
             {t("cluster", "linkOpenClusters")}

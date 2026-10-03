@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, renderHook, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -27,15 +24,12 @@ import { peekMutationKeys } from "@/components/resources/peek-actions";
 import { commands } from "@/lib/commands";
 import { Crds } from "@/pages/Crds";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import { useCrdIndex } from "./useCrdIndex";
 
 let client: QueryClient;
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <QueryClientProvider client={client}>
-    <MemoryRouter>
-      <TooltipProvider>{children}</TooltipProvider>
-    </MemoryRouter>
-  </QueryClientProvider>
+  <QueryClientProvider client={client}>{children}</QueryClientProvider>
 );
 
 beforeEach(() => {
@@ -54,7 +48,11 @@ beforeEach(() => {
 describe("the CRD index", () => {
   /** Fails if the page and the index key the list apart. */
   it("is the list the CRD page reads, asked for once", async () => {
-    render(<Crds />, { wrapper });
+    await renderWithRouter(<Crds />, {
+      client,
+      at: "/c/prod/customresourcedefinitions",
+      route: "/c/$cluster/customresourcedefinitions",
+    });
     const { result } = renderHook(() => useCrdIndex(), { wrapper });
 
     await waitFor(() =>

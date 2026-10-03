@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 import { JobRows, RevisionRows } from "./child-rows";
 
 const revision = (
@@ -19,6 +19,11 @@ const revision = (
     replicas: { desired, ready, current: ready, available: ready },
     createdAt: null,
   }) as unknown as ReplicaSetInfo;
+
+const onDeployment = {
+  at: "/c/prod/deployments/default/web",
+  route: "/c/$cluster/$resource/$namespace/$name",
+};
 
 const job: JobInfo = {
   name: "nightly-1",
@@ -39,13 +44,13 @@ describe("the rows a workload's own objects get, in the reader's language", () =
    * to their counts: "revision 4 · 2/3 ready", "scaled to zero",
    * "0/1 completed · 2 failed".
    */
-  it("says a revision's number and readiness in Russian", () => {
+  it("says a revision's number and readiness in Russian", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    const { container } = renderWithProviders(
+    const { container } = await renderWithRouter(
       <RevisionRows
         revisions={[revision("web-4", "4", 3, 2), revision("web-3", "3", 0, 0)]}
       />,
-      { initialEntries: ["/"] }
+      onDeployment
     );
     expect(container.textContent).toContain("ревизия 4 · готово 2/3");
     expect(container.textContent).toContain(
@@ -55,11 +60,12 @@ describe("the rows a workload's own objects get, in the reader's language", () =
   });
 
   /** Would break if the Job row's counts went back to English words. */
-  it("says a Job's completions and failures in Russian", () => {
+  it("says a Job's completions and failures in Russian", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    const { container } = renderWithProviders(<JobRows jobs={[job]} />, {
-      initialEntries: ["/"],
-    });
+    const { container } = await renderWithRouter(
+      <JobRows jobs={[job]} />,
+      onDeployment
+    );
     expect(container.textContent).toContain("завершено 0/1 · 2 неудачных");
     expect(container.textContent).not.toMatch(/completed|failed/);
   });

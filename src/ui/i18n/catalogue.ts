@@ -4274,6 +4274,23 @@ export const en = {
     systemLanguage: "Match the system",
   },
   empty: {
+    addressMissing: "Nothing lives at this address",
+    addressMissingBody:
+      "{path} is not a page Rubick has. It may have come from an older build or a mistyped link.",
+    toOverview: "Cluster overview",
+    toClusters: "All clusters",
+    clusterMissing: "{cluster} is not in the kubeconfig",
+    clusterMissingBody:
+      "The link names a cluster this kubeconfig does not list. Open one it does.",
+    kubeconfigUnread: "Could not read the kubeconfig",
+    kubeconfigUnreadBody: "So whether {cluster} is in it is not known. {error}",
+    resourceNotOpened: "Rubick does not open {resource} yet",
+    resourceNotOpenedBody:
+      "It is neither a kind Rubick knows nor the name of a custom resource definition.",
+    listNotShown: "Rubick does not list {resource} yet",
+    listNotShownBody:
+      "Each object of this kind opens from anything that refers to it.",
+    objectUnread: "Could not read this object",
     // A NetworkPolicy's four readings of one direction, and its three of a
     // `podSelector`. Each one is a state the others would be mistaken for.
     saysNothing: "says nothing",

@@ -1,7 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, screen } from "@testing-library/react";
 
 vi.mock("@/hooks/useAppInfo", () => ({
   useAppInfo: () => ({ data: { version: "4.18.0" } }),
@@ -20,28 +19,39 @@ vi.mock("./ShareDialog", () => ({
   ),
 }));
 
+import { renderWithRouter } from "@/test/render";
 import { ScreenShareProvider, useShareSection } from "./screen-share";
 import { ShareScreenAction } from "./ShareAction";
 
-const wrap = (ui: ReactNode) => (
-  <MemoryRouter>
-    <ScreenShareProvider>{ui}</ScreenShareProvider>
-  </MemoryRouter>
-);
+const mount = (ui: ReactNode) =>
+  renderWithRouter(<ScreenShareProvider>{ui}</ScreenShareProvider>, {
+    at: "/c/prod/nodes",
+  });
+
+/** A screen that re-renders on demand, handing Share a new object each time as a watch tick does. */
+function Ticking() {
+  const [tick, setTick] = useState(0);
+  return (
+    <>
+      <button type="button" onClick={() => setTick(tick + 1)}>
+        tick
+      </button>
+      <ShareScreenAction screen={{ title: "Nodes" }} />
+    </>
+  );
+}
 
 describe("a screen's Share while its dialog is open", () => {
   /** The dialog keys the public-target tick and the published link on
    *  `capturedAt`; a new one on every watch tick took both away mid-read. */
   it("keeps the moment it was captured when the screen re-renders", async () => {
-    const { rerender } = render(
-      wrap(<ShareScreenAction screen={{ title: "Nodes" }} />)
-    );
+    await mount(<Ticking />);
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
     const first = screen.getByTestId("captured").textContent;
     expect(first).not.toBe("");
 
     await new Promise((resolve) => setTimeout(resolve, 5));
-    rerender(wrap(<ShareScreenAction screen={{ title: "Nodes" }} />));
+    fireEvent.click(screen.getByRole("button", { name: "tick" }));
     expect(screen.getByTestId("captured").textContent).toBe(first);
   });
 
@@ -50,8 +60,8 @@ describe("a screen's Share while its dialog is open", () => {
    * report names was read" over no sections at all: a screen that put
    * nothing in has to say so.
    */
-  it("says nothing on the screen went into the file, when nothing did", () => {
-    render(wrap(<ShareScreenAction screen={{ title: "Traefik · Map" }} />));
+  it("says nothing on the screen went into the file, when nothing did", async () => {
+    await mount(<ShareScreenAction screen={{ title: "Traefik · Map" }} />);
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
     expect(screen.getByTestId("not-read").textContent).toContain(
       "Nothing on this screen was put into the file"
@@ -63,7 +73,7 @@ describe("a screen's Share while its dialog is open", () => {
    * report was built, it moved with every render and disagreed with the
    * dialog's own "captured".
    */
-  it("stamps the link with the moment of capture", () => {
+  it("stamps the link with the moment of capture", async () => {
     function Part() {
       useShareSection("part", () => ({
         id: "part",
@@ -74,13 +84,11 @@ describe("a screen's Share while its dialog is open", () => {
       }));
       return null;
     }
-    render(
-      wrap(
-        <>
-          <Part />
-          <ShareScreenAction screen={{ title: "Nodes" }} />
-        </>
-      )
+    await mount(
+      <>
+        <Part />
+        <ShareScreenAction screen={{ title: "Nodes" }} />
+      </>
     );
     fireEvent.click(screen.getByRole("button", { name: /Share/ }));
     const captured = screen.getByTestId("captured").textContent!;

@@ -1,5 +1,34 @@
 import { useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+
+import type { AppSearch } from "@/lib/app-search";
+
+/** The address's query, typed; outside a cluster route every key is absent. */
+export function useAppSearch(): AppSearch {
+  return useSearch({ strict: false }) as AppSearch;
+}
+
+/** Writes part of the query in place, keeping the rest of it. */
+export function useSetSearch(): (
+  patch: Partial<AppSearch>,
+  options?: { replace?: boolean }
+) => void {
+  const navigate = useNavigate();
+  return useCallback(
+    (patch, options) =>
+      void navigate({
+        to: ".",
+        search: (prev: AppSearch) => {
+          const next: AppSearch = { ...prev, ...patch };
+          for (const key of Object.keys(next) as Array<keyof AppSearch>)
+            if (next[key] === undefined || next[key] === "") delete next[key];
+          return next;
+        },
+        replace: options?.replace ?? true,
+      } as Parameters<typeof navigate>[0]),
+    [navigate]
+  );
+}
 
 /**
  * One query parameter as state. In the address rather than a `useState`, so a
@@ -7,23 +36,17 @@ import { useSearchParams } from "react-router-dom";
  * `?tab=routes&q=<host>` — and a reload or a copied address keeps it.
  */
 export function useSearchParam(
-  key: string,
+  key: keyof AppSearch,
   fallback = ""
 ): [string, (next: string) => void] {
-  const [params, setParams] = useSearchParams();
-  const value = params.get(key) ?? fallback;
+  const value = useAppSearch()[key] ?? fallback;
+  const setSearch = useSetSearch();
   const set = useCallback(
     (next: string) =>
-      setParams(
-        (previous) => {
-          const updated = new URLSearchParams(previous);
-          if (next.trim() === "" || next === fallback) updated.delete(key);
-          else updated.set(key, next);
-          return updated;
-        },
-        { replace: true }
-      ),
-    [key, fallback, setParams]
+      setSearch({
+        [key]: next.trim() === "" || next === fallback ? undefined : next,
+      }),
+    [key, fallback, setSearch]
   );
   return [value, set];
 }

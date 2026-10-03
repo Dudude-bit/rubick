@@ -22,7 +22,8 @@
  */
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
-import { crdObjectPath, conditionOf, getValueByPath } from "../kit";
+import { objectLink } from "@/lib/links";
+import { conditionOf, getValueByPath } from "../kit";
 import type { T } from "@/i18n/useT";
 import type {
   Delivery,
@@ -159,7 +160,12 @@ function ownerRef(
     kind,
     name: owner.name,
     namespace: owner.namespace ?? "",
-    to: crdObjectPath(crd, owner.namespace, owner.name),
+    to: objectLink({
+      kind,
+      name: owner.name,
+      namespace: owner.namespace,
+      crd,
+    })!,
   };
 }
 

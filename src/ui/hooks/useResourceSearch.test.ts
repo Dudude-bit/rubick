@@ -362,7 +362,10 @@ describe("the shortest query", () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const shared = JSON.parse(
-      readFileSync(resolve(process.cwd(), "src/contracts/search-limits.json"), "utf8")
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/search-limits.json"),
+        "utf8"
+      )
     ) as { minQueryCharacters: number };
     const { MIN_SEARCH_LENGTH } = await import("./useResourceSearch");
     expect(MIN_SEARCH_LENGTH).toBe(shared.minQueryCharacters);

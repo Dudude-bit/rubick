@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act } from "@testing-library/react";
+import type { AnyRouter } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -14,6 +14,7 @@ vi.mock("@/lib/commands", () => ({
 import { useScopeTabs } from "./useScopeTabs";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 
 const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
   id: "t1",
@@ -26,24 +27,22 @@ const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
 
 function Probe() {
   useScopeTabs();
-  const { pathname, search } = useLocation();
-  return <span data-testid="href">{`${pathname}${search}`}</span>;
+  return null;
 }
 
 let client: QueryClient;
+let router: AnyRouter;
 
-function mount(entry = "/") {
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[entry]}>
-        <Probe />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+async function mount(entry = "/") {
+  client = testQueryClient();
+  ({ router } = await renderWithRouter(<Probe />, {
+    client,
+    at: entry,
+    route: "$",
+  }));
 }
 
-const href = () => screen.getByTestId("href").textContent;
+const href = () => router.state.location.href;
 const state = () => useScopeTabStore.getState();
 
 beforeEach(() => {
@@ -63,50 +62,70 @@ beforeEach(() => {
 
 describe("the router bridge", () => {
   it("records a navigation onto the tab it happened in", async () => {
-    mount("/");
+    await mount("/");
     await act(async () => {
-      state().recordHref("/workloads/pods");
+      await router.navigate({ href: "/c/prod/pods" });
     });
-    expect(state().tabs[0].href).toBe("/workloads/pods");
+    await vi.waitFor(() => expect(state().tabs[0].href).toBe("/c/prod/pods"));
   });
 
   it("takes the reader to the activated tab's route, query string and all", async () => {
     useScopeTabStore.setState({
       tabs: [
         tab({ id: "a", href: "/" }),
-        tab({ id: "b", href: "/workloads/pods?peek=pods%2Fweb%2Fapi-1" }),
+        tab({ id: "b", href: "/c/prod/pods?peek=pods%2Fweb%2Fapi-1" }),
       ],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await act(async () => {
       await state().activateTab("b");
     });
-    expect(href()).toBe("/workloads/pods?peek=pods%2Fweb%2Fapi-1");
-    expect(state().pendingHref).toBeNull();
+    await vi.waitFor(() =>
+      expect(href()).toBe("/c/prod/pods?peek=pods%2Fweb%2Fapi-1")
+    );
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
   });
 
   it("goes to the restored route on boot without recording the boot one over it", async () => {
     useScopeTabStore.setState({
-      tabs: [tab({ id: "a", href: "/nodes" })],
+      tabs: [tab({ id: "a", href: "/c/prod/nodes" })],
       activeId: "a",
-      pendingHref: "/nodes",
+      pendingHref: "/c/prod/nodes",
     });
-    mount("/");
-    await act(async () => {});
-    expect(href()).toBe("/nodes");
-    expect(state().tabs[0].href).toBe("/nodes");
-    expect(state().pendingHref).toBeNull();
+    await mount("/");
+    await vi.waitFor(() => expect(href()).toBe("/c/prod/nodes"));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(state().tabs[0].href).toBe("/c/prod/nodes");
+  });
+
+  /**
+   * The router does not always land where it was asked: a redirect moves it
+   * on, and it writes a query value back in its own encoding. A bridge that
+   * settled only on arriving at the very address asked for asked again,
+   * forever.
+   */
+  it("settles where the router lands when that is not the address asked for", async () => {
+    const asked = "/c/prod/pods?peek=pods/web/api-1";
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: asked })],
+      activeId: "a",
+      pendingHref: asked,
+    });
+    await mount("/");
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(href()).not.toBe(asked);
+    expect(state().tabs[0].href).toBe(href());
   });
 
   // One live connection means everything cached belonged to a scope that is
   // no longer being watched, so none of it may be redrawn as current.
   it("empties the query cache on a tab switch", async () => {
     useScopeTabStore.setState({
-      tabs: [tab({ id: "a" }), tab({ id: "b", href: "/nodes" })],
+      tabs: [tab({ id: "a" }), tab({ id: "b", href: "/c/prod/nodes" })],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     client.setQueryData(["pods", "web"], [{ name: "api-1" }]);
     await act(async () => {
       await state().activateTab("b");
@@ -123,7 +142,7 @@ describe("a tab whose cluster is gone", () => {
       tabs: [tab({ id: "a", context: "gone", missing: true })],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await act(async () => {
       await useClusterStore.getState().connect("drain");
     });
@@ -141,7 +160,7 @@ describe("a tab whose cluster is gone", () => {
       ],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await act(async () => {
       await state().activateTab("b");
     });
@@ -158,7 +177,7 @@ describe("the keyboard", () => {
   };
 
   it("opens a tab on mod+T and closes one on mod+W", async () => {
-    mount("/");
+    await mount("/");
     await press({ key: "t", ctrlKey: true });
     expect(state().tabs).toHaveLength(2);
     await press({ key: "w", metaKey: true });
@@ -170,7 +189,7 @@ describe("the keyboard", () => {
       tabs: [tab({ id: "a" }), tab({ id: "b" }), tab({ id: "c" })],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await press({ key: "Tab", ctrlKey: true });
     expect(state().activeId).toBe("b");
     await press({ key: "Tab", ctrlKey: true, shiftKey: true });
@@ -182,7 +201,7 @@ describe("the keyboard", () => {
       tabs: [tab({ id: "a" }), tab({ id: "b" }), tab({ id: "c" })],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await press({ key: "2", ctrlKey: true });
     expect(state().activeId).toBe("b");
     await press({ key: "9", ctrlKey: true });
@@ -196,7 +215,7 @@ describe("the kubeconfig", () => {
       tabs: [tab({ id: "a", context: "gone" })],
       activeId: "a",
     });
-    mount("/");
+    await mount("/");
     await act(async () => {
       useClusterStore.setState({
         contexts: [

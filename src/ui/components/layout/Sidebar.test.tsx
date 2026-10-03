@@ -1,12 +1,11 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { useSettingsStore } from "@/stores/settingsStore";
-import { getResourceListUrl } from "@/lib/resource-registry";
+import { listSegment } from "@/lib/resource-registry";
+import { renderWithRouter } from "@/test/render";
 
 import type { ClusterOverview, DetectedExtension } from "@/generated/types";
 
@@ -98,15 +97,8 @@ const { useClusterStore } = await import("@/stores/clusterStore");
 const { useUpdaterStore } = await import("@/stores/updaterStore");
 const { useLocaleStore } = await import("@/stores/localeStore");
 
-function wrap(node: ReactNode, route: string[] = ["/"]) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={route}>{node}</MemoryRouter>
-    </QueryClientProvider>
-  );
+function wrap(node: ReactElement, at = "/c/prod") {
+  return renderWithRouter(node, { at, route: "/c/$cluster/$" });
 }
 
 beforeEach(() => {
@@ -174,7 +166,7 @@ function overviewWithPods(pods: number): OverviewStub {
 describe("the counts at the end of each row", () => {
   it("prints the cluster's numbers while there is a cluster", async () => {
     overview = overviewWithPods(41);
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
     expect(await screen.findByText("41")).toBeInTheDocument();
   });
 
@@ -189,7 +181,7 @@ describe("the counts at the end of each row", () => {
     overview = overviewWithPods(41);
     useClusterStore.setState({ isConnected: false, currentContext: null });
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(await screen.findByText("Pods")).toBeInTheDocument();
     expect(screen.queryByText("41")).not.toBeInTheDocument();
@@ -205,7 +197,7 @@ describe("the update dot", () => {
   it("opens Settings on About while an update is waiting", async () => {
     useUpdaterStore.setState({ available: true });
     useSettingsStore.setState({ open: false, section: "appearance" });
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: "Settings" })
@@ -218,7 +210,7 @@ describe("the update dot", () => {
 
   it("opens Settings where it was last when no update is waiting", async () => {
     useSettingsStore.setState({ open: false, section: "registries" });
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: "Settings" })
@@ -236,7 +228,7 @@ describe("the update dot", () => {
    */
   it("marks the row while Settings is open, whatever the route", async () => {
     useSettingsStore.setState({ open: true });
-    wrap(<Sidebar />, ["/workloads/pods"]);
+    await wrap(<Sidebar />, "/c/prod/pods");
 
     const row = await screen.findByRole("button", { name: "Settings" });
     expect(row.className).toContain("bg-sel");
@@ -251,10 +243,10 @@ describe("the Network group", () => {
    * this list is the only answer to "what is behind everything at once".
    */
   it("offers Endpoints its own row", async () => {
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
     expect(
       await screen.findByRole("link", { name: "Endpoints" })
-    ).toHaveAttribute("href", "/network/endpoints");
+    ).toHaveAttribute("href", "/c/prod/endpoints");
   });
 
   /**
@@ -263,22 +255,57 @@ describe("the Network group", () => {
    * name meant typing it again at every stop.
    *
    * Asserted on the row's `href` rather than on the helper: a test that only
-   * calls `withCarriedSearch` stays green when the sidebar stops calling it,
+   * calls `carriedSearch` stays green when the sidebar stops calling it,
    * which is the whole of the change reverting with nothing to show for it.
    */
   it("carries the search on a row that lists a kind", async () => {
-    wrap(<Sidebar />, [`${getResourceListUrl("Pod")}?q=release-42`]);
+    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=release-42`);
     expect(
       await screen.findByRole("link", { name: "Deployments" })
-    ).toHaveAttribute("href", "/workloads/deployments?q=release-42");
+    ).toHaveAttribute("href", "/c/prod/deployments?q=release-42");
   });
 
   /** Changes is not more of the same question, so it carries nothing. */
   it("carries nothing to a row that lists no kind", async () => {
-    wrap(<Sidebar />, [`${getResourceListUrl("Pod")}?q=release-42`]);
+    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=release-42`);
     expect(
       await screen.findByRole("link", { name: "Changes" })
-    ).toHaveAttribute("href", "/changes");
+    ).toHaveAttribute("href", "/c/prod/changes");
+  });
+});
+
+describe("which row is open", () => {
+  /**
+   * A list row stays lit on the pages of what it lists, and the overview's
+   * address is the start of every other one in the cluster. Fails if the
+   * overview stops matching exactly, lighting it beside every other row.
+   */
+  it("lights the list a page belongs to, and the overview only on itself", async () => {
+    await wrap(<Sidebar />, "/c/prod/pods/web/api-0");
+    const pods = await screen.findByRole("link", { name: /^Pods/ });
+    expect(pods.className).toContain("bg-sel");
+    expect(
+      screen.getByRole("link", { name: /^Overview/ }).className
+    ).not.toContain("bg-sel");
+  });
+
+  /**
+   * Every vendor without a screen of its own shares the catalog's address,
+   * so the query decides. Fails if the catalog lights up while one of those
+   * vendors is the row open on it.
+   */
+  it("lights the catalog only while no vendor is picked on it", async () => {
+    await wrap(<Sidebar />, "/c/prod/integrations?vendor=prometheus");
+    expect(
+      (await screen.findByRole("link", { name: "All integrations" })).className
+    ).not.toContain("bg-sel");
+  });
+
+  it("lights the catalog on the catalog", async () => {
+    await wrap(<Sidebar />, "/c/prod/integrations");
+    expect(
+      (await screen.findByRole("link", { name: "All integrations" })).className
+    ).toContain("bg-sel");
   });
 });
 
@@ -294,11 +321,11 @@ describe("the Integrations category", () => {
       { id: "cert-manager", installed: false, version: null },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(
       await screen.findByRole("link", { name: "All integrations" })
-    ).toHaveAttribute("href", "/integrations");
+    ).toHaveAttribute("href", "/c/prod/integrations");
     await waitFor(() =>
       expect(screen.queryByRole("link", { name: /Traefik/ })).toBeNull()
     );
@@ -313,10 +340,10 @@ describe("the Integrations category", () => {
       { id: "traefik", installed: true, version: "v2.11.18" },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const link = await screen.findByRole("link", { name: /Traefik/ });
-    expect(link).toHaveAttribute("href", "/integrations/traefik");
+    expect(link).toHaveAttribute("href", "/c/prod/integrations/traefik");
     expect(screen.getByText("Integrations")).toBeInTheDocument();
   });
 
@@ -338,14 +365,17 @@ describe("the Integrations category", () => {
       { id: "aws-load-balancer-controller", installed: true, version: null },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(
       await screen.findByRole("link", { name: /cert-manager/i })
-    ).toHaveAttribute("href", "/integrations/cert-manager");
+    ).toHaveAttribute("href", "/c/prod/integrations/cert-manager");
     expect(
       screen.getByRole("link", { name: /AWS Load Balancer Controller/i })
-    ).toHaveAttribute("href", "/integrations/aws-load-balancer-controller");
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/integrations/aws-load-balancer-controller"
+    );
   });
 
   /**
@@ -363,7 +393,7 @@ describe("the Integrations category", () => {
       { resource: "kustomizations", allowed: false },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /Flux/ });
     expect(
@@ -388,7 +418,7 @@ describe("the Integrations category", () => {
       { resource: "certificates", allowed: false },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const vendorReview = () =>
       checkListAccess.mock.calls.find(([queries]) =>
@@ -416,7 +446,7 @@ describe("the Integrations category", () => {
       { resource: "kustomizations", allowed: true },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /Flux/ });
     expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
@@ -437,7 +467,7 @@ describe("the Integrations category", () => {
       { resource: "kustomizations", allowed: true },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /Flux/ });
     await waitFor(() => expect(checkListAccess).toHaveBeenCalled());
@@ -457,7 +487,7 @@ describe("the Integrations category", () => {
       overdueCertificate("2026-01-01T00:00:00Z"),
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /cert-manager/i });
     expect(await screen.findByLabelText("worth a look")).toBeInTheDocument();
@@ -469,7 +499,7 @@ describe("the Integrations category", () => {
     ]);
     listCustomResources.mockResolvedValue([healthyCertificate()]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /cert-manager/i });
     expect(await screen.findByText("1")).toBeInTheDocument();
@@ -492,7 +522,7 @@ describe("the Integrations category", () => {
       healthyCertificate(),
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
     expect(await screen.findByText("2")).toBeInTheDocument();
 
     listCustomResources.mockResolvedValue([healthyCertificate()]);
@@ -514,7 +544,7 @@ describe("the Integrations category", () => {
       })
     );
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(
       await screen.findByLabelText("reading integrations")
@@ -536,7 +566,7 @@ describe("the Integrations category", () => {
     useLocaleStore.setState({ choice: "ru" });
     detectInClusterExtensions.mockReturnValue(new Promise(() => {}));
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(
       await screen.findByLabelText("идёт чтение: интеграции")
@@ -554,7 +584,7 @@ describe("the Integrations category", () => {
       { id: "cert-manager", installed: false, version: null },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     await screen.findByRole("link", { name: /Traefik/ });
     expect(screen.queryByRole("link", { name: /cert-manager/ })).toBeNull();
@@ -562,10 +592,10 @@ describe("the Integrations category", () => {
 });
 
 describe("the rail in another language", () => {
-  it("translates its own captions and leaves the kinds alone", () => {
+  it("translates its own captions and leaves the kinds alone", async () => {
     useLocaleStore.setState({ choice: "ru" });
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     expect(screen.getByText("Нагрузки")).toBeInTheDocument();
     expect(screen.getByText("Обзор")).toBeInTheDocument();
@@ -637,7 +667,7 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
       }
     );
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
     // Two namespaces, one route each — the fan-out, not a cluster-wide blank.
@@ -681,7 +711,7 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
       }
     );
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
     const gateways = await screen.findByRole("link", { name: /gateways/i });
@@ -720,7 +750,7 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
       return [routeIn("team-a")];
     });
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
     await waitFor(() =>
@@ -755,7 +785,7 @@ describe("the Gateway and Routes rows for a namespace-scoped token", () => {
       { resource: "gateways", allowed: true },
     ]);
 
-    wrap(<Sidebar />);
+    await wrap(<Sidebar />);
 
     const routes = await screen.findByRole("link", { name: /routes/i });
     await waitFor(() =>

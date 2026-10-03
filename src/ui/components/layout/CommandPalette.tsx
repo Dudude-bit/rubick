@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
 
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
@@ -30,6 +30,7 @@ import {
 import { clusterColor, detectProvider } from "@/lib/cluster-identity";
 import { commands } from "@/lib/commands";
 import { parseBang } from "@/lib/cluster-search";
+import { hrefOf, type AppLink } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -237,28 +238,34 @@ export function CommandPalette() {
         return;
       }
       close();
-      requestAnimationFrame(() => navigate(target.path));
+      requestAnimationFrame(() => void navigate({ href: target.path }));
     },
     [alert, arriveFromAlert, currentContext, openTab, close, navigate]
   );
 
   const go = useCallback(
     (
-      path: string,
-      remember?: { name: string; kind: string; namespace?: string }
+      link: AppLink,
+      remember?: {
+        name: string;
+        kind: string;
+        namespace?: string;
+        context: string | null;
+        crd?: string;
+      }
     ) => {
       if (remember) {
         commands
           .addRecentItem({
             ...remember,
-            path,
             namespace: remember.namespace ?? undefined,
+            context: remember.context ?? undefined,
             timestamp: Date.now(),
           })
           .catch(() => {});
       }
       close();
-      requestAnimationFrame(() => navigate(path));
+      requestAnimationFrame(() => void navigate(link));
     },
     [close, navigate]
   );
@@ -346,7 +353,7 @@ export function CommandPalette() {
           // would pull the ground out from under the page being read.
           if (newTab || hit.context !== currentContext) {
             openTab({
-              href: entry.path,
+              href: hrefOf(entry.path),
               context: hit.context,
               namespace: hit.namespace ?? "",
               background: newTab,
@@ -358,23 +365,26 @@ export function CommandPalette() {
             name: hit.name,
             kind: hit.kind,
             namespace: hit.namespace ?? undefined,
+            context: hit.context,
           });
           return;
         }
         case "recent":
           if (newTab) {
-            openTab({ href: entry.path, background: true });
+            openTab({ href: hrefOf(entry.path), background: true });
             return;
           }
           go(entry.path, {
             name: entry.name,
             kind: entry.resourceKind,
             namespace: entry.namespace,
+            context: entry.context,
+            crd: entry.crd,
           });
           return;
         case "link":
           if (newTab) {
-            openTab({ href: entry.path, background: true });
+            openTab({ href: hrefOf(entry.path), background: true });
             return;
           }
           go(entry.path);

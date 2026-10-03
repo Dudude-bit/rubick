@@ -12,20 +12,20 @@
  * is an answer; being silently bounced to the overview is not.
  */
 
-import { useParams } from "react-router-dom";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "@tanstack/react-router";
 import { PackageOpen } from "lucide-react";
 
 import { Section } from "@/components/ui/section";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { useIntegrationPage } from "@/integrations";
+import { pageLink } from "@/lib/links";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 
 export function IntegrationPage() {
   const t = useT();
-  const { slug } = useParams<{ slug: string }>();
-  const page = useIntegrationPage(slug);
+  const { vendor } = useParams({ strict: false });
+  const page = useIntegrationPage(vendor);
 
   if (page.state === "detecting") return <PageSkeleton className="p-0" />;
 
@@ -33,7 +33,7 @@ export function IntegrationPage() {
     return (
       <Missing
         title={t("empty", "noIntegrationByName")}
-        body={t("empty", "noIntegrationByNameBody", { slug: slug ?? "" })}
+        body={t("empty", "noIntegrationByNameBody", { slug: vendor ?? "" })}
       />
     );
   }
@@ -87,7 +87,10 @@ function Missing({ title, body }: { title: string; body: string }) {
       <p className="text-[11px] text-fg-fnt">
         {parts(t("empty", "integrationsPageLists"), {
           link: (
-            <Link to="/integrations" className="text-info hover:underline">
+            <Link
+              {...pageLink("integrations")}
+              className="text-info hover:underline"
+            >
               {t("nav", "integrations")}
             </Link>
           ),

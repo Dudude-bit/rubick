@@ -1,10 +1,8 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 
 import type { IngressInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   backing: (): Promise<unknown> => Promise.resolve({}),
@@ -79,26 +77,22 @@ const shop: IngressInfo = {
   createdAt: null,
 };
 
-function openOn(tab: string) {
+async function openOn(tab: string) {
   let collect: ReturnType<typeof useScreenSections> = null;
   function Probe() {
     collect = useScreenSections();
     return null;
   }
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/integrations/traefik?tab=${tab}`]}>
-        <ScreenShareProvider>
-          {children}
-          <Probe />
-        </ScreenShareProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
+  await renderWithRouter(
+    <ScreenShareProvider>
+      <TraefikPage />
+      <Probe />
+    </ScreenShareProvider>,
+    {
+      at: `/c/prod/integrations/traefik?tab=${tab}`,
+      route: "/c/$cluster/integrations/$vendor",
+    }
   );
-  render(<TraefikPage />, { wrapper });
   return () => collect!();
 }
 
@@ -115,7 +109,7 @@ beforeEach(() => {
 describe("a host with no certificate of its own when the edge could not be read", () => {
   /** With the Services refused, an ALB or GKE Ingress in front may hold the certificate; the finding was withheld and the row beside it still said "no TLS". Fails if the row reads the edge as none. */
   it("says TLS was not checked on the row, not that there is none", async () => {
-    openOn("routes");
+    await openOn("routes");
 
     expect(await screen.findByText(/TLS not checked/)).toBeInTheDocument();
     expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
@@ -123,7 +117,7 @@ describe("a host with no certificate of its own when the edge could not be read"
 
   /** The map's tag is the same fact in one word, and said "no TLS" in warn over the same unread edge. */
   it("tags the host as not checked on the map, too", async () => {
-    openOn("map");
+    await openOn("map");
 
     expect(await screen.findByText("TLS not checked")).toBeInTheDocument();
     expect(screen.queryByText("no TLS")).not.toBeInTheDocument();
@@ -143,7 +137,7 @@ describe("a host with no certificate of its own when the edge could not be read"
           replicas: { ready: 1, desired: 1 },
         },
       ]);
-    openOn("routes");
+    await openOn("routes");
 
     expect((await screen.findAllByText(/no TLS/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/TLS not checked/)).not.toBeInTheDocument();
@@ -153,7 +147,7 @@ describe("a host with no certificate of its own when the edge could not be read"
    *  on the left and "TLS not checked" on the right. */
   it("says TLS not checked while the entry points are unread", async () => {
     answers.backing = () => Promise.resolve({ services: [], published: [] });
-    openOn("routes");
+    await openOn("routes");
 
     expect(await screen.findByText(/TLS not checked/)).toBeInTheDocument();
     expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
@@ -166,7 +160,7 @@ describe("what the Traefik tabs hand to Share", () => {
    * "everything this report names was read".
    */
   it("gives the map's routers and entry points to the file", async () => {
-    const sections = openOn("map");
+    const sections = await openOn("map");
     await screen.findByText("TLS not checked");
     await waitFor(() =>
       expect(sections().map((section) => section.id)).toEqual(
@@ -181,7 +175,7 @@ describe("what the Traefik tabs hand to Share", () => {
    */
   it("names the entry points it could not read beside the routes", async () => {
     answers.backing = () => Promise.resolve({ services: [], published: [] });
-    const sections = openOn("routes");
+    const sections = await openOn("routes");
     await screen.findByText(/TLS not checked/);
     await waitFor(() => {
       const points = sections().find(

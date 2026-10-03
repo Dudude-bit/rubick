@@ -1,10 +1,8 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 
 import type { IngressInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   backing: (): Promise<unknown> => Promise.resolve({}),
@@ -66,17 +64,10 @@ const shop: IngressInfo = {
 };
 
 function openOn(tab: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<IngressNginxPage />, {
+    at: `/c/prod/integrations/ingress-nginx?tab=${tab}`,
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/integrations/ingress-nginx?tab=${tab}`]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  render(<IngressNginxPage />, { wrapper });
 }
 
 beforeEach(() => {
@@ -91,7 +82,7 @@ beforeEach(() => {
 describe("a host with no certificate of its own when the edge could not be read", () => {
   /** With the Services refused, a load balancer in front may hold the certificate, and the row said "no TLS" without looking. Fails if the row reads the edge as none. */
   it("says TLS was not checked on the row, not that there is none", async () => {
-    openOn("routes");
+    await openOn("routes");
 
     expect(await screen.findByText(/TLS not checked/)).toBeInTheDocument();
     expect(screen.queryByText(/no TLS/)).not.toBeInTheDocument();
@@ -99,7 +90,7 @@ describe("a host with no certificate of its own when the edge could not be read"
 
   /** The map's tag is the same fact in one word, and said "no TLS" in warn over the same unread edge. */
   it("tags the host as not checked on the map, too", async () => {
-    openOn("map");
+    await openOn("map");
 
     expect(await screen.findByText("TLS not checked")).toBeInTheDocument();
     expect(screen.queryByText("no TLS")).not.toBeInTheDocument();
@@ -108,7 +99,7 @@ describe("a host with no certificate of its own when the edge could not be read"
   /** The other half: with the Services read and nothing in front, the host really has no TLS, and says so. */
   it("says no TLS once the edge was read and nothing in front holds one", async () => {
     answers.backing = () => Promise.resolve({ services: [], published: [] });
-    openOn("routes");
+    await openOn("routes");
 
     expect((await screen.findAllByText(/no TLS/)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/TLS not checked/)).not.toBeInTheDocument();

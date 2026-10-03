@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 import type { NodeBudget, NodeInfo } from "@/generated/types";
 
 // ----- Mocks -----
@@ -41,6 +39,7 @@ vi.mock("@/components/debug", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { renderWithRouter } from "@/test/render";
 import { NodeDetail } from "./NodeDetail";
 
 // ----- Fixtures -----
@@ -167,16 +166,10 @@ function defaultUseResourceDetailReturn(node: NodeInfo) {
 }
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<NodeDetail />, {
+    at: "/c/prod/nodes/test-node-1",
+    route: "/c/$cluster/nodes/$name",
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/nodes/test-node-1"]}>
-        <NodeDetail />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
 // ----- Tests -----
@@ -190,8 +183,8 @@ describe("NodeDetail", () => {
     );
   });
 
-  it("renders the node name in the page title", () => {
-    renderPage();
+  it("renders the node name in the page title", async () => {
+    await renderPage();
     // The title is a `ResourceName`, so the identity tail is its own span:
     // the heading's text content is the name, its `getByText` is not.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(
@@ -199,17 +192,17 @@ describe("NodeDetail", () => {
     );
   });
 
-  it("shows the role badge when the node has a role", () => {
-    renderPage();
+  it("shows the role badge when the node has a role", async () => {
+    await renderPage();
     expect(screen.getByText("worker")).toBeInTheDocument();
   });
 
-  it("shows a Ready status badge when node is Ready", () => {
-    renderPage();
+  it("shows a Ready status badge when node is Ready", async () => {
+    await renderPage();
     expect(screen.getByText(/^ready$/i)).toBeInTheDocument();
   });
 
-  it("shows a NotReady status badge when node is not Ready", () => {
+  it("shows a NotReady status badge when node is not Ready", async () => {
     const notReady = buildNode({
       status: {
         ready: false,
@@ -222,12 +215,12 @@ describe("NodeDetail", () => {
         typeof useResourceDetail
       >
     );
-    renderPage();
+    await renderPage();
     expect(screen.getByText(/notready/i)).toBeInTheDocument();
   });
 
-  it("renders the tabs (Overview, Pods, Conditions, Labels, YAML)", () => {
-    renderPage();
+  it("renders the tabs (Overview, Pods, Conditions, Labels, YAML)", async () => {
+    await renderPage();
     expect(screen.getByRole("tab", { name: /overview/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /^pods/i })).toBeInTheDocument();
     expect(
@@ -237,13 +230,13 @@ describe("NodeDetail", () => {
     expect(screen.getByRole("tab", { name: /yaml/i })).toBeInTheDocument();
   });
 
-  it("displays InternalIP and ExternalIP from the node addresses", () => {
-    renderPage();
+  it("displays InternalIP and ExternalIP from the node addresses", async () => {
+    await renderPage();
     expect(screen.getByText("10.0.0.5")).toBeInTheDocument();
     expect(screen.getByText("1.2.3.4")).toBeInTheDocument();
   });
 
-  it('shows "-" for IPs when the node has no matching address', () => {
+  it('shows "-" for IPs when the node has no matching address', async () => {
     const noExternal = buildNode({
       status: {
         ready: true,
@@ -256,28 +249,28 @@ describe("NodeDetail", () => {
         typeof useResourceDetail
       >
     );
-    renderPage();
+    await renderPage();
     // External IP row should fall back to the dash placeholder.
     const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThan(0);
   });
 
-  it("shows the kubernetes version, runtime, OS and arch", () => {
-    renderPage();
+  it("shows the kubernetes version, runtime, OS and arch", async () => {
+    await renderPage();
     expect(screen.getByText("v1.30.0")).toBeInTheDocument();
     expect(screen.getByText("containerd://1.7.0")).toBeInTheDocument();
     expect(screen.getByText("linux")).toBeInTheDocument();
     expect(screen.getByText("amd64")).toBeInTheDocument();
   });
 
-  it("shows the Debug Node action button enabled when node loaded", () => {
-    renderPage();
+  it("shows the Debug Node action button enabled when node loaded", async () => {
+    await renderPage();
     const button = screen.getByRole("button", { name: /debug node/i });
     expect(button).toBeInTheDocument();
     expect(button).toBeEnabled();
   });
 
-  it("returns null (renders nothing meaningful) when no node + no loading + no error", () => {
+  it("returns null (renders nothing meaningful) when no node + no loading + no error", async () => {
     vi.mocked(useResourceDetail).mockReturnValue({
       ...defaultUseResourceDetailReturn(buildNode()),
       resource: undefined,
@@ -285,7 +278,7 @@ describe("NodeDetail", () => {
       error: null,
     } as unknown as ReturnType<typeof useResourceDetail>);
 
-    const { container } = renderPage();
+    const { container } = await renderPage();
     expect(container.firstChild).toBeNull();
   });
 });
@@ -301,7 +294,7 @@ describe("the resources table", () => {
 
   /** A device plugin's resource is exactly the row somebody with a GPU node opens this page for. */
   it("lists an extended resource beside the four the kubelet always has", async () => {
-    renderPage();
+    await renderPage();
     expect(await screen.findByText("nvidia.com/gpu")).toBeInTheDocument();
     expect(screen.getByText("extended")).toBeInTheDocument();
   });
@@ -320,7 +313,7 @@ describe("the resources table", () => {
         })),
       })
     );
-    renderPage();
+    await renderPage();
     const notice = await screen.findByText(/kube-system, monitoring/);
     expect(notice).toHaveTextContent("2 namespaces");
     // One "unknown" per resource for requested, and one for limited on all but pods.
@@ -341,7 +334,7 @@ describe("the resources table", () => {
         })),
       })
     );
-    renderPage();
+    await renderPage();
     expect(
       await screen.findByText(/etcdserver: request timed out/)
     ).toBeInTheDocument();
@@ -352,7 +345,7 @@ describe("the resources table", () => {
     budgetMock.mockImplementation(async () => {
       throw new Error("boom");
     });
-    renderPage();
+    await renderPage();
     expect(
       await screen.findByText("Could not read what is reserved on this node.")
     ).toBeInTheDocument();
@@ -362,7 +355,7 @@ describe("the resources table", () => {
   /** While the budget is still being read, an empty table would read as "this node reports no resources". Fails if the pending branch is dropped. */
   it("says it is reading rather than drawing an empty table while the budget loads", async () => {
     budgetMock.mockImplementation(() => new Promise<never>(() => {}));
-    renderPage();
+    await renderPage();
     expect(await screen.findByText("Reading…")).toBeInTheDocument();
   });
 });
@@ -373,11 +366,11 @@ describe("the header actions", () => {
   });
 
   /** The list had cordon and drain and the page did not, so a reader on the page went back to the list to act. */
-  it("offers cordon and drain on the page, and uncordon once cordoned", () => {
+  it("offers cordon and drain on the page, and uncordon once cordoned", async () => {
     vi.mocked(useResourceDetail).mockReturnValue(
       defaultUseResourceDetailReturn(buildNode()) as never
     );
-    const { unmount } = renderPage();
+    const { unmount } = await renderPage();
     expect(screen.getByRole("button", { name: /^cordon$/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /^drain$/i })).toBeEnabled();
     unmount();
@@ -387,7 +380,7 @@ describe("the header actions", () => {
         buildNode({ unschedulable: true })
       ) as never
     );
-    renderPage();
+    await renderPage();
     expect(screen.getByRole("button", { name: /uncordon/i })).toBeEnabled();
   });
 });

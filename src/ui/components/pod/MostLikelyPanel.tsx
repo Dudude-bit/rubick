@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { Copy, Search, Zap } from "lucide-react";
 
 import { ResourceRef } from "@/components/resources/ResourceRef";
@@ -17,6 +17,7 @@ import {
   type HintSaying,
   type MountedConfig,
 } from "@/lib/hints";
+import { listLink } from "@/lib/links";
 import { openExternal } from "@/lib/open-external";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
@@ -208,7 +209,7 @@ function CheckRow({
   }
   if (check.to.objectKind === "Node" && check.to.name === "") {
     return (
-      <Link to="/nodes" className="text-info hover:underline">
+      <Link {...listLink("Node")} className="text-info hover:underline">
         {text}
       </Link>
     );

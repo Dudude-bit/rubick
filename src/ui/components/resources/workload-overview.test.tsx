@@ -1,12 +1,12 @@
 import { afterEach, describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
 import { CountBlock } from "./workload-overview";
 import { Composition } from "./detail-blocks";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
+import { renderWithRouter } from "@/test/render";
 
 const subject = {
   kind: "StatefulSet",
@@ -74,22 +74,24 @@ const query = (data: ResourceConnections | undefined) =>
   ({ data }) as ConnectionsQuery;
 
 function renderBlock(governance?: ConnectionsQuery) {
-  return render(
-    <MemoryRouter>
-      <CountBlock title="Replicas" subject="what runs" governance={governance}>
-        <Composition
-          total={3}
-          label="replicas wanted"
-          segments={[{ label: "ready", count: 3, tone: "ok" }]}
-        />
-      </CountBlock>
-    </MemoryRouter>
+  return renderWithRouter(
+    <CountBlock title="Replicas" subject="what runs" governance={governance}>
+      <Composition
+        total={3}
+        label="replicas wanted"
+        segments={[{ label: "ready", count: 3, tone: "ok" }]}
+      />
+    </CountBlock>,
+    {
+      at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+      route: "/c/$cluster/$",
+    }
   );
 }
 
 describe("CountBlock", () => {
-  it("renders no Set by row for a workload nothing scales", () => {
-    renderBlock(query(conns()));
+  it("renders no Set by row for a workload nothing scales", async () => {
+    await renderBlock(query(conns()));
 
     expect(screen.queryByText("Set by")).toBeNull();
     expect(screen.queryByText("Now")).toBeNull();
@@ -98,15 +100,15 @@ describe("CountBlock", () => {
     expect(screen.getByText("replicas wanted")).toBeInTheDocument();
   });
 
-  it("renders no rows at all before the neighbourhood has answered", () => {
-    renderBlock(query(undefined));
+  it("renders no rows at all before the neighbourhood has answered", async () => {
+    await renderBlock(query(undefined));
 
     expect(screen.queryByText("Set by")).toBeNull();
     expect(screen.getByText("replicas wanted")).toBeInTheDocument();
   });
 
-  it("lets the bar own the count — the autoscaler never restates it", () => {
-    renderBlock(query(conns(autoscaler())));
+  it("lets the bar own the count — the autoscaler never restates it", async () => {
+    await renderBlock(query(conns(autoscaler())));
 
     expect(screen.getByText("Set by")).toBeInTheDocument();
     // `3 running · 3 wanted` is the same number the bar above it is drawing.
@@ -117,8 +119,8 @@ describe("CountBlock", () => {
     expect(screen.getAllByText("3")).toHaveLength(1);
   });
 
-  it("keeps the autoscaler's range and its reading", () => {
-    renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));
+  it("keeps the autoscaler's range and its reading", async () => {
+    await renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));
 
     expect(screen.getByText(/1 to 3 replicas/)).toBeInTheDocument();
     expect(screen.getByText("cpu")).toBeInTheDocument();
@@ -126,15 +128,15 @@ describe("CountBlock", () => {
   });
 
   /** Issue #178: the block described the autoscaler and gave no way to change it. */
-  it("offers the editor beside the autoscaler it names", () => {
-    renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));
+  it("offers the editor beside the autoscaler it names", async () => {
+    await renderBlock(query(conns(autoscaler({ lastScaleTime: null }))));
     expect(
       screen.getByRole("button", { name: /Edit YAML/ })
     ).toBeInTheDocument();
   });
 
-  it("reduces a budget that is doing its job to one clause", () => {
-    renderBlock(query(conns(budget())));
+  it("reduces a budget that is doing its job to one clause", async () => {
+    await renderBlock(query(conns(budget())));
 
     expect(screen.getByText("A drain waits")).toBeInTheDocument();
     expect(
@@ -144,8 +146,10 @@ describe("CountBlock", () => {
     expect(screen.queryByText(/which is the budget doing its job/)).toBeNull();
   });
 
-  it("keeps the sentence for a budget below its own floor", () => {
-    renderBlock(query(conns(budget({ currentHealthy: 1, desiredHealthy: 2 }))));
+  it("keeps the sentence for a budget below its own floor", async () => {
+    await renderBlock(
+      query(conns(budget({ currentHealthy: 1, desiredHealthy: 2 })))
+    );
 
     expect(
       screen.getByText(/is below its own floor — 1 healthy, 2 required/)
@@ -161,9 +165,9 @@ describe("CountBlock in Russian", () => {
    * labelled "Now" over "no reading against 80%", and a budget "keeps" its
    * floor: English words inside a Russian sentence.
    */
-  it("says who sets the count and what a drain waits on in the reader's words", () => {
+  it("says who sets the count and what a drain waits on in the reader's words", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    renderBlock(
+    await renderBlock(
       query(
         conns(
           autoscaler({

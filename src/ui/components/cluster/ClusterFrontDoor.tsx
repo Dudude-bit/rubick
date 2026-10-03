@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
+import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -41,7 +42,7 @@ export function ClusterFrontDoor() {
   const isLoading = useClusterStore((s) => s.isLoading);
   const error = useClusterStore((s) => s.error);
   const errorContext = useClusterStore((s) => s.errorContext);
-  const connect = useClusterStore((s) => s.connect);
+  const openCluster = useOpenCluster();
   const disconnect = useClusterStore((s) => s.disconnect);
 
   const kubeconfig = useKubeconfigPath();
@@ -64,7 +65,7 @@ export function ClusterFrontDoor() {
         <Failed
           context={errorContext}
           message={error}
-          onRetry={() => connect(errorContext)}
+          onRetry={() => openCluster(errorContext)}
         />
         <div className="mt-7">
           <ClusterList
@@ -74,7 +75,7 @@ export function ClusterFrontDoor() {
             onFilterChange={cluster.setFilter}
             query={cluster.query}
             inputRef={cluster.inputRef}
-            onSelect={connect}
+            onSelect={openCluster}
             failedContext={errorContext}
           />
         </div>
@@ -119,7 +120,7 @@ export function ClusterFrontDoor() {
           onFilterChange={cluster.setFilter}
           query={cluster.query}
           inputRef={cluster.inputRef}
-          onSelect={connect}
+          onSelect={openCluster}
         />
       </div>
       <SourceLine kubeconfig={kubeconfig} />

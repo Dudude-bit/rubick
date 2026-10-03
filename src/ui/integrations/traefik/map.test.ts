@@ -281,7 +281,10 @@ describe("the routing map", () => {
       ingresses: [ingress("shop", "shop.example.com")],
       services: [service("web")],
     });
-    expect(map.columns[1].nodes[0].to).toBe("?tab=routes&q=shop.example.com");
+    expect(map.columns[1].nodes[0].to).toEqual({
+      to: ".",
+      search: { tab: "routes", q: "shop.example.com" },
+    });
   });
 });
 

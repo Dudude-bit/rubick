@@ -3,14 +3,15 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { NodeUtilisation } from "@/components/resources/NodeUtilisation";
 import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { useCallback, useMemo } from "react";
@@ -196,6 +197,9 @@ export const columns = (
 const NODES_TITLE = "Nodes";
 const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
 
+const linkOf = (node: NodeInfo) =>
+  objectLink({ kind: ResourceType.Node, name: node.name })!;
+
 export function NodeList() {
   const t = useT();
   const grouping = useMemo(() => poolGrouping(t), [t]);
@@ -216,12 +220,11 @@ export function NodeList() {
   });
 
   // In the URL, so a deep link can open the view and a reload keeps it.
-  const [params, setParams] = useSearchParams();
-  const view = params.get("view") === "utilisation" ? "utilisation" : "table";
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
+  const view = search.view === "utilisation" ? "utilisation" : "table";
   const range = (
-    ["1h", "6h", "24h", "7d"].includes(params.get("range") ?? "")
-      ? params.get("range")
-      : "6h"
+    ["1h", "6h", "24h", "7d"].includes(search.range ?? "") ? search.range : "6h"
   ) as UsageRange;
 
   // Not while the Utilisation view is up: nothing there reads a live
@@ -242,18 +245,12 @@ export function NodeList() {
   const actions = useNodeActions();
 
   const setView = (next: "table" | "utilisation") =>
-    setParams((current) => {
-      const out = new URLSearchParams(current);
-      if (next === "table") out.delete("view");
-      else out.set("view", next);
-      return out;
-    });
+    setSearch(
+      { view: next === "table" ? undefined : next },
+      { replace: false }
+    );
   const setRange = (next: UsageRange) =>
-    setParams((current) => {
-      const out = new URLSearchParams(current);
-      out.set("range", next);
-      return out;
-    });
+    setSearch({ range: next }, { replace: false });
   // The same key the table reads, so the switch costs no second list.
   const nodesForTrends = useQuery({
     queryKey,
@@ -297,8 +294,7 @@ export function NodeList() {
       {
         icon: Eye,
         label: t("action", "viewDetails"),
-        onClick: (item) =>
-          navigate(getResourceDetailUrl(ResourceType.Node, item.name)),
+        onClick: (item) => navigate(linkOf(item)),
       },
       {
         icon: ShieldOff,
@@ -379,7 +375,7 @@ export function NodeList() {
             <MetricsStatusBanner status={nodeStatus} />
           ) : null
         }
-        getRowHref={(row) => getResourceDetailUrl(ResourceType.Node, row.name)}
+        getRowHref={(row) => hrefOf(linkOf(row))}
       />
       {actions.dialogs}
     </>

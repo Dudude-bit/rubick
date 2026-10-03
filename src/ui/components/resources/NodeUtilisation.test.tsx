@@ -1,8 +1,6 @@
 import type { ReactElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import {
   ScreenShareProvider,
@@ -11,6 +9,8 @@ import {
 import type { NodeUsageWindow } from "@/integrations";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { NodeInfo } from "@/generated/types";
+import { vendorLink } from "@/lib/links";
+import { renderWithRouter } from "@/test/render";
 
 const capability = vi.fn();
 
@@ -25,14 +25,10 @@ vi.mock("@/integrations", async (importOriginal) => {
 const { NodeUtilisation } = await import("./NodeUtilisation");
 
 function wrap(node: ReactElement) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(node, {
+    at: "/c/prod/nodes",
+    route: "/c/$cluster/nodes",
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{node}</MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
 function node(name: string, unschedulable = false): NodeInfo {
@@ -99,7 +95,7 @@ describe("NodeUtilisation", () => {
 
   /** The busiest node first, its peak and average in words a reader can act on. */
   it("orders by headroom and prints peak and average as shares of allocatable", async () => {
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("calm"), node("hot")]}
         range="6h"
@@ -117,7 +113,7 @@ describe("NodeUtilisation", () => {
 
   /** A node drawn at zero because Prometheus has not heard from it yet is the lie this view exists to avoid. */
   it("says a node without series has none, with how old its newest sample is", async () => {
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("fresh"), node("hot")]}
         range="24h"
@@ -139,7 +135,7 @@ describe("NodeUtilisation", () => {
    */
   it("says the resolution in the reader's language", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    wrap(
+    await wrap(
       <NodeUtilisation nodes={[node("calm")]} range="1h" onRange={() => {}} />
     );
     expect(
@@ -149,7 +145,7 @@ describe("NodeUtilisation", () => {
   });
 
   it("marks a cordoned node as a decision rather than a fault", async () => {
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("calm", true)]}
         range="6h"
@@ -172,7 +168,7 @@ describe("NodeUtilisation", () => {
       state: "ready",
       endpoint: "localhost:20000",
       vendor: "Prometheus",
-      page: "/integrations/prometheus?tab=monitors",
+      page: vendorLink("prometheus", { tab: "monitors" }),
       use: vi.fn(async () => ({
         nodes: {},
         newestAt: {},
@@ -184,7 +180,7 @@ describe("NodeUtilisation", () => {
         },
       })),
     });
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("a"), node("b"), node("c")]}
         range="6h"
@@ -200,7 +196,7 @@ describe("NodeUtilisation", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Prometheus › Monitors" })
-    ).toHaveAttribute("href", "/integrations/prometheus?tab=monitors");
+    ).toHaveAttribute("href", "/c/prod/integrations/prometheus?tab=monitors");
     expect(screen.queryByText("no series")).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Note" })).toBeNull();
     const rows = screen.getAllByRole("row");
@@ -222,7 +218,7 @@ describe("NodeUtilisation", () => {
         throw new Error("403 Forbidden");
       }),
     });
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("a"), node("b")]}
         range="6h"
@@ -244,7 +240,7 @@ describe("NodeUtilisation", () => {
       page: null,
       use: vi.fn(async () => ({ ...window, basis: "pods" })),
     });
-    wrap(
+    await wrap(
       <NodeUtilisation nodes={[node("hot")]} range="6h" onRange={() => {}} />
     );
     await screen.findByText("peak 90% · avg 58%");
@@ -255,7 +251,7 @@ describe("NodeUtilisation", () => {
 
   /** Some nodes answering and some not is per-row, and the block would be a lie about the ones that answered. */
   it("keeps per-row notes when only some nodes are silent", async () => {
-    wrap(
+    await wrap(
       <NodeUtilisation
         nodes={[node("hot"), node("cold")]}
         range="6h"
@@ -270,9 +266,9 @@ describe("NodeUtilisation", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 
-  it("offers a Prometheus when there is none rather than an empty table", () => {
+  it("offers a Prometheus when there is none rather than an empty table", async () => {
     capability.mockReturnValue({ state: "absent" });
-    wrap(
+    await wrap(
       <NodeUtilisation nodes={[node("calm")]} range="6h" onRange={() => {}} />
     );
     expect(screen.getByText(/needs a Prometheus/)).toBeInTheDocument();
@@ -289,23 +285,15 @@ describe("what the view offers Share", () => {
       collect = useScreenSections();
       return null;
     }
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter>
-          <ScreenShareProvider>
-            <NodeUtilisation
-              nodes={[node("calm"), node("hot")]}
-              range="6h"
-              onRange={() => {}}
-            />
-            <Probe />
-          </ScreenShareProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await wrap(
+      <ScreenShareProvider>
+        <NodeUtilisation
+          nodes={[node("calm"), node("hot")]}
+          range="6h"
+          onRange={() => {}}
+        />
+        <Probe />
+      </ScreenShareProvider>
     );
 
     await screen.findByText("peak 90% · avg 58%");
@@ -339,23 +327,11 @@ describe("what the view offers Share", () => {
       collect = useScreenSections();
       return null;
     }
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter>
-          <ScreenShareProvider>
-            <NodeUtilisation
-              nodes={[node("hot")]}
-              range="6h"
-              onRange={() => {}}
-            />
-            <Probe />
-          </ScreenShareProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await wrap(
+      <ScreenShareProvider>
+        <NodeUtilisation nodes={[node("hot")]} range="6h" onRange={() => {}} />
+        <Probe />
+      </ScreenShareProvider>
     );
     await screen.findByText("peak 90% · avg 58%");
     expect(collect!().map((s) => s.id)).toContain("utilisation-basis");
@@ -363,31 +339,23 @@ describe("what the view offers Share", () => {
 
   /** A node list this token could not read must not leave the utilisation
    *  table looking like a cluster with no nodes. */
-  it("marks the section unread when the node list did not answer", () => {
+  it("marks the section unread when the node list did not answer", async () => {
     let collect: ReturnType<typeof useScreenSections> = null;
     function Probe() {
       collect = useScreenSections();
       return null;
     }
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter>
-          <ScreenShareProvider>
-            <NodeUtilisation
-              nodes={[]}
-              nodesKnown={false}
-              nodesReason="Forbidden"
-              range="6h"
-              onRange={() => {}}
-            />
-            <Probe />
-          </ScreenShareProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await wrap(
+      <ScreenShareProvider>
+        <NodeUtilisation
+          nodes={[]}
+          nodesKnown={false}
+          nodesReason="Forbidden"
+          range="6h"
+          onRange={() => {}}
+        />
+        <Probe />
+      </ScreenShareProvider>
     );
 
     const section = collect!().find((s) => s.id === "utilisation");

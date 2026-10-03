@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -31,7 +31,7 @@ import {
 } from "@/lib/metrics";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { queryKeys } from "@/lib/query-keys";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
 import { getResourceRowId } from "@/lib/table-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -71,6 +71,13 @@ export interface WorkloadListPageConfig<T extends Workload> {
 export function createWorkloadListPage<T extends Workload>(
   config: WorkloadListPageConfig<T>
 ) {
+  const linkOf = (row: Workload) =>
+    objectLink({
+      kind: config.resourceType,
+      name: row.name,
+      namespace: row.namespace,
+    })!;
+
   const ListPage = function WorkloadListPage() {
     const t = useT();
     const scope = useNamespaceScope();
@@ -138,14 +145,7 @@ export function createWorkloadListPage<T extends Workload>(
           {
             icon: Eye,
             label: t("action", "viewDetails"),
-            onClick: (item) =>
-              navigate(
-                getResourceDetailUrl(
-                  config.resourceType,
-                  item.name,
-                  item.namespace
-                )
-              ),
+            onClick: (item) => navigate(linkOf(item)),
           },
           {
             icon: Trash2,
@@ -191,9 +191,7 @@ export function createWorkloadListPage<T extends Workload>(
             onRetry={() => void refetchPodMetrics()}
           />
         }
-        getRowHref={(row) =>
-          getResourceDetailUrl(config.resourceType, row.name, row.namespace)
-        }
+        getRowHref={(row) => hrefOf(linkOf(row))}
         deleteConfig={{
           mutationFn: async (item) => {
             await config.deleter(item);

@@ -1,11 +1,9 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 
 const mesh = vi.hoisted(() => ({
   objects: new Map<string, unknown[]>(),
@@ -74,17 +72,10 @@ function routing(
 }
 
 async function openHost() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  await renderWithRouter(<IstioPage />, {
+    at: "/c/prod/integrations/istio?tab=routes",
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/integrations/istio?tab=routes"]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  render(<IstioPage />, { wrapper });
   await userEvent.click(await screen.findByText("shop.mesh.test"));
 }
 

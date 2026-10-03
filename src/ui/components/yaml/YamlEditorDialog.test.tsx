@@ -13,13 +13,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
-
+import { renderWithRouter } from "@/test/render";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 
@@ -107,19 +104,10 @@ function application(listsTheDeployment: boolean) {
 }
 
 async function openWith(yamlText: string) {
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>
-        <TooltipProvider>
-          <YamlEditorDialog />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+  await renderWithRouter(<YamlEditorDialog />, {
+    at: "/c/test",
+    route: "/c/$cluster",
+  });
   await useYamlEditorStore.getState().openEditor({
     title: "Edit Deployment: api",
     resourceKey: { kind: "Deployment", name: "api", namespace: "shop" },

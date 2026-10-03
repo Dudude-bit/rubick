@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -15,7 +15,7 @@ import { nodeUtilisationSections } from "./node-utilisation-share";
 import { useCapabilityState, USAGE_RANGES } from "@/integrations";
 import type { DeclaredPoint, UsageRange } from "@/integrations";
 import { errorToShow } from "@/lib/error-utils";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink, pageLink, type AppLink } from "@/lib/links";
 import {
   everyNodeSilent,
   nodeTrends,
@@ -143,7 +143,10 @@ export function NodeUtilisation({
     return (
       <p className="px-1 py-6 text-xs text-fg-mut">
         {t("empty", "trendsNeedPrometheus")}{" "}
-        <Link to="/integrations" className="text-info hover:underline">
+        <Link
+          {...pageLink("integrations")}
+          className="text-info hover:underline"
+        >
           {t("action", "connectOne")}
         </Link>
         .
@@ -258,7 +261,7 @@ function SilentNodes({
   page,
 }: {
   vendor: string;
-  page: string | null;
+  page: AppLink | null;
 }) {
   const t = useT();
   const mono = (text: string) => (
@@ -284,7 +287,7 @@ function SilentNodes({
       <p className="mt-1 text-fg-mut">
         {parts(t("empty", "nodesSilentCheck"), {
           monitors: page ? (
-            <Link to={page} className="text-info hover:underline">
+            <Link {...page} className="text-info hover:underline">
               {monitors}
             </Link>
           ) : (
@@ -319,7 +322,7 @@ function Row({
     <TableRow data-quiet>
       <TableCell>
         <Link
-          to={getResourceDetailUrl(ResourceType.Node, trend.node.name)}
+          {...objectLink({ kind: ResourceType.Node, name: trend.node.name })!}
           className="font-mono text-xs text-fg hover:underline"
         >
           {trend.node.name}

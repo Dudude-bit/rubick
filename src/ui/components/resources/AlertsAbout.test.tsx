@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { screen, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 
 const capability = vi.fn();
 const speaks = vi.fn((_kind: string) => true);
@@ -11,19 +10,16 @@ vi.mock("@/integrations", () => ({
   alertsCanBeAbout: (kind: string) => speaks(kind),
 }));
 
+import { testQueryClient, renderWithRouter } from "@/test/render";
+import { vendorLink } from "@/lib/links";
 import { AlertsAbout } from "./AlertsAbout";
 
-const wrap = (ui: ReactNode, client?: QueryClient) =>
-  render(
-    <QueryClientProvider
-      client={
-        client ??
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement, client?: QueryClient) =>
+  renderWithRouter(<div data-testid="slot">{ui}</div>, {
+    client,
+    at: "/c/prod/deployments/shop/payments",
+    route: "/c/$cluster/$resource/$namespace/$name",
+  });
 
 describe("what is firing about this object", () => {
   beforeEach(() => speaks.mockReturnValue(true));
@@ -39,7 +35,9 @@ describe("what is firing about this object", () => {
       use: { read: () => Promise.reject(new Error("prometheus refused")) },
     });
 
-    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+    await wrap(
+      <AlertsAbout kind="Deployment" name="payments" namespace="shop" />
+    );
 
     await waitFor(() =>
       expect(screen.getByText(/could not be read/i)).toBeVisible()
@@ -47,10 +45,12 @@ describe("what is firing about this object", () => {
   });
 
   /** And a Prometheus that never answered is its own sentence. */
-  it("says the connected Prometheus did not answer", () => {
+  it("says the connected Prometheus did not answer", async () => {
     capability.mockReturnValue({ state: "unreachable", reason: "timed out" });
 
-    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+    await wrap(
+      <AlertsAbout kind="Deployment" name="payments" namespace="shop" />
+    );
 
     expect(screen.getByText(/did not answer/i)).toBeVisible();
   });
@@ -64,17 +64,22 @@ describe("what is firing about this object", () => {
   it("sends the reader where the supplier says its alerts are", async () => {
     capability.mockReturnValue({
       state: "ready",
-      page: "/integrations/mimir?tab=alerts",
+      page: vendorLink("mimir", { tab: "alerts" }),
       use: {
         read: async () => [],
         pick: () => [{ rule: "PodCrashLooping", state: "firing", via: {} }],
       },
     });
 
-    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+    await wrap(
+      <AlertsAbout kind="Deployment" name="payments" namespace="shop" />
+    );
 
     const link = await screen.findByRole("link");
-    expect(link).toHaveAttribute("href", "/integrations/mimir?tab=alerts");
+    expect(link).toHaveAttribute(
+      "href",
+      "/c/prod/integrations/mimir?tab=alerts"
+    );
   });
 
   /** A supplier with no screen of its own offers no link at all. */
@@ -88,7 +93,9 @@ describe("what is firing about this object", () => {
       },
     });
 
-    wrap(<AlertsAbout kind="Deployment" name="payments" namespace="shop" />);
+    await wrap(
+      <AlertsAbout kind="Deployment" name="payments" namespace="shop" />
+    );
 
     await waitFor(() =>
       expect(screen.getByText("PodCrashLooping")).toBeVisible()
@@ -109,19 +116,17 @@ describe("what is firing about this object", () => {
       page: null,
       use: { read, pick: () => [] },
     });
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = testQueryClient();
 
-    wrap(
+    await wrap(
       <AlertsAbout kind="Deployment" name="payments" namespace="shop" />,
       client
     );
-    wrap(
+    await wrap(
       <AlertsAbout kind="Deployment" name="checkout" namespace="shop" />,
       client
     );
-    wrap(
+    await wrap(
       <AlertsAbout kind="StatefulSet" name="ledger" namespace="bank" />,
       client
     );
@@ -144,11 +149,13 @@ describe("what is firing about this object", () => {
       use: { read, pick: () => [] },
     });
 
-    const { container } = wrap(
+    await wrap(
       <AlertsAbout kind="ConfigMap" name="settings" namespace="shop" />
     );
 
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    await waitFor(() =>
+      expect(screen.getByTestId("slot")).toBeEmptyDOMElement()
+    );
     expect(read).not.toHaveBeenCalled();
   });
 
@@ -159,10 +166,12 @@ describe("what is firing about this object", () => {
       use: { read: async () => [], pick: () => [] },
     });
 
-    const { container } = wrap(
+    await wrap(
       <AlertsAbout kind="Deployment" name="payments" namespace="shop" />
     );
 
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    await waitFor(() =>
+      expect(screen.getByTestId("slot")).toBeEmptyDOMElement()
+    );
   });
 });

@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 import type { CronJobDetailInfo } from "@/generated/types";
 
 vi.mock("@/hooks", () => ({
@@ -18,6 +16,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
+import { renderWithRouter } from "@/test/render";
 import { CronJobDetail } from "./CronJobDetail";
 
 function buildCronJob(
@@ -77,62 +76,56 @@ function mockDetail(
 }
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<CronJobDetail />, {
+    at: "/c/prod/cronjobs/ops/nightly-backup",
+    route: "/c/$cluster/cronjobs/$namespace/$name",
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/cronjobs/ops/nightly-backup"]}>
-        <CronJobDetail />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
 describe("CronJobDetail", () => {
   beforeEach(() => mockDetail(buildCronJob()));
 
-  it("leads with the schedule, in cron and in words", () => {
-    renderPage();
+  it("leads with the schedule, in cron and in words", async () => {
+    await renderPage();
     expect(screen.getByText("0 3 * * *")).toBeInTheDocument();
     expect(screen.getByText(/daily at 03:00/)).toBeInTheDocument();
   });
 
-  it("answers when it last ran and when it runs next", () => {
-    renderPage();
+  it("answers when it last ran and when it runs next", async () => {
+    await renderPage();
     expect(screen.getByText("Last run")).toBeInTheDocument();
     expect(screen.getByText("1h ago")).toBeInTheDocument();
     expect(screen.getByText("Next run")).toBeInTheDocument();
     expect(screen.getByText(/^in /)).toBeInTheDocument();
   });
 
-  it("says a suspended CronJob is not going to fire", () => {
+  it("says a suspended CronJob is not going to fire", async () => {
     mockDetail(buildCronJob({ suspend: true }));
-    renderPage();
+    await renderPage();
     expect(screen.getByText("suspended")).toBeInTheDocument();
     expect(
       screen.getByText(/nothing will start until the suspend flag is cleared/)
     ).toBeInTheDocument();
   });
 
-  it("admits it cannot read an unparsable schedule instead of guessing", () => {
+  it("admits it cannot read an unparsable schedule instead of guessing", async () => {
     mockDetail(buildCronJob({ schedule: "every other tuesday" }));
-    renderPage();
+    await renderPage();
     expect(screen.getByText("unknown")).toBeInTheDocument();
     expect(
       screen.getByText("the schedule could not be read")
     ).toBeInTheDocument();
   });
 
-  it("flags a CronJob that has fired but never succeeded", () => {
+  it("flags a CronJob that has fired but never succeeded", async () => {
     mockDetail(buildCronJob({ lastSuccessfulTime: null }));
-    renderPage();
+    await renderPage();
     expect(screen.getByText("no run has succeeded yet")).toBeInTheDocument();
   });
 
-  it("renders nothing when the CronJob is absent and nothing is in flight", () => {
+  it("renders nothing when the CronJob is absent and nothing is in flight", async () => {
     mockDetail(undefined);
-    const { container } = renderPage();
+    const { container } = await renderPage();
     expect(container.firstChild).toBeNull();
   });
 
@@ -146,7 +139,7 @@ describe("CronJobDetail", () => {
         'jobs.batch is forbidden: User "kirya" cannot list resource "jobs"'
       )
     );
-    renderPage();
+    await renderPage();
     expect(
       await screen.findByText("Could not read this CronJob's runs.")
     ).toBeInTheDocument();
@@ -165,7 +158,7 @@ describe("CronJobDetail", () => {
       )
     );
     mockDetail(buildCronJob(), "jobs");
-    renderPage();
+    await renderPage();
     expect(
       await screen.findByText("Could not read this CronJob's runs.")
     ).toBeInTheDocument();
@@ -179,7 +172,7 @@ describe("CronJobDetail", () => {
   /** The other side: a list that was read and is empty says so. */
   it("says on the Jobs tab that a CronJob with no runs has not run", async () => {
     mockDetail(buildCronJob(), "jobs");
-    renderPage();
+    await renderPage();
     expect(
       await screen.findByText("This CronJob has not run yet")
     ).toBeInTheDocument();

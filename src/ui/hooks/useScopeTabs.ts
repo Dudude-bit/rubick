@@ -8,16 +8,24 @@
 
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { useLocationHref } from "@/hooks/useLocationHref";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
+/**
+ * The route the bridge has asked the router for and not yet heard back on.
+ * Outside the hook because the layout that mounts it unmounts at the front
+ * door, and the ask has to survive that to be asked only once.
+ */
+let delivering: string | null = null;
+
 export function useScopeTabs(): void {
   const navigate = useNavigate();
-  const { pathname, search } = useLocation();
-  const href = `${pathname}${search}`;
+  const router = useRouter();
+  const href = useLocationHref();
   const queryClient = useQueryClient();
 
   const pendingHref = useScopeTabStore((s) => s.pendingHref);
@@ -32,15 +40,28 @@ export function useScopeTabs(): void {
   }, [href]);
 
   // Store -> router. An activation asks for a route; this delivers it and
-  // reports back, which is what re-opens the outlet.
+  // reports back, which is what re-opens the outlet. Asked once, and settled
+  // wherever the router lands: a redirect, or the front door sending the
+  // window on to a cluster, never arrives at the address asked for, and
+  // asking again would chase it forever.
   useEffect(() => {
     if (pendingHref === null) return;
-    if (pendingHref !== href) {
-      navigate(pendingHref);
+    if (pendingHref === href) {
+      useScopeTabStore.getState().routeSettled();
       return;
     }
-    useScopeTabStore.getState().routeSettled();
-  }, [pendingHref, href, navigate]);
+    if (delivering === pendingHref) return;
+    delivering = pendingHref;
+    const landed = () => {
+      if (delivering === pendingHref) delivering = null;
+      const store = useScopeTabStore.getState();
+      if (store.pendingHref !== pendingHref) return;
+      store.routeSettled();
+      const { pathname, searchStr } = router.state.location;
+      store.recordHref(`${pathname}${searchStr}`);
+    };
+    void navigate({ href: pendingHref }).then(landed, landed);
+  }, [pendingHref, href, navigate, router]);
 
   // A route that names an object names it in one cluster; the list it came
   // from is the same list anywhere.
@@ -107,8 +128,9 @@ export function useScopeTabs(): void {
     store.reconcileContexts(contexts.map((ctx) => ctx.name));
     if (resumed.current) return;
     resumed.current = true;
-    // The kubeconfig's own current context auto-connects on load; the
-    // restored tab is the workspace and outranks it.
+    // The restored tab is the workspace: its namespace scope, which the
+    // route's own connect knows nothing about, is applied once there is a
+    // kubeconfig to apply it under.
     void useScopeTabStore.getState().resumeActive();
   }, [contexts]);
 

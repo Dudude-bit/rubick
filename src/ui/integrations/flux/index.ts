@@ -1,6 +1,7 @@
 import { Layers } from "lucide-react";
 
-import { crdObjectPath } from "../kit";
+import { objectLink } from "@/lib/links";
+
 import { defineVendor, pageCount } from "../registry";
 import { crd } from "./crd";
 import {
@@ -73,5 +74,10 @@ export default defineVendor({
  * offers the link. Naming a vendor in *copy* was never the problem; naming
  * one in an `import` is.
  */
-export const helmReleasePath = (namespace: string, name: string) =>
-  crdObjectPath(HELM_RELEASES_CRD, namespace, name);
+export const helmReleaseObjectLink = (namespace: string, name: string) =>
+  objectLink({
+    kind: "HelmRelease",
+    name,
+    namespace,
+    crd: HELM_RELEASES_CRD,
+  })!;

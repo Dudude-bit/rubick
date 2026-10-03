@@ -19,7 +19,7 @@
 
 import type { en } from "@/i18n/catalogue";
 
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import type { ActionWarning } from "@/lib/governance";
 import { useT } from "@/i18n/useT";
@@ -66,7 +66,7 @@ export function ActionWarnings({
         {only.to && (
           <>
             {" "}
-            <Link to={only.to} className="text-info hover:underline">
+            <Link {...only.to} className="text-info hover:underline">
               {t("action", "openWhatDeliversIt")}
             </Link>
             .
@@ -93,7 +93,7 @@ export function ActionWarnings({
           {warning.to && (
             <>
               {" "}
-              <Link to={warning.to} className="text-info hover:underline">
+              <Link {...warning.to} className="text-info hover:underline">
                 {t("action", "openIt")}
               </Link>
               .

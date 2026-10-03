@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck,
@@ -52,67 +52,71 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
+import { listLink } from "@/lib/links";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 
 export function CrdDetail() {
   const t = useT();
-  const { name } = useParams<{ name: string }>();
-  const decodedName = name ? decodeURIComponent(name) : undefined;
+  const { name } = useParams({ strict: false });
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const copyToClipboard = useCopyToClipboard();
-  const [searchParams] = useSearchParams();
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
   // Only the initial value. A link that says "show me the objects" has to
   // land on them, and a reader who then clicks another tab has changed
   // their mind — re-reading the URL after that would take it back.
-  const [activeTab, setActiveTab] = useState(
-    () => searchParams.get("tab") ?? "overview"
-  );
+  const [activeTab, setActiveTab] = useState(() => search.tab ?? "overview");
+  const changeTab = (tab: string) => {
+    setActiveTab(tab);
+    setSearch({ tab: tab === "overview" ? undefined : tab }, { replace: true });
+  };
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 
   const goBack = () =>
-    navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
+    navigate(listLink(ResourceType.CustomResourceDefinition));
 
   const {
     data: crd,
     isLoading,
     error,
   } = useQuery({
-    queryKey: queryKeys.crd(decodedName),
+    queryKey: queryKeys.crd(name),
     queryFn: async () => {
-      if (!decodedName) throw new Error("CRD name is required");
+      if (!name) throw new Error("CRD name is required");
       try {
-        return await commands.getCrd(decodedName);
+        return await commands.getCrd(name);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
-    enabled: !!decodedName,
+    enabled: !!name,
   });
 
   const { data: yaml } = useQuery({
-    queryKey: ["crd-yaml", decodedName],
+    queryKey: ["crd-yaml", name],
     queryFn: async () => {
-      if (!decodedName) throw new Error("CRD name is required");
+      if (!name) throw new Error("CRD name is required");
       try {
-        return await commands.getCrdYaml(decodedName);
+        return await commands.getCrdYaml(name);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
     },
-    enabled: !!decodedName && activeTab === "yaml",
+    enabled: !!name && activeTab === "yaml",
   });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!decodedName) return;
+      if (!name) return;
       try {
-        await commands.deleteCrd(decodedName);
+        await commands.deleteCrd(name);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }
@@ -122,11 +126,11 @@ export function CrdDetail() {
         title: t("action", "kindDeleted", { kind: "CRD" }),
         description: t("action", "kindDeletedDetail", {
           kind: "CRD",
-          name: decodedName ?? "",
+          name: name ?? "",
         }),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.crds() });
-      navigate(`/${toPlural(ResourceType.CustomResourceDefinition)}`);
+      goBack();
     },
     onError: (err: Error) => {
       toastError(t("action", "deleteKindFailed", { kind: "CRD" }), err);
@@ -381,7 +385,7 @@ export function CrdDetail() {
       yaml,
       onCopy: () => yaml && copyToClipboard(yaml),
       resourceKind: ResourceType.CustomResourceDefinition,
-      resourceName: decodedName,
+      resourceName: name,
     }),
   ];
 
@@ -394,7 +398,7 @@ export function CrdDetail() {
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.CustomResourceDefinition}
-        title={crd?.kind || decodedName || ""}
+        title={crd?.kind || name || ""}
         createdAt={crd?.createdAt}
         statusBadge={
           crd && (
@@ -431,7 +435,7 @@ export function CrdDetail() {
         }
         tabs={tabs}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
       />
 
       <ConfirmDialog
@@ -439,7 +443,7 @@ export function CrdDetail() {
         onOpenChange={setDeleteDialogOpen}
         title={t("action", "deleteKindQuestion", { kind: "CRD" })}
         description={t("action", "deleteCrdWarning", {
-          name: decodedName ?? "",
+          name: name ?? "",
         })}
         confirmLabel={t("action", "delete")}
         confirmVariant="destructive"

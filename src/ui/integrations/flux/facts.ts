@@ -8,7 +8,8 @@
  * quiet; those two are why anybody would open the page.
  */
 
-import { integrationPagePath } from "../paths";
+import { vendorLink } from "@/lib/links";
+
 import type { VendorFact } from "../registry";
 import { countReconcilers, fetchPicture } from "./data";
 
@@ -67,7 +68,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (reconcilers.length > 0 || unread.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("flux"),
+      to: vendorLink("flux"),
     });
   }
 

@@ -47,6 +47,12 @@ export default [
     },
   },
   {
+    // A route file exports `Route` beside the screen it mounts, and the
+    // router's own plugin is what hot-reloads it.
+    files: ["src/ui/routes/**/*.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
+  {
     // The design system is a single flat canvas driven by role tokens.
     // A raw colour utility silently opts a component out of theming, and
     // that is exactly how 344 of them accumulated. Components also never

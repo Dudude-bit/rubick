@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -18,6 +17,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveries } from "@/hooks/useDelivery";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
+import { useAppSearch } from "@/hooks/useSearchParam";
 import {
   useCapabilities,
   type DeliveryOwner,
@@ -78,8 +78,7 @@ function ownersOf(
 
 export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   const t = useT();
-  const [params] = useSearchParams();
-  const since = params.get("since");
+  const { since } = useAppSearch();
   const sinceMs = since ? Date.parse(since) : NaN;
   const now = useNow();
   const context = useClusterStore((s) => s.currentContext);

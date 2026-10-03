@@ -23,6 +23,10 @@ import { useClusterRecencyStore } from "./clusterRecencyStore";
 /** Cluster store state and actions */
 interface ClusterState {
   contexts: ContextInfo[];
+  /** The kubeconfig was read: `contexts` is its answer, not an empty start. */
+  contextsKnown: boolean;
+  /** Where the window was last connected, else the kubeconfig's current context. */
+  lastContext: string | null;
   currentContext: string | null;
   /**
    * The one namespace to ask the API server for, or `""` for the whole
@@ -120,6 +124,8 @@ function scopeFor(
 
 export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
+  contextsKnown: false,
+  lastContext: null,
   currentContext: null,
   currentNamespace: "", // Empty string means all namespaces
   namespaceScope: [],
@@ -140,10 +146,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     set({ isLoading: true, error: null, errorContext: null });
     try {
       const contexts = await commands.listContexts();
-      const currentContext = await commands.getCurrentContext();
-      set({ contexts, currentContext, isLoading: false });
+      const kubeconfigCurrent = await commands.getCurrentContext();
+      let lastContext: string | null = kubeconfigCurrent;
 
-      // Restore saved cluster preferences and auto-connect
+      // Restore saved cluster preferences
       try {
         const prefs = await commands.getClusterPreferences();
         if (
@@ -175,21 +181,14 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
               currentNamespace: wireNamespace(scope),
             });
           }
-          // Auto-connect to the saved cluster — but only if nothing has
-          // already claimed the connection. A window launched from a deep
-          // link connects to that link's context (useDeepLinks), and the
-          // saved last cluster must not race it and win, or the link would
-          // silently open the wrong cluster under a "live" banner. Any
-          // explicit connect bumps connectionAttemptId off zero; whichever
-          // ran first, the deep link's connect is issued too and, being the
-          // later one, wins — so this guard only has to not add a competitor.
-          if (get().connectionAttemptId === 0 && !get().pendingContext) {
-            get().connect(prefs.lastContext);
-          }
+          lastContext = prefs.lastContext;
         }
       } catch {
         // Ignore errors loading preferences - not critical
       }
+      // The address decides which cluster to connect to; this only says
+      // which one the front door sends the window back to.
+      set({ contexts, contextsKnown: true, lastContext, isLoading: false });
     } catch (error) {
       set({
         error: errorToShow(error),
@@ -353,6 +352,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       isConnected: false,
       connectedThrough: null,
       currentContext: null,
+      // Leaving a cluster on purpose: the front door must not send the
+      // window straight back to it.
+      lastContext: null,
       pendingContext: null,
       error: null,
       errorContext: null,

@@ -25,6 +25,7 @@ import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 
 import type { Delivery, DeliveryQuery, DeliverySource } from "@/integrations";
+import type { AppLink } from "./links";
 import { kindFacts } from "./resource-registry";
 import { formatAge } from "./utils";
 
@@ -136,7 +137,7 @@ export interface DeliveryMark {
   /** "Argo CD · shop", and " · out of sync" where there is trouble. */
   text: string;
   /** Where the reader goes to change it, or `null` for a claim with no owner. */
-  to: string | null;
+  to: AppLink | null;
   tone: "faint" | "warn";
 }
 
@@ -188,7 +189,7 @@ export interface DeliveryLine {
     repoUrl: string | null;
   } | null;
   /** The owner to open, for the line that has one obvious next step. */
-  to: string | null;
+  to: AppLink | null;
 }
 
 /**
@@ -407,7 +408,7 @@ export interface DeliveryIntercept {
     path: string | null;
     revision: string | null;
     repoUrl: string | null;
-    to: string;
+    to: AppLink;
   } | null;
 }
 

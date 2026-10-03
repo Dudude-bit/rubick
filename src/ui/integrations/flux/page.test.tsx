@@ -1,10 +1,8 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 
 import type { CustomResourceInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   deployments: (): Promise<unknown[]> => Promise.resolve([]),
@@ -31,17 +29,10 @@ const refused = (words: string) =>
   });
 
 function renderOn(tab: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<FluxPage />, {
+    at: `/c/test/integrations/flux?tab=${tab}`,
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/integrations/flux?tab=${tab}`]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  return render(<FluxPage />, { wrapper });
 }
 
 beforeEach(() => {
@@ -77,7 +68,7 @@ describe("a source kind the reader may not list", () => {
   it("is named as unread rather than drawn as no sources", async () => {
     answers.crds.set(GIT_REPOSITORIES, refusedList);
 
-    renderOn("sources");
+    await renderOn("sources");
 
     await waitFor(() =>
       expect(screen.getByText(SOURCES_FORBIDDEN)).toBeInTheDocument()
@@ -89,7 +80,7 @@ describe("a source kind the reader may not list", () => {
   it("is none when the kind is not served", async () => {
     answers.crds.set(GIT_REPOSITORIES, notServed);
 
-    renderOn("sources");
+    await renderOn("sources");
 
     await waitFor(() =>
       expect(screen.getByText(/^No source objects/)).toBeInTheDocument()
@@ -106,7 +97,7 @@ describe("the Controllers tab", () => {
   it("says the controllers could not be looked for when the list is refused", async () => {
     answers.deployments = () => Promise.reject(refused(FORBIDDEN));
 
-    renderOn("controllers");
+    await renderOn("controllers");
 
     await waitFor(() =>
       expect(screen.getByText(new RegExp(FORBIDDEN))).toBeInTheDocument()
@@ -118,7 +109,7 @@ describe("the Controllers tab", () => {
 
   /** Read and empty is the one case where "none running" is the answer. */
   it("says none carries the label when the list answered empty", async () => {
-    renderOn("controllers");
+    await renderOn("controllers");
 
     await waitFor(() =>
       expect(
@@ -173,7 +164,7 @@ describe("a failing source when HelmReleases could not be listed", () => {
       Promise.resolve([failingChartRepo()])
     );
 
-    renderOn("sources");
+    await renderOn("sources");
 
     await waitFor(() =>
       expect(screen.getByText(/any built from this source/)).toBeInTheDocument()
@@ -191,7 +182,7 @@ describe("a failing source when HelmReleases could not be listed", () => {
       Promise.resolve([failingChartRepo()])
     );
 
-    renderOn("sources");
+    await renderOn("sources");
 
     await waitFor(() =>
       expect(screen.getByText(/Nothing names this source/)).toBeInTheDocument()
@@ -219,7 +210,7 @@ describe("the reconcilers when HelmReleases could not be listed", () => {
   it("does not say Flux applies nothing when the releases were not read", async () => {
     answers.crds.set(HELM_RELEASES, releasesRefused);
 
-    renderOn("reconcilers");
+    await renderOn("reconcilers");
 
     expect(
       await screen.findByText(en.empty.fluxReconcilersUnread)
@@ -237,7 +228,7 @@ describe("the reconcilers when HelmReleases could not be listed", () => {
     answers.crds.set(KUSTOMIZATIONS, () => Promise.resolve([appliedApps()]));
     answers.crds.set(GIT_REPOSITORIES, () => Promise.resolve([fetchingRepo()]));
 
-    renderOn("reconcilers");
+    await renderOn("reconcilers");
 
     await screen.findByText("apps");
     expect(screen.queryByText(/all applied/)).toBeNull();

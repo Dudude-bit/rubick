@@ -14,6 +14,7 @@
  * the occasional hairline, which is the same rhythm the overview uses.
  */
 
+import type { AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
 
@@ -123,14 +124,14 @@ interface ResourceDetailLayoutProps {
    * Breadcrumb overrides for kinds the resource registry does not own, and
    * `null` for a kind with no list page to send the reader to.
    */
-  listUrl?: string | null;
+  listLink?: AppLink | null;
   listLabel?: string;
 
   /** The object's name. */
   title: string;
   namespace?: string;
   /** `null` where narrowing to the namespace has no list to open under it. */
-  namespaceUrl?: string | null;
+  namespaceLink?: AppLink | null;
   createdAt?: string | null;
   statusBadge?: ReactNode;
   /** Qualifiers shown beside the name. */
@@ -206,11 +207,11 @@ export function ResourceDetailLayout({
   isLoading,
   error,
   resourceKind,
-  listUrl,
+  listLink,
   listLabel,
   title,
   namespace,
-  namespaceUrl,
+  namespaceLink,
   createdAt,
   statusBadge,
   badges,
@@ -309,10 +310,10 @@ export function ResourceDetailLayout({
         <ResourceDetailHeader
           name={title}
           kind={resourceKind}
-          listUrl={listUrl}
+          listLink={listLink}
           listLabel={listLabel}
           namespace={namespace}
-          namespaceUrl={namespaceUrl}
+          namespaceLink={namespaceLink}
           createdAt={createdAt}
           status={statusBadge}
           meta={

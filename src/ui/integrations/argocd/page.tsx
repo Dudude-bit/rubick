@@ -30,16 +30,17 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { refOf } from "@/lib/report-parts";
 import { useCrdIndex, type CrdLookup } from "@/hooks/useCrdIndex";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import {
   countMark,
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
+import { crdInstancesLink } from "@/lib/links";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
-import { crdObjectsPath, getValueByPath, troubleMark } from "../kit";
+import { getValueByPath, troubleMark } from "../kit";
 import { gitRepoLink, gitRevisionLink, shortRevision } from "../gitops";
 import {
   Chain,
@@ -1198,7 +1199,7 @@ function ControllerTab({
           {[APPLICATIONS_CRD, APPLICATIONSETS_CRD, PROJECTS_CRD].map((crd) => (
             <Link
               key={crd}
-              to={crdObjectsPath(crd)}
+              {...crdInstancesLink(crd)}
               className="font-mono text-info hover:underline"
             >
               {crd}

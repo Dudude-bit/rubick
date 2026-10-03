@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 
 // ----- Mocks -----
 
@@ -33,6 +32,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { renderWithRouter } from "@/test/render";
 import { PortForwardsTab } from "./PortForwardsTab";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -64,11 +64,10 @@ const SESSION = {
 };
 
 function mount() {
-  return render(
-    <MemoryRouter>
-      <PortForwardsTab />
-    </MemoryRouter>
-  );
+  return renderWithRouter(<PortForwardsTab />, {
+    at: "/c/k3d",
+    route: "/c/$cluster/$",
+  });
 }
 
 describe("PortForwardsTab", () => {
@@ -83,8 +82,8 @@ describe("PortForwardsTab", () => {
     });
   });
 
-  it("lists a forward that is running right now", () => {
-    mount();
+  it("lists a forward that is running right now", async () => {
+    await mount();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Stop forwarding api-7f9/ })
@@ -96,7 +95,7 @@ describe("PortForwardsTab", () => {
   // have stranded every saved config the app already holds.
   it("opens an editor for a saved forward", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.click(
       screen.getByRole("button", { name: /More actions for Auth API/ })
@@ -111,7 +110,7 @@ describe("PortForwardsTab", () => {
 
   it("saves a repointed forward through the store", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.click(
       screen.getByRole("button", { name: /More actions for Auth API/ })
@@ -131,7 +130,7 @@ describe("PortForwardsTab", () => {
 
   it("deletes a saved forward", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.click(
       screen.getByRole("button", { name: /More actions for Auth API/ })
@@ -145,7 +144,7 @@ describe("PortForwardsTab", () => {
 
   it("offers a new forward without sending the reader to another page", async () => {
     const user = userEvent.setup();
-    mount();
+    await mount();
 
     await user.click(screen.getByRole("button", { name: /New/ }));
     expect(await screen.findByRole("dialog")).toHaveTextContent(
@@ -166,9 +165,9 @@ describe("PortForwardsTab", () => {
      * the reader reads it as "running against the cluster I am looking at",
      * and a forward from another one silently made that false.
      */
-    it("is kept out of Running", () => {
+    it("is kept out of Running", async () => {
       usePortForwardStore.setState({ sessions: [SESSION, ELSEWHERE] });
-      mount();
+      await mount();
 
       const running = screen.getByText("Running").closest("section");
       expect(running).toHaveTextContent("api-7f9");
@@ -179,9 +178,9 @@ describe("PortForwardsTab", () => {
      * ...and not deleted either. It is a live process holding a local port;
      * a panel that omitted it would be lying about what is on the machine.
      */
-    it("is listed under a group that says where it is", () => {
+    it("is listed under a group that says where it is", async () => {
       usePortForwardStore.setState({ sessions: [SESSION, ELSEWHERE] });
-      mount();
+      await mount();
 
       expect(screen.getByText("Running elsewhere")).toBeInTheDocument();
       expect(screen.getByText("billing-4c1")).toBeInTheDocument();
@@ -196,17 +195,17 @@ describe("PortForwardsTab", () => {
      * The pod route would resolve against the cluster the reader is in —
      * a different pod with the same name, or none at all.
      */
-    it("does not offer its pod as a link into the current cluster", () => {
+    it("does not offer its pod as a link into the current cluster", async () => {
       usePortForwardStore.setState({ sessions: [ELSEWHERE] });
-      mount();
+      await mount();
 
       expect(screen.getByText("billing-4c1")).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /billing-4c1/ })).toBeNull();
     });
 
-    it("shows no Running group at all when every forward is elsewhere", () => {
+    it("shows no Running group at all when every forward is elsewhere", async () => {
       usePortForwardStore.setState({ sessions: [ELSEWHERE] });
-      mount();
+      await mount();
 
       expect(screen.queryByText("Running")).not.toBeInTheDocument();
       expect(screen.getByText("Running elsewhere")).toBeInTheDocument();

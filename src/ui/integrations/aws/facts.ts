@@ -15,8 +15,8 @@
  */
 
 import { commands } from "@/lib/commands";
+import { crdInstancesLink, objectLink } from "@/lib/links";
 
-import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   INGRESS_CLASS_PARAMS_CRD,
@@ -74,12 +74,13 @@ export async function facts(): Promise<VendorFact[]> {
       say: { key: failing.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         failing.length === 1
-          ? crdObjectPath(
-              TARGET_GROUP_BINDING_CRD,
-              failing[0].namespace,
-              failing[0].name
-            )
-          : crdObjectsPath(TARGET_GROUP_BINDING_CRD),
+          ? objectLink({
+              kind: "TargetGroupBinding",
+              name: failing[0].name,
+              namespace: failing[0].namespace,
+              crd: TARGET_GROUP_BINDING_CRD,
+            })!
+          : crdInstancesLink(TARGET_GROUP_BINDING_CRD),
     });
   }
 

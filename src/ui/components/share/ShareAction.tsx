@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { Share2, type LucideIcon } from "lucide-react";
-import { useLocation } from "react-router-dom";
 
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { Button } from "@/components/ui/button";
 import { useAppInfo } from "@/hooks/useAppInfo";
+import { useLocationHref } from "@/hooks/useLocationHref";
 import { useObjectReport, type ObjectSubject } from "@/hooks/useObjectReport";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
@@ -74,7 +74,7 @@ export function ShareScreenAction({
 }) {
   const t = useT();
   const locale = useLocale();
-  const location = useLocation();
+  const href = useLocationHref();
   const context = useClusterStore((s) => s.currentContext) ?? "";
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
@@ -126,11 +126,7 @@ export function ShareScreenAction({
       verdict: null,
       sections: placed(sections),
       notRead,
-      link: buildDeepLink(
-        context,
-        `${location.pathname}${location.search}`,
-        new Date(capturedAt)
-      ),
+      link: buildDeepLink(href, new Date(capturedAt)),
       words: frameWords(t, locale, notRead.length),
       icons: frameIcons(),
     };
@@ -143,8 +139,7 @@ export function ShareScreenAction({
     context,
     t,
     colouring,
-    location.pathname,
-    location.search,
+    href,
     locale,
   ]);
 

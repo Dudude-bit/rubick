@@ -1,12 +1,16 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 
+import { renderWithRouter } from "@/test/render";
 import { ConditionRows, UsageRow } from "./detail-blocks";
 import type { ConditionInfo } from "@/generated/types";
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, {
+    at: "/c/prod/deployments/k8s-gui-test/crash-demo",
+    route: "/c/$cluster/$resource/$namespace/$name",
+  });
 
 const THREE_HOURS_AGO = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
 
@@ -32,8 +36,8 @@ describe("ConditionRows", () => {
    * fact any of them had was 1300px away in a 46px column. A dash back in the
    * detail column means the row is again saying nothing.
    */
-  it("says since when a condition with nothing to report has held", () => {
-    wrap(
+  it("says since when a condition with nothing to report has held", async () => {
+    await wrap(
       <ConditionRows
         conditions={[
           condition("Ready", "True"),
@@ -50,8 +54,8 @@ describe("ConditionRows", () => {
    * of its own — and the reader who wants the exact moment still gets it from
    * the title, which is the only place a full timestamp fits.
    */
-  it("keeps the age beside a condition that has something to say", () => {
-    wrap(
+  it("keeps the age beside a condition that has something to say", async () => {
+    await wrap(
       <ConditionRows
         conditions={[
           condition("MemoryPressure", "False", {
@@ -73,8 +77,8 @@ describe("ConditionRows", () => {
    * `PodScheduled` carries nothing. Printing the age in both places would put
    * the same fact on one row twice.
    */
-  it("states a condition's age once, wherever that row put it", () => {
-    wrap(
+  it("states a condition's age once, wherever that row put it", async () => {
+    await wrap(
       <ConditionRows
         conditions={[
           condition("Ready", "False", { reason: "PodCompleted" }),
@@ -91,8 +95,10 @@ describe("ConditionRows", () => {
    * that means "met" is `False`, so a reader with `kubectl describe` open has
    * nothing else on the row that says which way round this condition runs.
    */
-  it("prints the raw status word even where the glyph already said met", () => {
-    wrap(<ConditionRows conditions={[condition("MemoryPressure", "False")]} />);
+  it("prints the raw status word even where the glyph already said met", async () => {
+    await wrap(
+      <ConditionRows conditions={[condition("MemoryPressure", "False")]} />
+    );
     expect(screen.getByText("False")).toBeInTheDocument();
   });
 
@@ -101,8 +107,8 @@ describe("ConditionRows", () => {
    * there is no way from `has timed out progressing` to the replica set that
    * timed out.
    */
-  it("offers the objects a condition's message names", () => {
-    wrap(
+  it("offers the objects a condition's message names", async () => {
+    await wrap(
       <ConditionRows
         conditions={[
           condition("Progressing", "False", {
@@ -122,7 +128,7 @@ describe("ConditionRows", () => {
       screen.getByRole("link", { name: "ReplicaSet crash-demo-56588f6b8c" })
     ).toHaveAttribute(
       "href",
-      "/replicasets/k8s-gui-test/crash-demo-56588f6b8c"
+      "/c/prod/replicasets/k8s-gui-test/crash-demo-56588f6b8c"
     );
   });
 });

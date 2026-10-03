@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
+
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
   crds: (_crd: string): Promise<unknown[]> => Promise.resolve([]),
@@ -33,17 +32,10 @@ const failure = (code: string, message: string) =>
   );
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<AksAddonsPage />, {
+    at: "/c/test/integrations/aks-addons",
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/integrations/aks-addons"]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  return render(<AksAddonsPage />, { wrapper });
 }
 
 beforeEach(() => {
@@ -63,7 +55,7 @@ describe("the AKS add-ons page", () => {
         ? failure("PERMISSION_DENIED", "azureidentities is forbidden")
         : failure("NOT_FOUND", "not found");
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText(/No pod in this cluster carries/);
     expect(
@@ -75,7 +67,7 @@ describe("the AKS add-ons page", () => {
 
   /** Read and not served is the one real "not installed". */
   it("says the retired add-on is not installed when its kinds are not served", async () => {
-    renderPage();
+    await renderPage();
 
     expect(
       await screen.findByText(en.empty.legacyAddonNotInstalled.trim(), {
@@ -98,7 +90,7 @@ describe("the AKS add-ons page", () => {
           )
         : failure("NOT_FOUND", "not found");
 
-    renderPage();
+    await renderPage();
 
     const sentence = await screen.findByText(/add-on is not installed/);
     expect(sentence).toHaveTextContent(
@@ -116,7 +108,7 @@ describe("the AKS add-ons page", () => {
   it("draws no count when the pods that name identities were refused", async () => {
     answers.pods = () => failure("PERMISSION_DENIED", "pods is forbidden");
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText(/could not be listed/);
     expect(screen.queryByText("0 identities")).toBeNull();
@@ -150,7 +142,7 @@ describe("the AKS add-ons page", () => {
             ])
           : failure("NOT_FOUND", "not found");
 
-    renderPage();
+    await renderPage();
 
     await screen.findByText(/No pod in this cluster carries/);
     expect(screen.queryByText("No AzureIdentity named web-id")).toBeNull();

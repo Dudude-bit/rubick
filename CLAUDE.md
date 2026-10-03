@@ -90,6 +90,14 @@ Claims here are settled by running things, not by reasoning about them.
 
 ## Frontend
 
+- **Every in-app address is built in `@/lib/links`** (`objectLink`,
+  `listLink`, `pageLink`, ...). A link is the router's own options object, so
+  `to` is checked against the route tree when it compiles; a path string
+  written in code is a dead link waiting to be found by a click. A string
+  exists only where something stores one, and it comes from `hrefOf`.
+- A query key a screen reads is declared in `AppSearch` (`@/lib/app-search`).
+  The router drops every other key on arrival, so a new one that is not
+  there reads as absent with nothing failing.
 - Call the backend through `commands` from `@/lib/commands` — never
   `@/generated/commands`, never `invoke`. The wrapper is the only place that
   normalises errors and notices an expired session.
@@ -244,6 +252,9 @@ the recorder; the rules that fail silently are these.
 - A frontend test lives beside its subject as `<name>.test.ts(x)` under `src/ui/`.
   A `__tests__/` folder or any other suffix is collected by nothing and reports
   nothing.
+- A component that reads route params or builds links renders through
+  `renderWithRouter` from `@/test/render`, which waits for the router's first
+  load; a navigation is asserted on `router.state.location`.
 - A `.test.tsx` runs under jsdom and a `.test.ts` under node. A `.test.ts`
   that needs a DOM starts with `// @vitest-environment jsdom` — and so does
   one whose subject checks `typeof window`, which under node passes quietly
@@ -279,6 +290,9 @@ the recorder; the rules that fail silently are these.
 
 ## Tooling
 
+- `src/ui/generated/routeTree.gen.ts` is generated from `src/ui/routes/` by
+  `bun run routes` (and by Vite on every start). Commit it: `tsc` runs
+  before Vite in `bun run build`, and type-checks against the committed copy.
 - `src/ui/generated/{commands,types}.ts` are generated. Never hand-edit them.
   Regenerate with `make gen-entities-tauri` — which needs `cargo-expand`,
   without which it silently drops every macro-generated `subscribe_*_watch`
@@ -305,16 +319,17 @@ Half-done is invisible: each of these fails by the kind simply not appearing.
 
 `RESOURCE_REGISTRY` entry · its group, version, plural and scope in
 `src/contracts/kinds.json`, which the registry reads them from and a Rust test holds
-to `k8s-openapi` · a route file under the right section · the item in the
-Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+to `k8s-openapi` · a folder `src/ui/routes/c/$cluster/(<section>)/<plural>/`
+with `index.tsx` and `$namespace.$name.tsx` (or `$name.tsx`), then
+`bun run routes` · the item in the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
-Then two tables keyed by kind, each of which fails by staying quiet rather
-than by breaking. `ROUTABLE` in `ResourceRef.tsx` — absent, and every
-reference to the kind renders as text instead of a link. `peek-actions.ts` —
-absent, and the peek offers no Delete even though the command exists. Both
-have guards now; the guards are what noticed.
+Then one table keyed by kind that fails by staying quiet rather than by
+breaking: `peek-actions.ts`. Absent, and the peek offers no Delete even though
+the command exists. It has a guard; the guard is what noticed. A kind with no
+folder still opens, on the generic object page under `$resource`, so a
+missing folder shows up as a plain YAML page rather than as nothing.
 
 Adding an integration is one folder and one line — [CONTRIBUTING](CONTRIBUTING.md)
 has it — but two things it does not say: a **detected** vendor needs its id in

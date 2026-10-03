@@ -37,11 +37,12 @@ import { Unknown } from "@/components/ui/unknown";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
-import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/resources/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T as Translator } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
+import { objectLink } from "@/lib/links";
 import type { ReportFinding } from "@/lib/report";
 import { ORDER, slugOf, type PlacedSection } from "@/lib/report-parts";
 import { TONE_BORDER, TONE_TEXT } from "@/lib/tone";
@@ -492,13 +493,7 @@ export function TroubleRow({
       >
         {title}
       </CopyableValue>
-    ) : reference &&
-      objectUrl(
-        reference.kind,
-        reference.name,
-        reference.namespace,
-        reference.crd
-      ) !== null ? (
+    ) : reference && objectLink(reference) !== null ? (
       // Asked before the element is built: a row whose object turns out not
       // to be addressable keeps its plain title rather than losing it to a
       // link that renders nothing.

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
@@ -22,7 +22,9 @@ import {
   helmResourcesSection,
   helmStatusOf,
 } from "@/lib/share/helm-share";
-import { fluxHelmReleasePath } from "@/integrations";
+import { fluxHelmReleaseLink } from "@/integrations";
+import { pageLink } from "@/lib/links";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
@@ -93,11 +95,7 @@ function valuesAsYaml(values: unknown, empty: string): string {
 
 export function HelmDetail() {
   const t = useT();
-  const { source, namespace, name } = useParams<{
-    source: string;
-    namespace: string;
-    name: string;
-  }>();
+  const { source, namespace, name } = useParams({ strict: false });
   const navigate = useNavigate();
   const { toast } = useToast();
   const copyToClipboard = useCopyToClipboard();
@@ -107,11 +105,17 @@ export function HelmDetail() {
 
   const [rollbackTarget, setRollbackTarget] = useState<number | null>(null);
   const [showUninstall, setShowUninstall] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
+  const [activeTab, setActiveTab] = useState(() => search.tab ?? "overview");
+  const changeTab = (tab: string) => {
+    setActiveTab(tab);
+    setSearch({ tab: tab === "overview" ? undefined : tab }, { replace: true });
+  };
 
   const isNative = source === "native";
   const helmCliAvailable = helm?.available ?? false;
-  const goBack = () => navigate("/helm");
+  const goBack = () => navigate(pageLink("helm"));
 
   const {
     data: release,
@@ -167,7 +171,7 @@ export function HelmDetail() {
         title: t("action", "releaseUninstalled"),
         description: t("action", "releaseUninstalledDetail"),
       });
-      navigate("/helm");
+      goBack();
     },
     onError: (error) => {
       toastError(t("action", "uninstallFailed"), error);
@@ -221,7 +225,7 @@ export function HelmDetail() {
             label={t("action", "openHelmRelease")}
             icon={ExternalLink}
             onClick={() =>
-              navigate(fluxHelmReleasePath(namespace ?? "", name ?? ""))
+              navigate(fluxHelmReleaseLink(namespace ?? "", name ?? ""))
             }
           />
         </div>
@@ -493,12 +497,12 @@ export function HelmDetail() {
         isLoading={isLoading}
         error={error}
         resourceKind={t("readings", "helmRelease")}
-        listUrl="/helm"
+        listLink={pageLink("helm")}
         listLabel="Helm"
         // The Helm list filters by a namespace of its own that this scope does
         // not drive, so sending the reader there would narrow the tab and show
         // them every namespace anyway. The scope alone is the honest half.
-        namespaceUrl={null}
+        namespaceLink={null}
         title={release?.name || name || ""}
         namespace={release?.namespace || namespace}
         createdAt={release?.firstDeployed}
@@ -544,7 +548,7 @@ export function HelmDetail() {
         }
         tabs={tabs}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
       />
 
       <ConfirmDialog

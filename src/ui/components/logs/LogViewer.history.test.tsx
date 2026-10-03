@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ----- Mocks -----
@@ -34,30 +34,19 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import type { ReactElement } from "react";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import type { ContainerInfo, LokiPage } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import { LogViewer } from "./LogViewer";
 
 const asMock = <T extends (...args: never[]) => unknown>(fn: T) =>
   fn as unknown as ReturnType<typeof vi.fn>;
 
-function Providers({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>{children}</TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-}
+const mount = (ui: ReactElement) =>
+  renderWithRouter(ui, { at: "/c/test", route: "/c/$cluster" });
 
 const app: ContainerInfo = {
   name: "app",
@@ -105,11 +94,7 @@ function page(lines: number, overrides: Partial<LokiPage> = {}): LokiPage {
 
 /** A stream that is up, then a live line, then the pod going away. */
 async function renderStranded() {
-  render(
-    <Providers>
-      <LogViewer {...props} />
-    </Providers>
-  );
+  await mount(<LogViewer {...props} />);
   // Not just the listener: the batch handler drops anything whose stream id
   // it has not been told about yet, and that mapping is written after
   // `streamPodLogs` resolves.
@@ -352,13 +337,11 @@ describe("a workload's Logs tab", () => {
   });
 
   it("asks about the workload over a range, not about the pod on screen", async () => {
-    render(
-      <Providers>
-        <LogViewer
-          {...props}
-          workload={{ owner: "log-demo", ownerKind: "Deployment" }}
-        />
-      </Providers>
+    await mount(
+      <LogViewer
+        {...props}
+        workload={{ owner: "log-demo", ownerKind: "Deployment" }}
+      />
     );
     await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
 

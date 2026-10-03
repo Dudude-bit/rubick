@@ -1,25 +1,19 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 
+import { renderWithRouter } from "@/test/render";
 import { DrainDialog } from "./drain-dialog";
 import type { DrainReport, DrainState, RefusedPod } from "@/hooks/useNodeDrain";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, {
+    at: "/c/prod/nodes/node-7",
+    route: "/c/$cluster/nodes/$name",
+  });
 
 const refused = (over: Partial<RefusedPod> = {}): RefusedPod => ({
   namespace: "prod",
@@ -62,7 +56,7 @@ describe("confirming a drain", () => {
    */
   it("asks for nothing destructive unless it is ticked", async () => {
     const onConfirm = vi.fn();
-    wrap(dialog({ phase: "idle" }, { onConfirm }));
+    await wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(screen.getByRole("button", { name: /drain/i }));
 
@@ -75,7 +69,7 @@ describe("confirming a drain", () => {
 
   it("carries a ticked opt-in through to the caller", async () => {
     const onConfirm = vi.fn();
-    wrap(dialog({ phase: "idle" }, { onConfirm }));
+    await wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(
       screen.getByRole("checkbox", { name: /nothing would replace/i })
@@ -96,28 +90,20 @@ describe("confirming a drain", () => {
    */
   it("starts the next node from a clean pair of opt-ins", async () => {
     const onConfirm = vi.fn();
-    const view = wrap(dialog({ phase: "idle" }, { onConfirm }));
+    const view = await wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     await userEvent.click(
       screen.getByRole("checkbox", { name: /nothing would replace/i })
     );
 
-    view.rerender(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter>
-          <DrainDialog
-            node="node-8"
-            state={{ phase: "idle" }}
-            onOpenChange={() => {}}
-            onConfirm={onConfirm}
-            onCancelDrain={() => {}}
-          />
-        </MemoryRouter>
-      </QueryClientProvider>
+    await view.rerender(
+      <DrainDialog
+        node="node-8"
+        state={{ phase: "idle" }}
+        onOpenChange={() => {}}
+        onConfirm={onConfirm}
+        onCancelDrain={() => {}}
+      />
     );
 
     await userEvent.click(screen.getByRole("button", { name: /drain/i }));
@@ -130,8 +116,8 @@ describe("confirming a drain", () => {
   });
 
   /** It says what will happen, and the promise is now one the backend keeps. */
-  it("says it will keep asking, which is what the backend does", () => {
-    wrap(dialog({ phase: "idle" }));
+  it("says it will keep asking, which is what the backend does", async () => {
+    await wrap(dialog({ phase: "idle" }));
 
     expect(
       screen.getByText(/keeps asking about the rest/i)
@@ -153,15 +139,15 @@ describe("watching a drain run", () => {
   });
 
   /** A lag can drop the drain's ending; the dialog kept saying it was running, with nothing to say the report was stale. Fails if `missed` is not drawn. */
-  it("says reports were lost, and that the drain may already be over", () => {
-    wrap(dialog(running({}, 3, true)));
+  it("says reports were lost, and that the drain may already be over", async () => {
+    await wrap(dialog(running({}, 3, true)));
 
     expect(screen.getByText(/may already have finished/i)).toBeInTheDocument();
   });
 
   /** The other half: a drain that missed nothing must not claim it did. */
-  it("says nothing about lost reports when none were lost", () => {
-    wrap(dialog(running()));
+  it("says nothing about lost reports when none were lost", async () => {
+    await wrap(dialog(running()));
 
     expect(screen.queryByText(/may already have finished/i)).toBeNull();
   });
@@ -170,8 +156,8 @@ describe("watching a drain run", () => {
    * The reason this is a dialog and not a spinner: "still waiting" and
    * "stuck" look identical without a count of tries.
    */
-  it("says which try it is on, so waiting is legible", () => {
-    wrap(dialog(running()));
+  it("says which try it is on, so waiting is legible", async () => {
+    await wrap(dialog(running()));
 
     expect(screen.getByText(/try 3/i)).toBeInTheDocument();
     expect(screen.getByText(/waiting on one pod/i)).toBeInTheDocument();
@@ -179,7 +165,7 @@ describe("watching a drain run", () => {
 
   it("offers a way to stop, and stopping calls back", async () => {
     const onCancelDrain = vi.fn();
-    wrap(dialog(running(), { onCancelDrain }));
+    await wrap(dialog(running(), { onCancelDrain }));
 
     await userEvent.click(
       screen.getByRole("button", { name: /stop draining/i })
@@ -189,8 +175,8 @@ describe("watching a drain run", () => {
   });
 
   /** Leaving is allowed; it just does not stop the cluster doing the work. */
-  it("says that closing the window does not stop it", () => {
-    wrap(dialog(running()));
+  it("says that closing the window does not stop it", async () => {
+    await wrap(dialog(running()));
 
     expect(screen.getByText(/does not stop the drain/i)).toBeInTheDocument();
   });
@@ -201,7 +187,7 @@ describe("watching a drain run", () => {
    */
   it("lets you leave, having said that leaving is fine", async () => {
     const onOpenChange = vi.fn();
-    wrap(dialog(running(), { onOpenChange }));
+    await wrap(dialog(running(), { onOpenChange }));
 
     await userEvent.keyboard("{Escape}");
 
@@ -209,8 +195,8 @@ describe("watching a drain run", () => {
   });
 
   /** An eviction is a graceful delete: accepted is not gone. */
-  it("counts what has been accepted but has not left yet", () => {
-    wrap(dialog(running({ leaving: 4 })));
+  it("counts what has been accepted but has not left yet", async () => {
+    await wrap(dialog(running({ leaving: 4 })));
 
     expect(screen.getByText(/4 are on their way out/i)).toBeInTheDocument();
   });
@@ -221,7 +207,9 @@ describe("watching a drain run", () => {
    */
   it("can be stopped before the drain has a handle", async () => {
     const onCancelDrain = vi.fn();
-    wrap(dialog({ phase: "starting", node: "node-7" }, { onCancelDrain }));
+    await wrap(
+      dialog({ phase: "starting", node: "node-7" }, { onCancelDrain })
+    );
 
     await userEvent.click(
       screen.getByRole("button", { name: /stop draining/i })
@@ -231,8 +219,8 @@ describe("watching a drain run", () => {
   });
 
   /** The first attempt is not worth announcing as a retry. */
-  it("does not call the first look a retry", () => {
-    wrap(dialog(running({}, 1)));
+  it("does not call the first look a retry", async () => {
+    await wrap(dialog(running({}, 1)));
 
     expect(screen.queryByText(/try 1/i)).not.toBeInTheDocument();
   });
@@ -250,8 +238,8 @@ describe("reading how a drain ended", () => {
     message: null,
   });
 
-  it("names every pod that stayed and why", () => {
-    wrap(
+  it("names every pod that stayed and why", async () => {
+    await wrap(
       dialog(
         ended("stopped", {
           refused: [
@@ -277,8 +265,8 @@ describe("reading how a drain ended", () => {
    * it is pacing itself, and nothing in the response tells the two apart. So
    * the line hedges, on purpose.
    */
-  it("does not claim the budget was the reason", () => {
-    wrap(dialog(ended("cancelled")));
+  it("does not claim the budget was the reason", async () => {
+    await wrap(dialog(ended("cancelled")));
 
     expect(
       screen.getByText(/usually a disruption budget/i)
@@ -286,8 +274,8 @@ describe("reading how a drain ended", () => {
   });
 
   /** The two lists mean different things and get different advice. */
-  it("tells apart what is waiting from what will never move", () => {
-    wrap(
+  it("tells apart what is waiting from what will never move", async () => {
+    await wrap(
       dialog(
         ended("stopped", {
           refused: [refused({ refusal: "holdsLocalData" })],
@@ -304,8 +292,8 @@ describe("reading how a drain ended", () => {
   });
 
   /** When the app has no name for a failure, the server's own words run. */
-  it("quotes the server for a failure it cannot name", () => {
-    wrap(
+  it("quotes the server for a failure it cannot name", async () => {
+    await wrap(
       dialog(
         ended("stopped", {
           refused: [
@@ -322,8 +310,10 @@ describe("reading how a drain ended", () => {
   });
 
   /** The counts have to add up to what was on the node. */
-  it("accounts for the pods it neither moved nor was refused", () => {
-    wrap(dialog(ended("stopped", { alreadyGone: 2, daemonsetPodsLeft: 3 })));
+  it("accounts for the pods it neither moved nor was refused", async () => {
+    await wrap(
+      dialog(ended("stopped", { alreadyGone: 2, daemonsetPodsLeft: 3 }))
+    );
 
     expect(screen.getByText(/3 DaemonSet pods stay/i)).toBeInTheDocument();
     expect(
@@ -331,8 +321,8 @@ describe("reading how a drain ended", () => {
     ).toBeInTheDocument();
   });
 
-  it("says who stopped it when it was the operator", () => {
-    wrap(dialog(ended("cancelled")));
+  it("says who stopped it when it was the operator", async () => {
+    await wrap(dialog(ended("cancelled")));
 
     expect(screen.getByText(/you stopped the drain/i)).toBeInTheDocument();
   });
@@ -342,8 +332,8 @@ describe("reading how a drain ended", () => {
    * so it still knows what it had already moved; the `failed` phase below is
    * the command being refused before any drain existed, and knows nothing.
    */
-  it("keeps the count when a running drain breaks", () => {
-    wrap(
+  it("keeps the count when a running drain breaks", async () => {
+    await wrap(
       dialog({
         phase: "done",
         node: "node-7",
@@ -359,8 +349,8 @@ describe("reading how a drain ended", () => {
   });
 
   /** A drain that never started is its own state, not an empty report. */
-  it("shows what broke when the drain could not start", () => {
-    wrap(
+  it("shows what broke when the drain could not start", async () => {
+    await wrap(
       dialog({
         phase: "failed",
         node: "node-7",
@@ -398,7 +388,7 @@ describe("draining a node on critical infrastructure", () => {
    */
   it("holds the drain until the cluster's name is typed", async () => {
     const onConfirm = vi.fn();
-    wrap(dialog({ phase: "idle" }, { onConfirm }));
+    await wrap(dialog({ phase: "idle" }, { onConfirm }));
 
     const drain = screen.getByRole("button", { name: /drain/i });
     expect(screen.getByRole("alert")).toHaveTextContent(PROD);

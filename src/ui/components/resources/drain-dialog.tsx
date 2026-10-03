@@ -18,7 +18,7 @@
  */
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,6 +40,7 @@ import type {
 import { useConnections } from "@/hooks/useConnections";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { budgetRule, drainBlockers } from "@/lib/governance";
+import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
@@ -230,7 +231,7 @@ function DrainConfirm({
         </div>
         {node && (
           <Link
-            to={`/nodes/${node}`}
+            {...objectLink({ kind: ResourceType.Node, name: node })!}
             className="pt-1 text-[11px] text-info hover:underline"
           >
             {t("action", "openTheNodeFirst")}

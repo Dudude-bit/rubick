@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -27,10 +25,10 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import type { PodInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 
 const crashing = {
@@ -86,22 +84,14 @@ const crashing = {
 } as unknown as PodInfo;
 
 function mount(pod: PodInfo, eventsError: string | null = null) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>
-          <MostLikelyPanel
-            pod={pod}
-            events={[]}
-            eventsError={eventsError}
-            onOpenTab={() => {}}
-          />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
+  return renderWithRouter(
+    <MostLikelyPanel
+      pod={pod}
+      events={[]}
+      eventsError={eventsError}
+      onOpenTab={() => {}}
+    />,
+    { at: "/c/test", route: "/c/$cluster" }
   );
 }
 
@@ -117,7 +107,7 @@ describe("MostLikelyPanel", () => {
    * Service with nothing behind it. Neither sentence claims a test.
    */
   it("says the Service behind the refused address has nothing ready, and that nothing was probed", async () => {
-    mount(crashing);
+    await mount(crashing);
     const panel = await screen.findByTestId("most-likely");
     await waitFor(() =>
       expect(panel.textContent).toContain(
@@ -150,7 +140,7 @@ describe("MostLikelyPanel", () => {
     vi.mocked(commands.listServices).mockRejectedValueOnce(
       new Error("services is forbidden")
     );
-    mount(crashing);
+    await mount(crashing);
     const panel = await screen.findByTestId("most-likely");
     await waitFor(() =>
       expect(panel.textContent).toContain("could not be read")
@@ -163,7 +153,7 @@ describe("MostLikelyPanel", () => {
     vi.mocked(commands.getPodLogs).mockRejectedValueOnce(
       new Error("pods/log is forbidden")
     );
-    mount(crashing);
+    await mount(crashing);
     const panel = await screen.findByTestId("most-likely");
     await waitFor(() => expect(panel.textContent).toContain("app"));
     expect(panel.textContent).toContain("forbidden");
@@ -188,7 +178,7 @@ describe("MostLikelyPanel", () => {
         },
       ],
     } as PodInfo;
-    mount(healthy, "events is forbidden");
+    await mount(healthy, "events is forbidden");
     const panel = await screen.findByTestId("most-likely");
     expect(panel.textContent).toContain("could not be read");
     expect(panel.textContent).toContain("forbidden");
@@ -226,7 +216,7 @@ describe("MostLikelyPanel", () => {
         },
       ],
     } as PodInfo;
-    mount(withSidecars);
+    await mount(withSidecars);
     const panel = await screen.findByTestId("most-likely");
     await waitFor(() => expect(panel.textContent).toContain("cloud-sql-proxy"));
     expect(panel.textContent).not.toContain("metrics");
@@ -246,7 +236,7 @@ describe("MostLikelyPanel", () => {
           "ERROR dial tcp shop-db-rw.billing.svc.cluster.local:5432: connect: connection refused",
       },
     ] as never);
-    mount(crashing);
+    await mount(crashing);
     const panel = await screen.findByTestId("most-likely");
     // The Services of `billing` were never listed, so the sentence says so
     // rather than answering from the same-named Service next door.
@@ -258,7 +248,7 @@ describe("MostLikelyPanel", () => {
     expect(panel.textContent).not.toContain("Service shop-db-rw");
   });
 
-  it("draws nothing for a pod with nothing wrong, and nothing when switched off", () => {
+  it("draws nothing for a pod with nothing wrong, and nothing when switched off", async () => {
     const healthy = {
       ...crashing,
       status: { ...crashing.status, display: "Running", ready: true },
@@ -273,11 +263,11 @@ describe("MostLikelyPanel", () => {
       ],
     } as PodInfo;
     // With the events read answered, so this cannot pass on a refusal.
-    mount(healthy, null);
+    await mount(healthy, null);
     expect(screen.queryByTestId("most-likely")).not.toBeInTheDocument();
 
     useHintSettingsStore.setState({ showPanel: false });
-    mount(crashing);
+    await mount(crashing);
     expect(screen.queryByTestId("most-likely")).not.toBeInTheDocument();
   });
 });

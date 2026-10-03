@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { beforeAll, describe, expect, it } from "vitest";
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
 
+import { routeTree } from "@/generated/routeTree.gen";
 import type { ClusterSearchState, SearchHit } from "@/hooks/useResourceSearch";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, setRouter, type AppLink } from "@/lib/links";
 import {
   buildPaletteEntries,
   ROWS_PER_CLUSTER,
@@ -12,6 +16,19 @@ import {
 } from "./palette-entries";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
+
+/** The window the links resolve from, as the app's own router would. */
+beforeAll(async () => {
+  const router = createRouter({
+    routeTree,
+    context: { queryClient: new QueryClient() },
+    history: createMemoryHistory({ initialEntries: ["/c/k3d-dev"] }),
+  });
+  setRouter(router);
+  await router.load();
+});
+
+const where = (link: AppLink | null) => (link ? hrefOf(link) : null);
 
 function state(overrides: Partial<PaletteState> = {}): PaletteState {
   return {
@@ -83,7 +100,57 @@ describe("the palette's entries with nothing typed", () => {
       state({
         recentItems: [
           {
-            path: "/workloads/pods/default/api-0",
+            name: "api-0",
+            kind: "Pod",
+            namespace: "default",
+            context: "k3d-dev",
+            timestamp: 1,
+          },
+        ],
+      })
+    );
+
+    expect(ids(entries)).toEqual([
+      "cap:recent",
+      "recent:k3d-dev/Pod/default/api-0",
+      "cap:nav",
+      "nav:goToOverview",
+      "nav:goToPods",
+      "nav:goToDeployments",
+      "nav:goToServices",
+      "nav:goToNodes",
+      "nav:goToConfigMaps",
+      "nav:goToSecrets",
+      "nav:goToEvents",
+      "nav:goToHelm",
+      "settings",
+      "cap:activity",
+      "panel:ports",
+      "panel:terminals",
+    ]);
+    expect(
+      entries.flatMap((entry) =>
+        entry.kind === "link" ? [where(entry.path)] : []
+      )
+    ).toEqual([
+      "/c/k3d-dev",
+      "/c/k3d-dev/pods",
+      "/c/k3d-dev/deployments",
+      "/c/k3d-dev/services",
+      "/c/k3d-dev/nodes",
+      "/c/k3d-dev/configmaps",
+      "/c/k3d-dev/secrets",
+      "/c/k3d-dev/events",
+      "/c/k3d-dev/helm",
+    ]);
+  });
+
+  /** A recent saved before it named its cluster could open in the wrong one, so it is not offered. */
+  it("leaves out a recent that names no cluster", () => {
+    const entries = buildPaletteEntries(
+      state({
+        recentItems: [
+          {
             name: "api-0",
             kind: "Pod",
             namespace: "default",
@@ -93,24 +160,8 @@ describe("the palette's entries with nothing typed", () => {
       })
     );
 
-    expect(ids(entries)).toEqual([
-      "cap:recent",
-      "recent:/workloads/pods/default/api-0",
-      "cap:nav",
-      "nav:/",
-      "nav:/workloads/pods",
-      "nav:/workloads/deployments",
-      "nav:/network/services",
-      "nav:/nodes",
-      "nav:/configuration/configmaps",
-      "nav:/configuration/secrets",
-      "nav:/events",
-      "nav:/helm",
-      "settings",
-      "cap:activity",
-      "panel:ports",
-      "panel:terminals",
-    ]);
+    expect(entries.some((entry) => entry.kind === "recent")).toBe(false);
+    expect(ids(entries)).not.toContain("cap:recent");
   });
 
   /**
@@ -140,7 +191,7 @@ describe("the palette's entries while typing", () => {
 
     expect(
       entries.filter((entry) => entry.kind === "link").map((e) => e.id)
-    ).toEqual(["nav:/helm"]);
+    ).toEqual(["nav:goToHelm"]);
     expect(entries.some((entry) => entry.kind === "settings")).toBe(false);
     expect(entries.some((entry) => entry.kind === "panel")).toBe(false);
   });
@@ -343,12 +394,33 @@ describe("the palette's resource rows", () => {
     );
 
     const paths = entries.flatMap((entry) =>
-      entry.kind === "hit" ? [[entry.hit.kind, entry.path]] : []
+      entry.kind === "hit" ? [[entry.hit.kind, where(entry.path)]] : []
     );
     expect(paths).toEqual([
-      ["Pod", getResourceDetailUrl("Pod", "api-0", "default")],
+      ["Pod", "/c/k3d-dev/pods/default/api-0"],
       ["Namespace", null],
     ]);
+  });
+
+  /**
+   * A hit from another cluster opens there; resolved against the window's
+   * own cluster it would name an object that cluster does not have.
+   */
+  it("links a hit into the cluster it was found in", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        scope: { kind: "all" },
+        shownClusters: [cluster("k3d-dev"), cluster("prod-eu")],
+        hitsByContext: byContext(pods("prod-eu", 1)),
+      })
+    );
+
+    expect(
+      entries.flatMap((entry) =>
+        entry.kind === "hit" ? [where(entry.path)] : []
+      )
+    ).toEqual(["/c/prod-eu/pods/default/api-0"]);
   });
 
   /**

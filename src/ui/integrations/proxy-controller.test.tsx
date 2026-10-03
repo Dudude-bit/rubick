@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
+import { renderWithRouter } from "@/test/render";
 import { ProxyControllerTab } from "./proxy-controller";
 
 const words = {
@@ -17,32 +17,31 @@ describe("a proxy's controller tab", () => {
    * ingress-nginx installed as a DaemonSet sent the reader to a Deployment
    * that does not exist.
    */
-  it("links the workload as the kind it really is", () => {
-    render(
-      <MemoryRouter>
-        <ProxyControllerTab
-          controller={{
-            workload: {
-              kind: "DaemonSet",
-              name: "ingress-nginx-controller",
-              namespace: "ingress-nginx",
-              image: null,
-              ready: 3,
-              desired: 3,
-            },
-            args: [],
-            problem: null,
-          }}
-          classes={[]}
-          words={words}
-        />
-      </MemoryRouter>
+  it("links the workload as the kind it really is", async () => {
+    await renderWithRouter(
+      <ProxyControllerTab
+        controller={{
+          workload: {
+            kind: "DaemonSet",
+            name: "ingress-nginx-controller",
+            namespace: "ingress-nginx",
+            image: null,
+            ready: 3,
+            desired: 3,
+          },
+          args: [],
+          problem: null,
+        }}
+        classes={[]}
+        words={words}
+      />,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     expect(
       screen.getByRole("link", { name: /ingress-nginx-controller/ })
     ).toHaveAttribute(
       "href",
-      "/daemonsets/ingress-nginx/ingress-nginx-controller"
+      "/c/prod/daemonsets/ingress-nginx/ingress-nginx-controller"
     );
     expect(screen.getByText("claims no class")).toBeInTheDocument();
   });

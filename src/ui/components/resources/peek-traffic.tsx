@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { useConnections } from "@/hooks/useConnections";
@@ -325,7 +325,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
                   n: behind.hosts,
                 })}{" "}
                 <Link
-                  to={behind.to}
+                  {...behind.to}
                   className="text-info underline-offset-2 hover:underline"
                 >
                   {t("empty", "itsPage")}

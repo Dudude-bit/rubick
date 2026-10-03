@@ -22,7 +22,7 @@
  */
 
 import { commands } from "@/lib/commands";
-import { crdObjectPath } from "../kit";
+import { objectLink } from "@/lib/links";
 import {
   deliveryKey,
   type Delivery,
@@ -136,7 +136,12 @@ function ownerRef(app: ArgoApp): DeliveryOwner {
     kind: OWNER_KIND,
     name: app.name,
     namespace: app.namespace,
-    to: crdObjectPath(APPLICATIONS_CRD, app.namespace, app.name),
+    to: objectLink({
+      kind: OWNER_KIND,
+      name: app.name,
+      namespace: app.namespace,
+      crd: APPLICATIONS_CRD,
+    })!,
   };
 }
 

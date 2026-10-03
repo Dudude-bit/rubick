@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Bell } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { errorToShow } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -104,7 +104,7 @@ export function AlertsAbout({
           : t("alerts", "aboutPending", { n: pending.length })}
         {page !== null && (
           <Link
-            to={page}
+            {...page}
             className="ml-auto text-[11px] font-normal text-info hover:underline"
           >
             {t("alerts", "openAlerts")}

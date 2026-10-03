@@ -63,7 +63,10 @@ describe("an error's code across the IPC boundary", () => {
   /** A code Rust sends that this table does not know reads as unknown here. */
   it("knows every code the backend sends", () => {
     const shared = JSON.parse(
-      readFileSync(resolve(process.cwd(), "src/contracts/error-codes.json"), "utf8")
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/error-codes.json"),
+        "utf8"
+      )
     ) as { codes: string[] };
     const here = new Set<string>(Object.values(ERROR_CODES));
     here.delete(ERROR_CODES.UNKNOWN);

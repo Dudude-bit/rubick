@@ -8,7 +8,7 @@
  */
 
 import type { T } from "@/i18n/useT";
-import { integrationPagePath } from "../paths";
+import { vendorLink } from "@/lib/links";
 import type { VendorFact } from "../registry";
 import { fetchMesh } from "./data";
 import { hostGroups } from "./model";
@@ -61,7 +61,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (groups.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("istio"),
+      to: vendorLink("istio"),
     });
   }
 

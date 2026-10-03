@@ -5,13 +5,13 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { createContext, useCallback, useContext, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
 import {
   Tooltip,
   TooltipContent,
@@ -200,6 +200,13 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   createAgeColumn<IngressInfo>(),
 ];
 
+const linkOf = (ingress: IngressInfo) =>
+  objectLink({
+    kind: ResourceType.Ingress,
+    name: ingress.name,
+    namespace: ingress.namespace,
+  })!;
+
 export function IngressList() {
   const t = useT();
   const scope = useNamespaceScope();
@@ -252,14 +259,7 @@ export function IngressList() {
       {
         icon: Eye,
         label: t("action", "viewDetails"),
-        onClick: (item) =>
-          navigate(
-            getResourceDetailUrl(
-              ResourceType.Ingress,
-              item.name,
-              item.namespace
-            )
-          ),
+        onClick: (item) => navigate(linkOf(item)),
       },
       {
         icon: ExternalLink,
@@ -300,9 +300,7 @@ export function IngressList() {
         refresh={refresh}
         live={live}
         resyncing={resyncing}
-        getRowHref={(row) =>
-          getResourceDetailUrl(ResourceType.Ingress, row.name, row.namespace)
-        }
+        getRowHref={(row) => hrefOf(linkOf(row))}
       />
     </VendorTls.Provider>
   );

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -42,6 +41,7 @@ vi.mock("@/hooks/useResourceSearch", async (importOriginal) => ({
 }));
 
 import { CommandPalette } from "./CommandPalette";
+import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
@@ -54,11 +54,10 @@ const hit = (over: Partial<(typeof search.hits)[number]> = {}) => ({
 });
 
 async function open(query: string) {
-  render(
-    <MemoryRouter>
-      <CommandPalette />
-    </MemoryRouter>
-  );
+  await renderWithRouter(<CommandPalette />, {
+    at: "/c/k3d-dev",
+    route: "/c/$cluster/$",
+  });
   window.dispatchEvent(new Event("command-palette-open"));
   await userEvent.type(await screen.findByRole("combobox"), query);
 }
@@ -85,7 +84,7 @@ describe("the command palette's hits", () => {
           id: "palette",
           context: "k3d-dev",
           namespace: "",
-          href: "/",
+          href: "/c/k3d-dev",
           missing: false,
         },
       ],
@@ -151,7 +150,11 @@ describe("the command palette's hits", () => {
 
   it("does not offer a kind the router has no page for at all", async () => {
     search.hits = [
-      hit({ kind: "Event", name: "burst-demo.17f", namespace: "k8s-gui-test" }),
+      hit({
+        kind: "Widget",
+        name: "burst-demo.17f",
+        namespace: "k8s-gui-test",
+      }),
     ];
     await open("burst-demo");
     expect(screen.queryByText(/burst-demo\.17f/)).toBeNull();

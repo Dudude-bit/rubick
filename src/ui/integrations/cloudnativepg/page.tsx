@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Box, Database, Network } from "lucide-react";
 
@@ -12,7 +12,7 @@ import {
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { crdInstancesLink, objectLink } from "@/lib/links";
 import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
@@ -22,13 +22,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
-import {
-  crdObjectPath,
-  crdObjectsPath,
-  getValueByPath,
-  troubleMark,
-  allowedWord,
-} from "../kit";
+import { getValueByPath, troubleMark, allowedWord } from "../kit";
 import { Cell, Finding, TroubleRow, VendorReadFailure } from "../page-kit";
 import { BACKUP_REFUSED, actionsFor, perform, type PgAction } from "./actions";
 import { backupsSection } from "./share";
@@ -795,7 +789,7 @@ function BackupsTab({ companions }: { companions: Companions | undefined }) {
       )}
       <p className="text-[11px] text-fg-fnt">
         <Link
-          to={crdObjectsPath(BACKUPS_CRD)}
+          {...crdInstancesLink(BACKUPS_CRD)}
           className="text-info hover:underline"
         >
           {t("operators", "allBackupObjects")}
@@ -812,7 +806,12 @@ function BackupLine({ backup }: { backup: CustomResourceInfo }) {
   return (
     <li className="flex flex-wrap items-baseline gap-x-3 py-1.5">
       <Link
-        to={crdObjectPath(BACKUPS_CRD, backup.namespace, backup.name)}
+        {...objectLink({
+          kind: "Backup",
+          name: backup.name,
+          namespace: backup.namespace,
+          crd: BACKUPS_CRD,
+        })!}
         className="font-mono text-fg hover:underline"
       >
         {backup.name}
@@ -857,7 +856,12 @@ function PoolersTab({ companions }: { companions: Companions | undefined }) {
           className="flex flex-wrap items-baseline gap-x-3 py-1.5"
         >
           <Link
-            to={crdObjectPath(POOLERS_CRD, pooler.namespace, pooler.name)}
+            {...objectLink({
+              kind: "Pooler",
+              name: pooler.name,
+              namespace: pooler.namespace,
+              crd: POOLERS_CRD,
+            })!}
             className="font-mono text-fg hover:underline"
           >
             {pooler.name}
@@ -941,11 +945,14 @@ function OperatorTab({
       ) : operator?.controller ? (
         <p>
           <Link
-            to={`${getResourceDetailUrl(
-              ResourceType.Deployment,
-              operator.controller.name,
-              operator.controller.namespace
-            )}?tab=logs`}
+            {...objectLink(
+              {
+                kind: ResourceType.Deployment,
+                name: operator.controller.name,
+                namespace: operator.controller.namespace,
+              },
+              { tab: "logs" }
+            )!}
             className="text-info hover:underline"
           >
             {t("operators", "operatorLogs")}

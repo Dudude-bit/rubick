@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2, List } from "lucide-react";
 import {
@@ -20,8 +20,8 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "@/components/resources/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { getCrdInstancesUrl } from "@/lib/navigation-utils";
+import { ResourceType } from "@/lib/resource-registry";
+import { crdInstancesLink, hrefOf, objectLink } from "@/lib/links";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -31,8 +31,6 @@ import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
 
-const CRD_PATH = `/${toPlural(ResourceType.CustomResourceDefinition)}`;
-
 // CRDs are cluster-scoped, so `namespace` carries the API group instead:
 // it is the field DataTable groups its captions on, and the API group is
 // the only grouping a CRD list has.
@@ -40,7 +38,8 @@ type CrdListItem = CrdInfo & { namespace: string };
 
 const getCrdRowId = (row: CrdListItem) => row.name;
 
-const crdHref = (name: string) => `${CRD_PATH}/${encodeURIComponent(name)}`;
+const crdLink = (name: string) =>
+  objectLink({ kind: ResourceType.CustomResourceDefinition, name })!;
 
 export function Crds() {
   const t = useT();
@@ -170,13 +169,13 @@ export function Crds() {
         cell: ({ row }) => (
           <ActionMenu>
             <DropdownMenuItem asChild>
-              <Link to={crdHref(row.original.name)}>
+              <Link {...crdLink(row.original.name)}>
                 <Eye className="mr-2 h-3.5 w-3.5" />
                 <T section="action" k="viewDetails" />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to={getCrdInstancesUrl(row.original.name)}>
+              <Link {...crdInstancesLink(row.original.name)}>
                 <List className="mr-2 h-3.5 w-3.5" />
                 <T section="action" k="viewInstances" />
               </Link>
@@ -234,7 +233,7 @@ export function Crds() {
         })}
         searchParam="q"
         getRowId={getCrdRowId}
-        getRowHref={(row) => crdHref(row.name)}
+        getRowHref={(row) => hrefOf(crdLink(row.name))}
         grouping={byNamespace<CrdListItem>("CRDs")}
         rowLabel="CRDs"
         share={{

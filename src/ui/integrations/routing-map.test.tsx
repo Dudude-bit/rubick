@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { renderWithRouter } from "@/test/render";
 import { RoutingMap, type MapNode } from "./routing-map";
 
 const host = (id: string, tag: MapNode["tag"]): MapNode => ({
@@ -17,24 +17,22 @@ describe("a tag on the routing map", () => {
    * words — a TLS nobody checked looked like one that was fine. Fails if an
    * unknown tag is painted like a quiet one again.
    */
-  it("marks a tag nobody could check apart from a quiet one", () => {
-    render(
-      <MemoryRouter>
-        <RoutingMap
-          data={{
-            columns: [
-              {
-                label: "Hosts",
-                nodes: [
-                  host("shop", { text: "TLS", tone: "mute" }),
-                  host("blog", { text: "TLS not checked", tone: "unknown" }),
-                ],
-              },
-            ],
-            edges: [],
-          }}
-        />
-      </MemoryRouter>
+  it("marks a tag nobody could check apart from a quiet one", async () => {
+    await renderWithRouter(
+      <RoutingMap
+        data={{
+          columns: [
+            {
+              label: "Hosts",
+              nodes: [
+                host("shop", { text: "TLS", tone: "mute" }),
+                host("blog", { text: "TLS not checked", tone: "unknown" }),
+              ],
+            },
+          ],
+          edges: [],
+        }}
+      />
     );
 
     const quiet = screen.getByText("TLS");

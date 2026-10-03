@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
+import { renderWithRouter } from "@/test/render";
 import type { NodeInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -45,16 +44,12 @@ vi.mock("@/components/resources/NodeUtilisation", () => ({
 
 import { NodeList } from "./NodeList";
 
-function open(client: QueryClient, url: string) {
-  return render(
-    <QueryClientProvider client={client}>
-      <TooltipProvider>
-        <MemoryRouter initialEntries={[url]}>
-          <NodeList />
-        </MemoryRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
+function open(client: QueryClient, search = "") {
+  return renderWithRouter(<NodeList />, {
+    client,
+    at: `/c/prod/nodes${search}`,
+    route: "/c/$cluster/nodes",
+  });
 }
 
 describe("NodeList", () => {
@@ -71,7 +66,7 @@ describe("NodeList", () => {
       rows: [node],
       unread: [],
     });
-    open(client, "/nodes?view=utilisation");
+    await open(client, "?view=utilisation");
     await waitFor(() => expect(drawn.nodes).toEqual([node]));
   });
 
@@ -84,7 +79,7 @@ describe("NodeList", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    open(client, "/nodes?view=utilisation");
+    await open(client, "?view=utilisation");
     await waitFor(() => expect(drawn.nodes).toEqual([node]));
     expect(
       client.getQueryData(queryKeys.resources(ResourceType.Node, null))
@@ -97,7 +92,7 @@ describe("NodeList", () => {
    * row of its own. Fails if either view stops using the shared header row.
    */
   it("keeps the title and the view toggle in the same header row in both views", async () => {
-    for (const url of ["/nodes", "/nodes?view=utilisation"]) {
+    for (const search of ["", "?view=utilisation"]) {
       const client = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: Infinity } },
       });
@@ -105,12 +100,36 @@ describe("NodeList", () => {
         rows: [],
         unread: [],
       });
-      const view = open(client, url);
+      const view = await open(client, search);
       const heading = await screen.findByRole("heading", { name: "Nodes" });
       const row = heading.parentElement!;
       expect(within(row).getByRole("tablist")).toBeInTheDocument();
       expect(screen.getAllByRole("tablist")).toHaveLength(1);
       view.unmount();
     }
+  });
+
+  /**
+   * The view lives in the address so a deep link can open it and a reload
+   * keeps it. A toggle that only set state would leave the address saying
+   * "table" over a screen showing utilisation.
+   */
+  it("writes the view it switches to into the address", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    client.setQueryData(queryKeys.resources(ResourceType.Node, null), {
+      rows: [],
+      unread: [],
+    });
+    const { router } = await open(client);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Utilisation" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ view: "utilisation" })
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Table" }));
+    await waitFor(() => expect(router.state.location.search).toEqual({}));
   });
 });

@@ -16,6 +16,7 @@
  */
 
 import type { Saying } from "@/i18n/say";
+import type { AppLink } from "@/lib/links";
 
 export type { Saying };
 
@@ -24,7 +25,7 @@ export interface DeliveryOwner {
   kind: string;
   name: string;
   namespace: string;
-  to: string;
+  to: AppLink;
 }
 
 /**

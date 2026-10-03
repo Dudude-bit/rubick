@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 import type { ConfigMapInfo } from "@/generated/types";
 
 // ----- Mocks -----
@@ -40,6 +38,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { renderWithRouter } from "@/test/render";
 import { ConfigMapList } from "./ConfigMapList";
 
 // ----- Fixtures -----
@@ -58,16 +57,10 @@ function buildConfigMap(overrides: Partial<ConfigMapInfo> = {}): ConfigMapInfo {
 }
 
 function renderList() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<ConfigMapList />, {
+    at: "/c/prod/configmaps",
+    route: "/c/$cluster/configmaps",
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/configmaps"]}>
-        <ConfigMapList />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
 // ----- Tests -----
@@ -82,12 +75,12 @@ describe("ConfigMapList", () => {
   });
 
   it("renders the title", async () => {
-    renderList();
+    await renderList();
     expect(await screen.findByText("ConfigMaps")).toBeInTheDocument();
   });
 
   it("asks for the window's selection from the cluster store", async () => {
-    renderList();
+    await renderList();
     await waitFor(() => {
       expect(commands.listConfigmapsIn).toHaveBeenCalled();
     });
@@ -103,7 +96,7 @@ describe("ConfigMapList", () => {
    */
   it("watches the whole selection when several namespaces are selected", async () => {
     store.state.namespaceScope = ["default", "staging"];
-    renderList();
+    await renderList();
     await waitFor(() => {
       expect(commands.subscribeConfigmapWatch).toHaveBeenCalledWith([
         "default",
@@ -127,7 +120,7 @@ describe("ConfigMapList", () => {
       ],
       unread: [],
     });
-    renderList();
+    await renderList();
     expect(await screen.findByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("beta")).toBeInTheDocument();
   });
@@ -139,7 +132,7 @@ describe("ConfigMapList", () => {
       ],
       unread: [],
     });
-    renderList();
+    await renderList();
     await screen.findByText("alpha");
     // The createDataKeysColumn helper renders the count of keys.
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -150,7 +143,7 @@ describe("ConfigMapList", () => {
       rows: [],
       unread: [],
     });
-    renderList();
+    await renderList();
     // Wait for the load to complete, then confirm the table renders no rows.
     await waitFor(() => {
       expect(commands.listConfigmapsIn).toHaveBeenCalled();

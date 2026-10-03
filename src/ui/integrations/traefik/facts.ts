@@ -13,7 +13,8 @@
  * be the pane contradicting the screen it links to.
  */
 
-import { integrationPagePath } from "../paths";
+import { vendorLink } from "@/lib/links";
+
 import type { VendorFact } from "../registry";
 import { countHosts, fetchRouteSources } from "./data";
 import { CONTROLLER } from "./model";
@@ -61,7 +62,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (hosts > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("traefik"),
+      to: vendorLink("traefik"),
     });
   }
 

@@ -1,8 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
-import { getResourceDetailUrl, isClusterScoped } from "@/lib/navigation-utils";
-import { isRoutableKind } from "@/components/resources/ResourceRef";
+import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
 import { formatAge, cn } from "@/lib/utils";
 import {
   clusterChoices,
@@ -63,28 +62,34 @@ export function AlertReadingPanel({
   const object = reading.objects[pickedObject] ?? null;
   const namespace = reading.namespace?.value ?? pickedNamespace;
 
-  const path = useMemo(() => {
+  const link = useMemo(() => {
     if (!object) return null;
-    if (!isRoutableKind(object.kind, namespace)) return null;
-    const url = getResourceDetailUrl(object.kind, object.name, namespace);
+    const ref = { kind: object.kind, name: object.name, namespace };
+    const cluster = context ?? undefined;
     // `since` is read by the Changes tab and by nothing else, so it travels
     // with the tab that reads it. Sent alone it marked a timeline nobody had
     // opened; sent to a page with no such tab it would open no panel at all.
-    if (reading.firedAt === null || !hasChangesTab(object.kind)) return url;
+    if (reading.firedAt === null || !hasChangesTab(object.kind))
+      return objectLink(ref, { cluster });
+    const changes = objectLink(ref, { tab: "changes", cluster });
+    if (!changes) return null;
     const since = new Date(reading.firedAt.value).toISOString();
-    return `${url}?tab=changes&since=${encodeURIComponent(since)}`;
-  }, [object, namespace, reading.firedAt]);
+    return { ...changes, search: { tab: "changes", since } };
+  }, [object, namespace, reading.firedAt, context]);
 
-  const namespacePath =
+  const namespaceLink =
     namespace !== null && namespace !== undefined
-      ? `/namespaces/${namespace}`
+      ? objectLink(
+          { kind: "Namespace", name: namespace },
+          { cluster: context ?? undefined }
+        )
       : null;
 
-  const open = (target: string | null, kind: string, name: string) => {
+  const open = (target: AppLink | null, kind: string, name: string) => {
     if (target === null || context === null) return;
     onOpen({
       context,
-      path: target,
+      path: hrefOf(target),
       // The alert's namespace label belongs to the alert, not to every
       // object it names: a Node, a Namespace, anything cluster-scoped has
       // none, and the page then could not match what was stored — so the
@@ -309,8 +314,8 @@ export function AlertReadingPanel({
           // the panel mounted, and the handler that puts `esc` back on the
           // search box lives there — so `esc` closed the whole palette and
           // ⌘K reopened it on the stale alert instead of the search.
-          disabled={path === null || context === null}
-          onClick={() => object && open(path, object.kind, object.name)}
+          disabled={link === null || context === null}
+          onClick={() => object && open(link, object.kind, object.name)}
           className="flex items-center gap-1.5 rounded border border-info/40 bg-info/12 px-2.5 py-1 text-[11.5px] text-info transition-colors hover:bg-info/20 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
         >
           <ExternalLink aria-hidden="true" className="h-3 w-3" />
@@ -318,18 +323,22 @@ export function AlertReadingPanel({
             ? t("alerts", "openThis", { kind: object.kind, name: object.name })
             : t("alerts", "openIt")}
         </button>
-        {object !== null && path === null ? (
+        {object !== null && link === null ? (
           <span className="text-[11px] text-warn">
-            {isRoutableKind(object.kind, "any")
+            {objectLink({
+              kind: object.kind,
+              name: object.name,
+              namespace: "any",
+            }) !== null
               ? t("alerts", "noNamespaceToOpenBy", { kind: object.kind })
               : t("alerts", "noPageForKind", { kind: object.kind })}
           </span>
         ) : null}
-        {namespacePath && context !== null ? (
+        {namespaceLink && context !== null ? (
           <button
             type="button"
             onClick={() =>
-              open(namespacePath, "Namespace", namespace as string)
+              open(namespaceLink, "Namespace", namespace as string)
             }
             className="rounded px-1 text-[11px] text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
           >

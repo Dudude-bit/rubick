@@ -1,14 +1,14 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
@@ -17,6 +17,8 @@ import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
+import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
+import { renderWithRouter } from "@/test/render";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -40,14 +42,17 @@ const DATA: Item[] = [
   { name: "b-2", namespace: "ns" },
 ];
 
-const href = (row: Item) => `/pods/${row.namespace}/${row.name}`;
+const podLink = (row: Item) =>
+  objectLink({ kind: "Pod", name: row.name, namespace: row.namespace })!;
+
+const href = (row: Item) => hrefOf(podLink(row));
 
 const columns: ColumnDef<Item>[] = [
   {
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => (
-      <RouteLink to={href(row.original)}>{row.original.name}</RouteLink>
+      <RouteLink {...podLink(row.original)}>{row.original.name}</RouteLink>
     ),
   },
   {
@@ -60,19 +65,48 @@ const columns: ColumnDef<Item>[] = [
 ];
 
 function LocationProbe() {
-  const { pathname, search } = useLocation();
-  return <span data-testid="location">{`${pathname}${search}`}</span>;
+  const { pathname, searchStr } = useLocation();
+  return <span data-testid="location">{`${pathname}${searchStr}`}</span>;
 }
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <MemoryRouter initialEntries={["/pods"]}>
-      <TooltipProvider>{ui}</TooltipProvider>
-      <LocationProbe />
-    </MemoryRouter>
-  );
+const LIST = "/c/prod/pods";
+
+let router: AnyRouter;
+
+const framed = (ui: ReactNode) => (
+  <>
+    <TooltipProvider>{ui}</TooltipProvider>
+    <LocationProbe />
+  </>
+);
+
+const wrap = async (ui: ReactNode, at = LIST) => {
+  const rendered = await renderWithRouter(framed(ui), {
+    at,
+    route: "/c/$cluster/$",
+  });
+  router = rendered.router;
+  return rendered;
+};
+
+const wrapRerenderable = async (initial: ReactNode) => {
+  const rendered = await wrap(initial);
+  return {
+    ...rendered,
+    rerender: (next: ReactNode) => rendered.rerender(framed(next)),
+  };
+};
 
 const location = () => screen.getByTestId("location").textContent;
+
+const goesTo = (expected: string) =>
+  vi.waitFor(() => expect(location()).toBe(expected));
+
+/** Lets a navigation that was started finish, so "nothing happened" means it. */
+const staysAt = async (expected: string = LIST) => {
+  await act(() => router.load());
+  expect(location()).toBe(expected);
+};
 
 /** Anywhere in the row that is not the name, a link or a quick action. */
 const whitespace = () => screen.getByTestId("status-a-1");
@@ -173,7 +207,7 @@ describe("DataTable rows", () => {
           context: null,
           namespace: "",
           scope: [],
-          href: "/pods",
+          href: LIST,
           missing: false,
         },
       ],
@@ -202,13 +236,13 @@ describe("DataTable rows", () => {
    * and the page is a double click. Would break if the row went back to
    * navigating on a plain click, or if the double click stopped opening it.
    */
-  it("peeks on a plain click anywhere in the row, and opens the page on a double click", () => {
-    renderTable();
+  it("peeks on a plain click anywhere in the row, and opens the page on a double click", async () => {
+    await renderTable();
     fireEvent.click(whitespace());
-    expect(location()).toBe("/pods?peek=pods%2Fns%2Fa-1");
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
     expect(tabs()).toHaveLength(1);
     fireEvent.doubleClick(whitespace());
-    expect(location()).toBe("/pods/ns/a-1");
+    await goesTo("/c/prod/pods/ns/a-1");
   });
 
   /**
@@ -218,10 +252,10 @@ describe("DataTable rows", () => {
    * that points somewhere else — a row's node, its owner — keeps its own
    * meaning, because the reader aimed at that link rather than at the row.
    */
-  it("opens the page on a double click on the row's own name, and not on a link elsewhere", () => {
-    renderTable();
+  it("opens the page on a double click on the row's own name, and not on a link elsewhere", async () => {
+    await renderTable();
     fireEvent.doubleClick(screen.getByText("a-1"));
-    expect(location()).toBe("/pods/ns/a-1");
+    await goesTo("/c/prod/pods/ns/a-1");
   });
 
   /**
@@ -229,24 +263,28 @@ describe("DataTable rows", () => {
    * there is deliberately inert, and a double click navigated, so the same
    * spot answered two ways depending on how fast the reader clicked.
    */
-  it("leaves the quick-actions gutter to the quick actions", () => {
+  it("leaves the quick-actions gutter to the quick actions", async () => {
     const onClick = vi.fn();
-    renderTable({ quickAction: onClick });
+    await renderTable({ quickAction: onClick });
     const gutter = row().querySelector("[data-quick-actions]") as HTMLElement;
     fireEvent.click(gutter);
-    expect(location()).toBe("/pods");
+    await staysAt();
     fireEvent.doubleClick(gutter);
-    expect(location()).toBe("/pods");
+    await staysAt();
   });
 
-  it("leaves a double click on a link to somewhere else alone", () => {
-    wrap(
+  it("leaves a double click on a link to somewhere else alone", async () => {
+    await wrap(
       <DataTable<Item>
         columns={[
           {
             accessorKey: "name",
             header: "Name",
-            cell: () => <RouteLink to="/nodes/worker-1">worker-1</RouteLink>,
+            cell: () => (
+              <RouteLink {...objectLink({ kind: "Node", name: "worker-1" })!}>
+                worker-1
+              </RouteLink>
+            ),
           },
         ]}
         data={[DATA[0]]}
@@ -254,20 +292,28 @@ describe("DataTable rows", () => {
       />
     );
     fireEvent.doubleClick(screen.getByText("worker-1"));
-    expect(location()).toBe("/pods");
+    await staysAt();
   });
 
   // A row whose route has no peek behind it is a plain link, as it always was.
-  it("navigates on a plain click where the route is not an object", () => {
-    wrap(
+  it("navigates on a plain click where the route is not an object", async () => {
+    await wrap(
       <DataTable<Item>
         columns={columns}
         data={DATA}
-        getRowHref={(row) => `/helm/${row.namespace}/${row.name}`}
+        getRowHref={(row) =>
+          hrefOf(
+            helmReleaseLink({
+              source: "native",
+              namespace: row.namespace,
+              name: row.name,
+            })
+          )
+        }
       />
     );
     fireEvent.click(whitespace());
-    expect(location()).toBe("/helm/ns/a-1");
+    await goesTo("/c/prod/helm/native/ns/a-1");
   });
 
   // This is the regression the whole change exists for: the row used to call
@@ -279,38 +325,38 @@ describe("DataTable rows", () => {
     ["shift", { shiftKey: true }, false],
   ])(
     "opens a %s click on the row in a scope tab, leaving the list alone",
-    (_label, init, background) => {
-      renderTable();
+    async (_label, init, background) => {
+      await renderTable();
       fireEvent.click(whitespace(), init);
       expect(tabs()).toHaveLength(2);
-      expect(tabs()[1].href).toBe("/pods/ns/a-1");
+      expect(tabs()[1].href).toBe("/c/prod/pods/ns/a-1");
       expect(isActive(1)).toBe(!background);
-      expect(location()).toBe("/pods");
+      await staysAt();
     }
   );
 
   // Middle click did nothing at all on every list in the app.
-  it("opens a middle click on the row behind the list", () => {
-    renderTable();
+  it("opens a middle click on the row behind the list", async () => {
+    await renderTable();
     middleClick(whitespace());
     expect(tabs()).toHaveLength(2);
-    expect(tabs()[1].href).toBe("/pods/ns/a-1");
+    expect(tabs()[1].href).toBe("/c/prod/pods/ns/a-1");
     expect(isActive(0)).toBe(true);
-    expect(location()).toBe("/pods");
+    await staysAt();
   });
 
   // Alt-click is the platform's gesture; the row does not get to take it.
-  it("leaves an alt click alone", () => {
-    renderTable();
+  it("leaves an alt click alone", async () => {
+    await renderTable();
     fireEvent.click(whitespace(), { altKey: true });
     expect(tabs()).toHaveLength(1);
-    expect(location()).toBe("/pods");
+    await staysAt();
   });
 
   // A right click has to reach the context menu, and it arrives as auxclick
   // too — reading the modifiers before the button would eat it.
-  it("ignores a right click, modified or not", () => {
-    renderTable();
+  it("ignores a right click, modified or not", async () => {
+    await renderTable();
     fireEvent(
       whitespace(),
       new MouseEvent("auxclick", {
@@ -321,36 +367,36 @@ describe("DataTable rows", () => {
       })
     );
     expect(tabs()).toHaveLength(1);
-    expect(location()).toBe("/pods");
+    await staysAt();
   });
 
-  it("keeps a quick action from opening the row", () => {
+  it("keeps a quick action from opening the row", async () => {
     const onClick = vi.fn();
-    renderTable({ quickAction: onClick });
+    await renderTable({ quickAction: onClick });
     fireEvent.click(screen.getAllByLabelText("View")[0]);
     expect(onClick).toHaveBeenCalledTimes(1);
-    expect(location()).toBe("/pods");
+    await staysAt();
     expect(tabs()).toHaveLength(1);
   });
 
   describe("keyboard", () => {
-    it("opens the focused row on Enter", () => {
-      renderTable();
+    it("opens the focused row on Enter", async () => {
+      await renderTable();
       fireEvent.keyDown(row(), { key: "Enter" });
-      expect(location()).toBe("/pods/ns/a-1");
+      await goesTo("/c/prod/pods/ns/a-1");
     });
 
     // Enter is an activation like a click, so it carries the same modifiers.
-    it("opens a modified Enter in a scope tab", () => {
-      renderTable();
+    it("opens a modified Enter in a scope tab", async () => {
+      await renderTable();
       fireEvent.keyDown(row(), { key: "Enter", ctrlKey: true });
       expect(tabs()).toHaveLength(2);
-      expect(tabs()[1].href).toBe("/pods/ns/a-1");
-      expect(location()).toBe("/pods");
+      expect(tabs()[1].href).toBe("/c/prod/pods/ns/a-1");
+      await staysAt();
     });
 
-    it("still moves the focus with the arrows", () => {
-      renderTable();
+    it("still moves the focus with the arrows", async () => {
+      await renderTable();
       fireEvent.keyDown(row(), { key: "ArrowDown" });
       expect(screen.getByTestId("status-b-2").closest("tr")).toHaveAttribute(
         "data-focused",
@@ -362,18 +408,18 @@ describe("DataTable rows", () => {
   describe("the name cell", () => {
     // No href meant no destination in the status bar, no "copy link address"
     // and no place in the keyboard's link order.
-    it("is a real anchor carrying the row's destination", () => {
-      renderTable();
+    it("is a real anchor carrying the row's destination", async () => {
+      await renderTable();
       expect(screen.getByRole("link", { name: "a-1" })).toHaveAttribute(
         "href",
-        "/pods/ns/a-1"
+        "/c/prod/pods/ns/a-1"
       );
     });
 
     // The row bails on anything inside an anchor, so a modified click on the
     // name must not also be handled by the row.
-    it("opens exactly one tab when middle-clicked", () => {
-      renderTable();
+    it("opens exactly one tab when middle-clicked", async () => {
+      await renderTable();
       middleClick(screen.getByRole("link", { name: "a-1" }));
       expect(tabs()).toHaveLength(2);
       expect(isActive(0)).toBe(true);
@@ -399,16 +445,16 @@ describe("row grouping", () => {
    * captions, and above all no "ungrouped" heading, which would turn silence
    * into a claim.
    */
-  it("draws a flat list when nothing states a group", () => {
-    grouped(DATA, { keyOf: () => null, caption: () => "never" });
+  it("draws a flat list when nothing states a group", async () => {
+    await grouped(DATA, { keyOf: () => null, caption: () => "never" });
     expect(screen.getAllByRole("row")).toHaveLength(1 + DATA.length);
   });
 
   /** Namespaces ask for two groups; one pool still earns its caption. */
-  it("honours a minimum before captioning anything", () => {
-    grouped(DATA, { ...byLetter, keyOf: () => "one", minGroups: 2 });
+  it("honours a minimum before captioning anything", async () => {
+    await grouped(DATA, { ...byLetter, keyOf: () => "one", minGroups: 2 });
     expect(screen.queryByText(/one/)).toBeNull();
-    grouped(DATA, { ...byLetter, keyOf: () => "one" });
+    await grouped(DATA, { ...byLetter, keyOf: () => "one" });
     expect(screen.getByText("one · 2")).toBeInTheDocument();
   });
 
@@ -417,8 +463,8 @@ describe("row grouping", () => {
    * has to be reachable — and has to be drawn without being filed under a
    * group nobody stated.
    */
-  it("draws rows with no group first and without a caption", () => {
-    grouped(DATA, byLetter);
+  it("draws rows with no group first and without a caption", async () => {
+    await grouped(DATA, byLetter);
     const text = screen
       .getAllByRole("row")
       .map((tr) => tr.textContent ?? "")
@@ -430,12 +476,12 @@ describe("row grouping", () => {
   });
 
   /** A caption saying the same word on every row below it is one column of noise. */
-  it("hides the column the caption has taken over", () => {
+  it("hides the column the caption has taken over", async () => {
     const withNamespace: ColumnDef<Item>[] = [
       ...columns,
       { id: "namespace", header: "Namespace", cell: () => "ns" },
     ];
-    grouped(
+    await grouped(
       DATA,
       { ...byLetter, keyOf: () => "one", hides: ["namespace"] },
       withNamespace
@@ -473,7 +519,7 @@ describe("sorting a column", () => {
       .map((row) => row.querySelector("td")?.textContent);
 
   /** Equal sort values must preserve input order, including after an unrelated render. */
-  it("preserves the input order of ties when sorting and rerendering", () => {
+  it("preserves the input order of ties when sorting and rerendering", async () => {
     const data: Item[] = [
       { name: "b", namespace: "first" },
       { name: "a", namespace: "second" },
@@ -483,14 +529,8 @@ describe("sorting a column", () => {
       sortable[0],
       { accessorKey: "namespace", header: "Namespace" },
     ];
-    const tree = () => (
-      <MemoryRouter>
-        <TooltipProvider>
-          <DataTable columns={stableColumns} data={data} />
-        </TooltipProvider>
-      </MemoryRouter>
-    );
-    const { rerender } = render(tree());
+    const tree = () => <DataTable columns={stableColumns} data={data} />;
+    const { rerender } = await wrapRerenderable(tree());
     const namespaces = () =>
       screen
         .getAllByRole("row")
@@ -504,8 +544,8 @@ describe("sorting a column", () => {
     expect(namespaces()).toEqual(["first", "third", "second"]);
   });
 
-  it("reverses the rows when its header is toggled twice", () => {
-    wrap(<DataTable<Item> columns={sortable} data={DATA} />);
+  it("reverses the rows when its header is toggled twice", async () => {
+    await wrap(<DataTable<Item> columns={sortable} data={DATA} />);
     expect(namesInOrder()).toEqual(["a-1", "b-2"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Name" }));
@@ -527,8 +567,8 @@ describe("column widths", () => {
    * to TanStack's 150px default: a pod name gets exactly as much room as its
    * age, on every list in the app.
    */
-  it("writes each column's declared size onto its header", () => {
-    wrap(
+  it("writes each column's declared size onto its header", async () => {
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 320 },
@@ -556,7 +596,7 @@ describe("column widths", () => {
    * from the total being constant.
    */
   it("takes the width a column gains from the one beside it", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -605,8 +645,8 @@ describe("column widths", () => {
    * that it is a sliver whose label is cut — and before the floor existed,
    * the vendor's default of 20 let a drag paint one header over the next.
    */
-  it("stops the neighbour at the narrowest a column may be", () => {
-    wrap(
+  it("stops the neighbour at the narrowest a column may be", async () => {
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -643,7 +683,7 @@ describe("column widths", () => {
    * the port's width so the arithmetic is the real one.
    */
   it("converts the pointer's travel through the width the table is drawn at", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -691,7 +731,7 @@ describe("column widths", () => {
    * feedback at all. The second drag is the whole point of this one.
    */
   it("follows the pointer on a second drag, after the first is stored", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -746,7 +786,7 @@ describe("column widths", () => {
    * direction nobody dragged and which could never be given back.
    */
   it("leaves a column already narrower than the floor where it was", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -783,7 +823,7 @@ describe("column widths", () => {
    * resizing itself under a pointer nobody was holding down.
    */
   it("does not start a drag on any button but the first", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -813,7 +853,7 @@ describe("column widths", () => {
    * for good, on every visit, with nothing in the UI saying so.
    */
   it("puts both columns back to their declared widths on a double click", async () => {
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -852,8 +892,8 @@ describe("column widths", () => {
    * the one that used to be there straddled the edge, giving every list in
    * the app a few pixels of horizontal scroll it never had.
    */
-  it("puts no grip on the last column", () => {
-    wrap(
+  it("puts no grip on the last column", async () => {
+    await wrap(
       <DataTable<Item>
         columns={[
           { ...columns[0], size: 300 },
@@ -871,13 +911,13 @@ describe("column widths", () => {
    * taking a name column's share of the table for two 20px icons — which is
    * what the default did, on every list that has quick actions at all.
    */
-  it("sizes the generated actions column from what is in it", () => {
+  it("sizes the generated actions column from what is in it", async () => {
     const action = (label: string) => ({
       icon: Eye,
       label,
       onClick: () => {},
     });
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[{ ...columns[0], size: 320 }]}
         data={DATA}
@@ -890,7 +930,7 @@ describe("column widths", () => {
     const oneName = nameShare();
     cleanup();
 
-    wrap(
+    await wrap(
       <DataTable<Item>
         columns={[{ ...columns[0], size: 320 }]}
         data={DATA}
@@ -923,8 +963,8 @@ describe("the row's quick actions", () => {
    * the density the app opens on drops to 20×20, which is the size the button
    * was built not to be.
    */
-  it("leaves the actions cell unclipped in compact density", () => {
-    withActions();
+  it("leaves the actions cell unclipped in compact density", async () => {
+    await withActions();
     const actions = screen.getAllByLabelText("View")[0].closest("td");
     const name = screen.getByText("a-1").closest("td");
 
@@ -938,11 +978,11 @@ describe("the row's quick actions", () => {
    * column dragged to its floor painted its text straight over the column
    * beside it, which is the one thing fixed layout was chosen to prevent.
    */
-  it("clips a text cell in comfortable density too", () => {
+  it("clips a text cell in comfortable density too", async () => {
     act(() =>
       useDisplaySettingsStore.setState({ tableDensity: "comfortable" })
     );
-    withActions();
+    await withActions();
     const name = screen.getByText("a-1").closest("td");
     const actions = screen.getAllByLabelText("View")[0].closest("td");
 
@@ -957,8 +997,8 @@ describe("the row's quick actions", () => {
    * boundary. On a list that also re-reads itself every two seconds the
    * columns visibly shifted under the pointer.
    */
-  it("stay mounted and are hidden by the row's own hover state", () => {
-    withActions();
+  it("stay mounted and are hidden by the row's own hover state", async () => {
+    await withActions();
     const button = screen.getAllByLabelText("View")[0];
     expect(button).toBeInTheDocument();
 
@@ -984,22 +1024,18 @@ describe("the row's quick actions", () => {
    * ever raised. The row's own handler, bound to a `tr` that does survive,
    * kept working, which is why pressing repeatedly navigated instead.
    */
-  it("keeps the same button across a re-render", () => {
+  it("keeps the same button across a re-render", async () => {
     const table = () => (
-      <MemoryRouter initialEntries={["/pods"]}>
-        <TooltipProvider>
-          <DataTable<Item>
-            columns={columns}
-            data={DATA}
-            getRowHref={href}
-            // A fresh array every render, exactly as `ResourceList` builds it
-            // from the page's `quickActions` factory.
-            quickActions={[{ icon: Eye, label: "View", onClick: () => {} }]}
-          />
-        </TooltipProvider>
-      </MemoryRouter>
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={href}
+        // A fresh array every render, exactly as `ResourceList` builds it
+        // from the page's `quickActions` factory.
+        quickActions={[{ icon: Eye, label: "View", onClick: () => {} }]}
+      />
     );
-    const { rerender } = render(table());
+    const { rerender } = await wrapRerenderable(table());
     const before = screen.getAllByLabelText("View")[0];
 
     rerender(table());
@@ -1029,7 +1065,7 @@ describe("a list past the virtualisation threshold", () => {
   /** Rebuilding descriptors or sorting on scroll makes windowing cost the entire list. */
   it.each([false, true])(
     "reuses descriptors and navigation indexes when the scroll offset changes with grouping %s",
-    (grouped) => {
+    async (grouped) => {
       const sortFn = vi.fn((a: { original: Item }, b: { original: Item }) =>
         a.original.name.localeCompare(b.original.name)
       );
@@ -1043,7 +1079,7 @@ describe("a list past the virtualisation threshold", () => {
           sortFn,
         },
       ];
-      wrap(
+      await wrap(
         <DataTable
           columns={sortable}
           data={pods(10_000)}
@@ -1077,7 +1113,7 @@ describe("a list past the virtualisation threshold", () => {
   );
 
   /** Stale line indexes after sorting send a virtual keyboard jump to another row. */
-  it("moves the keyboard through the visible grouped order after sorting", () => {
+  it("moves the keyboard through the visible grouped order after sorting", async () => {
     const sortable: ColumnDef<Item>[] = [
       {
         accessorKey: "name",
@@ -1091,7 +1127,7 @@ describe("a list past the virtualisation threshold", () => {
         cell: ({ row }) => row.original.name,
       },
     ];
-    wrap(
+    await wrap(
       <DataTable
         columns={sortable}
         data={pods(500, 50)}
@@ -1115,16 +1151,16 @@ describe("a list past the virtualisation threshold", () => {
    * Before this, "virtual scroll" was a max-height and an overflow: all 500
    * rows mounted, and a watch tick every two seconds re-rendered all of them.
    */
-  it("mounts a window of rows rather than all of them", () => {
-    long();
+  it("mounts a window of rows rather than all of them", async () => {
+    await long();
     const drawn = screen.getAllByRole("row").length;
     expect(drawn).toBeGreaterThan(1);
     expect(drawn).toBeLessThan(many.length / 4);
   });
 
   /** The rows that are not drawn are still held open, or the scrollbar lies. */
-  it("keeps the undrawn rows' height in a spacer", () => {
-    long();
+  it("keeps the undrawn rows' height in a spacer", async () => {
+    await long();
     expect(
       document.querySelectorAll('tbody tr[aria-hidden="true"]').length
     ).toBeGreaterThan(0);
@@ -1136,8 +1172,8 @@ describe("a list past the virtualisation threshold", () => {
    * — otherwise the keyboard reader is stranded at the top of a long list
    * while the scroll port jumps away underneath them.
    */
-  it("carries a keyboard jump past the drawn window", () => {
-    long();
+  it("carries a keyboard jump past the drawn window", async () => {
+    await long();
     fireEvent.keyDown(rowAt(0)!, { key: "End" });
     fireEvent.scroll(scrollPort()!);
 
@@ -1151,8 +1187,8 @@ describe("a list past the virtualisation threshold", () => {
    * by a row — fifty groups is two windows short, the row never mounts, and
    * End does nothing at all.
    */
-  it("lands a keyboard jump on the right line when captions are drawn", () => {
-    wrap(
+  it("lands a keyboard jump on the right line when captions are drawn", async () => {
+    await wrap(
       <DataTable<Item>
         columns={columns}
         data={pods(500, 50)}
@@ -1193,7 +1229,7 @@ describe("a list past the virtualisation threshold", () => {
    * was one. Fails if such a column goes back to a bare `accessorKey`.
    */
   it("matches a column whose value is a structure by what it shows", async () => {
-    wrap(
+    await wrap(
       <DataTable
         columns={[
           ...columns,
@@ -1218,7 +1254,7 @@ describe("a list past the virtualisation threshold", () => {
   });
 
   it("matches on a column other than the first", async () => {
-    wrap(
+    await wrap(
       <DataTable
         columns={[
           ...columns,
@@ -1241,7 +1277,7 @@ describe("a list past the virtualisation threshold", () => {
   });
 
   it("sends End to the end of what the search left", async () => {
-    long();
+    await long();
     fireEvent.change(search(), { target: { value: "pod-19" } });
     await waitFor(() =>
       expect(document.querySelectorAll("tr[data-row-index]")).toHaveLength(11)
@@ -1259,7 +1295,7 @@ describe("a list past the virtualisation threshold", () => {
    * stop until the reader pressed an arrow again.
    */
   it("keeps a focus ring-3 and a tab stop after a search narrows the list", async () => {
-    long();
+    await long();
     fireEvent.keyDown(rowAt(0)!, { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
     expect(document.activeElement).toHaveAttribute("data-row-index", "2");
@@ -1280,8 +1316,8 @@ describe("a list past the virtualisation threshold", () => {
    * tabbable row at all: Tab skips the entire list, and a keyboard reader who
    * scrolled has no way back into it.
    */
-  it("moves the tab stop into the window when its row scrolls out", () => {
-    long();
+  it("moves the tab stop into the window when its row scrolls out", async () => {
+    await long();
     const port = scrollPort()!;
     port.scrollTop = 6000;
     fireEvent.scroll(port);
@@ -1298,20 +1334,16 @@ describe("a list past the virtualisation threshold", () => {
    * never produced it, and the moment the list grew back the table took the
    * focus off whatever the reader had moved to since.
    */
-  it("drops a jump whose row the list no longer has", () => {
+  it("drops a jump whose row the list no longer has", async () => {
     const tree = (data: Item[]) => (
-      <MemoryRouter initialEntries={["/pods"]}>
-        <TooltipProvider>
-          <DataTable<Item>
-            columns={columns}
-            data={data}
-            getRowHref={href}
-            grouping={null}
-          />
-        </TooltipProvider>
-      </MemoryRouter>
+      <DataTable<Item>
+        columns={columns}
+        data={data}
+        getRowHref={href}
+        grouping={null}
+      />
     );
-    const { rerender } = render(tree(many));
+    const { rerender } = await wrapRerenderable(tree(many));
 
     fireEvent.keyDown(rowAt(0)!, { key: "End" });
     // A watch tick shortens the list before the scroll has settled, then it
@@ -1331,8 +1363,8 @@ describe("a list past the virtualisation threshold", () => {
    * scrollbar off by the difference, and rows that jump as each one
    * re-measures on its way back in.
    */
-  it("re-draws the window for the new row height when the density changes", () => {
-    long();
+  it("re-draws the window for the new row height when the density changes", async () => {
+    await long();
     const drawn = () => document.querySelectorAll("tr[data-row-index]").length;
     const compact = drawn();
 
@@ -1344,19 +1376,15 @@ describe("a list past the virtualisation threshold", () => {
   });
 
   /** Windowing is a drawing decision. The list is still whole underneath it. */
-  it("still counts the whole list", () => {
-    long();
+  it("still counts the whole list", async () => {
+    await long();
     expect(screen.getByText("500 rows")).toBeInTheDocument();
   });
 });
 
 describe("the size band the layout switches on", () => {
   const table = (count: number) => (
-    <MemoryRouter initialEntries={["/pods"]}>
-      <TooltipProvider>
-        <DataTable<Item> columns={columns} data={pods(count)} grouping={null} />
-      </TooltipProvider>
-    </MemoryRouter>
+    <DataTable<Item> columns={columns} data={pods(count)} grouping={null} />
   );
 
   /**
@@ -1366,8 +1394,8 @@ describe("the size band the layout switches on", () => {
    * own scrollbar — losing the scroll position every time, and throwing away
    * every measured row height with it.
    */
-  it("holds its layout while the row count wobbles across the mark", () => {
-    const { rerender } = render(table(120));
+  it("holds its layout while the row count wobbles across the mark", async () => {
+    const { rerender } = await wrapRerenderable(table(120));
     expect(scrollPort()).not.toBeNull();
 
     rerender(table(98));
@@ -1405,8 +1433,8 @@ describe("a table given the page's height", () => {
   const port = () => document.querySelector("table")!.parentElement!;
 
   /** The pane it is in, not a number written here. */
-  it("takes no fixed height of its own", () => {
-    filled(500);
+  it("takes no fixed height of its own", async () => {
+    await filled(500);
 
     expect(document.querySelector('[style*="max-height"]')).toBeNull();
     // What lets the port shrink past its own content when the pane runs out.
@@ -1424,15 +1452,15 @@ describe("a table given the page's height", () => {
    * any length too. Sticky used to arrive with the windowing, which meant a
    * 40-row list scrolled its own column labels away.
    */
-  it("holds the column labels over a list too short to window", () => {
-    filled(40);
+  it("holds the column labels over a list too short to window", async () => {
+    await filled(40);
 
     expect(document.querySelector("thead")!.className).toContain("sticky");
   });
 
   /** Search above, count below: neither scrolls with the rows. */
-  it("leaves the search row and the count outside the scroll", () => {
-    filled(500);
+  it("leaves the search row and the count outside the scroll", async () => {
+    await filled(500);
 
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
@@ -1447,15 +1475,15 @@ describe("the namespace column", () => {
   ];
 
   /** Issue #178: with one namespace chosen the column repeated the scope bar on every row. */
-  it("is hidden while one namespace is chosen, and back for all or several", () => {
+  it("is hidden while one namespace is chosen, and back for all or several", async () => {
     useClusterStore.setState({ namespaceScope: ["ns"] });
-    const { unmount } = wrap(
+    const { unmount } = await wrap(
       <DataTable<Item> columns={withNamespace} data={DATA} />
     );
     expect(screen.queryByText("Namespace")).toBeNull();
     unmount();
     useClusterStore.setState({ namespaceScope: [] });
-    wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
+    await wrap(<DataTable<Item> columns={withNamespace} data={DATA} />);
     expect(screen.getByText("Namespace")).toBeInTheDocument();
   });
 });
@@ -1468,20 +1496,16 @@ describe("the search box", () => {
    * stopped reading the parameter, or stopped writing it.
    */
   it("reads its value from the query string and writes it back", async () => {
-    render(
-      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
-        <TooltipProvider>
-          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
-        </TooltipProvider>
-        <LocationProbe />
-      </MemoryRouter>
+    await wrap(
+      <DataTable<Item> columns={columns} data={DATA} searchParam="q" />,
+      `${LIST}?q=b-2`
     );
     expect(search()).toHaveValue("b-2");
     await waitFor(() => expect(screen.queryByText("a-1")).toBeNull());
     fireEvent.change(search(), { target: { value: "a-1" } });
-    expect(location()).toBe("/pods?q=a-1");
+    await goesTo("/c/prod/pods?q=a-1");
     fireEvent.change(search(), { target: { value: "" } });
-    expect(location()).toBe("/pods");
+    await goesTo(LIST);
   });
 
   /**
@@ -1496,31 +1520,30 @@ describe("the search box", () => {
     function Elsewhere() {
       const navigate = useNavigate();
       return (
-        <button type="button" onClick={() => navigate("/pods")}>
+        <button type="button" onClick={() => navigate({ href: LIST })}>
           drop it
         </button>
       );
     }
-    render(
-      <MemoryRouter initialEntries={["/pods?q=b-2"]}>
-        <TooltipProvider>
-          <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
-          <Elsewhere />
-        </TooltipProvider>
-        <LocationProbe />
-      </MemoryRouter>
+    await wrap(
+      <>
+        <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        <Elsewhere />
+      </>,
+      `${LIST}?q=b-2`
     );
     expect(search()).toHaveValue("b-2");
     fireEvent.click(screen.getByRole("button", { name: "drop it" }));
     await waitFor(() => expect(search()).toHaveValue(""));
-    expect(screen.getByText("a-1")).toBeInTheDocument();
+    // The rows follow the box a render later, through the deferred value.
+    await waitFor(() => expect(screen.getByText("a-1")).toBeInTheDocument());
   });
 });
 
 describe("a table offered to the screen's Share", () => {
   /** Every table registered under "table": the last one mounted, shared or
    *  not, replaced the others, and a list left the report without a trace. */
-  it("reports each shared table and nothing for one without a share", () => {
+  it("reports each shared table and nothing for one without a share", async () => {
     function Probe() {
       const collect = useScreenSections();
       return (
@@ -1535,7 +1558,7 @@ describe("a table offered to the screen's Share", () => {
         </button>
       );
     }
-    wrap(
+    await wrap(
       <ScreenShareProvider>
         <DataTable columns={columns} data={DATA} share={{ title: "Pods" }} />
         <DataTable

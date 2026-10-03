@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { nodeReadyWord, silentNodes } from "@/lib/node-reporting";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -63,7 +63,8 @@ import { commands } from "@/lib/commands";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
+import { objectLink } from "@/lib/links";
 import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
@@ -193,8 +194,11 @@ export function NodeDetail() {
 
   const handleDebugStart = (result: DebugResult) => {
     navigate(
-      `/${toPlural(ResourceType.Pod)}/${result.namespace}/${result.podName}`,
-      { replace: false }
+      objectLink({
+        kind: ResourceType.Pod,
+        name: result.podName,
+        namespace: result.namespace,
+      })!
     );
   };
 

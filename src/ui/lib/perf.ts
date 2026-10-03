@@ -239,11 +239,11 @@ export class PerfRecorder {
       tasks: taskLifetime ? stats(taskLifetime, tasks) : null,
       renders: summariseByName(
         this.rings.render.toArray(),
+        this.lifetimes.render
+      ),
       navigations: summariseByName(
         this.rings.navigation.toArray(),
         this.lifetimes.navigation
-      ),
-        this.lifetimes.render
       ),
       taskSource: this.taskSource,
       sampleCap: SAMPLE_CAP,

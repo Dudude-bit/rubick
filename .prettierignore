@@ -11,3 +11,6 @@ docs/superpowers/
 # dumper against the specimen cluster. Reformatting one would make the next
 # regeneration look like a change.
 src/ui/lib/__fixtures__/
+
+# The route tree is written by the router generator in its own format.
+src/ui/generated/routeTree.gen.ts

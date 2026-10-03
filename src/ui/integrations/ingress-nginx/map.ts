@@ -11,14 +11,11 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
-import { hostSeverity, hostTlsTag } from "../ingress";
+import { hostFilterLink, hostSeverity, hostTlsTag } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import { backingOf, type NginxHostGroup, type NginxSources } from "./model";
 
 /** Where clicking a host goes: its own routes, filtered to it. */
-export const hostFilterPath = (host: string | null) =>
-  `?tab=routes${host ? `&q=${encodeURIComponent(host)}` : ""}`;
-
 function toneOf(group: NginxHostGroup): MapTone {
   return hostSeverity(group) ?? "ok";
 }
@@ -97,7 +94,7 @@ export function routingMap(
       label: group.host ?? t("action", "anyHost"),
       sub: t("count", "paths", { n: group.routes.length }),
       tone,
-      to: hostFilterPath(group.host),
+      to: hostFilterLink(group.host),
       // The split outranks TLS for the one word this node gets: a host
       // quietly serving two versions is the fact a reader scans for.
       tag: group.split

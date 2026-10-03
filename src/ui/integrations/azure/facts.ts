@@ -14,8 +14,8 @@
  */
 
 import { commands } from "@/lib/commands";
+import { crdInstancesLink, objectLink } from "@/lib/links";
 
-import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   AZURE_IDENTITY_BINDING_CRD,
@@ -77,12 +77,13 @@ export async function facts(): Promise<VendorFact[]> {
       say: { key: dangling.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         dangling.length === 1
-          ? crdObjectPath(
-              AZURE_IDENTITY_BINDING_CRD,
-              dangling[0].namespace,
-              dangling[0].name
-            )
-          : crdObjectsPath(AZURE_IDENTITY_BINDING_CRD),
+          ? objectLink({
+              kind: "AzureIdentityBinding",
+              name: dangling[0].name,
+              namespace: dangling[0].namespace,
+              crd: AZURE_IDENTITY_BINDING_CRD,
+            })!
+          : crdInstancesLink(AZURE_IDENTITY_BINDING_CRD),
     });
   }
 

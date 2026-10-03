@@ -7,6 +7,7 @@ function harness(opts: { failStop?: boolean; failCounters?: boolean } = {}) {
   const recorder = new PerfRecorder();
   const calls: string[] = [];
   let watching = 0;
+  let timingNavigations = 0;
   const session = new PerfSession(
     recorder,
     {
@@ -34,12 +35,33 @@ function harness(opts: { failStop?: boolean; failCounters?: boolean } = {}) {
       return () => {
         watching--;
       };
+    },
+    () => {
+      timingNavigations++;
+      return () => {
+        timingNavigations--;
+      };
     }
   );
-  return { recorder, session, calls, watch: () => watching };
+  return {
+    recorder,
+    session,
+    calls,
+    watch: () => watching,
+    navigations: () => timingNavigations,
+  };
 }
 
 describe("PerfSession", () => {
+  /** Navigations timed only while a panel was open would miss every one the reader made after closing it. */
+  it("times navigations for exactly the length of the recording", async () => {
+    const { session, navigations } = harness();
+    await session.start();
+    expect(navigations()).toBe(1);
+    await session.stop();
+    expect(navigations()).toBe(0);
+  });
+
   /** A frame watch tied to the panel dies when Settings closes, mid-measurement. */
   it("owns the frame watch for the whole recording, not the panel's lifetime", async () => {
     const h = harness();

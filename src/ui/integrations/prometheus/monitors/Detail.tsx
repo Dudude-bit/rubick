@@ -8,13 +8,14 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT, type T } from "@/i18n/useT";
+import { objectLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { crdObjectPath, hourMinute } from "../../kit";
+import { hourMinute } from "../../kit";
 import { OutLink } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
 import { monitorDetailSections } from "./share";
@@ -128,7 +129,12 @@ export function Detail({
         </div>
         <div className="flex flex-none gap-1.5">
           <Link
-            to={crdObjectPath(crd, monitor.namespace, monitor.name)}
+            {...objectLink({
+              kind: monitor.kind,
+              name: monitor.name,
+              namespace: monitor.namespace,
+              crd,
+            })!}
             className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-hair px-2.5 text-xs text-fg-mid hover:bg-hover"
           >
             {t("monitors", "openObject")}
@@ -495,11 +501,12 @@ function PickedUpStep({
             className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 rounded-[6px] border border-info/35 bg-info/5 px-2.5 py-2 text-[11.5px] text-fg-mut"
           >
             <Link
-              to={crdObjectPath(
-                PROMETHEUSES_CRD,
-                instance.namespace,
-                instance.name
-              )}
+              {...objectLink({
+                kind: "Prometheus",
+                name: instance.name,
+                namespace: instance.namespace,
+                crd: PROMETHEUSES_CRD,
+              })!}
               className="col-span-2 font-mono text-xs text-fg hover:underline"
             >
               {instance.namespace}/{instance.name}

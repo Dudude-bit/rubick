@@ -8,7 +8,8 @@
  * ones that work, and the namespace it was meant to close is open.
  */
 
-import { integrationPagePath } from "../paths";
+import { vendorLink } from "@/lib/links";
+
 import type { VendorFact } from "../registry";
 import { fetchPolicies } from "./data";
 import { enforcementOf } from "./model";
@@ -60,7 +61,7 @@ export async function facts(): Promise<VendorFact[]> {
   if (all.length > 0) {
     lines.push({
       say: { key: "factShowThem" },
-      to: integrationPagePath("cilium"),
+      to: vendorLink("cilium"),
     });
   }
 

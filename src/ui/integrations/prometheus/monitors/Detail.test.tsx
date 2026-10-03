@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 import type { Picture } from "./data";
 import type { MonitorRow } from "./model";
 
@@ -50,8 +50,9 @@ const picture = (spec: object) =>
   ({ prometheuses: { state: "read", items: [prometheus(spec)] } }) as Picture;
 
 const draw = (spec: object) =>
-  renderWithProviders(<Detail row={row} picture={picture(spec)} />, {
-    initialEntries: ["/"],
+  renderWithRouter(<Detail row={row} picture={picture(spec)} />, {
+    at: "/c/prod",
+    route: "/c/$cluster",
   });
 
 describe("what the Monitors page says a Prometheus picks up", () => {
@@ -62,9 +63,9 @@ describe("what the Monitors page says a Prometheus picks up", () => {
    * namespace. The empty namespace selector was printed raw — "мониторы по
    * release=kps, в namespace по {}".
    */
-  it("says an empty namespace selector means every namespace", () => {
+  it("says an empty namespace selector means every namespace", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    draw({
+    await draw({
       serviceMonitorSelector: { matchLabels: { release: "kps" } },
       serviceMonitorNamespaceSelector: {},
     });
@@ -78,18 +79,18 @@ describe("what the Monitors page says a Prometheus picks up", () => {
    * An absent namespace selector is the Prometheus's own namespace only.
    * The line used to say nothing about namespaces, which reads as all.
    */
-  it("says an absent namespace selector means its own namespace", () => {
+  it("says an absent namespace selector means its own namespace", async () => {
     useLocaleStore.setState({ choice: "ru" });
-    draw({ serviceMonitorSelector: { matchLabels: { release: "kps" } } });
+    await draw({ serviceMonitorSelector: { matchLabels: { release: "kps" } } });
     expect(
       screen.getByText("мониторы по release=kps, в своём namespace")
     ).toBeInTheDocument();
   });
 
   /** Would break if an empty monitor selector were printed as `{}` again. */
-  it("says an empty monitor selector means every monitor", () => {
+  it("says an empty monitor selector means every monitor", async () => {
     useLocaleStore.setState({ choice: "en" });
-    draw({
+    await draw({
       serviceMonitorSelector: {},
       serviceMonitorNamespaceSelector: { matchLabels: { team: "shop" } },
     });
@@ -102,12 +103,15 @@ describe("what the Monitors page says a Prometheus picks up", () => {
   it.each([
     [{}, "все мониторы во всех namespace"],
     [null, "все мониторы в своём namespace"],
-  ])("reads an empty monitor selector with namespaces %j", (scope, words) => {
-    useLocaleStore.setState({ choice: "ru" });
-    draw({
-      serviceMonitorSelector: {},
-      serviceMonitorNamespaceSelector: scope,
-    });
-    expect(screen.getByText(words)).toBeInTheDocument();
-  });
+  ])(
+    "reads an empty monitor selector with namespaces %j",
+    async (scope, words) => {
+      useLocaleStore.setState({ choice: "ru" });
+      await draw({
+        serviceMonitorSelector: {},
+        serviceMonitorNamespaceSelector: scope,
+      });
+      expect(screen.getByText(words)).toBeInTheDocument();
+    }
+  );
 });

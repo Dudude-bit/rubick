@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -27,10 +27,7 @@ import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import {
-  getCustomResourceUrl,
-  getResourceDetailUrl,
-} from "@/lib/navigation-utils";
+import { listLink, objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
@@ -38,7 +35,7 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { EventRows } from "./detail-blocks";
 import { KeyValueList } from "./detail-kv";
 import type { KeyValue } from "./key-values";
-import { isRoutableKind, ResourceRef } from "./ResourceRef";
+import { ResourceRef } from "./ResourceRef";
 import { RESOURCE_NAME_SHELL } from "./ResourceName";
 import { PeekActions } from "./PeekActions";
 import { CopyName } from "./CopyName";
@@ -47,7 +44,6 @@ import { useDelivery } from "@/hooks/useDelivery";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
   getResourceDefinition,
-  getResourceListUrl,
   ResourceType,
   toKind,
   type ResourceKind,
@@ -129,9 +125,6 @@ export function PeekContent({
         | undefined
     )
   );
-  // A custom resource has a page of its own too — the CRD's instance route —
-  // so it gets the same Open full page and the same Enter shortcut.
-  const routable = !!target.crd || isRoutableKind(target.kind, namespace);
   // The tab the reader is on comes along: leaving Logs for the page and
   // landing on Overview is a second click nobody asked for.
   //
@@ -140,12 +133,18 @@ export function PeekContent({
   // Pods and a CronJob's Jobs — and no detail page has a tab by that name,
   // so the reader landed on Overview anyway and the address kept a
   // `?tab=children` the tab then recorded as its route.
+  const fullPage = objectLink(
+    {
+      kind: target.kind,
+      name: target.name,
+      namespace,
+      crd: target.crd,
+    },
+    { tab: pageTab(activeTab, target.kind) ?? undefined }
+  );
+  const routable = fullPage !== null;
   const openFullPage = () => {
-    const path = target.crd
-      ? getCustomResourceUrl(target.crd, target.name, namespace)
-      : getResourceDetailUrl(target.kind, target.name, namespace);
-    const tab = pageTab(activeTab, target.kind);
-    navigate(tab === null ? path : `${path}?tab=${tab}`);
+    if (fullPage) navigate(fullPage);
   };
 
   // Enter is the panel's shortcut, not the focused control's — once the
@@ -549,7 +548,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
         onClick={() => {
           void switchNamespace(namespace);
           close();
-          navigate(getResourceListUrl(kind));
+          navigate(listLink(kind));
         }}
         title={t("action", "openScopedTo", {
           plural: definition.displayPlural,

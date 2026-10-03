@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import {
   RefreshCw,
@@ -13,7 +13,7 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 
-import { fluxHelmReleasePath } from "@/integrations";
+import { fluxHelmReleaseLink } from "@/integrations";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { DataTable } from "@/components/ui/data-table";
 import {
@@ -31,6 +31,7 @@ import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { formatDate } from "@/lib/utils";
 
@@ -42,8 +43,7 @@ import { T } from "@/i18n/T";
 const getHelmReleaseRowId = (row: HelmRelease) =>
   `${row.source}-${row.namespace}-${row.name}`;
 
-const helmReleaseHref = (row: HelmRelease) =>
-  `/helm/${row.source}/${row.namespace}/${row.name}`;
+const helmReleaseHref = (row: HelmRelease) => hrefOf(helmReleaseLink(row));
 
 export interface HelmReleasesTabProps {
   releases: HelmRelease[];
@@ -91,7 +91,7 @@ export function HelmReleasesTab({
         size: 260,
         cell: ({ row }) => (
           <RouteLink
-            to={helmReleaseHref(row.original)}
+            {...helmReleaseLink(row.original)}
             className="font-mono text-info hover:underline"
           >
             {row.original.name}
@@ -164,11 +164,7 @@ export function HelmReleasesTab({
           return (
             <ActionMenu>
               <DropdownMenuItem
-                onClick={() =>
-                  navigate(
-                    `/helm/${release.source}/${release.namespace}/${release.name}`
-                  )
-                }
+                onClick={() => navigate(helmReleaseLink(release))}
               >
                 <FileCode className="mr-2 h-4 w-4" />
                 <T section="action" k="viewDetails" />
@@ -262,7 +258,7 @@ export function HelmReleasesTab({
                   <DropdownMenuItem
                     onClick={() =>
                       navigate(
-                        fluxHelmReleasePath(release.namespace, release.name)
+                        fluxHelmReleaseLink(release.namespace, release.name)
                       )
                     }
                   >

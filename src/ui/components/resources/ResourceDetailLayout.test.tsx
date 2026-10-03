@@ -1,23 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { useLocation } from "@tanstack/react-router";
 import { Info } from "lucide-react";
 
 import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
-
-/**
- * A client, because the frame now asks a capability where this object came
- * from. With nothing installed it answers "nothing" — which is the state this
- * whole file's cluster is in and exactly what it must draw.
- */
-const client = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+import { renderWithRouter } from "@/test/render";
 import { parseAlert } from "@/lib/alerts";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import {
@@ -29,16 +21,20 @@ import {
   type DetailTab,
 } from "./detail-tab";
 
-const wrap = (ui: React.ReactNode) =>
-  render(
-    <QueryClientProvider client={client()}>
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactNode, at = "/c/prod/persistentvolumes/pv-demo") =>
+  renderWithRouter(<>{ui}</>, { at, route: "/c/$cluster/$" });
+
+const wrapRerenderable = async (initial: ReactNode) => {
+  const rendered = await wrap(initial);
+  return {
+    ...rendered,
+    rerender: (next: ReactNode) => rendered.rerender(<>{next}</>),
+  };
+};
 
 /** Where a click landed, read out of the router rather than guessed at. */
 function LocationProbe() {
-  const { pathname } = useLocation();
+  const pathname = useLocation({ select: (location) => location.pathname });
   return <span data-testid="location">{pathname}</span>;
 }
 
@@ -77,8 +73,8 @@ describe("ResourceDetailLayout puts nothing of the page above the strip", () => 
     expect(blocks).toBeTruthy();
   });
 
-  it("draws the open tab's content after the strip, never before it", () => {
-    wrap(
+  it("draws the open tab's content after the strip, never before it", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -103,8 +99,8 @@ describe("ResourceDetailLayout puts nothing of the page above the strip", () => 
    * The one exception, and it earns it: what is wrong with the *object* is
    * worth its two lines on every tab, including a full-height one.
    */
-  it("keeps the summary above the strip, on a surface tab as much as any", () => {
-    wrap(
+  it("keeps the summary above the strip, on a surface tab as much as any", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="logs"
@@ -159,13 +155,13 @@ describe("ResourceDetailLayout and who owns the height", () => {
     />
   );
 
-  it("gives the window to a page whose every tab is a surface", () => {
-    const { container } = wrap(onlySurfaces);
+  it("gives the window to a page whose every tab is a surface", async () => {
+    const { container } = await wrap(onlySurfaces);
     expect(container.firstChild).toHaveClass("h-full");
   });
 
-  it("leaves the page scrolling on a tab made of blocks", () => {
-    const { container } = wrap(
+  it("leaves the page scrolling on a tab made of blocks", async () => {
+    const { container } = await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -230,37 +226,27 @@ describe("ResourceDetailLayout surface tabs and what lives in them", () => {
     ],
   });
 
-  it("keeps a session alive through a trip to another tab and back", () => {
+  it("keeps a session alive through a trip to another tab and back", async () => {
     mounted.mockClear();
-    const { rerender } = wrap(<ResourceDetailLayout {...withShell("shell")} />);
+    const { rerender } = await wrapRerenderable(
+      <ResourceDetailLayout {...withShell("shell")} />
+    );
     expect(mounted).toHaveBeenCalledTimes(1);
 
-    rerender(
-      <QueryClientProvider client={client()}>
-        <MemoryRouter>
-          <ResourceDetailLayout {...withShell("overview")} />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    rerender(<ResourceDetailLayout {...withShell("overview")} />);
     // Still in the DOM, merely off the screen: `hidden` is what a reader loses
     // when they click away, and the session is not theirs to lose with it.
     expect(screen.getByText("attached to app")).toBeInTheDocument();
 
-    rerender(
-      <QueryClientProvider client={client()}>
-        <MemoryRouter>
-          <ResourceDetailLayout {...withShell("shell")} />
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+    rerender(<ResourceDetailLayout {...withShell("shell")} />);
     // The number that matters: a second mount would be a second `openPodShell`
     // and a dead prompt where the reader left a live one.
     expect(mounted).toHaveBeenCalledTimes(1);
   });
 
-  it("does not mount a surface nobody has opened", () => {
+  it("does not mount a surface nobody has opened", async () => {
     mounted.mockClear();
-    wrap(<ResourceDetailLayout {...withShell("overview")} />);
+    await wrap(<ResourceDetailLayout {...withShell("overview")} />);
     expect(screen.queryByText("attached to app")).not.toBeInTheDocument();
     expect(mounted).not.toHaveBeenCalled();
   });
@@ -296,16 +282,16 @@ describe("ResourceDetailLayout chrome", () => {
       />
     );
 
-  it("puts the actions on the tab strip's row", () => {
-    withActions("overview");
+  it("puts the actions on the tab strip's row", async () => {
+    await withActions("overview");
     const row = screen.getByRole("tablist").parentElement;
     expect(row).toContainElement(
       screen.getByRole("button", { name: "Delete" })
     );
   });
 
-  it("keeps them off the header, which is now identity only", () => {
-    withActions("overview");
+  it("keeps them off the header, which is now identity only", async () => {
+    await withActions("overview");
     const header = screen
       .getByRole("heading", { level: 1 })
       .closest("div")?.parentElement;
@@ -319,8 +305,8 @@ describe("ResourceDetailLayout chrome", () => {
   // either way now, so there is nothing to buy and nothing to drop — and a
   // header that restructures itself when the reader clicks Logs reads as the
   // page reloading.
-  it("says the same things on a full-height tab as on any other", () => {
-    withActions("yaml", "surface");
+  it("says the same things on a full-height tab as on any other", async () => {
+    await withActions("yaml", "surface");
     expect(screen.getByText(/old/)).toBeInTheDocument();
   });
 });
@@ -331,8 +317,8 @@ describe("ResourceDetailLayout chrome", () => {
  * breadcrumb and the title already carry.
  */
 describe("ResourceDetailLayout captions", () => {
-  it("drops a block heading that only repeats the tab label", () => {
-    wrap(
+  it("drops a block heading that only repeats the tab label", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="conditions"
@@ -351,8 +337,8 @@ describe("ResourceDetailLayout captions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the count the strip does not carry, with its noun", () => {
-    wrap(
+  it("keeps the count the strip does not carry, with its noun", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="conditions"
@@ -369,8 +355,8 @@ describe("ResourceDetailLayout captions", () => {
     expect(screen.getByText("3 conditions")).toBeInTheDocument();
   });
 
-  it("drops a block heading that only repeats the kind", () => {
-    wrap(
+  it("drops a block heading that only repeats the kind", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -389,8 +375,8 @@ describe("ResourceDetailLayout captions", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("leaves a heading that says something new", () => {
-    wrap(
+  it("leaves a heading that says something new", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="access"
@@ -428,8 +414,8 @@ describe("ResourceDetailLayout glyphs", () => {
     expect(glyphless.label).toBe("X");
   });
 
-  it("draws one for every tab, and hides it from the accessible name", () => {
-    wrap(
+  it("draws one for every tab, and hides it from the accessible name", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -461,8 +447,8 @@ describe("ResourceDetailLayout glyphs", () => {
    * open one — meeting the same cube on a Deployment's Pods tab that was
    * clicked in the sidebar is the entire reason kinds carry a hue.
    */
-  it("tints a tab that names a kind, active or not", () => {
-    wrap(
+  it("tints a tab that names a kind, active or not", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -486,8 +472,8 @@ describe("ResourceDetailLayout glyphs", () => {
   });
 
   /** A view is a verb. Giving it a hue would claim it is a resource. */
-  it("leaves a tab that names a view untinted", () => {
-    wrap(
+  it("leaves a tab that names a view untinted", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         activeTab="overview"
@@ -536,22 +522,22 @@ describe("ResourceDetailLayout tab marks", () => {
       />
     );
 
-  it("says how many a collection holds, so an empty one needs no click", () => {
-    strip(countMark(0));
+  it("says how many a collection holds, so an empty one needs no click", async () => {
+    await strip(countMark(0));
     expect(screen.getByRole("tab", { name: /Containers/ })).toHaveTextContent(
       "Containers0"
     );
   });
 
-  it("puts a severity dot's meaning into words", () => {
-    strip(severityMark("err", "1 of 4 failing"));
+  it("puts a severity dot's meaning into words", async () => {
+    await strip(severityMark("err", "1 of 4 failing"));
     expect(
       screen.getByRole("tab", { name: "Containers — 1 of 4 failing" })
     ).toBeInTheDocument();
   });
 
-  it("does the same for a live session", () => {
-    strip(liveMark("session attached to app"));
+  it("does the same for a live session", async () => {
+    await strip(liveMark("session attached to app"));
     expect(
       screen.getByRole("tab", { name: "Containers — session attached to app" })
     ).toBeInTheDocument();
@@ -561,8 +547,8 @@ describe("ResourceDetailLayout tab marks", () => {
    * The only animated thing in the strip, which is what lets it mean one
    * thing — and it stops for a reader who asked motion to stop.
    */
-  it("animates the live dot and nothing else, and not under reduced motion", () => {
-    strip(liveMark("session attached to app"));
+  it("animates the live dot and nothing else, and not under reduced motion", async () => {
+    await strip(liveMark("session attached to app"));
     const dot = screen
       .getByRole("tab", { name: /Containers/ })
       .querySelector("span[aria-hidden='true']");
@@ -587,19 +573,21 @@ describe("the breadcrumb's kind segment", () => {
     },
   ];
 
-  it("links to the list route the sidebar uses", () => {
-    wrap(<ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />);
+  it("links to the list route the sidebar uses", async () => {
+    await wrap(
+      <ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />
+    );
     expect(
       screen.getByRole("link", { name: "persistentvolumes" })
-    ).toHaveAttribute("href", "/storage/persistentvolumes");
+    ).toHaveAttribute("href", "/c/prod/persistentvolumes");
   });
 
-  it("is plain text when there is nowhere to go", () => {
-    wrap(
+  it("is plain text when there is nowhere to go", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...base}
         resourceKind="ReplicaSet"
-        listUrl={null}
+        listLink={null}
         activeTab="overview"
         tabs={tabs}
       />
@@ -633,14 +621,13 @@ describe("the breadcrumb's namespace segment", () => {
     },
   ];
 
-  function place(ui: React.ReactNode) {
-    return render(
-      <QueryClientProvider client={client()}>
-        <MemoryRouter initialEntries={["/pods/k8s-gui-test/burst-demo"]}>
-          {ui}
-          <LocationProbe />
-        </MemoryRouter>
-      </QueryClientProvider>
+  function place(ui: ReactNode) {
+    return wrap(
+      <>
+        {ui}
+        <LocationProbe />
+      </>,
+      "/c/prod/pods/k8s-gui-test/burst-demo"
     );
   }
 
@@ -655,7 +642,7 @@ describe("the breadcrumb's namespace segment", () => {
           id: "trail",
           context: null,
           namespace: "",
-          href: "/pods/k8s-gui-test/burst-demo",
+          href: "/c/prod/pods/k8s-gui-test/burst-demo",
           missing: false,
         },
       ],
@@ -665,14 +652,18 @@ describe("the breadcrumb's namespace segment", () => {
   });
 
   it("narrows this tab and opens the list on a plain click", async () => {
-    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    await place(
+      <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
+    );
     await userEvent.click(segment());
     expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
-    expect(where()).toBe("/workloads/pods");
+    await vi.waitFor(() => expect(where()).toBe("/c/prod/pods"));
   });
 
-  it("carries the namespace into the tab a middle click opens", () => {
-    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+  it("carries the namespace into the tab a middle click opens", async () => {
+    await place(
+      <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
+    );
     // Testing Library has no `auxClick` helper; React binds `onAuxClick`
     // to the native `auxclick` event, so dispatch that one.
     fireEvent(
@@ -683,15 +674,15 @@ describe("the breadcrumb's namespace segment", () => {
     expect(open).toHaveLength(2);
     expect(open[1]).toMatchObject({
       namespace: "k8s-gui-test",
-      href: "/workloads/pods",
+      href: "/c/prod/pods",
     });
     // Behind, like the browser: the reader is still reading the pod.
     expect(activeId).toBe("trail");
     expect(useClusterStore.getState().currentNamespace).toBe("");
   });
 
-  it("says it narrows the tab only while that is true", () => {
-    const { unmount } = place(
+  it("says it narrows the tab only while that is true", async () => {
+    const { unmount } = await place(
       <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
     );
     expect(segment()).toHaveAccessibleName(
@@ -700,7 +691,9 @@ describe("the breadcrumb's namespace segment", () => {
     unmount();
 
     useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
-    place(<ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />);
+    await place(
+      <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
+    );
     expect(segment()).toHaveAccessibleName("Show pods in k8s-gui-test");
   });
 
@@ -711,29 +704,29 @@ describe("the breadcrumb's namespace segment", () => {
    * reader off the page they are reading to do it.
    */
   it("hands over the scope in place when there is no list to narrow", async () => {
-    place(
+    await place(
       <ResourceDetailLayout
         {...pod}
         resourceKind="ReplicaSet"
-        listUrl={null}
-        namespaceUrl={null}
+        listLink={null}
+        namespaceLink={null}
         activeTab="overview"
         tabs={tabs}
       />
     );
     await userEvent.click(segment());
     expect(useClusterStore.getState().currentNamespace).toBe("k8s-gui-test");
-    expect(where()).toBe("/pods/k8s-gui-test/burst-demo");
+    expect(where()).toBe("/c/prod/pods/k8s-gui-test/burst-demo");
   });
 
-  it("is plain text once that scope is the one the tab already holds", () => {
+  it("is plain text once that scope is the one the tab already holds", async () => {
     useClusterStore.setState({ currentNamespace: "k8s-gui-test" });
-    place(
+    await place(
       <ResourceDetailLayout
         {...pod}
         resourceKind="ReplicaSet"
-        listUrl={null}
-        namespaceUrl={null}
+        listLink={null}
+        namespaceLink={null}
         activeTab="overview"
         tabs={tabs}
       />
@@ -749,8 +742,8 @@ describe("DetailError does not stack the same sentence twice", () => {
    * Unknown box below it. Passing the heading's own key as the box's question
    * printed the sentence twice. The box asks the question the read was instead.
    */
-  it("says 'could not read' once, and asks a distinct question", () => {
-    wrap(
+  it("says 'could not read' once, and asks a distinct question", async () => {
+    await wrap(
       <DetailError
         error={
           new Error(
@@ -805,8 +798,8 @@ Started: 2026-09-10 03:14:22 UTC`;
     activeTab: "overview",
   };
 
-  it("shows it on the page that could not read the object", () => {
-    wrap(
+  it("shows it on the page that could not read the object", async () => {
+    await wrap(
       <ResourceDetailLayout
         {...props}
         resource={null}
@@ -816,8 +809,8 @@ Started: 2026-09-10 03:14:22 UTC`;
     expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
   });
 
-  it("shows it while the object is still being read", () => {
-    wrap(<ResourceDetailLayout {...props} resource={null} isLoading />);
+  it("shows it while the object is still being read", async () => {
+    await wrap(<ResourceDetailLayout {...props} resource={null} isLoading />);
     expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
   });
 });

@@ -20,7 +20,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import {
   Select,
@@ -30,7 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/i18n/useT";
-import { ObjectLink, objectUrl } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/resources/ResourceRef";
+import { objectLink, type AppLink } from "@/lib/links";
 import { cn } from "@/lib/utils";
 
 /** `unknown` is a node nothing could read: never drawn as working. */
@@ -56,7 +57,7 @@ export interface MapNode {
    */
   object?: { kind: string; name: string; namespace?: string | null };
   /** Where clicking it goes, inside this app. Absent draws plain text. */
-  to?: string;
+  to?: AppLink;
   /** A word at the top right of the node — `TLS`, `0 ready`. The
    *  className carries a hue of its own — a route kind's — and wins
    *  over the tone's. */
@@ -489,10 +490,7 @@ function Node({
   // Asked before the element is built: `ObjectLink` renders nothing for an
   // object it cannot address, and a node that vanished would leave an edge
   // pointing at empty space.
-  const linked =
-    node.object &&
-    objectUrl(node.object.kind, node.object.name, node.object.namespace) !==
-      null;
+  const linked = node.object && objectLink(node.object) !== null;
 
   return (
     // The wrapper owns the position and the attention: pointer or keyboard
@@ -514,7 +512,7 @@ function Node({
           {body}
         </ObjectLink>
       ) : node.to ? (
-        <Link to={node.to} className={clickable} title={node.label}>
+        <Link {...node.to} className={clickable} title={node.label}>
           {body}
         </Link>
       ) : (

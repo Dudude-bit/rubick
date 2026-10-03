@@ -10,7 +10,7 @@ import {
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
-import { useClusterStore } from "@/stores/clusterStore";
+import { clusterOf } from "@/lib/links";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
@@ -25,10 +25,9 @@ export function ObjectMenu() {
   const copy = useCopyToClipboard();
   const target = useObjectMenuStore((state) => state.target);
   const close = useObjectMenuStore((state) => state.close);
-  const context = useClusterStore((state) => state.currentContext);
   const openTab = useScopeTabStore((state) => state.openTab);
   if (target === null) return null;
-  const link = context ? buildDeepLink(context, target.to) : null;
+  const link = clusterOf(target.to) ? buildDeepLink(target.to) : null;
   // Into the body, because `position: fixed` is measured from the nearest
   // ancestor that has a transform rather than from the window, and the page
   // container this used to sit in carries one: the menu opened a sidebar's

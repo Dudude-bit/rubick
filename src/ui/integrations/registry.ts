@@ -56,6 +56,7 @@ import type {
   LogLevel,
   StyledSegment,
 } from "@/generated/types";
+import type { AppLink } from "@/lib/links";
 import type { UsageSample } from "@/lib/usage-history";
 import type {
   Delivery,
@@ -304,7 +305,7 @@ export interface VolumeFullness {
  */
 export interface EdgeConfig {
   /** The object that states it, and where the reader continues. */
-  source: { kind: string; name: string; to: string };
+  source: { kind: string; name: string; to: AppLink | null };
   /**
    * What it configures, in the object's own terms — as keys, since this is
    * composed inside a query. Several, joined on one line.
@@ -436,7 +437,7 @@ export interface ServiceRoute {
    * vendor knows its CRD's group. Absent for a core kind, which the consumer
    * can link on its own.
    */
-  to?: string;
+  to?: AppLink;
 }
 
 /** What stands behind a Service that is a proxy's own front door. */
@@ -444,7 +445,7 @@ export interface ProxyBehind {
   /** The vendor's display name — "Traefik". */
   vendor: string;
   /** Where the hosts it serves are drawn. */
-  to: string;
+  to: AppLink;
   /** How many hostnames it currently serves. */
   hosts: number;
 }
@@ -768,7 +769,7 @@ export type CapabilityState<K extends CapabilityKey> =
        * Where this capability is answered at length, or `null` where the
        * supplier has no screen of its own. See {@link VendorPage.answers}.
        */
-      page: string | null;
+      page: AppLink | null;
     };
 
 /**
@@ -893,7 +894,7 @@ export type VendorFact = {
    * rather than growing into a dashboard: every fact ends in the part of
    * the app already built for the objects it counted.
    */
-  to?: string;
+  to?: AppLink;
 } & (
   | {
       /**

@@ -27,6 +27,7 @@ import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import type { Saying } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
+import type { AppLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { covers, expiryOf, type Expiry } from "@/lib/certificates";
 import { certificatesOf } from "@/hooks/useTlsCertificates";
@@ -764,3 +765,9 @@ export async function findControllerWorkload(
   }
   return { workload: null, unread: failureOf(deployments, daemonSets) };
 }
+
+/** The vendor page's routes tab, filtered to one host: a routing map node's way in. */
+export const hostFilterLink = (host: string | null): AppLink => ({
+  to: ".",
+  search: host ? { tab: "routes", q: host } : { tab: "routes" },
+});

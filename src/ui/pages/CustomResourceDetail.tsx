@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useRouter } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Activity, Info, Link2, ListTree, Tag, Trash2 } from "lucide-react";
@@ -33,7 +33,9 @@ import { deliveryOf } from "@/lib/delivery";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
 import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { ResourceType } from "@/lib/resource-registry";
+import { objectLink } from "@/lib/links";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -173,14 +175,17 @@ function statusOf(resource: CustomResourceDetailInfo): string | null {
   return null;
 }
 
-export function CustomResourceDetail() {
+export function CustomResourceDetail({
+  crdName,
+  namespace,
+  name,
+}: {
+  crdName: string;
+  namespace?: string;
+  name: string;
+}) {
   const t = useT();
-  const { crdName, namespace, name } = useParams<{
-    crdName: string;
-    namespace?: string;
-    name: string;
-  }>();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { isConnected } = useClusterStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -189,20 +194,21 @@ export function CustomResourceDetail() {
   // page" carries the one the reader was on. Every other detail page reads
   // it through `useResourceDetail`; this one held its own state and landed
   // on Overview whatever the address said.
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(
-    () => searchParams.get("tab") ?? "overview"
-  );
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
+  const [activeTab, setActiveTab] = useState(() => search.tab ?? "overview");
+  const changeTab = (tab: string) => {
+    setActiveTab(tab);
+    setSearch({ tab: tab === "overview" ? undefined : tab }, { replace: true });
+  };
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const decodedCrdName = crdName ? decodeURIComponent(crdName) : "";
-
-  const goBack = () => navigate(-1);
+  const goBack = () => router.history.back();
 
   const { data: crdInfo } = useQuery({
-    queryKey: queryKeys.crd(decodedCrdName),
-    queryFn: () => commands.getCrd(decodedCrdName),
-    enabled: isConnected && !!decodedCrdName,
+    queryKey: queryKeys.crd(crdName),
+    queryFn: () => commands.getCrd(crdName),
+    enabled: isConnected && !!crdName,
   });
 
   const {
@@ -210,33 +216,24 @@ export function CustomResourceDetail() {
     isLoading,
     error,
   } = useLiveQuery({
-    queryKey: queryKeys.customResource(decodedCrdName, namespace, name),
-    queryFn: () =>
-      commands.getCustomResource(decodedCrdName, name || "", namespace || null),
-    enabled: isConnected && !!decodedCrdName && !!name,
+    queryKey: queryKeys.customResource(crdName, namespace, name),
+    queryFn: () => commands.getCustomResource(crdName, name, namespace || null),
+    enabled: isConnected && !!crdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
   });
 
   const { data: yaml = "" } = useQuery({
-    queryKey: queryKeys.customResourceYaml(decodedCrdName, namespace, name),
+    queryKey: queryKeys.customResourceYaml(crdName, namespace, name),
     queryFn: () =>
-      commands.getCustomResourceYaml(
-        decodedCrdName,
-        name || "",
-        namespace || null
-      ),
-    enabled: isConnected && !!decodedCrdName && !!name,
+      commands.getCustomResourceYaml(crdName, name, namespace || null),
+    enabled: isConnected && !!crdName && !!name,
     staleTime: STALE_TIMES.resourceDetail,
   });
 
   const deleteMutation = useMutation({
     mutationFn: () =>
-      commands.deleteCustomResource(
-        decodedCrdName,
-        name || "",
-        namespace || null
-      ),
+      commands.deleteCustomResource(crdName, name, namespace || null),
     onSuccess: () => {
       toast({
         title: t("action", "kindDeleted", {
@@ -245,9 +242,9 @@ export function CustomResourceDetail() {
         description: t("action", "nameDeleted", { name: name ?? "" }),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.customResourceLists(decodedCrdName),
+        queryKey: queryKeys.customResourceLists(crdName),
       });
-      navigate(-1);
+      goBack();
     },
     onError: (error: Error) => {
       toastError(
@@ -287,7 +284,7 @@ export function CustomResourceDetail() {
       value: (
         <ResourceRef
           kind={ResourceType.CustomResourceDefinition}
-          name={decodedCrdName}
+          name={crdName}
           showKind={false}
         />
       ),
@@ -462,10 +459,11 @@ export function CustomResourceDetail() {
         error={error}
         delivery={deliveryQuery}
         resourceKind={crdInfo?.kind || "Resource"}
-        listUrl={`/${toPlural(ResourceType.CustomResourceDefinition)}/${encodeURIComponent(
-          decodedCrdName
-        )}`}
-        listLabel={crdInfo?.kind || decodedCrdName}
+        listLink={objectLink({
+          kind: ResourceType.CustomResourceDefinition,
+          name: crdName,
+        })}
+        listLabel={crdInfo?.kind || crdName}
         title={resource?.name || name || ""}
         namespace={resource?.namespace ?? undefined}
         createdAt={resource?.createdAt}
@@ -490,7 +488,7 @@ export function CustomResourceDetail() {
         }
         tabs={tabs}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={changeTab}
       />
 
       <ConfirmDialog

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { RouterContextProvider } from "@tanstack/react-router";
 
 const listEvents = vi.fn<(...args: unknown[]) => Promise<unknown[]>>(
   async () => []
@@ -32,10 +32,15 @@ vi.mock("@/integrations", async (original) => ({
 
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import { testRouter } from "@/test/render";
 import { useObjectReport } from "./useObjectReport";
 
+const router = testRouter(null, {
+  at: "/c/prod-eu/ingressroutes.traefik.io/web/shop",
+});
+
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <MemoryRouter initialEntries={["/crds/traefik.io/ingressroutes/web/shop"]}>
+  <RouterContextProvider router={router}>
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -43,7 +48,7 @@ const wrapper = ({ children }: { children: ReactNode }) => (
     >
       {children}
     </QueryClientProvider>
-  </MemoryRouter>
+  </RouterContextProvider>
 );
 
 const subject = { kind: "IngressRoute", name: "shop", namespace: "web" };
@@ -152,7 +157,9 @@ describe("the report of any object", () => {
   it("links back to the page the report was made on", async () => {
     const { result } = build(true);
     await waitFor(() => expect(result.current.report).not.toBeNull());
-    expect(result.current.report!.link).toContain("ingressroutes");
+    expect(result.current.report!.link).toMatch(
+      /^rubick:\/\/open\/c\/prod-eu\/ingressroutes\.traefik\.io\/web\/shop\?/
+    );
   });
 
   /**

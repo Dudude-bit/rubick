@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
+import { renderWithRouter } from "@/test/render";
 import { ProblemsPanel, WarningsPanel } from "./health";
 import {
   nodesShare,
@@ -22,7 +22,8 @@ import { useLocaleStore } from "@/stores/localeStore";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
-const wrap = (ui: ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster" });
 
 /** One sentence the scheduler writes, read by both panels. */
 const MESSAGE = "Scaled up replica set meshed-demo-65d47b457f to 1";
@@ -49,13 +50,13 @@ const problem: ClusterProblem = {
 };
 
 describe("the overview's two event panels", () => {
-  it("linkify the same sentence the same way", () => {
+  it("linkify the same sentence the same way", async () => {
     /** `Needs attention` has linkified this message since the segmenter
      *  shipped and `Warning events`, directly under it, rendered it dead —
      *  the same name, in the same words, live in one panel and text in the
      *  other. The group carried a `"Kind/name"` string and no namespace, so
      *  the segmenter had nothing to resolve the name against. */
-    wrap(
+    await wrap(
       <>
         <ProblemsPanel
           problems={[problem]}
@@ -80,37 +81,39 @@ describe("the overview's two event panels", () => {
     ).toHaveLength(2);
   });
 
-  it("offers the object a warning group is about", () => {
+  it("offers the object a warning group is about", async () => {
     /** The row already printed `Deployment/meshed-demo`; it was the one
      *  naming of an object on this screen that went nowhere. */
-    wrap(<WarningsPanel warnings={[warning]} known />);
+    await wrap(<WarningsPanel warnings={[warning]} known />);
 
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
-    ).toHaveAttribute("href", "/deployments/k8s-gui-test/meshed-demo");
+    ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/meshed-demo");
   });
 
-  it("says the warnings are unknown when an events list failed", () => {
+  it("says the warnings are unknown when an events list failed", async () => {
     /** A refused events list drew no panel at all, and a scope where one
      *  namespace refused showed the others' warnings as the whole. */
-    const { container } = wrap(<WarningsPanel warnings={[]} known={false} />);
+    const { container } = await wrap(
+      <WarningsPanel warnings={[]} known={false} />
+    );
     expect(container).toHaveTextContent(
       "Not every events list was read in full, so warnings may be missing here."
     );
-    wrap(<WarningsPanel warnings={[warning]} known={false} />);
+    await wrap(<WarningsPanel warnings={[warning]} known={false} />);
     expect(screen.getAllByText(/Not every events list/)).toHaveLength(2);
     expect(screen.getByText("ScalingReplicaSet")).toBeInTheDocument();
   });
 
-  it("draws nothing for warnings read and none found", () => {
-    const { container } = wrap(<WarningsPanel warnings={[]} known />);
+  it("draws nothing for warnings read and none found", async () => {
+    const { container } = await wrap(<WarningsPanel warnings={[]} known />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("still renders a group whose event named no object", () => {
+  it("still renders a group whose event named no object", async () => {
     /** An event whose involved object the API server did not record is a
      *  real warning that still has to be read. */
-    wrap(
+    await wrap(
       <WarningsPanel
         warnings={[
           { ...warning, objectKind: null, objectName: null, namespace: null },
@@ -130,7 +133,7 @@ describe("the detail line on a problem row", () => {
    *  one `string` field until 2026-08-30, which is how "Marked
    *  unschedulable — no new pods will land here" came to sit on the first
    *  screen of a Russian interface. */
-  it("follows the reader for our words and leaves the cluster's alone", () => {
+  it("follows the reader for our words and leaves the cluster's alone", async () => {
     const panel = (problem: ClusterProblem) => (
       <ProblemsPanel
         problems={[problem]}
@@ -159,19 +162,19 @@ describe("the detail line on a problem row", () => {
     };
 
     useLocaleStore.setState({ choice: "en" });
-    const english = wrap(panel(cordoned));
+    const english = await wrap(panel(cordoned));
     expect(english.getByText(/no new pods will land here/)).toBeInTheDocument();
     english.unmount();
 
     useLocaleStore.setState({ choice: "ru" });
-    const russian = wrap(panel(cordoned));
+    const russian = await wrap(panel(cordoned));
     expect(russian.getByText(/новые поды сюда не поедут/)).toBeInTheDocument();
     expect(russian.queryByText(/no new pods/)).toBeNull();
     russian.unmount();
 
     // And the cluster's own sentence is still linkified, not looked up.
     useLocaleStore.setState({ choice: "ru" });
-    const quoted = wrap(panel(problem));
+    const quoted = await wrap(panel(problem));
     expect(
       quoted.getByRole("link", { name: "ReplicaSet meshed-demo-65d47b457f" })
     ).toBeInTheDocument();
@@ -196,8 +199,8 @@ describe("the healthy line when the node read was refused", () => {
    * unknown the clause is left off entirely; deleting the `nodesKnown` guard
    * puts "0 of 0 nodes ready" back on a screen that just said "no access".
    */
-  it("drops the nodes-ready clause when the nodes are unknown", () => {
-    const { queryByText, unmount } = wrap(
+  it("drops the nodes-ready clause when the nodes are unknown", async () => {
+    const { queryByText, unmount } = await wrap(
       <ProblemsPanel
         problems={[]}
         problemsTruncated={0}
@@ -209,7 +212,7 @@ describe("the healthy line when the node read was refused", () => {
     expect(queryByText(/nodes ready/)).toBeNull();
     unmount();
 
-    const known = wrap(
+    const known = await wrap(
       <ProblemsPanel
         problems={[]}
         problemsTruncated={0}

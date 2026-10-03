@@ -20,8 +20,8 @@
 
 import type { Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
+import { objectLink } from "@/lib/links";
 
-import { crdObjectPath } from "../kit";
 import type { EdgeConfig } from "../registry";
 import {
   BACKEND_CONFIG_CRD,
@@ -57,7 +57,7 @@ export async function serviceEdge({
     const found = configs.find((config) => config.name === ref.name);
     if (!found) {
       return {
-        source: { kind: "BackendConfig", name: ref.name, to: "" },
+        source: { kind: "BackendConfig", name: ref.name, to: null },
         summary: [{ key: "gcpNamedFor", values: { scope } }],
         problem: {
           text: {
@@ -72,7 +72,12 @@ export async function serviceEdge({
       source: {
         kind: "BackendConfig",
         name: ref.name,
-        to: crdObjectPath(BACKEND_CONFIG_CRD, namespace, ref.name),
+        to: objectLink({
+          kind: "BackendConfig",
+          name: ref.name,
+          namespace,
+          crd: BACKEND_CONFIG_CRD,
+        })!,
       },
       summary: [scope, ...backendConfigSummary(found)],
       problem: null,

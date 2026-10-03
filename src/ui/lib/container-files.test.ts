@@ -205,7 +205,10 @@ describe("the caps both halves apply", () => {
    */
   it("matches src/contracts/file-limits.json", () => {
     const shared = JSON.parse(
-      readFileSync(resolve(process.cwd(), "src/contracts/file-limits.json"), "utf8")
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/file-limits.json"),
+        "utf8"
+      )
     ) as {
       downloadMaxBytes: number;
       downloadConfirmBytes: number;

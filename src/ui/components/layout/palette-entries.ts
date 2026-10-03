@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import type { ActivityTab } from "@/stores/activityPanelStore";
-import { isRoutableKind } from "@/components/resources/ResourceRef";
 import {
   MIN_SEARCH_LENGTH,
   isSearchable,
@@ -24,13 +23,14 @@ import {
   parseBang,
   rankContexts,
 } from "@/lib/cluster-search";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
 import {
-  isResourceType,
-  ResourceType,
-  toKind,
-  toPlural,
-} from "@/lib/resource-registry";
+  clusterLink,
+  listLink,
+  objectLink,
+  pageLink,
+  type AppLink,
+} from "@/lib/links";
+import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
 import type { RecentItem } from "@/generated/types";
 import type { T } from "@/i18n/useT";
@@ -40,41 +40,33 @@ import { highlight } from "./palette-highlight";
 const quickActions: Array<{
   icon: IconType;
   label: keyof typeof en.action;
-  path: string;
+  path: AppLink;
 }> = [
-  { icon: LayoutDashboard, label: "goToOverview", path: "/" },
-  {
-    icon: Box,
-    label: "goToPods",
-    path: `/workloads/${toPlural(ResourceType.Pod)}`,
-  },
+  { icon: LayoutDashboard, label: "goToOverview", path: clusterLink() },
+  { icon: Box, label: "goToPods", path: listLink(ResourceType.Pod) },
   {
     icon: Box,
     label: "goToDeployments",
-    path: `/workloads/${toPlural(ResourceType.Deployment)}`,
+    path: listLink(ResourceType.Deployment),
   },
   {
     icon: Network,
     label: "goToServices",
-    path: `/network/${toPlural(ResourceType.Service)}`,
+    path: listLink(ResourceType.Service),
   },
-  {
-    icon: Server,
-    label: "goToNodes",
-    path: `/${toPlural(ResourceType.Node)}`,
-  },
+  { icon: Server, label: "goToNodes", path: listLink(ResourceType.Node) },
   {
     icon: FileText,
     label: "goToConfigMaps",
-    path: `/configuration/${toPlural(ResourceType.ConfigMap)}`,
+    path: listLink(ResourceType.ConfigMap),
   },
   {
     icon: FileText,
     label: "goToSecrets",
-    path: `/configuration/${toPlural(ResourceType.Secret)}`,
+    path: listLink(ResourceType.Secret),
   },
-  { icon: Activity, label: "goToEvents", path: "/events" },
-  { icon: Package, label: "goToHelm", path: "/helm" },
+  { icon: Activity, label: "goToEvents", path: pageLink("events") },
+  { icon: Package, label: "goToHelm", path: pageLink("helm") },
 ];
 
 /**
@@ -134,9 +126,9 @@ export type Entry =
       action: GroupAction;
     }
   /** `path` is null for a hit that is a scope rather than a page: a Namespace. */
-  | { id: string; kind: "hit"; hit: SearchHit; path: string | null }
+  | { id: string; kind: "hit"; hit: SearchHit; path: AppLink | null }
   | { id: string; kind: "more"; context: string; rest: number }
-  | { id: string; kind: "link"; path: string; label: string; icon: IconType }
+  | { id: string; kind: "link"; path: AppLink; label: string; icon: IconType }
   /** A row that does something instead of going somewhere. See `PANELS`. */
   | {
       id: string;
@@ -150,10 +142,12 @@ export type Entry =
   | {
       id: string;
       kind: "recent";
-      path: string;
+      path: AppLink;
       name: string;
       resourceKind: string;
       namespace?: string;
+      context: string;
+      crd?: string;
     };
 
 export type IconType = React.ComponentType<{ className?: string }>;
@@ -276,27 +270,41 @@ export function buildPaletteEntries({
   }
 
   if (!scoped) {
-    if (!hasQuery && recentItems.length > 0) {
+    // A recent saved before it named its cluster could open anywhere, so it
+    // is not offered at all.
+    const recent = recentItems.flatMap((item) => {
+      const { context } = item;
+      if (!context) return [];
+      const path = objectLink(item, { cluster: context });
+      return path ? [{ item, context, path }] : [];
+    });
+    if (!hasQuery && recent.length > 0) {
       out.push({
         id: "cap:recent",
         kind: "caption",
         text: t("action", "paletteRecent"),
       });
-      for (const item of recentItems) {
+      for (const { item, context, path } of recent) {
         out.push({
-          id: `recent:${item.path}`,
+          id: `recent:${context}/${item.crd ?? item.kind}/${item.namespace ?? ""}/${item.name}`,
           kind: "recent",
-          path: item.path,
+          path,
           name: item.name,
           resourceKind: item.kind,
           namespace: item.namespace ?? undefined,
+          context,
+          crd: item.crd,
         });
       }
     }
 
     const needle = query.toLowerCase();
     const links = quickActions
-      .map((action) => ({ ...action, label: t("action", action.label) }))
+      .map((action) => ({
+        ...action,
+        key: action.label,
+        label: t("action", action.label),
+      }))
       .filter(
         (action) => !hasQuery || action.label.toLowerCase().includes(needle)
       );
@@ -310,7 +318,7 @@ export function buildPaletteEntries({
       });
       for (const action of links) {
         out.push({
-          id: `nav:${action.path}`,
+          id: `nav:${action.key}`,
           kind: "link",
           path: action.path,
           label: action.label,
@@ -417,28 +425,25 @@ export function buildPaletteEntries({
           : "none",
     });
     // The search can list kinds the router serves no detail page for, and
-    // `getResourceDetailUrl` builds a URL for any of them: an unrouted path
-    // inside the layout route matches no branch and blanks the shell. A
-    // Namespace has a page, but here it offers the stronger action — the
-    // scope the window is read under. Nothing else unrouted is offered, and
-    // it is dropped before the cap so it neither takes a row nor counts in
-    // the rest.
+    // there is no address to give them. A Namespace has a page, but here it
+    // offers the stronger action: the scope the window is read under.
+    // Nothing else unaddressable is offered, and it is dropped before the
+    // cap so it neither takes a row nor counts in the rest. A hit links
+    // into the cluster it was found in, which need not be this window's.
     const found = [
       ...(hitsByContext.get(cluster.context)?.values() ?? []),
-    ].filter(
-      (hit) => isRoutableKind(hit.kind, hit.namespace) || isNamespaceHit(hit)
-    );
+    ].flatMap((hit): { hit: SearchHit; path: AppLink | null }[] => {
+      if (isNamespaceHit(hit)) return [{ hit, path: null }];
+      const path = objectLink(hit, { cluster: hit.context });
+      return path ? [{ hit, path }] : [];
+    });
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
-    for (const hit of found.slice(0, cap)) {
-      const routable = isRoutableKind(hit.kind, hit.namespace);
+    for (const { hit, path } of found.slice(0, cap)) {
       out.push({
         id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
         kind: "hit",
         hit,
-        path:
-          routable && !isNamespaceHit(hit)
-            ? getResourceDetailUrl(hit.kind, hit.name, hit.namespace)
-            : null,
+        path,
       });
     }
     if (found.length > cap) {

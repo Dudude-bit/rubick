@@ -7,11 +7,10 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { HelmRelease } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { HelmReleasesTab } from "./HelmReleasesTab";
 
 const release = (name: string): HelmRelease => ({
@@ -29,23 +28,20 @@ const release = (name: string): HelmRelease => ({
 });
 
 function mount(props: Partial<Parameters<typeof HelmReleasesTab>[0]> = {}) {
-  return render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <HelmReleasesTab
-          releases={[]}
-          isLoading={false}
-          error={null}
-          helmCliAvailable={true}
-          onRefetch={vi.fn()}
-          onShowHistory={vi.fn()}
-          onUpgrade={vi.fn()}
-          onRollback={vi.fn()}
-          onUninstall={vi.fn()}
-          {...props}
-        />
-      </TooltipProvider>
-    </MemoryRouter>
+  return renderWithRouter(
+    <HelmReleasesTab
+      releases={[]}
+      isLoading={false}
+      error={null}
+      helmCliAvailable={true}
+      onRefetch={vi.fn()}
+      onShowHistory={vi.fn()}
+      onUpgrade={vi.fn()}
+      onRollback={vi.fn()}
+      onUninstall={vi.fn()}
+      {...props}
+    />,
+    { at: "/c/test/helm", route: "/c/$cluster/helm" }
   );
 }
 
@@ -55,8 +51,8 @@ describe("what the releases tab does when the read fails", () => {
   // code did) throws mid-render. Passing an Error here would test a shape the
   // page need not produce and hide that crash — so these are strings, the
   // harsher case.
-  it("names a refusal instead of showing an empty table", () => {
-    mount({
+  it("names a refusal instead of showing an empty table", async () => {
+    await mount({
       error:
         "Tauri command 'listHelmReleasesIn' failed: secrets is forbidden (code: 403)",
     });
@@ -69,8 +65,8 @@ describe("what the releases tab does when the read fails", () => {
     expect(screen.queryByText(/Tauri command/)).not.toBeInTheDocument();
   });
 
-  it("calls a non-refusal failure a read error, not a refusal", () => {
-    mount({ error: "error trying to connect: connection refused" });
+  it("calls a non-refusal failure a read error, not a refusal", async () => {
+    await mount({ error: "error trying to connect: connection refused" });
 
     expect(
       screen.getByText(/Could not read Helm releases/i)
@@ -80,8 +76,8 @@ describe("what the releases tab does when the read fails", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("still shows the rows a readable namespace returned despite a sibling's refusal", () => {
-    mount({
+  it("still shows the rows a readable namespace returned despite a sibling's refusal", async () => {
+    await mount({
       releases: [release("api"), release("web")],
       error: "secrets is forbidden (code: 403)",
     });
@@ -101,8 +97,8 @@ describe("what the releases tab does when the read fails", () => {
  * as the count of the scope.
  */
 describe("the releases tab beside a namespace it could not read", () => {
-  it("does not call the rows a total in the footer", () => {
-    mount({
+  it("does not call the rows a total in the footer", async () => {
+    await mount({
       releases: [release("api")],
       unread: [
         { namespace: "team-b", code: "FORBIDDEN", message: "forbidden" },
@@ -125,7 +121,7 @@ describe("the releases tab beside a namespace it could not read", () => {
  */
 describe("a release whose secret would not decode", () => {
   it("is a row that says so, not a row that is missing", async () => {
-    mount({
+    await mount({
       releases: [
         {
           ...release("shop-api"),

@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 
 const getReplicaset = vi.fn();
 const getJob = vi.fn();
@@ -25,7 +25,10 @@ const owner = (kind: string, name: string, controller = true) => ({
 });
 
 const wrap = (ui: ReactElement) =>
-  renderWithProviders(ui, { initialEntries: ["/"] });
+  renderWithRouter(ui, {
+    at: "/c/prod/pods/k8s-gui-test/meshed-demo",
+    route: "/c/$cluster/$",
+  });
 
 describe("RelatedResources", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -38,7 +41,7 @@ describe("RelatedResources", () => {
       ownerReferences: [owner("Deployment", "meshed-demo")],
     });
 
-    wrap(
+    await wrap(
       <RelatedResources
         ownerReferences={[owner("ReplicaSet", "meshed-demo-65d47b457f")]}
         namespace="k8s-gui-test"
@@ -47,7 +50,7 @@ describe("RelatedResources", () => {
 
     expect(
       await screen.findByRole("link", { name: "Deployment meshed-demo" })
-    ).toHaveAttribute("href", "/deployments/k8s-gui-test/meshed-demo");
+    ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/meshed-demo");
     expect(
       screen.getByRole("link", { name: "ReplicaSet meshed-demo-65d47b457f" })
     ).toBeInTheDocument();
@@ -59,7 +62,7 @@ describe("RelatedResources", () => {
      *  carried and the app never needed permission for. */
     getReplicaset.mockRejectedValue(new Error("forbidden"));
 
-    wrap(
+    await wrap(
       <RelatedResources
         ownerReferences={[owner("ReplicaSet", "meshed-demo-65d47b457f")]}
         namespace="k8s-gui-test"
@@ -77,7 +80,7 @@ describe("RelatedResources", () => {
     /** A Deployment is owned by nothing in an ordinary cluster, so a walk
      *  that fetched it anyway would be one request per pod page whose answer
      *  is always empty. */
-    wrap(
+    await wrap(
       <RelatedResources
         ownerReferences={[owner("Deployment", "meshed-demo")]}
         namespace="k8s-gui-test"

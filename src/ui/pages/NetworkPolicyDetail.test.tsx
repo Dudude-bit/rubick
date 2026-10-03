@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, screen } from "@testing-library/react";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -12,9 +10,9 @@ vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: () => vi.fn(async () => null) }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useResourceDetail } from "@/hooks";
 import type { NetworkPolicyInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { NetworkPolicyDetail } from "./NetworkPolicyDetail";
 
 const policy = (selected: number | null): NetworkPolicyInfo => ({
@@ -39,7 +37,10 @@ const policy = (selected: number | null): NetworkPolicyInfo => ({
 });
 
 /** The colour the page paints the policy's pod reach in. */
-function reachColour(selected: number | null, words: string): string {
+async function reachColour(
+  selected: number | null,
+  words: string
+): Promise<string> {
   cleanup();
   vi.mocked(useResourceDetail).mockReturnValue({
     name: "p",
@@ -55,19 +56,10 @@ function reachColour(selected: number | null, words: string): string {
     refetch: vi.fn(),
     deleteMutation: { mutate: vi.fn(), isPending: false },
   } as unknown as ReturnType<typeof useResourceDetail>);
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>
-        <TooltipProvider>
-          <NetworkPolicyDetail />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+  await renderWithRouter(<NetworkPolicyDetail />, {
+    at: "/c/prod/networkpolicies/shop/p",
+    route: "/c/$cluster/networkpolicies/$namespace/$name",
+  });
   const drawn = screen.getByText(words, { selector: "dd, dd *" });
   const painted = drawn.closest("[class*='text-']");
   return /text-(?:fg(?:-\w+)?|warn|err|ok|info)\b/.exec(
@@ -80,9 +72,9 @@ describe("the pods a NetworkPolicy's page says it selects", () => {
    * "pods not read" was drawn in the colour of a count, the words the only
    * difference between a refused pod list and one that was read.
    */
-  it("paints a pod list it could not read apart from a count and from none", () => {
-    const refused = reachColour(null, "pods not read");
-    expect(refused).not.toBe(reachColour(3, "3 pods"));
-    expect(refused).not.toBe(reachColour(0, "no pods"));
+  it("paints a pod list it could not read apart from a count and from none", async () => {
+    const refused = await reachColour(null, "pods not read");
+    expect(refused).not.toBe(await reachColour(3, "3 pods"));
+    expect(refused).not.toBe(await reachColour(0, "no pods"));
   });
 });

@@ -20,7 +20,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DebugNodeDialog, DebugPodDialog } from "@/components/debug";
@@ -36,7 +36,7 @@ import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
 import { deliveryOfKind } from "@/lib/delivery";
 import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type {
@@ -284,20 +284,22 @@ export function useObjectActions({
     const container =
       reachableContainer(pod) ?? (pod ? lifetimeContainers(pod)[0] : undefined);
     if (!container) return;
-    navigate(
-      `${getResourceDetailUrl("Pod", name, namespace)}?shell=${encodeURIComponent(container.name)}`
-    );
+    navigate({
+      ...objectLink({ kind: "Pod", name, namespace })!,
+      search: { shell: container.name },
+    });
   };
 
   const handleDebugStart = (result: DebugResult) => {
     setDialog(null);
-    navigate(
-      `${getResourceDetailUrl("Pod", result.podName, result.namespace)}${
-        result.isNewPod
-          ? ""
-          : `?shell=${encodeURIComponent(result.containerName)}`
-      }`
-    );
+    navigate({
+      ...objectLink({
+        kind: "Pod",
+        name: result.podName,
+        namespace: result.namespace,
+      })!,
+      ...(result.isNewPod ? {} : { search: { shell: result.containerName } }),
+    });
   };
 
   const run = (id: PeekActionId) => {

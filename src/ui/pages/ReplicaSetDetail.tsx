@@ -38,7 +38,7 @@ import { useReplicaSetShare } from "@/hooks/useReplicaSetShare";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import type { ReplicaSetInfo } from "@/generated/types";
@@ -328,19 +328,19 @@ export function ReplicaSetDetail() {
       // The parent of a revision is the Deployment it is a revision of.
       // There is no list of ReplicaSets to offer instead, so without an
       // owner the segment says the kind and goes nowhere.
-      listUrl={
+      listLink={
         owner
-          ? getResourceDetailUrl(
-              ResourceType.Deployment,
-              owner.name,
-              replicaSet?.namespace
-            )
+          ? objectLink({
+              kind: ResourceType.Deployment,
+              name: owner.name,
+              namespace: replicaSet?.namespace,
+            })
           : null
       }
       listLabel={owner?.name}
       // And no list of them to narrow either: the namespace segment hands the
       // tab that scope and leaves the reader on the revision they opened.
-      namespaceUrl={null}
+      namespaceLink={null}
       title={replicaSet?.name || name || ""}
       namespace={replicaSet?.namespace || namespace}
       createdAt={replicaSet?.createdAt}

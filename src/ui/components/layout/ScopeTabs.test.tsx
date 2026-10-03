@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 
 /** What the authorizer answers about each namespace, per test. */
@@ -35,8 +33,9 @@ vi.mock("@/hooks/useClusterSummary", () => ({
   useClusterSummary: () => summary,
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { commands } from "@/lib/commands";
 import { SCOPE_LIMIT, scopeLabel, wireNamespace } from "@/lib/namespace-scope";
+import { renderWithRouter } from "@/test/render";
 import { ScopeTabs } from "./ScopeTabs";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -57,19 +56,9 @@ const tab = (over: Partial<ScopeTab> = {}): ScopeTab => ({
   ...over,
 });
 
-function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>
-          <ScopeTabs />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+async function mount(at = "/c/k3d-dev") {
+  const { router } = await renderWithRouter(<ScopeTabs />, { at, route: "$" });
+  return router;
 }
 
 const tabs = () => screen.getAllByRole("tab");
@@ -93,16 +82,16 @@ beforeEach(() => {
 });
 
 describe("what a tab says", () => {
-  it("drops the cluster name while the strip holds one cluster", () => {
+  it("drops the cluster name while the strip holds one cluster", async () => {
     useScopeTabStore.setState({
       tabs: [
-        tab({ id: "a", href: "/" }),
-        tab({ id: "b", href: "/workloads/pods" }),
+        tab({ id: "a", href: "/c/k3d-dev" }),
+        tab({ id: "b", href: "/c/k3d-dev/pods" }),
       ],
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
 
     // The sidebar has just said it and the dot still guards the mistake,
     // so the name is not worth the width it would take from the route.
@@ -111,36 +100,38 @@ describe("what a tab says", () => {
     expect(within(tabs()[1]).getByText("pods")).toBeInTheDocument();
   });
 
-  it("names every cluster the moment a second one is open", () => {
+  it("names every cluster the moment a second one is open", async () => {
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" }), tab({ id: "b", context: "prod-eu" })],
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
 
     expect(screen.getByText("k3d-dev")).toBeInTheDocument();
     expect(screen.getByText("prod-eu")).toBeInTheDocument();
   });
 
-  it("keeps the route on every tab, which is what tells them apart", () => {
+  it("keeps the route on every tab, which is what tells them apart", async () => {
     useScopeTabStore.setState({
       tabs: [
-        tab({ id: "a", href: "/workloads/pods" }),
-        tab({ id: "b", href: "/workloads/pods/kube-system/coredns-abc" }),
+        tab({ id: "a", href: "/c/k3d-dev/pods" }),
+        tab({ id: "b", href: "/c/k3d-dev/pods/kube-system/coredns-abc" }),
       ],
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
 
     expect(within(tabs()[0]).getByText("pods")).toBeInTheDocument();
     expect(within(tabs()[1]).getByText("coredns-abc")).toBeInTheDocument();
   });
 
-  it("carries the whole label in the accessible name the strip shortens", () => {
+  it("carries the whole label in the accessible name the strip shortens", async () => {
     useScopeTabStore.setState({
-      tabs: [tab({ id: "a", namespace: "kube-system", href: "/nodes" })],
+      tabs: [
+        tab({ id: "a", namespace: "kube-system", href: "/c/k3d-dev/nodes" }),
+      ],
       activeId: "a",
       pendingHref: null,
     });
@@ -148,7 +139,7 @@ describe("what a tab says", () => {
       currentNamespace: "kube-system",
       namespaceScope: ["kube-system"],
     });
-    mount();
+    await mount();
 
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
@@ -156,19 +147,19 @@ describe("what a tab says", () => {
     );
   });
 
-  it("has no native title left to cover the pickers", () => {
+  it("has no native title left to cover the pickers", async () => {
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" })],
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
     expect(tabs()[0]).not.toHaveAttribute("title");
   });
 });
 
 describe("watching several namespaces at once", () => {
-  const draw = (scope: string[]) => {
+  const draw = async (scope: string[]) => {
     summary.namespaces = Array.from({ length: SCOPE_LIMIT + 2 }, (_, i) => ({
       name: `ns-${i}`,
       podCount: 1,
@@ -186,11 +177,11 @@ describe("watching several namespaces at once", () => {
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
   };
 
-  it("names the whole selection where a reader cannot see the strip", () => {
-    draw(["ns-0", "ns-1"]);
+  it("names the whole selection where a reader cannot see the strip", async () => {
+    await draw(["ns-0", "ns-1"]);
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
       "k3d-dev · ns-0, ns-1 · overview"
@@ -214,7 +205,7 @@ describe("watching several namespaces at once", () => {
    */
   it("replaces the selection on a plain click and shuts the list", async () => {
     const user = userEvent.setup();
-    draw(["ns-0", "ns-1"]);
+    await draw(["ns-0", "ns-1"]);
     await openPicker(user);
 
     await user.click(rowFor("ns-3"));
@@ -233,7 +224,7 @@ describe("watching several namespaces at once", () => {
    */
   it("adds on a modifier click and on the box, and keeps the list open", async () => {
     const user = userEvent.setup();
-    draw(["ns-0"]);
+    await draw(["ns-0"]);
     await openPicker(user);
 
     await user.keyboard("{Control>}");
@@ -257,7 +248,7 @@ describe("watching several namespaces at once", () => {
   it("floats the selected namespaces to the top of the list", async () => {
     const user = userEvent.setup();
     // ns-3 and ns-4 are picked, and sit in the middle of the summary order.
-    draw(["ns-3", "ns-4"]);
+    await draw(["ns-3", "ns-4"]);
     const list = await openPicker(user);
 
     const label = (option: HTMLElement) => {
@@ -283,7 +274,7 @@ describe("watching several namespaces at once", () => {
   it("hides the namespaces the reader is refused, with a way to show them", async () => {
     const user = userEvent.setup();
     nsAccess.answers = [{ namespace: "ns-2", allowed: false }];
-    draw([]);
+    await draw([]);
     const list = await openPicker(user);
 
     // The refused one is gone; the others stay.
@@ -308,7 +299,7 @@ describe("watching several namespaces at once", () => {
   it("keeps offering a namespace whose access could not be checked", async () => {
     const user = userEvent.setup();
     nsAccess.answers = [{ namespace: "ns-2", allowed: null }];
-    draw([]);
+    await draw([]);
     const list = await openPicker(user);
 
     expect(
@@ -327,7 +318,7 @@ describe("watching several namespaces at once", () => {
    */
   it("does the same two things from the keyboard alone", async () => {
     const user = userEvent.setup();
-    draw([]);
+    await draw([]);
     const list = await openPicker(user);
     const filter = screen.getByRole("combobox", { name: "Filter namespaces" });
 
@@ -354,7 +345,7 @@ describe("watching several namespaces at once", () => {
    */
   it("says how many it will watch, and says so again when it refuses", async () => {
     const user = userEvent.setup();
-    draw(Array.from({ length: SCOPE_LIMIT }, (_, i) => `ns-${i}`));
+    await draw(Array.from({ length: SCOPE_LIMIT }, (_, i) => `ns-${i}`));
     await openPicker(user);
 
     const ceiling = `${SCOPE_LIMIT} namespaces — the most one window reads at once.`;
@@ -385,7 +376,7 @@ describe("watching several namespaces at once", () => {
    */
   it("still opens a namespace on its own at the ceiling", async () => {
     const user = userEvent.setup();
-    draw(Array.from({ length: SCOPE_LIMIT }, (_, i) => `ns-${i}`));
+    await draw(Array.from({ length: SCOPE_LIMIT }, (_, i) => `ns-${i}`));
     await openPicker(user);
 
     await user.click(rowFor(`ns-${SCOPE_LIMIT}`));
@@ -406,16 +397,16 @@ describe("a cluster that has been renamed", () => {
     });
   });
 
-  it("wears the name it was given where the strip names a cluster", () => {
-    mount();
+  it("wears the name it was given where the strip names a cluster", async () => {
+    await mount();
     expect(within(tabs()[0]).getByText("payments")).toBeInTheDocument();
     expect(within(tabs()[0]).queryByText("k3d-dev")).not.toBeInTheDocument();
   });
 
-  it("keeps the context name in the accessible name, beside the alias", () => {
+  it("keeps the context name in the accessible name, beside the alias", async () => {
     // A reader who cannot see the strip still has to know which context is
     // about to be acted on; one who can needs the name they gave it.
-    mount();
+    await mount();
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
       "payments (k3d-dev) · all namespaces · overview"
@@ -432,24 +423,24 @@ describe("a cluster the kubeconfig has lost", () => {
     });
   });
 
-  it("reads as a state beside the name, not as a suffix on it", () => {
-    mount();
+  it("reads as a state beside the name, not as a suffix on it", async () => {
+    await mount();
     const gone = tabs()[1];
     expect(within(gone).getByText("old")).toBeInTheDocument();
     expect(within(gone).getByText("missing")).toBeInTheDocument();
     expect(gone.textContent).not.toContain("(missing)");
   });
 
-  it("says so with a shape as well, not colour alone", () => {
-    mount();
+  it("says so with a shape as well, not colour alone", async () => {
+    await mount();
     const dot = tabs()[1].querySelector("span.rounded-full");
     // A ring, and no cluster colour painted into it.
     expect(dot?.className).toContain("border-fg-fnt");
     expect(dot?.getAttribute("style")).toBeNull();
   });
 
-  it("always names the cluster it lost, whatever else the strip drops", () => {
-    mount();
+  it("always names the cluster it lost, whatever else the strip drops", async () => {
+    await mount();
     expect(screen.getByText("old")).toBeInTheDocument();
   });
 });
@@ -464,8 +455,8 @@ describe("a tab with no cluster", () => {
     });
   });
 
-  it("collapses to one segment, and it is a verb", () => {
-    mount();
+  it("collapses to one segment, and it is a verb", async () => {
+    await mount();
     const strip = tabs()[0];
     expect(within(strip).getByText("Choose a cluster")).toBeInTheDocument();
     // The scope that cannot exist yet, and the page with nothing on it.
@@ -474,14 +465,48 @@ describe("a tab with no cluster", () => {
     expect(strip.textContent).not.toContain("overview");
   });
 
-  it("keeps its place, because it is where a cluster gets picked", () => {
-    mount();
+  it("keeps its place, because it is where a cluster gets picked", async () => {
+    await mount();
     expect(tabs()).toHaveLength(1);
   });
 
-  it("offers no close on the only tab, which has nothing to fall back to", () => {
-    mount();
+  it("offers no close on the only tab, which has nothing to fall back to", async () => {
+    await mount();
     expect(screen.queryByLabelText("Close tab")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The address decides which cluster the window is in, and its route is
+   * what connects. Fails if picking connects by itself again: a second
+   * answer to the same question, racing the address.
+   */
+  it("goes to the picked cluster's address and leaves the connecting to it", async () => {
+    useClusterStore.setState({
+      contexts: [
+        {
+          name: "prod-eu",
+          cluster: "prod-eu",
+          user: "prod-eu",
+          namespace: null,
+          is_current: false,
+          server: null,
+          exec_command: null,
+          auth: { kind: "unrecognised" },
+        },
+      ],
+    });
+    const router = await mount("/");
+    vi.mocked(commands.connectCluster).mockClear();
+
+    await userEvent.click(screen.getByText("Choose a cluster"));
+    await userEvent.click(
+      await screen.findByRole("option", { name: /prod-eu/ })
+    );
+
+    await vi.waitFor(() =>
+      expect(router.state.location.pathname).toBe("/c/prod-eu")
+    );
+    expect(commands.connectCluster).not.toHaveBeenCalled();
   });
 });
 
@@ -495,11 +520,11 @@ describe("a tab with no cluster", () => {
 describe("the namespace picker a timed-out list asks for", () => {
   it("opens on the active tab when a list asks for it", async () => {
     useScopeTabStore.setState({
-      tabs: [tab({ id: "a", href: "/workloads/pods" })],
+      tabs: [tab({ id: "a", href: "/c/k3d-dev/pods" })],
       activeId: "a",
       pendingHref: null,
     });
-    mount();
+    await mount();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     act(() => {

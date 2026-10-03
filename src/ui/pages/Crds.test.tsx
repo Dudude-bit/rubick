@@ -6,12 +6,9 @@
  * theoretical. The page never took `error` off its query at all.
  */
 
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: { listCrds: vi.fn() },
@@ -23,22 +20,16 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import { Crds } from "./Crds";
 
 const listCrds = vi.mocked(commands.listCrds);
 
-function draw() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+function draw(ui: ReactElement = <Crds />) {
+  return renderWithRouter(ui, {
+    at: "/c/prod/customresourcedefinitions",
+    route: "/c/$cluster/customresourcedefinitions",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/customresourcedefinitions"]}>
-        <TooltipProvider>{children}</TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  return render(<Crds />, { wrapper });
 }
 
 beforeEach(() => {
@@ -51,7 +42,7 @@ describe("the CRD list when the read did not answer", () => {
     listCrds.mockRejectedValue(
       new Error("READ_DEADLINE: the cluster did not answer within 60 s")
     );
-    draw();
+    await draw();
     await waitFor(() => {
       expect(screen.getByText(/could not read/i)).toBeInTheDocument();
     });
@@ -64,7 +55,7 @@ describe("the CRD list when the read did not answer", () => {
     listCrds.mockRejectedValue(
       new Error("customresourcedefinitions is forbidden (code: 403)")
     );
-    draw();
+    await draw();
     await waitFor(() => {
       expect(
         screen.getByText(/do not have permission to list/i)
@@ -77,7 +68,7 @@ describe("the CRD list when the read did not answer", () => {
 
   it("still says the cluster has none when that is the answer", async () => {
     listCrds.mockResolvedValue([]);
-    draw();
+    await draw();
     await waitFor(() => {
       expect(
         screen.getByText(/has no custom resource definitions/i)
@@ -115,20 +106,11 @@ describe("what the page offers Share", () => {
       collect = useScreenSections();
       return null;
     }
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, gcTime: 0 } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/customresourcedefinitions"]}>
-          <TooltipProvider>
-            <ScreenShareProvider>
-              <Crds />
-              <Probe />
-            </ScreenShareProvider>
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await draw(
+      <ScreenShareProvider>
+        <Crds />
+        <Probe />
+      </ScreenShareProvider>
     );
 
     await waitFor(() => {
@@ -162,7 +144,7 @@ describe("the row's way to a CRD's objects", () => {
         ],
       },
     ]);
-    draw();
+    await draw();
 
     const trigger = await screen.findByRole("button", {
       name: "Open actions",
@@ -173,7 +155,7 @@ describe("the row's way to a CRD's objects", () => {
     });
 
     expect(item.getAttribute("href")).toBe(
-      "/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
+      "/c/prod/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
     );
   });
 });

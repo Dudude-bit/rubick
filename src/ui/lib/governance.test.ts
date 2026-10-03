@@ -355,7 +355,12 @@ describe("what the Scale dialog reads", () => {
     lead: "Argo CD will undo this.",
     description: "shop re-applies this object every three minutes.",
     confirmLabel: "Scale anyway",
-    where: { path: "kustomize", revision: null, repoUrl: null, to: "/argo" },
+    where: {
+      path: "kustomize",
+      revision: null,
+      repoUrl: null,
+      to: { to: "/c/$cluster" },
+    },
   };
 
   /**
@@ -429,7 +434,12 @@ describe("what the YAML editor's apply reads", () => {
     lead: "Argo CD will undo this.",
     description: "shop re-applies this object every three minutes.",
     confirmLabel: "Apply anyway",
-    where: { path: "kustomize", revision: null, repoUrl: null, to: "/argo" },
+    where: {
+      path: "kustomize",
+      revision: null,
+      repoUrl: null,
+      to: { to: "/c/$cluster" },
+    },
   };
 
   const doc = (replicas: number | null) =>

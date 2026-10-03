@@ -13,7 +13,7 @@
  */
 
 import { joinSayings, sayWords } from "@/i18n/say";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -214,7 +214,7 @@ function EdgeNote({
         >
           {config.source.to ? (
             <Link
-              to={config.source.to}
+              {...config.source.to}
               className="font-mono text-info hover:underline"
             >
               {config.source.name}
@@ -299,7 +299,7 @@ export function RouteSource({ route }: { route: ServiceRoute }) {
   }
   if (route.to) {
     return (
-      <Link to={route.to} className="font-mono text-info hover:underline">
+      <Link {...route.to} className="font-mono text-info hover:underline">
         {route.source.name}
       </Link>
     );

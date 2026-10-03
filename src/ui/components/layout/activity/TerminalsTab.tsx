@@ -1,10 +1,10 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Terminal, AlertCircle } from "lucide-react";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ACTIVITY_ROW, ActivityEmpty, ActivityGroup } from "./primitives";
@@ -26,9 +26,12 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
 
   const handleNavigateToPod = (namespace: string, podName: string) => {
     onClose?.();
-    // `ResourceType.Pod` is the kind, "Pod"; the route is the plural. Building
-    // the path by hand produced `/Pod/ns/name`, which matches nothing.
-    navigate(getResourceDetailUrl(ResourceType.Pod, podName, namespace));
+    const link = objectLink({
+      kind: ResourceType.Pod,
+      name: podName,
+      namespace,
+    });
+    if (link) void navigate(link);
   };
 
   if (!currentContext) {

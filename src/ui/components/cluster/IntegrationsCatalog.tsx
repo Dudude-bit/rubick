@@ -1,8 +1,9 @@
 import { SettingsGroup } from "@/components/settings/settings-row";
 import * as React from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
+import { useAppSearch } from "@/hooks/useSearchParam";
 import {
   EXTENSION_NAMES,
   useIntegrations,
@@ -48,8 +49,7 @@ export function IntegrationsCatalog({ active = true }: { active?: boolean }) {
   // The sidebar sends an extension that owns no screen here rather than
   // nowhere, and a pane of fourteen rows is not an answer to "show me
   // Prometheus" unless it says which row that is.
-  const [params] = useSearchParams();
-  const asked = params.get("vendor");
+  const { vendor: asked } = useAppSearch();
 
   if (error) {
     return (
@@ -365,7 +365,7 @@ function Fact({ fact }: { fact: VendorFact }) {
           .join(" · ");
   if (!fact.to) return <span className={tone}>{words}</span>;
   return (
-    <Link to={fact.to} className="text-info hover:underline">
+    <Link {...fact.to} className="text-info hover:underline">
       {words}
     </Link>
   );

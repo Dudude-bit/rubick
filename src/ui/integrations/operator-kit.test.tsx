@@ -1,19 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 
 import { en } from "@/i18n/catalogue";
 import { TONE_TEXT } from "@/lib/tone";
+import { renderWithRouter } from "@/test/render";
 import { ControllerLine, OperatorActionButton } from "./operator-kit";
 import { OperatorStrip } from "./cloudnativepg/page";
 
 const UNREADABLE = en.operators.deploymentsUnreadable;
-const wrap = (ui: React.ReactNode) => render(<MemoryRouter>{ui}</MemoryRouter>);
+const wrap = (ui: React.ReactElement) =>
+  renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster" });
 
 describe("the controller's line on an operator page", () => {
   /** A refused Deployment list is "could not look", never "not running". */
-  it("says the Deployments could not be read rather than that none exists", () => {
-    wrap(
+  it("says the Deployments could not be read rather than that none exists", async () => {
+    await wrap(
       <ControllerLine
         controller={null}
         missing="no controller"
@@ -33,8 +34,8 @@ describe("the controller's line on an operator page", () => {
    * the words told them apart. Fails if the unread line takes the missing
    * line's colour again.
    */
-  it("paints a controller it could not look for apart from one that is missing", () => {
-    wrap(
+  it("paints a controller it could not look for apart from one that is missing", async () => {
+    await wrap(
       <>
         <ControllerLine
           controller={null}
@@ -51,8 +52,8 @@ describe("the controller's line on an operator page", () => {
     expect(unread).not.toHaveClass("text-warn");
   });
 
-  it("names a controller short of its replicas in red", () => {
-    wrap(
+  it("names a controller short of its replicas in red", async () => {
+    await wrap(
       <ControllerLine
         controller={{
           name: "cnpg",
@@ -73,8 +74,8 @@ describe("the controller's line on an operator page", () => {
    * The CloudNativePG strip drew "no Deployment carries the label" when the
    * operator read itself failed and nothing had been looked at.
    */
-  it("does not claim an absent operator when the operator read failed", () => {
-    wrap(<OperatorStrip operator={undefined} pending={false} />);
+  it("does not claim an absent operator when the operator read failed", async () => {
+    await wrap(<OperatorStrip operator={undefined} pending={false} />);
     expect(screen.getByText(UNREADABLE)).toBeInTheDocument();
     expect(screen.queryByText(en.operators.controllerNotFound)).toBeNull();
   });

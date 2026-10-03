@@ -1,7 +1,8 @@
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import { ClusterList } from "@/components/cluster/ClusterList";
 import { useClusterFilter } from "@/hooks/useClusterFilter";
+import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
@@ -23,7 +24,7 @@ export function ConnectClusterEmptyState({
 }) {
   const t = useT();
   const contexts = useClusterStore((s) => s.contexts);
-  const connect = useClusterStore((s) => s.connect);
+  const openCluster = useOpenCluster();
   // Its own needle: this pane and the front door are never on screen at the
   // same time, so there is nothing to share a box with.
   const cluster = useClusterFilter();
@@ -53,7 +54,7 @@ export function ConnectClusterEmptyState({
               onFilterChange={cluster.setFilter}
               query={cluster.query}
               inputRef={cluster.inputRef}
-              onSelect={connect}
+              onSelect={openCluster}
               autoFocus={false}
             />
           </div>

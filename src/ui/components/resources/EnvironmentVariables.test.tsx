@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -15,6 +13,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { renderWithRouter } from "@/test/render";
 import { EnvironmentVariables } from "./EnvironmentVariables";
 
 /**
@@ -26,32 +25,29 @@ import { EnvironmentVariables } from "./EnvironmentVariables";
  */
 describe("a pod's environment", () => {
   it("re-reads a ConfigMap once its page has changed a key", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <EnvironmentVariables
-            namespace="prod"
-            envFrom={[]}
-            env={[
-              {
-                name: "LOG_LEVEL",
-                value: null,
-                valueFrom: {
-                  sourceType: "configMapKeyRef",
-                  name: "app",
-                  key: "LOG_LEVEL",
-                  fieldPath: null,
-                  resource: null,
-                  optional: null,
-                },
-              },
-            ]}
-          />
-        </MemoryRouter>
-      </QueryClientProvider>
+    const { client } = await renderWithRouter(
+      <EnvironmentVariables
+        namespace="prod"
+        envFrom={[]}
+        env={[
+          {
+            name: "LOG_LEVEL",
+            value: null,
+            valueFrom: {
+              sourceType: "configMapKeyRef",
+              name: "app",
+              key: "LOG_LEVEL",
+              fieldPath: null,
+              resource: null,
+              optional: null,
+            },
+          },
+        ]}
+      />,
+      {
+        at: "/c/prod/pods/prod/api-0",
+        route: "/c/$cluster/$resource/$namespace/$name",
+      }
     );
     await waitFor(() =>
       expect(commands.getConfigmapData).toHaveBeenCalledTimes(1)

@@ -10,8 +10,7 @@ export interface NavigationHost {
 
 const browserHost = (): NavigationHost => ({
   history: window.history,
-  addEventListener: (type, listener) =>
-    window.addEventListener(type, listener),
+  addEventListener: (type, listener) => window.addEventListener(type, listener),
   removeEventListener: (type, listener) =>
     window.removeEventListener(type, listener),
   now: () => performance.now(),

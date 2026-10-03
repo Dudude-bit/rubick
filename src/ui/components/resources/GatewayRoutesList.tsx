@@ -13,7 +13,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Map as MapGlyph } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { CopyableValue } from "@/components/ui/copyable-value";
@@ -43,6 +43,7 @@ import {
 } from "@/hooks/useGatewayRoutes";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import {
   backingFrom,
   ROUTING_STALE,
@@ -51,8 +52,8 @@ import {
 } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { ResourceType } from "@/lib/resource-registry";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { hrefOf, listLink, objectLink } from "@/lib/links";
 import { KIND_TONE } from "@/lib/route-kind-tone";
 import { allServing, routesBoard, type RouteRow } from "@/lib/route-rows";
 import { useT, type T } from "@/i18n/useT";
@@ -124,7 +125,12 @@ function Row({
   const t = useT();
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
-  const href = getResourceDetailUrl(row.kind, row.name, row.namespace);
+  const link = objectLink({
+    kind: row.kind,
+    name: row.name,
+    namespace: row.namespace,
+  })!;
+  const href = hrefOf(link);
 
   // Not an anchor, on purpose: the via cell holds a real ResourceRef, and
   // an anchor inside an anchor is where browsers split the row apart. The
@@ -133,7 +139,7 @@ function Row({
   const act = (event: React.MouseEvent | React.KeyboardEvent) => {
     const target = event.target as HTMLElement;
     if (target.closest("a") || target.closest("button")) return;
-    linkGesture(event, href, () => navigate(href));
+    linkGesture(event, href, () => navigate(link));
   };
 
   return (
@@ -307,7 +313,9 @@ export function GatewayRoutesList() {
   } = useGatewayRoutes(scope.scope);
 
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState("");
+  const { kind: kindParam } = useAppSearch();
+  const setSearch = useSetSearch();
+  const kind = ROUTE_KINDS.find((k) => toPlural(k) === kindParam) ?? "";
   const [brokenOnly, setBrokenOnly] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
@@ -478,9 +486,10 @@ export function GatewayRoutesList() {
             />
             <Select
               value={kind === "" ? ALL_KINDS : kind}
-              onValueChange={(value) =>
-                setKind(value === ALL_KINDS ? "" : value)
-              }
+              onValueChange={(value) => {
+                const chosen = ROUTE_KINDS.find((k) => k === value);
+                setSearch({ kind: chosen && toPlural(chosen) });
+              }}
             >
               <SelectTrigger
                 aria-label={t("action", "filterByKind")}
@@ -540,7 +549,7 @@ export function GatewayRoutesList() {
             })}
           </span>
           <Link
-            to="/network/gateways"
+            {...listLink("Gateway")}
             className="ml-auto whitespace-nowrap text-info hover:underline"
           >
             {t("action", "openGateways")}

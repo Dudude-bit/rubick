@@ -1,28 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ChangeItem } from "@/lib/changes";
+import { renderWithRouter } from "@/test/render";
 import { ChangesTimeline } from "./ChangesTimeline";
 
 const T0 = Date.parse("2026-09-08T02:10:00Z");
 const HOUR = 60 * 60_000;
 
 function mount(items: ChangeItem[], since?: number) {
-  return render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <ChangesTimeline items={items} since={since} showObject />
-      </TooltipProvider>
-    </MemoryRouter>
+  return renderWithRouter(
+    <ChangesTimeline items={items} since={since} showObject />,
+    { at: "/c/dev", route: "/c/$cluster" }
   );
 }
 
 describe("ChangesTimeline", () => {
   /** A gap is drawn as its own row, in words, not as an empty stretch a reader would read as calm. */
-  it("draws a gap as a gap", () => {
-    mount([
+  it("draws a gap as a gap", async () => {
+    await mount([
       {
         kind: "journal",
         at: T0 + 6 * HOUR,
@@ -50,8 +46,8 @@ describe("ChangesTimeline", () => {
     expect(document.body.textContent).toContain("image app:1 → app:2");
   });
 
-  it("marks what happened after the moment the reader came from", () => {
-    mount(
+  it("marks what happened after the moment the reader came from", async () => {
+    await mount(
       [
         {
           kind: "journal",
@@ -93,8 +89,8 @@ describe("ChangesTimeline", () => {
     expect(rows[1]).not.toHaveAttribute("data-after-since");
   });
 
-  it("says the oldest revision has nothing to compare with", () => {
-    mount([
+  it("says the oldest revision has nothing to compare with", async () => {
+    await mount([
       {
         kind: "revision",
         at: T0,

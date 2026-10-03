@@ -27,6 +27,7 @@ import type {
   ResourceConnections,
 } from "@/generated/types";
 import type { DeliveryIntercept } from "./delivery";
+import type { AppLink } from "./links";
 import { formatAge } from "./utils";
 
 export type AutoscalerFacts = Extract<ObjectFacts, { kind: "autoscaler" }>;
@@ -399,7 +400,7 @@ export interface ActionWarning {
   lead: string;
   description: string;
   /** Where the change would really have to be made, where there is a page. */
-  to: string | null;
+  to: AppLink | null;
 }
 
 /**

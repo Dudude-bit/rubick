@@ -2,7 +2,8 @@ import { Fragment } from "react";
 
 import { linkifyMessage, type MessageSubject } from "@/lib/message-refs";
 import { ImageRef } from "./ImageRef";
-import { isRoutableKind, ResourceRef } from "./ResourceRef";
+import { objectLink } from "@/lib/links";
+import { ResourceRef } from "./ResourceRef";
 
 export interface ResourceMessageProps {
   message: string;
@@ -41,7 +42,7 @@ export function ResourceMessage({ message, subject }: ResourceMessageProps) {
           return <ImageRef key={index} image={segment.ref.reference} inline />;
         }
         const { kind, name, namespace } = segment.ref;
-        if (!isRoutableKind(kind, namespace)) {
+        if (!objectLink({ kind, name, namespace })) {
           return <Fragment key={index}>{segment.text}</Fragment>;
         }
         return (

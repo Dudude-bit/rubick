@@ -16,14 +16,11 @@ import type { T } from "@/i18n/useT";
 
 import { ResourceType } from "@/lib/resource-registry";
 
-import { hostSeverity } from "../ingress";
+import { hostFilterLink, hostSeverity } from "../ingress";
 import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
 import { backingOf, type IstioHostGroup, type IstioSources } from "./model";
 
 /** Where clicking a host goes: its own routes, filtered to it. */
-export const hostFilterPath = (host: string) =>
-  `?tab=routes&q=${encodeURIComponent(host)}`;
-
 function toneOf(group: IstioHostGroup): MapTone {
   return hostSeverity(group) ?? "ok";
 }
@@ -147,7 +144,7 @@ export function routingMap(
       label: group.host,
       sub: t("count", "routeRules", { n: group.routes.length }),
       tone,
-      to: hostFilterPath(group.host),
+      to: hostFilterLink(group.host),
       tag: group.meshOnly
         ? { text: t("readings", "istioMeshOnly"), tone: "mute" }
         : undefined,

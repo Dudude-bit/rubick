@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useLocation } from "react-router-dom";
 
 import type {
   ShareContribution,
@@ -9,6 +8,7 @@ import { useAppInfo } from "@/hooks/useAppInfo";
 import { useConnections } from "@/hooks/useConnections";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { useCapabilities } from "@/integrations";
 import { useT } from "@/i18n/useT";
@@ -108,7 +108,7 @@ export function useObjectReport(
   const colouring = useDisplaySettingsStore((s) => s.resourceColouring);
   const version = useAppInfo();
   const vendors = useCapabilities("object.report");
-  const location = useLocation();
+  const href = useLocationHref();
   const graphed = !!subject && CONNECTED_KINDS.has(subject.kind);
   const silent = useSilentNodes(capturing);
 
@@ -246,11 +246,7 @@ export function useObjectReport(
       verdict: own.verdict ?? null,
       sections: placed(sections),
       notRead,
-      link: buildDeepLink(
-        context,
-        `${location.pathname}${location.search}`,
-        new Date(capturedAt)
-      ),
+      link: buildDeepLink(href, new Date(capturedAt)),
       words: frameWords(t, locale, notRead.length),
       icons: frameIcons(),
     };
@@ -276,8 +272,7 @@ export function useObjectReport(
     capturedAt,
     colouring,
     locale,
-    location.pathname,
-    location.search,
+    href,
   ]);
 
   return { report, isPending: version.isPending };

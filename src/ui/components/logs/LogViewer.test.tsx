@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   act,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
@@ -48,10 +47,8 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import type { ReactElement } from "react";
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { commands } from "@/lib/commands";
 import type {
   ContainerInfo,
@@ -60,25 +57,15 @@ import type {
 } from "@/generated/types";
 import type { StreamFailureKind } from "@/lib/stream-failure";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
+import { renderWithProviders, renderWithRouter } from "@/test/render";
 import { LogViewer } from "./LogViewer";
 
 /**
- * What the app supplies at its root: a query client for the registry's
- * lookups, a router for the one link an absent integration offers, and the
- * tooltip context the status bar reaches for as soon as there is a line.
+ * The pane inside what the app mounts at its root. The router is for the one
+ * link an absent integration offers.
  */
-function Providers({ children }: { children: React.ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>{children}</TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-}
+const mount = (ui: ReactElement) =>
+  renderWithRouter(ui, { at: "/c/test", route: "/c/$cluster" });
 
 function container(
   name: string,
@@ -119,11 +106,7 @@ function fireFailure(
 async function renderStreaming() {
   // The status bar reaches for a Tooltip the moment there is a line to
   // describe the format of, which the app supplies at the root.
-  render(
-    <Providers>
-      <LogViewer {...props} />
-    </Providers>
-  );
+  await mount(<LogViewer {...props} />);
   await waitFor(() => {
     expect(listeners["stream-failed"]).toBeDefined();
   });
@@ -202,20 +185,18 @@ describe("LogViewer when a live stream dies", () => {
       startedAt: null,
       finishedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
     };
-    render(
-      <Providers>
-        <LogViewer
-          {...props}
-          containers={[
-            container("app", {
-              ready: false,
-              state: { type: "waiting", reason: "CrashLoopBackOff" },
-              lastTerminated: termination,
-              restartCount: 653,
-            }),
-          ]}
-        />
-      </Providers>
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[
+          container("app", {
+            ready: false,
+            state: { type: "waiting", reason: "CrashLoopBackOff" },
+            lastTerminated: termination,
+            restartCount: 653,
+          }),
+        ]}
+      />
     );
     await waitFor(() => {
       expect(listeners["stream-failed"]).toBeDefined();
@@ -598,17 +579,15 @@ describe("what the pane shows on open", () => {
   });
 
   it("hides no container", async () => {
-    render(
-      <Providers>
-        <LogViewer
-          {...props}
-          containers={[
-            container("app"),
-            container("sidecar"),
-            container("proxy"),
-          ]}
-        />
-      </Providers>
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[
+          container("app"),
+          container("sidecar"),
+          container("proxy"),
+        ]}
+      />
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
@@ -692,11 +671,7 @@ describe("LogViewer on a pod held in init", () => {
   });
 
   async function renderStuck() {
-    render(
-      <Providers>
-        <LogViewer {...props} containers={stuck} />
-      </Providers>
-    );
+    await mount(<LogViewer {...props} containers={stuck} />);
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
     });
@@ -898,11 +873,7 @@ describe("soloing a container", () => {
   });
 
   async function renderMany() {
-    render(
-      <Providers>
-        <LogViewer {...props} containers={many} />
-      </Providers>
-    );
+    await mount(<LogViewer {...props} containers={many} />);
     await waitFor(() => {
       expect(screen.getByTestId("log-legend")).toBeInTheDocument();
     });
@@ -965,32 +936,28 @@ describe("reading a container whose run is over", () => {
   });
 
   it("holds finished init lines out of a running pod and offers them", async () => {
-    render(
-      <Providers>
-        <LogViewer
-          {...props}
-          containers={[
-            container("prepare", {
-              phase: "init",
-              state: {
-                type: "terminated",
-                termination: {
-                  exitCode: 0,
-                  signal: null,
-                  reason: "Completed",
-                  message: null,
-                  startedAt: null,
-                  finishedAt: new Date(
-                    Date.now() - 21 * 60 * 1000
-                  ).toISOString(),
-                },
+    await mount(
+      <LogViewer
+        {...props}
+        containers={[
+          container("prepare", {
+            phase: "init",
+            state: {
+              type: "terminated",
+              termination: {
+                exitCode: 0,
+                signal: null,
+                reason: "Completed",
+                message: null,
+                startedAt: null,
+                finishedAt: new Date(Date.now() - 21 * 60 * 1000).toISOString(),
               },
-            }),
-            container("proxy", { phase: "sidecar" }),
-            container("app"),
-          ]}
-        />
-      </Providers>
+            },
+          }),
+          container("proxy", { phase: "sidecar" }),
+          container("app"),
+        ]}
+      />
     );
     await waitFor(() => {
       expect(screen.getByTestId("log-focus-notice")).toBeInTheDocument();
@@ -1039,15 +1006,13 @@ describe("a workload pane", () => {
     raw: message,
   });
   const pane = (pods: ReturnType<typeof pod>[], podsError?: unknown) => (
-    <Providers>
-      <LogViewer
-        namespace="default"
-        pods={pods}
-        podsError={podsError}
-        laneRule="pod"
-        workload={{ owner: "api", ownerKind: "Deployment" }}
-      />
-    </Providers>
+    <LogViewer
+      namespace="default"
+      pods={pods}
+      podsError={podsError}
+      laneRule="pod"
+      workload={{ owner: "api", ownerKind: "Deployment" }}
+    />
   );
 
   /**
@@ -1058,7 +1023,9 @@ describe("a workload pane", () => {
     vi.mocked(commands.streamPodLogs).mockImplementation(
       async (config: { podName: string }) => `stream-${config.podName}`
     );
-    const { rerender } = render(pane([pod("api-a"), pod("api-b")]));
+    const { rerender } = renderWithProviders(
+      pane([pod("api-a"), pod("api-b")])
+    );
     await waitFor(() =>
       expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(2)
     );
@@ -1117,7 +1084,7 @@ describe("a workload pane", () => {
         return `stream-${config.podName}`;
       }
     );
-    render(
+    renderWithProviders(
       pane([pod("api-a"), pod("api-b", [container("app"), container("side")])])
     );
     await waitFor(() =>
@@ -1135,7 +1102,7 @@ describe("a workload pane", () => {
   });
 
   it("says there is nothing to read from while the workload has no pods", async () => {
-    render(pane([]));
+    renderWithProviders(pane([]));
     expect(
       await screen.findByText("No pods to read from yet.")
     ).toBeInTheDocument();
@@ -1159,7 +1126,7 @@ describe("a workload pane", () => {
       async (config: { podName: string; container: string | null }) =>
         `stream-${config.podName}-${config.container}`
     );
-    render(
+    renderWithProviders(
       pane([
         pod("api-a", [
           container("migrate", {
@@ -1205,7 +1172,9 @@ describe("a workload pane", () => {
   });
 
   it("does not call a pod list it could not read an empty one", async () => {
-    render(pane([], new Error("pods is forbidden: User cannot list pods")));
+    renderWithProviders(
+      pane([], new Error("pods is forbidden: User cannot list pods"))
+    );
     expect(
       await screen.findByText(/pods could not be read/)
     ).toBeInTheDocument();
@@ -1222,7 +1191,7 @@ describe("a workload pane", () => {
     vi.mocked(commands.streamPodLogs).mockImplementation(
       async (config: { podName: string }) => `stream-${config.podName}`
     );
-    const { rerender } = render(pane([pod("api-a")]));
+    const { rerender } = renderWithProviders(pane([pod("api-a")]));
     await waitFor(() =>
       expect(screen.getByTestId("log-lane-coverage").textContent).toContain(
         "1 of 1 pod streaming"

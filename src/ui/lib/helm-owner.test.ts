@@ -1,6 +1,11 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
 
-import { helmOwnerOf, helmReleasePath } from "./helm-owner";
+import { routeTree } from "@/generated/routeTree.gen";
+import { helmOwnerLink, helmOwnerOf } from "./helm-owner";
+import { hrefOf, setRouter } from "./links";
 
 describe("the release an object says installed it", () => {
   /**
@@ -43,9 +48,16 @@ describe("the release an object says installed it", () => {
     expect(helmOwnerOf(null)).toBeNull();
   });
 
-  it("points at the release read from the cluster, which is always there", () => {
-    expect(helmReleasePath({ name: "api", namespace: "platform" })).toBe(
-      "/helm/native/platform/api"
+  it("points at the release read from the cluster, which is always there", async () => {
+    const router = createRouter({
+      routeTree,
+      context: { queryClient: new QueryClient() },
+      history: createMemoryHistory({ initialEntries: ["/c/prod"] }),
+    });
+    setRouter(router);
+    await router.load();
+    expect(hrefOf(helmOwnerLink({ name: "api", namespace: "platform" }))).toBe(
+      "/c/prod/helm/native/platform/api"
     );
   });
 });

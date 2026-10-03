@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   ResourceConnections,
   StatefulSetDetailInfo,
@@ -28,6 +26,7 @@ vi.mock("@/lib/commands", () => ({
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { renderWithRouter } from "@/test/render";
 import { StatefulSetDetail } from "./StatefulSetDetail";
 
 function buildSet(
@@ -137,22 +136,11 @@ function mockDetail(set: StatefulSetDetailInfo | undefined) {
 }
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<StatefulSetDetail />, {
+    at: "/c/prod/statefulsets/k8s-gui-test/stateful-demo",
+    route: "/c/$cluster/statefulsets/$namespace/$name",
   });
-  renderPage.client = client;
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter
-        initialEntries={["/statefulsets/k8s-gui-test/stateful-demo"]}
-      >
-        <StatefulSetDetail />
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 }
-
-renderPage.client = null as unknown as QueryClient;
 
 describe("StatefulSetDetail", () => {
   beforeEach(() => {
@@ -193,23 +181,23 @@ describe("StatefulSetDetail", () => {
       pod("stateful-demo-0"),
       pod("stateful-demo-web"),
     ] as never);
-    renderPage();
+    const { client } = await renderPage();
     await waitFor(() =>
       expect(
-        renderPage.client.getQueryData(
+        client.getQueryData(
           queryKeys.ownedPods("StatefulSet", "k8s-gui-test", "stateful-demo")
         )
       ).toEqual([pod("stateful-demo-0")])
     );
   });
 
-  it("offers Scale — a StatefulSet has a replica count like any other", () => {
-    renderPage();
+  it("offers Scale — a StatefulSet has a replica count like any other", async () => {
+    await renderPage();
     expect(screen.getByRole("button", { name: "Scale" })).toBeInTheDocument();
   });
 
   it("names the autoscaler that will put the number back", async () => {
-    renderPage();
+    await renderPage();
     await userEvent.click(screen.getByRole("button", { name: "Scale" }));
 
     expect(
@@ -222,7 +210,7 @@ describe("StatefulSetDetail", () => {
   });
 
   it("lays the Overview out as blocks in one column, never a page-level grid", async () => {
-    const { container } = renderPage();
+    const { container } = await renderPage();
     await screen.findByText("Set by");
 
     // A grid is allowed *inside* a block — a bar beside its rows, a short
@@ -252,7 +240,7 @@ describe("StatefulSetDetail", () => {
       })),
     };
 
-    renderPage();
+    await renderPage();
     await screen.findByText("Set by");
 
     // The header's `3/3 ready` is identity and exempt; inside the page's own
@@ -263,7 +251,7 @@ describe("StatefulSetDetail", () => {
 
   it("draws no empty Set by row for a workload nothing scales", async () => {
     connections = ungoverned;
-    renderPage();
+    await renderPage();
 
     // The bar is what a workload with no autoscaler and no budget shows.
     await screen.findByText("replica wanted");

@@ -1,10 +1,8 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
 
@@ -34,17 +32,10 @@ const refused = (crd: string) => () =>
   );
 
 function renderOn(tab: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<ArgoCdPage />, {
+    at: `/c/test/integrations/argocd?tab=${tab}`,
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/integrations/argocd?tab=${tab}`]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  return render(<ArgoCdPage />, { wrapper });
 }
 
 beforeEach(() => answers.clear());
@@ -58,7 +49,7 @@ describe("tabs whose own list was refused", () => {
   it("does not call a refused ApplicationSet list none", async () => {
     answers.set(APPLICATIONSETS_CRD, refused(APPLICATIONSETS_CRD));
 
-    renderOn("appsets");
+    await renderOn("appsets");
 
     await waitFor(() =>
       expect(
@@ -76,7 +67,7 @@ describe("tabs whose own list was refused", () => {
   it("does not call a refused AppProject list none", async () => {
     answers.set(PROJECTS_CRD, refused(PROJECTS_CRD));
 
-    renderOn("projects");
+    await renderOn("projects");
 
     await waitFor(() =>
       expect(
@@ -107,7 +98,7 @@ describe("Argo's own workloads", () => {
     answers.set("deployments", () => Promise.resolve([server]));
     answers.set("statefulsets", refused("statefulsets"));
 
-    renderOn("controller");
+    await renderOn("controller");
 
     expect(
       await screen.findByText(
@@ -127,7 +118,7 @@ describe("Argo's own workloads", () => {
     answers.set("statefulsets", refused("statefulsets"));
 
     try {
-      renderOn("controller");
+      await renderOn("controller");
 
       const finding = await screen.findByText(/Не удалось перечислить/);
       expect(finding).toHaveTextContent("здесь не показаны");
@@ -145,7 +136,7 @@ describe("Argo's own workloads", () => {
     answers.set("deployments", refused("deployments"));
     answers.set("statefulsets", refused("statefulsets"));
 
-    renderOn("controller");
+    await renderOn("controller");
 
     expect(await screen.findByText(/Could not list deployments/)).toHaveClass(
       "text-warn"

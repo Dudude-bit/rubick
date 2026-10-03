@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, screen } from "@testing-library/react";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -34,9 +32,9 @@ vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: () => vi.fn(async () => null) }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useResourceDetail } from "@/hooks";
 import type { IngressInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { IngressDetail } from "./IngressDetail";
 
 const shop: IngressInfo = {
@@ -67,7 +65,7 @@ const shop: IngressInfo = {
   createdAt: null,
 };
 
-const open = (tab: string) => {
+const open = async (tab: string) => {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: "shop",
     namespace: "web",
@@ -82,18 +80,10 @@ const open = (tab: string) => {
     refetch: vi.fn(),
     deleteMutation: { mutate: vi.fn(), isPending: false },
   } as unknown as ReturnType<typeof useResourceDetail>);
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  await renderWithRouter(<IngressDetail />, {
+    at: "/c/prod/ingresses/web/shop",
+    route: "/c/$cluster/ingresses/$namespace/$name",
   });
-  render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>
-          <IngressDetail />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 };
 
 beforeEach(() => {
@@ -115,20 +105,20 @@ function colourOf(element: Element): string | undefined {
 }
 
 /** How each place on the page paints the host's TLS, in one state. */
-function paints(terminated: boolean | null) {
+async function paints(terminated: boolean | null) {
   cleanup();
   vendor.terminated = terminated;
   const words =
     terminated === null ? "TLS not checked" : terminated ? "TLS" : "no TLS";
   const marker = terminated === null ? "?" : terminated ? "HTTPS" : "HTTP";
-  open("access");
+  await open("access");
   // A tab is also called "TLS"; the badge is the one outside the tab list.
   const badge = colourOf(
     screen.getAllByText(words).find((at) => !at.closest("[role='tab']"))!
   );
   const scheme = colourOf(screen.getByText(marker));
   cleanup();
-  open("overview");
+  await open("overview");
   const fact = colourOf(
     screen.getByText(
       terminated === null
@@ -148,8 +138,8 @@ describe("an Ingress whose certificate the controller could not read", () => {
    * decide: "no TLS" in the header and an `http://` URL on the Access tab,
    * for a host GKE serves over HTTPS. Fails if `null` is read as `false`.
    */
-  it("says TLS was not checked and offers no scheme", () => {
-    open("access");
+  it("says TLS was not checked and offers no scheme", async () => {
+    await open("access");
 
     expect(screen.queryByText("no TLS")).toBeNull();
     expect(screen.getAllByText("TLS not checked").length).toBeGreaterThan(0);
@@ -159,9 +149,9 @@ describe("an Ingress whose certificate the controller could not read", () => {
   });
 
   /** The other side of the same branch: a controller that said no. */
-  it("says no TLS when the controller said it serves plain HTTP", () => {
+  it("says no TLS when the controller said it serves plain HTTP", async () => {
     vendor.terminated = false;
-    open("access");
+    await open("access");
 
     expect(screen.getAllByText("no TLS").length).toBeGreaterThan(0);
     expect(screen.getByText("HTTP")).toBeTruthy();
@@ -173,10 +163,10 @@ describe("an Ingress whose certificate the controller could not read", () => {
    * said no either. Only `terminated: null` was tested, so reading the
    * failure as `false` put "no TLS" and `http://` back unnoticed.
    */
-  it("says TLS was not checked when the controllers could not be asked", () => {
+  it("says TLS was not checked when the controllers could not be asked", async () => {
     vendor.answered = false;
     vendor.error = new Error("the ingress controller did not answer");
-    open("rules");
+    await open("rules");
 
     expect(screen.queryByText(/no TLS/)).toBeNull();
     expect(screen.getByText(/· TLS not checked/)).toBeTruthy();
@@ -187,10 +177,10 @@ describe("an Ingress whose certificate the controller could not read", () => {
    * and the `?` on the Access tab were painted as "TLS" is, so only reading
    * the word told "not checked" from "has TLS".
    */
-  it("paints not checked apart from TLS and from no TLS everywhere it says so", () => {
-    const unknown = paints(null);
-    const yes = paints(true);
-    const no = paints(false);
+  it("paints not checked apart from TLS and from no TLS everywhere it says so", async () => {
+    const unknown = await paints(null);
+    const yes = await paints(true);
+    const no = await paints(false);
 
     for (const place of ["badge", "scheme", "fact"] as const) {
       expect(unknown[place], place).toBeDefined();

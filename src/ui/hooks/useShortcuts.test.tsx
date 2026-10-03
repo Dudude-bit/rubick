@@ -1,29 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { act, fireEvent, screen } from "@testing-library/react";
+import type { AnyRouter } from "@tanstack/react-router";
 
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
+import { renderWithRouter } from "@/test/render";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 import { ShortcutsOverlay } from "@/components/layout/ShortcutsOverlay";
 import { useShortcuts } from "./useShortcuts";
 
 function Probe() {
   useShortcuts();
-  const { pathname } = useLocation();
-  return (
-    <>
-      <span data-testid="path">{pathname}</span>
-      <input aria-label="search" />
-    </>
-  );
+  return <input aria-label="search" />;
 }
 
-const mount = () =>
-  render(
-    <MemoryRouter initialEntries={["/"]}>
-      <Probe />
-    </MemoryRouter>
-  );
+/** Mounted on every address in the cluster, so a chord's landing keeps it on screen. */
+async function mount(ui = <Probe />): Promise<AnyRouter> {
+  const { router } = await renderWithRouter(ui, {
+    at: "/c/prod",
+    route: "/c/$cluster/$",
+  });
+  vi.useFakeTimers();
+  return router;
+}
 
 /**
  * With the list of shortcuts really on screen, which is the only way to see
@@ -32,11 +30,11 @@ const mount = () =>
  * against behaviour the app does not have.
  */
 const mountWithOverlay = () =>
-  render(
-    <MemoryRouter initialEntries={["/"]}>
+  mount(
+    <>
       <Probe />
       <ShortcutsOverlay />
-    </MemoryRouter>
+    </>
   );
 
 const press = (key: string, target: Element | Window = window) =>
@@ -44,8 +42,14 @@ const press = (key: string, target: Element | Window = window) =>
     fireEvent.keyDown(target, { key });
   });
 
+/** A navigate writes history before it returns, so reading it at once cannot miss one still loading. */
+const stayed = (router: AnyRouter) =>
+  expect(router.history.location.pathname).toBe("/c/prod");
+
+const landedOn = (router: AnyRouter, pathname: string) =>
+  vi.waitFor(() => expect(router.state.location.pathname).toBe(pathname));
+
 beforeEach(() => {
-  vi.useFakeTimers();
   useShortcutsOverlayStore.setState({ open: false });
 });
 
@@ -54,26 +58,26 @@ afterEach(() => {
 });
 
 describe("the keys that are the same on every screen", () => {
-  it("goes where a g-chord points", () => {
-    mount();
+  it("goes where a g-chord points", async () => {
+    const router = await mount();
     press("g");
     press("p");
-    expect(screen.getByTestId("path")).toHaveTextContent("/pods");
+    await landedOn(router, "/c/prod/pods");
   });
 
   /** A chord that waited too long is two letters, not one shortcut. */
-  it("forgets a g that was pressed too long ago", () => {
-    mount();
+  it("forgets a g that was pressed too long ago", async () => {
+    const router = await mount();
     press("g");
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     press("p");
-    expect(screen.getByTestId("path")).toHaveTextContent("/");
+    stayed(router);
   });
 
-  it("opens the list of itself on ?", () => {
-    mount();
+  it("opens the list of itself on ?", async () => {
+    await mount();
     press("?");
     expect(useShortcutsOverlayStore.getState().open).toBe(true);
     press("?");
@@ -86,8 +90,8 @@ describe("the keys that are the same on every screen", () => {
    * and could never close it — and the test above passed anyway, because
    * nothing was rendered to step aside for.
    */
-  it("closes the list with the same key that opened it, drawn", () => {
-    mountWithOverlay();
+  it("closes the list with the same key that opened it, drawn", async () => {
+    await mountWithOverlay();
     press("?");
     expect(useShortcutsOverlayStore.getState().open).toBe(true);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -100,21 +104,21 @@ describe("the keys that are the same on every screen", () => {
    * behind, and a plain row click opens one. Asking whether any dialog exists
    * anywhere made every one of these keys dead for as long as it was up.
    */
-  it("still answers a chord while a non-modal panel is open behind it", () => {
-    mount();
+  it("still answers a chord while a non-modal panel is open behind it", async () => {
+    const router = await mount();
     const panel = document.createElement("div");
     panel.setAttribute("role", "dialog");
     panel.setAttribute("data-state", "open");
     document.body.appendChild(panel);
     press("g");
     press("p");
-    expect(screen.getByTestId("path")).toHaveTextContent("/pods");
+    await landedOn(router, "/c/prod/pods");
     panel.remove();
   });
 
   /** And a layer the reader is actually inside keeps its own keys. */
-  it("stays quiet when the focus is inside a layer", () => {
-    mount();
+  it("stays quiet when the focus is inside a layer", async () => {
+    const router = await mount();
     const menu = document.createElement("div");
     menu.setAttribute("role", "menu");
     const item = document.createElement("button");
@@ -123,7 +127,7 @@ describe("the keys that are the same on every screen", () => {
     item.focus();
     press("g", item);
     press("p", item);
-    expect(screen.getByTestId("path")).toHaveTextContent("/");
+    stayed(router);
     menu.remove();
   });
 
@@ -134,26 +138,26 @@ describe("the keys that are the same on every screen", () => {
    * page keys died silently while the modified shortcuts listed beside them
    * in the overlay went on working.
    */
-  it("answers a chord typed with caps lock on", () => {
-    mount();
+  it("answers a chord typed with caps lock on", async () => {
+    const router = await mount();
     press("G");
     press("P");
-    expect(screen.getByTestId("path")).toHaveTextContent("/pods");
+    await landedOn(router, "/c/prod/pods");
   });
 
   /** A `g` typed into a search box is a letter. */
-  it("stays quiet inside a field", () => {
-    mount();
+  it("stays quiet inside a field", async () => {
+    const router = await mount();
     const field = screen.getByLabelText("search");
     press("g", field);
     press("p", field);
-    expect(screen.getByTestId("path")).toHaveTextContent("/");
+    stayed(router);
     press("?", field);
     expect(useShortcutsOverlayStore.getState().open).toBe(false);
   });
 
-  it("asks the page to open the tab a letter names", () => {
-    mount();
+  it("asks the page to open the tab a letter names", async () => {
+    await mount();
     const asked = vi.fn();
     window.addEventListener(DETAIL_TAB_OPEN, asked);
     press("l");

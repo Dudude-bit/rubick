@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getResourceListUrl } from "./resource-registry";
-import { withCarriedSearch } from "./carried-search";
+import { listSegment } from "./resource-registry";
+import { carriedSearch } from "./carried-search";
 
 /** The real route, so a registry change moves the test with it. */
-const PODS = getResourceListUrl("Pod");
+const PODS = `/c/prod/${listSegment("Pod")}`;
 
 /**
  * Reported on #178: a release's name is part of its pods, its deployments and
@@ -14,9 +14,9 @@ const PODS = getResourceListUrl("Pod");
  */
 describe("the search the sidebar carries", () => {
   it("carries the term from one kind's list to another's", () => {
-    expect(
-      withCarriedSearch("/deployments", "Deployment", "?q=release-42", PODS)
-    ).toBe("/deployments?q=release-42");
+    expect(carriedSearch("Deployment", { q: "release-42" }, PODS)).toEqual({
+      q: "release-42",
+    });
   });
 
   /**
@@ -24,22 +24,17 @@ describe("the search the sidebar carries", () => {
    * search in their address would mean nothing to them.
    */
   it("carries nothing to a row that lists no kind", () => {
-    expect(
-      withCarriedSearch("/settings", undefined, "?q=release-42", PODS)
-    ).toBe("/settings");
-    expect(withCarriedSearch("/", undefined, "?q=release-42", PODS)).toBe("/");
+    expect(carriedSearch(undefined, { q: "release-42" }, PODS)).toBeUndefined();
   });
 
-  it("leaves the path alone when nothing is being searched for", () => {
-    expect(withCarriedSearch(PODS, "Pod", "", PODS)).toBe(PODS);
-    expect(withCarriedSearch(PODS, "Pod", "?namespace=shop", PODS)).toBe(PODS);
+  it("leaves the link alone when nothing is being searched for", () => {
+    expect(carriedSearch("Pod", {}, PODS)).toBeUndefined();
+    expect(carriedSearch("Pod", { view: "tree" }, PODS)).toBeUndefined();
   });
 
   /** A name with a slash or a space survives the trip as itself. */
-  it("escapes the term rather than pasting it into the address", () => {
-    expect(
-      withCarriedSearch(PODS, "Pod", "?q=" + encodeURIComponent("a b/c"), PODS)
-    ).toBe(`${PODS}?q=a%20b%2Fc`);
+  it("hands the term on as itself for the router to escape", () => {
+    expect(carriedSearch("Pod", { q: "a b/c" }, PODS)).toEqual({ q: "a b/c" });
   });
 
   /**
@@ -51,12 +46,14 @@ describe("the search the sidebar carries", () => {
    */
   it("carries nothing from a page where q is not the list search", () => {
     expect(
-      withCarriedSearch(
-        PODS,
+      carriedSearch(
         "Pod",
-        "?q=shop.example.com",
-        "/integrations/traefik"
+        { q: "shop.example.com" },
+        "/c/prod/integrations/traefik"
       )
-    ).toBe(PODS);
+    ).toBeUndefined();
+    expect(
+      carriedSearch("Pod", { q: "api" }, "/c/prod/pods/web/api-0")
+    ).toBeUndefined();
   });
 });

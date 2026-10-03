@@ -1,27 +1,22 @@
-import type { ReactNode } from "react";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
+import { renderWithRouter } from "@/test/render";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
 
 /**
- * A client, because the frame now asks a capability where this object came
- * from. With nothing installed it answers "nothing" — which is the state this
- * whole file's cluster is in and exactly what it must draw.
+ * Inside a query client, because the frame now asks a capability where this
+ * object came from. With nothing installed it answers "nothing", which is the
+ * state this whole file's cluster is in and exactly what it must draw.
  */
-const client = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-const wrap = (ui: ReactNode) =>
-  render(
-    <QueryClientProvider client={client()}>
-      <MemoryRouter>{ui}</MemoryRouter>
-    </QueryClientProvider>
-  );
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, {
+    at: "/c/prod/deployments/k8s-gui-test/mounts-demo",
+    route: "/c/$cluster/$resource/$namespace/$name",
+  });
 
 const subject: ObjectRef = {
   kind: "Deployment",
@@ -57,12 +52,12 @@ const answered = (
 });
 
 describe("ConnectionsPanel", () => {
-  it("draws the kinds it never asked about", () => {
+  it("draws the kinds it never asked about", async () => {
     /** The one group most likely to be dropped as noise. Without it, an
      *  absent Autoscaling section reads as "no HPA scales this Deployment",
      *  which is a claim the app cannot make: it has never read one. If this
      *  fails, the view has gone from honest to confident. */
-    wrap(
+    await wrap(
       <ConnectionsPanel
         query={query({
           data: answered({
@@ -95,11 +90,11 @@ describe("ConnectionsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("says a name was read off a pod spec rather than looked up", () => {
+  it("says a name was read off a pod spec rather than looked up", async () => {
     /** A ConfigMap the app never listed and a ConfigMap that exists arrive
      *  here identical. Dropping the note is how a typo in a volume name
      *  starts looking like a healthy mount. */
-    wrap(
+    await wrap(
       <ConnectionsPanel
         query={query({
           data: answered({
@@ -138,11 +133,11 @@ describe("ConnectionsPanel", () => {
     expect(screen.getByText("not checked")).toBeInTheDocument();
   });
 
-  it("tells an answered nothing apart from a question never asked", () => {
+  it("tells an answered nothing apart from a question never asked", async () => {
     /** Three states, three screens. An empty page that only says "nothing"
      *  is indistinguishable from one that failed, so the empty one states
      *  what was read as well as what was found. */
-    wrap(
+    await wrap(
       <ConnectionsPanel
         query={query({
           data: {
@@ -168,12 +163,12 @@ describe("ConnectionsPanel", () => {
       screen.getByText(/was read; none of them names it/)
     ).toBeInTheDocument();
 
-    wrap(<ConnectionsPanel query={query({ isPending: true })} />);
+    await wrap(<ConnectionsPanel query={query({ isPending: true })} />);
     expect(
       screen.getByText("Reading what connects to this…")
     ).toBeInTheDocument();
 
-    wrap(
+    await wrap(
       <ConnectionsPanel
         query={query({ error: new Error("connection refused") })}
       />

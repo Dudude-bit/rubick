@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -11,24 +9,16 @@ vi.mock("@/lib/commands", () => ({
 
 const connections = vi.hoisted(() => ({ answer: null as unknown }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
 import { MyServices } from "./MyServices";
 
 function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<MyServices />, {
+    at: "/c/prod",
+    route: "/c/$cluster",
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <TooltipProvider>
-          <MyServices />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
 }
 
 beforeEach(() => {
@@ -52,17 +42,17 @@ describe("My services", () => {
    * about what looks important — makes the list something to double-check
    * rather than something to trust.
    */
-  it("shows nothing that was not pinned by hand", () => {
+  it("shows nothing that was not pinned by hand", async () => {
     usePinnedServicesStore.setState({ pins: [pin("payments")] });
-    mount();
+    await mount();
 
     expect(screen.getAllByTestId("service-card")).toHaveLength(1);
     expect(screen.getByText("payments")).toBeInTheDocument();
   });
 
-  it("shows a cluster none of whose services are pinned how to start", () => {
+  it("shows a cluster none of whose services are pinned how to start", async () => {
     usePinnedServicesStore.setState({ pins: [pin("payments", "staging")] });
-    mount();
+    await mount();
 
     expect(screen.queryByTestId("service-card")).not.toBeInTheDocument();
     expect(
@@ -70,24 +60,24 @@ describe("My services", () => {
     ).toBeInTheDocument();
   });
 
-  it("leaves the other cluster's pins on the other cluster", () => {
+  it("leaves the other cluster's pins on the other cluster", async () => {
     usePinnedServicesStore.setState({
       pins: [pin("payments", "prod"), pin("carts", "staging")],
     });
-    mount();
+    await mount();
 
     expect(screen.getByText("payments")).toBeInTheDocument();
     expect(screen.queryByText("carts")).not.toBeInTheDocument();
   });
 
-  it("draws them in the order they were pinned", () => {
+  it("draws them in the order they were pinned", async () => {
     usePinnedServicesStore.setState({
       pins: [
         { ...pin("second"), pinnedAt: 2 },
         { ...pin("first"), pinnedAt: 1 },
       ],
     });
-    mount();
+    await mount();
 
     const names = screen
       .getAllByTestId("service-card")

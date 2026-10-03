@@ -1,12 +1,9 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/resources/detail-blocks";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
-import {
-  isRoutableKind,
-  ResourceRef,
-} from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import {
   composedDetail,
@@ -25,7 +22,7 @@ import {
   type Ratio,
 } from "@/components/overview/health-share";
 import { eventReasonMark } from "@/lib/event-reason";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { cn, formatAge } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
@@ -93,7 +90,11 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
   const navigate = useNavigate();
   const isCritical = problem.severity === "critical";
   const tone = isCritical ? "text-err" : "text-warn";
-  const routable = isRoutableKind(problem.kind, problem.namespace);
+  const link = objectLink({
+    kind: problem.kind,
+    name: problem.name,
+    namespace: problem.namespace,
+  });
   const restarts = problem.restarts ?? 0;
   const { Icon: ProblemIcon } = eventReasonMark(problem.reason);
 
@@ -167,7 +168,7 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
     </>
   );
 
-  if (!routable) return <div className={ROW}>{body}</div>;
+  if (link === null) return <div className={ROW}>{body}</div>;
   // The row opens the object's page; the name inside it opens the peek.
   return (
     <div
@@ -175,15 +176,11 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
       tabIndex={0}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("a")) return;
-        navigate(
-          getResourceDetailUrl(problem.kind, problem.name, problem.namespace)
-        );
+        navigate(link);
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;
-        navigate(
-          getResourceDetailUrl(problem.kind, problem.name, problem.namespace)
-        );
+        navigate(link);
       }}
       className={cn(ROW, "cursor-pointer hover:bg-hover")}
     >
@@ -430,7 +427,7 @@ function NodeRow({ node }: { node: NodeSummary }) {
   const t = useT();
   const navigate = useNavigate();
   const open = () =>
-    navigate(getResourceDetailUrl(ResourceType.Node, node.name));
+    navigate(objectLink({ kind: ResourceType.Node, name: node.name })!);
   return (
     <div
       role="link"

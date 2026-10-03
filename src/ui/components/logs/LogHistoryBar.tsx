@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 
 import {
   USAGE_RANGES,
   type CapabilityState,
   type UsageRange,
 } from "@/integrations";
+import { pageLink } from "@/lib/links";
 import { formatCount } from "./types";
 import type { HistoryState } from "./hooks/useLogHistory";
 import { useT } from "@/i18n/useT";
@@ -82,7 +83,10 @@ export function LogHistoryBar({
       <Bar tone="fnt" testId="log-history-absent">
         <p>
           {t("empty", "historyApiExhausted", { target: stranded })}{" "}
-          <Link to="/integrations" className="text-info hover:underline">
+          <Link
+            {...pageLink("integrations")}
+            className="text-info hover:underline"
+          >
             {t("action", "connectOne")}
           </Link>
           .

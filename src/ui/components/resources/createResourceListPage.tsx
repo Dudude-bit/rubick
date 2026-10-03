@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useMemo } from "react";
-import { useNavigate, type NavigateFunction } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
@@ -21,7 +21,7 @@ import {
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { deliveryScopeOf } from "@/lib/delivery";
@@ -33,6 +33,8 @@ import { useT, type T as Translator } from "@/i18n/useT";
 
 /** A resource that can show up in a list page. */
 type ListableResource = { name: string; namespace?: string | null };
+
+type Navigate = ReturnType<typeof useNavigate>;
 
 export interface ResourceListPageConfig<T extends ListableResource> {
   /** Kubernetes resource type — used for query keys + detail URLs. */
@@ -51,9 +53,9 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    */
   deleter?: (item: T) => Promise<unknown>;
   /** Build column definitions. Receives navigate so columns can link. */
-  columns: (deps: { navigate: NavigateFunction }) => ColumnDef<T>[];
+  columns: (deps: { navigate: Navigate }) => ColumnDef<T>[];
   /** Extra quick actions, inserted between the default View and Delete. */
-  extraActions?: (deps: { navigate: NavigateFunction }) => QuickAction<T>[];
+  extraActions?: (deps: { navigate: Navigate }) => QuickAction<T>[];
   /**
    * Cluster-scoped pages set `scope: "cluster"` so the fetcher receives
    * `namespace: null` regardless of the user's current namespace.
@@ -84,6 +86,13 @@ export interface ResourceListPageConfig<T extends ListableResource> {
 export function createResourceListPage<T extends ListableResource>(
   config: ResourceListPageConfig<T>
 ) {
+  const linkOf = (row: ListableResource) =>
+    objectLink({
+      kind: config.resourceType,
+      name: row.name,
+      namespace: row.namespace,
+    })!;
+
   const ListPage = function ResourceListPage() {
     const t = useT();
     const scope = useNamespaceScope();
@@ -103,14 +112,7 @@ export function createResourceListPage<T extends ListableResource>(
             {
               icon: Eye,
               label: t("action", "viewDetails"),
-              onClick: (item) =>
-                navigate(
-                  getResourceDetailUrl(
-                    config.resourceType,
-                    item.name,
-                    item.namespace
-                  )
-                ),
+              onClick: (item) => navigate(linkOf(item)),
             },
             ...(config.extraActions?.({ navigate }) ?? []),
           ];
@@ -165,9 +167,7 @@ export function createResourceListPage<T extends ListableResource>(
         quickActions={quickActions}
         emptyStateLabel={config.emptyStateLabel ?? config.title}
         narrowingHelps={narrowingHelps(config.resourceType)}
-        getRowHref={(row) =>
-          getResourceDetailUrl(config.resourceType, row.name, row.namespace)
-        }
+        getRowHref={(row) => hrefOf(linkOf(row))}
         deleteConfig={
           deleter
             ? {

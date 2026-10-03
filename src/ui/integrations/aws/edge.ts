@@ -12,8 +12,8 @@
  */
 
 import { commands } from "@/lib/commands";
+import { objectLink } from "@/lib/links";
 
-import { crdObjectPath } from "../kit";
 import type { EdgeConfig } from "../registry";
 import {
   TARGET_GROUP_BINDING_CRD,
@@ -44,11 +44,12 @@ export async function serviceEdge({
         source: {
           kind: "TargetGroupBinding",
           name: binding.name,
-          to: crdObjectPath(
-            TARGET_GROUP_BINDING_CRD,
-            binding.namespace,
-            binding.name
-          ),
+          to: objectLink({
+            kind: "TargetGroupBinding",
+            name: binding.name,
+            namespace: binding.namespace,
+            crd: TARGET_GROUP_BINDING_CRD,
+          })!,
         },
         summary: bindingSummary(binding),
         // Verbatim, and only where the controller wrote a failing `Ready`

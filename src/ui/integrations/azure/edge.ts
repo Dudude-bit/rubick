@@ -21,7 +21,7 @@
 import type { Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
 
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import type { EdgeConfig } from "../registry";
 import { claimsIngress } from "./ingress-tls";
@@ -119,11 +119,11 @@ export async function serviceEdge({
         source: {
           kind: "Ingress",
           name: ingress.name,
-          to: getResourceDetailUrl(
-            ResourceType.Ingress,
-            ingress.name,
-            ingress.namespace
-          ),
+          to: objectLink({
+            kind: ResourceType.Ingress,
+            name: ingress.name,
+            namespace: ingress.namespace,
+          })!,
         },
         // An AGIC Ingress with no annotations is a real and common object: it
         // gets the gateway's defaults, and saying so is better than a blank.

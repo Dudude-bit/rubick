@@ -16,8 +16,8 @@
  */
 
 import { commands } from "@/lib/commands";
+import { crdInstancesLink, objectLink } from "@/lib/links";
 
-import { crdObjectPath, crdObjectsPath } from "../kit";
 import type { VendorFact } from "../registry";
 import {
   BACKEND_CONFIG_CRD,
@@ -102,12 +102,13 @@ export async function facts(): Promise<VendorFact[]> {
       say: { key: problems.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         problems.length === 1
-          ? crdObjectPath(
-              MANAGED_CERTIFICATE_CRD,
-              problems[0].namespace,
-              problems[0].name
-            )
-          : crdObjectsPath(MANAGED_CERTIFICATE_CRD),
+          ? objectLink({
+              kind: "ManagedCertificate",
+              name: problems[0].name,
+              namespace: problems[0].namespace,
+              crd: MANAGED_CERTIFICATE_CRD,
+            })!
+          : crdInstancesLink(MANAGED_CERTIFICATE_CRD),
     });
   }
 

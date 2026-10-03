@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 
 import { claimedByLayer, claimedByTarget } from "@/hooks/useCopyLink";
 import {
@@ -59,7 +59,7 @@ export function useShortcuts(): void {
         );
         if (chord?.path) {
           event.preventDefault();
-          navigate(chord.path);
+          void navigate(chord.path);
         }
         return;
       }

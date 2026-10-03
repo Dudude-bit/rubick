@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import type { T } from "@/i18n/useT";
 import type { RowTone } from "./words";
+import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { crdObjectPath } from "../../kit";
-import { integrationSettingsPath } from "../../paths";
 import { Finding, FilterBox, VendorReadFailure } from "../../page-kit";
 import { useShareSection } from "@/components/share/screen-share";
 import { ladderSection, ladderUnread } from "./share";
@@ -47,7 +47,8 @@ export default function Monitors() {
   const t = useT();
   const picture = usePicture();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
   const [filter, setFilter] = useState("");
   const [only, setOnly] = useState<Group | null>(null);
 
@@ -74,7 +75,7 @@ export default function Monitors() {
     );
   }, [rows, filter, only]);
 
-  const asked = params.get("monitor");
+  const asked = search.monitor;
   const selected =
     shown.find((row) => keyOf(row) === asked) ?? shown[0] ?? null;
   const selectedKey = selected ? keyOf(selected) : null;
@@ -87,20 +88,19 @@ export default function Monitors() {
       .getElementById(`monitor-${selectedKey}`)
       ?.scrollIntoView({ block: "nearest" });
   }, [selectedKey]);
-  const select = (row: MonitorRow) => {
-    const updated = new URLSearchParams(params);
-    updated.set("monitor", keyOf(row));
-    setParams(updated, { replace: true });
-  };
+  const select = (row: MonitorRow) =>
+    setSearch({ monitor: keyOf(row) }, { replace: true });
   const open = (row: MonitorRow) =>
     navigate(
-      crdObjectPath(
-        row.monitor.kind === "ServiceMonitor"
-          ? SERVICE_MONITORS_CRD
-          : POD_MONITORS_CRD,
-        row.monitor.namespace,
-        row.monitor.name
-      )
+      objectLink({
+        kind: row.monitor.kind,
+        name: row.monitor.name,
+        namespace: row.monitor.namespace,
+        crd:
+          row.monitor.kind === "ServiceMonitor"
+            ? SERVICE_MONITORS_CRD
+            : POD_MONITORS_CRD,
+      })!
     );
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!selected) return;
@@ -201,7 +201,7 @@ function ScrapeTruth({ targets }: { targets: TargetsRead }) {
       <Note tone="info">
         {t("monitors", "notConnected")}{" "}
         <Link
-          to={integrationSettingsPath("prometheus")}
+          {...pageLink("integrations", { vendor: "prometheus" })}
           className="text-info hover:underline"
         >
           {t("monitors", "connectPrometheus")}

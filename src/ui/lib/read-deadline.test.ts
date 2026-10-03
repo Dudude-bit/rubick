@@ -12,7 +12,10 @@ describe("the numbers both halves of a read apply", () => {
   const shared = JSON.parse(
     // Read rather than imported: these are the bytes `include_str!` pulls
     // into the Rust test, so the two tests look at one file.
-    readFileSync(resolve(process.cwd(), "src/contracts/read-deadlines.json"), "utf8")
+    readFileSync(
+      resolve(process.cwd(), "src/contracts/read-deadlines.json"),
+      "utf8"
+    )
   ) as { listDeadlineSeconds: number; slowReadSeconds: number };
 
   it("stops waiting after the number the shared file states", () => {

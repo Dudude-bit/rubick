@@ -1,13 +1,12 @@
-import type { ReactElement } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { type ReactElement } from "react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useUsageHistoryStore } from "@/stores/usageHistoryStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import type {
   ConnectionEdge,
   ObjectRef,
@@ -43,18 +42,11 @@ vi.mock("@/lib/commands", () => ({
 
 const { UsageBlock } = await import("@/components/resources/usage-block");
 
-function wrap(node: ReactElement) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+const wrap = (node: ReactElement) =>
+  renderWithRouter(node, {
+    at: "/c/prod/pods/k8s-gui-test/busy-demo",
+    route: "/c/$cluster/$",
   });
-  const ui = (child: ReactElement) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter>{child}</MemoryRouter>
-    </QueryClientProvider>
-  );
-  const view = render(ui(node));
-  return { ...view, rerender: (next: ReactElement) => view.rerender(ui(next)) };
-}
 
 const CONNECTED: PrometheusConnection = {
   url: "http://prometheus.monitoring:9090",
@@ -142,8 +134,8 @@ beforeEach(() => {
 describe("UsageBlock when metrics-server is missing", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 
-  it("degrades to saying so rather than to an empty plot", () => {
-    wrap(
+  it("degrades to saying so rather than to an empty plot", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-1"
@@ -159,8 +151,8 @@ describe("UsageBlock when metrics-server is missing", () => {
     expect(document.querySelector("svg")).toBeNull();
   });
 
-  it("offers no range picker when there is nothing to range over", () => {
-    wrap(
+  it("offers no range picker when there is nothing to range over", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-1"
@@ -181,8 +173,8 @@ describe("UsageBlock when metrics-server is missing", () => {
 describe("UsageBlock range picker", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 
-  it("draws the longer ranges as unavailable rather than pretending they work", () => {
-    wrap(
+  it("draws the longer ranges as unavailable rather than pretending they work", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-2"
@@ -199,8 +191,8 @@ describe("UsageBlock range picker", () => {
     }
   });
 
-  it("names what the ranges are waiting on", () => {
-    wrap(
+  it("names what the ranges are waiting on", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-2b"
@@ -236,14 +228,14 @@ describe("UsageBlock storage summary", () => {
       />
     );
 
-  it("gives the declared size of what the workload mounts", () => {
-    renderWithStorage();
+  it("gives the declared size of what the workload mounts", async () => {
+    await renderWithStorage();
     expect(screen.getByText(/pvc-demo/)).toBeInTheDocument();
     expect(screen.getByText("1Gi")).toBeInTheDocument();
   });
 
-  it("says the number is size and not fullness", () => {
-    renderWithStorage();
+  it("says the number is size and not fullness", async () => {
+    await renderWithStorage();
     expect(
       screen.getByText(/Declared size, not how full/i)
     ).toBeInTheDocument();
@@ -252,8 +244,8 @@ describe("UsageBlock storage summary", () => {
     ).toBeInTheDocument();
   });
 
-  it("draws no used-vs-total bar for a volume, because nothing measured one", () => {
-    const { container } = renderWithStorage();
+  it("draws no used-vs-total bar for a volume, because nothing measured one", async () => {
+    const { container } = await renderWithStorage();
     const storage = screen.getByText(
       /Declared size, not how full/i
     ).parentElement!;
@@ -266,8 +258,8 @@ describe("UsageBlock storage summary", () => {
 describe("UsageBlock window label", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 
-  it("says the history is only what this page has watched", () => {
-    wrap(
+  it("says the history is only what this page has watched", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-4"
@@ -289,7 +281,7 @@ describe("UsageBlock with no limits at all", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 
   /** Two polls, so the bands are past "watching from now" and drawing. */
-  const renderPolled = (props: {
+  const renderPolled = async (props: {
     uid: string;
     cpuLimit: number | null;
     memoryLimit: number | null;
@@ -300,7 +292,7 @@ describe("UsageBlock with no limits at all", () => {
       memory: 4096,
       status: { status: "available" as const, message: null },
     };
-    const view = wrap(
+    const view = await wrap(
       <UsageBlock {...base} {...props} sampledAt={1_700_000_000_000} />
     );
     view.rerender(
@@ -309,15 +301,15 @@ describe("UsageBlock with no limits at all", () => {
     return view;
   };
 
-  it("says there is no ceiling once, not once per measure", () => {
-    renderPolled({ uid: "uid-5", cpuLimit: null, memoryLimit: null });
+  it("says there is no ceiling once, not once per measure", async () => {
+    await renderPolled({ uid: "uid-5", cpuLimit: null, memoryLimit: null });
     expect(screen.getAllByText(/No limit set/i)).toHaveLength(1);
   });
 
-  it("shows neither a denominator nor a percentage for either measure", () => {
+  it("shows neither a denominator nor a percentage for either measure", async () => {
     // The live bug: a caption promising "against this pod's limits" over a
     // full-width empty track, on a pod that declares none.
-    const { container } = renderPolled({
+    const { container } = await renderPolled({
       uid: "uid-6",
       cpuLimit: null,
       memoryLimit: null,
@@ -331,8 +323,8 @@ describe("UsageBlock with no limits at all", () => {
     expect(shares).toHaveLength(0);
   });
 
-  it("still attaches the sentence to the one measure that lacks a ceiling", () => {
-    const { container } = renderPolled({
+  it("still attaches the sentence to the one measure that lacks a ceiling", async () => {
+    const { container } = await renderPolled({
       uid: "uid-7",
       cpuLimit: null,
       memoryLimit: 128 * 1024 * 1024,
@@ -360,17 +352,17 @@ describe("UsageBlock degraded, on a workload that declares no limits", () => {
       />
     );
 
-  it("draws no track, because there is neither a reading nor a denominator", () => {
+  it("draws no track, because there is neither a reading nor a denominator", async () => {
     // The screenshotted bug, in the one path that still fell back to bars:
     // a full-width empty track under a caption promising a comparison
     // against limits the workload does not declare.
-    const { container } = renderDegraded();
+    const { container } = await renderDegraded();
     expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
     expect(container.textContent).not.toMatch(/\d\s*%/);
   });
 
-  it("does not claim to be measuring against limits that do not exist", () => {
-    renderDegraded();
+  it("does not claim to be measuring against limits that do not exist", async () => {
+    await renderDegraded();
     expect(
       screen.queryByText(/against declared limits/i)
     ).not.toBeInTheDocument();
@@ -381,8 +373,8 @@ describe("UsageBlock degraded, on a workload that declares no limits", () => {
 describe("UsageBlock in its first seconds", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 
-  it("says the window starts now, once for the pair rather than once per band", () => {
-    wrap(
+  it("says the window starts now, once for the pair rather than once per band", async () => {
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-9"
@@ -427,7 +419,7 @@ describe("UsageBlock and a history supplier", () => {
    * line, once, under a chart that is whole without it.
    */
   it("not configured: the core chart, dimmed ranges, and one quiet offer", async () => {
-    wrap(<UsageBlock {...live} uid="uid-10" />);
+    await wrap(<UsageBlock {...live} uid="uid-10" />);
 
     expect(
       await screen.findByText(/Longer than this needs a Prometheus/i)
@@ -443,7 +435,7 @@ describe("UsageBlock and a history supplier", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "connect one" })).toHaveAttribute(
       "href",
-      "/integrations"
+      "/c/prod/integrations"
     );
   });
 
@@ -455,7 +447,7 @@ describe("UsageBlock and a history supplier", () => {
   it("working: the ranges are live and the label names the endpoint", async () => {
     getPrometheusConnection.mockResolvedValue(CONNECTED);
 
-    wrap(<UsageBlock {...live} uid="uid-11" />);
+    await wrap(<UsageBlock {...live} uid="uid-11" />);
 
     const hour = await screen.findByRole("button", { name: "1h" });
     await waitFor(() => expect(hour).toBeEnabled());
@@ -485,7 +477,7 @@ describe("UsageBlock and a history supplier", () => {
     getPrometheusConnection.mockResolvedValue(CONNECTED);
     useLocaleStore.setState({ choice: "ru" });
     try {
-      wrap(<UsageBlock {...live} uid="uid-11-ru" />);
+      await wrap(<UsageBlock {...live} uid="uid-11-ru" />);
       const hour = await screen.findByRole("button", { name: "1h" });
       await waitFor(() => expect(hour).toBeEnabled());
       await userEvent.click(hour);
@@ -516,7 +508,7 @@ describe("UsageBlock and a history supplier", () => {
       reason: "no route to host",
     });
 
-    wrap(<UsageBlock {...live} uid="uid-12" />);
+    await wrap(<UsageBlock {...live} uid="uid-12" />);
 
     const said = await screen.findByText(/did not answer/i);
     expect(said.textContent).toMatch(/Prometheus did not answer/);
@@ -546,7 +538,7 @@ describe("UsageBlock and a history supplier", () => {
     getPrometheusConnection.mockResolvedValue(CONNECTED);
     prometheusQueryRange.mockReturnValue(new Promise(() => {}));
 
-    wrap(<UsageBlock {...live} uid="uid-13" />);
+    await wrap(<UsageBlock {...live} uid="uid-13" />);
 
     const hour = await screen.findByRole("button", { name: "1h" });
     await waitFor(() => expect(hour).toBeEnabled());
@@ -590,7 +582,7 @@ describe("UsageBlock storage fullness", () => {
       .mockResolvedValueOnce(answers[0])
       .mockResolvedValueOnce(answers[1]);
 
-    wrap(
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-14"
@@ -619,7 +611,7 @@ describe("UsageBlock storage fullness", () => {
     getPrometheusConnection.mockResolvedValue(CONNECTED);
     prometheusQuery.mockResolvedValue([]);
 
-    wrap(
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-15"
@@ -657,7 +649,7 @@ describe("UsageBlock without metrics-server but with a history supplier", () => 
     );
     prometheusQuery.mockResolvedValue([]);
 
-    wrap(
+    await wrap(
       <UsageBlock
         kind="Pod"
         uid="uid-nms"
@@ -709,7 +701,7 @@ describe("UsageBlock for a node summed from its pods", () => {
 
   async function openHour(uid: string) {
     getPrometheusConnection.mockResolvedValue(CONNECTED);
-    wrap(<UsageBlock {...node} uid={uid} />);
+    await wrap(<UsageBlock {...node} uid={uid} />);
     const hour = await screen.findByRole("button", { name: "1h" });
     await waitFor(() => expect(hour).toBeEnabled());
     await userEvent.click(hour);

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { ResourceType, toKind, toPlural } from "@/lib/resource-registry";
 
 export interface PeekTarget {
@@ -18,8 +18,6 @@ export interface PeekTarget {
    */
   crd?: string;
 }
-
-const PARAM = "peek";
 
 /**
  * A CRD is named `<plural>.<group>` and always has a dot; no plural in the
@@ -63,10 +61,10 @@ export function parsePeekValue(raw: string): PeekTarget | null {
  */
 export function peekTargetOfHref(href: string): PeekTarget | null {
   const path = href.split("?")[0];
-  if (!path.startsWith("/")) return null;
-  const parts = path.slice(1).split("/");
+  if (!path.startsWith("/c/")) return null;
+  const parts = path.split("/").filter(Boolean).slice(2);
   if (parts.length < 2 || parts.length > 3 || isCrdName(parts[0])) return null;
-  return parsePeekValue(parts.join("/"));
+  return parsePeekValue(parts.map(decodeURIComponent).join("/"));
 }
 
 /**
@@ -86,8 +84,8 @@ export function peekTargetOfHref(href: string): PeekTarget | null {
  * after a round trip.
  */
 export function usePeek() {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get(PARAM);
+  const raw = useAppSearch().peek ?? null;
+  const setSearch = useSetSearch();
 
   const target = useMemo<PeekTarget | null>(
     () => (raw ? parsePeekValue(raw) : null),
@@ -102,35 +100,18 @@ export function usePeek() {
         value = [next.crd, next.kind, ...where].join("/");
       } else {
         const kind = toKind(next.kind);
-        // A core kind the registry cannot spell has no address to write down,
-        // and no CRD was named to address it by; let the caller's own
-        // navigation stand rather than silently rewriting the URL.
         if (!kind) return;
         value = [toPlural(kind), ...where].join("/");
       }
       if (value === raw) return;
-      setParams(
-        (current) => {
-          const updated = new URLSearchParams(current);
-          updated.set(PARAM, value);
-          return updated;
-        },
-        { replace: false }
-      );
+      setSearch({ peek: value }, { replace: false });
     },
-    [setParams, raw]
+    [setSearch, raw]
   );
 
   const close = useCallback(() => {
-    setParams(
-      (current) => {
-        const updated = new URLSearchParams(current);
-        updated.delete(PARAM);
-        return updated;
-      },
-      { replace: false }
-    );
-  }, [setParams]);
+    setSearch({ peek: undefined }, { replace: false });
+  }, [setSearch]);
 
   return { target, open, close };
 }

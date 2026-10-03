@@ -1,12 +1,11 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
 import { DataTable } from "@/components/ui/data-table";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ColumnDef } from "@/components/ui/table-features";
 import type { NamespaceInfo } from "@/generated/types";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useClusterStore } from "@/stores/clusterStore";
+import { renderWithRouter } from "@/test/render";
 import { NamespaceList } from "./NamespaceList";
 import { ResourceList } from "./ResourceList";
 
@@ -35,13 +34,11 @@ function counts(podCount: number) {
   });
 }
 
-const tree = () => (
-  <MemoryRouter>
-    <TooltipProvider>
-      <NamespaceList />
-    </TooltipProvider>
-  </MemoryRouter>
-);
+const mount = () =>
+  renderWithRouter(<NamespaceList />, {
+    at: "/c/prod/namespaces",
+    route: "/c/$cluster/namespaces",
+  });
 
 function renderedColumns() {
   const columns = vi.mocked(ResourceList).mock.calls.at(-1)![0].columns;
@@ -57,15 +54,15 @@ beforeEach(() => {
 });
 
 /** Fresh renderer functions remount the cell and replace the link beneath the pointer. */
-it("keeps cell and header component identities while pod counts change", () => {
-  const { rerender } = render(tree());
+it("keeps cell and header component identities while pod counts change", async () => {
+  const { rerender } = await mount();
   const before = renderedColumns();
   const renderers = before.map(({ cell, header }) => ({ cell, header }));
   const link = screen.getByRole("link", { name: "Namespace prod" });
   const count = screen.getByText("2");
 
   counts(7);
-  rerender(tree());
+  await rerender(<NamespaceList />);
 
   const after = renderedColumns();
   after.forEach((column, index) => {
@@ -78,8 +75,8 @@ it("keeps cell and header component identities while pod counts change", () => {
 });
 
 /** Moving the current-scope value out of the closure must still update its marker. */
-it("updates the scope marker without remounting the name cell", () => {
-  render(tree());
+it("updates the scope marker without remounting the name cell", async () => {
+  await mount();
   const link = screen.getByRole("link", { name: "Namespace prod" });
   const nameCell = link.parentElement;
   expect(nameCell).toHaveTextContent("current scope");

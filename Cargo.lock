@@ -2844,7 +2844,6 @@ dependencies = [
  "gcp_auth",
  "http",
  "json-patch 4.2.0",
- "k8s-gui-common",
  "k8s-openapi",
  "kube",
  "libc",
@@ -2880,19 +2879,11 @@ dependencies = [
  "toml 1.1.3+spec-1.1.0",
  "tower",
  "tracing",
+ "tracing-subscriber",
  "url",
  "urlencoding",
  "uuid",
  "x509-parser",
-]
-
-[[package]]
-name = "k8s-gui-common"
-version = "4.21.2"
-dependencies = [
- "dirs",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

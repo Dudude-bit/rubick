@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 import { toast } from "@/components/ui/use-toast";
+import { useLocationHref } from "@/hooks/useLocationHref";
 import { buildDeepLink } from "@/lib/deep-link";
-import { useClusterStore } from "@/stores/clusterStore";
+import { clusterOf } from "@/lib/links";
 import { useT } from "@/i18n/useT";
 
 /** True inside a terminal or a text field, where the same keys mean something else. */
@@ -58,16 +58,15 @@ export function isCopyLinkKey(event: KeyboardEvent): boolean {
  * and a link would be a surprise.
  */
 export function useCopyLink(): void {
-  const location = useLocation();
+  const href = useLocationHref();
   const t = useT();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!isCopyLinkKey(event) || claimedByTarget(event.target)) return;
-      const context = useClusterStore.getState().currentContext;
-      if (!context) return;
+      if (clusterOf(href) === null) return;
       event.preventDefault();
-      const link = buildDeepLink(context, location.pathname + location.search);
+      const link = buildDeepLink(href);
       void writeText(link).then(() =>
         toast({
           title: t("cluster", "linkCopied"),
@@ -77,5 +76,5 @@ export function useCopyLink(): void {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [location.pathname, location.search, t]);
+  }, [href, t]);
 }

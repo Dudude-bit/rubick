@@ -1,16 +1,7 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import {
-  getCustomResourceUrl,
-  getResourceDetailUrl,
-} from "@/lib/navigation-utils";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-  type ResourceKind,
-} from "@/lib/resource-registry";
+import { hrefOf, objectLink } from "@/lib/links";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
@@ -54,79 +45,6 @@ export interface ResourceRefProps {
 }
 
 /**
- * Kinds `App.tsx` serves a detail route for; every one of them maps to
- * `/<plural>/...`, which is what `getResourceDetailUrl` produces.
- *
- * The registry is deliberately not the authority: it also lists Event, which
- * has a list route and no detail route, and a CustomResourceDefinition
- * *instance* lives under `/customresourcedefinitions/:crdName/instances/...`,
- * which cannot be built from kind and name alone. ReplicaSet is the mirror —
- * a detail route and no list page, reached from the event that scaled it, a
- * pod's owner chain or a Deployment's rollout.
- */
-const ROUTABLE = new Set<ResourceKind>([
-  "Pod",
-  "Deployment",
-  "ReplicaSet",
-  "StatefulSet",
-  "DaemonSet",
-  "Job",
-  "CronJob",
-  "ConfigMap",
-  "Secret",
-  "Service",
-  "Ingress",
-  "NetworkPolicy",
-  "Gateway",
-  "GatewayClass",
-  "Namespace",
-  "HTTPRoute",
-  "GRPCRoute",
-  "TLSRoute",
-  "TCPRoute",
-  "UDPRoute",
-  "Endpoints",
-  "PersistentVolumeClaim",
-  "PersistentVolume",
-  "StorageClass",
-  "Node",
-  "CustomResourceDefinition",
-]);
-
-/**
- * Where this object lives in the app, or `null` if it is not addressable.
- *
- * The single statement of the rule, so a caller deciding *whether* to draw a
- * reference and the component that draws one cannot disagree. A surface that
- * wraps a reference in its own layout has to ask here before it builds
- * anything: an element is truthy however it renders, so a link that returned
- * nothing would silently delete the title it was given.
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function objectUrl(
-  kind: string,
-  name: string,
-  namespace?: string | null,
-  crd?: string
-): string | null {
-  if (crd) return getCustomResourceUrl(crd, name, namespace);
-  if (!isRoutableKind(kind, namespace)) return null;
-  return getResourceDetailUrl(kind, name, namespace);
-}
-
-// Callers that decide whether to offer a reference at all need this rule
-// without rendering one; it lives beside the component that enforces it so
-// the two cannot drift.
-// eslint-disable-next-line react-refresh/only-export-components
-export function isRoutableKind(kind: string, namespace?: string | null) {
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  if (!resolved || !ROUTABLE.has(resolved)) return false;
-  // A namespaced kind with no namespace cannot build a valid URL, and a
-  // half-built one is a dead link the user only discovers by clicking.
-  return getResourceDefinition(resolved).scope !== "namespaced" || !!namespace;
-}
-
-/**
  * Where an object is, and what happens when it is clicked — with nothing said
  * about how it is drawn.
  *
@@ -162,8 +80,8 @@ export function ObjectLink({
   const gesture = useLinkGesture();
   const { open } = usePeek();
 
-  const to = objectUrl(kind, name, namespace, crd);
-  if (to === null) return null;
+  const link = objectLink({ kind, name, namespace, crd });
+  if (link === null) return null;
 
   // The gesture rules live in `useLinkGesture` for every surface; a local
   // copy is how ctrl-click comes to mean two different things.
@@ -174,19 +92,19 @@ export function ObjectLink({
     if (readLinkIntent(event) === "none") return;
     onClick?.(event);
     if (event.defaultPrevented) return;
-    gesture(event, to, () => open({ kind, name, namespace, crd }));
+    gesture(event, hrefOf(link), () => open({ kind, name, namespace, crd }));
   };
 
   return (
     <Link
-      to={to}
+      {...link}
       onClick={handle}
       onAuxClick={handle}
       onContextMenu={(event) => {
         event.preventDefault();
         useObjectMenuStore.getState().open({
           name,
-          to,
+          to: hrefOf(link),
           x: event.clientX,
           y: event.clientY,
         });
@@ -233,7 +151,7 @@ export function ResourceRef({
 
   // Asked before anything is built: an element is truthy whatever it renders,
   // so `ObjectLink` returning null cannot choose the fallback.
-  if (objectUrl(kind, name, namespace, crd) === null) {
+  if (objectLink({ kind, name, namespace, crd }) === null) {
     // Named for the same reason the link is: the name is drawn as two boxes
     // so the tail can keep its hue and its place, and the accessible-name
     // algorithm joins those with a space — "k3d-agent -0" for a pod called

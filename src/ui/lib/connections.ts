@@ -11,6 +11,7 @@
  * that into a sentence.
  */
 
+import type { AppLink } from "@/lib/links";
 import type { T } from "@/i18n/useT";
 import { covers, expiryOf } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
@@ -948,7 +949,7 @@ export function chainSilence(conns: ResourceConnections, t: T): string | null {
 export interface OutsideEnd {
   /** The controller's object, and where it is in this app. */
   name: string;
-  to: string;
+  to: AppLink;
   /** What it applied, and a page to read it on where the remote resolves. */
   revision: string | null;
   link: GitLink | null;

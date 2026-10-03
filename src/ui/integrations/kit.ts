@@ -19,36 +19,7 @@ import {
   severityMark,
   type DetailTabMark,
 } from "@/components/resources/detail-tab";
-import {
-  getCrdInstancesUrl,
-  getCustomResourceUrl,
-} from "@/lib/navigation-utils";
 import type { CrdView } from "./registry";
-
-/**
- * The route to the objects of one CRD, and to one of them.
- *
- * Built here rather than per vendor because it has already drifted once: a
- * literal `/crds/…` in a vendor folder named a segment no route has, and the
- * link went nowhere with nothing to say so.
- */
-export function crdObjectsPath(crdName: string): string {
-  return getCrdInstancesUrl(crdName);
-}
-
-/**
- * Kept as the vendor tree's spelling of it — the argument order reads
- * `where, then which` at every call site here — over the core function that
- * now owns the route, because `ResourceRef` needs the same path and cannot
- * import from this tree.
- */
-export function crdObjectPath(
-  crdName: string,
-  namespace: string | null,
-  name: string
-): string {
-  return getCustomResourceUrl(crdName, name, namespace);
-}
 
 /**
  * The one line a vendor row shows about itself, and how to colour it.

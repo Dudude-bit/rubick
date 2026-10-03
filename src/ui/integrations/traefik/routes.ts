@@ -14,8 +14,7 @@
  */
 
 import { commands } from "@/lib/commands";
-import { crdObjectPath } from "../kit";
-import { integrationPagePath } from "../paths";
+import { objectLink, vendorLink } from "@/lib/links";
 import type { ProxyBehind, ServiceRoute } from "../registry";
 import { fetchController, fetchRouteSources, servedGroupName } from "./data";
 import {
@@ -142,7 +141,12 @@ export async function serviceRoutes(input: {
       h2c,
       source,
       to: crd
-        ? crdObjectPath(crd, route.source.namespace, route.source.name)
+        ? objectLink({
+            kind: route.source.kind,
+            name: route.source.name,
+            namespace: route.source.namespace,
+            crd,
+          })!
         : undefined,
     });
   }
@@ -179,7 +183,7 @@ export async function proxyBehind(input: {
   );
   return {
     vendor: "Traefik",
-    to: integrationPagePath("traefik"),
+    to: vendorLink("traefik"),
     hosts: hosts.size,
   };
 }

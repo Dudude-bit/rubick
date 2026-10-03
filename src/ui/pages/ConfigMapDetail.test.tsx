@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -22,9 +20,9 @@ vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: (_, name) => command(String(name)) }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useResourceDetail } from "@/hooks";
 import { queryKeys } from "@/lib/query-keys";
+import { renderWithRouter } from "@/test/render";
 import { ConfigMapDetail } from "./ConfigMapDetail";
 
 /**
@@ -61,18 +59,10 @@ describe("a ConfigMap's values on its page", () => {
       withheld: {},
       binary: {},
     });
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+    const { client } = await renderWithRouter(<ConfigMapDetail />, {
+      at: "/c/prod/configmaps/prod/app",
+      route: "/c/$cluster/configmaps/$namespace/$name",
     });
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <TooltipProvider>
-            <ConfigMapDetail />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
 
     await waitFor(() =>
       expect(

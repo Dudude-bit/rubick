@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
-import { ResourceRef, isRoutableKind } from "./ResourceRef";
+import { useLocation } from "@tanstack/react-router";
+import type { AnyRouter } from "@tanstack/react-router";
+import { ResourceRef } from "./ResourceRef";
 import { ResourceName, RESOURCE_NAME_SIZE } from "./ResourceName";
 import {
   useDisplaySettingsStore,
@@ -12,22 +12,42 @@ import {
 } from "@/stores/displaySettingsStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
+import { objectLink } from "@/lib/links";
+import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
+import { renderWithRouter } from "@/test/render";
 
 /** Where the click landed: the peek is a query parameter, not component state. */
 function LocationProbe() {
-  const { pathname, search } = useLocation();
-  return <span data-testid="location">{`${pathname}${search}`}</span>;
+  const { pathname, searchStr } = useLocation();
+  return <span data-testid="location">{`${pathname}${searchStr}`}</span>;
 }
 
-const wrap = (ui: ReactNode) =>
-  render(
-    <MemoryRouter initialEntries={["/events"]}>
+const EVENTS = "/c/prod/events";
+
+let router: AnyRouter;
+
+const wrap = async (ui: ReactNode) => {
+  const rendered = await renderWithRouter(
+    <>
       {ui}
       <LocationProbe />
-    </MemoryRouter>
+    </>,
+    { at: EVENTS, route: "/c/$cluster/$" }
   );
+  router = rendered.router;
+  return rendered;
+};
 
 const location = () => screen.getByTestId("location").textContent;
+
+const goesTo = (expected: string) =>
+  vi.waitFor(() => expect(location()).toBe(expected));
+
+/** Lets a navigation that was started finish, so "nothing happened" means it. */
+const staysAt = async (expected = EVENTS) => {
+  await act(() => router.load());
+  expect(location()).toBe(expected);
+};
 
 const styleOf = (testId: string) =>
   screen.getByTestId(testId).getAttribute("style") ?? "";
@@ -44,7 +64,7 @@ describe("ResourceRef", () => {
           id: "ref-tab",
           context: null,
           namespace: "",
-          href: "/events",
+          href: EVENTS,
           missing: false,
         },
       ],
@@ -63,8 +83,8 @@ describe("ResourceRef", () => {
    * event through would leave the reader with the menu they complained
    * about. Without that assertion this test passed with the line deleted.
    */
-  it("opens the object menu on a right-click, at the pointer, and claims the event", () => {
-    wrap(<ResourceRef kind="Pod" name="web" namespace="shop" />);
+  it("opens the object menu on a right-click, at the pointer, and claims the event", async () => {
+    await wrap(<ResourceRef kind="Pod" name="web" namespace="shop" />);
     const claimed = fireEvent.contextMenu(
       screen.getByRole("link", { name: "Pod web" }),
       { clientX: 40, clientY: 60 }
@@ -73,15 +93,15 @@ describe("ResourceRef", () => {
     expect(claimed).toBe(false);
     expect(useObjectMenuStore.getState().target).toEqual({
       name: "web",
-      to: "/pods/shop/web",
+      to: "/c/prod/pods/shop/web",
       x: 40,
       y: 60,
     });
   });
 
   describe("routing", () => {
-    it("links a routable namespaced kind to its detail page", () => {
-      wrap(
+    it("links a routable namespaced kind to its detail page", async () => {
+      await wrap(
         <ResourceRef
           kind="Pod"
           name="log-demo-596964f7d6-54zt4"
@@ -90,25 +110,28 @@ describe("ResourceRef", () => {
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/pods/k8s-gui-test/log-demo-596964f7d6-54zt4"
+        "/c/prod/pods/k8s-gui-test/log-demo-596964f7d6-54zt4"
       );
     });
 
-    it("links a cluster-scoped kind with no namespace", () => {
-      wrap(<ResourceRef kind="Node" name="agent-0" />);
+    it("links a cluster-scoped kind with no namespace", async () => {
+      await wrap(<ResourceRef kind="Node" name="agent-0" />);
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/nodes/agent-0"
+        "/c/prod/nodes/agent-0"
       );
     });
 
-    it("accepts a plural spelling of the kind", () => {
-      wrap(<ResourceRef kind="pods" name="a-1" namespace="ns" />);
-      expect(screen.getByRole("link")).toHaveAttribute("href", "/pods/ns/a-1");
+    it("accepts a plural spelling of the kind", async () => {
+      await wrap(<ResourceRef kind="pods" name="a-1" namespace="ns" />);
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/pods/ns/a-1"
+      );
     });
 
-    it("renders text, not a link, for a kind the router does not serve", () => {
-      wrap(
+    it("renders text, not a link, for a kind the router does not serve", async () => {
+      await wrap(
         <ResourceRef
           kind="HelmRelease"
           name="traefik"
@@ -127,8 +150,8 @@ describe("ResourceRef", () => {
      * difference between an object nobody can open and one with a page and a
      * peek — and every vendor page holds it already.
      */
-    it("links a custom resource once it is told its CRD", () => {
-      wrap(
+    it("links a custom resource once it is told its CRD", async () => {
+      await wrap(
         <ResourceRef
           kind="HelmRelease"
           name="traefik"
@@ -138,12 +161,12 @@ describe("ResourceRef", () => {
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/customresourcedefinitions/helmreleases.helm.toolkit.fluxcd.io/instances/kube-system/traefik"
+        "/c/prod/helmreleases.helm.toolkit.fluxcd.io/kube-system/traefik"
       );
     });
 
     it("opens a custom resource in the peek, not on its own page", async () => {
-      wrap(
+      await wrap(
         <ResourceRef
           kind="HelmRelease"
           name="traefik"
@@ -152,14 +175,14 @@ describe("ResourceRef", () => {
         />
       );
       await userEvent.click(screen.getByRole("link"));
-      expect(location()).toBe(
-        "/events?peek=helmreleases.helm.toolkit.fluxcd.io%2FHelmRelease%2Fkube-system%2Ftraefik"
+      await goesTo(
+        "/c/prod/events?peek=helmreleases.helm.toolkit.fluxcd.io%2FHelmRelease%2Fkube-system%2Ftraefik"
       );
     });
 
     /** A cluster-scoped custom resource has no namespace to leave out. */
-    it("links a cluster-scoped custom resource", () => {
-      wrap(
+    it("links a cluster-scoped custom resource", async () => {
+      await wrap(
         <ResourceRef
           kind="ClusterIssuer"
           name="letsencrypt"
@@ -168,43 +191,48 @@ describe("ResourceRef", () => {
       );
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/customresourcedefinitions/clusterissuers.cert-manager.io/instances/letsencrypt"
+        "/c/prod/clusterissuers.cert-manager.io/letsencrypt"
       );
     });
 
-    it("renders text for a namespaced kind handed no namespace", () => {
-      wrap(<ResourceRef kind="Pod" name="orphan" />);
+    it("renders text for a namespaced kind handed no namespace", async () => {
+      await wrap(<ResourceRef kind="Pod" name="orphan" />);
       expect(screen.queryByRole("link")).toBeNull();
     });
 
-    // The registry lists Event; App.tsx serves it a list route only. Trusting
-    // the registry alone is exactly how a dead link ships.
-    it("renders text for Event, which the router only lists", () => {
-      wrap(<ResourceRef kind="Event" name="kube-system" />);
-      expect(screen.queryByRole("link")).toBeNull();
-    });
-
-    it("links a Namespace to its own page", () => {
-      wrap(<ResourceRef kind="Namespace" name="kube-system" />);
+    // An Event has no page of its own, so it opens the generic one every
+    // registry kind falls back to.
+    it("links an Event to the generic page", async () => {
+      await wrap(<ResourceRef kind="Event" name="web.17a2" namespace="shop" />);
       expect(screen.getByRole("link")).toHaveAttribute(
         "href",
-        "/namespaces/kube-system"
+        "/c/prod/events/shop/web.17a2"
       );
     });
 
-    it("agrees with isRoutableKind", () => {
-      expect(isRoutableKind("Pod", "ns")).toBe(true);
-      expect(isRoutableKind("Pod")).toBe(false);
-      expect(isRoutableKind("Node")).toBe(true);
-      expect(isRoutableKind("Namespace")).toBe(true);
-      expect(isRoutableKind("Event", "ns")).toBe(false);
-      expect(isRoutableKind("HelmRelease", "ns")).toBe(false);
+    it("links a Namespace to its own page", async () => {
+      await wrap(<ResourceRef kind="Namespace" name="kube-system" />);
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/namespaces/kube-system"
+      );
+    });
+
+    it("agrees with objectLink", () => {
+      const links = (kind: string, namespace?: string) =>
+        objectLink({ kind, name: "x", namespace }) !== null;
+      expect(links("Pod", "ns")).toBe(true);
+      expect(links("Pod")).toBe(false);
+      expect(links("Node")).toBe(true);
+      expect(links("Namespace")).toBe(true);
+      expect(links("Event", "ns")).toBe(true);
+      expect(links("HelmRelease", "ns")).toBe(false);
     });
   });
 
   describe("text", () => {
-    it("keeps the whole name readable as one string", () => {
-      wrap(
+    it("keeps the whole name readable as one string", async () => {
+      await wrap(
         <ResourceRef
           kind="Pod"
           name="cron-demo-29765945-cl6m2"
@@ -216,8 +244,8 @@ describe("ResourceRef", () => {
       );
     });
 
-    it("carries the kind as text for a screen reader even when shown as an icon", () => {
-      wrap(
+    it("carries the kind as text for a screen reader even when shown as an icon", async () => {
+      await wrap(
         <ResourceRef kind="Pod" name="a-1" namespace="ns" showKind={false} />
       );
       expect(screen.getByRole("link")).toHaveAccessibleName(/Pod/);
@@ -227,8 +255,8 @@ describe("ResourceRef", () => {
     // space between spans: "k3d-agent -0" is not the name of anything.
     it.each([true, false])(
       "announces exactly the kind and the real name (showKind=%s)",
-      (showKind) => {
-        wrap(
+      async (showKind) => {
+        await wrap(
           <ResourceRef kind="Node" name="k3d-agent-0" showKind={showKind} />
         );
         expect(screen.getByRole("link")).toHaveAccessibleName(
@@ -243,21 +271,25 @@ describe("ResourceRef", () => {
     // be real text a reader can be given.
     it.each([true, false])(
       "announces the kind and the real name when it is not a link (showKind=%s)",
-      (showKind) => {
-        wrap(<ResourceRef kind="Pod" name="k3d-agent-0" showKind={showKind} />);
+      async (showKind) => {
+        await wrap(
+          <ResourceRef kind="Pod" name="k3d-agent-0" showKind={showKind} />
+        );
         expect(screen.queryByRole("link")).toBeNull();
         expect(screen.getByText("Pod k3d-agent-0")).toBeInTheDocument();
       }
     );
 
     // A ragged left edge is exactly what an icon column exists to prevent.
-    it("reserves the mark's width for a kind the registry does not carry", () => {
-      wrap(<ResourceRef kind="HelmRelease" name="traefik" namespace="ns" />);
+    it("reserves the mark's width for a kind the registry does not carry", async () => {
+      await wrap(
+        <ResourceRef kind="HelmRelease" name="traefik" namespace="ns" />
+      );
       expect(screen.getByTestId("resource-ref-icon")).toBeInTheDocument();
     });
 
-    it("still names the kind when it is not routable", () => {
-      wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
+    it("still names the kind when it is not routable", async () => {
+      await wrap(<ResourceRef kind="Pod" name="orphan" showKind={false} />);
       expect(screen.getByText("Pod orphan")).toBeInTheDocument();
     });
   });
@@ -272,8 +304,8 @@ describe("ResourceRef", () => {
         />
       );
 
-    it("full tints the kind icon and the generated tail with different hues", () => {
-      renderRef();
+    it("full tints the kind icon and the generated tail with different hues", async () => {
+      await renderRef();
       expect(styleOf("resource-ref-icon")).toContain("var(--kind-s)");
       expect(styleOf("resource-ref-kind")).toContain("var(--kind-s)");
       expect(styleOf("resource-ref-tail")).toContain("var(--ident-s)");
@@ -283,17 +315,19 @@ describe("ResourceRef", () => {
       );
     });
 
-    it("full tints an ungenerated name whole, since it is its own identity", () => {
-      wrap(<ResourceRef kind="Pod" name="metrics-server" namespace="ns" />);
+    it("full tints an ungenerated name whole, since it is its own identity", async () => {
+      await wrap(
+        <ResourceRef kind="Pod" name="metrics-server" namespace="ns" />
+      );
       expect(styleOf("resource-ref-stem")).toContain("hsl");
       expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
         "text-fg-mut"
       );
     });
 
-    it("minimal keeps the kind hue on the icon only and dims the tail", () => {
+    it("minimal keeps the kind hue on the icon only and dims the tail", async () => {
       colouring("minimal");
-      renderRef();
+      await renderRef();
       expect(styleOf("resource-ref-icon")).toContain("var(--kind-s)");
       expect(styleOf("resource-ref-kind")).not.toContain("hsl");
       expect(styleOf("resource-ref-tail")).not.toContain("hsl");
@@ -305,9 +339,9 @@ describe("ResourceRef", () => {
       );
     });
 
-    it("off drops every tint and leaves the whole name at full contrast", () => {
+    it("off drops every tint and leaves the whole name at full contrast", async () => {
       colouring("off");
-      renderRef();
+      await renderRef();
       expect(screen.getByRole("link").innerHTML).not.toContain("hsl");
       for (const part of ["resource-ref-stem", "resource-ref-tail"]) {
         expect(screen.getByTestId(part).className).toContain("text-fg");
@@ -317,13 +351,15 @@ describe("ResourceRef", () => {
       }
     });
 
-    it("gives two kinds sharing a name different tail hues", () => {
-      const { unmount } = wrap(
+    it("gives two kinds sharing a name different tail hues", async () => {
+      const { unmount } = await wrap(
         <ResourceRef kind="Pod" name="cron-demo-29765945" namespace="ns" />
       );
       const pod = styleOf("resource-ref-tail");
       unmount();
-      wrap(<ResourceRef kind="Job" name="cron-demo-29765945" namespace="ns" />);
+      await wrap(
+        <ResourceRef kind="Job" name="cron-demo-29765945" namespace="ns" />
+      );
       expect(styleOf("resource-ref-tail")).not.toBe(pod);
     });
   });
@@ -335,9 +371,9 @@ describe("ResourceRef", () => {
       );
 
     it("opens the peek instead of navigating, keeping the page underneath", async () => {
-      renderRef();
+      await renderRef();
       await userEvent.click(screen.getByRole("link"));
-      expect(location()).toBe("/events?peek=pods%2Fns%2Fa-1");
+      await goesTo("/c/prod/events?peek=pods%2Fns%2Fa-1");
     });
 
     // The webview has no second window, so the modified click that used to
@@ -346,21 +382,21 @@ describe("ResourceRef", () => {
       ["ctrl", { ctrlKey: true }, true],
       ["meta", { metaKey: true }, true],
       ["shift", { shiftKey: true }, false],
-    ])("opens a %s click in a new tab", (_label, init, background) => {
-      renderRef();
+    ])("opens a %s click in a new tab", async (_label, init, background) => {
+      await renderRef();
       const link = screen.getByRole("link");
       fireEvent.click(link, init);
       const { tabs, activeId } = useScopeTabStore.getState();
       expect(tabs).toHaveLength(2);
-      expect(tabs[1].href).toBe("/pods/ns/a-1");
+      expect(tabs[1].href).toBe("/c/prod/pods/ns/a-1");
       expect(activeId === tabs[1].id).toBe(!background);
       // The page underneath is untouched either way.
-      expect(location()).toBe("/events");
-      expect(link).toHaveAttribute("href", "/pods/ns/a-1");
+      await staysAt();
+      expect(link).toHaveAttribute("href", "/c/prod/pods/ns/a-1");
     });
 
-    it("opens a middle click behind the page being read", () => {
-      renderRef();
+    it("opens a middle click behind the page being read", async () => {
+      await renderRef();
       // Testing Library has no `auxClick` helper; React binds `onAuxClick`
       // to the native `auxclick` event, so dispatch that one.
       fireEvent(
@@ -373,32 +409,35 @@ describe("ResourceRef", () => {
       );
       const { tabs, activeId } = useScopeTabStore.getState();
       expect(tabs).toHaveLength(2);
-      expect(tabs[1].href).toBe("/pods/ns/a-1");
+      expect(tabs[1].href).toBe("/c/prod/pods/ns/a-1");
       expect(activeId).toBe("ref-tab");
-      expect(location()).toBe("/events");
+      await staysAt();
     });
 
     // Alt-click is the browser's save gesture, not a navigation.
-    it("leaves an alt click to the browser", () => {
-      renderRef();
+    it("leaves an alt click to the browser", async () => {
+      await renderRef();
       const handled = fireEvent.click(screen.getByRole("link"), {
         altKey: true,
       });
       expect(handled).toBe(true);
       expect(useScopeTabStore.getState().tabs).toHaveLength(1);
-      expect(location()).toBe("/events");
+      await staysAt();
     });
 
     it("hands a plain click to onClick without losing the href", async () => {
       const onClick = vi.fn();
-      renderRef(onClick);
+      await renderRef(onClick);
       await userEvent.click(screen.getByRole("link"));
       expect(onClick).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole("link")).toHaveAttribute("href", "/pods/ns/a-1");
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/pods/ns/a-1"
+      );
     });
 
-    it("lets onClick call off the peek entirely", () => {
-      wrap(
+    it("lets onClick call off the peek entirely", async () => {
+      await wrap(
         <ResourceRef
           kind="Pod"
           name="a-1"
@@ -407,12 +446,14 @@ describe("ResourceRef", () => {
         />
       );
       fireEvent.click(screen.getByRole("link"), { button: 0 });
-      expect(location()).toBe("/events");
+      await staysAt();
     });
 
     it("does not call onClick for an unroutable reference", async () => {
       const onClick = vi.fn();
-      wrap(<ResourceRef kind="HelmRelease" name="traefik" onClick={onClick} />);
+      await wrap(
+        <ResourceRef kind="HelmRelease" name="traefik" onClick={onClick} />
+      );
       await userEvent.click(screen.getByTestId("resource-ref-name"));
       expect(onClick).not.toHaveBeenCalled();
     });
@@ -424,8 +465,8 @@ describe("ResourceRef", () => {
    * name, not printed beside it as a loose prefix that wraps on its own.
    */
   describe("showNamespace", () => {
-    it("draws the namespace inside the reference, dim and mono", () => {
-      wrap(
+    it("draws the namespace inside the reference, dim and mono", async () => {
+      await wrap(
         <ResourceRef kind="Pod" name="a-1" namespace="backend" showNamespace />
       );
       const prefix = screen.getByTestId("resource-ref-namespace");
@@ -436,31 +477,23 @@ describe("ResourceRef", () => {
       );
     });
 
-    it("prints nothing extra unasked", () => {
-      wrap(<ResourceRef kind="Pod" name="a-1" namespace="backend" />);
+    it("prints nothing extra unasked", async () => {
+      await wrap(<ResourceRef kind="Pod" name="a-1" namespace="backend" />);
       expect(screen.queryByTestId("resource-ref-namespace")).toBeNull();
     });
   });
 });
 
-// `ROUTABLE` restates what `App.tsx` serves, and a set that drifts from the
-// router fails in the quietest possible way: the reference silently stops
-// being a link. Read the routes back and hold the two together.
-describe("ROUTABLE against the router", () => {
-  it("lists exactly the kinds App.tsx serves a detail route", () => {
-    const app = readFileSync("src/ui/App.tsx", "utf8");
-    const declared = new Set(
-      [
-        ...app.matchAll(
-          /toPlural\(ResourceType\.(\w+)\)\}\/:(?:namespace\/)?:?name/g
-        ),
-      ].map((m) => m[1])
-    );
-    for (const kind of declared) {
+// A kind the registry knows that no link reaches is a reference that quietly
+// turns into text. The router serves every one of them through the generic
+// page, so the registry is the whole list.
+describe("the registry against the router", () => {
+  it("links every kind the registry knows", () => {
+    for (const { kind } of RESOURCE_REGISTRY) {
       expect(
-        isRoutableKind(kind, "some-namespace"),
-        `${kind} has a detail route but ResourceRef renders it as text`
-      ).toBe(true);
+        objectLink({ kind, name: "x", namespace: "some-namespace" }),
+        `${kind} is in the registry but ResourceRef renders it as text`
+      ).not.toBeNull();
     }
   });
 });
@@ -476,31 +509,31 @@ describe("names whose tail is too thin to carry identity", () => {
   const styleOf = (id: string) =>
     screen.getByTestId(id).getAttribute("style") ?? "";
 
-  it("tints the whole name of a node", () => {
-    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
+  it("tints the whole name of a node", async () => {
+    await wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
     expect(styleOf("resource-ref-stem")).toContain("hsl");
     expect(screen.getByTestId("resource-ref-stem").className).not.toContain(
       "text-fg-mut"
     );
   });
 
-  it("gives two nodes that differ only in their role distinct hues", () => {
-    const { unmount } = wrap(
+  it("gives two nodes that differ only in their role distinct hues", async () => {
+    const { unmount } = await wrap(
       <ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />
     );
     const agent = styleOf("resource-ref-stem");
     unmount();
-    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-server-0" />);
+    await wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-server-0" />);
     expect(styleOf("resource-ref-stem")).not.toBe(agent);
   });
 
-  it("tints the whole name when there is no tail at all", () => {
-    wrap(<ResourceRef kind="Pod" name="bad-image-demo" namespace="ns" />);
+  it("tints the whole name when there is no tail at all", async () => {
+    await wrap(<ResourceRef kind="Pod" name="bad-image-demo" namespace="ns" />);
     expect(styleOf("resource-ref-stem")).toContain("hsl");
   });
 
-  it("still dims the stem when the tail is a real generated one", () => {
-    wrap(
+  it("still dims the stem when the tail is a real generated one", async () => {
+    await wrap(
       <ResourceRef
         kind="Pod"
         name="crash-demo-56588f6b8c-8bj9v"
@@ -514,9 +547,9 @@ describe("names whose tail is too thin to carry identity", () => {
     expect(styleOf("resource-ref-tail")).toContain("hsl");
   });
 
-  it("leaves a node name uncoloured when colouring is off", () => {
+  it("leaves a node name uncoloured when colouring is off", async () => {
     useDisplaySettingsStore.setState({ resourceColouring: "off" });
-    wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
+    await wrap(<ResourceRef kind="Node" name="k3d-k8s-gui-dev-agent-0" />);
     expect(styleOf("resource-ref-stem")).not.toContain("hsl");
     expect(styleOf("resource-ref-tail")).not.toContain("hsl");
   });
@@ -539,13 +572,11 @@ describe("size", () => {
     }
   });
 
-  it("sets its own size rather than inheriting the box it lands in", () => {
-    render(
-      <MemoryRouter>
-        <div className="text-[32px]">
-          <ResourceRef kind="Pod" name="crash-demo-c688f57cf" namespace="ns" />
-        </div>
-      </MemoryRouter>
+  it("sets its own size rather than inheriting the box it lands in", async () => {
+    await wrap(
+      <div className="text-[32px]">
+        <ResourceRef kind="Pod" name="crash-demo-c688f57cf" namespace="ns" />
+      </div>
     );
     expect(
       nameClass().split(/\s+/),
@@ -553,11 +584,13 @@ describe("size", () => {
     ).toContain(RESOURCE_NAME_SIZE.row);
   });
 
-  it("draws a title a step above a row, and both from the same scale", () => {
-    const { unmount } = wrap(<ResourceName kind="Pod" name="crash-demo" />);
+  it("draws a title a step above a row, and both from the same scale", async () => {
+    const { unmount } = await wrap(
+      <ResourceName kind="Pod" name="crash-demo" />
+    );
     const row = nameClass();
     unmount();
-    wrap(<ResourceName kind="Pod" name="crash-demo" size="title" />);
+    await wrap(<ResourceName kind="Pod" name="crash-demo" size="title" />);
     expect(row).toContain(RESOURCE_NAME_SIZE.row);
     expect(nameClass()).toContain(RESOURCE_NAME_SIZE.title);
     expect(nameClass()).not.toBe(row);

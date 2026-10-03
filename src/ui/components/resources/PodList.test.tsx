@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, screen } from "@testing-library/react";
 
 import type { PodRow } from "@/generated/types";
 
@@ -56,7 +54,7 @@ vi.mock("@/hooks/usePodsWithMetrics", () => ({
   }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { renderWithRouter } from "@/test/render";
 import { PodList } from "./PodList";
 
 describe("the pod list while a new scope is read", () => {
@@ -65,16 +63,8 @@ describe("the pod list while a new scope is read", () => {
    * of its own query: the last scope's pods, standing in, were printed as the
    * new scope's total.
    */
-  it("does not total the last scope's pods", () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/workloads/pods"]}>
-          <TooltipProvider>
-            <PodList />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+  it("does not total the last scope's pods", async () => {
+    await renderWithRouter(<PodList />, { at: "/c/prod/pods" });
 
     expect(screen.queryByText("1 pod")).toBeNull();
     expect(
@@ -86,26 +76,17 @@ describe("the pod list while a new scope is read", () => {
 describe("the row's shell button", () => {
   /** It asked for `?tab=terminal`, a tab the pod page does not have, and
    *  landed on the overview with no shell anywhere. */
-  it("opens the pod page on its shell tab", () => {
-    function Landed() {
-      const { pathname, search } = useLocation();
-      return <p>{`${pathname}${search}`}</p>;
-    }
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/workloads/pods"]}>
-          <TooltipProvider>
-            <Routes>
-              <Route path="/workloads/pods" element={<PodList />} />
-              <Route path="/pods/:namespace/:name" element={<Landed />} />
-            </Routes>
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
-    );
+  it("opens the pod page on its shell tab", async () => {
+    const { router } = await renderWithRouter(<PodList />, {
+      at: "/c/prod/pods",
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Shell" }));
 
-    expect(screen.getByText("/pods/prod/api-0?tab=shell")).toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(router.state.location.href).toBe(
+        "/c/prod/pods/prod/api-0?tab=shell"
+      )
+    );
   });
 });

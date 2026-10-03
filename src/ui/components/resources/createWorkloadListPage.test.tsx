@@ -5,9 +5,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, screen } from "@testing-library/react";
+import type { ComponentType } from "react";
+import { QueryClient } from "@tanstack/react-query";
 
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 
@@ -43,7 +43,7 @@ vi.mock("@/hooks/useWatchedList", () => ({
   }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { renderWithRouter } from "@/test/render";
 import { matchDeploymentPods } from "@/lib/metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -72,16 +72,13 @@ function page(fetchList: () => Promise<Scoped<Item>>) {
   });
 }
 
-function mount(client: QueryClient, ui: React.ReactNode) {
-  const tree = (node: React.ReactNode) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/workloads/deployments"]}>
-        <TooltipProvider>{node}</TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  const { rerender } = render(tree(ui));
-  return (next: React.ReactNode) => rerender(tree(next));
+async function mount(client: QueryClient, List: ComponentType) {
+  const { rerender } = await renderWithRouter(<List />, {
+    client,
+    at: "/c/prod/deployments",
+    route: "/c/$cluster/deployments",
+  });
+  return () => rerender(<List />);
 }
 
 beforeEach(() => {
@@ -114,7 +111,7 @@ describe("a workload list under a live watch", () => {
       ],
       unread: [deadline],
     }));
-    mount(client, <List />);
+    await mount(client, List);
     expect(await screen.findByText("worker")).toBeVisible();
 
     await act(() => client.invalidateQueries({ queryKey: key }));
@@ -139,12 +136,12 @@ describe("a workload list while a new scope is read", () => {
       unread: [{ ...deadline, code: "FORBIDDEN" }],
     });
     const List = page(() => answer());
-    const rerender = mount(client, <List />);
+    const rerender = await mount(client, List);
     expect(await screen.findByText(/in staging/)).toBeVisible();
 
     store.state.namespaceScope = ["prod", "dev"];
     answer = () => new Promise(() => {});
-    rerender(<List />);
+    await rerender();
 
     expect(screen.getByText("api")).toBeVisible();
     expect(screen.queryByText(/in staging/)).toBeNull();

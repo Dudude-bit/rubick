@@ -1,7 +1,7 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
 import { toSingularNoun } from "@/lib/resource-registry";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import {
   flexRender,
   useTable,
@@ -35,6 +35,8 @@ import {
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { stallWatch } from "@/lib/stall-watch";
 import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
+import type { AppSearch } from "@/lib/app-search";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   Search,
@@ -68,7 +70,7 @@ interface DataTableProps<TData extends RowData> {
    * with the query string, so a search kept here survives leaving the tab
    * and coming back; one kept in state did not.
    */
-  searchParam?: string;
+  searchParam?: keyof AppSearch;
   searchPlaceholder?: string;
   /** Force the windowed layout on or off; unset, the table reads its own length. */
   enableVirtualScroll?: boolean;
@@ -296,8 +298,9 @@ function DataTableInner<TData extends RowData>({
   );
   const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const [params, setParams] = useSearchParams();
-  const inTheUrl = searchParam ? (params.get(searchParam) ?? "") : "";
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
+  const inTheUrl = searchParam ? (search[searchParam] ?? "") : "";
   const [searchValue, setSearchValue] = React.useState(inTheUrl);
   // The query string is the authority, and the state beside it is only so
   // that typing does not wait for a navigation. Seeded once, the two came
@@ -309,15 +312,7 @@ function DataTableInner<TData extends RowData>({
   const changeSearch = (value: string) => {
     setSearchValue(value);
     if (!searchParam) return;
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        if (value) next.set(searchParam, value);
-        else next.delete(searchParam);
-        return next;
-      },
-      { replace: true }
-    );
+    setSearch({ [searchParam]: value || undefined }, { replace: true });
   };
   const deferredSearch = React.useDeferredValue(searchValue);
 
@@ -677,7 +672,7 @@ function DataTableInner<TData extends RowData>({
         openPeek(peek);
         return;
       }
-      linkGesture(event, href, () => navigate(href));
+      linkGesture(event, href, () => navigate({ href }));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
       // No destination, so nothing to open a tab on; only a plain click acts.
       onRowClick(row);
@@ -713,7 +708,7 @@ function DataTableInner<TData extends RowData>({
             // where nothing happens.
             const link = target.closest("a");
             if (link && link.getAttribute("href") !== href) return;
-            navigate(href);
+            navigate({ href });
           }
         : undefined;
 

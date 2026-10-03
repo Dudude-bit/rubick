@@ -8,16 +8,10 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
 import type {
   ConfigMapInfo,
   CustomResourceDetailInfo,
@@ -108,7 +102,7 @@ status:
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { renderWithRouter } from "@/test/render";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
@@ -289,8 +283,8 @@ function buildConnections(
 }
 
 function Probe() {
-  const { pathname, search } = useLocation();
-  return <span data-testid="location">{`${pathname}${search}`}</span>;
+  const { pathname, searchStr } = useLocation();
+  return <span data-testid="location">{`${pathname}${searchStr}`}</span>;
 }
 
 /** Lets a test move the peek to another object the way a row click would. */
@@ -309,7 +303,7 @@ const tabNames = () =>
     .getAllByRole("tab")
     .map((tab) => tab.querySelector("span")?.textContent);
 
-const openTab = (name: string) =>
+const openTab = (name: string | RegExp) =>
   userEvent.click(screen.getByRole("tab", { name }));
 
 const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
@@ -317,24 +311,20 @@ const wrap = (entry: string, ui: ReactNode = <PeekPanel />) => {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   wrap.client = client;
-  return render(
-    <QueryClientProvider client={client}>
-      {/* The shell mounts one of these around the whole app; a disabled
-          action's reason rides in a tooltip and needs it. */}
-      <TooltipProvider>
-        <MemoryRouter initialEntries={[entry]}>
-          {ui}
-          <Probe />
-        </MemoryRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+  return renderWithRouter(
+    <>
+      {ui}
+      <Probe />
+    </>,
+    { client, at: entry, route: "/c/$cluster/$" }
   );
 };
 
 wrap.client = null as unknown as QueryClient;
 
 const location = () => screen.getByTestId("location").textContent;
-const POD_PEEK = "/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
+const POD_PEEK =
+  "/c/prod/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
 
 function mockCluster() {
   vi.mocked(commands.getPod).mockReset().mockResolvedValue(buildPod());
@@ -396,17 +386,17 @@ beforeAll(async () => {
 describe("PeekPanel", () => {
   beforeEach(mockCluster);
 
-  it("stays out of the way when nothing is peeked", () => {
-    wrap("/events");
+  it("stays out of the way when nothing is peeked", async () => {
+    await wrap("/c/prod/events");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(commands.getPod).not.toHaveBeenCalled();
   });
 
   // The header comes from the URL, so the panel is never an empty box that
   // fills in and shifts under the reader's eye.
-  it("names the object before the fetch resolves", () => {
+  it("names the object before the fetch resolves", async () => {
     vi.mocked(commands.getPod).mockReturnValue(new Promise(() => {}));
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(screen.getByRole("dialog")).toHaveTextContent(
       "crash-demo-56588f6b8c-8bj9v"
     );
@@ -424,9 +414,9 @@ describe("PeekPanel", () => {
    * here, so the arrangement the comment in PeekPanel.tsx defends is not
    * observable in this environment and is not guarded by anything.
    */
-  it("announces itself as the object and nothing else", () => {
+  it("announces itself as the object and nothing else", async () => {
     vi.mocked(commands.getPod).mockReturnValue(new Promise(() => {}));
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(screen.getByRole("dialog")).toHaveAccessibleName(
       "Pod crash-demo-56588f6b8c-8bj9v"
     );
@@ -454,7 +444,7 @@ describe("PeekPanel", () => {
       },
     ] as unknown as Awaited<ReturnType<typeof commands.listNodes>>);
 
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     const badge = await screen.findByText("CrashLoopBackOff");
 
     // The node list arrives after the pod, so the badge starts confident and
@@ -470,14 +460,14 @@ describe("PeekPanel", () => {
    * reader who peeks at a crashing pod is the one who most wants the alert.
    */
   it("carries what is firing about the peeked object", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(
       await screen.findByText("alerts about Pod crash-demo-56588f6b8c-8bj9v")
     ).toBeVisible();
   });
 
   it("shows the summary and this object's events once they arrive", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();
     expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
     expect(screen.getByText("0 of 1 ready")).toBeInTheDocument();
@@ -510,14 +500,14 @@ describe("PeekPanel", () => {
         memoryLimits: "1Gi",
       } as Partial<PodInfo>)
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(await screen.findByText("500m → unlimited")).toBeInTheDocument();
     expect(screen.getByText("256Mi → 1Gi")).toBeInTheDocument();
   });
 
   it("says what failed and keeps offering the full page", async () => {
     vi.mocked(commands.getPod).mockRejectedValue(new Error("pods not found"));
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     expect(await screen.findByText(/pods not found/)).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
@@ -526,45 +516,51 @@ describe("PeekPanel", () => {
   });
 
   it("leaves for the full page and closes behind itself", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await userEvent.click(
       await screen.findByRole("button", { name: /Open full page/ })
     );
-    expect(location()).toBe("/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v");
+    await waitFor(() =>
+      expect(location()).toBe(
+        "/c/prod/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v"
+      )
+    );
   });
 
   /** Issue #178: leaving Logs for the page landed on Overview. Would break if the tab stopped travelling. */
   it("takes the open tab along to the full page", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await openTab("Logs");
     await userEvent.click(
       await screen.findByRole("button", { name: /Open full page/ })
     );
-    expect(location()).toBe(
-      "/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v?tab=logs"
+    await waitFor(() =>
+      expect(location()).toBe(
+        "/c/prod/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v?tab=logs"
+      )
     );
   });
 
   // Radix owns Escape; a second listener here would close it twice.
   it("closes on Escape by dropping the parameter", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(location()).toBe("/events"));
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
   });
 
   it("replaces its contents when a reference inside it is clicked", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await userEvent.click(
       await screen.findByRole("link", { name: /k3d-agent/ })
     );
     await waitFor(() =>
-      expect(location()).toBe("/events?peek=nodes%2Fk3d-agent-0")
+      expect(location()).toBe("/c/prod/events?peek=nodes%2Fk3d-agent-0")
     );
   });
 
   it("falls back to the manifest for a kind with no detail command", async () => {
-    wrap("/events?peek=replicasets/k8s-gui-test/promo-abc");
+    await wrap("/c/prod/events?peek=replicasets/k8s-gui-test/promo-abc");
     // The badge and the status row both read the phase out of the manifest.
     expect(await screen.findAllByText("Active")).toHaveLength(2);
     expect(commands.getManifest).toHaveBeenCalledWith(
@@ -580,7 +576,7 @@ describe("PeekPanel", () => {
   });
 
   it("reads a namespace through its own command, labels first", async () => {
-    wrap("/events?peek=namespaces/kube-system");
+    await wrap("/c/prod/events?peek=namespaces/kube-system");
     expect(await screen.findByText("tier")).toBeInTheDocument();
     expect(commands.getNamespace).toHaveBeenCalledWith("kube-system");
     // The labels are the payload: they are what every namespaceSelector —
@@ -591,7 +587,7 @@ describe("PeekPanel", () => {
   });
 });
 
-const CONFIGMAP_PEEK = "/events?peek=configmaps/k8s-gui-test/app-config";
+const CONFIGMAP_PEEK = "/c/prod/events?peek=configmaps/k8s-gui-test/app-config";
 
 /**
  * The panel asks the same questions the detail pages ask, and keeps each
@@ -605,7 +601,7 @@ describe("PeekPanel reads what the detail pages read", () => {
   const POD = ["k8s-gui-test", "crash-demo-56588f6b8c-8bj9v"] as const;
 
   it("keeps the object itself in the pod page's entry", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(wrap.client.getQueryData(queryKeys.detail("Pod", ...POD))).toEqual(
       buildPod()
@@ -614,7 +610,7 @@ describe("PeekPanel reads what the detail pages read", () => {
 
   it("keeps the manifest in the pod page's entry", async () => {
     vi.mocked(commands.getManifest).mockResolvedValue("kind: Pod\n");
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     await openTab("YAML");
     await screen.findByTestId("yaml-editor");
@@ -624,7 +620,7 @@ describe("PeekPanel reads what the detail pages read", () => {
   });
 
   it("keeps a ConfigMap's values where its page and a pod's env read them", async () => {
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     await openTab("Data");
     await screen.findByText("worker_processes 1;");
     expect(
@@ -655,7 +651,7 @@ describe("PeekPanel reads what the detail pages read", () => {
       ownerReferences: [],
     } as never);
     vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
-    wrap("/events?peek=deployments/shop/api");
+    await wrap("/c/prod/events?peek=deployments/shop/api");
     await openTab("Pods");
     await waitFor(() =>
       expect(
@@ -673,14 +669,14 @@ describe("PeekPanel tab strip", () => {
   // The same rule the detail pages are drawn by: a strip where some tabs
   // carry a glyph and others do not is worse than a strip with none.
   it("gives every tab one glyph, and exactly one, on both kinds", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     for (const tab of screen.getAllByRole("tab")) {
       expect(tab.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
     }
 
     cleanup();
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     await screen.findByRole("tab", { name: /Data/ });
     for (const tab of screen.getAllByRole("tab")) {
       expect(tab.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(1);
@@ -688,7 +684,7 @@ describe("PeekPanel tab strip", () => {
   });
 
   it("counts what it is already holding, and fetches nothing to do it", async () => {
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     const data = await screen.findByRole("tab", { name: /Data/ });
     await waitFor(() => expect(data).toHaveTextContent("Data1"));
     expect(data).toHaveAttribute("title", "Data — 1");
@@ -702,12 +698,12 @@ describe("PeekPanel tabs", () => {
   beforeEach(mockCluster);
 
   it("offers only the surfaces the kind actually has", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(tabNames()).toEqual(["Overview", "Logs", "Containers", "YAML"]);
 
     cleanup();
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     await screen.findByRole("tab", { name: "Data" });
     expect(tabNames()).toEqual(["Overview", "Data", "YAML"]);
   });
@@ -715,7 +711,7 @@ describe("PeekPanel tabs", () => {
   // A peek is opened dozens of times an hour. If every open cost a manifest
   // read and a log stream, the panel would be slower than the page it saves.
   it("fetches nothing but the summary until a tab is opened", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(commands.getManifest).not.toHaveBeenCalled();
     expect(commands.streamPodLogs).not.toHaveBeenCalled();
@@ -727,7 +723,7 @@ describe("PeekPanel tabs", () => {
 
   it("renders the manifest under the YAML tab", async () => {
     vi.mocked(commands.getManifest).mockResolvedValue("kind: Pod\n");
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     await openTab("YAML");
     expect(await screen.findByTestId("yaml-editor")).toHaveTextContent(
@@ -739,7 +735,7 @@ describe("PeekPanel tabs", () => {
     vi.mocked(commands.getManifest).mockRejectedValue(
       new Error("manifest denied")
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     await openTab("YAML");
     expect(await screen.findByText(/manifest denied/)).toBeInTheDocument();
@@ -750,7 +746,7 @@ describe("PeekPanel tabs", () => {
   });
 
   it("streams a running pod's logs", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     await openTab("Logs");
     await waitFor(() => expect(commands.streamPodLogs).toHaveBeenCalled());
@@ -793,7 +789,7 @@ describe("PeekPanel tabs", () => {
         ],
       } as Partial<PodInfo>)
     );
-    wrap("/events?peek=pods/k8s-gui-test/unschedulable-demo");
+    await wrap("/c/prod/events?peek=pods/k8s-gui-test/unschedulable-demo");
     await screen.findByText("Pending");
     await openTab("Logs");
 
@@ -805,11 +801,12 @@ describe("PeekPanel tabs", () => {
   });
 
   it("reads a ConfigMap's values only once the Data tab is opened", async () => {
-    wrap(CONFIGMAP_PEEK);
-    await screen.findByRole("tab", { name: "Data" });
+    await wrap(CONFIGMAP_PEEK);
+    // The tab's name carries its count once the summary lands: "Data1".
+    await screen.findByRole("tab", { name: /^Data/ });
     expect(commands.getConfigmapData).not.toHaveBeenCalled();
 
-    await openTab("Data");
+    await openTab(/^Data/);
     expect(await screen.findByText("nginx.conf")).toBeInTheDocument();
     expect(await screen.findByText("worker_processes 1;")).toBeInTheDocument();
   });
@@ -818,7 +815,7 @@ describe("PeekPanel tabs", () => {
     vi.mocked(commands.getConfigmapData).mockRejectedValue(
       new Error("configmaps is forbidden")
     );
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     await openTab("Data");
     expect(
       await screen.findByText(/configmaps is forbidden/)
@@ -836,10 +833,10 @@ describe("PeekPanel on a custom resource", () => {
   beforeEach(mockCluster);
 
   const APP_PEEK =
-    "/events?peek=applications.argoproj.io/Application/argocd/shop";
+    "/c/prod/events?peek=applications.argoproj.io/Application/argocd/shop";
 
   it("reads it through its CRD rather than the core API", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     await waitFor(() =>
       expect(commands.getCustomResource).toHaveBeenCalledWith(
         "applications.argoproj.io",
@@ -851,17 +848,14 @@ describe("PeekPanel on a custom resource", () => {
   });
 
   it("names the object and its kind in the header", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     expect(await screen.findByText("shop")).toBeInTheDocument();
     // Twice by design: the reference announces the kind to a screen reader
     // because it draws it as a glyph, and the line under it prints it.
     expect(screen.getAllByText("Application").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("link", { name: "Application shop" })
-    ).toHaveAttribute(
-      "href",
-      "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
-    );
+    ).toHaveAttribute("href", "/c/prod/applications.argoproj.io/argocd/shop");
   });
 
   /**
@@ -869,29 +863,29 @@ describe("PeekPanel on a custom resource", () => {
    * every scalar under `status` is, not because this file recognises it.
    */
   it("draws the operator's status without understanding it", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     expect(await screen.findByText("health.status")).toBeInTheDocument();
     expect(screen.getByText("Degraded")).toBeInTheDocument();
   });
 
   /** A `Ready` condition is the nearest thing to a universal verdict. */
   it("badges it from a Ready condition where there is no phase", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     expect(await screen.findByText("Not ready")).toBeInTheDocument();
   });
 
   it("offers its own page, which for a custom resource is the CRD's", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     await userEvent.click(
       await screen.findByRole("button", { name: /Open full page/ })
     );
-    expect(location()).toBe(
-      "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
+    await waitFor(() =>
+      expect(location()).toBe("/c/prod/applications.argoproj.io/argocd/shop")
     );
   });
 
   it("reads the manifest through the CRD too", async () => {
-    wrap(APP_PEEK);
+    await wrap(APP_PEEK);
     await openTab("YAML");
     await waitFor(() =>
       expect(commands.getCustomResourceYaml).toHaveBeenCalledWith(
@@ -926,7 +920,7 @@ describe("PeekPanel tab persistence", () => {
   );
 
   it("falls back to Overview when the next target has no such tab", async () => {
-    wrap(POD_PEEK, withOpeners);
+    await wrap(POD_PEEK, withOpeners);
     await screen.findByText("CrashLoopBackOff");
     await openTab("Logs");
 
@@ -941,7 +935,7 @@ describe("PeekPanel tab persistence", () => {
   });
 
   it("returns to Logs on the next pod, having only borrowed Overview", async () => {
-    wrap(POD_PEEK, withOpeners);
+    await wrap(POD_PEEK, withOpeners);
     await screen.findByText("CrashLoopBackOff");
     await openTab("Logs");
 
@@ -1015,7 +1009,9 @@ const RUNNING_POD = buildPod({
   ],
 } as Partial<PodInfo>);
 
-const RUNNING_PEEK = "/events?peek=pods/k8s-gui-test/log-demo-1";
+const RUNNING_PEEK = "/c/prod/events?peek=pods/k8s-gui-test/log-demo-1";
+const RUNNING_PEEK_LOCATION =
+  "/c/prod/events?peek=pods%2Fk8s-gui-test%2Flog-demo-1";
 
 const openMore = () =>
   userEvent.click(screen.getByRole("button", { name: /More actions/ }));
@@ -1025,7 +1021,7 @@ describe("PeekPanel actions", () => {
 
   it("offers a pod's work up front and its destructive end behind a menu", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     expect(screen.getByRole("button", { name: /^Shell/ })).toBeInTheDocument();
@@ -1046,7 +1042,7 @@ describe("PeekPanel actions", () => {
   // the reason, which is the answer to the question the click was asking.
   it("says why a pending pod cannot be shelled into or forwarded", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(PENDING_POD);
-    wrap("/events?peek=pods/k8s-gui-test/unschedulable-demo");
+    await wrap("/c/prod/events?peek=pods/k8s-gui-test/unschedulable-demo");
     await screen.findByText("Pending");
 
     const shell = screen.getByRole("button", { name: /^Shell/ });
@@ -1070,16 +1066,18 @@ describe("PeekPanel actions", () => {
 
   it("takes a shell request to the page where a terminal fits", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await userEvent.click(screen.getByRole("button", { name: /^Shell/ }));
-    expect(location()).toBe("/pods/k8s-gui-test/log-demo-1?shell=app");
+    await waitFor(() =>
+      expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1?shell=app")
+    );
   });
 
   it("names the object and the consequence before deleting it", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await openMore();
@@ -1093,14 +1091,14 @@ describe("PeekPanel actions", () => {
     // Cancelling leaves both the object and the panel exactly where they were.
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(commands.deletePod).not.toHaveBeenCalled();
-    expect(location()).toBe(RUNNING_PEEK);
+    expect(location()).toBe(RUNNING_PEEK_LOCATION);
   });
 
   // A peek onto an object that no longer exists is a ghost.
   it("closes itself once the object it is showing is gone", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
     vi.mocked(commands.deletePod).mockResolvedValue(undefined);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await openMore();
@@ -1111,7 +1109,7 @@ describe("PeekPanel actions", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
 
-    await waitFor(() => expect(location()).toBe("/events"));
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
     expect(commands.deletePod).toHaveBeenCalledWith(
       "log-demo-1",
       "k8s-gui-test",
@@ -1122,7 +1120,7 @@ describe("PeekPanel actions", () => {
   it("keeps the panel open across a restart", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
     vi.mocked(commands.restartPod).mockResolvedValue(undefined);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await openMore();
@@ -1134,7 +1132,7 @@ describe("PeekPanel actions", () => {
         "k8s-gui-test"
       )
     );
-    expect(location()).toBe(RUNNING_PEEK);
+    expect(location()).toBe(RUNNING_PEEK_LOCATION);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
@@ -1144,7 +1142,7 @@ describe("PeekPanel actions", () => {
     vi.mocked(commands.getPod).mockResolvedValue(
       buildPod({ ...RUNNING_POD, ownerReferences: [] } as Partial<PodInfo>)
     );
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await openMore();
@@ -1158,7 +1156,7 @@ describe("PeekPanel actions", () => {
   });
 
   it("gives a ConfigMap the one action it has", async () => {
-    wrap(CONFIGMAP_PEEK);
+    await wrap(CONFIGMAP_PEEK);
     await screen.findByRole("tab", { name: "Data" });
     expect(screen.getByRole("button", { name: /Delete/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
@@ -1173,13 +1171,13 @@ describe("PeekPanel width", () => {
 
   it("opens at the stored width", async () => {
     useDisplaySettingsStore.setState({ peekWidth: 620 });
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(panelWidth()).toBe("620px");
   });
 
   it("is resizable from the keyboard, not only by dragging", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     handle().focus();
 
@@ -1195,7 +1193,7 @@ describe("PeekPanel width", () => {
   });
 
   it("announces its bounds to a screen reader", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(handle()).toHaveAttribute("aria-orientation", "vertical");
     expect(handle()).toHaveAttribute("aria-valuenow", `${PEEK_WIDTH_DEFAULT}`);
@@ -1206,7 +1204,7 @@ describe("PeekPanel width", () => {
   // something to be.
   it("never grows past what the window can spare", async () => {
     useDisplaySettingsStore.setState({ peekWidth: 1200 });
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(panelWidth()).toBe("784px");
   });
@@ -1220,7 +1218,7 @@ describe("PeekPanel width", () => {
 describe("PeekPanel traffic chain", () => {
   beforeEach(mockCluster);
 
-  const SERVICE_PEEK = "/events?peek=services/storefront/frontend";
+  const SERVICE_PEEK = "/c/prod/events?peek=services/storefront/frontend";
 
   /** Passes when `above` sits earlier in the document than `below`. */
   const expectAbove = (above: Element, below: Element) =>
@@ -1245,7 +1243,7 @@ describe("PeekPanel traffic chain", () => {
         },
       ])
     );
-    wrap(SERVICE_PEEK);
+    await wrap(SERVICE_PEEK);
 
     expect(await screen.findByText("Traffic path")).toBeInTheDocument();
     const ingress = await screen.findByRole("link", {
@@ -1287,7 +1285,7 @@ describe("PeekPanel traffic chain", () => {
         },
       ])
     );
-    wrap(SERVICE_PEEK);
+    await wrap(SERVICE_PEEK);
 
     expect(await screen.findByText("Traffic path")).toBeInTheDocument();
     const gateway = await screen.findByRole("link", { name: "Gateway edge" });
@@ -1364,7 +1362,7 @@ describe("PeekPanel traffic chain", () => {
       annotations: {},
       createdAt: "2026-08-19T20:00:00Z",
     });
-    wrap("/events?peek=httproutes/storefront/promo");
+    await wrap("/c/prod/events?peek=httproutes/storefront/promo");
 
     expect(
       await screen.findByRole("link", { name: "Gateway edge" })
@@ -1394,7 +1392,7 @@ describe("PeekPanel traffic chain", () => {
         },
       ])
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
 
     const service = await screen.findByRole("link", {
       name: "Service crash-svc",
@@ -1446,7 +1444,7 @@ describe("PeekPanel traffic chain", () => {
             ]),
           }
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
 
     const route = await screen.findByRole("link", {
       name: "IngressRoute crash-route",
@@ -1511,7 +1509,7 @@ describe("PeekPanel traffic chain", () => {
             ]),
           }
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
 
     await screen.findByRole("link", { name: "IngressRoute crash-admin" });
     expect(
@@ -1522,7 +1520,7 @@ describe("PeekPanel traffic chain", () => {
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {
-    wrap("/events?peek=endpoints/storefront/frontend");
+    await wrap("/c/prod/events?peek=endpoints/storefront/frontend");
 
     const service = await screen.findByRole("link", {
       name: "Service frontend",
@@ -1535,7 +1533,7 @@ describe("PeekPanel traffic chain", () => {
   });
 
   it("stays silent for a pod nothing routes", async () => {
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
     await screen.findByText("CrashLoopBackOff");
     expect(screen.queryByText("Traffic path")).toBeNull();
   });
@@ -1563,7 +1561,7 @@ describe("restarting a managed workload from the peek on critical infrastructure
    */
   it("holds the restart until the cluster's name is typed", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
-    wrap(RUNNING_PEEK);
+    await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
 
     await openMore();
@@ -1629,7 +1627,7 @@ describe("a peek block whose read was refused", () => {
     vi.mocked(commands.getResourceConnections).mockRejectedValue(
       new Error(FORBIDDEN)
     );
-    wrap(POD_PEEK);
+    await wrap(POD_PEEK);
 
     expect(await screen.findByText("Traffic path")).toBeInTheDocument();
     expect(
@@ -1642,7 +1640,7 @@ describe("a peek block whose read was refused", () => {
     vi.mocked(commands.listPods).mockRejectedValue(new Error(FORBIDDEN));
     vi.mocked(commands.listDeployments).mockResolvedValue([]);
     vi.mocked(commands.listServices).mockResolvedValue([]);
-    wrap("/events?peek=namespaces/kube-system");
+    await wrap("/c/prod/events?peek=namespaces/kube-system");
 
     expect(await screen.findByText(FORBIDDEN)).toBeInTheDocument();
     expect(screen.getByText("could not read")).toBeInTheDocument();
@@ -1658,7 +1656,7 @@ describe("a peek block whose read was refused", () => {
     vi.mocked(commands.listBackendTlsPolicies).mockRejectedValue(
       new Error(FORBIDDEN)
     );
-    wrap("/events?peek=services/storefront/frontend");
+    await wrap("/c/prod/events?peek=services/storefront/frontend");
 
     expect(
       await screen.findByText(/Could not read BackendTLSPolicies/)
@@ -1676,7 +1674,7 @@ describe("a peek block whose read was refused", () => {
       isPending: false,
       error: new Error("ingressroutes.traefik.io is forbidden"),
     });
-    wrap("/events?peek=services/storefront/frontend");
+    await wrap("/c/prod/events?peek=services/storefront/frontend");
 
     expect(
       await screen.findByText(/Could not ask the integrations/)

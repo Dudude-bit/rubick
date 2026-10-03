@@ -1,4 +1,5 @@
 import { helmReleaseOf } from "@/lib/changes";
+import { helmReleaseLink, type AppLink } from "@/lib/links";
 
 /**
  * The Helm release an object says installed it.
@@ -27,9 +28,9 @@ export function helmOwnerOf(
 }
 
 /** Where its page is. Helm's own releases are read from the cluster. */
-export function helmReleasePath(release: {
+export function helmOwnerLink(release: {
   name: string;
   namespace: string;
-}): string {
-  return `/helm/native/${release.namespace}/${release.name}`;
+}): AppLink {
+  return helmReleaseLink({ source: "native", ...release });
 }

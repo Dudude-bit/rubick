@@ -4,10 +4,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -16,7 +15,6 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   ScreenShareProvider,
   useScreenSections,
@@ -25,6 +23,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { Events } from "./Events";
 
 const listEvents = vi.mocked(commands.listEvents);
@@ -63,24 +62,30 @@ const NO_MATCH = "zq";
 const feed = (namespace: string, count: number) =>
   Array.from({ length: count }, (_, index) => event(namespace, index));
 
-function mount(view: "list" | "stories" = "list") {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+function eventsAt(view: "list" | "stories") {
+  return {
+    at: `/c/prod/events?view=${view}`,
+    route: "/c/$cluster/events",
+  };
+}
+
+async function mount(view: "list" | "stories" = "list") {
+  let bump = () => {};
   // A fresh element every time: React bails out of re-rendering a component
   // whose element it has already seen, so a redraw that reuses one proves
   // nothing about what a render costs.
-  const tree = () => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/events?view=${view}`]}>
-        <TooltipProvider>
-          <Events />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  const rendered = render(tree());
-  return { ...rendered, client, redraw: () => rendered.rerender(tree()) };
+  function Host() {
+    const [, setTick] = useState(0);
+    bump = () => setTick((tick) => tick + 1);
+    return <Events />;
+  }
+  const rendered = await renderWithRouter(<Host />, eventsAt(view));
+  return {
+    ...rendered,
+    redraw: () => {
+      act(() => bump());
+    },
+  };
 }
 
 const asked = () =>
@@ -108,7 +113,7 @@ describe("what the limit is counted against", () => {
     listEvents.mockImplementation(async (filters) =>
       feed(filters?.namespace ?? "", 2)
     );
-    mount();
+    await mount();
 
     await waitFor(() => expect(listEvents).toHaveBeenCalledTimes(2));
     expect(
@@ -135,7 +140,7 @@ describe("what the limit is counted against", () => {
       namespaceScope: ["prod"],
       currentNamespace: "prod",
     });
-    mount();
+    await mount();
 
     await waitFor(() => expect(listEvents).toHaveBeenCalledTimes(1));
     expect(asked()[0].namespace).toBe("prod");
@@ -151,7 +156,7 @@ describe("what the limit is counted against", () => {
     listEvents.mockImplementation(async (filters) =>
       feed(filters?.namespace ?? "", 300)
     );
-    mount();
+    await mount();
 
     // 300 + 300 kept as 500: the header counts what is on screen and names
     // the limit that is hiding the rest.
@@ -192,7 +197,7 @@ describe("narrowing the feed", () => {
       };
       return rows;
     });
-    mount();
+    await mount();
 
     await waitFor(() =>
       expect(document.body.textContent).toContain("prod-pod-0")
@@ -218,7 +223,7 @@ describe("narrowing the feed", () => {
       currentNamespace: "prod",
     });
     listEvents.mockImplementation(async () => feed("prod", 5));
-    mount();
+    await mount();
 
     await waitFor(() =>
       expect(document.body.textContent).toContain("prod-pod-0")
@@ -249,7 +254,7 @@ describe("what the join costs", () => {
     listEvents.mockImplementation(async (filters) =>
       feed(filters?.namespace ?? "", 50)
     );
-    const { redraw } = mount();
+    const { redraw } = await mount();
     await waitFor(() =>
       expect(document.body.textContent).toContain("staging-pod-0")
     );
@@ -273,7 +278,7 @@ describe("what the join costs", () => {
     });
     // A full window: the apiserver gave back everything the limit allows.
     listEvents.mockImplementation(async () => feed("prod", 500));
-    mount();
+    await mount();
 
     await screen.findByText(/500 normal/);
     await userEvent.type(
@@ -312,7 +317,7 @@ describe("stories", () => {
   /** The default view is the story, not the row: one sentence per object, worded from the counts. */
   it("opens on stories and words a crash loop from its events", async () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
-    mount("stories");
+    await mount("stories");
 
     const card = await screen.findByRole("article", { name: /api/ });
     expect(card.textContent).toContain("Cannot stay up");
@@ -335,7 +340,7 @@ describe("stories", () => {
   it("reads each pod on the timeline from the entry its own page keeps", async () => {
     const pod = "api-7b6d9c5f4-x8k2p";
     listEvents.mockResolvedValue([warning("prod", pod, 0)]);
-    const { client } = mount("stories");
+    const { client } = await mount("stories");
 
     const card = await screen.findByRole("article", { name: /api/ });
     await userEvent.click(
@@ -351,7 +356,7 @@ describe("stories", () => {
 
   /** A quiet window is a real answer only because the read succeeded; the copy says both. */
   it("says the window is quiet rather than drawing nothing", async () => {
-    mount("stories");
+    await mount("stories");
     expect(
       await screen.findByText(/Nothing happened in .* in the last 1 hour/)
     ).toBeInTheDocument();
@@ -369,7 +374,7 @@ describe("stories", () => {
         'events is forbidden: User "alice" cannot list resource "events"'
       )
     );
-    mount("stories");
+    await mount("stories");
     expect(
       await screen.findByText(/Could not read the events/)
     ).toBeInTheDocument();
@@ -379,7 +384,7 @@ describe("stories", () => {
 
   it("keeps the flat list one tab away", async () => {
     listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
-    mount("stories");
+    await mount("stories");
     await screen.findByRole("article", { name: /api/ });
     await userEvent.click(screen.getByRole("tab", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
@@ -397,20 +402,12 @@ describe("what the page offers Share", () => {
       collect = useScreenSections();
       return null;
     }
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/events?view=list"]}>
-          <TooltipProvider>
-            <ScreenShareProvider>
-              <Events />
-              <Probe />
-            </ScreenShareProvider>
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <Events />
+        <Probe />
+      </ScreenShareProvider>,
+      eventsAt("list")
     );
 
     await waitFor(() => {

@@ -11,7 +11,7 @@
  * file changing.
  */
 
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { ExternalLink, Package } from "lucide-react";
 
 import { gitRevisionLink, shortRevision, vendorIcon } from "@/integrations";
@@ -22,7 +22,8 @@ import {
   deliveryMarks,
   type DeliveryLine,
 } from "@/lib/delivery";
-import { helmOwnerOf, helmReleasePath } from "@/lib/helm-owner";
+import { helmOwnerOf } from "@/lib/helm-owner";
+import { helmReleaseLink } from "@/lib/links";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
@@ -56,7 +57,7 @@ export function DeliveryMarks({ deliveries }: { deliveries: Delivery[] }) {
         return mark.to ? (
           <Link
             key={`${mark.vendorId}-${mark.text}`}
-            to={mark.to}
+            {...mark.to}
             className={cn(className, "hover:text-fg-mut")}
           >
             {body}
@@ -87,7 +88,7 @@ export function HelmMark({ object }: { object: unknown }) {
   if (!release) return null;
   return (
     <Link
-      to={helmReleasePath(release)}
+      {...helmReleaseLink({ source: "native", ...release })}
       title={t("empty", "installedByRelease", { name: release.name })}
       className="inline-flex items-center gap-1.5 text-[11px] text-fg-fnt hover:text-fg-mut"
     >

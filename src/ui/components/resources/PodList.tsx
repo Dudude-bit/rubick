@@ -2,7 +2,7 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { Eye, Trash2, Terminal, FileText } from "lucide-react";
 import { useMemo } from "react";
 import {
@@ -25,7 +25,7 @@ import { ResourceList } from "./ResourceList";
 import { ResourceRef } from "./ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { hrefOf, objectLink } from "@/lib/links";
 import { MetricsStatusBanner } from "@/components/metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
@@ -257,16 +257,14 @@ export function PodList() {
         icon: Eye,
         label: t("action", "viewDetails"),
         onClick: (item) =>
-          navigate(
-            getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)
-          ),
+          navigate(objectLink({ kind: ResourceType.Pod, ...item })!),
       },
       {
         icon: FileText,
         label: t("action", "viewLogs"),
         onClick: (item) =>
           navigate(
-            `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=logs`
+            objectLink({ kind: ResourceType.Pod, ...item }, { tab: "logs" })!
           ),
       },
       {
@@ -274,7 +272,7 @@ export function PodList() {
         label: t("action", "shell"),
         onClick: (item) =>
           navigate(
-            `${getResourceDetailUrl(ResourceType.Pod, item.name, item.namespace)}?tab=shell`
+            objectLink({ kind: ResourceType.Pod, ...item }, { tab: "shell" })!
           ),
       },
       {
@@ -315,7 +313,7 @@ export function PodList() {
         />
       }
       getRowHref={(row) =>
-        getResourceDetailUrl(ResourceType.Pod, row.name, row.namespace)
+        hrefOf(objectLink({ kind: ResourceType.Pod, ...row })!)
       }
       deleteConfig={{
         mutationFn: (item) =>

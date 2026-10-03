@@ -7,7 +7,6 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 
 import {
   ScreenShareProvider,
@@ -15,6 +14,7 @@ import {
 } from "@/components/share/screen-share";
 import { translate } from "@/i18n";
 import type { PlacedSection } from "@/lib/report-parts";
+import { renderWithRouter } from "@/test/render";
 
 import {
   FindingList,
@@ -54,38 +54,37 @@ function ShareProbe() {
 }
 
 const row = (copy?: string) =>
-  render(
-    <MemoryRouter>
-      <TroubleRow
-        title="shop.example.com"
-        copy={copy}
-        meta="2 paths"
-        state={{ text: "serving", tone: "ok" }}
-      >
-        <p>the detail</p>
-      </TroubleRow>
-    </MemoryRouter>
+  renderWithRouter(
+    <TroubleRow
+      title="shop.example.com"
+      copy={copy}
+      meta="2 paths"
+      state={{ text: "serving", tone: "ok" }}
+    >
+      <p>the detail</p>
+    </TroubleRow>,
+    { at: "/c/prod", route: "/c/$cluster" }
   );
 
 describe("a row whose title can be copied", () => {
   /** The whole point: the name is its own control, not a decoration. */
-  it("makes the title a button of its own", () => {
-    row("shop.example.com");
+  it("makes the title a button of its own", async () => {
+    await row("shop.example.com");
     expect(
       screen.getByRole("button", { name: "Copy shop.example.com" })
     ).toBeInTheDocument();
   });
 
   /** A button inside a button is invalid and does not open. */
-  it("does not nest it inside the disclosure", () => {
-    row("shop.example.com");
+  it("does not nest it inside the disclosure", async () => {
+    await row("shop.example.com");
     const copy = screen.getByRole("button", { name: "Copy shop.example.com" });
     expect(copy.closest("button[aria-expanded]")).toBeNull();
   });
 
   /** The row still opens — from the chevron and from the rest of the line. */
-  it("still toggles", () => {
-    row("shop.example.com");
+  it("still toggles", async () => {
+    await row("shop.example.com");
     expect(screen.queryByText("the detail")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: /shop\.example\.com — expand/ })
@@ -97,8 +96,8 @@ describe("a row whose title can be copied", () => {
    * Every other page's rows are names of objects, not addresses. Leaving the
    * prop off has to keep the row exactly as it was — one button, one target.
    */
-  it("leaves a row with nothing to copy alone", () => {
-    row();
+  it("leaves a row with nothing to copy alone", async () => {
+    await row();
     expect(screen.getAllByRole("button")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("the detail")).toBeInTheDocument();
@@ -114,41 +113,40 @@ describe("a row whose title can be copied", () => {
  */
 describe("a row whose title is an object", () => {
   const objectRow = (crd?: string) =>
-    render(
-      <MemoryRouter>
-        <TroubleRow
-          title="shop"
-          reference={{
-            kind: "Application",
-            name: "shop",
-            namespace: "argocd",
-            crd,
-          }}
-          meta="project prod"
-          state={{ text: "degraded", tone: "err" }}
-        >
-          <p>the detail</p>
-        </TroubleRow>
-      </MemoryRouter>
+    renderWithRouter(
+      <TroubleRow
+        title="shop"
+        reference={{
+          kind: "Application",
+          name: "shop",
+          namespace: "argocd",
+          crd,
+        }}
+        meta="project prod"
+        state={{ text: "degraded", tone: "err" }}
+      >
+        <p>the detail</p>
+      </TroubleRow>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
 
-  it("makes the title a link to the object", () => {
-    objectRow("applications.argoproj.io");
+  it("makes the title a link to the object", async () => {
+    await objectRow("applications.argoproj.io");
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      "/customresourcedefinitions/applications.argoproj.io/instances/argocd/shop"
+      "/c/prod/applications.argoproj.io/argocd/shop"
     );
   });
 
-  it("does not nest it inside the disclosure", () => {
-    objectRow("applications.argoproj.io");
+  it("does not nest it inside the disclosure", async () => {
+    await objectRow("applications.argoproj.io");
     expect(
       screen.getByRole("link").closest("button[aria-expanded]")
     ).toBeNull();
   });
 
-  it("still toggles from the chevron", () => {
-    objectRow("applications.argoproj.io");
+  it("still toggles from the chevron", async () => {
+    await objectRow("applications.argoproj.io");
     expect(screen.queryByText("the detail")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /shop — expand/ }));
     expect(screen.getByText("the detail")).toBeInTheDocument();
@@ -159,8 +157,8 @@ describe("a row whose title is an object", () => {
    * fall back to the plain title rather than to a link that renders nothing,
    * which would delete its own subject.
    */
-  it("keeps a plain title for an object it cannot address", () => {
-    objectRow(undefined);
+  it("keeps a plain title for an object it cannot address", async () => {
+    await objectRow(undefined);
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText("shop")).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -175,30 +173,34 @@ interface Item {
 const severityOf = (item: Item) => item.severity;
 const searchable = (item: Item) => [item.name];
 
-function list(items: Item[], at = "/", upTo = 2, when: "err" | "any" = "err") {
-  return render(
-    <MemoryRouter initialEntries={[at]}>
-      <TroubleList
-        items={items}
-        severityOf={severityOf}
-        searchable={searchable}
-        filter={{ label: "Filter", placeholder: "name" }}
-        autoOpen={{ when, upTo }}
-        summary={{
-          brokenFirst: (n, total) => `${n} of ${total} broken`,
-          nothingBroken: "nothing broken",
-          allWell: (total) => `all ${total} well`,
-        }}
-        noMatch={(query) => `nothing matches ${query}`}
-        keyOf={(item) => item.name}
-        renderRow={(item, { openByDefault }) => (
-          <p>
-            {item.name}
-            {openByDefault ? " open" : " closed"}
-          </p>
-        )}
-      />
-    </MemoryRouter>
+function list(
+  items: Item[],
+  query = "",
+  upTo = 2,
+  when: "err" | "any" = "err"
+) {
+  return renderWithRouter(
+    <TroubleList
+      items={items}
+      severityOf={severityOf}
+      searchable={searchable}
+      filter={{ label: "Filter", placeholder: "name" }}
+      autoOpen={{ when, upTo }}
+      summary={{
+        brokenFirst: (n, total) => `${n} of ${total} broken`,
+        nothingBroken: "nothing broken",
+        allWell: (total) => `all ${total} well`,
+      }}
+      noMatch={(query) => `nothing matches ${query}`}
+      keyOf={(item) => item.name}
+      renderRow={(item, { openByDefault }) => (
+        <p>
+          {item.name}
+          {openByDefault ? " open" : " closed"}
+        </p>
+      )}
+    />,
+    { at: `/c/prod${query}`, route: "/c/$cluster" }
   );
 }
 
@@ -214,21 +216,21 @@ describe("a list ordered by trouble", () => {
    * pages kept their filter in local state, so the same click narrowed one
    * list and not the others.
    */
-  it("takes its filter from the address", () => {
-    list(items, "/?q=pro");
+  it("takes its filter from the address", async () => {
+    await list(items, "?q=pro");
     expect(screen.getByText(/promo/)).toBeInTheDocument();
     expect(screen.queryByText(/shop/)).not.toBeInTheDocument();
     expect(screen.getByText("1 of 3")).toBeInTheDocument();
   });
 
-  it("says so when the filter matches nothing", () => {
-    list(items, "/?q=zzz");
+  it("says so when the filter matches nothing", async () => {
+    await list(items, "?q=zzz");
     expect(screen.getByText("nothing matches zzz")).toBeInTheDocument();
   });
 
   /** Would open every broken row on a screen of two hundred. */
-  it("opens the broken rows only while there are few of them", () => {
-    list(items);
+  it("opens the broken rows only while there are few of them", async () => {
+    await list(items);
     expect(screen.getByText("shop open")).toBeInTheDocument();
     expect(screen.getByText("promo closed")).toBeInTheDocument();
 
@@ -236,29 +238,29 @@ describe("a list ordered by trouble", () => {
       name: `down-${i}`,
       severity: "err" as const,
     }));
-    list(many);
+    await list(many);
     expect(screen.getByText("down-0 closed")).toBeInTheDocument();
   });
 
-  it("opens rows worth a look too where the page asks for it", () => {
-    list(items, "/", 2, "any");
+  it("opens rows worth a look too where the page asks for it", async () => {
+    await list(items, "", 2, "any");
     expect(screen.getByText("promo open")).toBeInTheDocument();
     expect(screen.getByText("blog closed")).toBeInTheDocument();
   });
 
-  it("puts the broken count first and the rest after it", () => {
-    list(items);
+  it("puts the broken count first and the rest after it", async () => {
+    await list(items);
     expect(
       screen.getByText("1 of 3 broken · 1 worth a look")
     ).toBeInTheDocument();
   });
 
-  it("tells warnings apart from nothing to see", () => {
-    list([{ name: "promo", severity: "warn" }]);
+  it("tells warnings apart from nothing to see", async () => {
+    await list([{ name: "promo", severity: "warn" }]);
     expect(
       screen.getByText("nothing broken · 1 of 1 worth a look")
     ).toBeInTheDocument();
-    list([{ name: "blog", severity: null }]);
+    await list([{ name: "blog", severity: null }]);
     expect(screen.getByText("all 1 well")).toBeInTheDocument();
   });
 
@@ -267,8 +269,8 @@ describe("a list ordered by trouble", () => {
    * counted only what was found wrong, and nothing is found where nothing
    * is looked at.
    */
-  it("does not call rows it could not check well", () => {
-    list([
+  it("does not call rows it could not check well", async () => {
+    await list([
       { name: "blog", severity: "unknown" },
       { name: "shop", severity: null },
     ]);
@@ -277,8 +279,8 @@ describe("a list ordered by trouble", () => {
   });
 
   /** An unchecked row is not a finding to open for. */
-  it("does not open a row it could not check", () => {
-    list([{ name: "blog", severity: "unknown" }], "/", 2, "any");
+  it("does not open a row it could not check", async () => {
+    await list([{ name: "blog", severity: "unknown" }], "", 2, "any");
     expect(screen.getByText("blog closed")).toBeInTheDocument();
   });
 });
@@ -368,30 +370,29 @@ describe("a row's findings", () => {
  * call inside either component and this fails.
  */
 describe("a list ordered by trouble tells the screen's Share what it found", () => {
-  it("registers a findings section from the rows the vendor calls trouble", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <TroubleList
-            items={items}
-            severityOf={severityOf}
-            searchable={searchable}
-            filter={{ label: "Filter", placeholder: "name" }}
-            autoOpen={{ when: "err", upTo: 2 }}
-            noMatch={(query) => `nothing matches ${query}`}
-            keyOf={(item) => item.name}
-            renderRow={(item) => <p>{item.name}</p>}
-            share={{
-              title: "Applications",
-              toFinding: (item) =>
-                item.severity === "err" || item.severity === "warn"
-                  ? { title: item.name, detail: null, role: item.severity }
-                  : null,
-            }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("registers a findings section from the rows the vendor calls trouble", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <TroubleList
+          items={items}
+          severityOf={severityOf}
+          searchable={searchable}
+          filter={{ label: "Filter", placeholder: "name" }}
+          autoOpen={{ when: "err", upTo: 2 }}
+          noMatch={(query) => `nothing matches ${query}`}
+          keyOf={(item) => item.name}
+          renderRow={(item) => <p>{item.name}</p>}
+          share={{
+            title: "Applications",
+            toFinding: (item) =>
+              item.severity === "err" || item.severity === "warn"
+                ? { title: item.name, detail: null, role: item.severity }
+                : null,
+          }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     // Only shop (err) and promo (warn) are trouble; blog has none to report.
@@ -403,54 +404,52 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
    * list that was never read: nothing, under "everything was read". A list
    * with nothing wrong says how many it checked.
    */
-  it("says how many it checked once every row clears", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <TroubleList
-            items={[{ name: "blog", severity: null }]}
-            severityOf={severityOf}
-            searchable={searchable}
-            filter={{ label: "Filter", placeholder: "name" }}
-            autoOpen={{ when: "err", upTo: 2 }}
-            noMatch={(query) => `nothing matches ${query}`}
-            keyOf={(item) => item.name}
-            renderRow={(item) => <p>{item.name}</p>}
-            share={{ title: "Applications", toFinding: () => null }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("says how many it checked once every row clears", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <TroubleList
+          items={[{ name: "blog", severity: null }]}
+          severityOf={severityOf}
+          searchable={searchable}
+          filter={{ label: "Filter", placeholder: "name" }}
+          autoOpen={{ when: "err", upTo: 2 }}
+          noMatch={(query) => `nothing matches ${query}`}
+          keyOf={(item) => item.name}
+          renderRow={(item) => <p>{item.name}</p>}
+          share={{ title: "Applications", toFinding: () => null }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Applications (0)")).toBeInTheDocument();
   });
 
-  it("registers a row's own findings under the title the caller gives it", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <FindingList
-            findings={["clear", "broken"]}
-            render={(finding) => <p>{finding}</p>}
-            share={{
-              title: "Route findings",
-              toFinding: (finding) =>
-                finding === "clear"
-                  ? null
-                  : { title: finding, detail: null, role: "err" },
-            }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("registers a row's own findings under the title the caller gives it", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <FindingList
+          findings={["clear", "broken"]}
+          render={(finding) => <p>{finding}</p>}
+          share={{
+            title: "Route findings",
+            toFinding: (finding) =>
+              finding === "clear"
+                ? null
+                : { title: finding, detail: null, role: "err" },
+          }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Route findings (1)")).toBeInTheDocument();
   });
 
   /** A Russian title slugged to "" and two such lists took one registry slot. */
-  it("keeps two lists with titles in another script as two sections", () => {
+  it("keeps two lists with titles in another script as two sections", async () => {
     const broken = {
       toFinding: (finding: string) => ({
         title: finding,
@@ -458,22 +457,21 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
         role: "err" as const,
       }),
     };
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <FindingList
-            findings={["a"]}
-            render={(finding) => <p>{finding}</p>}
-            share={{ ...broken, title: "Маршруты" }}
-          />
-          <FindingList
-            findings={["b", "c"]}
-            render={(finding) => <p>{finding}</p>}
-            share={{ ...broken, title: "Издатели" }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <FindingList
+          findings={["a"]}
+          render={(finding) => <p>{finding}</p>}
+          share={{ ...broken, title: "Маршруты" }}
+        />
+        <FindingList
+          findings={["b", "c"]}
+          render={(finding) => <p>{finding}</p>}
+          share={{ ...broken, title: "Издатели" }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Маршруты (1)")).toBeInTheDocument();
@@ -495,33 +493,33 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
    * again; each copy registered its own section, and the file listed the
    * host's findings twice under one anchor.
    */
-  it("gives the file one section for a row's findings drawn twice", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <FindingList
-            findings={["broken"]}
-            brief
-            render={(finding) => <p>{finding}</p>}
-            share={flagged}
-          />
-          <FindingList
-            findings={["broken"]}
-            render={(finding) => <p>{finding}</p>}
-            share={flagged}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("gives the file one section for a row's findings drawn twice", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <FindingList
+          findings={["broken"]}
+          brief
+          render={(finding) => <p>{finding}</p>}
+          share={flagged}
+        />
+        <FindingList
+          findings={["broken"]}
+          render={(finding) => <p>{finding}</p>}
+          share={flagged}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getAllByText("shop.example.com (1)")).toHaveLength(1);
   });
 
   /** Closing the row takes one copy away; the other is still the row's findings. */
-  it("keeps the brief copy's section once the open copy is gone", () => {
-    const view = (open: boolean) => (
-      <MemoryRouter>
+  it("keeps the brief copy's section once the open copy is gone", async () => {
+    function Rows() {
+      const [open, setOpen] = useState(true);
+      return (
         <ScreenShareProvider>
           <FindingList
             findings={["broken"]}
@@ -536,12 +534,13 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
               share={flagged}
             />
           )}
+          <button onClick={() => setOpen(false)}>close</button>
           <ShareProbe />
         </ScreenShareProvider>
-      </MemoryRouter>
-    );
-    const { rerender } = render(view(true));
-    rerender(view(false));
+      );
+    }
+    await renderWithRouter(<Rows />, { at: "/c/prod", route: "/c/$cluster" });
+    fireEvent.click(screen.getByText("close"));
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("shop.example.com (1)")).toBeInTheDocument();
   });
@@ -550,18 +549,17 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
    * A row with no findings is not a section: the file got a "Nothing here."
    * for every open host with nothing wrong.
    */
-  it("gives the file nothing for a row with no findings", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <FindingList
-            findings={[]}
-            render={(finding: string) => <p>{finding}</p>}
-            share={flagged}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("gives the file nothing for a row with no findings", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <FindingList
+          findings={[]}
+          render={(finding: string) => <p>{finding}</p>}
+          share={flagged}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(document.body.textContent).not.toContain("shop.example.com");
@@ -571,34 +569,33 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
    * The list shared every row while the reader had searched it down to a
    * few, so the file carried findings the screen was not showing.
    */
-  it("gives the file the rows the search left, and says what was searched", () => {
-    render(
-      <MemoryRouter initialEntries={["/x?q=shop"]}>
-        <ScreenShareProvider>
-          <TroubleList
-            items={[
-              { name: "shop", severity: "err" as const },
-              { name: "blog", severity: "err" as const },
-            ]}
-            severityOf={severityOf}
-            searchable={searchable}
-            filter={{ label: "Filter", placeholder: "name" }}
-            autoOpen={{ when: "err", upTo: 2 }}
-            noMatch={(query) => `nothing matches ${query}`}
-            keyOf={(item) => item.name}
-            renderRow={(item) => <p>{item.name}</p>}
-            share={{
-              title: "Applications",
-              toFinding: (item) => ({
-                title: item.name,
-                detail: null,
-                role: "err",
-              }),
-            }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("gives the file the rows the search left, and says what was searched", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <TroubleList
+          items={[
+            { name: "shop", severity: "err" as const },
+            { name: "blog", severity: "err" as const },
+          ]}
+          severityOf={severityOf}
+          searchable={searchable}
+          filter={{ label: "Filter", placeholder: "name" }}
+          autoOpen={{ when: "err", upTo: 2 }}
+          noMatch={(query) => `nothing matches ${query}`}
+          keyOf={(item) => item.name}
+          renderRow={(item) => <p>{item.name}</p>}
+          share={{
+            title: "Applications",
+            toFinding: (item) => ({
+              title: item.name,
+              detail: null,
+              role: "err",
+            }),
+          }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod?q=shop", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(screen.getByText("Applications (1)")).toBeInTheDocument();
@@ -609,27 +606,26 @@ describe("a list ordered by trouble tells the screen's Share what it found", () 
    * Rows nobody could check gave no finding, and the file said they were
    * checked and had no problems.
    */
-  it("says how many rows it could not check, rather than that all are fine", () => {
-    render(
-      <MemoryRouter>
-        <ScreenShareProvider>
-          <TroubleList
-            items={[
-              { name: "shop", severity: "unknown" as const },
-              { name: "blog", severity: null },
-            ]}
-            severityOf={severityOf}
-            searchable={searchable}
-            filter={{ label: "Filter", placeholder: "name" }}
-            autoOpen={{ when: "err", upTo: 2 }}
-            noMatch={(query) => `nothing matches ${query}`}
-            keyOf={(item) => item.name}
-            renderRow={(item) => <p>{item.name}</p>}
-            share={{ title: "Applications", toFinding: () => null }}
-          />
-          <ShareProbe />
-        </ScreenShareProvider>
-      </MemoryRouter>
+  it("says how many rows it could not check, rather than that all are fine", async () => {
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <TroubleList
+          items={[
+            { name: "shop", severity: "unknown" as const },
+            { name: "blog", severity: null },
+          ]}
+          severityOf={severityOf}
+          searchable={searchable}
+          filter={{ label: "Filter", placeholder: "name" }}
+          autoOpen={{ when: "err", upTo: 2 }}
+          noMatch={(query) => `nothing matches ${query}`}
+          keyOf={(item) => item.name}
+          renderRow={(item) => <p>{item.name}</p>}
+          share={{ title: "Applications", toFinding: () => null }}
+        />
+        <ShareProbe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     fireEvent.click(screen.getByText("collect"));
     expect(

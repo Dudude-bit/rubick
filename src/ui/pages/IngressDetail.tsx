@@ -38,7 +38,7 @@ import { TrafficChain } from "@/components/resources/TrafficChain";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useConnections } from "@/hooks/useConnections";
 import { useIngressShare } from "@/hooks/useIngressShare";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
@@ -509,7 +509,7 @@ export function IngressDetail() {
                       n: behind.hosts,
                     })}{" "}
                     <Link
-                      to={behind.to}
+                      {...behind.to}
                       className="text-info underline-offset-2 hover:underline"
                     >
                       {t("empty", "itsPage")}

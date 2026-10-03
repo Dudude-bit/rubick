@@ -2,7 +2,8 @@ import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 
-import { renderWithProviders } from "@/test/render";
+import { objectLink } from "@/lib/links";
+import { renderWithRouter } from "@/test/render";
 
 import { TrafficChain } from "./TrafficChain";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
@@ -25,7 +26,18 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const wrap = (ui: ReactElement) =>
-  renderWithProviders(ui, { initialEntries: ["/"] });
+  renderWithRouter(ui, {
+    at: "/c/prod/services/k8s-gui-test/demo",
+    route: "/c/$cluster/$",
+  });
+
+const ingressRouteAPI = () =>
+  objectLink({
+    kind: "IngressRoute",
+    name: "api",
+    namespace: "backend",
+    crd: "ingressroutes.traefik.io",
+  })!;
 
 const service: ObjectRef = {
   kind: "Service",
@@ -71,18 +83,18 @@ const unreadBackend: ObjectRef = {
 } as unknown as ObjectRef;
 
 describe("TrafficChain", () => {
-  it("gives each stop its own answer", () => {
+  it("gives each stop its own answer", async () => {
     /** A view that draws all three the same way is a red dot. Each of these
      *  is a different repair — a name to fix, a selector to fix, a probe to
      *  fix — and the sentence is the whole product. */
-    const said = (stop: ChainStop) => {
-      const view = wrap(<TrafficChain query={query(answered([stop]))} />);
+    const said = async (stop: ChainStop) => {
+      const view = await wrap(<TrafficChain query={query(answered([stop]))} />);
       const text = view.container.textContent ?? "";
       view.unmount();
       return text;
     };
 
-    const missing = said({
+    const missing = await said({
       reason: "backendMissing",
       ingress: {
         kind: "Ingress",
@@ -93,12 +105,12 @@ describe("TrafficChain", () => {
       },
       service,
     });
-    const empty = said({
+    const empty = await said({
       reason: "selectsNothing",
       service,
       selector: "app=tls-demo",
     });
-    const unready = said({
+    const unready = await said({
       reason: "noneReady",
       service,
       selector: "app=unready-demo",
@@ -113,11 +125,11 @@ describe("TrafficChain", () => {
     expect(new Set([missing, empty, unready]).size).toBe(3);
   });
 
-  it("spends one line where there is nothing to draw", () => {
+  it("spends one line where there is nothing to draw", async () => {
     /** The whole feature has to be free on the pages that do not need it.
      *  A heading over an empty chain is two lines spent saying nothing is
      *  there. */
-    wrap(
+    await wrap(
       <TrafficChain
         query={query({
           subject: {
@@ -141,7 +153,7 @@ describe("TrafficChain", () => {
     expect(screen.queryByText("How traffic gets here")).not.toBeInTheDocument();
   });
 
-  it("carries the certificate above the Ingress, and reads without one", () => {
+  it("carries the certificate above the Ingress, and reads without one", async () => {
     /** The certificate is the first thing a browser consults, so it is the
      *  top of the chain. And it is core: a cluster with nothing installed
      *  on it still gets the expiry, because `tls.crt` states it. The second
@@ -200,7 +212,7 @@ describe("TrafficChain", () => {
       notLookedAt: [],
     };
 
-    const withCert = wrap(
+    const withCert = await wrap(
       <TrafficChain
         query={query(conns)}
         certificates={
@@ -230,13 +242,13 @@ describe("TrafficChain", () => {
     expect(withCert.container.textContent).toMatch(/valid for \d+ days/);
     withCert.unmount();
 
-    const bare = wrap(<TrafficChain query={query(conns)} />);
+    const bare = await wrap(<TrafficChain query={query(conns)} />);
     expect(bare.container.textContent).toContain("shop-tls");
     expect(bare.container.textContent).toContain("shop.k8s-gui.test/");
     expect(bare.container.textContent).toContain("demo");
   });
 
-  it("says when no controller claims an Ingress", () => {
+  it("says when no controller claims an Ingress", async () => {
     /** The failure that looks like nothing at all: correct YAML, no events,
      *  no error, and never served. The classes that do exist are named,
      *  because that turns "it does not work" into a one-word fix. */
@@ -273,7 +285,7 @@ describe("TrafficChain", () => {
       notLookedAt: [],
     };
 
-    wrap(
+    await wrap(
       <TrafficChain
         query={query(conns)}
         controller={{
@@ -299,8 +311,8 @@ describe("TrafficChain", () => {
     expect(screen.getByText(/This cluster has traefik\./)).toBeInTheDocument();
   });
 
-  it("marks the dot the reader is standing on, and only that one", () => {
-    wrap(
+  it("marks the dot the reader is standing on, and only that one", async () => {
+    await wrap(
       <TrafficChain
         query={query(
           answered([
@@ -312,10 +324,10 @@ describe("TrafficChain", () => {
     expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
   });
 
-  it("does not draw a chain it has not read yet", () => {
+  it("does not draw a chain it has not read yet", async () => {
     /** Loading is its own screen. A blank space where the chain will be
      *  reads as "nothing routes here", which is the one wrong answer. */
-    wrap(<TrafficChain query={query(undefined, true)} />);
+    await wrap(<TrafficChain query={query(undefined, true)} />);
     expect(screen.getByText("Following the path in…")).toBeInTheDocument();
   });
 
@@ -360,18 +372,18 @@ describe("TrafficChain", () => {
                   name: "api",
                   namespace: "backend",
                 },
-                to: "/x/ingressroutes/api",
+                to: ingressRouteAPI(),
               },
             ],
           ],
         ]),
       });
-      wrap(<Chain query={query(chain)} />);
+      await wrap(<Chain query={query(chain)} />);
 
       expect(screen.getByText("https://api.example.com")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "api" })).toHaveAttribute(
         "href",
-        "/x/ingressroutes/api"
+        "/c/prod/ingressroutes.traefik.io/backend/api"
       );
       vi.doUnmock("@/hooks/useServiceRoutes");
     });
@@ -401,20 +413,17 @@ describe("TrafficChain", () => {
                   namespace: "backend",
                   crd: "ingressroutes.traefik.io",
                 },
-                to: "/x/ingressroutes/api",
+                to: ingressRouteAPI(),
               },
             ],
           ],
         ]),
       });
-      wrap(<Chain query={query(chain)} />);
+      await wrap(<Chain query={query(chain)} />);
 
       expect(
         screen.getByRole("link", { name: "IngressRoute api" })
-      ).toHaveAttribute(
-        "href",
-        "/customresourcedefinitions/ingressroutes.traefik.io/instances/backend/api"
-      );
+      ).toHaveAttribute("href", "/c/prod/ingressroutes.traefik.io/backend/api");
       vi.doUnmock("@/hooks/useServiceRoutes");
     });
 
@@ -442,7 +451,7 @@ describe("TrafficChain", () => {
           ],
         ]),
       });
-      wrap(<Chain query={query(chain)} />);
+      await wrap(<Chain query={query(chain)} />);
 
       expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
       vi.doUnmock("@/hooks/useServiceRoutes");
@@ -487,7 +496,7 @@ describe("TrafficChain", () => {
                   source: {
                     kind: "BackendConfig",
                     name: "shop-backend",
-                    to: "",
+                    to: null,
                   },
                   summary: [
                     {
@@ -504,7 +513,7 @@ describe("TrafficChain", () => {
           ]),
         })
       );
-      wrap(<Chain query={query(chain)} />);
+      await wrap(<Chain query={query(chain)} />);
 
       expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
       expect(screen.getByText("shop-backend")).toBeInTheDocument();
@@ -527,7 +536,7 @@ describe("TrafficChain", () => {
               "k8s-gui-test/demo",
               [
                 {
-                  source: { kind: "BackendConfig", name: "ghost", to: "" },
+                  source: { kind: "BackendConfig", name: "ghost", to: null },
                   summary: [
                     { key: "verbatimLine", values: { said: "every port" } },
                   ],
@@ -546,7 +555,7 @@ describe("TrafficChain", () => {
           ]),
         })
       );
-      const view = wrap(<Chain query={query(chain)} />);
+      const view = await wrap(<Chain query={query(chain)} />);
 
       const problem = screen.getByText(/nothing is applied/);
       expect(problem).toHaveClass("text-err");
@@ -564,7 +573,7 @@ describe("TrafficChain", () => {
       const { TrafficChain: Chain } = await drawWith(
         edges({ available: false })
       );
-      const view = wrap(<Chain query={query(chain)} />);
+      const view = await wrap(<Chain query={query(chain)} />);
 
       expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
       expect(view.container.textContent).not.toContain("BackendConfig");
@@ -577,7 +586,7 @@ describe("TrafficChain", () => {
    * a refusal must end in the rule to ask for and a retry here too — not the
    * bare red dead-end it used to. Same fact, two readers.
    */
-  it("offers the rule and a retry when the connections read is refused", () => {
+  it("offers the rule and a retry when the connections read is refused", async () => {
     const refetch = vi.fn();
     const refused = {
       data: undefined,
@@ -588,7 +597,7 @@ describe("TrafficChain", () => {
       refetch,
     } as unknown as ConnectionsQuery;
 
-    wrap(<TrafficChain query={refused} />);
+    await wrap(<TrafficChain query={refused} />);
 
     expect(
       screen.getByRole("button", { name: /copy the rule to ask for/i })
@@ -605,8 +614,8 @@ describe("TrafficChain", () => {
    * a backend nobody looked at was indistinguishable from one that is there
    * and healthy, on the one view whose whole job is where traffic stops.
    */
-  it("does not draw a backend nobody looked at as a backend that is there", () => {
-    wrap(
+  it("does not draw a backend nobody looked at as a backend that is there", async () => {
+    await wrap(
       <TrafficChain
         query={query({
           subject: ingress,

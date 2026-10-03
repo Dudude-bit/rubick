@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Box, HardDrive, Layers } from "lucide-react";
 
@@ -14,7 +14,7 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { useNow } from "@/hooks/useNow";
-import { getResourceDetailUrl } from "@/lib/navigation-utils";
+import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
@@ -780,7 +780,14 @@ function OperatorTab({ operator }: { operator: OperatorInfo | undefined }) {
       {operator?.operator ? (
         <p>
           <Link
-            to={`${getResourceDetailUrl(ResourceType.Deployment, operator.operator.name, operator.operator.namespace)}?tab=logs`}
+            {...objectLink(
+              {
+                kind: ResourceType.Deployment,
+                name: operator.operator.name,
+                namespace: operator.operator.namespace,
+              },
+              { tab: "logs" }
+            )!}
             className="text-info hover:underline"
           >
             {t("operators", "operatorLogs")}

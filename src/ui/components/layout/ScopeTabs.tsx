@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useNamespaceAccess } from "@/hooks/useNamespaceAccess";
+import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
   clusterColor,
   detectProvider,
@@ -78,45 +79,11 @@ export function ScopeTabs() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useClusterStore((s) => s.namespaceScope);
-  const isConnected = useClusterStore((s) => s.isConnected);
-  const isLoading = useClusterStore((s) => s.isLoading);
-  const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
-  const error = useClusterStore((s) => s.error);
-  const pendingContext = useClusterStore((s) => s.pendingContext);
-  const loadContexts = useClusterStore((s) => s.loadContexts);
-  const connect = useClusterStore((s) => s.connect);
 
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
 
   const stripRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    loadContexts();
-  }, [loadContexts]);
-
-  // The kubeconfig's current context is only a name until something
-  // connects to it; nothing else in the app does.
-  useEffect(() => {
-    if (
-      currentContext &&
-      !isConnected &&
-      !isLoading &&
-      !isAuthenticating &&
-      !error &&
-      !pendingContext
-    ) {
-      connect(currentContext);
-    }
-  }, [
-    currentContext,
-    isConnected,
-    isLoading,
-    isAuthenticating,
-    error,
-    pendingContext,
-    connect,
-  ]);
 
   // Scrolling is only an acceptable overflow policy if the tab you just
   // switched to cannot be the one off the edge. Ctrl+1..9 and Ctrl+Tab
@@ -285,9 +252,8 @@ function ScopeTabItem({
   const t = useT();
   const { context } = tab;
   const scope = tabScope(tab);
-  const switchContext = useClusterStore((s) => s.switchContext);
   const setNamespaceScope = useClusterStore((s) => s.setNamespaceScope);
-  const connect = useClusterStore((s) => s.connect);
+  const openCluster = useOpenCluster();
   const activateTab = useScopeTabStore((s) => s.activateTab);
   const closeTab = useScopeTabStore((s) => s.closeTab);
 
@@ -327,8 +293,7 @@ function ScopeTabItem({
   const pickCluster = (next: string) => {
     setOpen(null);
     if (next === context) return;
-    switchContext(next);
-    connect(next);
+    openCluster(next);
   };
 
   // A tab with no cluster keeps its place — it is where a cluster gets

@@ -5,7 +5,7 @@
  * the answer cannot drift between kinds.
  */
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -27,6 +27,7 @@ import type {
   VolumeFullness,
 } from "@/integrations";
 import { errorToShow } from "@/lib/error-utils";
+import { pageLink } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
@@ -381,7 +382,10 @@ function HistoryNote({ state }: { state: RangedHistory }) {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
         {t("empty", "longerNeedsPrometheus")}{" "}
-        <Link to="/integrations" className="text-info hover:underline">
+        <Link
+          {...pageLink("integrations")}
+          className="text-info hover:underline"
+        >
           {t("action", "connectOne")}
         </Link>
         .

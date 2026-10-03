@@ -9,11 +9,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
 import { RelatedPanel } from "./RelatedPanel";
 import type { RelatedObjects } from "@/hooks/useRelatedObjects";
+import { renderWithRouter } from "@/test/render";
 
 const query = (over: Partial<RelatedObjects> = {}): RelatedObjects => ({
   claimed: false,
@@ -24,15 +24,14 @@ const query = (over: Partial<RelatedObjects> = {}): RelatedObjects => ({
 });
 
 const draw = (over: Partial<RelatedObjects> = {}, kind = "SealedSecret") =>
-  render(
-    <MemoryRouter>
-      <RelatedPanel query={query(over)} kind={kind} />
-    </MemoryRouter>
-  );
+  renderWithRouter(<RelatedPanel query={query(over)} kind={kind} />, {
+    at: "/c/prod/customresourcedefinitions/sealedsecrets.bitnami.com",
+    route: "/c/$cluster/$",
+  });
 
 describe("a custom resource's connections", () => {
-  it("says the app does not know, when no integration claims the kind", () => {
-    draw();
+  it("says the app does not know, when no integration claims the kind", async () => {
+    await draw();
     expect(
       screen.getByText(/No integration in this app reads SealedSecret/)
     ).toBeInTheDocument();
@@ -41,8 +40,8 @@ describe("a custom resource's connections", () => {
     ).toBeInTheDocument();
   });
 
-  it("says the object points at nothing, when one claims it and finds none", () => {
-    draw({ claimed: true }, "Application");
+  it("says the object points at nothing, when one claims it and finds none", async () => {
+    await draw({ claimed: true }, "Application");
     expect(
       screen.getByText(/names no other object right now/)
     ).toBeInTheDocument();
@@ -54,8 +53,8 @@ describe("a custom resource's connections", () => {
    * is drawn for every object whether or not anything understands the kind,
    * so a list of exactly one row must not read as the whole answer.
    */
-  it("marks an owner-only list as short, not as complete", () => {
-    draw({
+  it("marks an owner-only list as short, not as complete", async () => {
+    await draw({
       claimed: false,
       related: [
         {
@@ -73,8 +72,8 @@ describe("a custom resource's connections", () => {
     ).toBeInTheDocument();
   });
 
-  it("says nothing of the sort once an integration has answered", () => {
-    draw(
+  it("says nothing of the sort once an integration has answered", async () => {
+    await draw(
       {
         claimed: true,
         related: [
@@ -94,8 +93,8 @@ describe("a custom resource's connections", () => {
   });
 
   /** A row whose CRD is known is openable; one without it is still readable. */
-  it("opens a far end that is itself a custom resource", () => {
-    draw({
+  it("opens a far end that is itself a custom resource", async () => {
+    await draw({
       claimed: true,
       related: [
         {
@@ -110,7 +109,7 @@ describe("a custom resource's connections", () => {
     });
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      "/customresourcedefinitions/certificates.cert-manager.io/instances/shop/shop-tls"
+      "/c/prod/certificates.cert-manager.io/shop/shop-tls"
     );
   });
 
@@ -119,8 +118,8 @@ describe("a custom resource's connections", () => {
    * else's failure is a second guess at it, and this string is what the reader
    * pastes into a search.
    */
-  it("repeats the controller's message verbatim", () => {
-    draw({
+  it("repeats the controller's message verbatim", async () => {
+    await draw({
       claimed: true,
       related: [
         {
@@ -139,8 +138,8 @@ describe("a custom resource's connections", () => {
     ).toBeInTheDocument();
   });
 
-  it("warns that a failed integration leaves the list short", () => {
-    draw({ claimed: true, error: new Error("connection refused") });
+  it("warns that a failed integration leaves the list short", async () => {
+    await draw({ claimed: true, error: new Error("connection refused") });
     expect(screen.getByText(/short by an unknown amount/)).toBeInTheDocument();
   });
 });

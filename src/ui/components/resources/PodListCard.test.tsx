@@ -12,14 +12,14 @@ import { describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 import { PodListCard } from "./PodListCard";
 import type { PodInfo } from "@/generated/types";
 
 // The card asks whether any of these pods sits on a node that stopped
 // reporting, so it needs the provider the app always mounts around it.
 const card = (props: { pods: PodInfo[]; error?: Error | null }) =>
-  renderWithProviders(<PodListCard {...props} />, { initialEntries: ["/"] });
+  renderWithRouter(<PodListCard {...props} />, { at: "/c/prod" });
 
 const pod = (name: string): PodInfo =>
   ({
@@ -32,14 +32,14 @@ const pod = (name: string): PodInfo =>
   }) as unknown as PodInfo;
 
 describe("a pod list that could not be read", () => {
-  it("does not claim the workload owns no pods", () => {
-    card({ pods: [], error: new Error("connection refused") });
+  it("does not claim the workload owns no pods", async () => {
+    await card({ pods: [], error: new Error("connection refused") });
     expect(screen.queryByText(/no pods/i)).toBeNull();
     expect(screen.getByText(/could not read/i)).toBeTruthy();
   });
 
-  it("quotes the reason, because the reader has to act on it", () => {
-    card({ pods: [], error: new Error("connection refused") });
+  it("quotes the reason, because the reader has to act on it", async () => {
+    await card({ pods: [], error: new Error("connection refused") });
     expect(screen.getByText(/connection refused/i)).toBeTruthy();
   });
 
@@ -47,15 +47,18 @@ describe("a pod list that could not be read", () => {
    * A refusal is not a failure. Saying "could not read" about one invites a
    * retry that will be refused the same way.
    */
-  it("names a refusal as a refusal", () => {
-    card({ pods: [], error: new Error("pods is forbidden: User cannot list") });
+  it("names a refusal as a refusal", async () => {
+    await card({
+      pods: [],
+      error: new Error("pods is forbidden: User cannot list"),
+    });
     expect(screen.getByText(/permission/i)).toBeTruthy();
     expect(screen.queryByText(/could not read/i)).toBeNull();
   });
 
   /** A workload that genuinely owns none still says so. */
-  it("still says none when there is no error", () => {
-    card({ pods: [] });
+  it("still says none when there is no error", async () => {
+    await card({ pods: [] });
     expect(screen.getByText(/no pods/i)).toBeTruthy();
   });
 
@@ -63,8 +66,8 @@ describe("a pod list that could not be read", () => {
    * A refetch that fails keeps the rows it already had — the failure only
    * replaces the list when there is nothing left to show.
    */
-  it("keeps the rows it has when a refetch fails", () => {
-    const { container } = card({
+  it("keeps the rows it has when a refetch fails", async () => {
+    const { container } = await card({
       pods: [pod("web-1")],
       error: new Error("connection refused"),
     });
@@ -80,10 +83,10 @@ describe("what a pod row says about its containers", () => {
    * The row detail was "1/1 ready · 3 restarts" in English on a Russian
    * page, and the restart count had one form for every number.
    */
-  it("says readiness and restarts in the reader's language", () => {
+  it("says readiness and restarts in the reader's language", async () => {
     useLocaleStore.setState({ choice: "ru" });
     try {
-      const { container } = card({
+      const { container } = await card({
         pods: [{ ...pod("web-1"), restartCount: 3 } as PodInfo],
       });
       expect(container.textContent).toContain("готово 1/1 · 3 перезапуска");

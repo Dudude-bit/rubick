@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Bell, Check, Copy, HelpCircle, X } from "lucide-react";
 
-import { isRoutableKind, ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/resources/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow } from "@/hooks/useNow";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
+import { objectLink, pageLink } from "@/lib/links";
 import { cn, formatSince } from "@/lib/utils";
-import { crdObjectPath, hourMinute } from "../../kit";
+import { hourMinute } from "../../kit";
 import { FilterBox, Finding, OutLink, VendorReadFailure } from "../../page-kit";
-import { integrationSettingsPath } from "../../paths";
 import { useShareSection } from "@/components/share/screen-share";
 import { usePicture, type Picture } from "../monitors/data";
 import { useSavedConnection } from "../saved-connection";
@@ -59,11 +60,20 @@ const TONE: Record<RuleGroup, RowTone> = {
   unchecked: "mut",
 };
 
+const ruleLink = (object: { name: string; namespace: string }) =>
+  objectLink({
+    kind: "PrometheusRule",
+    name: object.name,
+    namespace: object.namespace,
+    crd: RULES_CRD,
+  })!;
+
 export default function Alerts() {
   const t = useT();
   const picture = usePicture();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const search = useAppSearch();
+  const setSearch = useSetSearch();
   const [filter, setFilter] = useState("");
   const [only, setOnly] = useState<RuleGroup | null>(null);
 
@@ -103,7 +113,7 @@ export default function Alerts() {
     );
   }, [rows, filter, only]);
 
-  const asked = params.get("rule");
+  const asked = search.rule;
   const selected =
     shown.find((row) => keyOf(row) === asked) ?? shown[0] ?? null;
   const selectedKey = selected ? keyOf(selected) : null;
@@ -116,13 +126,9 @@ export default function Alerts() {
       .getElementById(`alert-rule-${selectedKey}`)
       ?.scrollIntoView({ block: "nearest" });
   }, [selectedKey]);
-  const select = (row: RuleRow) => {
-    const updated = new URLSearchParams(params);
-    updated.set("rule", keyOf(row));
-    setParams(updated, { replace: true });
-  };
-  const open = (row: RuleRow) =>
-    navigate(crdObjectPath(RULES_CRD, row.object.namespace, row.object.name));
+  const select = (row: RuleRow) =>
+    setSearch({ rule: keyOf(row) }, { replace: true });
+  const open = (row: RuleRow) => navigate(ruleLink(row.object));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!selected) return;
     const index = shown.indexOf(selected);
@@ -234,7 +240,7 @@ function Header({ picture, rows }: { picture: Picture; rows: RuleRow[] }) {
         <Note tone="info">
           {t("alerts", "notConnected")}{" "}
           <Link
-            to={integrationSettingsPath("prometheus")}
+            {...pageLink("integrations", { vendor: "prometheus" })}
             className="text-info hover:underline"
           >
             {t("monitors", "connectPrometheus")}
@@ -544,7 +550,7 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
         </div>
         <div className="flex flex-none gap-1.5">
           <Link
-            to={crdObjectPath(RULES_CRD, object.namespace, object.name)}
+            {...ruleLink(object)}
             className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-hair px-2.5 text-xs text-fg-mid hover:bg-hover"
           >
             {t("monitors", "openObject")}
@@ -619,11 +625,12 @@ function Detail({ row, picture }: { row: RuleRow; picture: Picture }) {
           {by.map((instance) => (
             <p key={instance.uid} className="mt-1.5 font-mono text-xs text-fg">
               <Link
-                to={crdObjectPath(
-                  PROMETHEUSES_CRD,
-                  instance.namespace,
-                  instance.name
-                )}
+                {...objectLink({
+                  kind: "Prometheus",
+                  name: instance.name,
+                  namespace: instance.namespace,
+                  crd: PROMETHEUSES_CRD,
+                })!}
                 className="hover:underline"
               >
                 {instance.namespace}/{instance.name}
@@ -866,8 +873,7 @@ function RuleCard({
                   {alert.state}
                 </span>
                 <span className="min-w-0 truncate">
-                  {subject &&
-                  isRoutableKind(subject.kind, subject.namespace) ? (
+                  {subject && objectLink(subject) !== null ? (
                     <ObjectLink
                       kind={subject.kind}
                       name={subject.name}

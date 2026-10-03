@@ -14,14 +14,10 @@
 
 import { managedExpiryOf } from "@/lib/certificates";
 import { commands } from "@/lib/commands";
+import { crdInstancesLink, objectLink } from "@/lib/links";
 import type { CustomResourceInfo } from "@/generated/types";
 
-import {
-  crdObjectPath,
-  crdObjectsPath,
-  getValueByPath,
-  readyStatus,
-} from "../kit";
+import { getValueByPath, readyStatus } from "../kit";
 import type { VendorFact } from "../registry";
 
 const CERTIFICATES_CRD = "certificates.cert-manager.io";
@@ -140,12 +136,13 @@ export async function facts(): Promise<VendorFact[]> {
       say: { key: problems.length === 1 ? "factShowIt" : "factShowThem" },
       to:
         problems.length === 1
-          ? crdObjectPath(
-              CERTIFICATES_CRD,
-              problems[0].namespace,
-              problems[0].name
-            )
-          : crdObjectsPath(CERTIFICATES_CRD),
+          ? objectLink({
+              kind: "Certificate",
+              name: problems[0].name,
+              namespace: problems[0].namespace,
+              crd: CERTIFICATES_CRD,
+            })!
+          : crdInstancesLink(CERTIFICATES_CRD),
     });
   }
 

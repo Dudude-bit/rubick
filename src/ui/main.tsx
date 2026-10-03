@@ -6,10 +6,10 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { RouterProvider } from "@tanstack/react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
-import App from "./App";
+import { makeRouter } from "./router";
 // Fonts are bundled, not fetched: the app's CSP is `style-src 'self'` /
 // `font-src 'self' data:`, which blocks the Google Fonts stylesheet and
 // the gstatic font files outright. Loading them from a CDN also breaks
@@ -96,6 +96,8 @@ const queryClient = new QueryClient({
   },
 });
 
+const router = makeRouter(queryClient);
+
 // Kbd reads the platform synchronously, so it is set before the first render.
 setHostOs(hostOsFromUserAgent(navigator.userAgent));
 
@@ -105,10 +107,8 @@ function render() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <BrowserRouter>
-            <App />
-            <Toaster />
-          </BrowserRouter>
+          <RouterProvider router={router} />
+          <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
     </React.StrictMode>

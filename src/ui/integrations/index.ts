@@ -11,7 +11,8 @@
  * bulky beside it in the same folder, and one import plus one entry in
  * {@link VENDORS} here. A vendor bringing a whole screen adds
  * `page: { count, load }` beside `extension`, which puts a row in the sidebar
- * and serves `/integrations/<id>` through the route `App.tsx` already has.
+ * and serves `/c/<cluster>/integrations/<id>` through the route that
+ * already exists.
  *
  * Two exceptions, both inside the tree: a new *capability* adds a key to
  * `Capabilities` in `registry.ts` and needs a surface written to consume it;
@@ -37,13 +38,13 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { commands } from "@/lib/commands";
+import { pageLink, vendorLink, type AppLink } from "@/lib/links";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   forwardsFor,
   useClusterForwardStore,
 } from "@/stores/clusterForwardStore";
-import { integrationPagePath, integrationSettingsPath } from "./paths";
 import { pageDecision } from "./page-state";
 import argocd from "./argocd";
 import cloudnativepg from "./cloudnativepg";
@@ -52,7 +53,7 @@ import aws, { awsLoadBalancerController } from "./aws";
 import azure, { aksAddons } from "./azure";
 import certManager from "./cert-manager";
 import cilium from "./cilium";
-import flux, { helmReleasePath } from "./flux";
+import flux, { helmReleaseObjectLink } from "./flux";
 import googleCloud, { gkeIngress } from "./google-cloud";
 import ingressNginx from "./ingress-nginx";
 import istio from "./istio";
@@ -437,10 +438,10 @@ export function alertsCanBeAbout(kind: string): boolean {
  * answers this key: a link to a page that does not discuss the thing is
  * worse than no link, and the vendor is the only one who knows.
  */
-function answeredAt(vendor: Vendor, key: CapabilityKey): string | null {
+function answeredAt(vendor: Vendor, key: CapabilityKey): AppLink | null {
   const suffix = vendor.page?.answers?.[key];
   if (suffix === undefined) return null;
-  return `${integrationPagePath(vendor.id)}${suffix}`;
+  return vendorLink(vendor.id, Object.fromEntries(new URLSearchParams(suffix)));
 }
 
 /** The address as a chart label wants it — no scheme, no trailing slash. */
@@ -823,7 +824,7 @@ export interface IntegrationPageEntry {
   id: string;
   name: string;
   icon: LucideIcon;
-  path: string;
+  link: AppLink;
   /** `null` while it is being read, and where the cluster refused to say. */
   count: number | null;
   /**
@@ -833,7 +834,7 @@ export interface IntegrationPageEntry {
    */
   tone: "warn" | "err" | "unchecked" | null;
   /**
-   * Whether {@link path} is the vendor's own screen or its Settings row.
+   * Whether {@link link} is the vendor's own screen or its Settings row.
    * The caller needs it because the second kind shares one route between
    * several rows, and "which of these is the open one" is then a question
    * about the query string rather than about the path.
@@ -1028,10 +1029,10 @@ export function useIntegrationPages(): {
       id: vendor.id,
       name: vendor.name,
       icon: vendor.extension.icon,
-      path:
+      link:
         index === -1
-          ? integrationSettingsPath(vendor.id)
-          : integrationPagePath(vendor.id),
+          ? pageLink("integrations", { vendor: vendor.id })
+          : vendorLink(vendor.id),
       asleep:
         forwarded.has(vendor.id) &&
         connections.get(vendor.id)?.state !== "connected",
@@ -1232,8 +1233,7 @@ export function flavourOf(provider: ClusterProvider): Flavour | null {
  * offers the link. Naming a vendor in *copy* was never the problem; naming
  * one in an `import` is.
  */
-export { helmReleasePath as fluxHelmReleasePath };
-export { integrationPagePath };
+export { helmReleaseObjectLink as fluxHelmReleaseLink };
 
 /**
  * Reaching a configured vendor that runs *in* the cluster.

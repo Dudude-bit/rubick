@@ -6,11 +6,8 @@
  * away the page the reader is working in.
  */
 
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, waitFor } from "@testing-library/react";
 
 vi.mock("@/stores/clusterStore", () => {
   const state = { currentNamespace: "default", isConnected: true };
@@ -32,39 +29,38 @@ vi.mock("./useResourceYaml", () => ({
 }));
 
 import { queryKeys } from "@/lib/query-keys";
-import { useResourceDetail } from "./useResourceDetail";
+import { renderWithRouter, testQueryClient } from "@/test/render";
+import {
+  useResourceDetail,
+  type UseResourceDetailResult,
+} from "./useResourceDetail";
 
 interface Pod {
   name: string;
 }
 
-const PATH = "/pods/default/api-7bcd";
+const PATH = "/c/prod/pods/default/api-7bcd";
 
 /** Mounted at a route, because the hook reads the name out of the path. */
-function detail(fetchResource: (name: string) => Promise<Pod>) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+async function detail(fetchResource: (name: string) => Promise<Pod>) {
+  const client = testQueryClient();
+  const result = {} as { current: UseResourceDetailResult<Pod> };
+  function Probe() {
+    result.current = useResourceDetail<Pod>({
+      resourceKind: "Pod",
+      fetchResource: (name) => fetchResource(name),
+      refresh: false,
+    });
+    return null;
+  }
+  const { router } = await renderWithRouter(<Probe />, {
+    client,
+    at: PATH,
+    route: "/c/$cluster/pods/$namespace/$name",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[PATH]}>
-        <Routes>
-          <Route path="/pods/:namespace/:name" element={<>{children}</>} />
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  const rendered = renderHook(
-    () =>
-      useResourceDetail<Pod>({
-        resourceKind: "Pod",
-        fetchResource: (name) => fetchResource(name),
-        refresh: false,
-      }),
-    { wrapper }
-  );
   return {
-    ...rendered,
+    result,
+    router,
     /**
      * What the cache thinks, which is not what the page is told — and the
      * whole point. Asserting on the hook alone would pass before the fix too:
@@ -88,7 +84,7 @@ describe("what a detail page calls an error", () => {
       .mockResolvedValueOnce({ name: "api-7bcd" })
       .mockRejectedValue(new Error("connection reset"));
 
-    const { result, settled } = detail(fetch);
+    const { result, settled } = await detail(fetch);
     await waitFor(() => expect(result.current.resource).toBeDefined());
 
     result.current.refetch();
@@ -108,7 +104,7 @@ describe("what a detail page calls an error", () => {
       .fn<(name: string) => Promise<Pod>>()
       .mockResolvedValue({ name: "api-7bcd" });
 
-    const { result, settled } = detail(fetch);
+    const { result, settled } = await detail(fetch);
     await waitFor(() => expect(result.current.resource).toBeDefined());
     expect(settled()?.data).toEqual({ name: "api-7bcd" });
   });
@@ -119,9 +115,33 @@ describe("what a detail page calls an error", () => {
       .fn<(name: string) => Promise<Pod>>()
       .mockRejectedValue(new Error("pods 'api-7bcd' is forbidden"));
 
-    const { result } = detail(fetch);
+    const { result } = await detail(fetch);
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.error?.message).toMatch(/forbidden/);
+  });
+});
+
+describe("the tab a detail page is open on", () => {
+  /**
+   * A copied address, a deep link or a scope tab restored next launch has
+   * only the address to go on. Fails if the tab is kept in the page alone.
+   */
+  it("is written into the address, and the default tab is left out", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValue({ name: "api-7bcd" });
+    const { result, router } = await detail(fetch);
+    expect(result.current.activeTab).toBe("overview");
+
+    act(() => result.current.setActiveTab("logs"));
+    await waitFor(() =>
+      expect(router.state.location.href).toBe(`${PATH}?tab=logs`)
+    );
+    await waitFor(() => expect(result.current.activeTab).toBe("logs"));
+
+    act(() => result.current.setActiveTab("overview"));
+    await waitFor(() => expect(router.state.location.href).toBe(PATH));
+    await waitFor(() => expect(result.current.activeTab).toBe("overview"));
   });
 });

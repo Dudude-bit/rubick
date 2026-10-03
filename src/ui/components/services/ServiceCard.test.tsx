@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen } from "@testing-library/react";
 
 import {
   ScreenShareProvider,
   useScreenSections,
 } from "@/components/share/screen-share";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ChainPath } from "@/lib/connections";
+import { renderWithRouter } from "@/test/render";
 
 const chain = vi.hoisted(() => ({ paths: [] as ChainPath[] }));
 const read = vi.hoisted(() => ({ error: null as unknown }));
@@ -61,13 +60,10 @@ const pin = {
 };
 
 const mount = () =>
-  render(
-    <MemoryRouter>
-      <TooltipProvider>
-        <ServiceCard pin={pin} onUnpin={() => {}} />
-      </TooltipProvider>
-    </MemoryRouter>
-  );
+  renderWithRouter(<ServiceCard pin={pin} onUnpin={() => {}} />, {
+    at: "/c/prod",
+    route: "/c/$cluster",
+  });
 
 beforeEach(() => {
   read.error = null;
@@ -79,14 +75,14 @@ describe("what a card says about its state", () => {
    * sent with it was lost on the way: a deleted Deployment read as "could
    * not read" rather than as gone.
    */
-  it("says a pinned workload the cluster no longer has is gone", () => {
+  it("says a pinned workload the cluster no longer has is gone", async () => {
     const said = "Resource not found: Deployment/payments in namespace shop";
     read.error = new Error(
       `Tauri command 'getResourceConnections' failed: ${said}`,
       { cause: { code: "NOT_FOUND", message: said } }
     );
 
-    mount();
+    await mount();
 
     expect(screen.getByText(/does not exist|не существует/i)).toBeVisible();
   });
@@ -99,7 +95,7 @@ describe("what a card says about a way in", () => {
    * serving — and an address is the entry a reader would actually click,
    * which is the one that is never known until a published hop matches it.
    */
-  it("says the backing was not read rather than drawing it as working", () => {
+  it("says the backing was not read rather than drawing it as working", async () => {
     chain.paths = [
       {
         key: "c",
@@ -124,14 +120,14 @@ describe("what a card says about a way in", () => {
       },
     ] as unknown as ChainPath[];
 
-    mount();
+    await mount();
 
     expect(screen.getByText("https://shop.example.com")).toBeVisible();
     expect(screen.getByText(/not read yet|не читали/i)).toBeVisible();
   });
 
   /** And a Service read to have nothing behind it still says so, in warning. */
-  it("keeps saying when a service really has nothing behind it", () => {
+  it("keeps saying when a service really has nothing behind it", async () => {
     chain.paths = [
       {
         key: "c",
@@ -169,7 +165,7 @@ describe("what a card says about a way in", () => {
       },
     ] as unknown as ChainPath[];
 
-    mount();
+    await mount();
 
     expect(screen.getByText(/nothing behind|ничего нет/i)).toBeVisible();
   });
@@ -213,21 +209,18 @@ describe("what a card offers Share", () => {
     expect(section.unread).toBe("Forbidden");
   });
 
-  it("registers into the screen's Share while the card is mounted", () => {
+  it("registers into the screen's Share while the card is mounted", async () => {
     let collect = null as ReturnType<typeof useScreenSections>;
     function Probe() {
       collect = useScreenSections();
       return null;
     }
-    render(
-      <MemoryRouter>
-        <TooltipProvider>
-          <ScreenShareProvider>
-            <ServiceCard pin={pin} onUnpin={() => {}} />
-            <Probe />
-          </ScreenShareProvider>
-        </TooltipProvider>
-      </MemoryRouter>
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <ServiceCard pin={pin} onUnpin={() => {}} />
+        <Probe />
+      </ScreenShareProvider>,
+      { at: "/c/prod", route: "/c/$cluster" }
     );
     const sections = collect?.() ?? [];
     expect(

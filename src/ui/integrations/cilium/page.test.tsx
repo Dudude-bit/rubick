@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen, waitFor } from "@testing-library/react";
+
+import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
 
@@ -21,17 +20,10 @@ const { default: CiliumPage } = await import("./page");
 const FORBIDDEN = `ciliumendpoints.cilium.io is forbidden: User "dev" cannot list resource "ciliumendpoints" at the cluster scope`;
 
 function renderPage() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+  return renderWithRouter(<CiliumPage />, {
+    at: "/c/test/integrations/cilium",
+    route: "/c/$cluster/integrations/$vendor",
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/integrations/cilium"]}>
-        {children}
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  return render(<CiliumPage />, { wrapper });
 }
 
 beforeEach(() => answers.clear());
@@ -52,7 +44,7 @@ describe("the Cilium page", () => {
       )
     );
 
-    renderPage();
+    await renderPage();
 
     await waitFor(() =>
       expect(
@@ -91,7 +83,7 @@ describe("the Cilium page", () => {
       ])
     );
 
-    renderPage();
+    await renderPage();
 
     const state = await screen.findByText(en.readings.ciliumCannotSay);
     expect(state).toHaveClass(TONE_TEXT.unknown);
@@ -100,7 +92,7 @@ describe("the Cilium page", () => {
 
   /** Read and empty is its own sentence, not an empty search. */
   it("says there are no endpoints when the lists answered empty", async () => {
-    renderPage();
+    await renderPage();
 
     await waitFor(() =>
       expect(

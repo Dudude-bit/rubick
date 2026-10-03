@@ -1,4 +1,5 @@
-import { getResourceListUrl, RESOURCE_REGISTRY } from "@/lib/resource-registry";
+import type { AppSearch } from "@/lib/app-search";
+import { listSegment, RESOURCE_REGISTRY } from "@/lib/resource-registry";
 
 /**
  * The list search, carried from one kind to the next.
@@ -13,16 +14,16 @@ import { getResourceListUrl, RESOURCE_REGISTRY } from "@/lib/resource-registry";
  * same question, and a search in their address would mean nothing. A list a
  * carried search empties still says which term emptied it and offers to
  * clear it, so this cannot leave somebody looking at a blank page.
+ *
+ * The answer is the search to give the row's link, or `undefined` for none.
  */
-export function withCarriedSearch(
-  path: string,
+export function carriedSearch(
   kind: string | undefined,
-  search: string,
+  search: AppSearch,
   from: string
-): string {
-  if (!kind || !listsAKind(from)) return path;
-  const term = new URLSearchParams(search).get("q");
-  return term ? `${path}?q=${encodeURIComponent(term)}` : path;
+): { q: string } | undefined {
+  if (!kind || !listsAKind(from) || !search.q) return undefined;
+  return { q: search.q };
 }
 
 /**
@@ -32,7 +33,9 @@ export function withCarriedSearch(
  * where the sidebar's kind rows point.
  */
 function listsAKind(pathname: string): boolean {
+  const [c, cluster, resource, ...rest] = pathname.split("/").filter(Boolean);
+  if (c !== "c" || !cluster || !resource || rest.length > 0) return false;
   return RESOURCE_REGISTRY.some(
-    (entry) => getResourceListUrl(entry.kind) === pathname
+    (entry) => listSegment(entry.kind) === resource
   );
 }

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Lock,
@@ -18,6 +18,7 @@ import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useListAccess } from "@/hooks/useListAccess";
+import { useAppSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
@@ -34,9 +35,9 @@ import {
   ResourceType,
   getDisplayPlural,
   getResourceIcon,
-  getResourceListUrl,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import { clusterLink, listLink, pageLink, type AppLink } from "@/lib/links";
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
@@ -56,7 +57,7 @@ import { useUpdaterStore } from "@/stores/updaterStore";
 import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
-import { withCarriedSearch } from "@/lib/carried-search";
+import { carriedSearch } from "@/lib/carried-search";
 
 type NavKey = keyof typeof en.nav;
 
@@ -72,7 +73,7 @@ type NavName =
   { label: string; labelKey?: never } | { labelKey: NavKey; label?: never };
 
 type NavItem = NavName & {
-  path: string;
+  path: AppLink;
   icon: LucideIcon;
   /** Which of the backend's counts belongs at the end of this row. */
   count?: keyof ResourceCounts;
@@ -80,8 +81,12 @@ type NavItem = NavName & {
   kind?: ResourceKind;
 };
 
-const ROW_CLASS =
-  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] text-fg-mid transition-colors hover:bg-hover";
+// Split by state because the router joins a link's state classes onto it
+// without merging them, so the two text colours must never meet.
+const ROW_BASE_CLASS =
+  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] transition-colors hover:bg-hover";
+const ROW_SHUT_CLASS = "text-fg-mid";
+const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
 // The icon sits a step below the label in contrast: it aids recognition
 // without competing with it. Only the open row lifts it, which is what
@@ -95,7 +100,7 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
   return {
     kind,
     label: getDisplayPlural(kind),
-    path: getResourceListUrl(kind),
+    path: listLink(kind),
     icon: getResourceIcon(kind),
     count,
   };
@@ -112,9 +117,9 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
 const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   {
     items: [
-      { labelKey: "overview", path: "/", icon: LayoutDashboard },
+      { labelKey: "overview", path: clusterLink(), icon: LayoutDashboard },
       resource(ResourceType.Event, "events"),
-      { labelKey: "changes", path: "/changes", icon: History },
+      { labelKey: "changes", path: pageLink("changes"), icon: History },
     ],
   },
   {
@@ -134,7 +139,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       resource(ResourceType.Node, "nodes"),
       resource(ResourceType.Namespace, "namespaces"),
       resource(ResourceType.CustomResourceDefinition),
-      { label: "Helm", path: "/helm", icon: Package },
+      { label: "Helm", path: pageLink("helm"), icon: Package },
     ],
   },
   {
@@ -166,6 +171,21 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
     ],
   },
 ];
+
+const pathnameOf = (state: { location: { pathname: string } }) =>
+  state.location.pathname;
+
+/**
+ * The catalog itself, `/c/<cluster>/integrations`. Every vendor without a
+ * screen of its own shares that address, so which row is open is a question
+ * about `?vendor=`.
+ */
+const isCatalogLocation = (state: { location: { pathname: string } }) => {
+  const [, , page, ...rest] = state.location.pathname
+    .split("/")
+    .filter(Boolean);
+  return page === "integrations" && rest.length === 0;
+};
 
 /** Every kind the nav offers, which is exactly what to ask the authorizer about. */
 const NAV_KINDS: ResourceKind[] = GROUPS.flatMap((group) =>
@@ -232,7 +252,7 @@ export function Sidebar() {
             {group.caption && <GroupCaption k={group.caption} />}
             {group.items.map((item) => (
               <NavRow
-                key={item.path}
+                key={item.labelKey ?? item.label}
                 item={item}
                 overview={overview}
                 denied={item.kind ? access[item.kind] === false : false}
@@ -446,7 +466,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       )}
       {routeKinds.length > 0 && (
         <NavRow
-          item={{ labelKey: "routes", path: "/network/routes", icon: Route }}
+          item={{ labelKey: "routes", path: pageLink("routes"), icon: Route }}
           overview={overview}
           value={
             routes.data?.complete && routes.data.unread.length === 0
@@ -497,19 +517,18 @@ function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
  * A row whose vendor owns no screen goes to its catalog row instead of
  * being dropped — several of them share one route, which is why those rows
  * decide their own highlight from the query string rather than letting
- * `NavLink` light all of them at once.
+ * the router light all of them at once.
  */
 function IntegrationsGroup() {
   const t = useT();
-  const { pathname, search } = useLocation();
+  const onCatalog = useRouterState({ select: isCatalogLocation });
+  const vendor = useAppSearch().vendor ?? null;
   const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);
   const queryClient = useQueryClient();
   const [waking, setWaking] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState<string | null>(null);
-
-  const vendor = new URLSearchParams(search).get("vendor");
 
   // The catalog is the category's own door — the inventory of everything
   // the app knows, installed or not — so the group always draws, even on a
@@ -519,12 +538,12 @@ function IntegrationsGroup() {
     <NavRow
       item={{
         labelKey: "allIntegrations",
-        path: "/integrations",
+        path: pageLink("integrations"),
         icon: Plug,
       }}
       overview={undefined}
       value={null}
-      active={pathname === "/integrations" && vendor === null}
+      active={onCatalog && vendor === null}
     />
   );
 
@@ -576,8 +595,8 @@ function IntegrationsGroup() {
 
   const row = (page: (typeof pages)[number]) => (
     <NavRow
-      key={page.path}
-      item={{ label: page.name, path: page.path, icon: page.icon }}
+      key={page.id}
+      item={{ label: page.name, path: page.link, icon: page.icon }}
       overview={undefined}
       value={page.count}
       mark={page.tone ?? undefined}
@@ -599,11 +618,7 @@ function IntegrationsGroup() {
           : undefined
       }
       onPress={page.asleep ? () => press(page.id) : undefined}
-      active={
-        page.own
-          ? undefined
-          : pathname === "/integrations" && vendor === page.id
-      }
+      active={page.own ? undefined : onCatalog && vendor === page.id}
     />
   );
   const operators = pages.filter((page) => page.operator);
@@ -783,18 +798,25 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
-  const { pathname, search } = useLocation();
+  const pathname = useRouterState({ select: pathnameOf });
+  const carried = carriedSearch(item.kind, useAppSearch(), pathname);
+  const link = carried ? { ...item.path, search: carried } : item.path;
+  const overviewRow = item.labelKey === "overview";
 
   const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
+  // A row that decides its own highlight takes nothing from the router's.
+  const routerDecides = active === undefined;
 
   return (
-    <NavLink
-      to={withCarriedSearch(item.path, item.kind, search, pathname)}
-      end={item.path === "/"}
+    <Link
+      {...link}
+      activeOptions={{ exact: overviewRow, includeSearch: false }}
       onClick={onPress}
-      className={({ isActive }) =>
-        cn(ROW_CLASS, isOpen(isActive) && ROW_OPEN_CLASS)
+      className={
+        routerDecides ? ROW_BASE_CLASS : cn(ROW_CLASS, active && ROW_OPEN_CLASS)
       }
+      activeProps={routerDecides ? { className: ROW_OPEN_CLASS } : {}}
+      inactiveProps={routerDecides ? { className: ROW_SHUT_CLASS } : {}}
     >
       {({ isActive }) => (
         <>
@@ -854,7 +876,7 @@ function NavRow({
           )}
         </>
       )}
-    </NavLink>
+    </Link>
   );
 }
 
@@ -874,7 +896,7 @@ function NavCount({
 }) {
   if (!overview) return null;
 
-  if (item.path === "/") {
+  if (item.labelKey === "overview") {
     // Uncapped: the backend truncates its ranked list, and a headline that
     // shrank when things got worse would be the one number nobody can use.
     const problems = overview.problems.length + overview.problemsTruncated;

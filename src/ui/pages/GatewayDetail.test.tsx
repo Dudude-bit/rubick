@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { screen } from "@testing-library/react";
 
 vi.mock("@/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks")>()),
@@ -12,9 +10,9 @@ vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: () => vi.fn(async () => null) }),
 }));
 
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { useResourceDetail } from "@/hooks";
 import type { ConditionInfo, GatewayInfo } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
 import { GatewayDetail } from "./GatewayDetail";
 
 const said = (type: string, status: string, reason: string): ConditionInfo => ({
@@ -54,7 +52,7 @@ const edge = (listener: ConditionInfo[]): GatewayInfo => ({
   createdAt: null,
 });
 
-const open = (gateway: GatewayInfo) => {
+const open = async (gateway: GatewayInfo) => {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: "edge",
     namespace: "infra",
@@ -69,19 +67,10 @@ const open = (gateway: GatewayInfo) => {
     refetch: vi.fn(),
     deleteMutation: { mutate: vi.fn(), isPending: false },
   } as unknown as ReturnType<typeof useResourceDetail>);
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter>
-        <TooltipProvider>
-          <GatewayDetail />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
+  await renderWithRouter(<GatewayDetail />, {
+    at: "/c/prod/gateways/infra/edge",
+    route: "/c/$cluster/gateways/$namespace/$name",
+  });
 };
 
 describe("a Gateway's listener rows", () => {
@@ -90,8 +79,8 @@ describe("a Gateway's listener rows", () => {
    * `Conflicted=False · NoConflicts` sat on the page in red — the same
    * reading the peek had, fixed in both.
    */
-  it("reads a listener's conditions by their own polarity", () => {
-    open(
+  it("reads a listener's conditions by their own polarity", async () => {
+    await open(
       edge([
         said("Accepted", "True", "Accepted"),
         said("Conflicted", "False", "NoConflicts"),
@@ -105,8 +94,8 @@ describe("a Gateway's listener rows", () => {
    * the row called it broken, in red. Fails if it is drawn as a failure, or
    * not drawn at all.
    */
-  it("names an overlapping TLS config as a caution, not a break", () => {
-    open(
+  it("names an overlapping TLS config as a caution, not a break", async () => {
+    await open(
       edge([
         said("Accepted", "True", "Accepted"),
         said("OverlappingTLSConfig", "True", "OverlappingHostnames"),
@@ -117,8 +106,8 @@ describe("a Gateway's listener rows", () => {
     expect(caution).not.toHaveClass("text-err");
   });
 
-  it("still names the condition that broke it", () => {
-    open(edge([said("ResolvedRefs", "False", "InvalidCertificateRef")]));
+  it("still names the condition that broke it", async () => {
+    await open(edge([said("ResolvedRefs", "False", "InvalidCertificateRef")]));
     expect(screen.getByText(/InvalidCertificateRef/)).toBeTruthy();
   });
 });

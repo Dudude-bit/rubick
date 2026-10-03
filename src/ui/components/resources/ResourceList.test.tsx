@@ -7,13 +7,11 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { type ReactElement } from "react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@/components/ui/table-features";
-
-import { TooltipProvider } from "@/components/ui/tooltip";
 
 const store = vi.hoisted(() => ({
   state: {
@@ -37,6 +35,7 @@ import type { PlacedSection } from "@/lib/report-parts";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
+import { renderWithRouter } from "@/test/render";
 
 interface Item {
   name: string;
@@ -45,6 +44,11 @@ interface Item {
 
 const columns: ColumnDef<Item>[] = [{ accessorKey: "name", header: "Name" }];
 
+const draw = (ui: ReactElement, client?: QueryClient) =>
+  renderWithRouter(ui, { client, at: "/c/prod/pods", route: "/c/$cluster/$" });
+
+const drawRerenderable = draw;
+
 const list = (props: {
   data?: Item[];
   error?: Error | null;
@@ -52,23 +56,13 @@ const list = (props: {
   queryKey?: string[];
   queryFn?: () => Promise<Scoped<Item>>;
 }) =>
-  render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <MemoryRouter initialEntries={["/pods"]}>
-        <TooltipProvider>
-          <ResourceList<Item>
-            title="Pods"
-            columns={columns}
-            emptyStateLabel="Pods"
-            {...props}
-          />
-        </TooltipProvider>
-      </MemoryRouter>
-    </QueryClientProvider>
+  draw(
+    <ResourceList<Item>
+      title="Pods"
+      columns={columns}
+      emptyStateLabel="Pods"
+      {...props}
+    />
   );
 
 describe("a list whose rows come from outside", () => {
@@ -79,8 +73,8 @@ describe("a list whose rows come from outside", () => {
    * scope with nothing in it arrived here identical. Every such page told the
    * reader their cluster had no pods.
    */
-  it("says the read failed rather than that the scope is empty", () => {
-    list({ data: [], error: new Error("connection reset by peer") });
+  it("says the read failed rather than that the scope is empty", async () => {
+    await list({ data: [], error: new Error("connection reset by peer") });
 
     expect(screen.getByText(/Could not read Pods in this scope/)).toBeVisible();
     expect(screen.getByText(/connection reset/)).toBeVisible();
@@ -91,8 +85,8 @@ describe("a list whose rows come from outside", () => {
    * and invites a retry that will be refused in exactly the same way, which
    * is how an ordinary RBAC boundary came to read as a fault in the app.
    */
-  it("says a refusal is a refusal", () => {
-    list({ data: [], error: new Error("pods is forbidden: RBAC") });
+  it("says a refusal is a refusal", async () => {
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
 
     expect(
       screen.getByText(/do not have permission to list these/)
@@ -104,8 +98,8 @@ describe("a list whose rows come from outside", () => {
   });
 
   /** No error, no rows: the scope really is empty, and says so. */
-  it("draws the empty state when nothing failed", () => {
-    list({ data: [] });
+  it("draws the empty state when nothing failed", async () => {
+    await list({ data: [] });
 
     expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
     expect(screen.getByText(/No resources of this type/)).toBeVisible();
@@ -115,8 +109,8 @@ describe("a list whose rows come from outside", () => {
    * The same rule the internal query already followed: a failed re-read over
    * rows that are still on screen is not worth throwing the page away for.
    */
-  it("keeps the rows it has when a re-read fails", () => {
-    list({
+  it("keeps the rows it has when a re-read fails", async () => {
+    await list({
       data: [{ name: "api-7bcd", namespace: "default" }],
       error: new Error("connection reset"),
     });
@@ -143,9 +137,12 @@ describe("a scope some of whose namespaces did not answer", () => {
    * refused one is named with the cluster's words, and the header carries no
    * count, because the rows are not the scope's total.
    */
-  it("names the namespace it could not read beside the rows of the rest", () => {
+  it("names the namespace it could not read beside the rows of the rest", async () => {
     store.state.namespaceScope = ["prod", "staging"];
-    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+    await list({
+      data: [{ name: "api", namespace: "prod" }],
+      unread: [refused],
+    });
 
     expect(screen.getByText("api")).toBeVisible();
     expect(
@@ -164,7 +161,7 @@ describe("a scope some of whose namespaces did not answer", () => {
    */
   it("says none only of the namespaces that answered", async () => {
     store.state.namespaceScope = ["prod", "staging"];
-    list({
+    await list({
       queryKey: ["pods", "prod,staging"],
       queryFn: async () => ({ rows: [], unread: [refused] }),
     });
@@ -178,9 +175,12 @@ describe("a scope some of whose namespaces did not answer", () => {
    * The header dropped its count beside an unread namespace, and the footer
    * went on printing "1 pod" under it, the same number stated as the total.
    */
-  it("does not call the rows a total in the footer either", () => {
+  it("does not call the rows a total in the footer either", async () => {
     store.state.namespaceScope = ["prod", "staging"];
-    list({ data: [{ name: "api", namespace: "prod" }], unread: [refused] });
+    await list({
+      data: [{ name: "api", namespace: "prod" }],
+      unread: [refused],
+    });
 
     expect(
       screen.getByText("1 pod, from the namespaces that answered")
@@ -199,25 +199,20 @@ describe("a scope some of whose namespaces did not answer", () => {
       defaultOptions: { queries: { retry: false } },
     });
     const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ResourceList<Item>
-              title="Pods"
-              columns={columns}
-              emptyStateLabel="Pods"
-              queryKey={queryKey}
-              queryFn={answer}
-            />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        queryKey={queryKey}
+        queryFn={answer}
+      />
     );
-    const { rerender } = render(
+    const { rerender } = await drawRerenderable(
       page(["pods", "prod,staging"], async () => ({
         rows: [{ name: "api", namespace: "prod" }],
         unread: [refused],
-      }))
+      })),
+      client
     );
     expect(
       await screen.findByText("Could not read pods in staging.")
@@ -254,21 +249,16 @@ describe("a scope some of whose namespaces did not answer", () => {
       ],
       unread: [{ ...refused, code: "READ_DEADLINE" }],
     }));
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ResourceList<Item>
-              title="Pods"
-              columns={columns}
-              emptyStateLabel="Pods"
-              queryKey={key}
-              queryFn={answer}
-              live
-            />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        queryKey={key}
+        queryFn={answer}
+        live
+      />,
+      client
     );
     expect(await screen.findByText("worker")).toBeVisible();
     // What a delete from the page does next.
@@ -293,7 +283,7 @@ describe("a read on a large cluster", () => {
   it("ends in words that offer the narrower question before a retry", async () => {
     const opened = vi.fn();
     window.addEventListener(SCOPE_PICKER_OPEN, opened);
-    list({
+    await list({
       data: [],
       error: new Error(
         "Tauri command 'list_pods' failed: READ_DEADLINE: the cluster did not answer within 60 s"
@@ -323,24 +313,14 @@ describe("a read on a large cluster", () => {
     const pending = new Promise<Scoped<Item>>((done) => {
       resolve = done;
     });
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ResourceList<Item>
-              title="Pods"
-              columns={columns}
-              emptyStateLabel="Pods"
-              queryKey={["pods", "slow"]}
-              queryFn={() => pending}
-            />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        queryKey={["pods", "slow"]}
+        queryFn={() => pending}
+      />
     );
 
     await act(async () => {
@@ -372,29 +352,17 @@ describe("a read on a large cluster", () => {
    */
   it("says nothing it could not know when the read ran out of time", async () => {
     const retried = vi.fn();
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[]}
+        error={
+          new Error("READ_DEADLINE: the cluster did not answer within 60 s")
         }
-      >
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ResourceList<Item>
-              title="Pods"
-              columns={columns}
-              emptyStateLabel="Pods"
-              data={[]}
-              error={
-                new Error(
-                  "READ_DEADLINE: the cluster did not answer within 60 s"
-                )
-              }
-              onRetry={retried}
-            />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+        onRetry={retried}
+      />
     );
 
     expect(screen.getByText(/did not finish within/)).toBeInTheDocument();
@@ -416,25 +384,15 @@ describe("a read on a large cluster", () => {
   it("says what it is still reading when the rows come from the caller", async () => {
     vi.useFakeTimers();
     const startedAt = Date.now();
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ResourceList<Item>
-              title="Pods"
-              columns={columns}
-              emptyStateLabel="Pods"
-              data={undefined}
-              isLoading
-              waitingSince={startedAt}
-            />
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await draw(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={undefined}
+        isLoading
+        waitingSince={startedAt}
+      />
     );
 
     await act(async () => {
@@ -453,36 +411,26 @@ describe("a read on a large cluster", () => {
 
 describe("what a list hands to Share", () => {
   /** The list as Share collects it, with the read in whatever state the props say. */
-  function collected(props: {
+  async function collected(props: {
     data?: Item[];
     error?: Error | null;
     unread?: UnreadNamespace[];
-  }): PlacedSection[] {
+  }): Promise<PlacedSection[]> {
     let collect: (() => PlacedSection[]) | null = null;
     function Probe() {
       collect = useScreenSections();
       return null;
     }
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <MemoryRouter initialEntries={["/pods"]}>
-          <TooltipProvider>
-            <ScreenShareProvider>
-              <ResourceList<Item>
-                title="Pods"
-                columns={columns}
-                emptyStateLabel="Pods"
-                {...props}
-              />
-              <Probe />
-            </ScreenShareProvider>
-          </TooltipProvider>
-        </MemoryRouter>
-      </QueryClientProvider>
+    await draw(
+      <ScreenShareProvider>
+        <ResourceList<Item>
+          title="Pods"
+          columns={columns}
+          emptyStateLabel="Pods"
+          {...props}
+        />
+        <Probe />
+      </ScreenShareProvider>
     );
     return collect!();
   }
@@ -491,8 +439,8 @@ describe("what a list hands to Share", () => {
    * Refused outright, the list has no table and registered nothing; the
    * file had no sections and still said everything was read.
    */
-  it("says the list could not be read when the read failed", () => {
-    const [section] = collected({
+  it("says the list could not be read when the read failed", async () => {
+    const [section] = await collected({
       data: [],
       error: new Error("pods is forbidden: RBAC"),
     });
@@ -503,8 +451,8 @@ describe("what a list hands to Share", () => {
    * Two of three namespaces answered: the page names the third and drops
    * the total, and the file wrote the rows it had as the whole list.
    */
-  it("draws the rows it has and names the namespace that did not answer", () => {
-    const [section] = collected({
+  it("draws the rows it has and names the namespace that did not answer", async () => {
+    const [section] = await collected({
       data: [{ name: "web-1", namespace: "shop" }],
       unread: [{ namespace: "team-c", code: "Forbidden", message: "denied" }],
     });
@@ -512,8 +460,8 @@ describe("what a list hands to Share", () => {
     expect(section.count).toBeNull();
   });
 
-  it("gives the whole count when every namespace answered", () => {
-    const [section] = collected({
+  it("gives the whole count when every namespace answered", async () => {
+    const [section] = await collected({
       data: [{ name: "web-1", namespace: "shop" }],
     });
     expect(section.partial ?? null).toBeNull();

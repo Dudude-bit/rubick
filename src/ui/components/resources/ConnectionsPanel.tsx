@@ -11,7 +11,7 @@
  */
 
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 
 import { PerfProfiler } from "@/lib/perf-profiler";
@@ -69,7 +69,7 @@ function Outside({ end }: { end: OutsideEnd }) {
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
       <Link
-        to={end.to}
+        {...end.to}
         className="font-mono text-xs text-fg-mid hover:underline"
       >
         {end.name}

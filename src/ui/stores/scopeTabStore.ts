@@ -31,19 +31,19 @@ import {
   sameScope,
   wireNamespace,
 } from "@/lib/namespace-scope";
-import {
-  getDisplayPlural,
-  getResourceListUrl,
-  isResourceType,
-} from "@/lib/resource-registry";
+import { clusterOf, retargetHref } from "@/lib/links";
+import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 
-/**
- * Where a new tab starts. The overview is the app's home page and the one
- * screen that means something at any scope, including no namespace and no
- * cluster at all.
- */
+/** The front door: no cluster yet, and a tab's address before it has one. */
 const HOME = "/";
+
+/**
+ * Where a tab starts and where closing the last one sends it: the overview,
+ * the one screen that means something at any scope, in the tab's cluster.
+ */
+const homeOf = (context: string | null): string =>
+  context ? retargetHref(HOME, context) : HOME;
 
 export interface ScopeTab {
   id: string;
@@ -61,7 +61,10 @@ export interface ScopeTab {
    * {@link tabScope} reads it from instead.
    */
   scope?: string[];
-  /** Route as `pathname + search`; mirrored from the router while active. */
+  /**
+   * Route as `pathname + search`, which names the cluster it is in;
+   * mirrored from the router while active.
+   */
   href: string;
   /** The kubeconfig no longer lists `context`. Owned by `reconcileContexts`. */
   missing: boolean;
@@ -220,11 +223,12 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // the common reason to open one is a second view of the same
         // cluster, and inheriting makes the shortcut instant instead of
         // routing through a connect and possibly an auth prompt.
+        const tabContext = context ?? live.currentContext;
         const tab = makeTab({
-          context: context ?? live.currentContext,
+          context: tabContext,
           namespace: wireNamespace(scope),
           scope,
-          href: href ?? HOME,
+          href: href ?? homeOf(tabContext),
         });
         if (background) {
           set((state) => ({ tabs: [...state.tabs, tab] }));
@@ -280,12 +284,14 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // reset (disconnect, empty scope) and the one way back to the picker.
         if (tabs.length < 2) {
           const only = tabs[0];
-          if (only.href !== HOME && !only.missing) {
-            // Snapshot the live scope (the reader may have changed the
-            // namespace via the popover since this tab went live), keep it,
-            // and send the view home — no disconnect, no cleared namespace.
-            const parked = parkActive(tabs, only.id)[0];
-            set({ tabs: [{ ...parked, href: HOME }], pendingHref: HOME });
+          // Snapshot the live scope (the reader may have changed the
+          // namespace via the popover since this tab went live).
+          const parked = parkActive(tabs, only.id)[0];
+          const home = homeOf(parked.context);
+          if (only.href !== home && !only.missing) {
+            // Keep the scope and send the view home, with no disconnect and
+            // no cleared namespace.
+            set({ tabs: [{ ...parked, href: home }], pendingHref: home });
             return;
           }
           set({
@@ -321,18 +327,18 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // only for a cluster that changed under a tab standing still.
         if (pendingHref !== null) return;
         const active = tabs.find((tab) => tab.id === activeId);
-        if (!active) return;
-        // A tab whose own record names this cluster has a route that belongs
-        // to it — an activation, or the retry of one that failed — and there
-        // is nothing here to let go of.
-        if (active.context === connected) return;
-        const list = listBehind(active.href);
-        if (list === null || list === active.href) return;
+        if (!active || connected === null) return;
+        // The address names the cluster, so one already in the cluster that
+        // connected is what connected it, and there is nothing to let go of.
+        if (clusterOf(active.href) === connected) return;
+        // Otherwise the connection moved under a standing address, which
+        // follows it: a list stays a list, an object gives way to its list.
+        const moved = retargetHref(active.href, connected);
         set({
           tabs: tabs.map((tab) =>
-            tab.id === activeId ? { ...tab, href: list } : tab
+            tab.id === activeId ? { ...tab, href: moved } : tab
           ),
-          pendingHref: list,
+          pendingHref: moved,
         });
       },
 
@@ -406,13 +412,14 @@ export const useScopeTabStore = create<ScopeTabState>()(
     }),
     {
       name: "scope-tabs",
-      version: 1,
+      version: 2,
       // The route and the parked scope are the workspace; `pendingHref` is
       // one activation's in-flight state and means nothing next launch.
       partialize: (state) => ({ tabs: state.tabs, activeId: state.activeId }),
-      // Version 1 is the first payload that carries routes at all. Anything
-      // older is a bare scope list, so the tabs survive and land on the
-      // overview rather than being thrown away with the workspace.
+      // Version 1 is the first payload that carries routes at all, and
+      // version 2 the first whose routes name their cluster. Anything older
+      // keeps its tabs and scopes and loses its routes: an address from
+      // before `/c/<cluster>` matches nothing the app serves.
       migrate: (persisted) => {
         const state = persisted as
           { tabs?: Partial<ScopeTab>[]; activeId?: string } | undefined;
@@ -428,7 +435,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
               // a tab parked on one namespace meant.
               scope: Array.isArray(tab.scope) ? tab.scope : undefined,
               href:
-                typeof tab.href === "string" && tab.href.startsWith("/")
+                typeof tab.href === "string" && tab.href.startsWith("/c/")
                   ? tab.href
                   : HOME,
               missing: false,
@@ -442,7 +449,11 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // Not only for a version bump: a payload written before `scope`
         // existed carries the same version this build writes, so the field
         // has to be recovered here rather than in `migrate`.
-        state.tabs = state.tabs.map(normalizeTab);
+        state.tabs = state.tabs.map(normalizeTab).map((tab) =>
+          // A tab with no route of its own opens on its cluster's overview;
+          // the front door would send it to whichever cluster was last.
+          tab.href === HOME ? { ...tab, href: homeOf(tab.context) } : tab
+        );
         // Ids are a counter and the counter restarts at zero every launch,
         // so a fresh tab would otherwise be handed an id a restored tab
         // already holds — and React would key two tabs the same.
@@ -455,8 +466,9 @@ export const useScopeTabStore = create<ScopeTabState>()(
         state.activeId = active.id;
         // The window boots at "/", not where the tab was left. Asking for
         // the route here is also what stops the first location the router
-        // reports from being recorded over the restored one.
-        state.pendingHref = active.href;
+        // reports from being recorded over the restored one. A tab with no
+        // cluster asks for nothing: the window is already at its front door.
+        state.pendingHref = active.href === HOME ? null : active.href;
       },
     }
   )
@@ -476,40 +488,41 @@ export function tabRouteLabel(href: string): string {
   if (peeked) return peeked;
 
   const segments = path.split("/").filter(Boolean);
-  if (segments.length === 0) return "overview";
-  // A settings section is only ever read beside the word Settings. On its
-  // own in a tab strip, "appearance" or "about" names nothing the reader
-  // can place, so the page keeps its own name.
-  if (segments[0] === "settings") return "settings";
-  // A known plural in the last position is a list page — `/workloads/pods`
-  // as much as `/nodes`. Anything else is the object the route shows.
-  const last = segments.at(-1) as string;
-  return isResourceType(last) ? getDisplayPlural(last).toLowerCase() : last;
+  // The cluster is said by the tab's own name, not by its route.
+  const route = segments[0] === "c" ? segments.slice(2) : segments;
+  if (route.length === 0) return "overview";
+  // One segment is a list page, `/c/prod/pods` as much as `/c/prod/events`.
+  // Anything longer is the object the route shows.
+  if (route.length > 1) return route.at(-1) as string;
+  const [page] = route;
+  return isResourceType(page) ? getDisplayPlural(page).toLowerCase() : page;
 }
 
 /**
  * The list a route belongs to, for a route that names one object.
  *
- * `null` where the route names no object — a list, the overview, settings —
- * and so means the same thing in any cluster. Everything else names a pod or
- * a release that exists in the cluster it was opened in and nowhere else, and
- * switching left the reader holding its page, open and unreadable (#148).
+ * `null` where the route names no object (a list, the overview, a vendor's
+ * page) and so means the same thing in any cluster. Everything else names
+ * a pod or a release that exists in the cluster it was opened in and
+ * nowhere else, and switching left the reader holding its page, open and
+ * unreadable (#148).
  */
 export function listBehind(href: string): string | null {
   const [path, query = ""] = href.split("?");
-  const segments = path.split("/").filter(Boolean);
-  const first = segments[0];
-  const list = first && segments.length > 1 ? listOf(first) : null;
+  const list = listOf(path);
   // Over a list, dropping the peek is the whole move; over a detail page the
   // page has to go too, or the object stays with its panel merely closed.
   if (new URLSearchParams(query).get("peek")) return list ?? path;
   return list;
 }
 
-function listOf(first: string): string | null {
-  if (isResourceType(first)) return getResourceListUrl(first);
-  // Helm keeps its releases on the same shape without being a kind.
-  return first === "helm" ? "/helm" : null;
+function listOf(path: string): string | null {
+  const cluster = clusterOf(path);
+  const [, , resource, ...rest] = path.split("/").filter(Boolean);
+  if (cluster === null || rest.length === 0) return null;
+  // A vendor's page is about the integration, which every cluster can have.
+  if (resource === "integrations") return null;
+  return retargetHref(path, cluster);
 }
 
 /**

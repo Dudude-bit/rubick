@@ -1,17 +1,21 @@
 import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 
 vi.mock("@/lib/commands", () => ({
   commands: new Proxy({}, { get: () => () => new Promise(() => {}) }),
 }));
 
-const POD_PEEK = "/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
+const POD_PEEK =
+  "/c/prod/events?peek=pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v";
 
 async function panel() {
   const { PeekPanel } = await import("./PeekPanel");
-  renderWithProviders(<PeekPanel />, { initialEntries: [POD_PEEK] });
+  await renderWithRouter(<PeekPanel />, {
+    at: POD_PEEK,
+    route: "/c/$cluster/$",
+  });
 }
 
 describe("the peek panel's body, loaded apart from the window", () => {
