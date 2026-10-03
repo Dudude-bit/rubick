@@ -7,7 +7,7 @@ on:
     # Prose and the site: nothing any job here builds or reads. Never
     # CHANGELOG.md — What's New embeds it — and never a blanket **/*.md.
     paths-ignore: &docs
-      - 'web/**'
+      - 'src/website/**'
       - 'docs/**'
       - 'README.md'
       - 'CONTRIBUTING.md'
@@ -68,7 +68,7 @@ jobs:
         # Prettier ran in the pre-commit hook and in no CI job at all, so a
         # commit made with --no-verify put unformatted code on a green main.
         # Same glob as the hook in lefthook.yml, or the two would disagree.
-        run: bunx prettier --check "src/**/*.{ts,tsx,css,json,md}"
+        run: bunx prettier --check "src/ui/**/*.{ts,tsx,css,json,md}"
 
       - name: Frontend lint
         run: bun run lint
@@ -134,8 +134,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
 
       - name: Rust tests
-        # --workspace, not just src-tauri: k8s-gui-common carries unit
-        # tests and doctests that a manifest-scoped run never reaches.
+        # --workspace builds the binary as well as the library: `--lib` alone
+        # is how v2.1.0 shipped with 90 `__cmd__X not found` errors.
         run: cargo test --workspace
 
   windows-console:

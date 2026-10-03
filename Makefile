@@ -48,7 +48,7 @@ gen-entities-tauri:
 	@# reads as ~900 changed lines and the one real change hides in them.
 	@bunx prettier --write src/generated/commands.ts src/generated/types.ts >/dev/null
 
-# Regenerate every platform's icon from src-tauri/icons/base.png.
+# Regenerate every platform's icon from src/tauri/icons/base.png.
 #
 # `base.png` is drawn by hand and committed — edit that, then run this. There
 # used to be a `scripts/gen_icon.py` on the line above that generated it, and
@@ -57,7 +57,7 @@ gen-entities-tauri:
 # replaced the real icon with the old one and rebuilt all sixteen sizes from
 # it.
 gen-icons:
-	$(MISE_EXEC) bun run tauri icon src-tauri/icons/base.png
+	$(MISE_EXEC) bun run tauri icon src/tauri/icons/base.png
 
 # Run Tauri development server: vite HMR for the frontend, incremental
 # debug builds for Rust. The CLI comes from devDependencies so this works
@@ -96,8 +96,8 @@ clean:
 
 # Apply Kubernetes test manifests (CRDs first).
 apply-test-manifests:
-	kubectl apply -f test-manifests/k8s-gui-crds.yaml
-	kubectl apply -f test-manifests/k8s-gui-all.yaml
+	kubectl apply -f tests/manifests/k8s-gui-crds.yaml
+	kubectl apply -f tests/manifests/k8s-gui-all.yaml
 
 # A 10 000-pod cluster to measure against; docs/perf.md says how.
 PERF_RATE ?= 100

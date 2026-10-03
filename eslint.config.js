@@ -9,11 +9,11 @@ export default [
     ignores: [
       "dist/**",
       "node_modules/**",
-      "src/generated/**",
-      "src-tauri/**",
+      "src/ui/generated/**",
+      "src/tauri/**",
       "target/**",
       "artifacts/**",
-      "web/**",
+      "src/website/**",
       ".claude/**",
       ".worktrees/**",
       "**/*.config.{js,ts,cjs,mjs}",
@@ -22,7 +22,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/ui/**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
@@ -53,7 +53,7 @@ export default [
     // branch on the theme: the role token already resolves per theme.
     //
     // The guard started life scoped to `ui/`, because that was the only
-    // part converted at the time. It covers all of `src/` now that the
+    // part converted at the time. It covers all of `src/ui/` now that the
     // rest has caught up — the point of the rule is that there is no
     // corner left where drift is allowed to start again.
     //
@@ -62,13 +62,13 @@ export default [
     // second config object naming the same rule does not add to this list,
     // it replaces it — which silently switches the colour guard off for
     // every file the later block matches.
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/ui/**/*.{ts,tsx}"],
     // The one file allowed to name a polling interval. Exempting it here
     // rather than in a config object of its own is deliberate: a second
     // object naming `no-restricted-syntax` would replace this whole list
     // instead of adding to it, and quietly switch the colour guard off for
     // the file it matched.
-    ignores: ["src/hooks/useLiveQuery.ts"],
+    ignores: ["src/ui/hooks/useLiveQuery.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -87,7 +87,7 @@ export default [
           selector:
             "Property[key.name=/^refetchInterval(InBackground)?$/], TSPropertySignature[key.name=/^refetchInterval(InBackground)?$/]",
           message:
-            "Do not set refetchInterval. Use useLiveQuery({ refresh: '<rate>' }) — the rates live in src/lib/refresh.ts, and going through the hook is what stops a screen nobody is looking at from polling and what keeps the freshness badge honest about a backed-off query.",
+            "Do not set refetchInterval. Use useLiveQuery({ refresh: '<rate>' }) — the rates live in src/ui/lib/refresh.ts, and going through the hook is what stops a screen nobody is looking at from polling and what keeps the freshness badge honest about a backed-off query.",
         },
         {
           selector:
@@ -139,7 +139,7 @@ export default [
             .map((node) => `${node} > Literal[value=/(^|\\/)integrations\\/./]`)
             .join(", "),
           message:
-            "Ask for a facet, not for a vendor: import { useCapability, useCrdView, flavourOf, ... } from '@/integrations'. Nothing outside src/integrations/ names a vendor.",
+            "Ask for a facet, not for a vendor: import { useCapability, useCrdView, flavourOf, ... } from '@/integrations'. Nothing outside src/ui/integrations/ names a vendor.",
         },
         {
           // The one that turns the whole interface grey without failing.

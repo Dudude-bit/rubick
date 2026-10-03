@@ -31,8 +31,8 @@ Thumbs.db
 .env.*.local
 
 # Tauri
-/src-tauri/target/
-/src-tauri/.force_rebuild
+/src/tauri/target/
+/src/tauri/.force_rebuild
 
 # Test coverage
 coverage/

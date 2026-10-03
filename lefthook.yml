@@ -48,6 +48,6 @@ pre-commit:
       # --max-warnings 0 matches `bun run lint`, which CI requires. The
       # react-hooks@7 backlog this used to be waived for is empty.
       # --no-warn-ignored because staged-file mode hands eslint files its
-      # config ignores — src/generated — and the "file ignored" warning
+      # config ignores — src/ui/generated — and the "file ignored" warning
       # would fail the zero-warning gate that project-mode lint never sees.
       run: bunx eslint --max-warnings 0 --no-warn-ignored {staged_files}

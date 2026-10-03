@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(__dirname, "./src/ui"),
     },
   },
   clearScreen: false,
@@ -14,7 +14,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src/tauri/**", "**/src/website/**"],
     },
   },
   envPrefix: ["VITE_", "TAURI_"],

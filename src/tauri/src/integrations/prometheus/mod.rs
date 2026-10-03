@@ -1,0 +1,884 @@
+//! Prometheus — the first integration that is configured rather than detected.
+//!
+//! The network half lives here and not in the webview, for two reasons that
+//! are not stylistic. A bearer token in a renderer process is a token in
+//! every devtools session, every crash dump and every extension that ever
+//! gets to run there; and a browser context talking to somebody's Prometheus
+//! would need that Prometheus to have been configured with CORS headers for
+//! an app it has never heard of, which no cluster operator has done.
+//!
+//! So the webview sends `PromQL` and gets numbers back. It never sends, sees,
+//! or stores the credential — {@link `PrometheusConnection`} is deliberately
+//! missing the token field, and `get_prometheus_connection` answers with
+//! `has_token` rather than with the token.
+//!
+//! What is *not* here is any knowledge of what the queries mean. The `PromQL`
+//! is built in `src/ui/integrations/prometheus/queries.ts`, where it is pure and
+//! unit-tested against the label shapes cAdvisor actually emits. This module
+//! is a credentialed HTTP client with a Prometheus-shaped response parser.
+
+// A `#[tauri::command]` receives its arguments already deserialised from the
+// IPC message, so the macro requires them owned. Taking a borrow here is not
+// something a caller could satisfy — the caller is the frontend.
+#![allow(clippy::needless_pass_by_value)]
+
+use std::collections::HashMap;
+use std::time::Instant;
+
+use serde::{Deserialize, Serialize};
+use tauri::State;
+
+use crate::config::{AppConfig, PrometheusEntry};
+use crate::error::{Error, Result};
+use crate::integrations::wire::{get_text, now_ms};
+use crate::state::AppState;
+
+pub const ID: &str = "prometheus";
+
+// ---------------------------------------------------------------------------
+// What the webview is allowed to know
+// ---------------------------------------------------------------------------
+
+/// A saved connection, with the credential removed rather than masked.
+///
+/// `has_token` is the only thing the form needs: it draws a filled password
+/// field it will not read back, and an empty submission means "leave it
+/// alone" — the same round trip the registry editor already does.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrometheusConnection {
+    pub url: String,
+    pub auth_type: String,
+    pub has_token: bool,
+    pub insecure_tls: bool,
+}
+
+impl From<&PrometheusEntry> for PrometheusConnection {
+    fn from(entry: &PrometheusEntry) -> Self {
+        Self {
+            url: entry.url.clone(),
+            auth_type: entry.auth_type.clone(),
+            has_token: entry.token.as_deref().is_some_and(|t| !t.is_empty()),
+            insecure_tls: entry.insecure_tls,
+        }
+    }
+}
+
+/// The Test button's answer, and the gate on every power behind this vendor.
+///
+/// `reason` is the server's or the transport's own words, never a
+/// paraphrase: "no route to host" and "401 Unauthorized" send the reader to
+/// two different places, and a single "could not connect" sends them nowhere.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrometheusProbe {
+    pub ok: bool,
+    /// Epoch ms the answer came back, so the row can say "answered 2s ago".
+    pub at: f64,
+    pub latency_ms: u64,
+    /// Present only on failure.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Nothing was configured to probe. Separate from `reason`, which is
+    /// the server's own words and has to survive untranslated: this is the
+    /// app's own observation, so the frontend says it in the reader's
+    /// language rather than receiving an English sentence here.
+    #[serde(default)]
+    pub no_address: bool,
+    /// The build version, where `/api/v1/status/buildinfo` answered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+/// One point of a series. `v` is `None` for the `NaN` Prometheus writes when
+/// a rate has nothing to divide — a gap, which the chart draws as a gap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromPoint {
+    /// Epoch **ms**, converted here so nothing downstream has to remember
+    /// that Prometheus counts in seconds and JavaScript does not.
+    pub t: f64,
+    pub v: Option<f64>,
+}
+
+/// One labelled series.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromSeries {
+    pub labels: HashMap<String, String>,
+    pub points: Vec<PromPoint>,
+}
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+fn context_of(state: &State<'_, AppState>) -> Result<String> {
+    state
+        .get_current_context()
+        .ok_or_else(|| Error::Config("No cluster is connected".to_string()))
+}
+
+fn entry_for(context: &str) -> Result<Option<PrometheusEntry>> {
+    Ok(AppConfig::load()?
+        .integrations
+        .prometheus
+        .get(context)
+        .cloned())
+}
+
+/// This cluster's Prometheus, or `None` where nobody configured one.
+#[tauri::command]
+pub fn get_prometheus_connection(
+    state: State<'_, AppState>,
+) -> Result<Option<PrometheusConnection>> {
+    let context = context_of(&state)?;
+    Ok(entry_for(&context)?.map(|entry| PrometheusConnection::from(&entry)))
+}
+
+/// Save this cluster's Prometheus.
+///
+/// An empty `token` keeps whatever is already stored — the form never
+/// receives the credential, so it cannot send it back, and treating empty as
+/// "clear it" would silently unauthenticate the connection every time the
+/// reader edited the URL.
+#[tauri::command]
+pub fn save_prometheus_connection(
+    url: String,
+    auth_type: String,
+    token: Option<String>,
+    insecure_tls: bool,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let context = context_of(&state)?;
+    let url = url.trim().trim_end_matches('/').to_string();
+    if url.is_empty() {
+        return Err(Error::InvalidInput("A Prometheus needs an address".into()));
+    }
+
+    let mut config = AppConfig::load()?;
+    let existing = config.integrations.prometheus.get(&context);
+    let token = match auth_type.as_str() {
+        "bearer" => token
+            .filter(|t| !t.is_empty())
+            .or_else(|| existing.and_then(|entry| entry.token.clone())),
+        _ => existing.and_then(|entry| entry.token.clone()),
+    };
+
+    config.integrations.prometheus.insert(
+        context,
+        PrometheusEntry {
+            url,
+            auth_type,
+            token,
+            insecure_tls,
+        },
+    );
+    crate::commands::settings::helpers::save_config(&config)
+}
+
+/// Forget this cluster's Prometheus, credential included.
+#[tauri::command]
+pub fn forget_prometheus_connection(state: State<'_, AppState>) -> Result<()> {
+    let context = context_of(&state)?;
+    crate::commands::settings::helpers::with_config(|config| {
+        config.integrations.prometheus.remove(&context);
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The wire
+// ---------------------------------------------------------------------------
+
+async fn get_json(
+    entry: &PrometheusEntry,
+    path: &str,
+    query: &[(&str, String)],
+) -> std::result::Result<serde_json::Value, String> {
+    let body = get_text(entry, path, query).await?;
+    serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|e| format!("Prometheus answered with something that is not JSON: {e}"))
+}
+
+/// Is it there, and does it answer?
+///
+/// `/api/v1/query` with a constant rather than `/-/ready`: readiness is
+/// unauthenticated on a stock Prometheus, so a probe against it would come
+/// back green for a connection whose token is wrong and every power behind
+/// it would then fail one at a time. A trivial query exercises the whole
+/// path the ranges use.
+#[tauri::command]
+pub async fn probe_prometheus(
+    url: Option<String>,
+    auth_type: Option<String>,
+    token: Option<String>,
+    insecure_tls: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<PrometheusProbe> {
+    let context = context_of(&state)?;
+    let stored = entry_for(&context)?;
+
+    // Typed-but-unsaved values win, so Test answers the form on screen
+    // rather than the last thing that was saved.
+    let entry = match url {
+        Some(url) if !url.trim().is_empty() => PrometheusEntry {
+            url: url.trim().trim_end_matches('/').to_string(),
+            auth_type: auth_type.unwrap_or_else(|| "none".into()),
+            token: token
+                .filter(|t| !t.is_empty())
+                .or_else(|| stored.as_ref().and_then(|e| e.token.clone())),
+            insecure_tls: insecure_tls.unwrap_or(false),
+        },
+        _ => match stored {
+            Some(entry) => entry,
+            None => {
+                return Ok(PrometheusProbe {
+                    ok: false,
+                    at: now_ms(),
+                    latency_ms: 0,
+                    reason: None,
+                    no_address: true,
+                    version: None,
+                })
+            }
+        },
+    };
+
+    let started = Instant::now();
+    let answer = get_json(&entry, "/api/v1/query", &[("query", "1".to_string())]).await;
+    let latency_ms = crate::utils::elapsed_ms(started);
+
+    match answer {
+        Ok(_) => {
+            let version = get_json(&entry, "/api/v1/status/buildinfo", &[])
+                .await
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("data")?
+                        .get("version")?
+                        .as_str()
+                        .map(str::to_string)
+                });
+            Ok(PrometheusProbe {
+                ok: true,
+                at: now_ms(),
+                latency_ms,
+                reason: None,
+                no_address: false,
+                version,
+            })
+        }
+        Err(reason) => Ok(PrometheusProbe {
+            ok: false,
+            at: now_ms(),
+            latency_ms,
+            reason: Some(reason),
+            no_address: false,
+            version: None,
+        }),
+    }
+}
+
+/// The error a power reports when the address is there and the server is not.
+///
+/// Deliberately a failed `Result` rather than an empty answer: the consuming
+/// surface owes three different screens, and "connected but nothing matched"
+/// has to stay distinguishable from "did not answer".
+fn unreachable(reason: String) -> Error {
+    Error::Connection(reason)
+}
+
+fn configured(state: &State<'_, AppState>) -> Result<PrometheusEntry> {
+    let context = context_of(state)?;
+    entry_for(&context)?
+        .ok_or_else(|| Error::Config("No Prometheus is configured for this cluster".into()))
+}
+
+/// One instant query — the fullness of a volume, and nothing that needs a past.
+#[tauri::command]
+pub async fn prometheus_query(
+    query: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PromSeries>> {
+    let entry = configured(&state)?;
+    let value = get_json(&entry, "/api/v1/query", &[("query", query)])
+        .await
+        .map_err(unreachable)?;
+    parse_result(&value)
+}
+
+/// One range query — the whole point of having a Prometheus.
+///
+/// `start` and `end` are epoch **ms** and `step` is seconds, matching the
+/// units either side of this boundary rather than picking one and making
+/// half the callers convert.
+#[tauri::command]
+pub async fn prometheus_query_range(
+    query: String,
+    start: f64,
+    end: f64,
+    step: u32,
+    state: State<'_, AppState>,
+) -> Result<Vec<PromSeries>> {
+    let entry = configured(&state)?;
+    let value = get_json(
+        &entry,
+        "/api/v1/query_range",
+        &[
+            ("query", query),
+            ("start", format!("{:.3}", start / 1000.0)),
+            ("end", format!("{:.3}", end / 1000.0)),
+            ("step", format!("{}s", step.max(1))),
+        ],
+    )
+    .await
+    .map_err(unreachable)?;
+    parse_result(&value)
+}
+
+/// Both response shapes, flattened to one.
+///
+/// A `vector` is a `matrix` with one point per series as far as every caller
+/// here is concerned, and keeping the distinction would put a `match` on
+/// result type in three places that do not care.
+/// One target as `/api/v1/targets` lists it: which scrape pool it belongs
+/// to, whether the last scrape worked, and what Prometheus said when it did
+/// not. The pool is how a target is traced back to the `ServiceMonitor` or
+/// `PodMonitor` the operator wrote it from: `serviceMonitor/<ns>/<name>/<i>`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrapeTarget {
+    pub scrape_pool: String,
+    pub scrape_url: String,
+    /// `up`, `down` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last scrape worked.
+    pub last_error: String,
+    pub last_scrape: Option<String>,
+    pub labels: HashMap<String, String>,
+}
+
+/// Every active target of the configured Prometheus.
+#[tauri::command]
+pub async fn prometheus_targets(state: State<'_, AppState>) -> Result<Vec<ScrapeTarget>> {
+    let entry = configured(&state)?;
+    let value = get_json(
+        &entry,
+        "/api/v1/targets",
+        &[("state", "active".to_string())],
+    )
+    .await
+    .map_err(unreachable)?;
+    parse_targets(&value)
+}
+
+pub fn parse_targets(body: &serde_json::Value) -> Result<Vec<ScrapeTarget>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its targets");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |target: &serde_json::Value, key: &str| {
+        target
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    // A body that says success and carries no `activeTargets` array is not
+    // a Prometheus with no targets — it is not the answer this asked for.
+    // Read as an empty list it becomes "nothing is being scraped", stated
+    // about a server that never said so.
+    let Some(active) = body
+        .get("data")
+        .and_then(|d| d.get("activeTargets"))
+        .and_then(|t| t.as_array())
+    else {
+        return Err(unreachable(
+            "Prometheus answered without a target list".to_string(),
+        ));
+    };
+    Ok(active
+        .iter()
+        .map(|target| ScrapeTarget {
+            scrape_pool: text(target, "scrapePool"),
+            scrape_url: text(target, "scrapeUrl"),
+            health: text(target, "health"),
+            last_error: text(target, "lastError"),
+            last_scrape: target
+                .get("lastScrape")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            labels: target
+                .get("labels")
+                .and_then(|m| m.as_object())
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// One alert of one rule, as `/api/v1/rules` lists it under the rule:
+/// the labels after templating are what name the object it is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertInstance {
+    /// `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    pub active_at: Option<String>,
+    pub value: String,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+}
+
+/// One alerting rule as `/api/v1/rules?type=alert` lists it. The `file` is
+/// how a rule is traced back to the `PrometheusRule` the operator wrote it
+/// from: the operator names the file after the object's namespace and name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlertRule {
+    pub group: String,
+    pub file: String,
+    pub name: String,
+    /// `inactive`, `pending` or `firing`, as Prometheus writes it.
+    pub state: String,
+    /// `ok`, `err` or `unknown`, as Prometheus writes it.
+    pub health: String,
+    /// Empty when the last evaluation worked.
+    pub last_error: String,
+    pub query: String,
+    /// The `for` clause, in seconds.
+    pub duration_seconds: f64,
+    pub last_evaluation: Option<String>,
+    pub labels: HashMap<String, String>,
+    pub annotations: HashMap<String, String>,
+    pub alerts: Vec<AlertInstance>,
+}
+
+/// Every alerting rule the configured Prometheus has loaded, with the
+/// alerts each one has active.
+#[tauri::command]
+pub async fn prometheus_rules(state: State<'_, AppState>) -> Result<Vec<AlertRule>> {
+    let entry = configured(&state)?;
+    let value = get_json(&entry, "/api/v1/rules", &[("type", "alert".to_string())])
+        .await
+        .map_err(unreachable)?;
+    parse_rules(&value)
+}
+
+fn string_map(value: Option<&serde_json::Value>) -> HashMap<String, String> {
+    value
+        .and_then(|m| m.as_object())
+        .map(|map| {
+            map.iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn parse_rules(body: &serde_json::Value) -> Result<Vec<AlertRule>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused to list its rules");
+        return Err(unreachable(message.to_string()));
+    }
+    let text = |node: &serde_json::Value, key: &str| {
+        node.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let optional = |node: &serde_json::Value, key: &str| {
+        node.get(key).and_then(|v| v.as_str()).map(str::to_string)
+    };
+    // The same rule the target list is read by: a body that says success and
+    // carries no `groups` array is not a Prometheus with no rules. Read as an
+    // empty list it becomes "this PrometheusRule is not loaded" — in red, on
+    // every rule object the cluster has — from an answer that said nothing
+    // about rules at all.
+    let Some(groups) = body
+        .get("data")
+        .and_then(|d| d.get("groups"))
+        .and_then(|g| g.as_array())
+    else {
+        return Err(unreachable(
+            "Prometheus answered without a rule list".to_string(),
+        ));
+    };
+    let mut rules = Vec::new();
+    for group in groups {
+        let group_name = text(group, "name");
+        let file = text(group, "file");
+        // The same rule one level down: a group whose `rules` is missing or
+        // is not an array has not said it holds none, and reading it as
+        // empty makes every PrometheusRule behind it look unloaded.
+        let Some(members) = group.get("rules").and_then(|r| r.as_array()) else {
+            return Err(unreachable(format!(
+                "Prometheus answered with no rule list for group {group_name}"
+            )));
+        };
+        for rule in members {
+            // `type=alert` is asked for; a recording rule that came anyway
+            // has no state and is not an alert.
+            if rule.get("type").and_then(|t| t.as_str()) == Some("recording") {
+                continue;
+            }
+            rules.push(AlertRule {
+                group: group_name.clone(),
+                file: file.clone(),
+                name: text(rule, "name"),
+                state: text(rule, "state"),
+                health: text(rule, "health"),
+                last_error: text(rule, "lastError"),
+                query: text(rule, "query"),
+                duration_seconds: rule
+                    .get("duration")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
+                last_evaluation: optional(rule, "lastEvaluation"),
+                labels: string_map(rule.get("labels")),
+                annotations: string_map(rule.get("annotations")),
+                alerts: rule
+                    .get("alerts")
+                    .and_then(|a| a.as_array())
+                    .into_iter()
+                    .flatten()
+                    .map(|alert| AlertInstance {
+                        state: text(alert, "state"),
+                        active_at: optional(alert, "activeAt"),
+                        value: text(alert, "value"),
+                        labels: string_map(alert.get("labels")),
+                        annotations: string_map(alert.get("annotations")),
+                    })
+                    .collect(),
+            });
+        }
+    }
+    Ok(rules)
+}
+
+fn parse_result(body: &serde_json::Value) -> Result<Vec<PromSeries>> {
+    if body.get("status").and_then(|s| s.as_str()) != Some("success") {
+        let message = body
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("Prometheus refused the query");
+        return Err(unreachable(message.to_string()));
+    }
+    let data = body
+        .get("data")
+        .ok_or_else(|| unreachable("Prometheus answered without any data".into()))?;
+    let empty = Vec::new();
+    let results = data
+        .get("result")
+        .and_then(|r| r.as_array())
+        .unwrap_or(&empty);
+
+    Ok(results
+        .iter()
+        .map(|series| {
+            let labels = series
+                .get("metric")
+                .and_then(|m| m.as_object())
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let mut points: Vec<PromPoint> = series
+                .get("values")
+                .and_then(|v| v.as_array())
+                .map(|values| values.iter().filter_map(parse_point).collect())
+                .unwrap_or_default();
+            if let Some(single) = series.get("value").and_then(parse_point) {
+                points.push(single);
+            }
+
+            PromSeries { labels, points }
+        })
+        .collect())
+}
+
+/// `[1699999999.5, "12.5"]` — the timestamp is a number and the value is a
+/// string, which is Prometheus keeping float precision the JSON number type
+/// would round off. `NaN` is a real answer meaning "nothing to compute here".
+fn parse_point(raw: &serde_json::Value) -> Option<PromPoint> {
+    let pair = raw.as_array()?;
+    let t = pair.first()?.as_f64()?;
+    let v = pair.get(1)?.as_str()?.parse::<f64>().ok();
+    Some(PromPoint {
+        t: t * 1000.0,
+        v: v.filter(|value| value.is_finite()),
+    })
+}
+
+#[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
+mod tests {
+    use super::*;
+
+    /// A body that says success and carries no target list is not a server
+    /// with nothing to scrape. Read as an empty list it became "no targets"
+    /// — a fact about the cluster, from an answer that stated none — and
+    /// every monitor on the page then read as unpicked.
+    #[test]
+    fn an_answer_without_a_target_list_is_not_an_answer_of_no_targets() {
+        for body in [
+            serde_json::json!({ "status": "success" }),
+            serde_json::json!({ "status": "success", "data": {} }),
+            serde_json::json!({ "status": "success", "data": { "activeTargets": null } }),
+        ] {
+            assert!(
+                parse_targets(&body).is_err(),
+                "a body with no target list has not answered: {body}"
+            );
+        }
+
+        // And the real empty answer, which is a fact and must still be one.
+        let none = serde_json::json!({
+            "status": "success",
+            "data": { "activeTargets": [] }
+        });
+        assert_eq!(parse_targets(&none).expect("an answer").len(), 0);
+    }
+
+    /// The rule list has the same shape and had none of the guard: a body
+    /// with no `groups` array read as "loaded nothing", which the Alerts tab
+    /// draws as every `PrometheusRule` in the cluster being unloaded — in red,
+    /// from an answer that said nothing about rules.
+    #[test]
+    fn an_answer_without_a_rule_list_is_not_an_answer_of_no_rules() {
+        for body in [
+            serde_json::json!({ "status": "success" }),
+            serde_json::json!({ "status": "success", "data": {} }),
+            serde_json::json!({ "status": "success", "data": { "groups": null } }),
+        ] {
+            assert!(
+                parse_rules(&body).is_err(),
+                "a body with no rule list has not answered: {body}"
+            );
+        }
+
+        // A Prometheus that really has loaded no rules still answers zero.
+        let none = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [] }
+        });
+        assert_eq!(parse_rules(&none).expect("an answer").len(), 0);
+
+        // And one level down: a group that names no rule list has not said
+        // it holds none either.
+        let headless = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [ { "name": "apps", "file": "/x.yaml" } ] }
+        });
+        assert!(parse_rules(&headless).is_err());
+
+        // A group that really is empty is still an answer.
+        let empty_group = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [ { "name": "apps", "file": "/x.yaml", "rules": [] } ] }
+        });
+        assert_eq!(parse_rules(&empty_group).expect("an answer").len(), 0);
+    }
+
+    /// The pool is the only thing that ties a target back to its monitor, and a target that is down must keep Prometheus's own sentence.
+    #[test]
+    fn targets_keep_the_pool_the_health_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "activeTargets": [
+                {
+                    "discoveredLabels": {"__address__": "10.0.0.9:8080"},
+                    "labels": {"job": "shop/web", "namespace": "shop", "service": "web", "instance": "10.0.0.9:8080"},
+                    "scrapePool": "serviceMonitor/shop/web/0",
+                    "scrapeUrl": "http://10.0.0.9:8080/metrics",
+                    "lastError": "",
+                    "lastScrape": "2026-09-12T08:00:00.000Z",
+                    "lastScrapeDuration": 0.01,
+                    "health": "up"
+                },
+                {
+                    "labels": {"job": "shop/db"},
+                    "scrapePool": "serviceMonitor/shop/db/0",
+                    "scrapeUrl": "http://10.0.0.7:9187/metrics",
+                    "lastError": "Get \"http://10.0.0.7:9187/metrics\": dial tcp 10.0.0.7:9187: connect: connection refused",
+                    "lastScrape": "2026-09-12T08:00:01.000Z",
+                    "health": "down"
+                }
+            ], "droppedTargets": [] }
+        });
+        let targets = parse_targets(&body).unwrap();
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].scrape_pool, "serviceMonitor/shop/web/0");
+        assert_eq!(targets[0].health, "up");
+        assert_eq!(
+            targets[0].labels.get("service").map(String::as_str),
+            Some("web")
+        );
+        assert_eq!(targets[1].health, "down");
+        assert!(targets[1].last_error.contains("connection refused"));
+    }
+
+    /// A Prometheus that refuses is a refusal, not an empty pool list.
+    /// Would break if a firing alert's labels or the rule's own error were
+    /// dropped on the way through, or a recording rule slipped in as an alert.
+    #[test]
+    fn rules_keep_the_file_the_state_the_alerts_and_the_words() {
+        let body = serde_json::json!({
+            "status": "success",
+            "data": { "groups": [{
+                "name": "kubernetes-apps",
+                "file": "/etc/prometheus/rules/prometheus-kps-rulefiles-0/monitoring-kps-kubernetes-apps-1a2b.yaml",
+                "rules": [
+                    {
+                        "type": "alerting", "name": "KubePodCrashLooping", "state": "firing",
+                        "health": "ok", "lastError": "", "query": "max_over_time(...) >= 1",
+                        "duration": 900, "labels": {"severity": "warning"},
+                        "annotations": {"summary": "Pod is crash looping."},
+                        "alerts": [{
+                            "state": "firing", "activeAt": "2026-09-12T20:00:00Z", "value": "1e+00",
+                            "labels": {"namespace": "shop", "pod": "web-1", "severity": "warning"},
+                            "annotations": {"summary": "Pod shop/web-1 is crash looping."}
+                        }]
+                    },
+                    { "type": "recording", "name": "cluster:cpu", "health": "ok", "query": "sum(...)" },
+                    {
+                        "type": "alerting", "name": "Broken", "state": "inactive", "health": "err",
+                        "lastError": "found duplicate series", "query": "up", "duration": 0,
+                        "labels": {}, "annotations": {}, "alerts": []
+                    }
+                ]
+            }]}
+        });
+        let rules = parse_rules(&body).unwrap();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].group, "kubernetes-apps");
+        assert!(rules[0]
+            .file
+            .ends_with("monitoring-kps-kubernetes-apps-1a2b.yaml"));
+        assert_eq!(rules[0].state, "firing");
+        assert_eq!(rules[0].duration_seconds, 900.0);
+        assert_eq!(
+            rules[0].alerts[0].labels.get("pod").map(String::as_str),
+            Some("web-1")
+        );
+        assert_eq!(rules[1].health, "err");
+        assert!(rules[1].last_error.contains("duplicate"));
+        // The two fields both readers key on, and neither was asserted: the
+        // rule's own name is how a PrometheusRule's spec is matched to what
+        // Prometheus loaded, and an alert's state is the difference between
+        // "firing" and "pending" on the page. Blanking either left the whole
+        // suite green.
+        assert_eq!(rules[0].name, "KubePodCrashLooping");
+        assert_eq!(rules[1].name, "Broken");
+        assert_eq!(rules[0].alerts[0].state, "firing");
+        assert_eq!(rules[0].alerts[0].value, "1e+00");
+    }
+
+    #[test]
+    fn a_refused_rule_list_is_an_error_not_no_rules() {
+        let body = serde_json::json!({"status": "error", "error": "forbidden"});
+        assert!(parse_rules(&body).is_err());
+    }
+
+    #[test]
+    fn a_refused_target_list_is_an_error_not_no_targets() {
+        let body = serde_json::json!({ "status": "error", "error": "forbidden" });
+        assert!(parse_targets(&body).is_err());
+    }
+    use serde_json::json;
+
+    /// Would break if the credential started travelling to the webview —
+    /// the one property this whole module's shape exists to hold.
+    #[test]
+    fn a_saved_connection_reports_that_it_has_a_token_and_never_which_one() {
+        let entry = PrometheusEntry {
+            url: "http://p:9090".into(),
+            auth_type: "bearer".into(),
+            token: Some("s3cr3t".into()),
+            insecure_tls: true,
+        };
+        let connection = PrometheusConnection::from(&entry);
+        assert!(connection.has_token);
+        assert!(connection.insecure_tls);
+
+        let wire = serde_json::to_string(&connection).unwrap();
+        assert!(
+            !wire.contains("s3cr3t"),
+            "the token reached the webview: {wire}"
+        );
+        assert!(!wire.contains("token\":\""), "a token field exists: {wire}");
+    }
+
+    /// Would break if a rate with nothing to divide started drawing as zero.
+    /// A gap is not a quiet period, and a chart that fills one is lying about
+    /// a window nobody measured.
+    #[test]
+    fn nan_is_a_gap_and_not_a_zero() {
+        let body = json!({
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [{
+                    "metric": { "pod": "busy-demo-abc-def" },
+                    "values": [[1_700_000_000.0, "12.5"], [1_700_000_015.0, "NaN"]]
+                }]
+            }
+        });
+        let series = parse_result(&body).unwrap();
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].labels.get("pod").unwrap(), "busy-demo-abc-def");
+        assert_eq!(series[0].points[0].v, Some(12.5));
+        assert_eq!(series[0].points[1].v, None);
+        assert_eq!(
+            series[0].points[0].t, 1_700_000_000_000.0,
+            "seconds were not converted to milliseconds"
+        );
+    }
+
+    /// Would break if a vector answer stopped being readable through the same
+    /// path as a matrix — the volume-fullness power reads instant queries.
+    #[test]
+    fn an_instant_answer_reads_through_the_same_door_as_a_range() {
+        let body = json!({
+            "status": "success",
+            "data": {
+                "resultType": "vector",
+                "result": [{
+                    "metric": { "persistentvolumeclaim": "data-stateful-demo-0" },
+                    "value": [1_700_000_000.0, "0.84"]
+                }]
+            }
+        });
+        let series = parse_result(&body).unwrap();
+        assert_eq!(series[0].points.len(), 1);
+        assert_eq!(series[0].points[0].v, Some(0.84));
+    }
+
+    /// Would break if a refusal started arriving as an empty chart — which is
+    /// indistinguishable from a workload that used nothing.
+    #[test]
+    fn a_refusal_is_an_error_and_never_an_empty_series() {
+        let body = json!({ "status": "error", "error": "parse error: unexpected \"}\"" });
+        let error = parse_result(&body).unwrap_err();
+        assert!(
+            error.to_string().contains("parse error"),
+            "Prometheus's own words were dropped: {error}"
+        );
+    }
+}

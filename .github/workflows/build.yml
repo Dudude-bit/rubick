@@ -13,7 +13,7 @@ on:
     # Prose and the site: nothing any job here builds or reads. Never
     # CHANGELOG.md — What's New embeds it — and never a blanket **/*.md.
     paths-ignore: &docs
-      - 'web/**'
+      - 'src/website/**'
       - 'docs/**'
       - 'README.md'
       - 'CONTRIBUTING.md'

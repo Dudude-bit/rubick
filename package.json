@@ -11,7 +11,7 @@
     "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format": "prettier --write \"src/ui/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
     "prepare": "lefthook install"
   },

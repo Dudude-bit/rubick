@@ -21,13 +21,13 @@ reviews:
       - "dependabot[bot]"
 
   path_filters:
-    - "!src/generated/**"
+    - "!src/ui/generated/**"
     - "!dist/**"
     - "!target/**"
     - "!node_modules/**"
     - "!bun.lock"
     - "!Cargo.lock"
-    - "!web/**"
+    - "!src/website/**"
     - "!**/__fixtures__/**"
     - "!**/*.snap"
 
@@ -47,7 +47,7 @@ reviews:
         как читается факт из кластера, ищи остальных читателей — страница и
         бейдж в сайдбаре, страница и peek-панель, список и карточка. Правка в
         одном месте при трёх других — типичный здешний баг.
-    - path: "src/**/*.{ts,tsx}"
+    - path: "src/ui/**/*.{ts,tsx}"
       instructions: >-
         Бэкенд зовут только через `commands` из `@/lib/commands` — не через
         `@/generated/commands` и не через `invoke`. Опрос по таймеру — только
@@ -58,9 +58,9 @@ reviews:
         модуля или в мемоизированном массиве колонок. Цвета — только
         роль-токены (`bg-canvas`, `text-fg-mut`, `text-ok`, `border-hair`),
         никаких сырых цветов Tailwind и `dark:`. `<select>` берётся из
-        `components/ui`. Вне `src/integrations/` вендор по имени не
+        `components/ui`. Вне `src/ui/integrations/` вендор по имени не
         упоминают — спрашивают фасет.
-    - path: "src-tauri/**/*.rs"
+    - path: "src/tauri/**/*.rs"
       instructions: >-
         Новая `#[tauri::command]` обязана попасть в `generate_handler!` в
         `main.rs` — иначе биндинг сгенерируется, соберётся и упадёт в рантайме.
@@ -70,7 +70,7 @@ reviews:
         `Error::CredentialsExpired` трогать нельзя: префикс
         `CREDENTIALS_EXPIRED:` — это формат провода. Внутри долгой задачи
         клиент берут из `state.client_manager` на каждую попытку.
-    - path: "src/i18n/**"
+    - path: "src/ui/i18n/**"
       instructions: >-
         `catalogue.ts` и `ru.ts` должны совпадать по множеству ключей в обе
         стороны. Секция, добавленная в один файл и забытая в другом, молчит:

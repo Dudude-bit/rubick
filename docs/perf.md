@@ -17,9 +17,9 @@ editor states its numbers against these, before and after.
 | Rows in the DOM                                                   | bounded by the viewport; anything past 100 rows is virtualised      |
 | Input to paint under load                                         | p95 ≤ 50 ms                                                         |
 
-The IPC numbers live in `shared/ipc-budget.json`, with a test on each side
+The IPC numbers live in `src/contracts/ipc-budget.json`, with a test on each side
 of the boundary holding its constant equal to the file, the same way
-`shared/read-deadlines.json` does. The pod list is the one answer chunked to
+`src/contracts/read-deadlines.json` does. The pod list is the one answer chunked to
 the target on its way out (`list_pod_rows` streams `PodRow`s through
 `chunks_within`); every other answer is unenforced at runtime, and the
 recorder paints one over the target in the warning tone so a PR cannot miss
