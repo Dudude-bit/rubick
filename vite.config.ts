@@ -239,6 +239,10 @@ export default defineConfig({
       "src/ui/generated/routeTree.gen.ts",
     ],
   },
+  // The UI's own folder holds its index.html; the build still lands in
+  // the repo's dist/, where tauri.conf.json looks for it.
+  root: path.resolve(__dirname, "src/ui"),
+  envDir: __dirname,
   plugins: [tanstackRouter(), react()],
   resolve: {
     alias: {
@@ -255,6 +259,8 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
+    outDir: path.resolve(__dirname, "dist"),
+    emptyOutDir: true,
     target:
       process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome110" : "safari15",
     minify: !process.env.TAURI_ENV_DEBUG,

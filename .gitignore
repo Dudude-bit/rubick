@@ -61,3 +61,4 @@ ldd.txt
 run.log
 .vitest/
 *.tsbuildinfo
+.tanstack/
