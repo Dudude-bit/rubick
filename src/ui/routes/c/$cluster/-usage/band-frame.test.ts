@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 const source = (file: string) =>
-  readFileSync(join("src", "ui", "components", "resources", file), "utf8");
+  readFileSync(join(import.meta.dirname, file), "utf8");
 
 describe("the frame the usage and traffic bands are drawn in", () => {
   /**

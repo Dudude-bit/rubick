@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 /** Every command a source asked, by name. */
@@ -17,6 +16,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { queryKeys } from "@/lib/query-keys";
+import { CODE_FILES } from "@/test/source-files";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 import { flatten, peekQueryKey, resolveSource } from "./peek-sources";
 
@@ -37,11 +37,9 @@ async function peekOf(target: {
  * rather than restated, so a page that changes what it asks shows up here.
  */
 function detailGetters(): Array<[string, string, string | null]> {
-  const dir = join("src", "ui", "pages");
-  return readdirSync(dir)
-    .filter((file) => file.endsWith("Detail.tsx"))
-    .flatMap((file) => {
-      const found = readFileSync(join(dir, file), "utf8").match(
+  return CODE_FILES.filter((file) => file.endsWith("Detail.tsx")).flatMap(
+    (file) => {
+      const found = readFileSync(file, "utf8").match(
         /resourceKind:\s*ResourceType\.(\w+),(\s*isClusterScoped:\s*true,)?\s*fetchResource:[\s\S]*?commands\.(\w+)\(/
       );
       if (!found) return [];
@@ -49,7 +47,8 @@ function detailGetters(): Array<[string, string, string | null]> {
       return [[kind, getter, clusterScoped ? null : "ns"]] as Array<
         [string, string, string | null]
       >;
-    });
+    }
+  );
 }
 
 /**
@@ -80,7 +79,7 @@ describe("the peek's Overview against the detail pages", () => {
 
   it("reads a route where the route's page does", async () => {
     const page = readFileSync(
-      join("src", "ui", "pages", "GatewayRouteDetail.tsx"),
+      "src/ui/routes/c/$cluster/(network)/(gateway-api)/-components/GatewayRouteDetail.tsx",
       "utf8"
     );
     expect(page).toMatch(/fetchResource:[^\n]*commands\.getGatewayRoute\(/);

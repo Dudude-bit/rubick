@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 
-import changelog from "../../../../CHANGELOG.md?raw";
+import changelog from "/CHANGELOG.md?raw";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
