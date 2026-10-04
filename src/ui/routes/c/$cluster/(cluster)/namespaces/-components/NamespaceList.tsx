@@ -4,10 +4,10 @@ import { columnHeader } from "@/i18n/column-header";
 import type { CellContext, ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
-import { ResourceList } from "./ResourceList";
-import { ResourceRef } from "./ResourceRef";
+import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { createAgeColumn } from "./columns";
+import { createAgeColumn } from "@/components/resources/columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";

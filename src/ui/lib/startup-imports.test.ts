@@ -13,7 +13,7 @@ const SOURCES = import.meta.glob<string>(
 const MAY_IMPORT_YAML = new Set([
   "/src/ui/components/yaml/manifest-reads.ts",
   "/src/ui/lib/helm-manifest.ts",
-  "/src/ui/pages/HelmDetail.tsx",
+  "/src/ui/routes/c/$cluster/(cluster)/helm/-components/HelmDetail.tsx",
 ]);
 
 describe("what startup loads", () => {

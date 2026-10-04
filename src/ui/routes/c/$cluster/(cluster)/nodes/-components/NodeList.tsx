@@ -5,7 +5,7 @@ import { nodeReadyWord } from "@/lib/node-reporting";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { NodeUtilisation } from "@/components/resources/NodeUtilisation";
+import { NodeUtilisation } from "./NodeUtilisation";
 import type { UsageRange } from "@/integrations";
 import { Eye, Shield, ShieldOff, AlertTriangle } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -37,7 +37,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { queryKeys } from "@/lib/query-keys";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useWatchedList } from "@/hooks/useWatchedList";
-import { useNodeActions } from "@/hooks/useNodeActions";
+import { useNodeActions } from "./useNodeActions";
 import { useT, type T as TranslateFn } from "@/i18n/useT";
 
 /**

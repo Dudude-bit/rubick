@@ -18,7 +18,7 @@ import {
   HelmReleasesTab,
   HelmChartsTab,
   HelmRepositoriesTab,
-} from "@/components/helm";
+} from "./";
 import { Package, Search, FolderGit2 } from "lucide-react";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";

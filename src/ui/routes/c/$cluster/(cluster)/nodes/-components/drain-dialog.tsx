@@ -36,7 +36,7 @@ import type {
   DrainRefusal,
   DrainState,
   RefusedPod,
-} from "@/hooks/useNodeDrain";
+} from "./useNodeDrain";
 import { useConnections } from "@/hooks/useConnections";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { budgetRule, drainBlockers } from "@/lib/governance";

@@ -7,13 +7,13 @@ import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { NamespaceList } from "./NamespaceList";
-import { ResourceList } from "./ResourceList";
+import { ResourceList } from "@/components/resources/ResourceList";
 
 vi.mock("@/hooks/useClusterSummary", () => ({ useClusterSummary: vi.fn() }));
 vi.mock("@/hooks/useResourceWatch", () => ({
   useResourceWatch: () => ({ resyncing: false }),
 }));
-vi.mock("./ResourceList", () => ({
+vi.mock("@/components/resources/ResourceList", () => ({
   ResourceList: vi.fn(
     ({ columns }: { columns: ColumnDef<NamespaceInfo>[] }) => (
       <DataTable columns={columns} data={namespaces} />

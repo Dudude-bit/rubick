@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { CrdDetail } from "@/pages/CrdDetail";
+import { CrdDetail } from "./-components/CrdDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(cluster)/customresourcedefinitions/$name"

@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { DrainDialog } from "@/components/resources/drain-dialog";
+import { DrainDialog } from "./drain-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useAsk } from "@/hooks/useAsk";
 import { useCritical } from "@/hooks/useCritical";
-import { drainingNode, useNodeDrain } from "@/hooks/useNodeDrain";
+import { drainingNode, useNodeDrain } from "./useNodeDrain";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";

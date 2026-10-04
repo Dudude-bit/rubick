@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Crds } from "@/pages/Crds";
+import { Crds } from "./-components/Crds";
 
 export const Route = createFileRoute(
   "/c/$cluster/(cluster)/customresourcedefinitions/"

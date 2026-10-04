@@ -7,9 +7,9 @@ import { columns as deployments } from "@/routes/c/$cluster/(workloads)/deployme
 import { columns as endpoints } from "@/routes/c/$cluster/(network)/endpoints/-components/EndpointsList";
 import { baseColumns as ingresses } from "@/routes/c/$cluster/(network)/ingresses/-components/IngressList";
 import { columns as jobs } from "@/routes/c/$cluster/(workloads)/jobs/-components/JobList";
-import { columns as namespaces } from "./NamespaceList";
+import { columns as namespaces } from "@/routes/c/$cluster/(cluster)/namespaces/-components/NamespaceList";
 import { networkPolicyColumns } from "@/routes/c/$cluster/(network)/networkpolicies/-components/NetworkPolicyList";
-import { columns as nodes } from "./NodeList";
+import { columns as nodes } from "@/routes/c/$cluster/(cluster)/nodes/-components/NodeList";
 import { columns as persistentVolumeClaims } from "@/routes/c/$cluster/(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
 import { columns as persistentVolumes } from "@/routes/c/$cluster/(storage)/persistentvolumes/-components/PersistentVolumeList";
 import { columns as pods } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
@@ -36,8 +36,8 @@ interface Column {
  *
  * - CustomResources builds its columns from whichever CRD is installed, so
  *   their widths are decided there and cannot be decided here.
- * - CRDs (`src/ui/pages/Crds.tsx`) and Helm releases
- *   (`src/ui/components/helm/HelmReleasesTab.tsx`) build theirs in a `useMemo`
+ * - CRDs (`src/ui/routes/c/$cluster/(cluster)/customresourcedefinitions/-components/Crds.tsx`) and Helm releases
+ *   (`src/ui/routes/c/$cluster/(cluster)/helm/-components/HelmReleasesTab.tsx`) build theirs in a `useMemo`
  *   inside the component and close over its state, so reaching them means
  *   either rendering the page with a cluster's worth of mocks behind it or
  *   lifting the array out into a factory that takes those callbacks.

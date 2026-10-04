@@ -26,7 +26,7 @@ import {
   UsageRow,
 } from "@/components/resources/detail-blocks";
 import { UsageBlock } from "@/components/resources/usage-block";
-import { NodeResources } from "@/components/resources/NodeResources";
+import { NodeResources } from "./NodeResources";
 import { PodListCard } from "@/components/resources/PodListCard";
 import {
   countMark,
@@ -34,7 +34,7 @@ import {
   podsMark,
 } from "@/components/resources/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { useNodeActions } from "@/hooks/useNodeActions";
+import { useNodeActions } from "./useNodeActions";
 import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import {

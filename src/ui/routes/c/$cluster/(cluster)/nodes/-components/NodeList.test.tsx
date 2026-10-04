@@ -30,12 +30,12 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ nodeMetrics: [], nodeStatus: null }),
 }));
-vi.mock("@/hooks/useNodeActions", () => ({
+vi.mock("./useNodeActions", () => ({
   useNodeActions: () => ({ dialogs: null }),
 }));
 
 const drawn = vi.hoisted(() => ({ nodes: [] as unknown[] }));
-vi.mock("@/components/resources/NodeUtilisation", () => ({
+vi.mock("./NodeUtilisation", () => ({
   NodeUtilisation: ({ nodes }: { nodes: unknown[] }) => {
     drawn.nodes = nodes;
     return null;

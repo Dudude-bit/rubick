@@ -29,8 +29,8 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "@/components/resources/yaml-tab";
-import { SchemaViewer } from "@/components/crds/SchemaViewer";
-import { CustomResourceList } from "@/components/resources/CustomResourceList";
+import { SchemaViewer } from "./SchemaViewer";
+import { CustomResourceList } from "./CustomResourceList";
 import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
 import {
   conditionsMark,

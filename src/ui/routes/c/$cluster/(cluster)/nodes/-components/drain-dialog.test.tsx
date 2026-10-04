@@ -12,7 +12,7 @@ import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
 import { DrainDialog } from "./drain-dialog";
-import type { DrainReport, DrainState, RefusedPod } from "@/hooks/useNodeDrain";
+import type { DrainReport, DrainState, RefusedPod } from "./useNodeDrain";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 
