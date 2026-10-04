@@ -1,3 +1,4 @@
+import { load } from "js-yaml";
 import type { ReactNode } from "react";
 import {
   beforeAll,
@@ -62,6 +63,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     getPod: vi.fn(),
     getManifest: vi.fn(),
+    getServedObject: vi.fn(),
     listEvents: vi.fn(),
     getConfigmap: vi.fn(),
     getConfigmapData: vi.fn(),
@@ -331,6 +333,9 @@ function mockCluster() {
   vi.mocked(commands.getManifest)
     .mockReset()
     .mockResolvedValue(REPLICASET_MANIFEST);
+  vi.mocked(commands.getServedObject)
+    .mockReset()
+    .mockResolvedValue(load(REPLICASET_MANIFEST));
   vi.mocked(commands.getNamespace)
     .mockReset()
     .mockResolvedValue({
@@ -559,13 +564,13 @@ describe("PeekPanel", () => {
     );
   });
 
-  it("falls back to the manifest for a kind with no detail command", async () => {
+  it("falls back to the whole object for a kind with no detail command", async () => {
     await wrap("/c/prod/events?peek=replicasets/k8s-gui-test/promo-abc");
     // The badge and the status row both read the phase out of the manifest.
     expect(await screen.findAllByText("Active")).toHaveLength(2);
-    expect(commands.getManifest).toHaveBeenCalledWith(
-      "ReplicaSet",
-      "apps/v1",
+    expect(commands.getServedObject).toHaveBeenCalledWith(
+      "apps",
+      "replicasets",
       "promo-abc",
       "k8s-gui-test"
     );

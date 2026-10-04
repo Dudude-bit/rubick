@@ -1,13 +1,17 @@
 import { useRouter } from "@tanstack/react-router";
-import { Network } from "lucide-react";
+import { Info, Network } from "lucide-react";
 
 import { EmptyPage } from "../../../-components/NotFound";
+import { KeyValueSection } from "./detail-kv";
+import { objectFacets } from "./facets";
 import { OwnsPanel } from "./Owns";
 import { useLineage } from "./ownership";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
 import { servedOf, useServed, type Served } from "./served";
 import { DetailTabs } from "@/components/object/DetailTabs";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
@@ -60,11 +64,30 @@ export function GenericObjectPage({
     refresh: "resourceDetail",
     staleTime: STALE_TIMES.resourceDetail,
   });
+  const object = useLiveQuery({
+    queryKey: queryKeys.servedObject(
+      target.group,
+      target.plural,
+      namespace,
+      name
+    ),
+    queryFn: () =>
+      commands.getServedObject(
+        target.group,
+        target.plural,
+        name,
+        namespace ?? null
+      ),
+    enabled: isConnected,
+    refresh: "resourceDetail",
+    staleTime: STALE_TIMES.resourceDetail,
+  });
+  const facets = object.data ? objectFacets(object.data, t) : null;
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
   const uid = useLineage(target, name, namespace).data?.uid ?? null;
-  const activeTab = useAppSearch().tab ?? "yaml";
+  const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 
   const manifest = yamlTab({
@@ -74,8 +97,29 @@ export function GenericObjectPage({
     namespace,
     onCopy: () => yaml.data && copy(yaml.data),
   });
+  const overview: DetailTab = {
+    id: "overview",
+    label: t("nav", "overview"),
+    glyph: viewGlyph(Info),
+    content: facets ? (
+      <div className="flex flex-col gap-[22px]">
+        {facets.groups.map((group) => (
+          <KeyValueSection
+            key={group.title}
+            title={group.title}
+            count={group.count}
+            items={group.items}
+            emptyMessage={group.emptyMessage ?? t("empty", "none")}
+          />
+        ))}
+      </div>
+    ) : (
+      <DetailSkeleton />
+    ),
+  };
   const tabs: DetailTab[] = uid
     ? [
+        overview,
         manifest,
         {
           id: "owns",
@@ -84,7 +128,7 @@ export function GenericObjectPage({
           content: <OwnsPanel uid={uid} />,
         },
       ]
-    : [manifest];
+    : [overview, manifest];
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -95,13 +139,19 @@ export function GenericObjectPage({
         listLink={resourceListLink(resource)}
         listLabel={resource}
         served={target}
+        status={
+          facets?.status ? (
+            <StatusBadge status={facets.status}>{facets.status}</StatusBadge>
+          ) : undefined
+        }
+        createdAt={facets?.createdAt}
         onBack={() => router.history.back()}
         dataUpdatedAt={yaml.dataUpdatedAt}
         slowed={yaml.freshness.slowed}
       />
-      {yaml.isError ? (
+      {object.isError && yaml.isError ? (
         <Unread
-          error={yaml.error}
+          error={object.error}
           served={served}
           resource={resource}
           kind={kind}
@@ -113,7 +163,7 @@ export function GenericObjectPage({
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={(tab) =>
-            setSearch({ tab: tab === "yaml" ? undefined : tab })
+            setSearch({ tab: tab === "overview" ? undefined : tab })
           }
         />
       )}

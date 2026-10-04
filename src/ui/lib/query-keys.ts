@@ -277,6 +277,18 @@ export const queryKeys = {
     scope(namespace),
     pages,
   ],
+  servedObject: (
+    group: string,
+    plural: string,
+    namespace: string | null | undefined,
+    name: string
+  ): (string | null)[] => [
+    "served-object",
+    group,
+    plural,
+    home(namespace),
+    name,
+  ],
   servedObjectYaml: (
     group: string,
     plural: string,

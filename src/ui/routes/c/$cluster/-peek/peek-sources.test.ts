@@ -69,7 +69,7 @@ describe("the peek's Overview against the detail pages", () => {
     "shares the %s page's entry only when it asks what the page asks",
     async (kind, getter, namespace) => {
       const peek = await peekOf({ kind, name: "x", namespace });
-      expect([getter, "getManifest"]).toContain(peek.asked[0]);
+      expect([getter, "getServedObject"]).toContain(peek.asked[0]);
       const shared =
         JSON.stringify(peek.key) ===
         JSON.stringify(queryKeys.detail(kind, namespace, "x"));

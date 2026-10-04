@@ -8,12 +8,16 @@ import { renderWithRouter } from "@/test/render";
 const answers = vi.hoisted(() => ({
   catalog: (): Promise<ApiCatalog> =>
     Promise.resolve({ entries: [], unread: [] }),
+  object: (): Promise<unknown> => Promise.reject(new Error("unset")),
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listApiCatalog: () => answers.catalog(),
     getServedObjectYaml: () =>
+      Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
+    getServedObject: () => answers.object(),
+    objectLineage: () =>
       Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
   },
 }));
@@ -42,7 +46,38 @@ const open = () =>
     />
   );
 
+describe("an object of a kind no screen draws", () => {
+  /** The peek and this page read an object through one function. */
+  it("draws what the object says about itself as the peek does", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+    answers.object = () =>
+      Promise.resolve({
+        metadata: {
+          name: "x",
+          labels: { tier: "control" },
+          managedFields: [
+            {
+              manager: "kubelet",
+              operation: "Update",
+              time: "2026-10-04T05:00:00Z",
+            },
+          ],
+        },
+        spec: { holderIdentity: "node-1" },
+      });
+    await open();
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+    expect(screen.getByText("kubelet")).toBeInTheDocument();
+    expect(screen.getByText("tier")).toBeInTheDocument();
+  });
+});
+
 describe("an object of a kind no screen draws, when the read finds nothing", () => {
+  beforeEach(() => {
+    answers.object = () =>
+      Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' });
+  });
+
   /** Only a served kind's 404 is about the object. */
   it("says the object is missing when the kind is served", async () => {
     answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });

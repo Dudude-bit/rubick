@@ -404,6 +404,7 @@ export const ru: Catalogue = {
     state: "Состояние",
     zone: "Зона",
     labels: "Метки",
+    writtenBy: "Пишут",
     selectors: "Селекторы",
     data: "Данные",
     serviceType: "Тип Service",

@@ -4,21 +4,21 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiVersion, toKind } from "@/lib/resource-registry";
 import { vendorPeek } from "@/integrations";
-import type { T as Translate } from "@/i18n/useT";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue } from "@/components/object/key-values";
-import type {
-  ConditionInfo,
-  CustomResourceDetailInfo,
-} from "@/generated/types";
+import type { CustomResourceDetailInfo } from "@/generated/types";
 import {
-  conditionItem,
   controlledBy,
   source,
   type PeekSource,
   type PeekSources,
-  type PeekSummary,
 } from "./peek-sources-kit";
+import {
+  FACET_ROW_LIMIT,
+  flatten,
+  objectFacets,
+  stateOf,
+} from "../-object/facets";
+import { servedOfKind } from "../-object/ownership";
 import { CLUSTER_SOURCES } from "./peek-sources-cluster";
 import { GATEWAY_SOURCES } from "./peek-sources-gateway";
 import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
@@ -26,6 +26,7 @@ import { CONFIG_STORAGE_SOURCES } from "./peek-sources-storage";
 import { NETWORK_SOURCES } from "./peek-sources-network";
 
 export type { PeekGroup, PeekSummary } from "./peek-sources-kit";
+export { flatten };
 
 /**
  * What each kind says about itself in the peek's Overview tab.
@@ -95,19 +96,19 @@ function customResourceSource(crdName: string): PeekSource {
       const status = resource.status as Record<string, unknown> | null;
       const body = vendor?.(resource, t);
       return {
-        status: body?.status ?? customResourceState(status),
+        status: body?.status ?? stateOf(status),
         createdAt: resource.createdAt,
         groups: [
           ...controlledBy(resource.ownerReferences, resource.namespace, t),
           ...(body?.groups ?? [
             {
               title: t("columns", "status"),
-              items: flatten(status, MANIFEST_ROW_LIMIT),
+              items: flatten(status, FACET_ROW_LIMIT),
               emptyMessage: t("empty", "nothingReportedYet"),
             },
             {
               title: t("columns", "spec"),
-              items: flatten(resource.spec, MANIFEST_ROW_LIMIT),
+              items: flatten(resource.spec, FACET_ROW_LIMIT),
               emptyMessage: t("empty", "noSpec"),
             },
           ]),
@@ -126,43 +127,21 @@ function customResourceSource(crdName: string): PeekSource {
 }
 
 /**
- * The one word for the header badge, from the two places an operator is
- * likely to have put one.
- *
- * `phase` and `state` are the conventional free-form fields; `conditions` is
- * the upstream `metav1.Condition` shape, and a `Ready` condition is the
- * nearest thing to a universal verdict a custom resource has. Anything else
- * is left unsaid rather than guessed — an operator that reports health under
- * a name of its own gets no badge, and the flattened status underneath is
- * where the reader finds it.
- */
-function customResourceState(
-  status: Record<string, unknown> | null
-): string | undefined {
-  if (!status) return undefined;
-  const said = asText(status.phase) ?? asText(status.state);
-  if (said) return said;
-
-  const conditions = Array.isArray(status.conditions) ? status.conditions : [];
-  const ready = conditions.find(
-    (condition): condition is { type: string; status: string } =>
-      typeof condition === "object" &&
-      condition !== null &&
-      (condition as { type?: unknown }).type === "Ready"
-  );
-  if (!ready) return undefined;
-  return ready.status === "True" ? "Ready" : "Not ready";
-}
-
-/**
- * The fallback every kind answers. The manifest arrives as YAML, and pasting
- * it into the panel would just be the YAML tab in a narrower column — so the
- * scalars under `status` and `spec` become rows, which is the part of a
- * manifest a reader actually scans for.
+ * The fallback every kind answers: the object read whole, by the group and
+ * plural discovery serves it at, and drawn as the facets the object page
+ * draws for the same object.
  */
 function manifestSource(kind: string): PeekSource {
+  const served = servedOfKind(kind);
   return source(
     async (name, namespace) => {
+      if (served)
+        return commands.getServedObject(
+          served.group,
+          served.plural,
+          name,
+          namespace
+        );
       const text = await commands.getManifest(
         kind,
         getApiVersion(kind),
@@ -174,137 +153,6 @@ function manifestSource(kind: string): PeekSource {
       const { load } = await import("js-yaml");
       return load(text);
     },
-    (manifest, _target, t) => summariseManifest(manifest, t)
+    (object, _target, t) => objectFacets(object, t)
   );
-}
-
-const MANIFEST_ROW_LIMIT = 12;
-
-function summariseManifest(manifest: unknown, t: Translate): PeekSummary {
-  if (!manifest || typeof manifest !== "object") {
-    return {
-      groups: [
-        {
-          title: t("action", "manifestTab"),
-          items: [],
-          emptyMessage: t("empty", "nothingReportedYet"),
-        },
-      ],
-    };
-  }
-  const record = manifest as Record<string, unknown>;
-  const metadata = (record.metadata ?? {}) as Record<string, unknown>;
-  const status = record.status as unknown;
-  const labels = (metadata.labels ?? {}) as Record<string, string>;
-
-  return {
-    status:
-      typeof status === "object" && status !== null
-        ? (asText((status as Record<string, unknown>).phase) ??
-          asText((status as Record<string, unknown>).state))
-        : undefined,
-    createdAt: asText(metadata.creationTimestamp) ?? null,
-    groups: [
-      {
-        title: t("columns", "status"),
-        items: flatten(status, MANIFEST_ROW_LIMIT),
-        emptyMessage: t("empty", "nothingReportedYet"),
-      },
-      {
-        title: t("columns", "spec"),
-        items: flatten(record.spec, MANIFEST_ROW_LIMIT),
-        emptyMessage: t("empty", "noSpec"),
-      },
-      {
-        title: t("columns", "labels"),
-        count: Object.keys(labels).length || undefined,
-        items: Object.entries(labels)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([label, value]) => ({ label, value, mono: true })),
-        emptyMessage: t("empty", "noLabels"),
-      },
-    ],
-  };
-}
-
-function asText(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
-}
-
-/** Scalar leaves, dotted, so a nested `status.conditions` does not explode. */
-export function flatten(value: unknown, limit: number): KeyValue[] {
-  const rows: KeyValue[] = [];
-  walk(value, "", rows, limit);
-  return rows;
-}
-
-/** The one shape the whole API machinery shares — enough to read as one. */
-function isConditionList(
-  path: string,
-  value: unknown[]
-): value is Array<Record<string, unknown>> {
-  return (
-    /(^|\.)conditions$/i.test(path) &&
-    value.length > 0 &&
-    value.every(
-      (entry) =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof (entry as Record<string, unknown>).type === "string" &&
-        typeof (entry as Record<string, unknown>).status === "string"
-    )
-  );
-}
-
-function walk(
-  value: unknown,
-  path: string,
-  rows: KeyValue[],
-  limit: number
-): void {
-  if (rows.length >= limit || value === null || value === undefined) return;
-  if (Array.isArray(value)) {
-    const scalars = value.filter((entry) => typeof entry !== "object");
-    if (scalars.length === value.length) {
-      rows.push({ label: path, value: scalars.join(" · "), mono: true });
-      return;
-    }
-    // A conditions array is verdicts, not data: one row per condition, in
-    // the reason-first wording and polarity-aware tone every condition row
-    // in the app already carries — instead of six grey fragments per entry.
-    if (isConditionList(path, value)) {
-      for (const entry of value.slice(0, limit - rows.length)) {
-        const condition: ConditionInfo = {
-          type: String(entry.type),
-          status: String(entry.status),
-          reason: typeof entry.reason === "string" ? entry.reason : null,
-          message: typeof entry.message === "string" ? entry.message : null,
-          lastTransitionTime: null,
-        };
-        // The same wording every condition row speaks — one implementation,
-        // relabelled with the dotted path.
-        rows.push({
-          ...conditionItem(condition),
-          label: `${path}.${condition.type}`,
-        });
-      }
-      return;
-    }
-    // An array of objects is where a custom resource keeps the part anybody
-    // opens it for — an IngressRoute's `routes` holds the match rule, the
-    // service, the priority. Printed as "1 entries" the peek said nothing;
-    // descended with indexed paths it says the thing itself, and the row
-    // limit still caps how far that goes.
-    value.forEach((child, index) => {
-      walk(child, path ? `${path}.${index}` : String(index), rows, limit);
-    });
-    return;
-  }
-  if (typeof value === "object") {
-    for (const [key, child] of Object.entries(value)) {
-      walk(child, path ? `${path}.${key}` : key, rows, limit);
-    }
-    return;
-  }
-  rows.push({ label: path, value: String(value), mono: true });
 }

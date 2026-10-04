@@ -434,6 +434,7 @@ export const en = {
     state: "State",
     zone: "Zone",
     labels: "Labels",
+    writtenBy: "Written by",
     selectors: "Selectors",
     data: "Data",
     serviceType: "Service Type",
