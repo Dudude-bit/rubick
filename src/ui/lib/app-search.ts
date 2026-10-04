@@ -15,6 +15,8 @@ export interface AppSearch {
   rule?: string;
   monitor?: string;
   kind?: string;
+  /** The attached object a redirect came from, as `<resource>/[<namespace>/]<name>`. */
+  via?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -28,6 +30,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "vendor",
   "rule",
   "monitor",
+  "via",
   "kind",
 ];
 

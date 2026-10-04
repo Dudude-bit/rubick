@@ -4712,6 +4712,21 @@ export const ru: Catalogue = {
       "Язык интерфейса. Имена и статусы Kubernetes остаются такими, как их пишет кластер.",
     systemLanguage: "Как в системе",
   },
+  attached: {
+    openedFrom: "Открыто из {kind} {name}, который относится сюда.",
+    openOwn: "Открыть его отдельно",
+    targetMissing: "Не открыто на цели: {kind} {name} не существует.",
+    targetUnread:
+      "Не открыто на цели: не удалось прочитать {kind} {name}. {error}",
+    targetContested:
+      "Не открыто на цели: на {kind} {name} нацелено больше одного автоскейлера, и они спорят за него.",
+    siblingsUnread:
+      "Не открыто на цели: не удалось проверить, не нацелен ли на {kind} {name} ещё один автоскейлер.",
+    noService:
+      "Service с именем {name} здесь нет, так что эти endpoints держит только тот, кто их записал.",
+    noOwner: "Эту ревизию не держит ни один контроллер.",
+    involvedGone: "{kind} {name}, о котором это событие, больше не существует.",
+  },
   empty: {
     addressMissing: "По этому адресу ничего нет",
     addressMissingBody:

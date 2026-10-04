@@ -141,6 +141,54 @@ pub async fn get_served_object_yaml(
     clean_yaml_for_editor(&yaml)
 }
 
+/// How many siblings a page compares one object against. Enough for the
+/// autoscalers of one namespace; past it, the answer says it was cut.
+const SIBLINGS: u32 = 200;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServedObjects {
+    pub items: Vec<serde_json::Value>,
+    /// The kind has more objects here than were read.
+    pub truncated: bool,
+}
+
+/// The objects of a small kind in one namespace, whole but for their
+/// managed fields: what a page needs to compare one object with its
+/// siblings, such as two autoscalers aimed at one workload.
+#[tauri::command]
+pub async fn list_served_objects(
+    group: String,
+    plural: String,
+    namespace: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ServedObjects> {
+    let served = served(&state, &group, &plural).await?;
+    let api = if served.namespaced {
+        ResourceContext::for_command(&state, namespace)?
+            .dynamic_api_for_resource(&served.resource, false)
+    } else {
+        ResourceContext::for_list(&state, None)?.dynamic_api_for_resource(&served.resource, true)
+    };
+    let answer = api.list(&page_params(SIBLINGS, None)).await;
+    let list = state.served_answer(&group, answer)?;
+    let truncated = list
+        .metadata
+        .continue_
+        .as_deref()
+        .is_some_and(|token| !token.is_empty());
+    let items = list
+        .items
+        .into_iter()
+        .map(|mut object| {
+            object.metadata.managed_fields = None;
+            serde_json::to_value(object)
+        })
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|e| Error::Serialization(e.to_string()))?;
+    Ok(ServedObjects { items, truncated })
+}
+
 async fn served(state: &AppState, group: &str, plural: &str) -> Result<Served> {
     if !group.is_empty() {
         crate::validation::validate_dns_subdomain(group)?;

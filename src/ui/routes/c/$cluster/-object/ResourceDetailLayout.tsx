@@ -24,6 +24,7 @@ import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
 import { AlertBanner } from "../-alerts/AlertBanner";
+import { AttachedFrom } from "./Attached";
 import { errorToShow } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
@@ -254,15 +255,18 @@ export function ResourceDetailLayout({
   // underneath, so it never appeared there; `error` reaching it could only
   // ever be `undefined`, and its own "could not read" branch was dead code.
   const banner = (
-    <AlertBanner
-      kind={resourceKind}
-      name={title}
-      namespace={namespace ?? null}
-      now={resource && !error ? statusBadge : undefined}
-      readAt={freshness?.dataUpdatedAt}
-      error={error ? errorToShow(error) : undefined}
-      reading={isLoading}
-    />
+    <>
+      <AttachedFrom />
+      <AlertBanner
+        kind={resourceKind}
+        name={title}
+        namespace={namespace ?? null}
+        now={resource && !error ? statusBadge : undefined}
+        readAt={freshness?.dataUpdatedAt}
+        error={error ? errorToShow(error) : undefined}
+        reading={isLoading}
+      />
+    </>
   );
 
   if (isLoading) {

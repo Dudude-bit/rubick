@@ -58,11 +58,17 @@ export function resourceSegment(ref: Pick<ObjectRef, "kind" | "crd">) {
  */
 export function objectLink(
   ref: ObjectRef,
-  options: { tab?: string; cluster?: string } = {}
+  options: { tab?: string; cluster?: string; via?: string; view?: string } = {}
 ): AppLink | null {
   const resource = resourceSegment(ref);
   if (!resource) return null;
-  const search = options.tab ? { tab: options.tab } : undefined;
+  const { tab, via, view } = options;
+  const search =
+    tab || via || view
+      ? Object.fromEntries(
+          Object.entries({ tab, via, view }).filter(([, value]) => value)
+        )
+      : undefined;
   const clusterScoped = !ref.crd && isClusterScoped(ref.kind);
   if (!clusterScoped && ref.namespace) {
     return {

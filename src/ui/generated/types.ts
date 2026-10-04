@@ -1171,6 +1171,11 @@ export interface NamespaceInfo {
   createdAt: string | null;
 }
 
+export interface ServedObjects {
+  items: unknown[];
+  truncated: boolean;
+}
+
 export interface ResourceTable {
   columns: TableColumn[];
   rows: TableRow[];

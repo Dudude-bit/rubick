@@ -222,6 +222,7 @@ fn main() {
             commands::catalog::list_resource_table,
             commands::catalog::get_served_object,
             commands::catalog::get_served_object_yaml,
+            commands::catalog::list_served_objects,
             commands::crds::delete_custom_resource,
             commands::crds::patch_custom_resource,
             commands::crds::patch_custom_resource_json,

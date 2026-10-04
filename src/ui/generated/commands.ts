@@ -111,6 +111,7 @@ import type {
   SearchHandle,
   SearchRequest,
   SecretInfo,
+  ServedObjects,
   ServiceBacking,
   ServiceFilters,
   ServiceInfo,
@@ -825,6 +826,18 @@ export async function getServedObjectYaml(
     group,
     plural,
     name,
+    namespace,
+  });
+}
+
+export async function listServedObjects(
+  group: string,
+  plural: string,
+  namespace: string | null
+): Promise<ServedObjects> {
+  return invoke<ServedObjects>("list_served_objects", {
+    group,
+    plural,
     namespace,
   });
 }

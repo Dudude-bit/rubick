@@ -59,14 +59,16 @@ export function servedIn(
 /** A minute: a kind appears when something is installed, not mid-read. */
 const CATALOG_STALE_MS = 60_000;
 
+/** The catalogue's one cache entry, for a hook and for a read inside a query. */
+export const catalogQuery = () => ({
+  queryKey: queryKeys.apiCatalog(),
+  queryFn: () => commands.listApiCatalog(),
+  staleTime: CATALOG_STALE_MS,
+  retry: false,
+});
+
 export function useServed(resource: ServedResource): Served {
   const isConnected = useClusterStore((state) => state.isConnected);
-  const catalog = useQuery({
-    queryKey: queryKeys.apiCatalog(),
-    queryFn: () => commands.listApiCatalog(),
-    enabled: isConnected,
-    staleTime: CATALOG_STALE_MS,
-    retry: false,
-  });
+  const catalog = useQuery({ ...catalogQuery(), enabled: isConnected });
   return servedIn(catalog.data, catalog.error, resource);
 }

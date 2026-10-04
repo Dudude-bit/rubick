@@ -4273,6 +4273,22 @@ export const en = {
       "The interface language. Kubernetes names and statuses stay as the cluster spells them.",
     systemLanguage: "Match the system",
   },
+  // An object whose meaning belongs to one parent, opened there or not.
+  attached: {
+    openedFrom: "Opened from {kind} {name}, which belongs here.",
+    openOwn: "Open it on its own page",
+    targetMissing: "Not opened on its target: {kind} {name} does not exist.",
+    targetUnread:
+      "Not opened on its target: could not read {kind} {name}. {error}",
+    targetContested:
+      "Not opened on its target: more than one autoscaler aims at {kind} {name}, and they fight over it.",
+    siblingsUnread:
+      "Not opened on its target: could not check whether another autoscaler also aims at {kind} {name}.",
+    noService:
+      "There is no Service named {name} here, so nothing keeps these endpoints but whoever wrote them.",
+    noOwner: "No controller owns this revision.",
+    involvedGone: "{kind} {name}, which this event is about, no longer exists.",
+  },
   empty: {
     addressMissing: "Nothing lives at this address",
     addressMissingBody:
