@@ -27,6 +27,7 @@ import { DebugNodeDialog, DebugPodDialog } from "../-debug";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
+import { CascadePreview } from "./CascadePreview";
 import { useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useCritical } from "@/hooks/useCritical";
@@ -397,6 +398,11 @@ export function useObjectActions({
         onOpenChange={(open) => setConfirming(open ? "delete" : null)}
         title={deletion.title}
         description={warned(deletion.description, intercept("Delete"))}
+        details={
+          confirming === "delete" ? (
+            <CascadePreview kind={kind} name={name} namespace={namespace} />
+          ) : null
+        }
         confirmationText={name}
         confirmLabel={t("action", "delete")}
         isLoading={remove.isPending}

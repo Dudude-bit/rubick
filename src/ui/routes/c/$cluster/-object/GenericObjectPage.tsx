@@ -1,10 +1,16 @@
 import { useRouter } from "@tanstack/react-router";
+import { Network } from "lucide-react";
 
 import { EmptyPage } from "../../../-components/NotFound";
+import { OwnsPanel } from "./Owns";
+import { useLineage } from "./ownership";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
-import { YamlTabContent } from "./YamlTabContent";
+import { yamlTab } from "./yaml-tab";
 import { servedOf, useServed, type Served } from "./served";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
@@ -57,6 +63,28 @@ export function GenericObjectPage({
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
+  const uid = useLineage(target, name, namespace).data?.uid ?? null;
+  const activeTab = useAppSearch().tab ?? "yaml";
+  const setSearch = useSetSearch();
+
+  const manifest = yamlTab({
+    yaml: yaml.data,
+    resourceKind: registryKind ?? undefined,
+    resourceName: name,
+    namespace,
+    onCopy: () => yaml.data && copy(yaml.data),
+  });
+  const tabs: DetailTab[] = uid
+    ? [
+        manifest,
+        {
+          id: "owns",
+          label: t("owns", "tab"),
+          glyph: viewGlyph(Network),
+          content: <OwnsPanel uid={uid} />,
+        },
+      ]
+    : [manifest];
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -66,6 +94,7 @@ export function GenericObjectPage({
         namespace={namespace}
         listLink={resourceListLink(resource)}
         listLabel={resource}
+        served={target}
         onBack={() => router.history.back()}
         dataUpdatedAt={yaml.dataUpdatedAt}
         slowed={yaml.freshness.slowed}
@@ -80,12 +109,12 @@ export function GenericObjectPage({
           t={t}
         />
       ) : (
-        <YamlTabContent
-          yaml={yaml.data}
-          resourceKind={registryKind ?? undefined}
-          resourceName={name}
-          namespace={namespace}
-          onCopy={() => yaml.data && copy(yaml.data)}
+        <DetailTabs
+          tabs={tabs}
+          activeTab={activeTab}
+          onTabChange={(tab) =>
+            setSearch({ tab: tab === "yaml" ? undefined : tab })
+          }
         />
       )}
     </div>

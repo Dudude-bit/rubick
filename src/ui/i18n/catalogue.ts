@@ -4273,6 +4273,41 @@ export const en = {
       "The interface language. Kubernetes names and statuses stay as the cluster spells them.",
     systemLanguage: "Match the system",
   },
+  // The controllers above an object, nearest last.
+  lineage: {
+    label: "Owners",
+    ownerGone: "{kind} {name} (gone)",
+    ownerUnread: "{kind} {name} (not read)",
+    kindNotServed: "{kind} (not served here)",
+    several: "several owners",
+    tooDeep: "more owners above",
+  },
+  // What an object owns, from the ownership index.
+  owns: {
+    tab: "Owns",
+    none: "Owns nothing among the kinds read.",
+    notController: "owner, not controller",
+    expand: "Show what {name} owns",
+    collapse: "Hide what {name} owns",
+    failed: "Could not read what it owns. {error}",
+    retry: "Try again",
+    groupsUnread: "Discovery did not answer for {groups}.",
+    syncing: "still listing",
+    stale: "stale since {since}",
+    refused: "refused",
+    partial: "read only in {namespaces}",
+    readFailed: "failed",
+    unlistable: "cannot be listed",
+    skipped: "left out",
+  },
+  // What deleting an object takes with it.
+  cascade: {
+    working: "Working out what goes with it…",
+    takes: "Also deletes:",
+    nothing: "Nothing else goes with it, among the kinds read.",
+    possibly: "And possibly objects of kinds not read: {kinds}.",
+    failed: "Could not work out what goes with it. {error}",
+  },
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {
     openedFrom: "Opened from {kind} {name}, which belongs here.",
@@ -6057,6 +6092,8 @@ export const en = {
   count: {
     secondsShort: "{n} s",
     pods: { one: "{n} pod", other: "{n} pods" },
+    dependents: { one: "owns {n}", other: "owns {n}" },
+    kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",

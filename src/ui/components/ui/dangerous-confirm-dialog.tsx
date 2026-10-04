@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,8 @@ interface DangerousConfirmDialogProps {
   open: boolean;
   title: string;
   description?: string;
+  /** What else the action does, worked out while the dialog is open. */
+  details?: ReactNode;
   /** The text that user must type to confirm the action */
   confirmationText: string;
   /** Placeholder text for the input field */
@@ -35,6 +37,7 @@ export function DangerousConfirmDialog({
   open,
   title,
   description,
+  details,
   confirmationText,
   confirmationPlaceholder,
   confirmLabel,
@@ -78,6 +81,7 @@ export function DangerousConfirmDialog({
           <AlertDialogDescription className={description ? "" : "sr-only"}>
             {description || t("action", "confirmByTyping")}
           </AlertDialogDescription>
+          {details}
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">

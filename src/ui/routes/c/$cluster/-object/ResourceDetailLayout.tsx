@@ -16,7 +16,7 @@
 
 import type { AppLink } from "@/lib/links";
 import { useEffect, useMemo, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+import { AlertCircle, ArrowLeft, Network, RefreshCw } from "lucide-react";
 
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
@@ -31,7 +31,14 @@ import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { DetailAction } from "@/components/object/detail-blocks";
 import { DeliveryBanner, DeliveryMarks, HelmMark } from "../-delivery/delivery";
-import { surfaceIsOpen, type DetailTab } from "@/components/object/detail-tab";
+import {
+  surfaceIsOpen,
+  viewGlyph,
+  type DetailTab,
+} from "@/components/object/detail-tab";
+import { OwnsPanel } from "./Owns";
+import { servedOfKind, useLineage } from "./ownership";
+import type { ServedResource } from "./served";
 import { useDelivery } from "../-delivery/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
@@ -201,6 +208,16 @@ interface ResourceDetailLayoutProps {
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
+  /** Where a kind the registry does not hold is served, for its owners. */
+  served?: ServedResource | null;
+}
+
+/** What it owns, beside the page's own tabs and before its YAML. */
+function withOwns(tabs: DetailTab[], owns: DetailTab): DetailTab[] {
+  const yaml = tabs.findIndex((tab) => tab.id === "yaml");
+  return yaml === -1
+    ? [...tabs, owns]
+    : [...tabs.slice(0, yaml), owns, ...tabs.slice(yaml)];
 }
 
 export function ResourceDetailLayout({
@@ -224,10 +241,30 @@ export function ResourceDetailLayout({
   isSearchingReplacement,
   summary,
   freshness,
-  tabs,
+  tabs: pageTabs,
   activeTab,
   onTabChange,
+  served,
 }: ResourceDetailLayoutProps) {
+  const t = useT();
+  const lineage = useLineage(
+    served ?? servedOfKind(resourceKind),
+    title,
+    namespace
+  );
+  const uid = lineage.data?.uid ?? null;
+  const tabs = useMemo(
+    () =>
+      uid
+        ? withOwns(pageTabs, {
+            id: "owns",
+            label: t("owns", "tab"),
+            glyph: viewGlyph(Network),
+            content: <OwnsPanel uid={uid} />,
+          })
+        : pageTabs,
+    [pageTabs, uid, t]
+  );
   const { deliveries } = useDelivery(delivery ?? null);
   const subject = useMemo(
     () =>
@@ -314,6 +351,7 @@ export function ResourceDetailLayout({
         <ResourceDetailHeader
           name={title}
           kind={resourceKind}
+          served={served}
           listLink={listLink}
           listLabel={listLabel}
           namespace={namespace}

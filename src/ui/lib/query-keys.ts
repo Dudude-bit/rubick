@@ -246,6 +246,22 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  lineage: (
+    group: string,
+    plural: string,
+    namespace: string | null | undefined,
+    name: string
+  ): (string | null)[] => ["lineage", group, plural, home(namespace), name],
+  dependents: (uid: string, namespace: string | null): string[] => [
+    "dependents",
+    uid,
+    scope(namespace),
+  ],
+  cascade: (uid: string, namespace: string | null): string[] => [
+    "cascade",
+    uid,
+    scope(namespace),
+  ],
   /** Every kind the cluster serves. One answer for the whole app. */
   apiCatalog: (): string[] => ["api-catalog"],
   /** The first `pages` pages of a kind's printed list, in one scope. */

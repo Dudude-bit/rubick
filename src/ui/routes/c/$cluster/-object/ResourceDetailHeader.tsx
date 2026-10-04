@@ -11,6 +11,9 @@ import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
+import { LineageTrail } from "./Lineage";
+import { servedOfKind } from "./ownership";
+import type { ServedResource } from "./served";
 
 export interface ResourceDetailHeaderProps {
   /** The object's own name — an identifier, so it reads as mono. */
@@ -50,6 +53,8 @@ export interface ResourceDetailHeaderProps {
   dataUpdatedAt?: number;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
+  /** Where a kind the registry does not hold is served, for its owners. */
+  served?: ServedResource | null;
 }
 
 /** Both segments of the trail, so the reader's eye reads one path. */
@@ -164,6 +169,7 @@ export function ResourceDetailHeader({
   onBack,
   dataUpdatedAt,
   slowed,
+  served,
 }: ResourceDetailHeaderProps) {
   const t = useT();
   const segment = {
@@ -221,6 +227,11 @@ export function ResourceDetailHeader({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <LineageTrail
+        served={served ?? servedOfKind(kind)}
+        name={name}
+        namespace={namespace}
+      />
       {/* Tighter than the row around it: the trail and the name are one path,
           and 10px between a slash and its segment breaks that path into
           separate words. */}

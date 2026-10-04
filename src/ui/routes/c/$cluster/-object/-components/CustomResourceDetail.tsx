@@ -16,6 +16,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
+import { servedOf } from "../served";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RelatedPanel } from "../RelatedPanel";
@@ -450,6 +451,7 @@ export function CustomResourceDetail({
   return (
     <>
       <ResourceDetailLayout
+        served={servedOf(crdName)}
         resource={resource}
         share={share}
         isLoading={isLoading}
