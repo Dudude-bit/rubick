@@ -4729,7 +4729,7 @@ export const ru: Catalogue = {
     collapse: "Скрыть, чем владеет {name}",
     failed: "Не удалось прочитать, чем он владеет. {error}",
     retry: "Повторить",
-    groupsUnread: "Discovery не ответил для {groups}.",
+    groupUnread: "discovery не ответил",
     syncing: "ещё читается",
     stale: "устарело с {since}",
     refused: "отказано",
@@ -4742,11 +4742,11 @@ export const ru: Catalogue = {
     working: "Выясняю, что удалится вместе с ним…",
     takes: "Удалит также:",
     nothing: "Среди прочитанных kind'ов больше ничего не удалится.",
-    possibly: "И, возможно, объекты непрочитанных kind'ов: {kinds}.",
+    possibly: "И, возможно, объекты kind'ов, которые не удалось прочитать:",
     failed: "Не удалось выяснить, что удалится вместе с ним. {error}",
   },
   attached: {
-    openedFrom: "Открыто из {kind} {name}, который относится сюда.",
+    openedFrom: "Открыто из {object}, который относится сюда.",
     openOwn: "Открыть его отдельно",
     targetMissing: "Не открыто на цели: {kind} {name} не существует.",
     targetUnread:
@@ -6604,6 +6604,12 @@ export const ru: Catalogue = {
       few: "владеет {n}",
       many: "владеет {n}",
       other: "владеет {n}",
+    },
+    kindsReading: {
+      one: "Ещё читаю {n} kind",
+      few: "Ещё читаю {n} kind'а",
+      many: "Ещё читаю {n} kind'ов",
+      other: "Ещё читаю {n} kind'а",
     },
     kindsNotRead: {
       one: "{n} kind не прочитан",

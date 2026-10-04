@@ -36,6 +36,8 @@ const { CascadePreview } = await import("./CascadePreview");
 
 const NOTHING_UNREAD: NotRead = { kinds: [], groups: [] };
 
+const chipOf = (kind: string) => screen.getByText(kind).closest("li");
+
 const dependent = (kind: string, name: string, dependents = 0): Dependent => ({
   uid: `uid-${name}`,
   kind,
@@ -87,7 +89,10 @@ describe("the owners above an object", () => {
       />
     );
     const links = await screen.findAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["api", "api-7f9"]);
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Deployment/api",
+      "ReplicaSet/api-7f9",
+    ]);
     expect(links[0]).toHaveAttribute("href", "/c/test/deployments/shop/api");
   });
 
@@ -140,10 +145,10 @@ describe("what an object owns", () => {
   });
 
   /**
-   * "Owns nothing" is only ever said about the kinds read; a kind still
-   * listing is named beside it, never folded into the nothing.
+   * While a kind is still listing, "owns nothing" would be premature: the
+   * panel says it is still reading and names the kind, never folds it in.
    */
-  it("names the kinds it has not read beside an empty answer", async () => {
+  it("says it is still reading rather than that it owns nothing", async () => {
     answers.dependents = () =>
       Promise.resolve({
         dependents: [],
@@ -160,11 +165,34 @@ describe("what an object owns", () => {
         },
       });
     await renderWithRouter(<OwnsPanel uid="d" />);
+    expect(await screen.findByText("Still reading 1 kind")).toBeInTheDocument();
+    expect(screen.queryByText("Owns nothing among the kinds read.")).toBeNull();
+    expect(screen.getByText("1 kind not read")).toBeInTheDocument();
+    expect(chipOf("Pod")).toHaveTextContent("still listing");
+  });
+
+  /** "Owns nothing" is only ever said about the kinds read, beside the rest. */
+  it("names the kinds it could not read beside an empty answer", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "Secret",
+              group: "",
+              plural: "secrets",
+              reading: { says: "refused", message: "forbidden" },
+            },
+          ],
+          groups: [],
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" />);
     expect(
       await screen.findByText("Owns nothing among the kinds read.")
     ).toBeInTheDocument();
-    expect(screen.getByText("1 kind not read")).toBeInTheDocument();
-    expect(screen.getByText("Pod (still listing)")).toBeInTheDocument();
+    expect(chipOf("Secret")).toHaveTextContent("refused");
   });
 
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */
@@ -213,12 +241,13 @@ describe("what deleting an object takes with it", () => {
     await renderWithRouter(
       <CascadePreview kind="Deployment" name="api" namespace="shop" />
     );
-    expect(await screen.findByText("Pod ×12")).toBeInTheDocument();
+    expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
+    expect(chipOf("Pod")).toHaveTextContent("12");
+    expect(chipOf("ReplicaSet")).toHaveTextContent("3");
     expect(
-      screen.getByText(
-        "And possibly objects of kinds not read: Secret (refused)."
-      )
+      screen.getByText("And possibly objects of the kinds it could not read:")
     ).toBeInTheDocument();
+    expect(chipOf("Secret")).toHaveTextContent("refused");
   });
 
   /** Before a delete, a count it could not work out is said, never skipped. */

@@ -1,12 +1,6 @@
-import { CircleDashed } from "lucide-react";
-
 import { cn } from "@/lib/utils";
+import { KindIcon } from "./KindIcon";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
-import {
-  getResourceDefinition,
-  isResourceType,
-  toKind,
-} from "@/lib/resource-registry";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 /**
@@ -85,11 +79,6 @@ export function ResourceName({
 }: ResourceNameProps) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
   const { stem, tail } = splitName(name);
-  const resolved = isResourceType(kind) ? toKind(kind) : null;
-  // A kind the registry does not carry — ReplicaSet, a HelmRelease, any CRD
-  // an event names — still has to reserve the mark's width, or it sits flush
-  // left while every other row in the column is indented behind an icon.
-  const Icon = resolved ? getResourceDefinition(resolved).icon : CircleDashed;
 
   // Full spends the hue on identity, so the kind falls back to its icon;
   // minimal keeps that icon hue and nothing else; off tints nothing.
@@ -129,14 +118,9 @@ export function ResourceName({
 
   return (
     <>
-      <Icon
-        className={cn(
-          "h-2.5 w-2.5 flex-none self-center",
-          colouring === "off" && "text-fg-mut",
-          iconClassName
-        )}
-        style={kindStyle}
-        aria-hidden="true"
+      <KindIcon
+        kind={kind}
+        className={cn("h-2.5 w-2.5 self-center", iconClassName)}
         data-testid="resource-ref-icon"
       />
       {/* The tail is the part that says *which* object this is — a pod's

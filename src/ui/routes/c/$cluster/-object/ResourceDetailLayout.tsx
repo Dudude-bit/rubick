@@ -262,10 +262,10 @@ export function ResourceDetailLayout({
             id: "owns",
             label: t("owns", "tab"),
             glyph: viewGlyph(Network),
-            content: <OwnsPanel uid={uid} />,
+            content: <OwnsPanel uid={uid} namespace={namespace} />,
           })
         : pageTabs,
-    [pageTabs, uid, t]
+    [pageTabs, uid, namespace, t]
   );
   const { deliveries } = useDelivery(delivery ?? null);
   const subject = useMemo(

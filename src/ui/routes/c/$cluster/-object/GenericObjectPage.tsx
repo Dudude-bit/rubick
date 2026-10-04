@@ -122,13 +122,13 @@ export function GenericObjectPage({
   const tabs: DetailTab[] = uid
     ? [
         overview,
-        manifest,
         {
           id: "owns",
           label: t("owns", "tab"),
           glyph: viewGlyph(Network),
-          content: <OwnsPanel uid={uid} />,
+          content: <OwnsPanel uid={uid} namespace={namespace} />,
         },
+        manifest,
       ]
     : [overview, manifest];
 

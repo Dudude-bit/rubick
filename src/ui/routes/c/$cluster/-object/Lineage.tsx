@@ -1,10 +1,29 @@
+import {
+  ChevronRight,
+  EyeOff,
+  GitFork,
+  HelpCircle,
+  MoreHorizontal,
+  Unlink,
+  type LucideIcon,
+} from "lucide-react";
 import { Fragment } from "react";
 
 import type { LineageStop } from "@/generated/types";
-import { RouteLink } from "@/components/ui/route-link";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { useT, type T } from "@/i18n/useT";
-import { refLink, useLineage } from "./ownership";
+import { cn } from "@/lib/utils";
+import { crdOf, useLineage } from "./ownership";
 import type { ServedResource } from "./served";
+
+/** Why the chain stops, drawn. Every stop has its own glyph and tone. */
+const STOP: Record<LineageStop["says"], { icon: LucideIcon; tone: string }> = {
+  ownerGone: { icon: Unlink, tone: "text-warn" },
+  ownerUnread: { icon: EyeOff, tone: "text-warn" },
+  kindNotServed: { icon: HelpCircle, tone: "text-fg-mut" },
+  several: { icon: GitFork, tone: "text-fg-mut" },
+  tooDeep: { icon: MoreHorizontal, tone: "text-fg-mut" },
+};
 
 function stopWords(stop: LineageStop, t: T): string {
   switch (stop.says) {
@@ -21,12 +40,16 @@ function stopWords(stop: LineageStop, t: T): string {
   }
 }
 
+const Separator = () => (
+  <ChevronRight className="h-3 w-3 flex-none text-fg-fnt" aria-hidden="true" />
+);
+
 /**
- * The controllers above this object, top first, each a link to its page,
- * on its own line over the title.
- * Where the chain stops short of the top it says why at the left end: an
- * owner that is gone and one that could not be read are different words.
- * Nothing is drawn for an object nothing owns.
+ * The controllers above this object, top first, each a reference with its
+ * kind's glyph, on its own line over the title. Where the chain stops short
+ * of the top it says why at the left end: an owner that is gone and one that
+ * could not be read are different words and different marks. Nothing is
+ * drawn for an object nothing owns.
  */
 export function LineageTrail({
   served,
@@ -42,42 +65,37 @@ export function LineageTrail({
   const data = lineage.data;
   if (!data || (data.ancestors.length === 0 && !data.stop)) return null;
   const top = [...data.ancestors].reverse();
-  const unread =
-    data.stop?.says === "ownerUnread" ? data.stop.message : undefined;
+  const stop = data.stop ? STOP[data.stop.says] : null;
+  const StopIcon = stop?.icon;
 
   return (
     <nav
       aria-label={t("lineage", "label")}
-      className="flex basis-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-fg-mut"
+      className="flex basis-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]"
     >
-      {data.stop && (
-        <span className="text-fg-fnt" title={unread}>
+      {data.stop && stop && StopIcon && (
+        <span
+          className={cn("inline-flex items-center gap-1", stop.tone)}
+          title={
+            data.stop.says === "ownerUnread" ? data.stop.message : undefined
+          }
+        >
+          <StopIcon className="h-3 w-3" aria-hidden="true" />
           {stopWords(data.stop, t)}
         </span>
       )}
-      {top.map((ancestor, index) => {
-        const link = refLink(ancestor);
-        return (
-          <Fragment key={ancestor.uid}>
-            {(index > 0 || data.stop) && (
-              <span aria-hidden className="text-fg-fnt">
-                ›
-              </span>
-            )}
-            <span className="text-fg-fnt">{ancestor.kind}</span>
-            {link ? (
-              <RouteLink
-                {...link}
-                className="font-mono text-info hover:underline"
-              >
-                {ancestor.name}
-              </RouteLink>
-            ) : (
-              <span className="font-mono">{ancestor.name}</span>
-            )}
-          </Fragment>
-        );
-      })}
+      {top.map((ancestor, index) => (
+        <Fragment key={ancestor.uid}>
+          {(index > 0 || data.stop) && <Separator />}
+          <ResourceRef
+            kind={ancestor.kind}
+            name={ancestor.name}
+            namespace={ancestor.namespace}
+            crd={crdOf(ancestor)}
+          />
+        </Fragment>
+      ))}
+      <Separator />
     </nav>
   );
 }

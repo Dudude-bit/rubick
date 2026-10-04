@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { KindReading, NotRead } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import type { T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { objectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
@@ -20,10 +19,17 @@ export function servedOfKind(kind: string): ServedResource | null {
   return { group, plural: resource };
 }
 
-/**
- * Where an ancestor or a dependent opens. A kind the registry does not hold
- * is addressed by `<plural>.<group>`, as kubectl names it.
- */
+/** The address segment a kind the registry does not hold is reached by. */
+export function crdOf(ref: {
+  kind: string;
+  group: string;
+  plural: string;
+}): string | undefined {
+  if (isResourceType(ref.kind)) return undefined;
+  return ref.group ? `${ref.plural}.${ref.group}` : ref.plural;
+}
+
+/** Where an ancestor or a dependent opens. */
 export function refLink(ref: {
   kind: string;
   group: string;
@@ -35,11 +41,7 @@ export function refLink(ref: {
     kind: ref.kind,
     name: ref.name,
     namespace: ref.namespace,
-    crd: isResourceType(ref.kind)
-      ? undefined
-      : ref.group
-        ? `${ref.plural}.${ref.group}`
-        : ref.plural,
+    crd: crdOf(ref),
   });
 }
 
@@ -102,27 +104,6 @@ export function mightHold(reading: KindReading): boolean {
   return (
     reading.reading.says !== "unlistable" && reading.reading.says !== "skipped"
   );
-}
-
-const READING_KEYS = {
-  syncing: "syncing",
-  stale: "stale",
-  refused: "refused",
-  partial: "partial",
-  failed: "readFailed",
-  unlistable: "unlistable",
-  skipped: "skipped",
-} as const satisfies Record<KindReading["reading"]["says"], string>;
-
-/** One unread kind in the reader's words: its name, and why. */
-export function readingOf(reading: KindReading, t: T): string {
-  const why = reading.reading;
-  let values: Record<string, string> | undefined;
-  if (why.says === "partial")
-    values = { namespaces: why.namespaces.join(", ") };
-  if (why.says === "stale")
-    values = { since: new Date(why.since).toLocaleTimeString() };
-  return `${reading.kind} (${t("owns", READING_KEYS[why.says], values)})`;
 }
 
 /** Whether nothing could still be hiding: every listable kind read live. */

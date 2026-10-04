@@ -4292,7 +4292,7 @@ export const en = {
     collapse: "Hide what {name} owns",
     failed: "Could not read what it owns. {error}",
     retry: "Try again",
-    groupsUnread: "Discovery did not answer for {groups}.",
+    groupUnread: "discovery did not answer",
     syncing: "still listing",
     stale: "stale since {since}",
     refused: "refused",
@@ -4306,12 +4306,12 @@ export const en = {
     working: "Working out what goes with it…",
     takes: "Also deletes:",
     nothing: "Nothing else goes with it, among the kinds read.",
-    possibly: "And possibly objects of kinds not read: {kinds}.",
+    possibly: "And possibly objects of the kinds it could not read:",
     failed: "Could not work out what goes with it. {error}",
   },
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {
-    openedFrom: "Opened from {kind} {name}, which belongs here.",
+    openedFrom: "Opened from {object}, which belongs here.",
     openOwn: "Open it on its own page",
     targetMissing: "Not opened on its target: {kind} {name} does not exist.",
     targetUnread:
@@ -6099,6 +6099,10 @@ export const en = {
     pods: { one: "{n} pod", other: "{n} pods" },
     dependents: { one: "owns {n}", other: "owns {n}" },
     kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
+    kindsReading: {
+      one: "Still reading {n} kind",
+      other: "Still reading {n} kinds",
+    },
     notReadList: "Not read: {list}",
     podsStreaming: {
       one: "{streaming} of {n} pod streaming",
