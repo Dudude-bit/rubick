@@ -20,7 +20,7 @@
     "paths": {
       "@/*": ["./src/ui/*"]
     },
-    // TypeScript 6 no longer pulls every `@types` package in automatically.
+    // Since TypeScript 6, every `@types` package is no longer pulled in.
     // Only `node` is needed explicitly; the rest arrive through imports or
     // the `vite/client` reference in `src/ui/vite-env.d.ts`.
     "types": ["node"]
