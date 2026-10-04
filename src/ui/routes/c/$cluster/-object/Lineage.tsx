@@ -1,24 +1,10 @@
 import { Fragment } from "react";
 
-import type { Ancestor, LineageStop } from "@/generated/types";
+import type { LineageStop } from "@/generated/types";
 import { RouteLink } from "@/components/ui/route-link";
 import { useT, type T } from "@/i18n/useT";
-import { objectLink } from "@/lib/links";
-import { isResourceType } from "@/lib/resource-registry";
-import { useLineage } from "./ownership";
+import { refLink, useLineage } from "./ownership";
 import type { ServedResource } from "./served";
-
-const linkOf = (ancestor: Ancestor) =>
-  objectLink({
-    kind: ancestor.kind,
-    name: ancestor.name,
-    namespace: ancestor.namespace,
-    crd: isResourceType(ancestor.kind)
-      ? undefined
-      : ancestor.group
-        ? `${ancestor.plural}.${ancestor.group}`
-        : ancestor.plural,
-  });
 
 function stopWords(stop: LineageStop, t: T): string {
   switch (stop.says) {
@@ -70,7 +56,7 @@ export function LineageTrail({
         </span>
       )}
       {top.map((ancestor, index) => {
-        const link = linkOf(ancestor);
+        const link = refLink(ancestor);
         return (
           <Fragment key={ancestor.uid}>
             {(index > 0 || data.stop) && (

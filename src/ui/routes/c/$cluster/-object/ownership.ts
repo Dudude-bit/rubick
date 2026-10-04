@@ -5,6 +5,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import type { T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { objectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { isResourceType, listQueryFor, toKind } from "@/lib/resource-registry";
@@ -17,6 +18,29 @@ export function servedOfKind(kind: string): ServedResource | null {
   if (!known) return null;
   const { group, resource } = listQueryFor(known);
   return { group, plural: resource };
+}
+
+/**
+ * Where an ancestor or a dependent opens. A kind the registry does not hold
+ * is addressed by `<plural>.<group>`, as kubectl names it.
+ */
+export function refLink(ref: {
+  kind: string;
+  group: string;
+  plural: string;
+  name: string;
+  namespace?: string | null;
+}) {
+  return objectLink({
+    kind: ref.kind,
+    name: ref.name,
+    namespace: ref.namespace,
+    crd: isResourceType(ref.kind)
+      ? undefined
+      : ref.group
+        ? `${ref.plural}.${ref.group}`
+        : ref.plural,
+  });
 }
 
 /** The controllers above one object, and its uid. A rollout is what moves it. */

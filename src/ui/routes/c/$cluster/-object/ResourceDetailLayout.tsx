@@ -38,6 +38,7 @@ import {
 } from "@/components/object/detail-tab";
 import { OwnsPanel } from "./Owns";
 import { servedOfKind, useLineage } from "./ownership";
+import { useOwnershipKeys } from "./ownership-keys";
 import type { ServedResource } from "./served";
 import { useDelivery } from "../-delivery/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
@@ -253,6 +254,7 @@ export function ResourceDetailLayout({
     namespace
   );
   const uid = lineage.data?.uid ?? null;
+  useOwnershipKeys(served ?? servedOfKind(resourceKind), title, namespace);
   const tabs = useMemo(
     () =>
       uid

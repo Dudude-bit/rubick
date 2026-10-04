@@ -8,23 +8,9 @@ import { RouteLink } from "@/components/ui/route-link";
 import { TextSkeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
-import { objectLink } from "@/lib/links";
-import { isResourceType } from "@/lib/resource-registry";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
-import { readingOf, useDependents } from "./ownership";
-
-const linkOf = (dependent: Dependent) =>
-  objectLink({
-    kind: dependent.kind,
-    name: dependent.name,
-    namespace: dependent.namespace,
-    crd: isResourceType(dependent.kind)
-      ? undefined
-      : dependent.group
-        ? `${dependent.plural}.${dependent.group}`
-        : dependent.plural,
-  });
+import { readingOf, refLink, useDependents } from "./ownership";
 
 /**
  * What this object owns, as a tree that opens a level at a time. Read only
@@ -73,7 +59,7 @@ function DependentRow({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const link = linkOf(dependent);
+  const link = refLink(dependent);
   const opens = dependent.dependents > 0;
 
   return (

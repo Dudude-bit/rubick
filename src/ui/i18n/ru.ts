@@ -6557,6 +6557,11 @@ export const ru: Catalogue = {
     sectionPage: "На странице объекта",
     sectionTabs: "Вкладки",
     sectionTable: "В списке",
+    sectionTree: "По владению",
+    treeUp: "Перейти к тому, кто владеет объектом",
+    treeDown: "Перейти к первому, чем он владеет",
+    treeSiblings:
+      "Перейти к предыдущему или следующему объекту владельца того же kind",
     sectionLogs: "В просмотре логов",
     palette: "Поиск и команды",
     settings: "Настройки",

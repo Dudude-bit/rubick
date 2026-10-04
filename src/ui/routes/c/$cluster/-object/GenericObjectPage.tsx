@@ -6,6 +6,7 @@ import { KeyValueSection } from "./detail-kv";
 import { objectFacets } from "./facets";
 import { OwnsPanel } from "./Owns";
 import { useLineage } from "./ownership";
+import { useOwnershipKeys } from "./ownership-keys";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
 import { servedOf, useServed, type Served } from "./served";
@@ -87,6 +88,7 @@ export function GenericObjectPage({
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
   const uid = useLineage(target, name, namespace).data?.uid ?? null;
+  useOwnershipKeys(target, name, namespace);
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 

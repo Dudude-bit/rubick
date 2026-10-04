@@ -19,6 +19,7 @@ export type ShortcutSection =
   | "page"
   | "tabs"
   | "table"
+  | "tree"
   | "logs";
 
 export interface Shortcut {
@@ -200,6 +201,15 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "rowMove", section: "table", keys: ["↑", "↓"], labelKey: "rowMove" },
   { id: "rowOpen", section: "table", keys: ["enter"], labelKey: "rowOpen" },
 
+  { id: "treeUp", section: "tree", keys: ["alt+↑"], labelKey: "treeUp" },
+  { id: "treeDown", section: "tree", keys: ["alt+↓"], labelKey: "treeDown" },
+  {
+    id: "treeSiblings",
+    section: "tree",
+    keys: ["alt+←", "alt+→"],
+    labelKey: "treeSiblings",
+  },
+
   {
     id: "soloContainer",
     section: "logs",
@@ -220,6 +230,7 @@ export const SECTIONS: readonly ShortcutSection[] = [
   "page",
   "tabs",
   "table",
+  "tree",
   "logs",
 ];
 
@@ -247,6 +258,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "mod+a selects the rendered window, not the whole buffer",
   "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":
     "mod+s downloads, Backspace goes up",
+  "src/ui/routes/c/$cluster/-object/ownership-keys.ts":
+    "alt+arrows move along ownership on an object's page",
   "src/ui/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
 };

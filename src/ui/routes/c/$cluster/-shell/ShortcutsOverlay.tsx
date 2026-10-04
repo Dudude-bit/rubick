@@ -79,5 +79,6 @@ const SECTION_KEY = {
   page: "sectionPage",
   tabs: "sectionTabs",
   table: "sectionTable",
+  tree: "sectionTree",
   logs: "sectionLogs",
 } as const;
