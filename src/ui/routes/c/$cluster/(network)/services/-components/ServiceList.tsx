@@ -4,14 +4,14 @@ import { ExternalLink } from "lucide-react";
 import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { PortsDisplay } from "@/components/network";
+import { PortsDisplay } from "../../-components";
 import { AddressCell } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "./columns";
-import { createResourceListPage } from "./createResourceListPage";
+} from "@/components/resources/columns";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 
 /**
  * A service type is a configuration fact, so it is printed rather than badged.

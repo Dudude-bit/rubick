@@ -32,7 +32,7 @@ import { EventRows } from "@/components/resources/detail-blocks";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import { RouteTraceSection } from "@/components/resources/RouteTrace";
+import { RouteTraceSection } from "./RouteTrace";
 import {
   KeyValueSection,
   type KeyValue,
@@ -42,7 +42,7 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { useGatewayRouteShare } from "@/hooks/useGatewayRouteShare";
+import { useGatewayRouteShare } from "./useGatewayRouteShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingFrom, backingOf, useBackingLists } from "@/integrations";
 import { describeStop } from "@/lib/connections";

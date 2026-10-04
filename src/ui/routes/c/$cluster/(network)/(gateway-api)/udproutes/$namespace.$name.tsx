@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../../-object/prefetch";
-import { GatewayRouteDetail } from "@/pages/GatewayRouteDetail";
+import { GatewayRouteDetail } from "../-components/GatewayRouteDetail";
 import { ResourceType } from "@/lib/resource-registry";
 
 export const Route = createFileRoute(

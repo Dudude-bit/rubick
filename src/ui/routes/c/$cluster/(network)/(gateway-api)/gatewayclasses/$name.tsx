@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../../-object/prefetch";
-import { GatewayClassDetail } from "@/pages/GatewayClassDetail";
+import { GatewayClassDetail } from "./-components/GatewayClassDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(network)/(gateway-api)/gatewayclasses/$name"

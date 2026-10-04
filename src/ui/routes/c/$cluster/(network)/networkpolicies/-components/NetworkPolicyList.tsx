@@ -5,13 +5,17 @@ import { columnHeader } from "@/i18n/column-header";
 import { commands } from "@/lib/commands";
 import { directionWords, reachWords, selectsWords } from "@/lib/network-policy";
 import { ResourceType } from "@/lib/resource-registry";
-import { DirectionCell, ReachCell, SelectsCell } from "./network-policy-cells";
+import {
+  DirectionCell,
+  ReachCell,
+  SelectsCell,
+} from "@/components/resources/network-policy-cells";
 import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "./columns";
-import { createResourceListPage } from "./createResourceListPage";
+} from "@/components/resources/columns";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 
 // Exported for `column-widths.test.ts`: a column with no declared width gets
 // an equal share of a `table-fixed` table.

@@ -30,7 +30,7 @@ import {
   ingressOpenUrl,
   vendorTlsAnswer,
   type VendorTlsAnswer,
-} from "@/components/network";
+} from "../../-components";
 import { useWatchedList } from "@/hooks/useWatchedList";
 
 import type { IngressInfo, Scoped } from "@/generated/types";

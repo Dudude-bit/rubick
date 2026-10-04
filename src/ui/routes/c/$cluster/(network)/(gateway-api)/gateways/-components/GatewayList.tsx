@@ -4,14 +4,14 @@
  * Programmed — with "nothing answered" kept apart from "broken".
  */
 
-import { createResourceListPage } from "./createResourceListPage";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 import {
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
-} from "./columns";
+} from "@/components/resources/columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { ResourceRef } from "./ResourceRef";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { columnHeader } from "@/i18n/column-header";
 import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";

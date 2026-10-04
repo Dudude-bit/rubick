@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EndpointsList } from "@/components/resources/EndpointsList";
+import { EndpointsList } from "./-components/EndpointsList";
 
 export const Route = createFileRoute("/c/$cluster/(network)/endpoints/")({
   component: EndpointsList,

@@ -46,7 +46,7 @@ import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
 import { verdictOf } from "@/lib/route-verdict";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { useGatewayShare } from "@/hooks/useGatewayShare";
+import { useGatewayShare } from "./useGatewayShare";
 import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";

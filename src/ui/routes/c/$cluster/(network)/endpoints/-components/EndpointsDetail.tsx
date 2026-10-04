@@ -19,7 +19,7 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { useResourceDetail } from "@/hooks";
-import { useEndpointsShare } from "@/hooks/useEndpointsShare";
+import { useEndpointsShare } from "./useEndpointsShare";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";

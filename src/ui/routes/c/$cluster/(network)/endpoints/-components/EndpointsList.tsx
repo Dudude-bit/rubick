@@ -17,8 +17,8 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "./columns";
-import { createResourceListPage } from "./createResourceListPage";
+} from "@/components/resources/columns";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 
 export const columns = (): ColumnDef<EndpointsInfo>[] => [
   createNameColumn<EndpointsInfo>(ResourceType.Endpoints),

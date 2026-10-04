@@ -24,7 +24,7 @@ import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { useGatewayClassShare } from "@/hooks/useGatewayClassShare";
+import { useGatewayClassShare } from "./useGatewayClassShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";

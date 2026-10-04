@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { IngressDetail } from "@/pages/IngressDetail";
+import { IngressDetail } from "./-components/IngressDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(network)/ingresses/$namespace/$name"

@@ -11,7 +11,7 @@ import { yamlTab } from "@/components/resources/yaml-tab";
 import { InterceptedAction } from "@/components/resources/delivery-intercept";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { useNetworkPolicyShare } from "@/hooks/useNetworkPolicyShare";
+import { useNetworkPolicyShare } from "./useNetworkPolicyShare";
 import { useResourceDetail } from "@/hooks";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";

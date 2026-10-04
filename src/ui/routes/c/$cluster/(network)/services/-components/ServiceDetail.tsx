@@ -20,13 +20,13 @@ import {
   type KeyValue,
 } from "@/components/resources/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { ServiceAccessInfo } from "@/components/network";
+import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "@/components/resources/TrafficChain";
-import { PublishedEndpoints } from "@/components/resources/PublishedEndpoints";
+import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "@/components/resources/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
-import { useServiceShare } from "@/hooks/useServiceShare";
+import { useServiceShare } from "./useServiceShare";
 import { ResourceType } from "@/lib/resource-registry";
 import { deliveryOfKind } from "@/lib/delivery";
 import { publishedFor } from "@/lib/published";

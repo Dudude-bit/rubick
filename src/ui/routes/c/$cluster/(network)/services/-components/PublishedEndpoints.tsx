@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { ResourceRef } from "./ResourceRef";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
 import { errorToShow } from "@/lib/error-utils";
