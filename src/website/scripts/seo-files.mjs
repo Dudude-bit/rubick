@@ -27,13 +27,15 @@ Key facts:
 - Install with \`${LINKS.brew}\`, from the AUR package rubick-kubernetes-bin, or as a dmg, exe, deb, rpm, AppImage or Flatpak bundle from the latest release.`;
 
 const lies = LIES.map(
-  (l) => `- [Lie ${lieNumber(l)}: ${l.lie}](${lieUrl(l.slug)}): ${l.description}`
+  (l) =>
+    `- [Lie ${lieNumber(l)}: ${l.lie}](${lieUrl(l.slug)}): ${l.description}`
 );
 const pages = [DELIVERY, CERTIFICATES].map(
   (p) => `- [${p.title}](${pageUrl(p)}): ${p.description}`
 );
 const comparisons = COMPETITORS.map(
-  (c) => `- [Rubick vs ${c.name}, honestly](${vsUrl(c.slug)}): ${c.metaDescription}`
+  (c) =>
+    `- [Rubick vs ${c.name}, honestly](${vsUrl(c.slug)}): ${c.metaDescription}`
 );
 
 const llms = `# ${SITE.name}
@@ -136,7 +138,9 @@ const prerendered = walk(CLIENT)
   )
   .filter((path) => path !== "/404")
   .sort();
-const missing = prerendered.filter((path) => !llms.includes(`${SITE.url}${path}`));
+const missing = prerendered.filter(
+  (path) => !llms.includes(`${SITE.url}${path}`)
+);
 if (missing.length > 0) {
   console.error(`llms.txt names no link to: ${missing.join(", ")}`);
   process.exit(1);
@@ -153,4 +157,6 @@ ${prerendered.map((path) => `  <url><loc>${SITE.url}${path}</loc></url>`).join("
 writeFileSync(join(CLIENT, "llms.txt"), llms);
 writeFileSync(join(CLIENT, "llms-full.txt"), full);
 writeFileSync(join(CLIENT, "sitemap.xml"), sitemap);
-console.log(`llms.txt, llms-full.txt and sitemap.xml cover ${prerendered.length} pages`);
+console.log(
+  `llms.txt, llms-full.txt and sitemap.xml cover ${prerendered.length} pages`
+);

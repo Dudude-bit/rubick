@@ -3,7 +3,9 @@
 Tauri 2 + React 19 + TypeScript desktop Kubernetes client. Rust in `src/tauri/`,
 frontend in `src/ui/`, the JSON both halves of IPC read in `src/contracts/`,
 test-cluster manifests in `tests/manifests/`, and the marketing site in
-`src/website/`, a separate app that no workflow builds, lints or tests.
+`src/website/`, a separate app that no workflow builds, lints or tests. It
+runs on Vite+ and TypeScript 7 like the app, with its own install and config:
+`bun run lint`, `bun run check` and `bun run build` from inside it.
 
 **bun, not npm.** `bun install`, `bun run test`, `bunx tsc --noEmit`.
 
