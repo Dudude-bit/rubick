@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use kube::discovery::{self, ApiGroup, ApiResource, Scope};
+use kube::discovery::{self, ApiCapabilities, ApiGroup, ApiResource, Scope};
 use kube::Client;
 use tokio::sync::OnceCell;
 
@@ -152,6 +152,25 @@ impl ServedIndex {
             .group(context, client, group, |_| true)
             .await?
             .map(|api_group| kinds_of(&api_group)))
+    }
+
+    /// Every kind `group` serves, each at the version kubectl would use and
+    /// with the verbs it allows; `None` where the cluster serves no such
+    /// group.
+    ///
+    /// # Errors
+    ///
+    /// Where discovery could not be read.
+    pub async fn recommended(
+        &self,
+        context: &str,
+        client: &Client,
+        group: &str,
+    ) -> Result<Option<Vec<(ApiResource, ApiCapabilities)>>> {
+        Ok(self
+            .group(context, client, group, |_| true)
+            .await?
+            .map(|api_group| api_group.recommended_resources()))
     }
 
     /// The group as discovered, read again where the answer held is too old

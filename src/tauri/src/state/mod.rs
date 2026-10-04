@@ -273,6 +273,30 @@ impl AppState {
             .await
     }
 
+    /// Every kind `group` serves on the current cluster, at the version
+    /// kubectl would use; `None` where the group is not served.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served_recommended(
+        &self,
+        group: &str,
+    ) -> Result<
+        Option<
+            Vec<(
+                kube::discovery::ApiResource,
+                kube::discovery::ApiCapabilities,
+            )>,
+        >,
+    > {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .recommended(&context, &client, group)
+            .await
+    }
+
     /// A request's answer from where discovery put a kind of `group` on the
     /// current cluster, a 404 sending discovery back: see
     /// [`crate::client::served::ServedIndex::answered`].

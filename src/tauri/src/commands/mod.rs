@@ -20,6 +20,7 @@ pub mod access;
 pub mod app_events;
 pub mod auth;
 pub mod binaries;
+pub mod catalog;
 pub mod certificates;
 pub mod checks;
 pub mod cluster;

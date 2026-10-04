@@ -1171,6 +1171,49 @@ export interface NamespaceInfo {
   createdAt: string | null;
 }
 
+export interface ResourceTable {
+  columns: TableColumn[];
+  rows: TableRow[];
+  cursor: string | null;
+  unread: UnreadNamespace[];
+}
+
+export interface TableRow {
+  name: string;
+  namespace: string | null;
+  uid: string | null;
+  createdAt: string | null;
+  cells: unknown[];
+}
+
+export interface TableColumn {
+  name: string;
+  columnType: string;
+  format: string;
+  description: string;
+  priority: number;
+}
+
+export interface ApiCatalog {
+  entries: CatalogEntry[];
+  unread: UnreadGroup[];
+}
+
+export interface UnreadGroup {
+  group: string;
+  code: string;
+  message: string;
+}
+
+export interface CatalogEntry {
+  group: string;
+  version: string;
+  kind: string;
+  plural: string;
+  namespaced: boolean;
+  verbs: string[];
+}
+
 export interface ResourceConnections {
   subject: ObjectRef;
   edges: ConnectionEdge[];

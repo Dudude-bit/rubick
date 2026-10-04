@@ -6,6 +6,7 @@ import type {
   AccessAnswer,
   AccessQuery,
   AlertRule,
+  ApiCatalog,
   AppEvent,
   AppInfo,
   AzureProfile,
@@ -102,6 +103,7 @@ import type {
   ResolveProbe,
   ResourceConnections,
   ResourceFilters,
+  ResourceTable,
   RolloutStatus,
   RouteInfo,
   Scoped,
@@ -778,6 +780,52 @@ export async function getResourceConnections(
     name,
     namespace,
     gateway,
+  });
+}
+
+export async function listApiCatalog(): Promise<ApiCatalog> {
+  return invoke<ApiCatalog>("list_api_catalog");
+}
+
+export async function listResourceTable(
+  group: string,
+  plural: string,
+  scope: string[] | null,
+  cursor: string | null
+): Promise<ResourceTable> {
+  return invoke<ResourceTable>("list_resource_table", {
+    group,
+    plural,
+    scope,
+    cursor,
+  });
+}
+
+export async function getServedObject(
+  group: string,
+  plural: string,
+  name: string,
+  namespace: string | null
+): Promise<unknown> {
+  return invoke<unknown>("get_served_object", {
+    group,
+    plural,
+    name,
+    namespace,
+  });
+}
+
+export async function getServedObjectYaml(
+  group: string,
+  plural: string,
+  name: string,
+  namespace: string | null
+): Promise<string> {
+  return invoke<string>("get_served_object_yaml", {
+    group,
+    plural,
+    name,
+    namespace,
   });
 }
 
